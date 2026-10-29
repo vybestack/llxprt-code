@@ -1,0 +1,2180 @@
+{
+  "format": "openai-responses-via-openai",
+  "description": "Frozen request-body hashes and lengths of the pre-#854 builders (issue #854 phase 0). Regenerate only deliberately with FROZEN_WIRE_CORPUS_UPDATE=1; never in CI.",
+  "pinnedClock": "2026-01-02T03:04:05.678Z",
+  "seeds": 5000,
+  "settings": [
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none"
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none"
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all"
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none"
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all"
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {},
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all"
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none"
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {},
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast"
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all"
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast"
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {},
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all"
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast"
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {},
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {},
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast"
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {},
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all"
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast"
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast"
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none"
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none"
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false,
+        "media.pdf.enabled": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "gpt-5.6",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true,
+        "media.pdf.enabled": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    }
+  ]
+}

@@ -23,6 +23,7 @@
 import { spawnSync } from 'node:child_process';
 import {
   mkdirSync,
+  existsSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -34,6 +35,11 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'bun:test';
 import { parseSamples } from '../memory/sample.ts';
 import { assertBoundedPostClearRetention } from './memory/retention-checkpoints.ts';
+import { withShortUiWorkspace } from '../short-ui-workspace.js';
+import { cleanupScenarioProcessGroup } from '../interactive-ui-process-group.ts';
+import memoryRetentionScript from '../tmux-script.issue3386-memory-retention.fake.json' with { type: 'json' };
+import { synchronizeShellInput } from './interactive-ui-input.ts';
+import { assertJournalBorders } from './journal-render-assertions.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
@@ -78,8 +84,12 @@ function runHarness(
   extraEnv: NodeJS.ProcessEnv = {},
   timeoutMs = 300_000,
   welcomeState: WelcomeState = 'completed',
+  workingDirectory = projectRoot,
 ): HarnessResult {
-  const scriptPath = path.join(projectRoot, 'scripts', scriptName);
+  const scriptPath =
+    scriptName === 'tmux-script.issue3386-memory-retention.fake.json'
+      ? path.join(getArtifactDir(testName), 'synchronized-input.json')
+      : path.join(projectRoot, 'scripts', scriptName);
   const harnessPath = path.join(projectRoot, 'scripts/tmux-harness.ts');
   const artifactDir = getArtifactDir(testName);
   const welcomeConfigPath = path.join(artifactDir, 'welcome-config.json');
@@ -93,9 +103,16 @@ function runHarness(
     );
   }
   artifactDirs.push(artifactDir);
+  if (scriptName === 'tmux-script.issue3386-memory-retention.fake.json') {
+    writeFileSync(
+      scriptPath,
+      JSON.stringify(synchronizeShellInput(memoryRetentionScript), null, 2),
+      'utf8',
+    );
+  }
 
   const result = spawnSync(
-    'bun',
+    process.execPath,
     [
       harnessPath,
       '--script',
@@ -106,7 +123,7 @@ function runHarness(
     ],
     {
       encoding: 'utf8',
-      cwd: projectRoot,
+      cwd: workingDirectory,
       timeout: timeoutMs,
       env: {
         ...process.env,
@@ -118,6 +135,15 @@ function runHarness(
     },
   );
 
+  cleanupScenarioProcessGroup(artifactDir);
+  const exitFile = path.join(artifactDir, 'scenario-exit-code');
+  if (
+    result.status === 0 &&
+    (!existsSync(exitFile) || readFileSync(exitFile, 'utf8') !== '0')
+  )
+    throw new Error(
+      `Scenario CLI failed: ${readFileSync(exitFile, 'utf8')}; artifacts: ${artifactDir}`,
+    );
   return {
     stdout: result.stdout ?? '',
     stderr: result.stderr ?? '',
@@ -149,6 +175,7 @@ function assertHarnessSuccess(result: HarnessResult): void {
 }
 
 afterAll(() => {
+  for (const directory of artifactDirs) cleanupScenarioProcessGroup(directory);
   if (artifactDirs.length > 0) {
     console.log('Interactive UI artifact directories:');
     for (const dir of artifactDirs) {
@@ -158,6 +185,57 @@ afterAll(() => {
 });
 
 describe('Interactive UI (tmux harness)', () => {
+  for (const alternate of [false, true]) {
+    for (const [cols, rows] of [
+      [160, 45],
+      [100, 30],
+    ]) {
+      runTmuxE2E(
+        `journal tool groups retain complete borders at ${cols}x${rows} (alternate=${alternate})`,
+        () => {
+          const testName = `journal-render-${cols}-${alternate}`;
+          assertHarnessSuccess(
+            runHarness(
+              'tmux-script.journal-render.fake.json',
+              testName,
+              ['--cols', String(cols), '--rows', String(rows)],
+              alternate
+                ? {
+                    LLXPRT_UI_RENDER_SETTINGS: path.join(
+                      projectRoot,
+                      'scripts/fixtures/journal-render-settings.json',
+                    ),
+                  }
+                : {},
+            ),
+          );
+          const directory = getArtifactDir(testName);
+          const captures = readdirSync(directory).filter((file) =>
+            file.endsWith('-scrollback.txt'),
+          );
+          expect(captures.length).toBeGreaterThanOrEqual(5);
+          for (const file of captures)
+            assertJournalBorders(
+              readFileSync(path.join(directory, file), 'utf8'),
+            );
+          const finalFile = captures.find((file) =>
+            file.endsWith('-final-scrollback.txt'),
+          );
+          if (finalFile === undefined)
+            throw new Error('Missing final transcript capture');
+          const final = readFileSync(path.join(directory, finalFile), 'utf8');
+          expect(final.match(/RENDER_FINAL:/g)).toHaveLength(1);
+          expect(final).not.toMatch(/\| 0 skills?/);
+          expect(final).toMatch(/\b[1-9]\d{0,5} skills/);
+          if (!alternate) {
+            expect(final.match(/Tips for getting started:/g)).toHaveLength(1);
+            expect(final.match(/RENDER-LINE-40/g)).toHaveLength(1);
+          }
+        },
+        300_000,
+      );
+    }
+  }
   runTmuxE2E(
     'clean startup renders a non-blank first frame with the composer',
     () => {
@@ -173,14 +251,54 @@ describe('Interactive UI (tmux harness)', () => {
   runTmuxE2E(
     'slash autocomplete opens, navigates, and dismisses',
     () => {
-      const result = runHarness(
-        'tmux-script.slash-autocomplete.json',
-        'slash-autocomplete',
-      );
-      assertHarnessSuccess(result);
+      withShortUiWorkspace(projectRoot, (directory) => {
+        const result = runHarness(
+          'tmux-script.slash-autocomplete.json',
+          'slash-autocomplete',
+          [],
+          {},
+          300_000,
+          'completed',
+          directory,
+        );
+        assertHarnessSuccess(result);
+      });
     },
     300_000,
   );
+
+  for (const alternate of [false, true]) {
+    runTmuxE2E(
+      `Task child approval names its subagent and completes the main turn (alternate=${alternate})`,
+      () => {
+        const testName = `task-child-approval-${alternate}`;
+        const result = runHarness(
+          'tmux-script.task-approval.fake.json',
+          testName,
+          [],
+          {
+            LLXPRT_UI_TASK_SETTINGS: path.join(
+              projectRoot,
+              alternate
+                ? 'scripts/fixtures/task-approval-settings.json'
+                : 'scripts/system-settings.interactive-ui.json',
+            ),
+          },
+        );
+        assertHarnessSuccess(result);
+        const directory = getArtifactDir(testName);
+        const capture = readdirSync(directory).find((file) =>
+          file.endsWith('-child-approval-screen.txt'),
+        );
+        if (capture === undefined)
+          throw new Error('Missing child approval capture');
+        const pane = readFileSync(path.join(directory, capture), 'utf8');
+        expect(pane).toContain('approval-child-');
+        expect(pane).toContain('Allow once');
+      },
+      300_000,
+    );
+  }
 
   runTmuxE2E(
     'tool approval dialog appears and accepts approval',

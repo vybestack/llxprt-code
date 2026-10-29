@@ -1,3 +1,4 @@
+import { CliSessionPersistence } from './cliSessionPersistence.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -18,11 +19,14 @@ import {
 } from 'bun:test';
 import { validateDnsResolutionOrder } from './cli.js';
 import { startInteractiveUI } from './__tests__/raw-interactive-startup-fixture.js';
-import { Config, DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  DebugLogger,
+  LocalMediaStore,
+} from '@vybestack/llxprt-code-core';
 import { useCommandOwners as installCommandOwners } from './__tests__/command-owner-fixture.js';
 const makeStartupAgent = installCommandOwners();
 import { createLoadedSettings } from './__tests__/loaded-settings-fixture.js';
-import { CliSessionPersistence } from './cliSessionPersistence.js';
 
 // Mock writeToStdout for exit-handler tests
 const { mockWriteToStdout } = {
@@ -174,7 +178,7 @@ describe('startInteractiveUI', () => {
       undefined,
       undefined,
       'raw',
-      rawPersistence(),
+      rawSessionPersistence(),
       startupSettings(),
     );
 
@@ -211,7 +215,7 @@ describe('startInteractiveUI', () => {
       undefined,
       undefined,
       'raw',
-      rawPersistence(),
+      rawSessionPersistence(),
       startupSettings(),
     );
 
@@ -276,7 +280,7 @@ describe('startInteractiveUI', () => {
         undefined,
         undefined,
         'raw',
-        rawPersistence(),
+        rawSessionPersistence(),
         startupSettings(),
       );
 
@@ -342,7 +346,7 @@ describe('startInteractiveUI', () => {
         undefined,
         undefined,
         'raw',
-        rawPersistence(),
+        rawSessionPersistence(),
         startupSettings(),
       ),
     ).rejects.toThrow('render failed');
@@ -375,7 +379,7 @@ describe('startInteractiveUI', () => {
         startupSettings(),
       );
 
-    await startRaw(rawPersistence());
+    await startRaw(rawSessionPersistence());
 
     await expect(startRaw(undefined)).rejects.toThrow(
       'Raw interactive startup requires its own CLI session persistence',
@@ -439,7 +443,7 @@ describe('startInteractiveUI', () => {
         undefined,
         undefined,
         'raw',
-        rawPersistence(),
+        rawSessionPersistence(),
         startupSettings(),
       );
 
@@ -490,9 +494,14 @@ function startupSettings(): SessionSettingsOwner {
   return owner;
 }
 
-function rawPersistence(): CliSessionPersistence {
+function rawSessionPersistence(): CliSessionPersistence {
   return new CliSessionPersistence(
-    { projectRoot: '/root', chatsDir: '/root/chats' },
-    {},
+    { projectRoot: process.cwd(), chatsDir: process.cwd() },
+    {
+      mediaStore: new LocalMediaStore({
+        rootDirectory: '/unused/test-media',
+        quotaBytes: 1024,
+      }),
+    },
   );
 }

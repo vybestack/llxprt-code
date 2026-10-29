@@ -20,14 +20,10 @@ import {
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
-  type HistoryItem,
   type HistoryItemWithoutId,
   type SlashCommandProcessorResult,
 } from '../../types.js';
-import {
-  type RemoveHistoryItems,
-  type UseHistoryManagerReturn,
-} from '../useHistoryManager.js';
+import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { mergePendingToolGroupsForDisplay } from './streamUtils.js';
 import { useCheckpointPersistence } from './checkpointPersistence.js';
 import type { useStreamState } from './useStreamState.js';
@@ -36,7 +32,6 @@ import { useAgentStreamOrchestration } from './useAgentStreamOrchestration.js';
 import type { OperationLifecycleRegistry } from './operationLifecycle.js';
 
 export interface StreamInteractionInputs {
-  history: HistoryItem[];
   addItem: UseHistoryManagerReturn['addItem'];
   settings: LoadedSettings;
   onDebugMessage: (message: string) => void;
@@ -53,14 +48,12 @@ export interface StreamInteractionInputs {
   terminalWidth?: number;
   terminalHeight?: number;
   onEditorOpen?: () => void;
-  removeItems?: RemoveHistoryItems;
   operationLifecycle?: OperationLifecycleRegistry;
   cancelActiveSlashCommand?: () => boolean;
 }
 
 export interface AgentStreamInputs extends AgentStreamOrchestrationDeps {
-  history: HistoryItem[];
-  readHistory: Agent['getHistory'];
+  readHistory: Agent['streamHistory'];
   isCheckpointingEnabled: () => boolean;
   projectCheckpointsDir: string;
 }
@@ -69,7 +62,6 @@ export function useAgentStream(input: AgentStreamInputs) {
   const orchestration = useAgentStreamOrchestration(input);
   return useAgentStreamReturn(
     orchestration,
-    input.history,
     input.readHistory,
     input.isCheckpointingEnabled,
     input.projectCheckpointsDir,
@@ -79,8 +71,7 @@ export function useAgentStream(input: AgentStreamInputs) {
 
 function useAgentStreamReturn(
   orchestration: ReturnType<typeof useAgentStreamOrchestration>,
-  history: HistoryItem[],
-  readHistory: Agent['getHistory'],
+  readHistory: Agent['streamHistory'],
   isCheckpointingEnabled: () => boolean,
   projectCheckpointsDir: string,
   onDebugMessage: (message: string) => void,
@@ -94,7 +85,6 @@ function useAgentStreamReturn(
     orchestration.toolCalls,
     isCheckpointingEnabled,
     orchestration.st.gitService,
-    history,
     readHistory,
     projectCheckpointsDir,
     onDebugMessage,
@@ -124,11 +114,13 @@ function usePendingHistoryItems(
 ) {
   return useMemo(
     () =>
-      mergePendingToolGroupsForDisplay(
-        st.pendingHistoryItem,
-        pendingToolCallGroupDisplay,
-      ),
-    [st.pendingHistoryItem, pendingToolCallGroupDisplay],
+      st.turnCancelled
+        ? []
+        : mergePendingToolGroupsForDisplay(
+            st.pendingHistoryItem,
+            pendingToolCallGroupDisplay,
+          ),
+    [st.turnCancelled, st.pendingHistoryItem, pendingToolCallGroupDisplay],
   );
 }
 

@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { appendJournalUiItem } from '../../../hooks/command-journal-output.js';
 import { useCallback, useMemo } from 'react';
 import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../../../config/settings.js';
@@ -26,7 +27,10 @@ type BootstrapInputs = Pick<
   | 'readCoreMemoryFileCount'
   | 'readProviderMetrics'
   | 'readSessionTokenUsage'
-  | 'resumedHistory'
+  | 'resumedBoot'
+  | 'readJournal'
+  | 'settings'
+  | 'readRecordingPath'
   | 'version'
   | 'memoryController'
   | 'readIdeMode'
@@ -75,23 +79,27 @@ export function useBootstrapRuntime(
     | React.MutableRefObject<RecordingIntegration | null>
     | undefined,
 ): AppBootstrapResult {
-  const recordRecordingEvent = inputs.recordRecordingEvent;
+  const { recordRecordingEvent, readJournal } = inputs;
   return useAppBootstrap({
     ...inputs,
     terminalStore: stores.terminalStore,
     turnStore: stores.turnStore,
     settingsStore: stores.settingsStore,
-    historyMaxItems: settings.ui.historyMaxItems,
-    historyMaxBytes: settings.ui.historyMaxBytes,
     hasSeenIdeIntegrationNudge: settings.hasSeenIdeIntegrationNudge,
     ...useBootstrapReads(reads),
     recordFeedback: useCallback(
-      (severity, message) => {
+      async (severity, message) => {
+        await appendJournalUiItem(readJournal(), undefined, {
+          type: severity,
+          text: message,
+        });
+        if (severity === 'info') return undefined;
         if (recordingOwner === 'agent') {
           return recordRecordingEvent({
             type: 'session_event',
             severity,
             message,
+            presentation: 'already-appended',
           });
         }
         return recordingIntegrationRef?.current?.recordSessionEvent(
@@ -99,7 +107,12 @@ export function useBootstrapRuntime(
           message,
         );
       },
-      [recordRecordingEvent, recordingOwner, recordingIntegrationRef],
+      [
+        recordRecordingEvent,
+        recordingOwner,
+        recordingIntegrationRef,
+        readJournal,
+      ],
     ),
     subscribeRecordingHistory: useMemo(
       () =>

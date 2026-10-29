@@ -24,7 +24,7 @@ describe('Explicit session client lifetime', () => {
         },
       ]);
       expect(
-        (await route.agent.getHistory()).filter(
+        (await route.agent.session.getHistory()).filter(
           (item) => item.speaker === 'human',
         ),
       ).toHaveLength(1);

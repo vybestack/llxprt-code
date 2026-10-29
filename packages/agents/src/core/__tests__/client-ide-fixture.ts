@@ -13,7 +13,32 @@ import { createServer } from 'node:http';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { PingRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentClient } from '../client.js';
+import type { ChatSession } from '../chatSession.js';
+
+/**
+ * Gives a stub chat the idle wait and history-service tail read that the
+ * client's last-row reader uses, steered by `readRows`, and counts the reads.
+ */
+export function bindChatHistoryTail(
+  chat: Partial<ChatSession>,
+  readRows: () => readonly IContent[],
+): { readonly tailReads: () => number } {
+  let tailReads = 0;
+  chat.waitForIdle = () => Promise.resolve();
+  chat.clearHistoryForDisposal = async (): Promise<void> => undefined;
+  chat.getHistoryService = (() => ({
+    waitForOwnershipSettlement: async (): Promise<void> => undefined,
+    dispose: async (): Promise<void> => undefined,
+    getLastContent: (): Promise<IContent | undefined> => {
+      tailReads += 1;
+      const rows = readRows();
+      return Promise.resolve(rows[rows.length - 1]);
+    },
+  })) as unknown as ChatSession['getHistoryService'];
+  return { tailReads: () => tailReads };
+}
 
 export async function createClientIdeFixture(client: AgentClient): Promise<{
   update(context: IdeContext): Promise<void>;

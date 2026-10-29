@@ -14,8 +14,12 @@ import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/s
 
 import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
 import { BaseProvider } from './BaseProvider.js';
+import {
+  type IProvider,
+  type GenerateChatOptions,
+  type ProviderRuntimeOptions,
+} from './IProvider.js';
 import type { ProviderFileLifecycle } from './providerFilePolicy.js';
-import { type IProvider, type GenerateChatOptions } from './IProvider.js';
 import { type IProviderManager } from './IProviderManager.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core/models/hydration.js';
@@ -467,10 +471,10 @@ export class ProviderManager implements IProviderManager {
    *
    * Normalize runtime inputs per call - no stored settings/config fallbacks.
    */
-  normalizeRuntimeInputs(
-    rawOptions: GenerateChatOptions,
+  normalizeRuntimeInputs<Contents>(
+    rawOptions: ProviderRuntimeOptions & { contents: Contents },
     providerName?: string,
-  ): GenerateChatOptions {
+  ): ProviderRuntimeOptions & { contents: Contents } {
     return normalizeRuntimeInputs(
       rawOptions,
       {
@@ -544,6 +548,12 @@ export class ProviderManager implements IProviderManager {
     // 3. LoggingProviderWrapper (token tracking, telemetry)
 
     let finalProvider: IProvider = provider;
+    while (
+      finalProvider instanceof RetryOrchestrator ||
+      finalProvider instanceof LoggingProviderWrapper
+    ) {
+      finalProvider = finalProvider.wrappedProvider;
+    }
 
     // First wrap with RetryOrchestrator for centralized retry/failover
     finalProvider = new RetryOrchestrator(finalProvider, {

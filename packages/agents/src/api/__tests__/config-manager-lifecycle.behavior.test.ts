@@ -137,12 +137,12 @@ describe('Config-independent provider owner lifecycle', () => {
     if (selected === undefined)
       throw new Error('Expected active local provider');
     for await (const chunk of selected.generateChatCompletion({
-      contents: [
-        {
+      contents: (async function* () {
+        yield {
           speaker: 'human',
           blocks: [{ type: 'text', text: 'local request before release' }],
-        },
-      ],
+        };
+      })(),
     })) {
       expect(chunk.blocks.length).toBeGreaterThan(0);
     }

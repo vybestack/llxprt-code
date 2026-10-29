@@ -21,7 +21,7 @@ import {
   useRef,
   useReducer,
 } from 'react';
-import type { HistoryItem } from '../types.js';
+import type { HistoryItemWithoutId } from '../types.js';
 import { MessageType } from '../types.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 
@@ -48,19 +48,8 @@ import { createTurnStore, type TurnStore } from '../stores/turn/turnStore.js';
 
 // Context type
 export interface SessionContextType {
-  history: HistoryItem[];
-  addItem: (
-    itemData: Omit<HistoryItem, 'id'>,
-    baseTimestamp?: number,
-  ) => number;
-  updateItem: (
-    id: number,
-    updates:
-      | Partial<Omit<HistoryItem, 'id'>>
-      | ((prevItem: HistoryItem) => Partial<Omit<HistoryItem, 'id'>>),
-  ) => void;
+  addItem: (itemData: HistoryItemWithoutId, baseTimestamp?: number) => number;
   clearItems: () => void;
-  loadHistory: (newHistory: HistoryItem[]) => void;
   sessionState: SessionState;
   dispatch: React.Dispatch<SessionAction>;
   appState: AppState;
@@ -195,10 +184,7 @@ function useCheckPaymentModeChange(
 
 function usePerformMemoryRefresh(
   config: SessionControllerRuntime,
-  addItem: (
-    itemData: Omit<HistoryItem, 'id'>,
-    baseTimestamp?: number,
-  ) => number,
+  addItem: (itemData: HistoryItemWithoutId, baseTimestamp?: number) => number,
 ): () => Promise<void> {
   return useCallback(async () => {
     addItem(
@@ -322,9 +308,8 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   const turnStoreRef = useRef<TurnStore | null>(null);
   const turnStore =
     turnStoreProp ?? (turnStoreRef.current ??= createTurnStore());
-  const { addItem, updateItem, clearItems, loadHistory } =
-    useHistory(turnStore);
-  const history = useStoreSelector(turnStore.store, (state) => state.history);
+  const { addItem, clearItems } = useHistory(turnStore);
+  const historyLength = turnStore.commands.getJournalLength();
   const pendingAddRequest = useStoreSelector(
     turnStore.store,
     (state) => state.pendingAddRequest,
@@ -334,7 +319,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   const checkPaymentModeChange = useCheckPaymentModeChange(
     runtimeProviderStatus,
     sessionState,
-    history.length,
+    historyLength,
     dispatch,
     warningTimerRef,
   );
@@ -345,7 +330,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
     runtimeProviderStatus,
     config,
     sessionState,
-    history.length,
+    historyLength,
     dispatch,
     warningTimerRef,
   );
@@ -365,11 +350,8 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
 
   const contextValue = useMemo(
     () => ({
-      history,
       addItem,
-      updateItem,
       clearItems,
-      loadHistory,
       sessionState,
       dispatch,
       appState,
@@ -378,11 +360,8 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       performMemoryRefresh,
     }),
     [
-      history,
       addItem,
-      updateItem,
       clearItems,
-      loadHistory,
       sessionState,
       dispatch,
       appState,

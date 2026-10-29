@@ -21,6 +21,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
+import { arrivalHistoryFixture } from './__tests__/support/arrival-history-fixture.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -28,6 +29,7 @@ import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.
 
 function createMockRuntimeContext() {
   return {
+    state: { model: 'test' },
     ephemerals: {
       reasoning: {
         includeInContext: () => false,
@@ -49,14 +51,7 @@ function createMockConversationManager() {
   };
 }
 
-function createMockHistoryService() {
-  return {
-    add: vi.fn(),
-    getAll: () => [],
-    generateTurnKey: () => `turn-${crypto.randomUUID()}`,
-    waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
-  };
-}
+const createMockHistoryService = arrivalHistoryFixture();
 
 function makeChunk(text: string): ModelStreamChunk {
   return toModelStreamChunk({
@@ -80,9 +75,9 @@ function createUserInput(): IContent {
   } as IContent;
 }
 
-describe('StreamProcessor.processStreamResponse — accumulation efficiency (#2852)', () => {
-  let processor: StreamProcessor;
+let processor: StreamProcessor;
 
+describe('StreamProcessor.processStreamResponse — accumulation efficiency (#2852)', () => {
   beforeEach(() => {
     processor = Object.create(StreamProcessor.prototype);
     Object.assign(processor, {
@@ -97,7 +92,6 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
       '_finalizeStreamProcessing'
     ] = vi.fn().mockResolvedValue(undefined);
   });
-
   it('produces correct final accumulated output with many text chunks', async () => {
     const { yielded, words } =
       await observeProducesCorrectFinalAccumulatedOutputWithManyTextChunks();
@@ -133,7 +127,6 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
 
       return { yielded, words };
     };
-
   it('accumulates metadata from later chunks (finishReason, usage)', async () => {
     const usageChunk: ModelStreamChunk = {
       content: { speaker: 'ai', blocks: [] },
@@ -167,7 +160,6 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
       totalTokens: 300,
     });
   });
-
   it('does not grow quadratically — large stream completes in bounded time', async () => {
     // The O(N²) defect: accumulateModelStreamChunk creates a new blocks
     // array containing ALL prior blocks plus the new chunk on every call.
@@ -206,7 +198,6 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
     // rejecting O(N²) behavior.
     expect(elapsed).toBeLessThan(500);
   });
-
   it('preserves block order across mixed block types', async () => {
     const textChunk = makeChunk('before');
     const toolCallChunk: ModelStreamChunk = toModelStreamChunk({
@@ -241,11 +232,11 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
 
     expect(types).toStrictEqual(['text', 'tool_call', 'text', 'text']);
   });
-
   it('passes includeThoughts flag to finalize', async () => {
     processor = Object.create(StreamProcessor.prototype);
     Object.assign(processor, {
       ports: {
+        state: { model: 'test' },
         ephemerals: {
           reasoning: {
             includeInContext: () => true,

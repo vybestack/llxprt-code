@@ -312,7 +312,10 @@ export async function acquireZedSession(
   providerInputs: ZedSessionProviderInputs,
   resume: boolean,
   fileLister: ChatSessionFileLister,
-): Promise<{ session: Session; history: readonly IContent[] }> {
+): Promise<{
+  session: Session;
+  history: AsyncIterable<IContent> | Iterable<IContent>;
+}> {
   return new AcquiredZedSession(
     hostConfig,
     hostInputs,
@@ -390,7 +393,10 @@ class AcquiredZedSession {
   async acquire(
     resume: boolean,
     fileLister: ChatSessionFileLister,
-  ): Promise<{ session: Session; history: readonly IContent[] }> {
+  ): Promise<{
+    session: Session;
+    history: AsyncIterable<IContent> | Iterable<IContent>;
+  }> {
     await this.initialize();
     try {
       const history = resume
@@ -435,7 +441,7 @@ class AcquiredZedSession {
       readContextLimit: () => agent.getProviderContextLimit(),
       readApprovalMode: () => agent.getApprovalMode(),
       writeApprovalMode: (mode) => agent.setApprovalMode(mode),
-      readHistory: () => agent.getHistory(),
+      readHistory: (signal) => agent.streamHistory(signal),
       compressHistory: (options) => agent.compress(options),
       retireAgent: () => agent.dispose(),
       lookupTool: (name) => agent.tools.get(name),

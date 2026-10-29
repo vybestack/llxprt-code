@@ -11,6 +11,7 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
+import * as fsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAgentRuntimeState } from './AgentRuntimeState.js';
@@ -18,7 +19,11 @@ import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from './providerRuntimeContext.js';
-import { loadAgentRuntime } from './AgentRuntimeLoader.js';
+import {
+  loadAgentRuntime,
+  type AgentRuntimeLoaderOptions,
+  type AgentRuntimeLoaderResult,
+} from './AgentRuntimeLoader.js';
 import type {
   AgentRuntimeProviderAdapter,
   AgentRuntimeTelemetryAdapter,
@@ -91,7 +96,46 @@ function createStubGenerator(label: string): ContentGenerator {
   };
 }
 
+async function withClosedHistoryHandles(
+  work: () => Promise<void>,
+  startup: 'opened' | 'unopened' = 'opened',
+): Promise<void> {
+  const open = fsPromises.open;
+  const handles: fsPromises.FileHandle[] = [];
+  const probe = vi
+    .spyOn(fsPromises, 'open')
+    .mockImplementation(async (...args: Parameters<typeof fsPromises.open>) => {
+      const handle = await open(...args);
+      handles.push(handle);
+      return handle;
+    });
+  try {
+    await work();
+    if (startup === 'unopened') expect(handles.length).toBe(0);
+    else expect(handles.length).toBeGreaterThan(0);
+    for (const handle of handles) {
+      await expect(handle.stat()).rejects.toMatchObject({ code: 'EBADF' });
+    }
+  } finally {
+    probe.mockRestore();
+    for (const handle of handles) await handle.close();
+  }
+}
+
 describe('AgentRuntimeLoader', () => {
+  const histories = new Set<HistoryService>();
+  afterEach(async () => {
+    for (const history of histories) await history.dispose();
+    histories.clear();
+  });
+  async function loadTestRuntime(
+    options: AgentRuntimeLoaderOptions,
+  ): Promise<AgentRuntimeLoaderResult> {
+    const result = await loadAgentRuntime(options);
+    histories.add(result.history);
+    return result;
+  }
+
   let config: Config;
   let policyOwner: RuntimePolicyOwner;
   afterEach(() => policyOwner.dispose());
@@ -189,12 +233,12 @@ describe('AgentRuntimeLoader', () => {
         toolsView,
         contentGenerator: createStubGenerator('owner-media'),
       };
-      const firstRuntime = await loadAgentRuntime({
+      const firstRuntime = await loadTestRuntime({
         profile,
         mediaStore: first,
         overrides,
       });
-      const secondRuntime = await loadAgentRuntime({
+      const secondRuntime = await loadTestRuntime({
         profile,
         mediaStore: second,
         overrides,
@@ -281,14 +325,14 @@ describe('AgentRuntimeLoader', () => {
       },
     } as const;
 
-    const bundleA = await loadAgentRuntime({
+    const bundleA = await loadTestRuntime({
       ...baseOptions,
       overrides: {
         ...baseOptions.overrides,
         contentGeneratorFactory: generatorFactoryA,
       },
     });
-    const bundleB = await loadAgentRuntime({
+    const bundleB = await loadTestRuntime({
       ...baseOptions,
       overrides: {
         ...baseOptions.overrides,
@@ -313,7 +357,7 @@ describe('AgentRuntimeLoader', () => {
 
   it('reuses provided history service when supplied', async () => {
     const sharedHistory = new HistoryService();
-    const bundle = await loadAgentRuntime({
+    const bundle = await loadTestRuntime({
       mediaStore: new LocalMediaStore({
         rootDirectory: config.projectTempDir + '/media',
         quotaBytes: config.getMediaStoreQuotaByteLimit(),
@@ -426,12 +470,12 @@ describe('AgentRuntimeLoader', () => {
           contentGenerator: createStubGenerator('media-owner'),
         },
       };
-      await loadAgentRuntime(runtimeOptions);
-      await loadAgentRuntime(runtimeOptions);
+      await loadTestRuntime(runtimeOptions);
+      await loadTestRuntime(runtimeOptions);
       await admission.releaseContents(admittedHistory, admissionContext);
       expect(await store.hasReservations(block.contentId)).toBe(true);
 
-      sharedHistory.clear();
+      await sharedHistory.clear();
       await sharedHistory.waitForOwnershipSettlement();
       expect(await store.hasReservations(block.contentId)).toBe(false);
     } finally {
@@ -446,7 +490,7 @@ describe('AgentRuntimeLoader', () => {
       preserveThreshold: 0.25,
     };
 
-    const bundle = await loadAgentRuntime({
+    const bundle = await loadTestRuntime({
       mediaStore: new LocalMediaStore({
         rootDirectory: config.projectTempDir + '/media',
         quotaBytes: config.getMediaStoreQuotaByteLimit(),
@@ -507,7 +551,7 @@ describe('AgentRuntimeLoader', () => {
       new MockTool('beta', 'beta', 'Beta tool for testing.'),
     );
 
-    const bundle = await loadAgentRuntime({
+    const bundle = await loadTestRuntime({
       mediaStore: new LocalMediaStore({
         rootDirectory: config.projectTempDir + '/media',
         quotaBytes: config.getMediaStoreQuotaByteLimit(),
@@ -592,7 +636,7 @@ describe('AgentRuntimeLoader', () => {
       model: 'gemini-2.0-pro',
     };
 
-    const bundle = await loadAgentRuntime({
+    const bundle = await loadTestRuntime({
       mediaStore: new LocalMediaStore({
         rootDirectory: config.projectTempDir + '/media',
         quotaBytes: config.getMediaStoreQuotaByteLimit(),
@@ -634,48 +678,55 @@ describe('AgentRuntimeLoader', () => {
   });
 
   it('throws when providerManager is absent', async () => {
-    await expect(
-      loadAgentRuntime({
-        mediaStore: new LocalMediaStore({
-          rootDirectory: config.projectTempDir + '/media',
-          quotaBytes: config.getMediaStoreQuotaByteLimit(),
+    await withClosedHistoryHandles(async () => {
+      await expect(
+        loadTestRuntime({
+          mediaStore: new LocalMediaStore({
+            rootDirectory: config.projectTempDir + '/media',
+            quotaBytes: config.getMediaStoreQuotaByteLimit(),
+          }),
+          profile: {
+            config,
+            telemetry: settingsOwner.telemetry,
+            state: runtimeState,
+            settings: settingsSnapshot,
+            providerRuntime,
+            prepareProviderInvocation: (
+              provider: string,
+              parameters?: AdmittedModelParameters,
+              signal?: AbortSignal,
+            ) =>
+              settingsOwner.prepareProviderInvocation(
+                runtimeState.runtimeId,
+                provider,
+                parameters,
+                signal,
+                undefined,
+                requestFetch,
+              ),
+            readToolGovernance: () =>
+              settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+            contentGeneratorConfig: createContentGeneratorConfig(),
+          },
+          overrides: {
+            providerAdapter,
+            telemetryAdapter,
+            toolsView,
+          },
         }),
-        profile: {
-          config,
-          telemetry: settingsOwner.telemetry,
-          state: runtimeState,
-          settings: settingsSnapshot,
-          providerRuntime,
-          prepareProviderInvocation: (
-            provider: string,
-            parameters?: AdmittedModelParameters,
-            signal?: AbortSignal,
-          ) =>
-            settingsOwner.prepareProviderInvocation(
-              runtimeState.runtimeId,
-              provider,
-              parameters,
-              signal,
-              undefined,
-              requestFetch,
-            ),
-          readToolGovernance: () =>
-            settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
-          contentGeneratorConfig: createContentGeneratorConfig(),
-        },
-        overrides: {
-          providerAdapter,
-          telemetryAdapter,
-          toolsView,
-        },
-      }),
-    ).rejects.toThrow(
-      'No provider runtime is composed for this Config. Compose the providers package (see packages/providers/src/composition) before creating a content generator.',
-    );
+      ).rejects.toThrow(
+        'No provider runtime is composed for this Config. Compose the providers package (see packages/providers/src/composition) before creating a content generator.',
+      );
+    }, 'unopened');
   });
 
   it('throws when providerManager is present but contentGeneratorFactory is missing and Config has no factory', async () => {
+    const callerHistory = new HistoryService();
+    histories.add(callerHistory);
+
     const fakeManager: RuntimeProviderManager = {
+      fetchNetwork: requestFetch,
+      bindModelRegistry: () => {},
       getActiveProvider: vi.fn(),
       getActiveProviderName: vi.fn(),
       setActiveProvider: vi.fn(),
@@ -717,7 +768,7 @@ describe('AgentRuntimeLoader', () => {
     };
 
     await expect(
-      loadAgentRuntime({
+      loadTestRuntime({
         mediaStore: new LocalMediaStore({
           rootDirectory: config.projectTempDir + '/media',
           quotaBytes: config.getMediaStoreQuotaByteLimit(),
@@ -747,6 +798,7 @@ describe('AgentRuntimeLoader', () => {
           contentGeneratorConfig: contentConfigWithManagerOnly,
         },
         overrides: {
+          historyService: callerHistory,
           providerAdapter,
           telemetryAdapter,
           toolsView,
@@ -755,5 +807,14 @@ describe('AgentRuntimeLoader', () => {
     ).rejects.toThrow(
       'No provider runtime is composed for this Config. Compose the providers package (see packages/providers/src/composition) before creating a content generator.',
     );
+
+    callerHistory.add({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'still open' }],
+    });
+    const rows = await Array.fromAsync(callerHistory.streamRawHistory());
+    expect(rows.map((row) => row.blocks)).toStrictEqual([
+      [{ type: 'text', text: 'still open' }],
+    ]);
   });
 });

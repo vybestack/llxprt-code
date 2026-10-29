@@ -63,12 +63,12 @@ export interface MessageStreamDeps {
   ideContextTracker: IdeContextTracker;
   agentHookManager: AgentHookManager;
   getEffectiveModelIdentity: () => EffectiveModelIdentity;
-  getHistory: () => Promise<readonly IContent[]>;
+  /** The newest history row, or undefined when history is empty. */
+  readLastHistoryRow: () => Promise<IContent | undefined>;
   getSessionTurnCount: () => number;
   incrementSessionTurnCount: () => void;
   lazyInitialize: () => Promise<void>;
   startChat: (extraHistory?: readonly IContent[]) => Promise<ChatSession>;
-  getPreviousHistory: () => readonly IContent[] | undefined;
   setChat: (chat: ChatSession) => void;
   hasChat: () => boolean;
   complexityAnalyzer: ComplexityAnalyzer;
@@ -317,19 +317,9 @@ export class MessageStreamOrchestrator {
   }
 
   private async _ensureChatInitialized(): Promise<void> {
-    const { hasChat, getPreviousHistory, setChat, startChat, logger } =
-      this.deps;
+    const { hasChat, setChat, startChat } = this.deps;
     if (hasChat()) return;
-
-    const previousHistory = getPreviousHistory();
-    if (previousHistory && previousHistory.length > 0) {
-      logger.debug('Restoring previous history during prompt generation', {
-        historyLength: previousHistory.length,
-      });
-      setChat(await startChat(previousHistory));
-    } else {
-      setChat(await startChat());
-    }
+    setChat(await startChat());
   }
 
   private async *_preflight(
@@ -450,30 +440,27 @@ export class MessageStreamOrchestrator {
    * @requirement:REQ-005.4
    */
   private async _injectIdeContext(): Promise<void> {
-    const { ideContextTracker, getChat, getHistory } = this.deps;
-    const history = await getHistory();
-    const lastMessage =
-      history.length > 0 ? history[history.length - 1] : undefined;
-    const lastIContent = lastMessage;
-    const hasPendingToolCall =
-      !!lastIContent &&
-      lastIContent.speaker === 'ai' &&
-      lastIContent.blocks.some((b) => b.type === 'tool_call');
+    const { ideContextTracker, getChat, readLastHistoryRow } = this.deps;
+    if (!ideContextTracker.isEnabled()) return;
 
-    if (ideContextTracker.isEnabled() && !hasPendingToolCall) {
-      const { contextParts, newIdeContext } = ideContextTracker.getContextParts(
-        history.length === 0,
+    const lastRow = await readLastHistoryRow();
+    const hasPendingToolCall =
+      lastRow?.speaker === 'ai' &&
+      lastRow.blocks.some((block) => block.type === 'tool_call');
+    if (hasPendingToolCall) return;
+
+    const { contextParts, newIdeContext } = ideContextTracker.getContextParts(
+      lastRow === undefined,
+    );
+    if (contextParts.length > 0) {
+      getChat().addHistory(
+        iContentFromBlocks(
+          [{ type: 'text', text: contextParts.join('\n') }],
+          'human',
+        ),
       );
-      if (contextParts.length > 0) {
-        getChat().addHistory(
-          iContentFromBlocks(
-            [{ type: 'text', text: contextParts.join('\n') }],
-            'human',
-          ),
-        );
-      }
-      ideContextTracker.recordSentContext(newIdeContext);
     }
+    ideContextTracker.recordSentContext(newIdeContext);
   }
 
   private async *_runRetryLoop(

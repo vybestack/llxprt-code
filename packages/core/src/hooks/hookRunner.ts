@@ -17,6 +17,11 @@ import {
   reapProcessGroup,
 } from '../services/shellProcessKill.js';
 import type { HookConfig } from './types.js';
+import {
+  HookOutputOwner,
+  type HookSnapshotResult,
+} from './hookOutputSnapshot.js';
+import { runHookSnapshot, snapshotFailure } from './hookSnapshotProcess.js';
 import { HookEventName } from './types.js';
 import type {
   HookInput,
@@ -28,6 +33,10 @@ import type {
   BeforeToolInput,
 } from './types.js';
 import { mergeHookLLMRequest } from './hookTranslator.js';
+import {
+  stopHookInputProcess,
+  type HookModelRowsInput,
+} from './hookModelInputStream.js';
 import { DebugLogger } from '../debug/index.js';
 import type { HookProcessConfiguration } from './hook-configuration.js';
 import { sanitizeEnvironment } from '../services/environmentSanitization.js';
@@ -129,6 +138,57 @@ export class HookRunner {
         duration,
       };
     }
+  }
+
+  /** Internal disk seam; production event handlers retain the legacy array API. */
+  async executeHookWithRequestRows(
+    hookConfig: HookConfig,
+    eventName: HookEventName.BeforeModel | HookEventName.AfterModel,
+    input: HookModelRowsInput,
+    signal?: AbortSignal,
+  ): Promise<HookSnapshotResult> {
+    const startTime = Date.now();
+    const owner = new HookOutputOwner(input.cwd);
+    const options = { hookConfig, eventName, startTime };
+    try {
+      signal?.throwIfAborted();
+      if (input.hook_event_name !== eventName)
+        throw new Error('Hook input event mismatch');
+      const { ConfigSource } = await import('./hookRegistry.js');
+      if (hookConfig.source === ConfigSource.Project) {
+        if (!this.isTrustedFolder())
+          throw new Error('Project hook blocked - folder not trusted');
+        // Same project-trust cancellation as the legacy route: withdrawing
+        // trust must stop a running project hook, not only block new ones.
+        signal =
+          signal === undefined
+            ? this.projectSignal()
+            : AbortSignal.any([signal, this.projectSignal()]);
+        signal.throwIfAborted();
+      }
+      if (!hookConfig.command) throw new Error('Command hook missing command');
+    } catch (error) {
+      return snapshotFailure(
+        owner,
+        options,
+        error instanceof Error
+          ? error
+          : new Error('Hook input failed', { cause: error }),
+      );
+    }
+    const timeout = hookConfig.timeout ?? DEFAULT_HOOK_TIMEOUT;
+    return runHookSnapshot(
+      {
+        ...options,
+        input,
+        signal,
+        timeout,
+        spawn: () => this.spawnHookProcess(hookConfig, input),
+        killTimeout: (child, expired) =>
+          this.setupKillTimeout(child, timeout, expired, true),
+      },
+      owner,
+    );
   }
 
   /**
@@ -488,6 +548,41 @@ export class HookRunner {
       success: false,
       error: new Error(errorMessage),
       duration: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Sends SIGTERM after `timeout`, then escalates to SIGKILL if the child is
+   * still running. Do not use `child.killed` for escalation — Node sets that
+   * when a signal is *sent*, not when the process exits, so SIGTERM-ignoring
+   * hooks would never receive SIGKILL and could hang forever.
+   */
+  private setupKillTimeout(
+    child: ReturnType<typeof spawn>,
+    timeout: number,
+    onTimeout: () => void,
+    sourceInput = false,
+  ): { clear: () => void } {
+    let forceKillHandle: NodeJS.Timeout | undefined;
+    const timeoutHandle = setTimeout(() => {
+      onTimeout();
+      if (sourceInput) stopHookInputProcess(child, 'SIGTERM');
+      else child.kill('SIGTERM');
+      forceKillHandle = setTimeout(() => {
+        if (sourceInput) stopHookInputProcess(child, 'SIGKILL');
+        // Still running only when both exit indicators remain null.
+        else if (child.exitCode === null && child.signalCode === null)
+          child.kill('SIGKILL');
+      }, 5000);
+    }, timeout);
+
+    return {
+      clear: () => {
+        clearTimeout(timeoutHandle);
+        if (forceKillHandle !== undefined) {
+          clearTimeout(forceKillHandle);
+        }
+      },
     };
   }
 

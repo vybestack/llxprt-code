@@ -17,6 +17,7 @@ const modelTools = installModelToolFixture();
  * This exercises ConversationManager.recordHistory → _addModelOutputToHistory.
  */
 
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, it, expect, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -145,11 +146,13 @@ describe('ConversationManager records responseId into history @issue:207', () =>
       { responseId: 'resp_abc' },
     );
 
-    const all = historyService.getAll();
-    const ai = all.find((c) => c.speaker === 'ai');
-    expect(ai).toBeDefined();
-    expect(ai?.metadata?.id).toBe('resp_abc');
-    expect(ai?.metadata?.responsesStored).toBeUndefined();
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const all = rows;
+      const ai = all.find((c) => c.speaker === 'ai');
+      expect(ai).toBeDefined();
+      expect(ai?.metadata?.id).toBe('resp_abc');
+      expect(ai?.metadata?.responsesStored).toBeUndefined();
+    });
   });
 
   it('does not set metadata.id when responseId is null', async () => {
@@ -161,19 +164,23 @@ describe('ConversationManager records responseId into history @issue:207', () =>
       { responseId: null },
     );
 
-    const all = historyService.getAll();
-    const ai = all.find((c) => c.speaker === 'ai');
-    expect(ai).toBeDefined();
-    expect(ai?.metadata?.id).toBeUndefined();
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const all = rows;
+      const ai = all.find((c) => c.speaker === 'ai');
+      expect(ai).toBeDefined();
+      expect(ai?.metadata?.id).toBeUndefined();
+    });
   });
 
   it('does not set metadata.id when responseId is omitted (undefined)', async () => {
     await conversationManager.recordHistory(USER_INPUT, MODEL_OUTPUT);
 
-    const all = historyService.getAll();
-    const ai = all.find((c) => c.speaker === 'ai');
-    expect(ai).toBeDefined();
-    expect(ai?.metadata?.id).toBeUndefined();
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const all = rows;
+      const ai = all.find((c) => c.speaker === 'ai');
+      expect(ai).toBeDefined();
+      expect(ai?.metadata?.id).toBeUndefined();
+    });
   });
 
   it('sets metadata.responsesStored when responsesStored is true', async () => {
@@ -185,11 +192,13 @@ describe('ConversationManager records responseId into history @issue:207', () =>
       { responseId: 'resp_stored', responsesStored: true },
     );
 
-    const all = historyService.getAll();
-    const ai = all.find((c) => c.speaker === 'ai');
-    expect(ai).toBeDefined();
-    expect(ai?.metadata?.id).toBe('resp_stored');
-    expect(ai?.metadata?.responsesStored).toBe(true);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const all = rows;
+      const ai = all.find((c) => c.speaker === 'ai');
+      expect(ai).toBeDefined();
+      expect(ai?.metadata?.id).toBe('resp_stored');
+      expect(ai?.metadata?.responsesStored).toBe(true);
+    });
   });
 
   it('does not set metadata.responsesStored when responsesStored is false', async () => {
@@ -201,11 +210,13 @@ describe('ConversationManager records responseId into history @issue:207', () =>
       { responseId: 'resp_unstored', responsesStored: false },
     );
 
-    const all = historyService.getAll();
-    const ai = all.find((c) => c.speaker === 'ai');
-    expect(ai).toBeDefined();
-    expect(ai?.metadata?.id).toBe('resp_unstored');
-    expect(ai?.metadata?.responsesStored).toBeUndefined();
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const all = rows;
+      const ai = all.find((c) => c.speaker === 'ai');
+      expect(ai).toBeDefined();
+      expect(ai?.metadata?.id).toBe('resp_unstored');
+      expect(ai?.metadata?.responsesStored).toBeUndefined();
+    });
   });
 
   it('does not set metadata.id when responseId is an empty string', async () => {
@@ -217,9 +228,11 @@ describe('ConversationManager records responseId into history @issue:207', () =>
       { responseId: '' },
     );
 
-    const all = historyService.getAll();
-    const ai = all.find((c) => c.speaker === 'ai');
-    expect(ai).toBeDefined();
-    expect(ai?.metadata?.id).toBeUndefined();
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const all = rows;
+      const ai = all.find((c) => c.speaker === 'ai');
+      expect(ai).toBeDefined();
+      expect(ai?.metadata?.id).toBeUndefined();
+    });
   });
 });

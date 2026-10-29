@@ -212,7 +212,16 @@ describe('Public Agent tool ownership (#2616 S1/S8, #2615 E)', () => {
         async function* (
           options: NormalizedGenerateChatOptions,
         ): AsyncIterableIterator<IContent> {
-          requests = [...requests, structuredClone(options.contents)];
+          requests = [
+            ...requests,
+            structuredClone(
+              options.requestRows === undefined
+                ? options.contents
+                : await Array.fromAsync(
+                    options.requestRows.openReader(options.invocation.signal),
+                  ),
+            ),
+          ];
           const request = requests.length;
           if (request === 1) {
             modelEntered.release();
@@ -289,7 +298,9 @@ describe('Public Agent tool ownership (#2616 S1/S8, #2615 E)', () => {
       await a.toolRelease();
       const firstResult = await first;
       successful(firstResult);
-      const historyA = JSON.stringify(await a.agent.getHistory());
+      const historyA = JSON.stringify(
+        await Array.fromAsync(a.agent.streamHistory()),
+      );
       await a.agent.dispose();
       await b.toolRelease();
       const secondResult = await second;
@@ -333,7 +344,9 @@ describe('Public Agent tool ownership (#2616 S1/S8, #2615 E)', () => {
           otherInvocation,
         );
       }
-      const historyB = JSON.stringify(await b.agent.getHistory());
+      const historyB = JSON.stringify(
+        await Array.fromAsync(b.agent.streamHistory()),
+      );
       expect(historyA).toContain('alpha-external-output:alpha-invocation-1');
       expect(historyA).not.toContain('beta-external-output');
       expect(historyB).toContain('beta-external-output:beta-invocation-1');
@@ -348,9 +361,9 @@ describe('Public Agent tool ownership (#2616 S1/S8, #2615 E)', () => {
       expect(JSON.stringify(b.requests()[3])).toContain(
         'beta-external-output:beta-invocation-2',
       );
-      expect(JSON.stringify(await b.agent.getHistory())).not.toContain(
-        'alpha-external-output',
-      );
+      expect(
+        JSON.stringify(await Array.fromAsync(b.agent.streamHistory())),
+      ).not.toContain('alpha-external-output');
     } finally {
       abort.abort();
       await Promise.all(releases.map((release) => release()));

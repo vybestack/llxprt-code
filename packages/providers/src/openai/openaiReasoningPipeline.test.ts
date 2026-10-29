@@ -20,7 +20,7 @@ import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { prepareRequest } from './OpenAIRequestPreparation.js';
+import { prepareRequestBody as prepareRequest } from './__tests__/support/prepareRequestBody.js';
 import { REASONING_WIRE_KEYS } from './openaiReasoningDialect.js';
 import { buildProviderSettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/admit-model-parameters.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';

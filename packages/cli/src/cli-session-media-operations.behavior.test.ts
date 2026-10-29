@@ -9,9 +9,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   LocalMediaStore,
-  SessionRecordingService,
+  createLockedSessionRecorder,
   getProjectHash,
 } from '@vybestack/llxprt-code-core';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { CliSessionPersistence } from './cliSessionPersistence.js';
 
 describe('CLI recording media operations', () => {
@@ -29,7 +30,7 @@ describe('CLI recording media operations', () => {
       quotaBytes: 4096,
     });
     cleanups.push(() => media.close());
-    const recording = await SessionRecordingService.createLocked({
+    const recording = await createLockedSessionRecorder({
       sessionId: crypto.randomUUID(),
       chatsDir,
       projectHash: getProjectHash(root),
@@ -45,10 +46,12 @@ describe('CLI recording media operations', () => {
       mimeType: 'text/plain',
       semanticMetadata: { mediaType: 'document' },
     });
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'attached source' }, reference],
-    });
+    await recordRowsForTest(recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'attached source' }, reference],
+      },
+    ]);
     const owner = new CliSessionPersistence(
       { projectRoot: root, chatsDir },
       { mediaStore: media },

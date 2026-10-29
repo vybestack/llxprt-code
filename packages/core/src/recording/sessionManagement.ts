@@ -31,7 +31,7 @@ import {
   type LockHandle,
 } from './SessionLockManager.js';
 import { RESUME_NO_SESSIONS_FOUND } from './resumeNotFoundMessages.js';
-import { CheckpointService } from './CheckpointService.js';
+import { createCheckpointService } from './checkpointServiceFactory.js';
 
 /**
  * Result of listing sessions for a project.
@@ -108,11 +108,7 @@ export async function deleteSessionWithDiagnostics(
   }
 
   return {
-    result: await deleteResolvedSession(
-      resolved.session,
-      chatsDir,
-      projectHash,
-    ),
+    result: await deleteResolvedSession(resolved.session, chatsDir),
     unreadableRecordings,
   };
 }
@@ -149,13 +145,12 @@ export async function deleteSessionById(
     };
   }
 
-  return deleteResolvedSession(target, chatsDir, projectHash);
+  return deleteResolvedSession(target, chatsDir);
 }
 
 async function deleteResolvedSession(
   target: SessionSummary,
   chatsDir: string,
-  projectHash: string,
 ): Promise<DeleteSessionResult | DeleteSessionError> {
   let lock: LockHandle;
   try {
@@ -177,9 +172,8 @@ async function deleteResolvedSession(
   const { unlink } = await import('node:fs/promises');
   let result: DeleteSessionResult | DeleteSessionError;
   try {
-    const blockers = await new CheckpointService().getDeletionBlockers(
+    const blockers = await createCheckpointService().getDeletionBlockers(
       target.filePath,
-      projectHash,
     );
     if (blockers.length > 0) {
       const details = blockers

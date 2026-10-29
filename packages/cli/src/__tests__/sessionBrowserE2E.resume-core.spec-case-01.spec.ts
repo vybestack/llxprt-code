@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { collectResumeRows } from './resumeRows.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P30
@@ -78,8 +79,12 @@ describe('Core resume flow #1', () => {
 
     expect(result.ok).toBe(true);
     assertTruthy(result.ok);
+    const recording = context.recordingCallbacks.getCurrentRecording();
+    if (recording === null) throw new Error('Resume did not adopt a recording');
+    state.recordingsToDispose.push(recording);
+    const restoredRows = await collectResumeRows(result.history);
     expect(result.metadata.sessionId).toBe(newerSessionId);
-    expect(result.history[0].blocks[0]).toMatchObject({
+    expect(restoredRows[0].blocks[0]).toMatchObject({
       type: 'text',
       text: 'newer message',
     });

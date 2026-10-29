@@ -8,7 +8,6 @@ import type {
   RecordingIntegration,
   ToolCallConfirmationDetails,
   AgentRequestInput,
-  IContent,
 } from '@vybestack/llxprt-code-core';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
@@ -31,8 +30,9 @@ import type {
   SlashCommandProcessorResult,
 } from '../types.js';
 import { MessageType, ToolCallStatus } from '../types.js';
-import { addResumeWarnings } from '../utils/resumeWarnings.js';
+import { stringifyPrompt } from './slash-command-messages.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
+import { SubagentView } from '../components/SubagentManagement/types.js';
 import type { DialogRequest } from '../stores/dialog/dialogStore.js';
 
 /**
@@ -44,6 +44,7 @@ export interface CommandLoggingPort {
 }
 
 export interface SlashCommandHandlerDeps {
+  writeOutput: (item: HistoryItemWithoutId) => Promise<void>;
   commands: readonly SlashCommand[] | undefined;
   config: CommandLoggingPort | null;
   commandContext: CommandContext;
@@ -53,12 +54,9 @@ export interface SlashCommandHandlerDeps {
   resumeRawSession:
     | ((action: PerformResumeActionReturn) => Promise<PerformResumeResult>)
     | null;
-  replayResumedHistory: (history: readonly IContent[]) => void;
+  refreshResumedHistory: () => void;
   recordCommandError: (message: string) => Promise<void>;
   isMcpDiscoveryPending: () => boolean;
-  loadCommandHistory: (
-    result: Extract<ActionResult, { type: 'load_history' }>,
-  ) => Promise<void>;
   actions: SlashCommandProcessorActions;
   addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
   addMessage: (message: Message) => void;
@@ -105,7 +103,7 @@ export async function processSlashCommand(
   deps.setIsProcessing(true);
   deps.setLocalIsProcessing(true);
   if (addToHistory) {
-    addUserCommandToHistory(deps, trimmed);
+    await addUserCommandToHistory(deps, trimmed);
   }
 
   const parsed = parseCommand(trimmed, deps.commands);
@@ -126,14 +124,14 @@ export async function processSlashCommand(
   }
 }
 
-function addUserCommandToHistory(
+async function addUserCommandToHistory(
   deps: SlashCommandHandlerDeps,
   trimmed: string,
-): void {
+): Promise<void> {
   const sanitizedCommand = secureInputHandler.shouldUseSecureMode(trimmed)
     ? secureInputHandler.sanitizeForHistory(trimmed)
     : trimmed;
-  deps.addItem({ type: MessageType.USER, text: sanitizedCommand }, Date.now());
+  await deps.writeOutput({ type: MessageType.USER, text: sanitizedCommand });
 }
 
 function parseCommand(
@@ -180,10 +178,10 @@ async function executeParsedCommand(
       : { type: 'handled' };
   }
   if (commandToExecute?.subCommands) {
-    addSubcommandHelp(deps, commandToExecute);
+    await addSubcommandHelp(deps, commandToExecute);
     return { type: 'handled' };
   }
-  addUnknownCommandMessage(deps, parsed.trimmed);
+  await addUnknownCommandMessage(deps, parsed.trimmed);
   return { type: 'handled' };
 }
 
@@ -249,6 +247,10 @@ function logDiscarded(
 }
 
 function describeError(error: unknown): string {
+  if (error instanceof AggregateError) {
+    const failures: readonly unknown[] = error.errors;
+    return `${error.message}: ${failures.map(describeError).join('; ')}`;
+  }
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -302,15 +304,13 @@ async function handleActionResult(
       return handleMessageResult(deps, result);
     case 'dialog':
       return handleDialogResult(deps, result);
-    case 'load_history':
-      return handleLoadHistoryResult(deps, result);
     case 'quit':
       deps.actions.quit(result.messages);
       return { type: 'handled' };
     case 'submit_prompt':
       return {
         type: 'submit_prompt',
-        content: stringifyPrompt(result.content as AgentRequestInput),
+        content: stringifyPrompt(result.content),
       };
     case 'confirm_shell_commands':
       return confirmShellCommands(deps, result);
@@ -329,14 +329,10 @@ async function handleMessageResult(
   deps: SlashCommandHandlerDeps,
   result: Extract<ActionResult, { type: 'message' }>,
 ): Promise<SlashCommandProcessorResult> {
-  deps.addItem(
-    {
-      type:
-        result.messageType === 'error' ? MessageType.ERROR : MessageType.INFO,
-      text: result.content,
-    },
-    Date.now(),
-  );
+  await deps.writeOutput({
+    type: result.messageType === 'error' ? MessageType.ERROR : MessageType.INFO,
+    text: result.content,
+  });
   if (result.messageType === 'error') {
     await deps.recordCommandError(result.content);
   }
@@ -384,8 +380,7 @@ function buildSimpleDialogActions(
     profileEditor: (data) => openProfileEditor(deps, data),
     saveProfile: () => undefined,
     subagent: (data) => openSubagentDialog(actions, data),
-    models: (data) =>
-      actions.openModelsDialog(data as ModelsDialogData | undefined),
+    models: (data) => actions.openModelsDialog(readModelsDialogData(data)),
     welcome: () => actions.openWelcomeDialog(),
     sessionBrowser: () => actions.openSessionBrowserDialog(),
   };
@@ -400,7 +395,9 @@ function openLoggingDialog(
     typeof dialogData === 'object' &&
     'entries' in dialogData
   ) {
-    actions.openLoggingDialog(dialogData as { entries: unknown[] });
+    actions.openLoggingDialog({
+      entries: Array.isArray(dialogData.entries) ? dialogData.entries : [],
+    });
   } else {
     actions.openLoggingDialog();
   }
@@ -411,9 +408,9 @@ function readProfileName(dialogData: unknown): string | undefined {
     dialogData != null &&
     typeof dialogData === 'object' &&
     'profileName' in dialogData &&
-    typeof (dialogData as { profileName: unknown }).profileName === 'string'
+    typeof dialogData.profileName === 'string'
   ) {
-    return (dialogData as { profileName: string }).profileName;
+    return dialogData.profileName;
   }
   return undefined;
 }
@@ -446,39 +443,11 @@ function openSubagentDialog(
   actions: SlashCommandProcessorActions,
   dialogData: unknown,
 ): void {
-  const subagentData = dialogData as SubagentDialogData | undefined;
+  const subagentData = readSubagentDialogData(dialogData);
   actions.openSubagentDialog(
     subagentData?.initialView,
     subagentData?.initialSubagentName,
   );
-}
-
-async function handleLoadHistoryResult(
-  deps: SlashCommandHandlerDeps,
-  result: Extract<ActionResult, { type: 'load_history' }>,
-): Promise<SlashCommandProcessorResult> {
-  await deps.loadCommandHistory(result);
-  return { type: 'handled' };
-}
-
-function stringifyPrompt(content: AgentRequestInput): string {
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (!Array.isArray(content)) {
-    return '';
-  }
-  return content
-    .map((part) => {
-      if (typeof part === 'string') {
-        return part;
-      }
-      if (typeof part === 'object' && 'text' in part) {
-        return (part as { text?: string }).text ?? '';
-      }
-      return '';
-    })
-    .join('');
 }
 
 async function confirmShellCommands(
@@ -619,11 +588,15 @@ async function performOwnerSessionResume(
 ): Promise<SlashCommandProcessorResult> {
   const replay = resume(action);
   try {
-    addResumeWarnings(deps.addMessage, await replay);
+    for (const warning of await replay)
+      await deps.writeOutput({
+        type: MessageType.INFO,
+        text: `Warning: ${warning}`,
+      });
   } catch (error) {
     deps.addMessage({
       type: MessageType.ERROR,
-      content: error instanceof Error ? error.message : String(error),
+      content: describeError(error),
       timestamp: new Date(),
     });
   }
@@ -661,7 +634,7 @@ async function performSessionResume(
   } catch (error: unknown) {
     deps.addMessage({
       type: MessageType.ERROR,
-      content: error instanceof Error ? error.message : String(error),
+      content: describeError(error),
       timestamp: new Date(),
     });
     return { type: 'handled' };
@@ -675,36 +648,35 @@ async function performSessionResume(
     return { type: 'handled' };
   }
 
-  deps.replayResumedHistory(resumeResult.history);
-  addResumeWarnings(deps.addMessage, resumeResult.warnings);
+  deps.refreshResumedHistory();
+  for (const warning of resumeResult.warnings)
+    await deps.writeOutput({
+      type: MessageType.INFO,
+      text: `Warning: ${warning}`,
+    });
   return { type: 'handled' };
 }
 
-function addSubcommandHelp(
+async function addSubcommandHelp(
   deps: SlashCommandHandlerDeps,
   command: SlashCommand,
-): void {
+): Promise<void> {
   const helpText = `Command '/${command.name}' requires a subcommand. Available:\n${command.subCommands
     ?.map((sc) => `  - ${sc.name}: ${sc.description || ''}`)
     .join('\n')}`;
-  deps.addMessage({
-    type: MessageType.INFO,
-    content: helpText,
-    timestamp: new Date(),
-  });
+  await deps.writeOutput({ type: MessageType.INFO, text: helpText });
 }
 
-function addUnknownCommandMessage(
+async function addUnknownCommandMessage(
   deps: SlashCommandHandlerDeps,
   trimmed: string,
-): void {
+): Promise<void> {
   const isMcpLoading = deps.isMcpDiscoveryPending();
-  deps.addMessage({
+  await deps.writeOutput({
     type: MessageType.ERROR,
-    content: isMcpLoading
+    text: isMcpLoading
       ? `Unknown command: ${trimmed}. Command might have been from an MCP server but MCP servers are not done loading.`
       : `Unknown command: ${trimmed}`,
-    timestamp: new Date(),
   });
 }
 
@@ -717,7 +689,7 @@ async function handleCommandError(
     logParsedCommand(deps, parsed);
   }
   const errorText = error instanceof Error ? error.message : String(error);
-  deps.addItem({ type: MessageType.ERROR, text: errorText }, Date.now());
+  await deps.writeOutput({ type: MessageType.ERROR, text: errorText });
   await deps.recordCommandError(errorText);
 }
 
@@ -742,4 +714,67 @@ function logParsedCommand(
     parsed.subcommand,
   );
   deps.config!.logSlashCommand(event);
+}
+
+function optionalString(value: unknown): string | undefined {
+  if (value === undefined || typeof value === 'string') return value;
+  throw new Error('Expected a string');
+}
+function optionalBoolean(value: unknown): boolean | undefined {
+  if (value === undefined || typeof value === 'boolean') return value;
+  throw new Error('Expected a boolean');
+}
+function readModelsFilters(value: unknown): ModelsDialogData['initialFilters'] {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'object' || value === null)
+    throw new Error('Invalid model filters');
+  return {
+    tools: optionalBoolean('tools' in value ? value.tools : undefined),
+    vision: optionalBoolean('vision' in value ? value.vision : undefined),
+    reasoning: optionalBoolean(
+      'reasoning' in value ? value.reasoning : undefined,
+    ),
+    audio: optionalBoolean('audio' in value ? value.audio : undefined),
+  };
+}
+function readModelsDialogData(data: unknown): ModelsDialogData | undefined {
+  if (data === undefined) return undefined;
+  if (typeof data !== 'object' || data === null)
+    throw new Error('Invalid models dialog data');
+  const provider =
+    'providerOverride' in data ? data.providerOverride : undefined;
+  return {
+    initialSearch: optionalString(
+      'initialSearch' in data ? data.initialSearch : undefined,
+    ),
+    includeDeprecated: optionalBoolean(
+      'includeDeprecated' in data ? data.includeDeprecated : undefined,
+    ),
+    providerOverride: provider === null ? null : optionalString(provider),
+    showAllProviders: optionalBoolean(
+      'showAllProviders' in data ? data.showAllProviders : undefined,
+    ),
+    initialFilters: readModelsFilters(
+      'initialFilters' in data ? data.initialFilters : undefined,
+    ),
+  };
+}
+function readSubagentDialogData(data: unknown): SubagentDialogData | undefined {
+  if (data === undefined) return undefined;
+  if (typeof data !== 'object' || data === null)
+    throw new Error('Invalid subagent dialog data');
+  const initialView = 'initialView' in data ? data.initialView : undefined;
+  const initialSubagentName =
+    'initialSubagentName' in data ? data.initialSubagentName : undefined;
+  if (
+    initialSubagentName !== undefined &&
+    typeof initialSubagentName !== 'string'
+  )
+    throw new Error('Invalid subagent name');
+  if (initialView !== undefined && !isSubagentView(initialView))
+    throw new Error('Invalid subagent view');
+  return { initialView, initialSubagentName };
+}
+function isSubagentView(value: unknown): value is SubagentView {
+  return Object.values(SubagentView).some((view) => view === value);
 }

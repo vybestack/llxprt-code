@@ -7,20 +7,15 @@ import type { McpAuthFactoryRegistry } from './mcp-auth-factory.js';
 
 import * as crypto from 'node:crypto';
 import { URL } from 'node:url';
-import type { EventEmitter } from 'node:events';
 import { type HostBrowserLauncher } from '../host/hostServices.js';
-import {
-  type MCPOAuthToken,
+import type {
+  MCPOAuthToken,
   MCPOAuthTokenStorage,
 } from './oauth-token-storage.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-tools/utils/errors.js';
 import { OAuthUtils, ResourceMismatchError } from './oauth-utils.js';
 import { awaitOAuthOperation } from './oauth-request.js';
-import {
-  startOAuthCallbackServer,
-  REDIRECT_PATH,
-  type OAuthCallbackServer,
-} from './oauth-callback.js';
+import { startOAuthCallbackServer, REDIRECT_PATH } from './oauth-callback.js';
 export type { OAuthAuthorizationResponse } from './oauth-callback.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import {
@@ -31,7 +26,15 @@ import {
 
 const debugLogger = new DebugLogger('llxprt:mcp:oauth');
 
-export const OAUTH_DISPLAY_MESSAGE_EVENT = 'oauth-display-message' as const;
+import {
+  waitForAuthorizationCode,
+  type OAuthDisplaySink,
+} from './oauth-authorization.js';
+import {
+  finalizeOAuthToken,
+  getValidOAuthToken,
+} from './oauth-token-lifecycle.js';
+export type { OAuthDisplaySink } from './oauth-authorization.js';
 
 /**
  * OAuth configuration for an MCP server.
@@ -646,129 +649,6 @@ export class MCPOAuthProvider {
   }
 
   /**
-   * Save the OAuth token and verify it was persisted correctly.
-   */
-  private static async saveAndVerifyToken(
-    serverName: string,
-    token: MCPOAuthToken,
-    config: MCPOAuthConfig,
-    mcpServerUrl: string | undefined,
-    signal: AbortSignal | undefined,
-    tokenStorage: MCPOAuthTokenStorage,
-  ): Promise<void> {
-    try {
-      await awaitOAuthOperation(signal, () =>
-        tokenStorage.saveToken(
-          serverName,
-          token,
-          config.clientId,
-          config.tokenUrl,
-          mcpServerUrl,
-        ),
-      );
-      debugLogger.debug('[OK] Authentication successful! Token saved.');
-
-      const savedToken = await awaitOAuthOperation(signal, () =>
-        tokenStorage.getCredentials(serverName),
-      );
-      if (savedToken?.token.accessToken) {
-        debugLogger.debug('[OK] Token verification successful');
-      } else {
-        debugLogger.error(
-          'Token verification failed: token not found or invalid after save',
-        );
-      }
-    } catch (saveError) {
-      debugLogger.error(`Failed to save token: ${getErrorMessage(saveError)}`);
-      throw saveError;
-    }
-  }
-
-  /**
-   * Open the browser for OAuth authorization and wait for the callback code.
-   */
-  private static async waitForAuthorizationCode(
-    config: MCPOAuthConfig,
-    pkceParams: PKCEParams,
-    redirectPort: number,
-    mcpServerUrl: string | undefined,
-    callbackServer: OAuthCallbackServer,
-    events: EventEmitter | undefined,
-    signal: AbortSignal | undefined,
-    openBrowser: HostBrowserLauncher,
-  ): Promise<string> {
-    const displayMessage = (message: string) => {
-      if (events) {
-        events.emit(OAUTH_DISPLAY_MESSAGE_EVENT, message);
-      } else {
-        debugLogger.log(message);
-      }
-    };
-
-    const authUrl = this.buildAuthorizationUrl(
-      config,
-      pkceParams,
-      redirectPort,
-      mcpServerUrl,
-    );
-
-    signal?.throwIfAborted();
-    displayMessage(`→ Opening your browser for OAuth sign-in...
-
-If the browser does not open, copy and paste this URL into your browser:
-${authUrl}
-
-TIP: Triple-click to select the entire URL, then copy and paste it into your browser.
-WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.`);
-
-    try {
-      await awaitOAuthOperation(signal, () => openBrowser(authUrl));
-    } catch (error) {
-      signal?.throwIfAborted();
-      debugLogger.warn(
-        'Failed to open browser automatically:',
-        getErrorMessage(error),
-      );
-    }
-
-    const response = await callbackServer.response;
-    signal?.throwIfAborted();
-    if ('error' in response) throw response.error;
-    const { code } = response.value;
-    debugLogger.debug(
-      '[OK] Authorization code received, exchanging for tokens...',
-    );
-    return code;
-  }
-
-  /**
-   * Convert an OAuthTokenResponse to an MCPOAuthToken, setting expiresAt if applicable.
-   */
-  private static buildMCPOAuthToken(
-    tokenResponse: OAuthTokenResponse,
-  ): MCPOAuthToken {
-    if (!tokenResponse.access_token) {
-      throw new Error('No access token received from token endpoint');
-    }
-
-    const token: MCPOAuthToken = {
-      accessToken: tokenResponse.access_token,
-      tokenType: tokenResponse.token_type || 'Bearer',
-      refreshToken: tokenResponse.refresh_token,
-      scope: tokenResponse.scope,
-    };
-
-    if (
-      tokenResponse.expires_in !== undefined &&
-      tokenResponse.expires_in > 0
-    ) {
-      token.expiresAt = Date.now() + tokenResponse.expires_in * 1000;
-    }
-
-    return token;
-  }
-
-  /**
    * Perform the full OAuth authorization code flow with PKCE.
    * Cancellation joins in-flight work and rejects with the signal's reason.
    * Browser and storage calls cannot be interrupted; a started write may persist,
@@ -779,7 +659,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
     serverName: string,
     config: MCPOAuthConfig,
     mcpServerUrl?: string,
-    events?: EventEmitter,
+    display?: OAuthDisplaySink,
     signal?: AbortSignal,
   ): Promise<MCPOAuthToken> {
     const { openBrowser, tokenStorage } = capabilities;
@@ -821,13 +701,15 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
         );
       }
 
-      code = await this.waitForAuthorizationCode(
-        config,
-        pkceParams,
-        redirectPort,
-        mcpServerUrl,
+      code = await waitForAuthorizationCode(
+        this.buildAuthorizationUrl(
+          config,
+          pkceParams,
+          redirectPort,
+          mcpServerUrl,
+        ),
         callbackServer,
-        events,
+        display,
         signal,
         openBrowser,
       );
@@ -838,27 +720,21 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
       await callbackServer.close();
     }
 
-    const tokenResponse = await this.exchangeCodeForToken(
-      config,
-      code,
-      pkceParams.codeVerifier,
-      redirectPort,
-      mcpServerUrl,
-      signal,
-    );
-
-    const token = this.buildMCPOAuthToken(tokenResponse);
-    await this.saveAndVerifyToken(
+    return finalizeOAuthToken(
+      this.exchangeCodeForToken(
+        config,
+        code,
+        pkceParams.codeVerifier,
+        redirectPort,
+        mcpServerUrl,
+        signal,
+      ),
       serverName,
-      token,
       config,
       mcpServerUrl,
       signal,
       tokenStorage,
     );
-    signal?.throwIfAborted();
-
-    return token;
   }
 
   /**
@@ -873,80 +749,13 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
     config: MCPOAuthConfig,
     signal?: AbortSignal,
   ): Promise<string | null> {
-    signal?.throwIfAborted();
-    debugLogger.debug(`Getting valid token for server: ${serverName}`);
-    const credentials = await awaitOAuthOperation(signal, () =>
-      tokenStorage.getCredentials(serverName),
+    return getValidOAuthToken(
+      tokenStorage,
+      serverName,
+      config,
+      signal,
+      this.refreshAccessToken.bind(this),
     );
-
-    if (!credentials) {
-      debugLogger.debug(`No credentials found for server: ${serverName}`);
-      return null;
-    }
-
-    const { token } = credentials;
-    debugLogger.debug(
-      `Found token for server: ${serverName}, expired: ${MCPOAuthTokenStorage.isTokenExpired(token)}`,
-    );
-
-    // Check if token is expired
-    if (!MCPOAuthTokenStorage.isTokenExpired(token)) {
-      debugLogger.debug(`Returning valid token for server: ${serverName}`);
-      return token.accessToken;
-    }
-
-    // Try to refresh if we have a refresh token
-    if (token.refreshToken && config.clientId && credentials.tokenUrl) {
-      try {
-        debugLogger.log(
-          `Refreshing expired token for MCP server: ${serverName}`,
-        );
-
-        const newTokenResponse = await this.refreshAccessToken(
-          config,
-          token.refreshToken,
-          credentials.tokenUrl,
-          credentials.mcpServerUrl,
-          signal,
-        );
-
-        // Update stored token
-        const newToken: MCPOAuthToken = {
-          accessToken: newTokenResponse.access_token,
-          tokenType: newTokenResponse.token_type,
-          refreshToken: newTokenResponse.refresh_token ?? token.refreshToken,
-          scope: newTokenResponse.scope ?? token.scope,
-        };
-
-        if (
-          newTokenResponse.expires_in !== undefined &&
-          newTokenResponse.expires_in > 0
-        ) {
-          newToken.expiresAt = Date.now() + newTokenResponse.expires_in * 1000;
-        }
-
-        await awaitOAuthOperation(signal, () =>
-          tokenStorage.saveToken(
-            serverName,
-            newToken,
-            config.clientId,
-            credentials.tokenUrl,
-            credentials.mcpServerUrl,
-          ),
-        );
-
-        return newToken.accessToken;
-      } catch (error) {
-        signal?.throwIfAborted();
-        debugLogger.error(`Failed to refresh token: ${getErrorMessage(error)}`);
-        // Remove invalid token
-        await awaitOAuthOperation(signal, () =>
-          tokenStorage.deleteCredentials(serverName),
-        );
-      }
-    }
-
-    return null;
   }
 }
 

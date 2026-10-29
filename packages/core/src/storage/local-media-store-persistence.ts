@@ -35,12 +35,10 @@ import {
   type LocalMediaStoreOptions,
   type MediaReclamationResult,
   type PublishedMediaObjectPath,
-  type ReservationRecord,
   type StoreLockOwner,
 } from './local-media-store-types.js';
 import {
   LOCK_VERSION,
-  RESERVATION_VERSION,
   contentIdFor,
   hasErrnoCode,
   isNonNegativeSafeInteger,
@@ -86,6 +84,10 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
   protected override readonly reservationLeaseMs: number;
   private readonly quotaScanMaxEntries: number;
   private readonly operations = new Set<Promise<unknown>>();
+  private readonly lockLifetime: 'operation' | 'store';
+  private heldLock:
+    | { readonly owner: StoreLockOwner; readonly heartbeat: LeaseHeartbeat }
+    | undefined;
   private closing: Promise<void> | undefined;
 
   constructor(options: LocalMediaStoreOptions) {
@@ -109,6 +111,7 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
     );
     this.lockTimeoutMs = lockTimeoutMs;
     this.staleLockMs = staleLockMs;
+    this.lockLifetime = options.lockLifetime ?? 'operation';
     this.reservationLeaseMs = reservationLeaseMs;
     this.quotaScanMaxEntries = quotaScanMaxEntries;
   }
@@ -120,7 +123,26 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
 
   private async joinAndClose(): Promise<void> {
     await Promise.allSettled([...this.operations]);
-    await super.close();
+    const failures: unknown[] = [];
+    try {
+      await super.close();
+    } catch (error) {
+      failures.push(error);
+    }
+    const held = this.heldLock;
+    this.heldLock = undefined;
+    if (held !== undefined) {
+      const heartbeatFailure = await held.heartbeat.stop();
+      if (heartbeatFailure !== undefined) failures.push(heartbeatFailure);
+      try {
+        await this.releaseStoreLock(held.owner, 'close store', undefined);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'Failed to close media store');
+    }
   }
 
   async runExclusive<T>(
@@ -207,6 +229,19 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
     this.assertOpen(operation, contentId);
     await this.files.ensureDirectories(contentId);
     this.assertInstanceLeaseHealthy(contentId);
+    if (this.lockLifetime === 'store') {
+      if (this.heldLock === undefined) {
+        const owner = await this.acquireStoreLock(operation, contentId);
+        this.heldLock = {
+          owner,
+          heartbeat: this.startStoreLockHeartbeat(owner, operation, contentId),
+        };
+      }
+      await this.refreshStoreLock(this.heldLock.owner, operation, contentId);
+      const result = await work();
+      await this.refreshStoreLock(this.heldLock.owner, operation, contentId);
+      return result;
+    }
     const owner = await this.acquireStoreLock(operation, contentId);
     const heartbeat = this.startStoreLockHeartbeat(owner, operation, contentId);
     let outcome:
@@ -234,6 +269,19 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
   async readObjectVerified(reference: MediaStoredObject): Promise<Uint8Array> {
     return this.runExclusive('read verified', reference.contentId, () =>
       this.readObjectVerifiedUnlocked(reference, 'read verified'),
+    );
+  }
+
+  /**
+   * Reads an object the caller already holds a reservation for. Reservations
+   * keep reclamation away from the object, so the read needs no store lock.
+   */
+  readReservedObjectVerified(
+    reference: MediaReferenceBlock,
+  ): Promise<Uint8Array> {
+    return this.readObjectVerifiedUnlocked(
+      reference.selectedObject,
+      'read reserved',
     );
   }
 
@@ -384,21 +432,24 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
     );
   }
 
-  async release(contentId: string, ownerId: string): Promise<void> {
-    validateContentId(contentId, 'release reference');
-    validateOwnerId(ownerId, contentId, 'release reference');
-    await this.runExclusive('release reference', contentId, async () => {
-      const ownerDigest = createHash('sha256').update(ownerId).digest('hex');
-      const record = await this.readReservationIfPresent(
-        contentId,
-        ownerDigest,
-      );
-      if (record === undefined) return;
-      for (const relatedContentId of record.relatedContentIds) {
-        await this.removeReservation(relatedContentId, ownerDigest);
-      }
-      await this.files.syncDirectory(this.files.reservationDirectory);
-    });
+  release(contentId: string, ownerId: string): Promise<void> {
+    return this.releaseAll([contentId], ownerId);
+  }
+
+  /** Releases the owner's reservations for every content id in one lock cycle. */
+  async releaseAll(
+    contentIds: readonly string[],
+    ownerId: string,
+  ): Promise<void> {
+    if (contentIds.length === 0) return;
+    for (const contentId of contentIds) {
+      validateContentId(contentId, 'release reference');
+      validateOwnerId(ownerId, contentId, 'release reference');
+    }
+    const lockContentId = contentIds.length === 1 ? contentIds[0] : undefined;
+    await this.runExclusive('release reference', lockContentId, () =>
+      this.releaseReservationsUnlocked(contentIds, ownerId),
+    );
   }
 
   async hasReservations(contentId: string): Promise<boolean> {
@@ -712,33 +763,6 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
     }
   }
 
-  private async rollbackReservationAfterReadFailure(
-    objects: readonly MediaStoredObject[],
-    ownerDigest: string,
-    error: unknown,
-  ): Promise<never> {
-    const failures: unknown[] = [];
-    for (const object of objects) {
-      try {
-        await this.removeReservation(object.contentId, ownerDigest);
-      } catch (cleanupError) {
-        failures.push(cleanupError);
-      }
-    }
-    try {
-      await this.files.syncDirectory(this.files.reservationDirectory);
-    } catch (cleanupError) {
-      failures.push(cleanupError);
-    }
-    if (failures.length > 0) {
-      throw new AggregateError(
-        [error, ...failures],
-        'Media reservation and verification cleanup failed',
-      );
-    }
-    throw error;
-  }
-
   async reserveUnlocked(
     reference: MediaReferenceBlock,
     ownerId: string,
@@ -808,35 +832,5 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
         );
       }
     }
-  }
-
-  private buildReservationRecord(
-    objects: readonly MediaStoredObject[],
-    ownerDigest: string,
-  ): ReservationRecord {
-    const now = Date.now();
-    return {
-      version: RESERVATION_VERSION,
-      ownerDigest,
-      instanceId: this.instanceId,
-      pid: process.pid,
-      hostname: hostname(),
-      createdAt: now,
-      expiresAt: now + this.reservationLeaseMs,
-      relatedContentIds: objects.map((object) => object.contentId),
-    };
-  }
-
-  private reservationMatches(
-    record: ReservationRecord,
-    objects: readonly MediaStoredObject[],
-  ): boolean {
-    const contentIds = objects.map((object) => object.contentId);
-    return (
-      record.relatedContentIds.length === contentIds.length &&
-      record.relatedContentIds.every(
-        (contentId, index) => contentId === contentIds[index],
-      )
-    );
   }
 }

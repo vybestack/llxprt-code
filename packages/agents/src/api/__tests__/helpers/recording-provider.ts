@@ -1,3 +1,4 @@
+import { providerRowsOf } from '@vybestack/llxprt-code-providers/utils/providerRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -60,6 +61,19 @@ interface Gate {
 }
 
 class RecordingOpenAIProvider extends OpenAIProvider {
+  private readonly preparedTools = new WeakMap<
+    object,
+    NormalizedGenerateChatOptions['tools']
+  >();
+
+  override async projectPromptEnvelope(
+    options: Parameters<OpenAIProvider['projectPromptEnvelope']>[0],
+  ): ReturnType<OpenAIProvider['projectPromptEnvelope']> {
+    const projection = await super.projectPromptEnvelope(options);
+    this.preparedTools.set(projection.transportToken, options.tools);
+    return projection;
+  }
+
   constructor(
     private readonly record: (request: RecordedRequest) => Promise<number>,
     private readonly responseText: string,
@@ -71,7 +85,13 @@ class RecordingOpenAIProvider extends OpenAIProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    const index = await this.record(options);
+    const token = options.promptEnvelopeTransportToken;
+    const index = await this.record({
+      ...options,
+      tools:
+        token === undefined ? options.tools : this.preparedTools.get(token),
+    });
+    if (token !== undefined) this.preparedTools.delete(token);
     yield {
       speaker: 'ai',
       blocks: this.responses[index] ?? [
@@ -122,10 +142,15 @@ function createRecordingPlugin(options: RecordingProviderOptions): {
 
   const record = async (request: RecordedRequest): Promise<number> => {
     const index = requests.length;
-    requests.push(request);
+    const rows = await providerRowsOf(request);
+    const recorded = {
+      ...request,
+      contents: await Array.fromAsync(rows.openReader()),
+    };
+    requests.push(recorded);
     const current = gate;
     if (current === undefined) return index;
-    current.onEntered(request);
+    current.onEntered(recorded);
     await waitFor(current.open, request.invocation.signal);
     return index;
   };

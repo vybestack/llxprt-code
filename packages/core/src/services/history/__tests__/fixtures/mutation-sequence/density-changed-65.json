@@ -1,0 +1,101 @@
+{
+  "name": "density-changed-65",
+  "description": "density result that changes 65 rows (13.5 defect 3 sizes)",
+  "steps": [
+    {
+      "step": {
+        "op": "fill",
+        "count": 65,
+        "prefix": "row"
+      },
+      "observed": {
+        "live": {
+          "length": 65,
+          "digest": "c5eaf23f00a9e019a599f31bffbe7184840b37c5040609b04ff19e095b0f1e1a"
+        },
+        "resumed": {
+          "length": 65,
+          "digest": "c5eaf23f00a9e019a599f31bffbe7184840b37c5040609b04ff19e095b0f1e1a"
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "densityChanged",
+        "count": 65
+      },
+      "observed": {
+        "live": {
+          "length": 65,
+          "digest": "b8b90b51a584dadd37aef93a924d931ed556d9cc0554a9b78c8a3c6c0327b9a6"
+        },
+        "resumed": {
+          "length": 65,
+          "digest": "b8b90b51a584dadd37aef93a924d931ed556d9cc0554a9b78c8a3c6c0327b9a6"
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "after-density"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 66,
+          "digest": "04a0ae1dec712c0a83b8a7af6ca04461c05865665f2083e1d732f7de8a2c0382"
+        },
+        "resumed": {
+          "length": 66,
+          "digest": "04a0ae1dec712c0a83b8a7af6ca04461c05865665f2083e1d732f7de8a2c0382"
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 65,
+          "digest": "b8b90b51a584dadd37aef93a924d931ed556d9cc0554a9b78c8a3c6c0327b9a6"
+        },
+        "resumed": {
+          "length": 65,
+          "digest": "b8b90b51a584dadd37aef93a924d931ed556d9cc0554a9b78c8a3c6c0327b9a6"
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "truncate",
+        "keep": 4
+      },
+      "observed": {
+        "live": {
+          "length": 4,
+          "digest": "a1c1fbe30d457535febad90fdc6b26270f77867aee5f6f437cf67c2c7990b4c5",
+          "tags": [
+            "8a105d65c04b5c81",
+            "6f39f6e59cfd8c7b",
+            "a5bbc837d5bafc0c",
+            "f64b8f2ae49ac790"
+          ]
+        },
+        "resumed": {
+          "length": 4,
+          "digest": "a1c1fbe30d457535febad90fdc6b26270f77867aee5f6f437cf67c2c7990b4c5",
+          "tags": [
+            "8a105d65c04b5c81",
+            "6f39f6e59cfd8c7b",
+            "a5bbc837d5bafc0c",
+            "f64b8f2ae49ac790"
+          ]
+        }
+      }
+    }
+  ]
+}

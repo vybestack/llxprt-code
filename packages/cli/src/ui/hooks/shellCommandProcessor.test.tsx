@@ -44,6 +44,8 @@ void vi.mock('fs', () => {
   const mocked = {
     ...automock(realFsModule),
     mkdtempSync: realFsModule.mkdtempSync,
+    // The scratch root sweeps dead roots under the temp dir when first created.
+    readdirSync: () => [],
     existsSync: (filePath: Parameters<typeof realFsModule.existsSync>[0]) =>
       String(filePath) === process.cwd()
         ? realFsModule.existsSync(filePath)

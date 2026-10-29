@@ -17,7 +17,10 @@
  * Types and constants for the compression strategy module.
  */
 
+import type { NativeDensityPolicy } from '../../services/history/nativeDensityPolicy.js';
 import type { IContent, UsageStats } from '../../services/history/IContent.js';
+import type { HistoryIndexedRows } from '../../services/history/historyIndexedRows.js';
+import type { DiskDensityResult } from '../../services/history/historyDiskDensity.js';
 import {
   getErrorStatus,
   isNetworkTransientError,
@@ -261,8 +264,12 @@ export interface CompressionStrategy {
   readonly name: CompressionStrategyName;
   readonly requiresLLM: boolean;
   readonly trigger: StrategyTrigger;
-  compress(context: CompressionContext): Promise<StrategyCompressionResult>;
   optimize?(history: readonly IContent[], config: DensityConfig): DensityResult;
+  nativeDensityPolicy?(config: DensityConfig): NativeDensityPolicy;
+  optimizeRows?(
+    history: HistoryIndexedRows,
+    config: DensityConfig,
+  ): DiskDensityResult;
 }
 
 /**

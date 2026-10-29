@@ -1,3 +1,4 @@
+import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -75,23 +76,23 @@ function toolResponseMsg(callId: string, toolName: string): IContent {
   };
 }
 
-function providerContent(hs: HistoryService): IContent[] {
-  return buildProviderContent(hs.getCurated(), [], logger);
+async function providerContent(hs: HistoryService): Promise<IContent[]> {
+  return buildProviderContent(await curatedHistoryAfterCommit(hs), [], logger);
 }
 
 describe('B1: per-turn provider pipeline is prefix-stable under append (characterization)', () => {
-  it('appending a new turn keeps the previous provider content as a strict prefix', () => {
+  it('appending a new turn keeps the previous provider content as a strict prefix', async () => {
     const hs = new HistoryService();
     hs.add(textMsg('human', 'hello'));
     hs.add(textMsg('ai', 'world'));
 
-    const before = providerContent(hs);
+    const before = await providerContent(hs);
 
     // Append a new turn
     hs.add(textMsg('human', 'second question'));
     hs.add(textMsg('ai', 'second answer'));
 
-    const after = providerContent(hs);
+    const after = await providerContent(hs);
     const serializedBefore = serializeForCache(before);
     const serializedAfter = serializeForCache(after);
     const prefixLen = commonPrefixLength(serializedBefore, serializedAfter);
@@ -99,20 +100,20 @@ describe('B1: per-turn provider pipeline is prefix-stable under append (characte
     expect(prefixLen).toBe(serializedBefore.length);
   });
 
-  it('appending a tool turn keeps the previous provider content as a strict prefix', () => {
+  it('appending a tool turn keeps the previous provider content as a strict prefix', async () => {
     const hs = new HistoryService();
     hs.add(textMsg('human', 'run a tool'));
     hs.add(toolCallMsg('tc-1', 'read_file'));
     hs.add(toolResponseMsg('tc-1', 'read_file'));
     hs.add(textMsg('ai', 'done'));
 
-    const before = providerContent(hs);
+    const before = await providerContent(hs);
 
     hs.add(textMsg('human', 'do more'));
     hs.add(toolCallMsg('tc-2', 'write_file'));
     hs.add(toolResponseMsg('tc-2', 'write_file'));
 
-    const after = providerContent(hs);
+    const after = await providerContent(hs);
     const serializedBefore = serializeForCache(before);
     const serializedAfter = serializeForCache(after);
     const prefixLen = commonPrefixLength(serializedBefore, serializedAfter);
@@ -122,20 +123,20 @@ describe('B1: per-turn provider pipeline is prefix-stable under append (characte
 });
 
 describe('B2: interrupted tool call perturbs only the tail, not the head (characterization)', () => {
-  it('an unmatched tool_call at the end does not alter the established head prefix', () => {
+  it('an unmatched tool_call at the end does not alter the established head prefix', async () => {
     const hs = new HistoryService();
     hs.add(textMsg('human', 'question one'));
     hs.add(textMsg('ai', 'answer one'));
     hs.add(textMsg('human', 'question two'));
     hs.add(textMsg('ai', 'answer two'));
 
-    const before = providerContent(hs);
+    const before = await providerContent(hs);
 
     // Simulate an interrupted turn: tool call without response
     hs.add(textMsg('human', 'run tool'));
     hs.add(toolCallMsg('tc-99', 'some_tool'));
 
-    const after = providerContent(hs);
+    const after = await providerContent(hs);
     const serializedBefore = serializeForCache(before);
     const serializedAfter = serializeForCache(after);
 
@@ -146,14 +147,14 @@ describe('B2: interrupted tool call perturbs only the tail, not the head (charac
 });
 
 describe('B3: curation is an identity map on any valid prefix (characterization)', () => {
-  it('curating a prefix of curated history returns exactly that prefix', () => {
+  it('curating a prefix of curated history returns exactly that prefix', async () => {
     const hs = new HistoryService();
     for (let i = 0; i < 10; i++) {
       hs.add(textMsg('human', `prompt ${i}`));
       hs.add(textMsg('ai', `response ${i}`));
     }
 
-    const curated = hs.getCurated();
+    const curated = await curatedHistoryAfterCommit(hs);
     expect(curated.length).toBe(20);
 
     // Curation is an identity map on already-valid entries: re-curating a
@@ -167,7 +168,7 @@ describe('B3: curation is an identity map on any valid prefix (characterization)
       for (const entry of prefix) {
         reCurated.add(entry);
       }
-      const reCuratedOutput = reCurated.getCurated();
+      const reCuratedOutput = await curatedHistoryAfterCommit(reCurated);
 
       const serializedPrefix = serializeForCache(prefix);
       const serializedReCurated = serializeForCache(reCuratedOutput);
@@ -179,17 +180,17 @@ describe('B3: curation is an identity map on any valid prefix (characterization)
     }
   });
 
-  it('curated history is prefix-stable under append', () => {
+  it('curated history is prefix-stable under append', async () => {
     const hs = new HistoryService();
     hs.add(textMsg('human', 'first'));
     hs.add(textMsg('ai', 'reply'));
 
-    const before = hs.getCurated();
+    const before = await curatedHistoryAfterCommit(hs);
 
     hs.add(textMsg('human', 'second'));
     hs.add(textMsg('ai', 'reply2'));
 
-    const after = hs.getCurated();
+    const after = await curatedHistoryAfterCommit(hs);
     const serializedBefore = serializeForCache(before);
     const serializedAfter = serializeForCache(after);
 

@@ -6,7 +6,10 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type {
+  AgentClientContract,
+  DeferredHistorySourceOptions,
+} from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type {
   RuntimeTokenizerFactory,
@@ -15,7 +18,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+
 import {
   extractExistingState,
   prepareAgentClientReplacement,
@@ -91,6 +94,7 @@ export async function replaceSessionClient(
   acquire: (state: AgentRuntimeState) => AgentClientContract,
   bind: (client: AgentClientContract, state: AgentRuntimeState) => void,
   publish: (client: AgentClientContract, state: AgentRuntimeState) => void,
+  options: DeferredHistorySourceOptions = {},
 ): Promise<void> {
   const logger = new DebugLogger('llxprt:session:refreshAuth');
   const { history, historyService } = await extractExistingState(
@@ -114,6 +118,7 @@ export async function replaceSessionClient(
       historyService,
       prepared.contentGeneratorConfig,
       previous.getContentGeneratorConfig()?.vertexai,
+      options,
     );
   } catch (error) {
     await ledger.releaseFailedReplacement(next, error);
@@ -122,10 +127,6 @@ export async function replaceSessionClient(
   next.getHistoryService()?.setTokenizerFactory({
     getTokenizer: (provider, model) => tokenizer.getTokenizer(provider, model),
   });
-  // The new client reuses the previous client's HistoryService. Rebind the
-  // previous chat to a throwaway service so disposing it clears that one
-  // instead of the shared conversation.
-  previous.prepareHistoryRebind(new HistoryService())();
   await ledger.dispose(previous);
 }
 
@@ -156,6 +157,7 @@ export async function prepareBoundProfileClient(
     },
     selectedState,
     factory,
+    (client) => ledger.dispose(client),
   ).catch(async (primary: unknown) => {
     if (candidate !== undefined) {
       if (!bound) await ledger.disposeAfterFailure(candidate, primary);
@@ -173,5 +175,8 @@ export interface PreparedRecordingSession {
   publish(): void;
   retire(): Promise<void>;
   discard(): Promise<void>;
-  attachRecording(recording: RecordingIntegration, origin: object): void;
+  attachRecording(
+    recording: RecordingIntegration,
+    origin: object,
+  ): Promise<void>;
 }

@@ -310,7 +310,7 @@ describe('profile-commit-publication', () => {
     try {
       for await (const event of agent.stream('establish prior history'))
         expect(event.type).not.toBe('error');
-      const priorHistory = await agent.getHistory();
+      const priorHistory = await agent.session.getHistory();
       expect(priorHistory.length).toBeGreaterThan(0);
 
       const outcome = await agent.profiles
@@ -335,7 +335,7 @@ describe('profile-commit-publication', () => {
       expect(originalCauses(outcome.error)).toContain(profileError);
       expect(agent.getModel()).toBe('committed-after-listener-error');
       expect(agent.profiles.isApplying()).toBe(false);
-      expect(await agent.getHistory()).toStrictEqual(priorHistory);
+      expect(await agent.session.getHistory()).toStrictEqual(priorHistory);
       releaseListener();
       await agent.profiles.applySnapshot({
         version: 1,
@@ -363,8 +363,23 @@ describe('profile-commit-publication', () => {
   }, 30000);
 
   it('stops delivering model notifications to the client the owner replaced', async () => {
-    await openbuiltCaller('plain-text.jsonl');
+    const deliveries = new Map<number, { count: number }>();
+    const subscribe = SessionSettingsOwner.prototype.subscribeModelChanges;
+    const observation = vi
+      .spyOn(SessionSettingsOwner.prototype, 'subscribeModelChanges')
+      .mockImplementation(function (this: SessionSettingsOwner, listener) {
+        const delivery = { count: 0 };
+        deliveries.set(deliveries.size, delivery);
+        return subscribe.call(this, (profile) => {
+          delivery.count++;
+          listener(profile);
+        });
+      });
     try {
+      await openbuiltCaller('plain-text.jsonl');
+      const priorDeliveries = deliveries.get(deliveries.size - 1);
+      if (priorDeliveries === undefined)
+        throw new Error('Missing prior client subscription');
       const profile = {
         model: 'notified-model',
         providerName: 'fake',
@@ -379,16 +394,27 @@ describe('profile-commit-publication', () => {
       await prior.startChat();
       expect(prior.hasChatInitialized()).toBe(true);
 
+      const priorCount = priorDeliveries.count;
+      expect(priorCount).toBeGreaterThan(0);
       await builtCallerOwner.clients.refreshAuth();
+      expect(prior.hasChatInitialized()).toBe(false);
 
       const replacement = lastBuiltCallerClient();
+      const replacementDeliveries = deliveries.get(deliveries.size - 1);
+      if (replacementDeliveries === undefined)
+        throw new Error('Missing replacement client subscription');
+      expect(replacementDeliveries).not.toBe(priorDeliveries);
+      const replacementCount = replacementDeliveries.count;
       expect(replacement).not.toBe(prior);
       await replacement.startChat();
       expect(replacement.hasChatInitialized()).toBe(true);
       builtCallerSettingsOwner.publishModelProfile(profile);
       expect(replacement.hasChatInitialized()).toBe(false);
-      expect(prior.hasChatInitialized()).toBe(true);
+      expect(prior.hasChatInitialized()).toBe(false);
+      expect(priorDeliveries.count - priorCount).toBe(0);
+      expect(replacementDeliveries.count - replacementCount).toBe(1);
     } finally {
+      observation.mockRestore();
       await builtCallerClose();
     }
   }, 30000);
@@ -488,7 +514,7 @@ describe('profile-commit-publication', () => {
       for await (const event of agent.stream('remember the prior conversation'))
         initialEvents.push(event);
       expect(initialEvents.some((event) => event.type === 'error')).toBe(false);
-      const priorHistory = await agent.getHistory();
+      const priorHistory = await Array.fromAsync(agent.streamHistory());
       expect(priorHistory.length).toBeGreaterThan(0);
       vi.useFakeTimers();
       for (const bucket of ['old', 'replacement'])
@@ -538,7 +564,9 @@ describe('profile-commit-publication', () => {
       expect(profiles).toStrictEqual([]);
       expect(models).toStrictEqual([]);
       vi.useRealTimers();
-      expect(await agent.getHistory()).toStrictEqual(priorHistory);
+      expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual(
+        priorHistory,
+      );
       const recoveredEvents = [];
       for await (const event of agent.stream('continue on the prior profile'))
         recoveredEvents.push(event);

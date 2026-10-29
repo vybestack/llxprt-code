@@ -20,11 +20,14 @@ import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/tool
 import { type IModel } from './IModel.js';
 import { type ITool } from './ITool.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { SystemPromptPlacement } from './utils/systemPromptPlacement.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
@@ -51,7 +54,13 @@ export interface GenerateChatOptions extends ProviderRetryOperations {
   modelParameters?: AdmittedModelParameters;
   runtimeKind?: RuntimeKind;
   requestDiagnostics?: ProviderRequestDiagnostics;
-  contents: IContent[];
+  /**
+   * The history arrives as a stream (issue #854, PLAN-20260917-ISSUE854.P05b3);
+   * providers collect it request-scoped at the entry point.
+   */
+  contents: AsyncIterable<IContent>;
+  requestRows?: ProviderRequestSelection;
+  contentCount?: number;
   tools?: ProviderToolset;
   invocation?: RuntimeInvocationContext;
   onProviderError?: (error: StructuredError) => void;
@@ -92,12 +101,49 @@ export interface GenerateChatOptions extends ProviderRetryOperations {
   systemPromptAssembler?: SystemPromptAssembler;
 }
 
+/** Arrays supplied at the public entry are already owned by the caller. */
+export interface ProviderChatOptions
+  extends Omit<GenerateChatOptions, 'contents'> {
+  contents: AsyncIterable<IContent> | readonly IContent[];
+}
+
+/**
+ * Provider call options once the history stream has been collected
+ * request-scoped (issue #854, PLAN-20260917-ISSUE854.P05b3). The wire
+ * contract carries the stream; everything downstream of a collection
+ * point — normalization, request prep, logging, estimation — holds the
+ * plain array. Internal request arrays stay arrays.
+ */
+export interface MaterializedGenerateChatOptions
+  extends Omit<GenerateChatOptions, 'contents'> {
+  contents: IContent[];
+}
+
+/**
+ * Minimal read shape for request-scoped helpers that only attach or read
+ * state through `options.metadata` (retry contexts, transport attempt
+ * budgets, image-recovery state). Both the wire contract
+ * (`GenerateChatOptions`) and the materialized internal shape satisfy it
+ * (issue #854, PLAN-20260917-ISSUE854.P05b3).
+ */
+export type ProviderRuntimeOptions = Omit<GenerateChatOptions, 'contents'>;
+
+export interface MetadataBearingOptions {
+  metadata?: Record<string, unknown>;
+}
+
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P06
  * @requirement REQ-SP2-001
  * @pseudocode base-provider-call-contract.md lines 3-5
  */
 export interface IProvider {
+  readonly contextDumpVersion?: 2;
+  buildContextDumpBody?(
+    history: HistoryDumpSource,
+    model?: string,
+    config?: OutputLimitConfig,
+  ): Promise<Record<string, unknown>>;
   name: string;
   isDefault?: boolean;
   transportAttemptOwnership?: 'provider';
@@ -111,8 +157,13 @@ export interface IProvider {
   generateChatCompletion(
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
+  /**
+   * Legacy positional form. The history arrives as a stream (issue #854,
+   * PLAN-20260917-ISSUE854.P05b3); providers collect it request-scoped at
+   * the entry point.
+   */
   generateChatCompletion(
-    content: IContent[],
+    content: AsyncIterable<IContent>,
     tools?: ProviderToolset,
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent>;
@@ -152,7 +203,7 @@ export interface IProvider {
    * Claude Code string and the real prompt must go at the top of the context.
    */
   getSystemPromptPlacement?(
-    options: GenerateChatOptions,
+    options: Pick<GenerateChatOptions, 'resolved'>,
   ): SystemPromptPlacement;
   // Methods for updating provider configuration
   getToolFormat?(): string;

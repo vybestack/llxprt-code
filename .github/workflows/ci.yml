@@ -346,7 +346,7 @@ jobs:
         with:
           path: |
             ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'patches/**') }}
 
       - name: 'Run lockfile check'
         run: |-
@@ -1173,7 +1173,7 @@ jobs:
         with:
           path: |
             ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'patches/**') }}
 
       # S6 (#2243): `bun install` resolves dependencies; the root postinstall
       # (scripts/postinstall.cjs) then symlinks Bun's static workspace copies to
@@ -1279,8 +1279,9 @@ jobs:
 
       - name: 'Run shell-script behavioral tests (#2606)'
         # Shell-script tests are not workspace-scoped; run them once on the
-        # scripts shard to avoid duplicating across every leg.
-        if: matrix.shard == 'scripts'
+        # scripts shard (its first partition leg) to avoid duplicating them
+        # across every leg.
+        if: matrix.shard == 'scripts' && startsWith(matrix.partition, '1of')
         env:
           CI: true
         run: npm run test:shell
@@ -1613,7 +1614,7 @@ jobs:
         with:
           path: |
             ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'patches/**') }}
 
       - name: 'Install dependencies for SecureStore tests'
         run: |-

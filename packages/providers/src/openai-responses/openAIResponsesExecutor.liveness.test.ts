@@ -1,6 +1,7 @@
 import {
   captureResponsesTestRequest,
   type ResponsesTestDeps,
+  executeResponsesTestRequest,
 } from './responses-request.test-helpers.js';
 /**
  * @license
@@ -26,7 +27,6 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
-import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -146,7 +146,7 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
       onStreamLiveness: (event) => livenessEvents.push(event),
     });
 
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     );
@@ -170,7 +170,7 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
     setGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: sseBody }));
 
     const options = buildNormalizedOptions();
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     );
@@ -384,7 +384,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       },
     });
 
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     );
@@ -425,7 +425,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       close: vi.fn(),
     };
 
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(
         options,
         buildDeps({
@@ -501,7 +501,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       close: vi.fn(),
     };
 
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(
         options,
         buildDeps({
@@ -596,7 +596,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       close: vi.fn(),
     };
 
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(
         options,
         buildDeps({
@@ -671,7 +671,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
 
     let caught: unknown;
     try {
-      const iterator = executeOpenAIResponsesRequest(
+      const iterator = executeResponsesTestRequest(
         captureResponsesTestRequest(
           options,
           buildDeps({
@@ -728,7 +728,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     // First getCodexAccountId call (dump metadata) fails; the second (real
     // handshake) succeeds so the request still goes over the WebSocket.
     let codexAccountIdCalls = 0;
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(
         options,
         buildDeps({

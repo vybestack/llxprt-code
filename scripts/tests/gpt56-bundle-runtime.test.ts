@@ -16,6 +16,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'bun:test';
+import { cliBundleConfig } from '../bun-build.config.js';
+import { stageBundleRuntimeExternals } from './support/bundle-runtime-externals.js';
 import { describeOwnedChild, runOwnedChild } from './owned-child-process.ts';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -83,6 +85,7 @@ await Bun.build({
   target: 'node',
   format: 'esm',
   plugins: [portableTiktokenPlugin],
+  external: ${JSON.stringify(cliBundleConfig.external?.filter((name) => name !== '@dqbd/tiktoken'))},
   conditions: ['production'],
   banner: "import { fileURLToPath as __llxprtFileURLToPath } from 'node:url'; import { dirname as __llxprtDirname } from 'node:path'; globalThis.__dirname = __llxprtDirname(__llxprtFileURLToPath(import.meta.url));",
 });
@@ -94,6 +97,11 @@ await Bun.build({
 describe.skipIf(!bunAvailable)('GPT-5.6 bundled runtime', () => {
   it('executes o200k from an isolated bundle and adjacent WASM', async () => {
     const buildDirectory = createTemporaryDirectory('llxprt-gpt56-build-');
+    stageBundleRuntimeExternals(
+      repoRoot,
+      buildDirectory,
+      cliBundleConfig.external ?? [],
+    );
     run(process.execPath, [writePortableBuildScript(buildDirectory)], repoRoot);
     copyFileSync(tokenizerWasm, join(buildDirectory, 'tiktoken_bg.wasm'));
 

@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P30
@@ -17,7 +18,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { assertTruthy } from '../__tests__/assertions.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core';
+import { createSessionRecorder } from '@vybestack/llxprt-code-core';
 import { performResume } from '../services/performResume.js';
 import {
   PROJECT_HASH,
@@ -64,8 +65,8 @@ describe('Two-phase swap #1', () => {
       sessionId: 'old-current-session',
       projectHash: PROJECT_HASH,
     });
-    const oldRecording = new SessionRecordingService(oldConfig);
-    oldRecording.recordContent(makeContent('old message'));
+    const oldRecording = createSessionRecorder(oldConfig);
+    await recordRowsForTest(oldRecording, [makeContent('old message')]);
     await oldRecording.flush();
     state.recordingsToDispose.push(oldRecording);
 

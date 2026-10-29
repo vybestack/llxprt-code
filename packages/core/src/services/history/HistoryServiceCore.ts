@@ -14,130 +14,107 @@
  * limitations under the License.
  */
 
-import { validateHistoryBatch } from './history-batch-validation.js';
-import { finalizeMutationEffects } from './historyMutationFailure.js';
-import { retainContentOrigins } from './historyOrigin.js';
-import { CompressionOperationQueue } from './historyCompressionQueue.js';
-import {
-  type ChronologyMarker,
-  type IContent,
-  type MediaReferenceBlock,
-} from './IContent.js';
 import { EventEmitter } from 'events';
+import {
+  createDetachedHistoryAPI,
+  type DetachedHistoryAPI,
+} from './detachedHistoryAPI.js';
+import type { HistoryStorePort } from './historyStorePort.js';
+import type { TokenRowSource } from './history-token-tickets.js';
+import { estimateTokenRange } from './estimate-token-range.js';
+import { finalizeHistoryMutation } from './finalizeHistoryMutation.js';
+import { HistoryTokenTickets } from './history-token-tickets.js';
+import { CompressionOperationQueue } from './historyCompressionQueue.js';
+import { historyOriginId } from './historyOriginId.js';
+import { type IContent } from './IContent.js';
+import type { NativeDensityPolicy } from './nativeDensityPolicy.js';
+import type { ProviderCuratedStreamOptions } from './provider-request-options.js';
+import type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
 // @plan:PLAN-20260603-ISSUE1584.P05 RuntimeTokenizerFactory used for injection path
-import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
-import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
-import { DebugLogger } from '../../debug/index.js';
 import { randomUUID } from 'crypto';
-import { canonicalizeToolCallId } from './canonicalToolIds.js';
+import { DebugLogger } from '../../debug/index.js';
+import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
+import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
+
 import type { DensityResult } from '../../core/compression/types.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
+import type { RowOwnership } from '../../recording/rowOwnership.js';
+import { canonicalizeToolCallId } from './canonicalToolIds.js';
+import {
+  contextSummaryOfEntry,
+  firstEntryContextRange,
+} from './contextRange.js';
+import {
+  logContentAdded,
+  logQueuedDuringCompression,
+} from './curationDebugLogger.js';
+import { restorePendingChronologyFailure } from './historyArrayDensity.js';
+import { createHistoryStore } from './historyBackend.js';
+import type {
+  HistoryMutationInput,
+  HistoryServiceJournalOptions,
+} from './historyBatchContracts.js';
+import {
+  ChronologyStamper,
+  stampMutationChronology,
+} from './historyChronology.js';
+import {
+  projectDensityCommitSpans,
+  withDiskDensityMutation,
+  type DiskDensityOptimizer,
+} from './historyDiskDensity.js';
+import {
+  type CompressionConfig,
+  type ContextRange,
+  type ContextSummaryInfo,
+  type HistoryEventEmission,
+  type HistoryEventRegistration,
+  type HistoryServiceEventEmitter,
+} from './historyEventTypes.js';
+import {
+  historyMutationFailure,
+  prepareMutationEffects,
+  rollbackMutationEffects,
+} from './historyMutationEffects.js';
+import { HistoryMutationFifo } from './historyMutationFifo.js';
+import { HistoryMutationPublication } from './historyMutationPublication.js';
+import type { HistoryMutationSnapshot } from './historyIndexedRows.js';
+import { SpanWindow } from './historySpanWindow.js';
 import {
   estimateContentTokens as estimateContentTokensImpl,
   estimateTokensForContents as estimateTokensForContentsImpl,
   simpleTokenEstimateForText,
   type TokenizerProvider,
 } from './historyTokenEstimation.js';
-import {
-  validateDensityResult,
-  applyDensityMutations,
-} from './densityValidation.js';
-import {
-  logContentAdded,
-  logQueuedDuringCompression,
-} from './curationDebugLogger.js';
-import {
-  type HistoryServiceEventEmitter,
-  type CompressionConfig,
-} from './historyEventTypes.js';
 import { getTokenizerForModel } from './historyTokenizerAdapter.js';
 import {
-  ChronologyStamper,
-  type ChronologyState,
-} from './historyChronology.js';
+  acceptedHistoryValues,
+  densityValueTransform,
+} from './historyValueEntries.js';
+import { QueuedClearFailures } from './queuedClearFailures.js';
 
 // Preserve the CompressionConfig type export from the same path for consumers.
 export type { CompressionConfig };
 
-import {
-  type MutationFailure,
-  combineMutationFailures,
-} from './historyMutationFailure.js';
+// The journal options type rides the Core surface for facade consumers.
+export type { HistoryServiceJournalOptions } from './historyBatchContracts.js';
+
+// Batch/ownership contracts moved to historyBatchContracts.ts (size budget);
+// the public export surface of this module is unchanged.
+export type {
+  HistoryBatchOptions,
+  HistoryMediaOwner,
+  HistoryOwnedMediaReservation,
+  PreparedHistoryBatchEffect,
+} from './historyBatchContracts.js';
+
+import type {
+  HistoryBatchOptions,
+  HistoryMediaOwner,
+  PreparedHistoryBatchEffect,
+} from './historyBatchContracts.js';
 
 type HistoryTokenizerSelection = Pick<RuntimeTokenizerFactory, 'getTokenizer'>;
-
-export interface PreparedHistoryBatchEffect {
-  publish(): void | Promise<void>;
-  rollback(): void | Promise<void>;
-  finalize?(): void | Promise<void>;
-}
-
-export type HistoryBatchParticipant = (
-  publication: HistoryBatchPublication,
-) => PreparedHistoryBatchEffect | Promise<PreparedHistoryBatchEffect>;
-
-export interface HistoryOwnedMediaReservation {
-  readonly contentId: string;
-  readonly ownerId: string;
-  readonly reference?: MediaReferenceBlock;
-}
-
-/**
- * Explicit owner participant that reconciles durable local-media ownership with live
- * history on every mutation that adds, replaces, removes, or clears history.
- * Registered via {@link HistoryService.registerMediaOwner}.
- */
-export interface HistoryMediaOwner {
-  /** Transactional ownership transition for a queued history mutation. */
-  prepareReplacement(input: {
-    readonly previous: readonly IContent[];
-    readonly next: readonly IContent[];
-    readonly adopted: readonly HistoryOwnedMediaReservation[];
-  }): PreparedHistoryBatchEffect | Promise<PreparedHistoryBatchEffect>;
-
-  /** Reconcile ownership from `previous` to current history for synchronous
-   * mutations that cannot await (clears, pops, settlement). */
-  reconcile(
-    previous: readonly IContent[],
-    getNext: () => readonly IContent[],
-  ): Promise<void>;
-
-  /** Release every reservation the history still owns (disposal). */
-  releaseAll(): Promise<void>;
-
-  /** Adopt reservations for content that becomes resident without a removal diff. */
-  adopt(contents: readonly IContent[]): void;
-}
-
-export interface HistoryBatchPublication {
-  readonly contents: readonly IContent[];
-  readonly origin?: object;
-  readonly recordingCompletion?: 'appended';
-  readonly nextHistory: readonly IContent[];
-  readonly addedTokens: number;
-  readonly totalTokens: number;
-}
-
-export interface HistoryBatchOptions {
-  readonly origin?: object;
-  readonly recordingCompletion?: 'appended';
-  readonly afterPublication?: () => void | Promise<void>;
-  readonly adoptedOwners?: readonly HistoryOwnedMediaReservation[];
-}
-
-type QueuedHistoryMutation =
-  | { kind: 'synchronous'; execute: () => void }
-  | {
-      kind: 'asynchronous';
-      execute: () => Promise<void>;
-      resolve: () => void;
-      reject: (error: unknown) => void;
-    };
-
-interface ChronologyRollbackEntry {
-  readonly content: IContent;
-  readonly hadMetadata: boolean;
-  readonly chronology: ChronologyMarker | undefined;
-}
 
 /**
  * Service for managing conversation history in a provider-agnostic way.
@@ -148,26 +125,86 @@ export abstract class HistoryServiceCore
   extends EventEmitter
   implements HistoryServiceEventEmitter
 {
+  declare on: HistoryEventRegistration<this>;
+  declare once: HistoryEventRegistration<this>;
+  declare addListener: HistoryEventRegistration<this>;
+  declare prependListener: HistoryEventRegistration<this>;
+  declare prependOnceListener: HistoryEventRegistration<this>;
+  declare off: HistoryEventRegistration<this>;
+  declare removeListener: HistoryEventRegistration<this>;
+  declare emit: HistoryEventEmission;
+
   abstract recalculateTotalTokens(
     modelName?: string,
     activeProvider?: string,
+    signal?: AbortSignal,
   ): Promise<void>;
 
-  protected history: IContent[] = [];
-  protected contentOrigins = new Map<IContent, object>();
+  /**
+   * The journal is the system of record (#854): contents are never retained
+   * in memory; reads materialize transiently from the journal fold plus the
+   * not-yet-durable pending ops.
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  protected readonly journal: HistoryStorePort;
+  protected readonly captureTokenRow: (start?: number) => TokenRowSource;
+  readonly detachedValues: DetachedHistoryAPI;
+
+  /**
+   * Capped standing-state window for removed-interior spans (mutation-time
+   * knowledge the journal fold cannot re-derive).
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  protected spanWindow = new SpanWindow();
+
   protected totalTokens: number = 0;
   protected baseTokenOffset: number = 0;
   protected tokenizerCache = new Map<string, ITokenizer>();
+  private rankingTokenizer: ITokenizer | undefined;
+  private rankingGeneration = randomUUID();
   protected tokenizerLock: Promise<void> = Promise.resolve();
+  protected readonly tokenTickets = new HistoryTokenTickets(
+    (execute) =>
+      this.observeTokenizerOperation(this.serializeTokenOperation(execute)),
+    async ({ content, modelName, generation }) => {
+      const draft = 'estimateTokens' in content ? undefined : content;
+      if (draft !== undefined) this.mutationOwnership?.retain(draft);
+      try {
+        const model = modelName ?? this.activeTokenizationModel;
+        const contentTokens =
+          'estimateTokens' in content
+            ? await content.estimateTokens(
+                model,
+                this.tokenizerProvider(),
+                this.logger,
+              )
+            : await this.estimateContentTokens(content, model);
+        if (generation !== this.syncGeneration) return;
+        this.totalTokens += contentTokens;
+        this.emit('tokensUpdated', {
+          totalTokens: this.getTotalTokens(),
+          addedTokens: contentTokens,
+          contentId: content.metadata?.id,
+        });
+      } finally {
+        if (draft !== undefined) this.mutationOwnership?.release(draft);
+      }
+    },
+    (error) => {
+      this.pendingTokenizerFailure ??= { error };
+      this.logger.error('Asynchronous token accounting failed', error);
+    },
+  );
   protected pendingTokenizerFailure: { error: unknown } | undefined;
-  private syncGeneration: number = 0;
-  protected historyMutationInProgress = false;
-  private historyMutationQueue: QueuedHistoryMutation[] = [];
-  private batchParticipants = new Set<HistoryBatchParticipant>();
+  protected syncGeneration: number = 0;
   protected mediaOwner: HistoryMediaOwner | undefined;
   private ownershipSettlement: Promise<void> = Promise.resolve();
   private ownershipFailure: unknown;
   protected logger = new DebugLogger('llxprt:history:service');
+  protected readonly mutationOwnership?: RowOwnership;
+  protected readonly queuedClears = new QueuedClearFailures();
 
   protected chronology = new ChronologyStamper();
 
@@ -211,6 +248,99 @@ export abstract class HistoryServiceCore
   );
 
   /**
+   * @param options.recording injects the journal store; omitted, the service
+   *   creates its own temp-file-backed journal (no in-memory path exists).
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  protected constructor(options: HistoryServiceJournalOptions = {}) {
+    super();
+    this.mutationOwnership = options.mutationOwnership;
+    const journal = createHistoryStore(options);
+    this.journal = journal;
+    this.captureTokenRow = (start) => journal.captureTokenRow(start);
+    this.detachedValues = createDetachedHistoryAPI(
+      this,
+      this.journal,
+      () => this.chronology,
+      this.spanWindow,
+      this.mutationOwnership,
+      () => this.mediaOwner,
+      (execute) => this.enqueueAsynchronousHistoryMutation(execute),
+      (tokens) => {
+        this.invalidatePendingSyncs();
+        this.totalTokens = tokens;
+      },
+    );
+  }
+
+  async prepareCuratedForProviderSnapshot(
+    tailContents: readonly IContent[] = [],
+    options: ProviderCuratedStreamOptions = {},
+    historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
+  ): Promise<ProviderRequestSnapshot> {
+    await this.waitForCommit();
+    let snapshot: ProviderRequestSnapshot | undefined;
+    await this.enqueueAsynchronousHistoryMutation(async () => {
+      snapshot = await this.journal.prepareCurated({
+        tail: tailContents,
+        options,
+        logger: this.logger,
+        isCompressing: this.isCompressing,
+        historyOverride,
+      });
+    });
+    if (snapshot === undefined)
+      throw new Error('Provider snapshot was not pinned');
+    return snapshot;
+  }
+
+  /** Attach the journal store after construction (foreground wiring order). */
+  attachJournal(
+    recorder: SessionRecordingPort,
+    replace = false,
+    onAttached?: () => void,
+    origin?: object,
+  ): Promise<void> {
+    const originId = origin === undefined ? undefined : historyOriginId(origin);
+    if (this.journal.isAdoptingRecorder(recorder)) {
+      this.journal.adoptedOrigin(originId);
+      onAttached?.();
+      return Promise.resolve();
+    }
+    return this.enqueueAsynchronousHistoryMutation(() =>
+      this.journal.attachJournal(recorder, replace, onAttached, originId),
+    );
+  }
+
+  detachJournal(recorder: SessionRecordingPort): Promise<void> {
+    return this.enqueueAsynchronousHistoryMutation(() =>
+      this.journal.detachJournal(recorder),
+    );
+  }
+
+  onJournalRetired(listener: () => void): () => void {
+    return this.journal.onRetired(listener);
+  }
+
+  /** The file backing the journal store, or null before the first record. */
+  journalPath(): string | null {
+    return this.journal.journalPath();
+  }
+
+  /**
+   * Resolve once every mutation enqueued so far has a durable commit ack.
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  async waitForCommit(): Promise<void> {
+    await this.enqueueAsynchronousHistoryMutation(() =>
+      this.journal.waitForCommit(),
+    );
+    await this.queuedClears.settle();
+  }
+
+  /**
    * @plan:PLAN-20260603-ISSUE1584.P05
    * @requirement:REQ-DEP-001
    * @pseudocode component-boundaries.md C-CB-01, lines 10-15
@@ -219,17 +349,38 @@ export abstract class HistoryServiceCore
    * When set, getTokenizerForModel will prefer the factory over
    * constructing provider tokenizers directly.
    */
+  toolRankingRevision(model: string): string {
+    const tokenizer = this.getTokenizerForModel(
+      model,
+      this.activeTokenizationProvider,
+    );
+    if (tokenizer !== this.rankingTokenizer) {
+      this.rankingTokenizer = tokenizer;
+      this.rankingGeneration = randomUUID();
+    }
+    return JSON.stringify([
+      'tool-stub:1',
+      model,
+      this.activeTokenizationProvider,
+      this.rankingGeneration,
+    ]);
+  }
+
   setTokenizerFactory(factory: HistoryTokenizerSelection): void {
-    this.tokenizerFactory = factory;
-    this.tokenizerCache.clear();
+    this.runSynchronousHistoryMutation(() => {
+      this.tokenizerFactory = factory;
+      this.tokenizerCache.clear();
+    });
   }
 
   setActiveTokenizationTarget(
     modelName: string,
     activeProvider?: string,
   ): void {
-    this.activeTokenizationModel = modelName;
-    this.activeTokenizationProvider = activeProvider;
+    this.runSynchronousHistoryMutation(() => {
+      this.activeTokenizationModel = modelName;
+      this.activeTokenizationProvider = activeProvider;
+    });
   }
 
   /**
@@ -343,17 +494,19 @@ export abstract class HistoryServiceCore
    * @param offset - Number of tokens in the system prompt or fixed overhead
    */
   setBaseTokenOffset(offset: number): void {
-    const normalized = Math.max(0, Math.floor(offset));
-    const delta = normalized - this.baseTokenOffset;
-    this.baseTokenOffset = normalized;
+    this.runSynchronousHistoryMutation(() => {
+      const normalized = Math.max(0, Math.floor(offset));
+      const delta = normalized - this.baseTokenOffset;
+      this.baseTokenOffset = normalized;
 
-    if (delta !== 0) {
-      this.emit('tokensUpdated', {
-        totalTokens: this.getTotalTokens(),
-        addedTokens: delta,
-        contentId: null,
-      });
-    }
+      if (delta !== 0) {
+        this.emit('tokensUpdated', {
+          totalTokens: this.getTotalTokens(),
+          addedTokens: delta,
+          contentId: null,
+        });
+      }
+    });
   }
 
   /**
@@ -395,6 +548,13 @@ export abstract class HistoryServiceCore
   protected runSerializedTokenOperation<T>(
     operation: () => T | Promise<T>,
   ): Promise<T> {
+    return this.serializeTokenOperation(operation);
+  }
+
+  private serializeTokenOperation<T>(
+    operation: () => T | Promise<T>,
+  ): Promise<T> {
+    this.tokenTickets.seal();
     const result = this.tokenizerLock.then(operation);
     this.tokenizerLock = result.then(
       () => undefined,
@@ -414,95 +574,33 @@ export abstract class HistoryServiceCore
     this.syncGeneration++;
   }
 
+  /**
+   * The history mutation FIFO (extracted module; file size budget). Behavior
+   * unchanged: synchronous mutations never interleave with asynchronous ones.
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  private readonly mutationFifo = new HistoryMutationFifo();
+
   protected runSynchronousHistoryMutation(execute: () => void): void {
-    if (this.historyMutationInProgress) {
-      this.historyMutationQueue.push({ kind: 'synchronous', execute });
-      return;
-    }
-
-    this.historyMutationInProgress = true;
-    let failure: MutationFailure = { failed: false };
-    try {
-      execute();
-    } catch (error: unknown) {
-      failure = { failed: true, error };
-    }
-    const queuedFailure = this.drainSynchronousHistoryMutations();
-    this.historyMutationInProgress = false;
-    this.processHistoryMutationQueue();
-
-    const combinedFailure = combineMutationFailures(failure, queuedFailure);
-    if (combinedFailure.failed) throw combinedFailure.error;
-  }
-
-  private drainSynchronousHistoryMutations(): MutationFailure {
-    let failure: MutationFailure = { failed: false };
-    while (this.historyMutationQueue[0]?.kind === 'synchronous') {
-      const mutation = this.historyMutationQueue.shift();
-      if (mutation?.kind !== 'synchronous') break;
-      try {
-        mutation.execute();
-      } catch (error: unknown) {
-        failure = combineMutationFailures(failure, { failed: true, error });
-      }
-    }
-    return failure;
+    this.mutationFifo.runSynchronous(execute);
   }
 
   protected enqueueAsynchronousHistoryMutation(
     execute: () => Promise<void>,
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.historyMutationQueue.push({
-        kind: 'asynchronous',
-        execute,
-        resolve,
-        reject,
-      });
-      this.processHistoryMutationQueue();
-    });
-  }
-
-  private processHistoryMutationQueue(): void {
-    if (this.historyMutationInProgress) return;
-    const mutation = this.historyMutationQueue.shift();
-    if (mutation === undefined) return;
-    if (mutation.kind === 'synchronous') {
-      this.runSynchronousHistoryMutation(mutation.execute);
-      return;
-    }
-
-    this.historyMutationInProgress = true;
-    void mutation.execute().then(
-      () =>
-        this.completeAsynchronousHistoryMutation(mutation, { failed: false }),
-      (error: unknown) =>
-        this.completeAsynchronousHistoryMutation(mutation, {
-          failed: true,
-          error,
-        }),
-    );
-  }
-
-  private completeAsynchronousHistoryMutation(
-    mutation: Extract<QueuedHistoryMutation, { kind: 'asynchronous' }>,
-    failure: MutationFailure,
-  ): void {
-    const queuedFailure = this.drainSynchronousHistoryMutations();
-    this.historyMutationInProgress = false;
-    const result = combineMutationFailures(failure, queuedFailure);
-    if (result.failed) mutation.reject(result.error);
-    else mutation.resolve();
-    this.processHistoryMutationQueue();
+    return this.mutationFifo.enqueueAsynchronous(execute);
   }
 
   resetTokenAccounting(): void {
-    this.invalidatePendingSyncs();
-    this.baseTokenOffset = 0;
-    this.emit('tokensUpdated', {
-      totalTokens: this.getTotalTokens(),
-      addedTokens: 0,
-      contentId: null,
+    this.runSynchronousHistoryMutation(() => {
+      this.invalidatePendingSyncs();
+      this.baseTokenOffset = 0;
+      this.emit('tokensUpdated', {
+        totalTokens: this.getTotalTokens(),
+        addedTokens: 0,
+        contentId: null,
+      });
     });
   }
 
@@ -598,60 +696,61 @@ export abstract class HistoryServiceCore
       return;
     }
 
+    this.tokenTickets.assertAdmission();
     const generation = this.syncGeneration;
-    this.history.push(content);
-
+    const wasEmpty = this.journal.getLength() === 0;
+    let token: ReturnType<HistoryTokenTickets['prepare']> | undefined;
+    let tokenPublished = false;
+    const scope = this.journal.openPublication();
     try {
-      this.emit('contentAdded', content, origin);
-      this.mediaOwner?.adopt([content]);
-      if (origin !== undefined) this.contentOrigins.set(content, origin);
-      else this.contentOrigins.delete(content);
-    } catch (error: unknown) {
-      // Roll back the insertion. The consumed chronology sequence number is
-      // intentionally NOT reclaimed: sequence numbers are never reused, and
-      // the resulting gap truthfully records that an item was removed.
-      this.history.pop();
-      throw error;
-    }
-
-    // Update token count asynchronously but atomically
-    this.observeTokenizerOperation(
-      this.updateTokenCount(content, modelName, generation),
-    );
-  }
-
-  /**
-   * Atomically update token count for new content
-   */
-  protected updateTokenCount(
-    content: IContent,
-    modelName?: string,
-    generation = this.syncGeneration,
-  ): Promise<void> {
-    return this.runSerializedTokenOperation(async () => {
-      // Always derive token counts from the stored content to avoid double counting
-      // when providers attach aggregate usage metadata (which already includes prompt tokens).
-      const defaultModel = modelName ?? this.activeTokenizationModel;
-      const contentTokens = await this.estimateContentTokens(
-        content,
-        defaultModel,
+      // Durable write first: the postcondition of every mutation is "journal
+      // appended (awaitable ack) + observers notified" (#854).
+      const originId =
+        origin === undefined ? undefined : historyOriginId(origin);
+      this.journal.apply({ kind: 'content', content, origin: originId });
+      token = this.tokenTickets.prepare(
+        this.captureTokenRow(),
+        modelName,
+        generation,
       );
-      if (generation !== this.syncGeneration) return;
 
-      // Atomically update the total
-      this.totalTokens += contentTokens;
+      try {
+        this.emit('contentAdded', content, origin);
+        this.mediaOwner?.adopt([content]);
+      } catch (error: unknown) {
+        // Roll back the insertion with a compensating rewind. The consumed
+        // chronology sequence number is intentionally NOT reclaimed: sequence
+        // numbers are never reused, and the resulting gap truthfully records
+        // that an item was removed.
+        this.journal.apply({
+          kind: 'rewind',
+          itemsRemoved: 1,
+          cutSeq: content.metadata?.chronology?.seq,
+          origin: originId,
+        });
+        throw error;
+      }
+      scope.close(true);
 
-      // Emit event with updated count
-      const eventData = {
-        totalTokens: this.getTotalTokens(),
-        addedTokens: contentTokens,
-        contentId: content.metadata?.id,
-      };
+      // Empty→first entry is a context boundary event (#854): the curated
+      // context came into existence, so observers must learn its boundary even
+      // though no batch commit ran. Emitted exactly once here; subsequent
+      // single adds are silent. The span state resets with it so
+      // getContextRange() stays at parity with this event: the context the old
+      // spans described is gone.
+      if (wasEmpty) {
+        this.spanWindow.set([]);
+        this.emit('contextRangeChanged', firstEntryContextRange(content));
+      }
 
-      this.logger.debug('Emitting tokensUpdated:', eventData);
-
-      this.emit('tokensUpdated', eventData);
-    });
+      // Update token count asynchronously but atomically
+      this.tokenTickets.publish(token);
+      tokenPublished = true;
+    } finally {
+      scope.close(false);
+      if (!tokenPublished && token !== undefined)
+        this.tokenTickets.cancel(token);
+    }
   }
 
   /**
@@ -660,12 +759,14 @@ export abstract class HistoryServiceCore
   protected async estimateContentTokens(
     content: IContent,
     modelName: string,
+    signal?: AbortSignal,
   ): Promise<number> {
     return estimateContentTokensImpl(
       content,
       modelName,
       this.tokenizerProvider(),
       this.logger,
+      signal,
     );
   }
 
@@ -683,9 +784,8 @@ export abstract class HistoryServiceCore
   /**
    * Add multiple contents to the history.
    *
-   * Iterates a snapshot because `add` appends to `this.history`: if `contents`
-   * aliases the backing array (`getRawHistory()`), a live iterator would keep
-   * consuming its own appends and never terminate. `replaceAll` is already
+   * Iterates a snapshot so a caller passing a materialized projection can
+   * never have the iterator chase its own appends; `replaceAll` is already
    * immune the same way — its `filter` produces a fresh array before use.
    */
   addAll(contents: readonly IContent[], modelName?: string): void {
@@ -696,87 +796,37 @@ export abstract class HistoryServiceCore
 
   addBatch(
     contents: readonly IContent[],
-    modelName?: string,
+    modelName = this.activeTokenizationModel,
     options: HistoryBatchOptions = {},
   ): Promise<void> {
-    const batch = [...contents];
-    return this.enqueueAsynchronousHistoryMutation(async () => {
-      validateHistoryBatch(batch);
-      if (batch.length === 0) return;
-      await this.waitForTokenUpdates();
-      const addedTokens = await this.estimateTokensForContents(
-        batch,
-        modelName,
-      );
-      await this.commitHistoryMutation({
-        nextHistory: [...this.history, ...batch],
-        nextHistoryTokens: this.totalTokens + addedTokens,
-        publishedContents: batch,
-        options,
-      });
-    });
+    if (contents.length === 0)
+      return this.enqueueAsynchronousHistoryMutation(() => Promise.resolve());
+    return this.detachedValues.append(contents, modelName, options);
   }
 
   replaceBatch(
     contents: readonly IContent[],
-    modelName?: string,
+    modelName = this.activeTokenizationModel,
     options: HistoryBatchOptions = {},
   ): Promise<void> {
-    const replacement = [...contents];
-    return this.enqueueAsynchronousHistoryMutation(async () => {
-      validateHistoryBatch(replacement);
-      await this.waitForTokenUpdates();
-      const replacementTokens = await this.estimateTokensForContents(
-        replacement,
-        modelName,
-      );
-      await this.commitHistoryMutation({
-        nextHistory: replacement,
-        nextHistoryTokens: replacementTokens,
-        publishedContents: replacement,
-        options,
-      });
+    return this.detachedValues.replace(contents, modelName, {
+      ...options,
+      publishBatch: true,
     });
   }
 
-  transformAll(
-    transform: (
-      contents: readonly IContent[],
-    ) => readonly IContent[] | Promise<readonly IContent[]>,
-    modelName?: string,
-    options: HistoryBatchOptions = {},
-  ): Promise<void> {
-    return this.enqueueAsynchronousHistoryMutation(async () => {
-      const replacement = [...(await transform([...this.history]))];
-      validateHistoryBatch(replacement);
-      await this.waitForTokenUpdates();
-      const replacementTokens = await this.estimateTokensForContents(
-        replacement,
-        modelName,
-      );
-      await this.commitHistoryMutation({
-        nextHistory: replacement,
-        nextHistoryTokens: replacementTokens,
-        options,
-      });
+  async registerMediaOwner(owner: HistoryMediaOwner): Promise<void> {
+    await this.enqueueAsynchronousHistoryMutation(async () => {
+      this.mediaOwner = owner;
+      await this.journal.adoptMediaOwner(owner);
     });
-  }
-
-  registerBatchParticipant(participant: HistoryBatchParticipant): () => void {
-    this.batchParticipants.add(participant);
-    return () => {
-      this.batchParticipants.delete(participant);
-    };
-  }
-
-  registerMediaOwner(owner: HistoryMediaOwner): void {
-    this.mediaOwner = owner;
-    owner.adopt(this.history);
   }
 
   settleMediaOwnership(): Promise<void> {
     return this.enqueueAsynchronousHistoryMutation(async () => {
-      await this.mediaOwner?.reconcile([...this.history], () => this.history);
+      const owner = this.mediaOwner;
+      if (owner === undefined) return;
+      await this.journal.reconcileMedia(owner);
     });
   }
 
@@ -807,17 +857,9 @@ export abstract class HistoryServiceCore
     this.ownershipSettlement = this.ownershipSettlement.then(() => observed);
   }
 
-  protected enqueueSynchronousOwnershipReconcile(
-    previous: readonly IContent[],
-    getNext: () => readonly IContent[],
-  ): void {
-    const owner = this.mediaOwner;
-    if (owner === undefined) return;
-    this.observeOwnershipOperation(
-      this.enqueueAsynchronousHistoryMutation(() =>
-        owner.reconcile(previous, getNext),
-      ),
-    );
+  protected enqueueSynchronousOwnershipSettlement(): void {
+    if (this.mediaOwner === undefined) return;
+    this.observeOwnershipOperation(this.settleMediaOwnership());
   }
 
   protected enqueueSynchronousOwnershipReleaseAll(): void {
@@ -828,173 +870,167 @@ export abstract class HistoryServiceCore
     );
   }
 
+  /**
+   * The curated in-memory context boundary plus the v2 membership projection
+   * (#854): boundary fields derived from the transient journal fold, joined
+   * with the capped span window and the compressed spans re-derived from
+   * summary metadata.
+   *
+   * @plan PLAN-20260917-ISSUE854.P01
+   * @requirement REQ-854-004
+   */
+  getContextRange(): ContextRange {
+    return this.journal.contextRange(this.spanWindow.get());
+  }
+
+  /**
+   * Projections of every summary entry currently in context, derived from
+   * each entry's `chronologyReplaced` metadata.
+   *
+   * @plan PLAN-20260917-ISSUE854.P01
+   * @requirement REQ-854-004
+   */
+  async *getContextSummaries(): AsyncIterable<ContextSummaryInfo> {
+    for await (const entry of this.journal.streamRows()) {
+      const summary = contextSummaryOfEntry(entry);
+      if (summary !== undefined) yield summary;
+    }
+  }
+
+  /**
+   * Emits `contextRangeChanged` with the current boundary snapshot. Called
+   * only from boundary-moving commit paths (history mutations and clear);
+   * single-entry `add` emits only for the empty→first transition, from
+   * `addInternal` directly.
+   *
+   * @plan PLAN-20260917-ISSUE854.P01
+   * @requirement REQ-854-004
+   */
+  protected emitContextRangeChanged(): void {
+    this.emit('contextRangeChanged', this.getContextRange());
+  }
+
   replaceAll(
     contents: readonly IContent[],
     modelName?: string,
     options: HistoryBatchOptions = {},
   ): Promise<void> {
-    const accepted = [...contents].filter(
-      (content) =>
-        ['human', 'ai', 'tool'].includes(content.speaker) &&
-        Array.isArray(content.blocks) &&
-        content.blocks.length > 0,
+    return this.detachedValues.replace(
+      acceptedHistoryValues(contents),
+      modelName,
+      {
+        ...options,
+        publishTokens: true,
+      },
     );
-    return this.enqueueAsynchronousHistoryMutation(async () => {
-      await this.waitForTokenUpdates();
-      const replacementTokens = await this.estimateTokensForContents(
-        accepted,
-        modelName,
-      );
-      await this.commitHistoryMutation({
-        nextHistory: accepted,
-        nextHistoryTokens: replacementTokens,
-        options,
-      });
-    });
   }
 
-  private stampHistory(contents: readonly IContent[]): {
-    readonly state: ChronologyState;
-    readonly entries: readonly ChronologyRollbackEntry[];
-  } {
-    const state = this.chronology.snapshot();
-    const entries = contents.map((content) => ({
-      content,
-      hadMetadata: content.metadata !== undefined,
-      chronology: content.metadata?.chronology,
-    }));
-    for (const content of contents) {
-      this.chronology.stamp(content);
-    }
-    return { state, entries };
-  }
-
-  private restoreChronology(input: {
-    readonly state: ChronologyState;
-    readonly entries: readonly ChronologyRollbackEntry[];
-  }): void {
-    this.chronology.restore(input.state);
-    for (const entry of input.entries) {
-      if (!entry.hadMetadata) {
-        delete entry.content.metadata;
-      } else if (entry.chronology === undefined) {
-        if (entry.content.metadata?.chronology !== undefined) {
-          delete entry.content.metadata.chronology;
-        }
-      } else if (
-        entry.content.metadata !== undefined &&
-        entry.content.metadata.chronology !== entry.chronology
-      ) {
-        entry.content.metadata.chronology = entry.chronology;
-      }
-    }
-  }
-
-  private async prepareMutationEffects(
-    effects: PreparedHistoryBatchEffect[],
-    publication: HistoryBatchPublication | undefined,
-    previousHistory: readonly IContent[],
-    nextHistory: readonly IContent[],
-    adopted: readonly HistoryOwnedMediaReservation[],
+  protected async commitHistoryMutation(
+    input: HistoryMutationInput,
+    previousHistory: HistoryMutationSnapshot,
   ): Promise<void> {
-    if (this.mediaOwner !== undefined) {
-      effects.push(
-        await this.mediaOwner.prepareReplacement({
-          previous: previousHistory,
-          next: nextHistory,
-          adopted,
-        }),
-      );
-    }
-    if (publication !== undefined) {
-      for (const participant of this.batchParticipants) {
-        effects.push(await participant(publication));
-      }
-    }
-  }
-
-  private async rollbackMutationEffects(
-    effects: readonly PreparedHistoryBatchEffect[],
-  ): Promise<unknown[]> {
-    const failures: unknown[] = [];
-    for (const effect of [...effects].reverse()) {
-      try {
-        await effect.rollback();
-      } catch (error: unknown) {
-        failures.push(error);
-      }
-    }
-    return failures;
-  }
-
-  private async commitHistoryMutation(input: {
-    readonly nextHistory: readonly IContent[];
-    readonly nextHistoryTokens: number;
-    readonly publishedContents?: readonly IContent[];
-    readonly options: HistoryBatchOptions;
-  }): Promise<void> {
-    const previousHistory = this.history;
     const previousTokens = this.totalTokens;
-    const chronology = this.stampHistory(input.nextHistory);
-    const nextHistory = [...input.nextHistory];
-    const addedTokens = input.nextHistoryTokens - previousTokens;
-    const publication: HistoryBatchPublication | undefined =
-      input.publishedContents === undefined
-        ? undefined
-        : {
-            contents: input.publishedContents,
-            origin: input.options.origin,
-            recordingCompletion: input.options.recordingCompletion,
-            nextHistory,
-            addedTokens,
-            totalTokens: this.baseTokenOffset + input.nextHistoryTokens,
-          };
+    const previousSpans = this.spanWindow.get();
+    const chronology = this.chronology.snapshot();
+    const nextHistory = input.nextHistory;
     const effects: PreparedHistoryBatchEffect[] = [];
-    let historyPublished = false;
+    const publication = new HistoryMutationPublication(
+      this.journal,
+      this.mutationOwnership,
+    );
+    const scope = this.journal.openPublication();
     try {
-      await this.prepareMutationEffects(
+      input.signal?.throwIfAborted();
+      stampMutationChronology(this.chronology, input);
+      const nextHistoryTokens =
+        input.nextHistoryTokens ??
+        (await this.estimateTokensForContents(nextHistory));
+      const committedSpans = projectDensityCommitSpans(
+        input,
+        previousSpans,
+        previousHistory,
+      );
+      await prepareMutationEffects(
+        this.mediaOwner,
         effects,
-        publication,
         previousHistory,
         nextHistory,
         input.options.adoptedOwners ?? [],
+        this.mutationOwnership,
       );
-      for (const effect of effects) {
-        await effect.publish();
-      }
-
+      for (const effect of effects) await effect.publish();
       this.invalidatePendingSyncs();
-      this.history = nextHistory;
-      this.totalTokens = input.nextHistoryTokens;
-      historyPublished = true;
-      if (publication) this.emit('contentBatchAdded', publication.contents);
-      this.emit('tokensUpdated', {
-        totalTokens: this.getTotalTokens(),
-        addedTokens,
-        contentId: null,
-      });
-      await input.options.afterPublication?.();
-      await finalizeMutationEffects(effects);
-      this.contentOrigins = retainContentOrigins(
-        this.contentOrigins,
-        nextHistory,
-        input.publishedContents,
-        input.options.origin,
-        previousHistory,
+      const publishing = publication.publish(previousHistory, input);
+      if (publishing !== undefined) await publishing;
+      this.totalTokens = nextHistoryTokens;
+      this.spanWindow.set(committedSpans);
+      await finalizeHistoryMutation(
+        this,
+        input,
+        effects,
+        nextHistoryTokens - previousTokens,
+        this.spanWindow.get(),
+        () => this.emitContextRangeChanged(),
       );
+      scope.close(true);
     } catch (error: unknown) {
-      if (historyPublished) {
-        this.invalidatePendingSyncs();
-        this.history = previousHistory;
-        this.totalTokens = previousTokens;
-      }
-      this.restoreChronology(chronology);
-      const rollbackFailures = await this.rollbackMutationEffects(effects);
-      if (rollbackFailures.length === 0) throw error;
-      throw new AggregateError(
-        [error, ...rollbackFailures],
-        'History mutation and rollback failed',
+      const failures: unknown[] = [];
+      restorePendingChronologyFailure(previousHistory, failures);
+      const compensated = await this.compensateAdmittedMutation(
+        publication,
+        failures,
+        error,
       );
+      this.totalTokens = compensated
+        ? previousTokens
+        : await this.journalTokensAfterFailedCompensation(failures);
+      this.spanWindow.set(previousSpans);
+      this.chronology.restore(chronology);
+      failures.push(...(await rollbackMutationEffects(effects)));
+      throw historyMutationFailure(error, failures);
+    } finally {
+      scope.close(false);
+      publication.close();
+    }
+    await this.journal.settleFanout();
+  }
+
+  /**
+   * Undo journal admissions of a failed mutation. When compensation itself
+   * fails the journal is no longer the previous history, so the saved token
+   * total is not claimed; the caller re-derives it from the journal rows.
+   */
+  private async compensateAdmittedMutation(
+    publication: HistoryMutationPublication,
+    failures: unknown[],
+    failure: unknown,
+  ): Promise<boolean> {
+    if (publication.admittedCount === 0) return true;
+    this.invalidatePendingSyncs();
+    try {
+      await this.journal.compensate(publication.compensationMark, failure);
+      return true;
+    } catch (compensationError: unknown) {
+      failures.push(compensationError);
+      return false;
+    }
+  }
+
+  private async journalTokensAfterFailedCompensation(
+    failures: unknown[],
+  ): Promise<number> {
+    try {
+      return (
+        await estimateTokenRange(
+          this.captureTokenRow(0),
+          this.activeTokenizationModel,
+          this.tokenizerProvider(),
+          this.logger,
+        )
+      ).tokens;
+    } catch (estimateError: unknown) {
+      failures.push(estimateError);
+      return 0;
     }
   }
 
@@ -1002,14 +1038,16 @@ export abstract class HistoryServiceCore
    * Estimate total tokens for hypothetical contents without mutating history.
    */
   async estimateTokensForContents(
-    contents: readonly IContent[],
-    modelName = this.activeTokenizationModel,
+    contents: Iterable<IContent> | AsyncIterable<IContent>,
+    modelName?: string,
+    signal?: AbortSignal,
   ): Promise<number> {
     return estimateTokensForContentsImpl(
-      [...contents],
+      contents,
       modelName,
       this.tokenizerProvider(),
       this.logger,
+      signal,
     );
   }
 
@@ -1030,35 +1068,38 @@ export abstract class HistoryServiceCore
    * @requirement REQ-HD-003.1, REQ-HD-003.2, REQ-HD-003.3, REQ-HD-001.6, REQ-HD-001.7
    * @pseudocode history-service.md lines 20-82
    */
-  async applyDensityResult(result: DensityResult): Promise<void> {
-    await this.enqueueAsynchronousHistoryMutation(async () => {
-      validateDensityResult(result, this.history.length);
-      const nextHistory = [...this.history];
-      // Each density replacement takes over the chronology position of the item
-      // it replaces, so the surviving history keeps an unbroken sequence.
-      // densityValidation stays free of chronology knowledge.
-      for (const [index, replacement] of result.replacements) {
-        const replacedMarker = this.history[index].metadata?.chronology;
-        if (replacedMarker !== undefined) {
-          this.chronology.inherit(replacement, replacedMarker);
-        }
-      }
-      applyDensityMutations(nextHistory, result);
-      await this.waitForTokenUpdates();
-      const replacementTokens =
-        await this.estimateTokensForContents(nextHistory);
-      await this.commitHistoryMutation({
-        nextHistory,
-        nextHistoryTokens: replacementTokens,
-        options: {},
-      });
+  async optimizeDensityRows(
+    optimize: DiskDensityOptimizer,
+    nativePolicy?: () => NativeDensityPolicy,
+  ): Promise<void> {
+    await this.enqueueAsynchronousHistoryMutation(() =>
+      this.journal.optimizeDensity({
+        optimize,
+        nativePolicy,
+        ownership: this.mutationOwnership,
+        host: this.detachedValues.host(),
+        mutate: async (previous) => {
+          await this.waitForTokenUpdates();
+          await withDiskDensityMutation(
+            previous,
+            optimize,
+            (input) => this.commitHistoryMutation(input, previous),
+            (rows) => this.estimateTokensForContents(rows),
+            this.mutationOwnership,
+          );
+        },
+      }),
+    );
+  }
 
-      this.logger.debug('Density: applied result', {
-        replacements: result.replacements.size,
-        removals: result.removals.length,
-        newHistoryLength: this.history.length,
-        metadata: result.metadata,
-      });
-    });
+  applyDensityResult(result: DensityResult): Promise<void> {
+    return this.detachedValues.transform(
+      densityValueTransform(result),
+      undefined,
+      {
+        publishTokens: true,
+        densityShape: true,
+      },
+    );
   }
 }

@@ -28,6 +28,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { suspendJournalMaintenance } from '@vybestack/llxprt-code-core/journal/deferred-maintenance.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -42,6 +43,8 @@ import type { SchedulerLease } from '../../session/sessionSchedulerOwner.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgenticLoopEvent, AgenticLoopOptions } from './types.js';
 import { AgenticEventQueue } from './agenticEventQueue.js';
+import { ApprovalPublicationError } from '@vybestack/llxprt-code-core/scheduler/approval-lifecycle.js';
+import type { ApprovalLifecycleRecord } from '@vybestack/llxprt-code-core/scheduler/approval-lifecycle.js';
 import { buildToolResponses, classifyCompletedTools } from './loopHelpers.js';
 
 const logger = new DebugLogger('llxprt:agents:agentic-loop');
@@ -135,7 +138,10 @@ function wrapCompletionTask(
 ): Promise<CompletedToolCall[] | null> {
   return completionPromise
     .then((c) => c)
-    .catch(() => null)
+    .catch((error: unknown) => {
+      if (error instanceof ApprovalPublicationError) throw error;
+      return null;
+    })
     .finally(() => {
       state.completionSettled = true;
     });
@@ -144,6 +150,8 @@ function wrapCompletionTask(
 export class AgenticLoop {
   private readonly streamModel: AgenticLoopOptions['streamModel'];
   private readonly recordToolHistory: AgenticLoopOptions['recordToolHistory'];
+  private readonly recordToolPresentations: AgenticLoopOptions['recordToolPresentations'];
+  private readonly publishApproval: AgenticLoopOptions['persistApproval'];
   private readonly config: AgenticLoopOptions['config'];
   private readonly tools: AgenticLoopOptions['tools'];
   private readonly displayCallbacks: AgenticLoopOptions['displayCallbacks'];
@@ -166,6 +174,8 @@ export class AgenticLoop {
   constructor(options: AgenticLoopOptions) {
     this.streamModel = options.streamModel;
     this.recordToolHistory = options.recordToolHistory;
+    this.recordToolPresentations = options.recordToolPresentations;
+    this.publishApproval = options.persistApproval;
     this.config = options.config;
     this.tools = options.tools;
     this.displayCallbacks = options.displayCallbacks;
@@ -258,10 +268,12 @@ export class AgenticLoop {
     }
     this.isRunning = true;
     let unsubscribe = (): void => {};
+    let resumeMaintenance: (() => void) | undefined;
     let failed = false;
     let primary: unknown;
     try {
       unsubscribe = this.tools.begin();
+      resumeMaintenance = await suspendJournalMaintenance();
       let currentMessage = message;
       const initialPromptId = promptId ?? this.generateInitialPromptId();
       let currentPromptId = initialPromptId;
@@ -306,7 +318,11 @@ export class AgenticLoop {
       );
       throw error;
     } finally {
-      this.finishRun(unsubscribe, failed, primary);
+      try {
+        this.finishRun(unsubscribe, failed, primary);
+      } finally {
+        resumeMaintenance?.();
+      }
     }
   }
 
@@ -372,6 +388,7 @@ export class AgenticLoop {
       dedupedRequests,
       signal,
       recordingExecution?.hookOwner,
+      recordingExecution?.historyOrigin,
     );
 
     if (completed === null || completed.length === 0) {
@@ -382,6 +399,10 @@ export class AgenticLoop {
       };
     }
 
+    await this.recordToolPresentations(
+      completed,
+      recordingExecution?.historyOrigin,
+    );
     this.notifyAllToolCallsComplete(completed);
     yield { kind: 'tools_complete', completed };
     // Bun 1.3.14 does not unwrap a promised async-generator return value through yield*.
@@ -465,6 +486,7 @@ export class AgenticLoop {
     requests: ToolCallRequestInfo[],
     signal: AbortSignal,
     hookOwner?: AgentChatRecordingExecution['hookOwner'],
+    historyOrigin?: object,
   ): AsyncGenerator<AgenticLoopEvent, TurnToolResult> {
     const queue = new AgenticEventQueue();
 
@@ -482,6 +504,7 @@ export class AgenticLoop {
       () => {
         acceptedToolUpdateSeen = true;
       },
+      historyOrigin,
     );
 
     const state: TurnState = { completionSettled: false };
@@ -503,6 +526,10 @@ export class AgenticLoop {
         }
       })
       .catch((error: unknown) => {
+        if (error instanceof ApprovalPublicationError) {
+          rejectCompletion(error);
+          return;
+        }
         logger.debug(
           () =>
             `scheduler.schedule rejected; ending tool turn: ${
@@ -551,12 +578,20 @@ export class AgenticLoop {
     });
   }
 
+  private persistApproval(
+    record: ApprovalLifecycleRecord,
+    origin?: object,
+  ): Promise<void> {
+    return this.publishApproval(record, origin);
+  }
+
   private async createSchedulerWithCallbacks(
     queue: AgenticEventQueue,
     resolveCompletion: (calls: CompletedToolCall[]) => void,
     rejectCompletion: (error: unknown) => void,
     forwardingState: { active: boolean },
     markAcceptedUpdate: () => void,
+    historyOrigin?: object,
   ): Promise<SchedulerLease> {
     const display = this.displayCallbacks;
     const pushQueueEvent = (event: AgenticLoopEvent): boolean => {
@@ -577,6 +612,7 @@ export class AgenticLoop {
     };
 
     const lease = this.tools.acquire({
+      persistApproval: (record) => this.persistApproval(record, historyOrigin),
       outputUpdateHandler: (callId, update) => {
         if (!forwardingState.active) {
           return;

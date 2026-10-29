@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -82,7 +83,7 @@ describe('submission turn recording owner', () => {
     expect(await runOwnedTurn(owner, retired)).toContain(
       'keep this owner turn',
     );
-    expect(await sibling.getHistory()).toHaveLength(0);
+    expect(await collectResumeRows(sibling.streamHistory())).toHaveLength(0);
     await owner.dispose();
     expect(await runOwnedTurn(sibling, owner)).toContain(
       'keep this owner turn',

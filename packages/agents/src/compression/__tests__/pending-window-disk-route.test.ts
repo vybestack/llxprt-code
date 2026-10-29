@@ -1,0 +1,154 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
+import {
+  withPendingFixture,
+  pendingCaller,
+  pendingGate,
+  pendingPublishedRows,
+} from './pending-window-disk-helpers.js';
+import { middleoutRow } from './middleout-disk-helpers.js';
+import { buildCompressionMetadata } from '../compressionContextBuilder.js';
+import { compressTopDownArray } from './support/topdown-array-oracle.js';
+import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
+import { invalidateResponsesStatefulChain } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+
+async function durableParity(size: number): Promise<number> {
+  return withPendingFixture(size, async ({ history, setup }) => {
+    const logger = new DebugLogger('test:pending-oracle');
+    const metadata = await buildCompressionMetadata(
+      'oracle',
+      setup.runtime,
+      undefined,
+      history,
+      async () => ({
+        provider: setup.transport,
+        runtime: setup.runtime.providerRuntime,
+      }),
+      undefined,
+      undefined,
+      logger,
+      { targetTokenCount: 0 },
+    );
+    const legacy = await compressTopDownArray({
+      ...metadata,
+      history: buildCuratedHistory(
+        logger,
+        Array.from({ length: size }, (_, index) => middleoutRow(index)),
+        false,
+      ),
+    });
+    if (legacy.kind !== 'applied')
+      throw new Error('Expected legacy truncation');
+    await setup.handler.enforceContextWindow(600, 'pending-durable');
+    expect(await collectRawHistory(history)).toStrictEqual([
+      ...invalidateResponsesStatefulChain(legacy.newHistory),
+    ]);
+    expect(history.getCacheAnchorSeq()).toBe(0);
+    expect(setup.handler.getLastPromptTokenCount()).toBe(0);
+    expect(setup.handler.wasRecentlyCompressed()).toBe(true);
+    return (await collectRawHistory(history)).length;
+  });
+}
+async function pendingParity(size: number): Promise<number> {
+  return withPendingFixture(size, async (fixture) => {
+    const { history, recorder, owners, assertCommitted, reads, setup } =
+      fixture;
+    const callers = [pendingCaller(0), pendingCaller(1)];
+    history.add(callers[0]);
+    history.add(callers[1]);
+    await assertCommitted();
+    const markers = callers.map((row) => row.metadata?.chronology);
+    history.startCompression();
+    const queued = pendingCaller(2);
+    history.add(queued);
+    const ready = pendingGate();
+    const gate = pendingGate();
+    await fixture.pausePublication(ready, gate);
+    const operation = setup.handler.enforceContextWindow(600, 'pending-paused');
+    await ready.promise;
+    try {
+      expect(owners.snapshot().liveRows).toBeGreaterThan(0);
+      expect(
+        owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
+      ).toBe(true);
+      expect(reads.snapshot().peakDecodedRows).toBeLessThanOrEqual(440);
+      expect((await pendingPublishedRows(fixture)).slice(-2)).toStrictEqual(
+        callers,
+      );
+      expect(queued.metadata?.chronology).toBeUndefined();
+    } finally {
+      gate.resolve();
+    }
+    await operation;
+    const installed = await collectRawHistory(history);
+    expect(installed).toHaveLength(2);
+    for (let index = 0; index < callers.length; index++) {
+      expect(installed[index]).toStrictEqual(callers[index]);
+      expect(installed[index].metadata?.chronology).toStrictEqual(
+        markers[index],
+      );
+    }
+    expect(owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 })).toBe(
+      true,
+    );
+    history.endCompression();
+    const queuedRows = await collectRawHistory(history);
+    expect(queuedRows[queuedRows.length - 1]).toStrictEqual(queued);
+    await recorder.flush();
+    expect(owners.snapshot().liveRows).toBe(0);
+    expect(await collectRawHistory(history)).toStrictEqual([
+      ...callers,
+      queued,
+    ]);
+    return queuedRows.length;
+  });
+}
+describe('actual pending-window disk route', () => {
+  it.each([65])(
+    'matches independent legacy selection for %i durable mixed rows',
+    async (size) => {
+      expect(await durableParity(size)).toBeGreaterThan(0);
+    },
+    180000,
+  );
+  it.each([65])(
+    'publishes %i rows during a pending window and preserves caller and queued row values',
+    async (size) => {
+      expect(await pendingParity(size)).toBeGreaterThan(0);
+    },
+    180000,
+  );
+  it('supports a valid surviving record larger than eight MiB', async () => {
+    await withPendingFixture(
+      3,
+      async ({ history, setup }) => {
+        await history.detachedValues.replace(
+          (function* () {
+            for (let index = 0; index < 3; index++) yield pendingCaller(index);
+            yield {
+              speaker: 'human' as const,
+              blocks: [
+                { type: 'text' as const, text: 'x'.repeat(9 * 1024 * 1024) },
+              ],
+            };
+          })(),
+          undefined,
+          { publishTokens: true },
+        );
+        setup.handler.setLastPromptTokenCount(
+          history.getTotalTokens() + 20000000,
+        );
+        await setup.handler.enforceContextWindow(600, 'pending-large');
+        const rows = await collectRawHistory(history);
+        expect(rows).toHaveLength(2);
+        expect(JSON.stringify(rows[rows.length - 1]).length).toBeGreaterThan(
+          8 * 1024 * 1024,
+        );
+      },
+      2048,
+      10000000,
+    );
+  }, 180000);
+});

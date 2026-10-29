@@ -31,6 +31,7 @@ import type { SubAgentScopeFactory } from '../subagent.js';
 import {
   createRuntimeBundle,
   fakeChildScope,
+  launchForTest,
   makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
 
@@ -128,7 +129,8 @@ describe('SubagentOrchestrator - Runtime Assembly (load balancer profiles)', () 
       messageBus: new MessageBus(),
     });
 
-    const result = await orchestrator.launch(
+    const result = await launchForTest(
+      orchestrator,
       {
         name: loadBalancerSubagent.name,
       },

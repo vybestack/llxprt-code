@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ApprovalLifecycleRecord } from '@vybestack/llxprt-code-core/scheduler/approval-lifecycle.js';
 /**
  * @requirement REQ-LOOP-002
  *
@@ -133,6 +134,14 @@ export interface AgenticLoopOptions {
     modelParameters?: AdmittedModelParameters,
   ) => AsyncGenerator<ServerAgentStreamEvent>;
   recordToolHistory: (calls: CompletedToolCall[]) => Promise<void>;
+  recordToolPresentations: (
+    calls: CompletedToolCall[],
+    origin?: object,
+  ) => Promise<void>;
+  persistApproval: (
+    record: ApprovalLifecycleRecord,
+    origin?: object,
+  ) => Promise<void>;
   config: AgenticLoopRuntime;
   tools: TurnToolExecutionOwner;
   /**

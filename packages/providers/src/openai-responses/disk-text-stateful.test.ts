@@ -1,0 +1,342 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { readAtOf } from '../__tests__/requestRowsTestSupport.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { readdirSync } from 'node:fs';
+import type {
+  IContent,
+  UsageStats,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import type { GenerateChatOptions } from '../IProvider.js';
+import { requestSelection } from './__tests__/support/request-selection.js';
+import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
+const completed =
+  'data: {"type":"response.output_text.delta","delta":"ok"}\n\n' +
+  'data: {"type":"response.completed","response":{"id":"resp_s","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}\n\n';
+
+const text = (speaker: 'human' | 'ai', value: string): IContent => ({
+  speaker,
+  blocks: [{ type: 'text', text: value }],
+});
+
+const parent = (id: string, usage?: UsageStats): IContent => ({
+  ...text('ai', `answer ${id}`),
+  metadata: {
+    id,
+    responsesStored: true,
+    ...(usage === undefined ? {} : { usage }),
+  },
+});
+
+const withCall = (row: IContent, id: string): IContent => ({
+  ...row,
+  blocks: [
+    ...row.blocks,
+    { type: 'tool_call', id, name: 'shell', parameters: { command: 'ls' } },
+  ],
+});
+
+const usage: UsageStats = {
+  promptTokens: 10,
+  completionTokens: 5,
+  totalTokens: 15,
+};
+
+const histories: Record<string, readonly IContent[]> = {
+  'a parent with observed usage': [
+    text('human', 'one'),
+    parent('resp_parent', usage),
+    text('human', 'two "雪"'),
+  ],
+  'a parent without observed usage': [
+    text('human', 'one'),
+    parent('resp_parent'),
+    text('human', 'two'),
+  ],
+  'the newest of two parents': [
+    text('human', 'one'),
+    parent('resp_old', usage),
+    text('human', 'two'),
+    parent('resp_new', usage),
+    text('human', 'three'),
+  ],
+  'a parent as the last row': [text('human', 'one'), parent('resp_parent')],
+  'a parent row ending in dangling tool calls': [
+    text('human', 'one'),
+    withCall(parent('resp_parent', usage), 'hist_call_1'),
+  ],
+  'a dangling parent row followed by more rows': [
+    text('human', 'one'),
+    withCall(parent('resp_parent', usage), 'hist_call_1'),
+    text('human', 'two'),
+  ],
+  'an unanswered call before the parent and answered calls after it': [
+    text('human', 'one'),
+    withCall(text('ai', 'early'), 'hist_call_0'),
+    parent('resp_parent', usage),
+    text('human', 'two'),
+    withCall(text('ai', 'late'), 'hist_call_2'),
+    {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'hist_call_2',
+          toolName: 'shell',
+          result: 'ok',
+        },
+      ],
+    },
+  ],
+  'a dangling call row before the parent': [
+    text('human', 'one'),
+    withCall(text('ai', 'early'), 'hist_call_0'),
+    parent('resp_parent', usage),
+  ],
+  'no parent': [
+    text('human', 'one'),
+    text('ai', 'plain'),
+    text('human', 'two'),
+  ],
+  'a parent from another endpoint': [
+    text('human', 'one'),
+    {
+      ...parent('resp_foreign', usage),
+      metadata: {
+        id: 'resp_foreign',
+        responsesStored: true,
+        providerBaseURL: 'https://elsewhere.example/v1',
+      },
+    },
+    text('human', 'two'),
+  ],
+};
+
+function rowsOf(list: readonly IContent[]): ProviderRequestRows {
+  return {
+    callerOwned: true,
+    count: list.length,
+    readAt: readAtOf(list),
+    async *openReader(signal?: AbortSignal): AsyncGenerator<IContent, void> {
+      for (const row of list) {
+        signal?.throwIfAborted();
+        yield structuredClone(row);
+      }
+    },
+  };
+}
+
+type Setup = Awaited<ReturnType<typeof projectionRuntime>>;
+
+function withEphemerals(
+  setup: Setup,
+  options: GenerateChatOptions,
+  ephemerals: Record<string, unknown>,
+): GenerateChatOptions {
+  if (options.invocation === undefined)
+    throw new Error('Missing fixture invocation');
+  return {
+    ...options,
+    invocation: createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
+      runtimeId: options.invocation.runtimeId,
+      runtimeMetadata: options.invocation.metadata,
+      providerName: setup.provider.name,
+      ephemeralsSnapshot: ephemerals,
+    }),
+  };
+}
+
+async function send(
+  setup: Setup,
+  options: GenerateChatOptions,
+  viaSource: boolean,
+): Promise<void> {
+  if (!viaSource) {
+    for await (const _ of setup.provider.generateChatCompletion(options));
+    return;
+  }
+  const projection = await setup.provider.projectPromptEnvelope(options);
+  for await (const _ of setup.provider.generateChatCompletion({
+    ...options,
+    promptEnvelopeTransportToken: projection.transportToken,
+  }));
+}
+
+function tmpPromptDirs(): Set<string> {
+  return new Set(
+    readdirSync(getScratchRoot()).filter((name) =>
+      name.startsWith('responses-prompt-keys-'),
+    ),
+  );
+}
+
+describe('Responses source route stateful accounting', () => {
+  const bodies: string[] = [];
+  let rejectParent: string | undefined;
+  let server: Bun.Server<undefined>;
+  let setup: Setup;
+
+  beforeEach(async () => {
+    bodies.length = 0;
+    rejectParent = undefined;
+    server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      async fetch(request): Promise<Response> {
+        const body = await request.text();
+        bodies.push(body);
+        const sent = (JSON.parse(body) as { previous_response_id?: string })
+          .previous_response_id;
+        if (sent !== undefined && sent === rejectParent)
+          return new Response(
+            `{"error":{"message":"Previous response with id '${sent}' not found.","param":"previous_response_id"}}`,
+            { status: 400 },
+          );
+        return new Response(completed, {
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      },
+    });
+    setup = await projectionRuntime(
+      `http://127.0.0.1:${server.port}/v1`,
+      process.cwd(),
+    );
+  });
+
+  afterEach(async () => {
+    await server.stop(true);
+    await setup.config.dispose();
+  });
+
+  async function bothRoutes(
+    list: readonly IContent[],
+    ephemerals: Record<string, unknown>,
+  ): Promise<string[]> {
+    const before = tmpPromptDirs();
+    const rows = rowsOf(list);
+    await send(
+      setup,
+      withEphemerals(setup, setup.options(rows), ephemerals),
+      false,
+    );
+    const arrayBodies = bodies.splice(0);
+    const selection = requestSelection({ ...rows, close: () => {} });
+    await send(
+      setup,
+      withEphemerals(setup, setup.options(selection), ephemerals),
+      true,
+    );
+    expect(bodies).toStrictEqual(arrayBodies);
+    expect(
+      [...tmpPromptDirs()].filter((entry) => !before.has(entry)),
+    ).toHaveLength(0);
+    return arrayBodies;
+  }
+
+  for (const [name, list] of Object.entries(histories)) {
+    it(`matches the array route bytes with ${name}`, async () => {
+      const sent = await bothRoutes(list, { 'responses-stateful': true });
+      expect(sent).toHaveLength(1);
+      expect(JSON.parse(sent[0])).toHaveProperty('store', true);
+    }, 60000);
+  }
+
+  it('sends only the rows after the parent', async () => {
+    const [sent] = await bothRoutes(histories['a parent with observed usage'], {
+      'responses-stateful': true,
+    });
+    const body = JSON.parse(sent) as {
+      previous_response_id: string;
+      input: unknown[];
+    };
+    expect(body.previous_response_id).toBe('resp_parent');
+    expect(body.input).toHaveLength(1);
+  }, 60000);
+
+  it('falls back to full history when the parent is the last row', async () => {
+    const [sent] = await bothRoutes(histories['a parent as the last row'], {
+      'responses-stateful': true,
+    });
+    const body = JSON.parse(sent) as {
+      previous_response_id?: string;
+      input: unknown[];
+    };
+    expect(body.previous_response_id).toBeUndefined();
+    expect(body.input).toHaveLength(2);
+  }, 60000);
+
+  it('chains a parent that ends in dangling tool calls with synthetic outputs', async () => {
+    const [sent] = await bothRoutes(
+      histories['a parent row ending in dangling tool calls'],
+      { 'responses-stateful': true },
+    );
+    const body = JSON.parse(sent) as {
+      previous_response_id?: string;
+      input: Array<{ type?: string }>;
+    };
+    expect(body.previous_response_id).toBe('resp_parent');
+    expect(body.input.map((item) => item.type)).toStrictEqual([
+      'function_call_output',
+    ]);
+  }, 60000);
+
+  it('stays stateless without the responses-stateful option', async () => {
+    const [sent] = await bothRoutes(
+      histories['a parent with observed usage'],
+      {},
+    );
+    expect(JSON.parse(sent)).not.toHaveProperty('previous_response_id');
+  }, 60000);
+
+  it('honours an explicit store=false by not chaining', async () => {
+    const [sent] = await bothRoutes(histories['a parent with observed usage'], {
+      'responses-stateful': true,
+      store: false,
+    });
+    const body = JSON.parse(sent) as Record<string, unknown>;
+    expect(body['previous_response_id']).toBeUndefined();
+    expect(body['store']).toBe(false);
+  }, 60000);
+
+  it('rebuilds a projected contents-only request after its parent is rejected', async () => {
+    const list = histories['a parent with observed usage'];
+    rejectParent = 'resp_parent';
+    const options = withEphemerals(setup, setup.options(rowsOf(list)), {
+      'responses-stateful': true,
+    });
+    await send(setup, options, true);
+    expect(bodies).toHaveLength(2);
+    expect(JSON.parse(bodies[1])).not.toHaveProperty('previous_response_id');
+    expect(bodies[1]).toContain('one');
+    expect(bodies[1]).toContain('two');
+  });
+
+  it('retires a rejected parent and replays full history like the array route', async () => {
+    const list = histories['a parent with observed usage'];
+    rejectParent = 'resp_parent';
+    const ephemerals = { 'responses-stateful': true };
+    const rows = rowsOf(list);
+    await send(
+      setup,
+      withEphemerals(setup, setup.options(rows), ephemerals),
+      false,
+    );
+    const arrayBodies = bodies.splice(0);
+    expect(arrayBodies).toHaveLength(2);
+    expect(JSON.parse(arrayBodies[1])).not.toHaveProperty(
+      'previous_response_id',
+    );
+    setup.provider.clearState();
+    const selection = requestSelection({ ...rows, close: () => {} });
+    await send(
+      setup,
+      withEphemerals(setup, setup.options(selection), ephemerals),
+      true,
+    );
+    expect(bodies).toStrictEqual(arrayBodies);
+  }, 60000);
+});

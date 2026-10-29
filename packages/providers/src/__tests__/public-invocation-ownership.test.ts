@@ -19,6 +19,7 @@ import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { replayableContents } from '../utils/collectContents.js';
 import {
   OwnedFetch,
   type NetworkFetch,
@@ -161,9 +162,9 @@ describe('public invocation ownership', () => {
 
   function optionsFor(_settings: SettingsService): GenerateChatOptions {
     return {
-      contents: [
+      contents: replayableContents([
         { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-      ],
+      ]),
       metadata: { runtimeId: 'public-invocation-owner' },
       systemInstruction: 'Respond to the user.',
     };

@@ -183,7 +183,7 @@ export const productionPolicy: AuditPolicy = {
     'core/src/runtime/contracts/RuntimeTokenizerFactory.ts':
       'RuntimeTokenizerFactory',
     'core/src/config/subagentManager.ts': 'SubagentManager',
-    'core/src/recording/SessionRecordingService.ts': 'SessionRecordingService',
+    'core/src/recording/journalRecordingService.ts': 'JournalRecordingService',
     'core/src/services/asyncTaskManager.ts': 'AsyncTaskManager',
     'core/src/services/shellJobManager.ts': 'ShellJobManager',
     'core/src/services/asyncTaskReminderService.ts': 'AsyncTaskReminderService',
@@ -194,8 +194,6 @@ export const productionPolicy: AuditPolicy = {
     'core/src/utils/workspaceContext.ts': 'WorkspaceContext',
     'core/src/utils/extensionLoader.ts': 'ExtensionLoader',
     'core/src/storage/local-media-store.ts': 'LocalMediaStore',
-    'core/src/storage/SessionPersistenceService.ts':
-      'SessionPersistenceService',
     'storage/src/services/fileDiscoveryService.ts': 'FileDiscoveryService',
     'storage/src/services/fileSystemService.ts': 'FileSystemService',
     'storage/src/secure-store/provider-key-storage.ts':

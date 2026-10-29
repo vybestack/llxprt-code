@@ -3,7 +3,7 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../__tests__/streamCallOptions.js';
 import { createOpenAIRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 const realLlxprtCodeSettingsModule = {

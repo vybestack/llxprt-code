@@ -390,7 +390,7 @@ async function runDirectNonInteractive(
 
 function runtimeProviderFor(
   responses: readonly IContent[],
-  requests: RuntimeGenerateChatOptions[],
+  requestContents: IContent[][],
 ): RuntimeProvider {
   let index = 0;
   return {
@@ -404,7 +404,6 @@ function runtimeProviderFor(
         throw new Error('Expected request options from the runtime.');
       }
       const options = input as RuntimeGenerateChatOptions;
-      requests.push(options);
       const response = responses[index] ?? stopped();
       index += 1;
       // The stream validator requires a finishReason on the model output;
@@ -415,6 +414,9 @@ function runtimeProviderFor(
           block.type === 'tool_call',
       );
       return (async function* () {
+        const rows: IContent[] = [];
+        for await (const row of options.contents) rows.push(row);
+        requestContents.push(rows);
         yield {
           ...response,
           finishReason: hasToolCall ? 'tool_calls' : 'stop',
@@ -445,8 +447,8 @@ async function runInteractiveDirect(
   const { config, toolRegistry, messageBus } = createEmptyRegistryConfig();
   toolRegistry.registerTool(new UppercaseTool());
   toolRegistry.registerTool(new RuntimeDisabledTool());
-  const requests: RuntimeGenerateChatOptions[] = [];
-  const provider = runtimeProviderFor(responses, requests);
+  const requestContents: IContent[][] = [];
+  const provider = runtimeProviderFor(responses, requestContents);
   // The ChatSession resolves its provider via adapter.getActiveProvider()
   // (see subagent.aggregate-output-budget.test.ts): the adapter method must
   // itself return a zero-arg fn that hands back the provider, and the name
@@ -490,7 +492,7 @@ async function runInteractiveDirect(
   await scope.runInteractive(new ContextState());
   return {
     output: scope.output,
-    requestContents: requests.map((r) => r.contents),
+    requestContents,
   };
 }
 

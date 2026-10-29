@@ -18,19 +18,24 @@ export async function currentOwnerClient(
 ): Promise<AgentClientContract> {
   const receivers: AgentClientContract[] = [];
   const restores = ownerClients(owner).map((client) => {
-    const hadOwn = Object.prototype.hasOwnProperty.call(client, 'getHistory');
-    const original = client.getHistory;
-    client.getHistory = () => {
+    const hadOwn = Object.prototype.hasOwnProperty.call(
+      client,
+      'streamHistory',
+    );
+    const original = client.streamHistory;
+    client.streamHistory = () => {
       receivers.push(client);
       return original.call(client);
     };
     return () => {
-      if (hadOwn) client.getHistory = original;
-      else Reflect.deleteProperty(client, 'getHistory');
+      if (hadOwn) client.streamHistory = original;
+      else Reflect.deleteProperty(client, 'streamHistory');
     };
   });
   try {
-    await owner.clients.conversationBinding.conversation.getHistory();
+    await Array.fromAsync(
+      owner.clients.conversationBinding.conversation.streamHistory(),
+    );
   } finally {
     for (const restore of restores) restore();
   }

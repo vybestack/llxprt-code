@@ -1,3 +1,4 @@
+import { providerRowsOf } from '@vybestack/llxprt-code-providers/utils/providerRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -62,7 +63,11 @@ class ScriptedReplies {
   ) {}
 
   async answer(request: GenerationRequest): Promise<readonly string[]> {
-    this.requests.push(request);
+    const rows = await providerRowsOf(request);
+    this.requests.push({
+      ...request,
+      contents: await Array.fromAsync(rows.openReader()),
+    });
     await this.generating?.(request);
     if (this.answered >= this.replies.length)
       throw new Error(

@@ -17,7 +17,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { type IModel } from '../IModel.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
-import { TOOL_PREFIX } from './schemaConverter.js';
+import { unprefixAnthropicToolName } from './schemaConverter.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import {
   BaseProvider,
@@ -49,44 +49,51 @@ import {
   getContextWindowForModel as getContextWindowForModelFn,
   getLatestClaudeModel as getLatestClaudeModelFn,
 } from './AnthropicModelData.js';
-import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
+import {
+  type AnthropicPlanParams,
+  type AnthropicRequestFacts,
+} from './AnthropicRequestPreparation.js';
 import {
   isAnthropicOAuthBaseURL,
-  createMediaSupportPredicate,
   ANTHROPIC_DEFAULT_BASE_URL,
 } from './AnthropicEndpointUtils.js';
 import { findAnthropicToolSchema } from './AnthropicToolSchema.js';
 import { firstTruthyString } from '../utils/falsyFallback.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { projectAnthropicPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
+import { projectAnthropicPromptEnvelopeFromSource } from '../runtime/promptEnvelopeProjections.js';
+import {
+  closeStagedRowsAfterFailure,
+  readsRequestRowsAtTransport,
+} from '../BaseProviderNormalization.js';
 import {
   buildAnthropicRequestHeaders,
   withCredentialHeader,
-  createAnthropicApiCall,
   executeAnthropicApiCall,
+  type AnthropicApiCall,
 } from './AnthropicApiExecution.js';
-import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
+import { reportRequestSize } from '../logging/requestSizeReport.js';
+import {
+  requestBodyForDump,
+  sendRequestFromSpool,
+  type AnthropicSendRequest,
+} from './AnthropicSendRequest.js';
+import {
+  prepareAnthropicRequestRows,
+  registerAnthropicRequestCleanup,
+  type PreparedAnthropicRequest,
+} from './native-anthropic-request.js';
 import {
   createAnthropicMissingCredentialError,
   resolveAnthropicCredential,
 } from './AnthropicCredentialResolution.js';
-import {
-  isAnthropicImageDimensionLimitError,
-  parseAnthropicImageDimensionLimit,
-  sanitizeAnthropicRequestBodyImages,
-  resolveAnthropicImageBudget,
-  resolveRecoveryImageBudget,
-  getImageRecoveryState,
-  ensureImageRecoveryState,
-} from './AnthropicImageSanitizer.js';
-import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
+import { getImageRecoveryState } from './AnthropicImageSanitizer.js';
+import { executeImageDimensionRecovery } from './AnthropicImageRecovery.js';
 import { findRequestCommitState } from '../retryRequestContext.js';
-
-import {
-  registerAnthropicRequestCleanup,
-  resolveAnthropicRequestBody,
-} from './AnthropicRequestCleanup.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
+import { providerRowsOf } from '../utils/providerRows.js';
+import { resolveRowsMedia } from '../openai-responses/responses-row-media.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
 import {
   finishMediaRequest,
   type MediaRequestOutcome,
@@ -136,19 +143,51 @@ export class AnthropicProvider extends BaseProvider {
     // @requirement REQ-SP4-002: Eliminate constructor-captured config and user-memory
   }
 
-  private resolveMediaRequest(
+  /** The transport reads `requestRows` itself (issue #854 WP07). */
+  protected override ownsRequestRowsTransport(): boolean {
+    return true;
+  }
+
+  /** A call without `requestRows` is sent from rows staged on disk. */
+  protected override takesRowsRoute(): boolean {
+    return true;
+  }
+
+  /**
+   * A source-route send is normalized with its prompt inputs blanked because
+   * the prepared body already carries them; the response path still needs the
+   * tool declarations and the transport the assembled instruction, so they
+   * come back from the one prepared envelope.
+   */
+  private restorePreparedSourceInputs(
     options: NormalizedGenerateChatOptions,
-  ): Promise<ResolvedMediaRequest> {
-    const { contents, invocation } = options;
-    const media = captureRequestMediaInput(
+  ): NormalizedGenerateChatOptions {
+    const token = options.promptEnvelopeTransportToken;
+    if (token === undefined || !readsRequestRowsAtTransport(options)) {
+      return options;
+    }
+    const inputs = this.preparedPromptEnvelopes.get(token)?.sourceInputs;
+    if (inputs === undefined) {
+      throw new Error('Unknown Anthropic prompt-envelope transport token');
+    }
+    return { ...options, ...inputs };
+  }
+
+  private captureMedia(options: NormalizedGenerateChatOptions) {
+    return captureRequestMediaInput(
       options.metadata['logicalRequestId'],
-      invocation.runtimeId,
+      options.invocation.runtimeId,
       this.requestMediaBudgetBytes,
       this.requestMediaResolver,
     );
-    return resolveRequestMedia(media, contents, invocation.signal);
   }
 
+  /**
+   * A send with a prepared envelope uses that envelope's media request. Any
+   * other send gets a fresh owner for the leases of the rows it resolves; its
+   * rows are never read here, media is resolved one row at a time while the
+   * body is written.
+   */
   private async resolveTransportPreparation(
     options: NormalizedGenerateChatOptions,
   ): Promise<AnthropicTransportPreparation> {
@@ -158,20 +197,22 @@ export class AnthropicProvider extends BaseProvider {
     if (token !== undefined && prepared === undefined) {
       throw new Error('Unknown Anthropic prompt-envelope transport token');
     }
-    const mediaRequest =
-      prepared?.mediaRequest ?? (await this.resolveMediaRequest(options));
-    try {
+    if (prepared === undefined) {
       return {
         prepared,
-        mediaRequest,
-        effectiveOptions: {
-          ...options,
-          contents: mediaRequest.withContents((contents) => contents),
-        },
+        mediaRequest: await resolveRequestMedia(
+          this.captureMedia(options),
+          [],
+          getRequestSignal(options),
+        ),
+        effectiveOptions: options,
       };
-    } catch (error) {
-      return finishMediaRequest(mediaRequest, { status: 'failed', error });
     }
+    return {
+      prepared,
+      mediaRequest: prepared.mediaRequest,
+      effectiveOptions: options,
+    };
   }
 
   /**
@@ -421,7 +462,7 @@ export class AnthropicProvider extends BaseProvider {
    * placement policy, not a placement decision made in isolation here.
    */
   getSystemPromptPlacement(
-    options: GenerateChatOptions,
+    options: Pick<GenerateChatOptions, 'resolved'>,
   ): SystemPromptPlacement {
     const resolvedToken = options.resolved?.authToken;
     if (isRuntimeAuthTokenProvider(resolvedToken)) {
@@ -520,6 +561,21 @@ export class AnthropicProvider extends BaseProvider {
    * Detect the appropriate tool format for the current model/configuration
    * @returns The detected tool format
    */
+  private detectToolFormatForModel(modelName: string): ToolFormat {
+    // Check for GLM models which require Qwen handling
+    if (modelName.includes('glm-')) {
+      return 'qwen';
+    }
+
+    // Check for qwen models
+    if (modelName.includes('qwen')) {
+      return 'qwen';
+    }
+
+    // Default to 'anthropic' format
+    return 'anthropic';
+  }
+
   detectToolFormat(): ToolFormat {
     // @plan PLAN-20251023-STATELESS-HARDENING.P08: Don't reference deprecated instance fields
     // Tools format should be derived from runtime context only
@@ -537,55 +593,19 @@ export class AnthropicProvider extends BaseProvider {
       if (toolFormatOverride && toolFormatOverride !== 'auto') {
         return toolFormatOverride;
       }
-
-      // Auto-detect based on model name if set to 'auto' or not set
-      const modelName = this.getCurrentModel().toLowerCase();
-
-      // Check for GLM models which require Qwen handling
-      if (modelName.includes('glm-')) {
-        return 'qwen';
-      }
-
-      // Check for qwen models
-      if (modelName.includes('qwen')) {
-        return 'qwen';
-      }
-
-      // Default to 'anthropic' format
-      return 'anthropic';
     } catch (error) {
       this.getLogger().debug(
         () => `Failed to detect tool format from SettingsService: ${error}`,
       );
-
-      // Fallback detection without SettingsService
-      const modelName = this.getCurrentModel().toLowerCase();
-
-      if (modelName.includes('glm-')) {
-        return 'qwen';
-      }
-
-      if (modelName.includes('qwen')) {
-        return 'qwen';
-      }
-
-      return 'anthropic';
     }
+
+    // Auto-detect based on model name if set to 'auto' or not set; also the
+    // fallback when SettingsService is unavailable.
+    return this.detectToolFormatForModel(this.getCurrentModel().toLowerCase());
   }
 
   private unprefixToolName(name: string, isOAuth: boolean): string {
-    // Only unprefix for OAuth requests
-    if (!isOAuth) {
-      return name;
-    }
-
-    // Remove the prefix if it's present
-    if (name.startsWith(TOOL_PREFIX)) {
-      return name.substring(TOOL_PREFIX.length);
-    }
-
-    // Return as-is if no prefix
-    return name;
+    return unprefixAnthropicToolName(name, isOAuth);
   }
 
   private findToolSchema(
@@ -609,9 +629,10 @@ export class AnthropicProvider extends BaseProvider {
     // Issue #3136: the agent layer owns system-prompt assembly. Fail fast
     // before any request preparation so a missing instruction is never
     // silently transported as an empty prompt.
-    requireAssembledSystemInstruction(options.systemInstruction);
+    const sendOptions = this.restorePreparedSourceInputs(options);
+    requireAssembledSystemInstruction(sendOptions.systemInstruction);
 
-    const preparation = await this.resolveTransportPreparation(options);
+    const preparation = await this.resolveTransportPreparation(sendOptions);
     let outcome: MediaRequestOutcome = { status: 'succeeded' };
     try {
       yield* this.generatePreparedChat(preparation);
@@ -626,52 +647,34 @@ export class AnthropicProvider extends BaseProvider {
     preparation: AnthropicTransportPreparation,
   ): AsyncIterableIterator<IContent> {
     const { prepared, mediaRequest, effectiveOptions } = preparation;
+    const signal = effectiveOptions.invocation.signal;
     const { client: initialClient, authToken } = await this.buildProviderClient(
       effectiveOptions,
       effectiveOptions.resolved.telemetry,
       prepared?.authToken,
     );
     const isOAuth = prepared?.isOAuth ?? this.classifyOAuthToken(authToken);
-    const requestContext =
-      prepared?.requestContext ??
-      (await this.prepareRequestContext(effectiveOptions, isOAuth, authToken));
-    registerAnthropicRequestCleanup(mediaRequest, requestContext.requestBody);
-
+    const request = await this.resolveSendRequest(
+      preparation,
+      isOAuth,
+      authToken,
+    );
     const customHeaders = buildAnthropicRequestHeaders({
       baseHeaders: this.getCustomHeaders() ?? {},
       isOAuth,
-      wantCaching: requestContext.wantCaching,
-      ttl: requestContext.ttl,
-      cacheLogger: requestContext.cacheLogger,
-      model: String(requestContext.requestBody['model']),
-      thinking: requestContext.requestBody['thinking'],
+      wantCaching: request.facts.wantCaching,
+      ttl: request.facts.ttl,
+      cacheLogger: request.facts.cacheLogger,
+      model: request.model,
+      thinking: request.thinking,
     });
     const rateLimitLogger = this.getRateLimitLogger();
-    await this.applyRateLimitThrottling(
-      requestContext,
-      rateLimitLogger,
-      effectiveOptions.invocation.signal,
-    );
-
-    // H2: if a prior outer attempt already sanitized this request's images,
-    // reuse the sanitized body instead of resending the poisoned original.
-    const effectiveRequestBody = resolveAnthropicRequestBody(
-      mediaRequest,
-      requestContext.requestBody,
-      getImageRecoveryState(effectiveOptions)?.sanitizedBody,
-    );
-    const apiCallWithResponse = createAnthropicApiCall(
-      initialClient,
-      effectiveRequestBody,
-      customHeaders,
-      effectiveOptions.invocation.signal,
-    );
+    await this.applyRateLimitThrottling(request.facts, rateLimitLogger, signal);
 
     const executed = await this.executeWithImageRecovery(
       effectiveOptions,
-      requestContext,
-      effectiveRequestBody,
-      apiCallWithResponse,
+      request,
+      request.call(initialClient, customHeaders, signal),
       initialClient,
       customHeaders,
       rateLimitLogger,
@@ -684,11 +687,62 @@ export class AnthropicProvider extends BaseProvider {
     if (rateLimitInfo) this.lastRateLimitInfo = rateLimitInfo;
     yield* this.yieldResponse(
       response,
-      requestContext,
+      request.facts,
       effectiveOptions,
       isOAuth,
       rateLimitLogger,
     );
+  }
+
+  /**
+   * The request to send. A projected send posts the spool its projection
+   * wrote, unless an earlier attempt of this request recovered from an image
+   * dimension error: then, like any other send, it writes its body to a
+   * request-scoped spool one row at a time, under the recovery's budget so
+   * the poisoned original is not sent again. Either way the media request's
+   * finish disposes the spool, the message table and the prompt files.
+   */
+  private async resolveSendRequest(
+    preparation: AnthropicTransportPreparation,
+    isOAuth: boolean,
+    authToken: string,
+  ): Promise<AnthropicSendRequest> {
+    const { prepared, mediaRequest, effectiveOptions } = preparation;
+    const recoveryBudget =
+      getImageRecoveryState(effectiveOptions)?.recoveryBudget;
+    const spooled =
+      prepared !== undefined && recoveryBudget === undefined
+        ? prepared.spooled
+        : await this.spoolSendRequest(
+            effectiveOptions,
+            isOAuth,
+            authToken,
+            mediaRequest,
+            recoveryBudget,
+          );
+    reportRequestSize(effectiveOptions.metadata, spooled.spool.byteLength);
+    return sendRequestFromSpool(spooled);
+  }
+
+  private async spoolSendRequest(
+    options: NormalizedGenerateChatOptions,
+    isOAuth: boolean,
+    authToken: string,
+    mediaRequest: ResolvedMediaRequest,
+    recoveryBudget: ImageDimensionBudget | undefined,
+  ): Promise<PreparedAnthropicRequest> {
+    const media = this.captureMedia(options);
+    const signal = getRequestSignal(options);
+    const requestRows = await providerRowsOf(options);
+    const spooled = await prepareAnthropicRequestRows(
+      this.planParams(options, isOAuth, authToken),
+      requestRows,
+      (rows) =>
+        resolveRowsMedia(rows, media, mediaRequest, signal, requestRows.native),
+      { recoveryBudget },
+    );
+    await registerAnthropicRequestCleanup(mediaRequest, spooled);
+    return spooled;
   }
 
   /**
@@ -699,16 +753,10 @@ export class AnthropicProvider extends BaseProvider {
    */
   private async executeWithImageRecovery(
     options: NormalizedGenerateChatOptions,
-    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
-    effectiveRequestBody: Awaited<
-      ReturnType<typeof prepareAnthropicRequest>
-    >['requestBody'],
-    apiCallWithResponse: () => Promise<{
-      data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
-      response: Response | undefined;
-    }>,
-    initialClient: Parameters<typeof createAnthropicApiCall>[0],
-    customHeaders: Parameters<typeof createAnthropicApiCall>[2],
+    request: AnthropicSendRequest,
+    apiCallWithResponse: AnthropicApiCall,
+    initialClient: Anthropic,
+    customHeaders: Record<string, string>,
     rateLimitLogger: { debug: (fn: () => string) => void },
     isOAuth: boolean,
     authToken: string,
@@ -720,7 +768,7 @@ export class AnthropicProvider extends BaseProvider {
     try {
       const result = await this.executeApiCall(
         options,
-        { ...requestContext, requestBody: effectiveRequestBody },
+        request,
         apiCallWithResponse,
         rateLimitLogger,
         customHeaders,
@@ -729,122 +777,46 @@ export class AnthropicProvider extends BaseProvider {
       );
       return { response: result.response, rateLimitInfo: result.rateLimitInfo };
     } catch (error) {
-      const recovered = await this.executeImageDimensionRecovery(
+      const recovered = await executeImageDimensionRecovery(
+        {
+          execute: (...args) => this.executeApiCall(...args),
+          errorsLogger: this.getErrorsLogger(),
+          rebuild: (budget) =>
+            this.spoolSendRequest(
+              options,
+              isOAuth,
+              authToken,
+              mediaRequest,
+              budget,
+            ),
+        },
         error,
-        requestContext,
+        request,
         options,
         initialClient,
         customHeaders,
         rateLimitLogger,
         isOAuth,
         authToken,
-        mediaRequest,
       );
       if (recovered === undefined) throw error;
       return recovered;
     }
   }
 
-  /**
-   * Issue #3216: one-shot recovery from a 400 that specifically states an image
-   * dimension exceeded the many-image maximum. Sanitizes oversized base64 image
-   * blocks from an immutable copy of the request body and retries exactly once.
-   * Returns the retry result, or `undefined` when the error is not recoverable
-   * (unrelated 400, no parseable limit, no oversized blocks to remove, the
-   * request-scoped recovery was already used, or no transport attempt remains)
-   * so the caller rethrows the original error. Never loops.
-   *
-   * H2: the recovery is request-scoped — at most one recovery per logical
-   * request shared across outer RetryOrchestrator attempts — and the retry's
-   * physical transport call consumes a slot from the shared transport budget
-   * so outer attempt accounting stays exact. The sanitized body is stored in
-   * the shared request state so subsequent outer attempts reuse it instead of
-   * reconstructing and resending the poisoned original.
-   */
-  private async executeImageDimensionRecovery(
-    error: unknown,
-    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
-    options: NormalizedGenerateChatOptions,
-    initialClient: Parameters<typeof createAnthropicApiCall>[0],
-    customHeaders: Parameters<typeof createAnthropicApiCall>[2],
-    rateLimitLogger: { debug: (fn: () => string) => void },
-    isOAuth: boolean,
-    authToken: string,
-    mediaRequest: ResolvedMediaRequest,
-  ): Promise<
-    | {
-        response:
-          | Anthropic.Message
-          | AsyncIterable<Anthropic.MessageStreamEvent>;
-        rateLimitInfo: AnthropicRateLimitInfo | undefined;
-      }
-    | undefined
-  > {
-    if (!isAnthropicImageDimensionLimitError(error)) return undefined;
-    const state = ensureImageRecoveryState(options);
-    if (state.recoveryUsed) return undefined;
-    const configuredBudget = resolveAnthropicImageBudget(
-      requestContext.configEphemerals,
-    );
-    const errorLimit = parseAnthropicImageDimensionLimit(error);
-    const recoveryBudget = resolveRecoveryImageBudget(
-      configuredBudget,
-      errorLimit,
-    );
-    if (recoveryBudget === undefined) return undefined;
-    const sanitized = sanitizeAnthropicRequestBodyImages(
-      requestContext.requestBody,
-      recoveryBudget,
-    );
-    if (sanitized.replacedCount === 0) return undefined;
-    // A known-aborted request must not consume a transport slot on a recovery
-    // that can never produce a usable response. Check before accounting.
-    if (options.invocation.signal?.aborted === true) return undefined;
-    // H2: the retry is a physical transport call; account it in the shared
-    // budget. When no slot remains, the original error is final.
-    if (!tryConsumeTransportAttempt(options)) return undefined;
-    state.recoveryUsed = true;
-    state.sanitizedBody = sanitized.body;
-    registerAnthropicRequestCleanup(mediaRequest, sanitized.body);
-    this.getErrorsLogger().debug(
-      () =>
-        '[AnthropicProvider] Image dimension 400: sanitized oversized image block(s), retrying once',
-    );
-    const retryResult = await this.executeApiCall(
-      options,
-      { ...requestContext, requestBody: sanitized.body },
-      createAnthropicApiCall(
-        initialClient,
-        sanitized.body,
-        customHeaders,
-        options.invocation.signal,
-      ),
-      rateLimitLogger,
-      customHeaders,
-      isOAuth,
-      authToken,
-    );
-    return {
-      response: retryResult.response,
-      rateLimitInfo: retryResult.rateLimitInfo,
-    };
-  }
-
-  private async prepareRequestContext(
+  private planParams(
     options: NormalizedGenerateChatOptions,
     isOAuth: boolean,
     authToken: string,
-  ) {
+  ): AnthropicPlanParams {
     // Issue #3172: placement is declared from the RESOLVED-token fact and
     // resolved through the shared policy, never re-derived from isOAuth here.
     const placement = resolveSystemPromptPlacement(
       this.getSystemPromptPlacement({
-        ...options,
         resolved: { ...options.resolved, authToken },
       }),
     );
-    return prepareAnthropicRequest({
-      content: options.contents,
+    return {
       tools: options.tools,
       options,
       isOAuth,
@@ -857,68 +829,96 @@ export class AnthropicProvider extends BaseProvider {
       logger: this.getLogger(),
       toolsLogger: this.getToolsLogger(),
       cacheLogger: this.getCacheLogger(),
-    });
+    };
   }
 
   /**
    * Project the finalized Anthropic Messages envelope (issue #2817).
    *
-   * Runs the SAME `prepareAnthropicRequest` path transport uses, so the
-   * estimate is derived from the exact `requestBody` that will be sent. Request
-   * preparation still resolves prompt-bearing inputs such as memory and tools,
-   * but no client is constructed and no credential is exchanged. The OAuth
-   * flavor only selects tool-name prefixing and cache formatting, so it is
-   * derived from the already-resolved token when one is present.
+   * Uses the transport's native preparation, so the estimate and later send
+   * share a pinned row selection. Each reads the rows one at a time in its
+   * required form; neither retains a request-sized messages array. Preparation
+   * still resolves prompt inputs such as memory and tools, but no client is
+   * constructed and no credential is
+   * exchanged. The OAuth flavor only selects tool-name prefixing and cache
+   * formatting, so it is derived from the already-resolved token when one is
+   * present.
    */
   async projectPromptEnvelope(
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
-    const mediaRequest = await this.resolveMediaRequest(normalized);
-    const resolvedOptions = {
-      ...normalized,
-      contents: mediaRequest.withContents((contents) => contents),
-    };
     try {
-      const authToken = await this.resolveProjectionAuthToken(resolvedOptions);
+      return await this.projectNormalized(normalized);
+    } catch (error) {
+      return closeStagedRowsAfterFailure(normalized.stagedRows, error);
+    }
+  }
+
+  private async projectNormalized(
+    normalized: NormalizedGenerateChatOptions,
+  ): Promise<PromptEnvelopeProjection> {
+    const media = this.captureMedia(normalized);
+    const signal = getRequestSignal(normalized);
+    const mediaRequest = await resolveRequestMedia(media, [], signal);
+    const { stagedRows } = normalized;
+    // Rows staged from `contents` stay open until the projection is released.
+    if (stagedRows !== undefined)
+      mediaRequest.registerCleanup(() => stagedRows.close());
+    try {
+      const authToken = await this.resolveProjectionAuthToken(normalized);
       const isOAuth = this.classifyOAuthToken(authToken);
-      const requestContext = await this.prepareRequestContext(
-        resolvedOptions,
-        isOAuth,
-        authToken,
+      const requestRows = await providerRowsOf(normalized);
+      const spooled = await prepareAnthropicRequestRows(
+        this.planParams(normalized, isOAuth, authToken),
+        requestRows,
+        (rows) =>
+          resolveRowsMedia(
+            rows,
+            media,
+            mediaRequest,
+            signal,
+            requestRows.native,
+          ),
+        { estimate: true },
       );
-      registerAnthropicRequestCleanup(mediaRequest, requestContext.requestBody);
+      await registerAnthropicRequestCleanup(mediaRequest, spooled);
+      const { estimate } = spooled;
+      if (estimate === undefined) {
+        throw new Error('A projected request carries its estimate projection');
+      }
       const transportToken = Object.freeze({});
+      const projection = projectAnthropicPromptEnvelopeFromSource(
+        estimate.projection,
+        {
+          model: String(spooled.envelope['model']),
+          unsupportedMedia: estimate.unsupportedMedia,
+          transportToken,
+          releaseIfUnsent: mediaRequest.release,
+        },
+      );
       this.preparedPromptEnvelopes.set(transportToken, {
-        requestContext,
+        spooled,
         isOAuth,
         authToken,
         mediaRequest,
+        ...(readsRequestRowsAtTransport(normalized)
+          ? {
+              sourceInputs: {
+                systemInstruction: normalized.systemInstruction,
+                tools: normalized.tools,
+              },
+            }
+          : {}),
       });
-      const projection = projectAnthropicPromptEnvelope(
-        requestContext.requestBody,
-        {
-          transportToken,
-          // Issue #3693: on zai endpoints url-encoded image blocks are
-          // serialized as placeholders, so the projection must report them
-          // as unsupported alongside audio/video.
-          unsupportedMedia: collectUnsupportedMedia(
-            resolvedOptions.contents,
-            createMediaSupportPredicate(resolvedOptions.resolved.baseURL),
-          ),
-        },
-      );
-      return {
-        ...projection,
-        releaseIfUnsent: mediaRequest.release,
-      };
+      return projection;
     } catch (error) {
       return finishMediaRequest(mediaRequest, { status: 'failed', error });
     }
   }
 
   private async applyRateLimitThrottling(
-    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
+    requestContext: AnthropicRequestFacts,
     rateLimitLogger: { debug: (fn: () => string) => void },
     signal?: AbortSignal,
   ): Promise<void> {
@@ -944,11 +944,8 @@ export class AnthropicProvider extends BaseProvider {
 
   private async executeApiCall(
     options: NormalizedGenerateChatOptions,
-    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
-    apiCallWithResponse: () => Promise<{
-      data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
-      response: Response | undefined;
-    }>,
+    request: AnthropicSendRequest,
+    apiCallWithResponse: AnthropicApiCall,
     rateLimitLogger: { debug: (fn: () => string) => void },
     headers: Record<string, string> | undefined,
     isOAuth: boolean,
@@ -969,8 +966,8 @@ export class AnthropicProvider extends BaseProvider {
       apiCallFn: apiCallWithResponse,
       dumpMode,
       baseURL,
-      requestBody: requestContext.requestBody,
-      streamingEnabled: requestContext.streamingEnabled,
+      requestBody: requestBodyForDump(dumpMode, request),
+      streamingEnabled: request.facts.streamingEnabled,
       headers: dumpHeaders,
       rateLimitLogger,
     });
@@ -978,7 +975,7 @@ export class AnthropicProvider extends BaseProvider {
 
   private async *yieldResponse(
     response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>,
-    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
+    requestContext: AnthropicRequestFacts,
     options: NormalizedGenerateChatOptions,
     isOAuth: boolean,
     rateLimitLogger: { debug: (fn: () => string) => void },

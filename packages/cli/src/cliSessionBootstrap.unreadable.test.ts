@@ -29,12 +29,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   Config,
-  SessionRecordingService,
+  createSessionRecorder,
   getProjectHash,
   type IContent,
-  readSessionHeader,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
@@ -62,7 +63,7 @@ import { setupOwnerSessionRecording } from './cliSessionBootstrap.js';
 
 let projectHash = '';
 const CORRUPT_REASON =
-  'Invalid session_start: missing or malformed required fields';
+  'was recorded in the retired JSONL journal format (versions 1 and 2) and cannot be resumed. Start a new session.';
 
 function recordingConfig(
   chatsDir: string,
@@ -83,14 +84,14 @@ async function writeHealthySession(
   sessionId: string,
   modified: string,
 ): Promise<void> {
-  const recording = new SessionRecordingService(
-    recordingConfig(chatsDir, sessionId),
-  );
+  const recording = createSessionRecorder(recordingConfig(chatsDir, sessionId));
   try {
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: `hello from ${sessionId}` }],
-    });
+    await recordRowsForTest(recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: `hello from ${sessionId}` }],
+      },
+    ]);
     await recording.flush();
     const when = new Date(modified);
     await utimes(recording.getFilePath()!, when, when);
@@ -211,6 +212,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     config: StartupConfig,
     restoreError?: Error,
     restoreIdentities?: string[],
+    cleanupFailure?: { error: Error; identities: string[] },
   ) {
     configs.push(config);
     const settings = new SettingsService();
@@ -280,23 +282,38 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     if (config.getProvider() !== undefined)
       await sessionClient.clients.refreshAuth();
     sessionClient.clients.conversationBinding.initializeConversation();
-    // The production path reaches the current client; every client the
-    // owner's factory built carries the same instance spy.
     const clients = ownerClients(sessionClient);
     const restored: unknown[][] = [];
-    for (const client of clients) {
-      const restoreHistory = client.restoreHistory;
-      const restore = spyOn(client, 'restoreHistory').mockImplementation(
-        async (history, origin) => {
-          restored.push([...history]);
-          if (restoreError) throw restoreError;
+    const history = readCurrentOwnerHistory(sessionClient);
+    if (history === null) throw new Error('Missing native history');
+    const adopt = history.adoptResumeBoot.bind(history);
+    const restore = spyOn(history, 'adoptResumeBoot').mockImplementation(
+      async (recording, boot, publish) => {
+        if (restoreError) {
+          if (cleanupFailure !== undefined) {
+            const dispose = recording.dispose.bind(recording);
+            const failedCleanup = spyOn(
+              recording,
+              'dispose',
+            ).mockImplementationOnce(async () => {
+              cleanupFailure.identities.push(config.getSessionId());
+              await dispose();
+              throw cleanupFailure.error;
+            });
+            restores.push(() => failedCleanup.mockRestore());
+          }
+          throw restoreError;
+        }
+        restoreIdentities?.push(config.getSessionId());
+        const warnings = await adopt(recording, boot, async () => {
           restoreIdentities?.push(config.getSessionId());
-          await restoreHistory.call(client, history, origin);
-          restoreIdentities?.push(config.getSessionId());
-        },
-      );
-      restores.push(() => restore.mockRestore());
-    }
+          await publish?.();
+        });
+        restored.push(await Array.fromAsync(history.streamRawHistory()));
+        return warnings;
+      },
+    );
+    restores.push(() => restore.mockRestore());
     const session = sessionClient.createSessionControl(
       'config',
       () => config.getSessionId(),
@@ -335,7 +352,9 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       { listSessions: false, deleteSession: undefined },
       null,
       startupWarnings,
-    ).then(({ history }) => history);
+    ).then(async ({ resumedBoot }) =>
+      resumedBoot === null ? null : Array.fromAsync(resumedBoot.streamRows()),
+    );
     const setup: StartupResult = {
       resumedSessionId: resumedHistory === null ? null : session.getSessionId(),
       resumedHistory,
@@ -357,7 +376,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
   ): Promise<void> {
     live.setProvider(provider);
     live.setModel(model);
-    await recording.flushRecording({
+    await recording.recordRecordingEvent({
       type: 'provider_switch',
       provider,
       model,
@@ -390,11 +409,13 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       first.listBrowserTargetsDetailed,
       { listSessions: false, deleteSession: undefined },
       null,
-    ).then(({ history }) => history);
-    let header: Awaited<ReturnType<typeof readSessionHeader>>;
+    ).then(async ({ resumedBoot }) =>
+      resumedBoot === null ? null : Array.fromAsync(resumedBoot.streamRows()),
+    );
+    let header: Awaited<ReturnType<typeof readJournalFileFacts>>;
     try {
       await loadProfile(noProviderConfig, first, 'codex', 'gpt-6-luna');
-      header = await readSessionHeader(
+      header = await readJournalFileFacts(
         await recordFirstMessage(first, sessionClient),
       );
     } finally {
@@ -404,7 +425,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     const entry = await startup(true);
 
     expect({
-      header: { provider: header?.provider, model: header?.model },
+      header: { provider: header?.facts.provider, model: header?.facts.model },
       resumedSessionId: entry.resumedSessionId,
       historyLength: entry.resumedHistory?.length,
       warnings,
@@ -426,17 +447,19 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       recording.listBrowserTargetsDetailed,
       { listSessions: false, deleteSession: undefined },
       null,
-    ).then(({ history }) => history);
+    ).then(async ({ resumedBoot }) =>
+      resumedBoot === null ? null : Array.fromAsync(resumedBoot.streamRows()),
+    );
     try {
       liveConfig.setProvider('anthropic');
       liveConfig.setModel('claude-opus-5-5');
-      const header = await readSessionHeader(
+      const header = await readJournalFileFacts(
         await recordFirstMessage(recording, sessionClient),
       );
 
       expect({
-        provider: header?.provider,
-        model: header?.model,
+        provider: header?.facts.provider,
+        model: header?.facts.model,
       }).toStrictEqual({ provider: 'anthropic', model: 'claude-opus-5-5' });
     } finally {
       await recording.dispose();
@@ -642,11 +665,15 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       session.listBrowserTargetsDetailed,
       { listSessions: false, deleteSession: undefined },
       null,
-    ).then(({ history }) => history);
+    ).then(async ({ resumedBoot }) =>
+      resumedBoot === null ? null : Array.fromAsync(resumedBoot.streamRows()),
+    );
     if (history === null) throw new Error('Expected restored startup history');
     expect(identities).toStrictEqual(['fresh-session', 'fresh-session']);
     expect(config.getSessionId()).toBe('identity-after-restore');
-    expect(session.readHistorySnapshot()?.messages).toStrictEqual(history);
+    expect(
+      await Array.fromAsync(session.readHistorySnapshot()?.messages ?? []),
+    ).toStrictEqual(history);
   });
 
   it('propagates native restore and rollback failures without starting a replacement recording', async () => {
@@ -661,22 +688,11 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     });
     const primary = new Error('native startup restore failed');
     const rollback = new Error('native prior-history rollback failed');
-    const { session, clients } = await acquireSession(config, primary);
     const resets: string[] = [];
-    for (const client of clients) {
-      const resetChat = client.resetChat;
-      const reset = spyOn(client, 'resetChat').mockImplementation(async () => {
-        resets.push(config.getSessionId());
-        await resetChat.call(client);
-      });
-      const setHistory = spyOn(client, 'setHistory').mockRejectedValue(
-        rollback,
-      );
-      restores.push(
-        () => setHistory.mockRestore(),
-        () => reset.mockRestore(),
-      );
-    }
+    const { session } = await acquireSession(config, primary, undefined, {
+      error: rollback,
+      identities: resets,
+    });
     const outcome = await setupOwnerSessionRecording(
       config,
       session,
@@ -685,7 +701,9 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       null,
       warnings,
     )
-      .then(({ history }) => history)
+      .then(async ({ resumedBoot }) =>
+        resumedBoot === null ? null : Array.fromAsync(resumedBoot.streamRows()),
+      )
       .then(
         () => undefined,
         (error: unknown) => error,
@@ -713,21 +731,19 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
         label: 'is not valid JSON',
         fileName: 'session-2026-10-08T21-18-08-badjson00001.jsonl',
         text: '{"type":"session_start", oops\n',
-        reason:
-          'Missing or corrupt session_start event: first line is not valid JSON',
+        reason: CORRUPT_REASON,
       },
       {
         label: 'is empty',
         fileName: 'session-2026-10-08T21-18-08-emptyfile001.jsonl',
         text: '',
-        reason: 'Empty file or unreadable first line',
+        reason: CORRUPT_REASON,
       },
       {
         label: 'is another event type',
         fileName: 'session-2026-10-08T21-18-08-notstart0001.jsonl',
         text: `${JSON.stringify({ v: 1, seq: 1, ts: 'x', type: 'content', payload: {} })}\n`,
-        reason:
-          'Missing or corrupt session_start event: first line is not a session_start event',
+        reason: CORRUPT_REASON,
       },
     ];
 
@@ -753,8 +769,9 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
         warningCount: warnings.length,
         listed: MALFORMED.map(
           (malformed, index) =>
-            warnings[0]?.includes(`${paths[index]}: ${malformed.reason}`) ===
-            true,
+            warnings[0]?.includes(
+              `Session file ${paths[index]} ${malformed.reason}`,
+            ) === true,
         ),
       }).toStrictEqual({
         resumedSessionId: 'healthy-0006',

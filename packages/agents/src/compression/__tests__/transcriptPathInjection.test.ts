@@ -22,8 +22,8 @@ import type {
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildTranscriptPathNotice } from '@vybestack/llxprt-code-core/core/compression/transcriptPathNotice.js';
-import { OneShotStrategy } from '../OneShotStrategy.js';
-import { MiddleOutStrategy } from '../MiddleOutStrategy.js';
+import { compressOneShotViaDisk } from './support/oneshot-disk-adapter.js';
+import { compressMiddleOutViaDisk } from './support/middleout-disk-adapter.js';
 import {
   buildContext,
   createCaptureProvider,
@@ -45,16 +45,14 @@ const JOURNAL_PATH = '/tmp/llxprt-chats/session-2026-08-22-abcd1234.jsonl';
 const NOTICE_PREFIX =
   buildTranscriptPathNotice(JOURNAL_PATH).split(JOURNAL_PATH)[0];
 
-interface Strategy {
-  compress(context: CompressionContext): Promise<unknown>;
-}
+type Compress = (context: CompressionContext) => Promise<unknown>;
 
 /**
  * Runs a strategy end to end and returns the text of every message the
  * provider actually received.
  */
 async function captureRequestText(
-  strategy: Strategy,
+  compress: Compress,
   transcriptPath: string | undefined,
 ): Promise<string[]> {
   const captured: IContent[] = [];
@@ -84,7 +82,7 @@ async function captureRequestText(
     ...(transcriptPath === undefined ? {} : { transcriptPath }),
   };
 
-  await strategy.compress(context);
+  await compress(context);
 
   return captured.flatMap((message) =>
     message.blocks
@@ -102,7 +100,8 @@ function noticeIn(requestText: string[]): string | undefined {
 describe('session journal notice injection (#2933)', () => {
   it('OneShotStrategy hands the journal path to the summarizing model', async () => {
     const requestText = await captureRequestText(
-      new OneShotStrategy(undefined, undefined, undefined, undefined),
+      compressOneShotViaDisk,
+
       JOURNAL_PATH,
     );
 
@@ -111,7 +110,8 @@ describe('session journal notice injection (#2933)', () => {
 
   it('MiddleOutStrategy hands the journal path to the summarizing model', async () => {
     const requestText = await captureRequestText(
-      new MiddleOutStrategy(undefined, undefined, undefined, undefined),
+      compressMiddleOutViaDisk,
+
       JOURNAL_PATH,
     );
 
@@ -120,11 +120,12 @@ describe('session journal notice injection (#2933)', () => {
 
   it('both strategies emit identical notice text so the wording cannot drift', async () => {
     const oneShotText = await captureRequestText(
-      new OneShotStrategy(undefined, undefined, undefined, undefined),
+      compressOneShotViaDisk,
       JOURNAL_PATH,
     );
     const middleOutText = await captureRequestText(
-      new MiddleOutStrategy(undefined, undefined, undefined, undefined),
+      compressMiddleOutViaDisk,
+
       JOURNAL_PATH,
     );
 
@@ -136,7 +137,8 @@ describe('session journal notice injection (#2933)', () => {
 
   it('OneShotStrategy sends no journal notice when no path is present', async () => {
     const requestText = await captureRequestText(
-      new OneShotStrategy(undefined, undefined, undefined, undefined),
+      compressOneShotViaDisk,
+
       undefined,
     );
 
@@ -148,7 +150,8 @@ describe('session journal notice injection (#2933)', () => {
 
   it('MiddleOutStrategy sends no journal notice when no path is present', async () => {
     const requestText = await captureRequestText(
-      new MiddleOutStrategy(undefined, undefined, undefined, undefined),
+      compressMiddleOutViaDisk,
+
       undefined,
     );
 

@@ -16,9 +16,12 @@
  * @requirement:REQ-PE-001 (issue #2817 acceptance A4, A10)
  */
 
-import { describe, expect, it, vi } from 'bun:test';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { createRuntimeTokenizerFactory } from '../../composition/runtimeTokenizerFactory.js';
 import { OpenAIProvider } from '../OpenAIProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../../__tests__/streamCallOptions.js';
 import { PROJECTION_REVISION } from '../../runtime/promptEnvelopeProjections.js';
 
 void vi.mock('openai', () => {
@@ -69,7 +72,38 @@ function buildCallOptions(
   });
 }
 
+const factory = createRuntimeTokenizerFactory();
+const unsent: PromptEnvelopeProjection[] = [];
+
+/** Projects and keeps the projection so its files are released after the test. */
+async function project(
+  provider: OpenAIProvider,
+  options: Parameters<OpenAIProvider['projectPromptEnvelope']>[0],
+): Promise<PromptEnvelopeProjection> {
+  const projection = await provider.projectPromptEnvelope(options);
+  unsent.push(projection);
+  return projection;
+}
+
+async function tokensOf(
+  provider: OpenAIProvider,
+  projection: PromptEnvelopeProjection,
+): Promise<number> {
+  const estimate = await estimatePromptEnvelope(
+    provider.name,
+    projection,
+    factory,
+  );
+  return estimate.estimatedPromptTokens;
+}
+
 describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
+  afterEach(async () => {
+    for (const projection of unsent.splice(0)) {
+      await projection.releaseIfUnsent?.();
+    }
+  });
+
   it('identifies openai-chat protocol, chat/completions/v1 method, and the model', async () => {
     const provider = new TestOpenAIProvider();
     const options = buildCallOptions(provider, {
@@ -81,7 +115,7 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
       ],
     });
 
-    const projection = await provider.projectPromptEnvelope(options);
+    const projection = await project(provider, options);
 
     expect(projection.protocol).toBe('openai-chat');
     expect(projection.method).toBe('chat/completions/v1');
@@ -92,14 +126,16 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
   it('counts more tokens for a larger conversation history', async () => {
     const provider = new TestOpenAIProvider();
 
-    const small = await provider.projectPromptEnvelope(
+    const small = await project(
+      provider,
       buildCallOptions(provider, {
         contents: [
           { speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] },
         ],
       }),
     );
-    const large = await provider.projectPromptEnvelope(
+    const large = await project(
+      provider,
       buildCallOptions(provider, {
         contents: [
           {
@@ -124,8 +160,8 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
       }),
     );
 
-    const smallTokens = await small.legacyEstimate();
-    const largeTokens = await large.legacyEstimate();
+    const smallTokens = await tokensOf(provider, small);
+    const largeTokens = await tokensOf(provider, large);
     expect(largeTokens).toBeGreaterThan(smallTokens);
   });
 
@@ -135,10 +171,12 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
       { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
     ];
 
-    const withoutTools = await provider.projectPromptEnvelope(
+    const withoutTools = await project(
+      provider,
       buildCallOptions(provider, { contents: baseContents }),
     );
-    const withTools = await provider.projectPromptEnvelope(
+    const withTools = await project(
+      provider,
       buildCallOptions(provider, {
         contents: baseContents,
         tools: [
@@ -154,8 +192,8 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
       }),
     );
 
-    const withoutTokens = await withoutTools.legacyEstimate();
-    const withTokens = await withTools.legacyEstimate();
+    const withoutTokens = await tokensOf(provider, withoutTools);
+    const withTokens = await tokensOf(provider, withTools);
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 
@@ -171,9 +209,7 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
       resolved: { ...options.resolved, model: '' },
     };
 
-    const projection = await provider.projectPromptEnvelope(
-      optionsWithoutExplicitModel,
-    );
+    const projection = await project(provider, optionsWithoutExplicitModel);
 
     expect(projection.protocol).toBe('openai-chat');
     expect(projection.model).toBe('gpt-4o');
@@ -185,7 +221,8 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
       { speaker: 'human', blocks: [{ type: 'text', text: 'Hello world' }] },
     ];
 
-    const baseline = await provider.projectPromptEnvelope(
+    const baseline = await project(
+      provider,
       buildCallOptions(provider, {
         contents,
         settingsOverrides: {
@@ -193,15 +230,16 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
         },
       }),
     );
-    const withEphemeralControls = await provider.projectPromptEnvelope(
+    const withEphemeralControls = await project(
+      provider,
       buildCallOptions(provider, {
         contents,
         ephemerals: { openai: { stream: true, temperature: 0.9 } },
       }),
     );
 
-    const baselineTokens = await baseline.legacyEstimate();
-    const controlledTokens = await withEphemeralControls.legacyEstimate();
+    const baselineTokens = await tokensOf(provider, baseline);
+    const controlledTokens = await tokensOf(provider, withEphemeralControls);
     expect(controlledTokens).toBe(baselineTokens);
   });
 

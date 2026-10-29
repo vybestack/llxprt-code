@@ -5,11 +5,11 @@
  */
 import { dirname } from 'node:path';
 import {
-  CheckpointService,
   SessionDiscovery,
   type LocalMediaStore,
-  type SessionRecordingService,
+  type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
+import { createCheckpointService } from '@vybestack/llxprt-code-core';
 import type { ChatRecordingOperations } from '../ui/commands/chatCommand.js';
 
 type CheckpointBindings = readonly [
@@ -21,12 +21,12 @@ type CheckpointBindings = readonly [
 ];
 
 export function checkpointBindings(
-  readRecording: () => SessionRecordingService | null,
+  readRecording: () => SessionRecordingPort | null,
   readHash: () => string | null,
   readDirectory: () => string | null,
   readMedia: () => LocalMediaStore | undefined,
 ): CheckpointBindings {
-  const recording = (): SessionRecordingService => {
+  const recording = (): SessionRecordingPort => {
     const current = readRecording();
     if (!current) throw new Error('No recording available');
     return current;
@@ -43,7 +43,7 @@ export function checkpointBindings(
         readMedia(),
       ),
     async (name, overwrite) => {
-      await new CheckpointService(readMedia()).createCheckpoint(
+      await createCheckpointService().createCheckpoint(
         recording(),
         hash(),
         name,
@@ -51,7 +51,7 @@ export function checkpointBindings(
       );
     },
     async (target) => {
-      const service = new CheckpointService(readMedia());
+      const service = createCheckpointService();
       const current = readRecording();
       if (current?.getSessionId() === target.source.sessionId)
         await service.deleteCheckpoint(
@@ -69,7 +69,7 @@ export function checkpointBindings(
         );
     },
     async (target, name, overwrite) => {
-      const service = new CheckpointService(readMedia());
+      const service = createCheckpointService();
       const current = readRecording();
       if (current?.getSessionId() === target.source.sessionId)
         await service.renameCheckpoint(
@@ -91,7 +91,7 @@ export function checkpointBindings(
         );
     },
     async (name, overwrite) => {
-      await new CheckpointService(readMedia()).setSessionName(
+      await createCheckpointService().setSessionName(
         recording(),
         hash(),
         name,

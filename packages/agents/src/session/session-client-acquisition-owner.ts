@@ -16,6 +16,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   AgentChatRecordingExecution,
   AgentClientContract,
+  DeferredHistorySourceOptions,
 } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ModelRegistry } from '@vybestack/llxprt-code-core/models/registry.js';
 import type { SessionPolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
@@ -113,7 +114,7 @@ export class SessionClientAcquisitionOwner {
   readonly conversationBinding: SessionConversationBinding;
   constructor(
     private readonly environment: SessionClientEnvironment,
-    readonly factories: SessionClientFactories,
+    private readonly factories: SessionClientFactories,
     private readonly bindings: SessionClientBindings,
   ) {
     this.runtimeState = this.captureRuntimeState(
@@ -142,6 +143,9 @@ export class SessionClientAcquisitionOwner {
   }
   get fetch(): NetworkFetch {
     return this.factories.manager.fetchNetwork;
+  }
+  async prepareTokenizer(provider: string, model: string): Promise<void> {
+    await this.factories.tokenizerFactory.prepareTokenizer?.(provider, model);
   }
   async initializeInitialClientBinding(): Promise<void> {
     if (!this.initialBindingComplete) {
@@ -344,8 +348,10 @@ export class SessionClientAcquisitionOwner {
   readonly workspaceDirectories = (): readonly string[] =>
     this.environment.workspacePaths.directories();
 
-  readonly readHistory = (): Promise<readonly AgentMessage[]> =>
-    this.work.enqueue(() => this.client.getHistory());
+  readonly streamHistory = (signal?: AbortSignal) => {
+    this.getAgentClient();
+    return this.client.streamHistory(signal);
+  };
 
   private initialBindingComplete = false;
 
@@ -457,8 +463,11 @@ export class SessionClientAcquisitionOwner {
     );
   }
 
-  refreshAuth(_authMethod?: string): Promise<void> {
-    return this.work.enqueue(() => this.replaceClient());
+  refreshAuth(
+    _authMethod?: string,
+    options: DeferredHistorySourceOptions = {},
+  ): Promise<void> {
+    return this.work.enqueue(() => this.replaceClient(options));
   }
 
   async prepareNewSession(
@@ -487,16 +496,18 @@ export class SessionClientAcquisitionOwner {
       publish: prepared.publish,
       retire: prepared.retire,
       discard: prepared.discard,
-      attachRecording: (integration, origin) => {
+      attachRecording: async (integration, origin) => {
         const history = prepared.client.getHistoryService();
         if (history === null)
           throw new Error('New session client has no history service');
-        integration.subscribeToHistory(history, origin);
+        await integration.subscribeToJournal(history, origin);
       },
     };
   }
 
-  private async replaceClient(): Promise<void> {
+  private async replaceClient(
+    options: DeferredHistorySourceOptions,
+  ): Promise<void> {
     const sessionId = this.runtimeState.sessionId;
     const previous = this.client;
     await replaceSessionClient(
@@ -512,6 +523,7 @@ export class SessionClientAcquisitionOwner {
         this.runtimeState = state;
         this.environment.config.setFallbackMode(false);
       },
+      options,
     );
   }
 
@@ -563,8 +575,7 @@ export class SessionClientAcquisitionOwner {
         this.environment.config.setFallbackMode(false);
       },
       retire: () => this.work.enqueueAccepted(() => ledger.dispose(previous)),
-      discard: () =>
-        this.work.enqueueAccepted(() => ledger.dispose(prepared.client)),
+      discard: () => this.work.enqueueAccepted(() => prepared.discard()),
     };
   }
 

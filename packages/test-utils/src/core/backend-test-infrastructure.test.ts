@@ -1,0 +1,146 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { CONTINUE_LATEST, resumeSession } from '@vybestack/llxprt-code-core';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { describe, expect, it } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { collectRawHistory } from './collect-raw-history.js';
+import { collectJournalRowsForAssertions } from './collect-rows-for-assertions.js';
+import { forbidHistoryMaterializationForTest } from './history-materialization-test-guard.js';
+import { suffixRow, withSuffixFixture } from './history-suffix-test-helpers.js';
+import {
+  createRecorderForTest,
+  recordRowsForTest,
+} from './recorder-for-test.js';
+type HistoryBackend = 'old' | 'journal';
+
+const BACKENDS: readonly HistoryBackend[] = ['journal'];
+
+describe('test infrastructure on both history backends', () => {
+  for (const backend of BACKENDS) {
+    describe(`${backend} backend`, () => {
+      it('creates the recorder of the backend with test defaults', async () => {
+        const chatsDir = mkdtempSync(join(tmpdir(), 'recorder-for-test-'));
+        const recorder = createRecorderForTest({ chatsDir });
+        try {
+          expect(recorder).toBeInstanceOf(JournalRecordingService);
+          expect(recorder.getSessionId()).toBe('test-session');
+          expect(recorder.getProjectHash()).toBe('test-project');
+          expect(recorder.getChatsDir()).toBe(chatsDir);
+        } finally {
+          await recorder.dispose();
+          rmSync(chatsDir, { recursive: true, force: true });
+        }
+      });
+
+      it('lets the caller override a default of the recorder config', async () => {
+        const chatsDir = mkdtempSync(join(tmpdir(), 'recorder-for-test-'));
+        const recorder = createRecorderForTest({
+          chatsDir,
+          sessionId: 'chosen',
+        });
+        try {
+          expect(recorder.getSessionId()).toBe('chosen');
+        } finally {
+          await recorder.dispose();
+          rmSync(chatsDir, { recursive: true, force: true });
+        }
+      });
+
+      it('records seed rows that a resume of the same session reads back', async () => {
+        const chatsDir = mkdtempSync(join(tmpdir(), 'recorder-for-test-'));
+        const recorder = createRecorderForTest({ chatsDir });
+        const seed = suffixRow(0);
+        await recordRowsForTest(recorder, [seed]);
+        await recorder.flush();
+        await recorder.dispose();
+        const resumed = await resumeSession({
+          continueRef: CONTINUE_LATEST,
+          projectHash: 'test-project',
+          chatsDir,
+          currentProvider: 'test',
+          currentModel: 'test',
+          workspaceDirs: [chatsDir],
+        });
+        try {
+          if (!resumed.ok) throw new Error(resumed.error);
+          const rows = [];
+          for await (const row of resumed.boot.streamRows()) rows.push(row);
+          expect(rows).toHaveLength(1);
+          expect(rows[0]?.blocks).toStrictEqual(seed.blocks);
+        } finally {
+          if (resumed.ok) await resumed.recording.dispose();
+          rmSync(chatsDir, { recursive: true, force: true });
+        }
+      });
+
+      it('reads the rows of the recorder file apart from the service', async () => {
+        await withSuffixFixture(40, async (history) => {
+          let seen = 0;
+          await collectJournalRowsForAssertions(history, (rows) => {
+            seen = rows.length;
+            expect(rows).toStrictEqual(
+              Array.from({ length: 40 }, (_, index) => suffixRow(index)),
+            );
+          });
+          expect(seen).toBe(40);
+        });
+      });
+
+      it('reads rows added after the fixture was seeded once they are durable', async () => {
+        await withSuffixFixture(3, async (history) => {
+          history.add(suffixRow(3));
+          await collectJournalRowsForAssertions(history, (rows) => {
+            expect(rows).toStrictEqual(
+              Array.from({ length: 4 }, (_, index) => suffixRow(index)),
+            );
+          });
+        });
+      });
+
+      it('reads the rows of a history that has no recorder once they are durable', async () => {
+        const service = new HistoryService();
+        try {
+          service.add(suffixRow(0));
+          service.add(suffixRow(1));
+          await collectJournalRowsForAssertions(service, (rows) => {
+            expect(rows).toStrictEqual([suffixRow(0), suffixRow(1)]);
+          });
+        } finally {
+          await service.dispose();
+        }
+      });
+
+      it('guards the eager read of the service journal and restores it', async () => {
+        await withSuffixFixture(2, async (history) => {
+          const journal: object = Object(Reflect.get(history, 'journal'));
+          const eagerRead = (): unknown =>
+            Reflect.get(journal, 'materialize').call(journal);
+          const restore = forbidHistoryMaterializationForTest(
+            history,
+            'eager read forbidden',
+          );
+          await expect(Promise.resolve().then(eagerRead)).rejects.toThrow(
+            'eager read forbidden',
+          );
+          expect(await collectRawHistory(history)).toHaveLength(2);
+          restore();
+          expect(await Promise.resolve(eagerRead())).toHaveLength(2);
+        });
+      });
+    });
+  }
+
+  it('samples committed journal history after its pending append', async () => {
+    const service = new HistoryService();
+    try {
+      service.add(suffixRow(0));
+      await service.waitForCommit();
+      expect(await collectRawHistory(service)).toHaveLength(1);
+    } finally {
+      await service.dispose();
+    }
+  });
+});

@@ -2,7 +2,7 @@ import { openRouteAAgent } from '../../../../agents/src/api/__tests__/helpers/ro
 import { useFakeResponsesReplay } from '../../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 import { bindFixtureOwnerResume } from '../../__tests__/command-history-result-fixture.js';
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
-import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
+import { readJournalItems } from '../stores/turn/read-journal-items.js';
 import { createDeps } from './slash-command-handler-deps-test-helpers.js';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { CommandKind } from '../commands/types.js';
@@ -58,12 +58,6 @@ describe('recording owner slash command construction', () => {
       deps.config = composeFixtureRuntime(config);
       deps.commandContext.services.agent = next;
       deps.commandContext.recordingOwner = 'agent';
-      let loaded:
-        | Parameters<CommandOwnerFixture['ui']['loadHistory']>[0]
-        | undefined;
-      deps.commandContext.ui.loadHistory = (history) => {
-        loaded = history;
-      };
       deps.commands = [
         {
           name: 'continue',
@@ -81,7 +75,7 @@ describe('recording owner slash command construction', () => {
       );
       await processSlashCommand(deps, `/continue ${sourceId}`);
       expect(
-        loaded?.some(
+        (await readJournalItems(next)).some(
           (item) => item.type === 'user' && item.text === 'slash replay',
         ),
       ).toBe(true);

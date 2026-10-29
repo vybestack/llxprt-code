@@ -18,17 +18,18 @@ import { captureResponsesRequest } from './responses-request.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import {
+  closeStagedRowsAfterFailure,
+  readsRequestRowsAtTransport,
+} from '../BaseProviderNormalization.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { projectOpenAIResponsesPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 import { OpenAIResponsesProviderBase } from './OpenAIResponsesProviderBase.js';
 import {
   executeOpenAIResponsesRequest,
-  buildResponsesRequestContextForProjection,
-  isResponsesPdfEnabled,
+  type PreparedResponsesRequestContext,
   type ResponsesExecutorDeps,
 } from './openAIResponsesExecutor.js';
-import type { GenerateChatOptions } from '../IProvider.js';
-import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
+import type { GenerateChatOptions, ProviderToolset } from '../IProvider.js';
 import {
   createCodexResponsesWebSocketTransport,
   type WebSocketTransport,
@@ -36,6 +37,13 @@ import {
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import type { IProviderConfig } from '../types/IProviderConfig.js';
 import type { ModelDefaultRule } from '../composition/providerAliases.js';
+import { finishMediaRequest } from '../utils/request-media-resolution.js';
+import {
+  buildDiskTextResponsesContext,
+  diskTextProjection,
+  assertDiskTextShape,
+  assertPreparedStatefulUnchanged,
+} from './responses-disk-text-projection.js';
 import {
   createUnallowedModelParametersResolver,
   type UnallowedModelParametersResolver,
@@ -64,7 +72,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   private readonly rejectedStatefulParents = new Set<string>();
   private readonly preparedPromptEnvelopes = new WeakMap<
     object,
-    Awaited<ReturnType<typeof buildResponsesRequestContextForProjection>>
+    PreparedResponsesRequestContext
   >();
 
   constructor(
@@ -123,6 +131,10 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     };
   }
 
+  dispose(): void {
+    this.clearState();
+  }
+
   private resolveWebSocketTransport(): WebSocketTransport | undefined {
     if (!this.isCodexMode()) {
       this.webSocketTransport?.close();
@@ -153,78 +165,172 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     this.rejectedStatefulParents.clear();
   }
 
+  override generateChatCompletion(
+    options: GenerateChatOptions,
+  ): AsyncIterableIterator<IContent>;
+  override generateChatCompletion(
+    contents: AsyncIterable<IContent>,
+    tools?: ProviderToolset,
+  ): AsyncIterableIterator<IContent>;
+  override generateChatCompletion(
+    contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
+    tools?: ProviderToolset,
+  ): AsyncIterableIterator<IContent> {
+    if (!('contents' in contentsOrOptions))
+      return super.generateChatCompletion(contentsOrOptions, tools);
+    const token = contentsOrOptions.promptEnvelopeTransportToken;
+    const prepared =
+      token === undefined ? undefined : this.preparedPromptEnvelopes.get(token);
+    if (
+      prepared !== undefined &&
+      prepared.rowsStagedFromContents !== true &&
+      !readsRequestRowsAtTransport(contentsOrOptions)
+    )
+      throw new Error('Source token requires its transport-read request rows');
+    if (readsRequestRowsAtTransport(contentsOrOptions) && token === undefined)
+      return this.generateWithOwnProjection(contentsOrOptions);
+    return super.generateChatCompletion(contentsOrOptions);
+  }
+
+  /**
+   * Callers outside the chat send seam (compression summaries) hand over
+   * request rows without a projection. The provider prepares the same
+   * projection the seam would, so the transport still reads one prepared
+   * envelope.
+   */
+  private async *generateWithOwnProjection(
+    options: GenerateChatOptions,
+  ): AsyncIterableIterator<IContent> {
+    const projection = await this.projectPromptEnvelope(options);
+    yield* super.generateChatCompletion({
+      ...options,
+      promptEnvelopeTransportToken: projection.transportToken,
+    });
+  }
+
+  protected override ownsRequestRowsTransport(): boolean {
+    return true;
+  }
+
+  /** A call without `requestRows` is sent from rows staged on disk. */
+  protected override takesRowsRoute(): boolean {
+    return true;
+  }
+
+  private captureRequest(
+    options: NormalizedGenerateChatOptions,
+  ): ReturnType<typeof captureResponsesRequest> {
+    return captureResponsesRequest(
+      options,
+      this.name,
+      this.resolveEffectiveBaseURL(options) ?? 'https://api.openai.com/v1',
+      this.getCustomHeaders(options),
+      this.getDefaultModel(),
+      this.requestMediaResolver,
+      this.requestMediaBudgetBytes,
+    );
+  }
+
+  protected override async releaseUnstartedOptions(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<void> {
+    if (!readsRequestRowsAtTransport(options)) return;
+    const token = options.promptEnvelopeTransportToken;
+    if (token === undefined) return;
+    const prepared = this.preparedPromptEnvelopes.get(token);
+    this.preparedPromptEnvelopes.delete(token);
+    options.resolved.authToken = '';
+    try {
+      await prepared?.mediaRequest.release();
+    } finally {
+      await prepared?.stagedRows?.close();
+      delete options.requestRows;
+      delete options.promptEnvelopeTransportToken;
+    }
+  }
+
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    const request = this.captureRequest(options);
+    assertDiskTextShape(request, this.buildExecutorDeps());
+    const token = options.promptEnvelopeTransportToken;
+    if (token === undefined && options.stagedRows === undefined)
+      throw new Error(
+        'Explicit Responses disk text send requires a prepared projection token',
+      );
     const preparedRequestContext =
-      options.promptEnvelopeTransportToken === undefined
-        ? undefined
-        : this.preparedPromptEnvelopes.get(
-            options.promptEnvelopeTransportToken,
-          );
-    if (
-      options.promptEnvelopeTransportToken !== undefined &&
-      preparedRequestContext === undefined
-    ) {
+      token === undefined
+        ? await buildDiskTextResponsesContext(request, this.buildExecutorDeps())
+        : this.preparedPromptEnvelopes.get(token);
+    if (preparedRequestContext === undefined) {
       throw new Error(
         'Unknown OpenAI Responses prompt-envelope transport token',
       );
     }
-    yield* executeOpenAIResponsesRequest(
-      captureResponsesRequest(
-        options,
-        this.name,
-        this.resolveEffectiveBaseURL(options) ?? 'https://api.openai.com/v1',
-        this.getCustomHeaders(options),
-        this.getDefaultModel(),
-        this.requestMediaResolver,
-        this.requestMediaBudgetBytes,
-      ),
+    if (token !== undefined)
+      assertPreparedStatefulUnchanged(
+        request,
+        this.buildExecutorDeps(),
+        preparedRequestContext,
+      );
+    if (token !== undefined) this.preparedPromptEnvelopes.delete(token);
+    try {
+      yield* executeOpenAIResponsesRequest(
+        request,
+        this.buildExecutorDeps(),
+        preparedRequestContext,
+      );
+    } finally {
+      await preparedRequestContext.stagedRows?.close();
+    }
+  }
+
+  private async projectDiskTextEnvelope(
+    normalized: NormalizedGenerateChatOptions,
+  ): Promise<PromptEnvelopeProjection> {
+    const built = await buildDiskTextResponsesContext(
+      this.captureRequest(normalized),
       this.buildExecutorDeps(),
-      preparedRequestContext,
     );
+    const { stagedRows } = normalized;
+    const prepared: PreparedResponsesRequestContext =
+      stagedRows === undefined
+        ? built
+        : { ...built, rowsStagedFromContents: true, stagedRows };
+    const token = Object.freeze({});
+    this.preparedPromptEnvelopes.set(token, prepared);
+    try {
+      return diskTextProjection(prepared, token, async () => {
+        if (!this.preparedPromptEnvelopes.delete(token)) return;
+        try {
+          await prepared.mediaRequest.release();
+        } finally {
+          await stagedRows?.close();
+        }
+      });
+    } catch (error) {
+      this.preparedPromptEnvelopes.delete(token);
+      return finishMediaRequest(prepared.mediaRequest, {
+        status: 'failed',
+        error,
+      });
+    }
   }
 
   /**
    * Project the finalized OpenAI Responses envelope (issue #2817) using the
-   * SAME `buildRequestContext` path transport consumes, so the estimate is
-   * derived from the exact `request` that will be sent.
+   * SAME disk text context transport consumes, so the estimate is derived
+   * from the exact request that will be sent.
    */
   async projectPromptEnvelope(
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
-    const request = captureResponsesRequest(
-      normalized,
-      this.name,
-      this.resolveEffectiveBaseURL(normalized) ?? 'https://api.openai.com/v1',
-      this.getCustomHeaders(normalized),
-      this.getDefaultModel(),
-      this.requestMediaResolver,
-      this.requestMediaBudgetBytes,
-    );
-    const requestContext = await buildResponsesRequestContextForProjection(
-      request,
-      this.buildExecutorDeps(),
-    );
-    const transportToken = Object.freeze({});
-    this.preparedPromptEnvelopes.set(transportToken, requestContext);
-    const pdfEnabled = isResponsesPdfEnabled(request);
-    const projection = projectOpenAIResponsesPromptEnvelope(
-      requestContext.request,
-      {
-        transportToken,
-        unsupportedMedia: collectUnsupportedMedia(
-          normalized.contents,
-          (_block, category) =>
-            category === 'image' || (category === 'pdf' && pdfEnabled),
-        ),
-      },
-      requestContext.projectionContext,
-    );
-    return {
-      ...projection,
-      releaseIfUnsent: requestContext.mediaRequest.release,
-    };
+    try {
+      return await this.projectDiskTextEnvelope(normalized);
+    } catch (error) {
+      return closeStagedRowsAfterFailure(normalized.stagedRows, error);
+    }
   }
 }

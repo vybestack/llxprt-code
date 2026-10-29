@@ -1,0 +1,185 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { CompressionInputSnapshot } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
+import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { buildCompressionMetadata } from '../compressionContextBuilder.js';
+import { OneShotStrategy } from '../OneShotStrategy.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { isCuratedContent } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
+import {
+  oneshotSetup,
+  oneshotRow,
+  OneshotDiskHistory,
+} from './oneshot-disk-helpers.js';
+
+class RetainingHistory extends OneshotDiskHistory {
+  readonly retained: IContent[] = [];
+  readonly copied: IContent[] = [];
+  readonly borrowedOwners = new RowOwnership();
+  readonly copyOwners = new RowOwnership();
+  override async openCompressionInput(): Promise<CompressionInputSnapshot> {
+    const snapshot = await super.openCompressionInput();
+    for await (const row of snapshot.previous.rows()) {
+      const copy = { ...row, blocks: [...row.blocks] };
+      this.retained.push(row);
+      this.copied.push(copy);
+      this.borrowedOwners.retain(row);
+      this.copyOwners.retain(copy);
+    }
+    return snapshot;
+  }
+  release(): void {
+    for (const row of this.retained) this.borrowedOwners.release(row);
+    for (const row of this.copied) this.copyOwners.release(row);
+    this.retained.length = 0;
+    this.copied.length = 0;
+  }
+}
+
+async function charge(size: number): Promise<number> {
+  const candidateOwners = new RowOwnership();
+  const diskBound = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
+  return withSuffixFixture(
+    size,
+    async (history, sourceOwners) => {
+      const { runtime, transport } = oneshotSetup(history);
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
+      const source = new HistoryDensityRows();
+      const candidate = new HistoryDensityRows(candidateOwners);
+      const snapshot = await history.openDumpSnapshot();
+      try {
+        for await (const row of snapshot.rows())
+          if (isCuratedContent(row)) source.append(row);
+        const metadata = await buildCompressionMetadata(
+          'owners',
+          runtime,
+          undefined,
+          history,
+          async () => ({
+            provider: transport,
+            runtime: runtime.providerRuntime,
+            invocation: runtime.prepareProviderInvocation(transport.name),
+          }),
+          undefined,
+          undefined,
+          new DebugLogger('test:owners'),
+        );
+        transport.failure = new DOMException(
+          'summary owner cancellation',
+          'AbortError',
+        );
+        await expect(
+          strategy.compressDisk({ ...metadata, history: source }, candidate),
+        ).rejects.toThrow('summary owner cancellation');
+        expect(strategy.summaryRequestOwnership.snapshot().liveRows).toBe(0);
+        expect(candidate.length).toBe(0);
+        transport.failure = undefined;
+        expect(
+          (
+            await strategy.compressDisk(
+              { ...metadata, history: source },
+              candidate,
+            )
+          ).kind,
+        ).toBe('applied');
+        for (const _row of candidate) {
+          /* exercise the disk row reader owners */
+        }
+        const summaryOwners = strategy.summaryRequestOwnership.snapshot();
+        expect(summaryOwners.peakRows).toBeLessThanOrEqual(1);
+        expect(summaryOwners.peakSerializedBytes).toBeLessThan(16 * 1024);
+        expect(summaryOwners.acquisitions).toBeGreaterThan(size * 0.4);
+        expect(strategy.summaryRequestOwnership.snapshot().liveRows).toBe(0);
+        expect(candidateOwners.within(diskBound)).toBe(true);
+        expect(sourceOwners.within(diskBound)).toBe(true);
+        expect(
+          candidateOwners.snapshot().liveRows +
+            sourceOwners.snapshot().liveRows,
+        ).toBe(0);
+        return summaryOwners.acquisitions;
+      } finally {
+        candidate.close();
+        source.close();
+        await snapshot.close();
+      }
+    },
+    2048,
+    oneshotRow,
+    undefined,
+    (options) => new OneshotDiskHistory(options),
+  );
+}
+
+async function trap(size: number, mode: string): Promise<number> {
+  let created: RetainingHistory | undefined;
+  return withSuffixFixture(
+    size,
+    async (history) => {
+      const { handler } = oneshotSetup(history);
+      await handler.performCompression('trap');
+      if (created === undefined)
+        throw new Error('Missing retaining participant');
+      const owner =
+        mode === 'borrowed' ? created.borrowedOwners : created.copyOwners;
+      const stats = owner.snapshot();
+      const within = owner.within({
+        rows: 440,
+        serializedBytes: 8 * 1024 * 1024,
+      });
+      created.release();
+      expect(
+        created.borrowedOwners.snapshot().liveRows +
+          created.copyOwners.snapshot().liveRows,
+      ).toBe(0);
+      expect(stats.liveRows).toBe(size);
+      expect(stats.liveSerializedBytes).toBeGreaterThan(8 * 1024 * 1024);
+      expect(within).toBe(process.env.ONESHOT_RETAINING_TRAP === '1');
+      return stats.liveRows;
+    },
+    32 * 1024,
+    (index, bytes) => {
+      const row = oneshotRow(index, bytes);
+      return {
+        ...row,
+        blocks: [
+          ...row.blocks,
+          { type: 'text', text: `${index}:${'x'.repeat(32 * 1024)}` },
+        ],
+      };
+    },
+    undefined,
+    (options) => {
+      created = new RetainingHistory(options);
+      return created;
+    },
+  );
+}
+
+const trapCases: Array<[number, string]> = [
+  [512, 'borrowed'],
+  [512, 'copy'],
+];
+describe('disk one-shot registered owners', () => {
+  it.each([65])(
+    'streams the %i-row summary request one owned row at a time while disk rows remain bounded',
+    async (size) => {
+      expect(await charge(size)).toBeGreaterThan(size * 0.4);
+    },
+    180_000,
+  );
+  it.each(trapCases)(
+    'detects deliberately retained %i-row %s owners with unchanged bounds',
+    async (size, mode) => {
+      expect(await trap(size, mode)).toBe(size);
+    },
+    180_000,
+  );
+});

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+
 import {
   mkdir,
   mkdtemp,
@@ -12,12 +13,13 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { SessionRecordingService } from './SessionRecordingService.js';
-import { SessionDiscovery } from './SessionDiscovery.js';
-import { replaySession } from './ReplayEngine.js';
+import { join } from 'node:path';
 import type { IContent } from '../services/history/IContent.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { readJournalSnapshot } from './__tests__/support/journalSnapshot.js';
+import { SessionDiscovery } from './SessionDiscovery.js';
+import { journalSessionFileName } from './sessionFileName.js';
 import type { SessionRecordingServiceConfig } from './types.js';
 
 const START_TIME = '2026-09-30T12:34:56.000Z';
@@ -28,24 +30,16 @@ function content(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
 
-function recordingPath(recording: SessionRecordingService): string {
+function recordingPath(recording: JournalRecordingService): string {
   const filePath = recording.getFilePath();
   if (filePath === null) throw new Error('Recording was not materialized');
   return filePath;
 }
 
-async function journal(filePath: string): Promise<unknown[]> {
-  const raw = await readFile(filePath, 'utf8');
-  return raw
-    .trim()
-    .split('\n')
-    .map((line): unknown => JSON.parse(line));
-}
-
 describe('recording instance pathname ownership', () => {
   let directory: string;
   let config: SessionRecordingServiceConfig;
-  let recordings: SessionRecordingService[];
+  let recordings: JournalRecordingService[];
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'recording-instance-isolation-'));
@@ -70,78 +64,78 @@ describe('recording instance pathname ownership', () => {
     }
   });
 
-  function owner(): SessionRecordingService {
-    const recording = new SessionRecordingService(config);
+  function owner(): JournalRecordingService {
+    const recording = JournalRecordingService.create(config);
     recordings.push(recording);
     return recording;
   }
 
   it('keeps simultaneous same-label journals independent through disposal, surviving append and original-path resume', async () => {
-    const first = owner();
-    const second = owner();
-    first.recordContent(content('first owner'));
-    second.recordContent(content('second owner'));
-    await Promise.all([first.flush(), second.flush()]);
-    const firstPath = recordingPath(first);
-    const secondPath = recordingPath(second);
-    await first.dispose();
-    second.recordContent(content('surviving second owner'));
-    await second.flush();
-    const discovery = await SessionDiscovery.listContinueTargetsDetailed(
-      config.chatsDir,
-      config.projectHash,
-    );
-    const secondReplay = await replaySession(secondPath, config.projectHash);
-    if (!secondReplay.ok) throw new Error(secondReplay.error);
-    expect(secondReplay.sequenceCorrupt).toBe(false);
-    expect(secondReplay.history).toStrictEqual([
-      content('second owner'),
-      content('surviving second owner'),
-    ]);
-    expect(await journal(firstPath)).toMatchObject([
-      { seq: 1, type: 'session_start', payload: { sessionId: SESSION_ID } },
-      { seq: 2, type: 'content', payload: { content: content('first owner') } },
-    ]);
-    expect(firstPath).not.toBe(secondPath);
-    expect(discovery.recordingErrors).toStrictEqual([]);
-    expect(discovery.targets.map((target) => target.kind)).toStrictEqual([
-      'session',
-      'session',
-    ]);
-    const sessions = await SessionDiscovery.listSessions(
-      config.chatsDir,
-      config.projectHash,
-    );
-    expect(sessions.map((session) => session.sessionId)).toStrictEqual([
-      SESSION_ID,
-      SESSION_ID,
-    ]);
-    expect(new Set(sessions.map((session) => session.filePath))).toStrictEqual(
-      new Set([firstPath, secondPath]),
-    );
-    for (const filePath of [firstPath, secondPath]) {
-      expect(filePath.endsWith(`-${SESSION_ID.substring(0, 12)}.jsonl`)).toBe(
-        true,
+    const first = JournalRecordingService.create(config);
+    const second = JournalRecordingService.create(config);
+    const native = [first, second];
+    try {
+      await (await first.session()).append([content('first owner')]);
+      await (await second.session()).append([content('second owner')]);
+      const firstPath = first.getFilePath();
+      const secondPath = second.getFilePath();
+      if (firstPath === null || secondPath === null)
+        throw new Error('Missing journals');
+      await first.dispose();
+      await (
+        await second.session()
+      ).append([content('surviving second owner')]);
+      await second.flush();
+      expect(firstPath).not.toBe(secondPath);
+      const discovery = await SessionDiscovery.listContinueTargetsDetailed(
+        config.chatsDir,
+        config.projectHash,
       );
+      expect(discovery.recordingErrors).toStrictEqual([]);
+      expect(discovery.targets.map((target) => target.kind)).toStrictEqual([
+        'session',
+        'session',
+      ]);
+      const sessions = await SessionDiscovery.listSessions(
+        config.chatsDir,
+        config.projectHash,
+      );
+      expect(sessions.map((session) => session.sessionId)).toStrictEqual([
+        SESSION_ID,
+        SESSION_ID,
+      ]);
+      expect(
+        new Set(sessions.map((session) => session.filePath)),
+      ).toStrictEqual(new Set([firstPath, secondPath]));
+      expect(
+        (await readJournalSnapshot(firstPath, config.projectHash)).history,
+      ).toStrictEqual([content('first owner')]);
+      expect(
+        (await readJournalSnapshot(secondPath, config.projectHash)).history,
+      ).toStrictEqual([
+        content('second owner'),
+        content('surviving second owner'),
+      ]);
+      for (const file of [firstPath, secondPath])
+        expect(file.endsWith('.llxj')).toBe(true);
+      const resumed = await JournalRecordingService.open(config, firstPath);
+      native.push(resumed);
+      await (await resumed.session()).append([content('resumed first owner')]);
+      await resumed.flush();
+      expect(resumed.getFilePath()).toBe(firstPath);
+      expect(
+        (await readJournalSnapshot(firstPath, config.projectHash)).history,
+      ).toStrictEqual([content('first owner'), content('resumed first owner')]);
+      expect(
+        (await readJournalSnapshot(secondPath, config.projectHash)).history,
+      ).toStrictEqual([
+        content('second owner'),
+        content('surviving second owner'),
+      ]);
+      expect(await readdir(config.chatsDir)).toHaveLength(2);
+    } finally {
+      for (const recorder of native) await recorder.dispose();
     }
-    expect(await journal(secondPath)).toMatchObject([
-      { seq: 1, type: 'session_start', payload: { sessionId: SESSION_ID } },
-      { seq: 2, type: 'content' },
-      { seq: 3, type: 'content' },
-    ]);
-    const resumed = owner();
-    resumed.initializeForResume(firstPath, 2);
-    resumed.recordContent(content('resumed first owner'));
-    await resumed.flush();
-    expect(recordingPath(resumed)).toBe(firstPath);
-    const resumedReplay = await replaySession(firstPath, config.projectHash);
-    if (!resumedReplay.ok) throw new Error(resumedReplay.error);
-    expect(resumedReplay.sequenceCorrupt).toBe(false);
-    expect(resumedReplay.history).toStrictEqual([
-      content('first owner'),
-      content('resumed first owner'),
-    ]);
-    expect(await readdir(config.chatsDir)).toHaveLength(2);
   });
 
   it('rejects exclusive allocation collisions without touching an existing journal', async () => {
@@ -149,42 +143,44 @@ describe('recording instance pathname ownership', () => {
     await mkdir(config.chatsDir, { recursive: true });
     const occupiedPath = join(
       config.chatsDir,
-      `session-2026-09-30T12-34-56-${INSTANCE_ID}-${SESSION_ID.substring(0, 12)}.jsonl`,
+      journalSessionFileName(SESSION_ID),
     );
     const occupiedBytes = 'previous owner bytes\n';
     await writeFile(occupiedPath, occupiedBytes);
     const recording = owner();
-    expect(() => recording.recordContent(content('must not append'))).toThrow(
-      /EEXIST/,
-    );
+    await expect(recording.session()).rejects.toThrow(/EEXIST/);
     expect(recording.getFilePath()).toBeNull();
-    await recording.flush();
+    await expect(recording.flush()).rejects.toThrow(/EEXIST/);
     expect(await readFile(occupiedPath, 'utf8')).toBe(occupiedBytes);
     expect(await readdir(config.chatsDir)).toStrictEqual([
       occupiedPath.slice(config.chatsDir.length + 1),
     ]);
   });
 
-  it('releases a rolled-back empty reservation so the next batch can publish', async () => {
+  it('preserves an occupied empty file and permits a fresh recorder after its removal', async () => {
     vi.spyOn(crypto, 'randomUUID').mockReturnValue(INSTANCE_ID);
+    await mkdir(config.chatsDir, { recursive: true });
+    const occupiedPath = join(
+      config.chatsDir,
+      journalSessionFileName(SESSION_ID),
+    );
+    await writeFile(occupiedPath, '');
     const recording = owner();
-    const prepared = recording.prepareContentBatch([content('aborted')]);
-    prepared.publish();
-    const reservedPath = recordingPath(recording);
-    expect(await readFile(reservedPath, 'utf8')).toBe('');
-    prepared.rollback();
+    await expect(recording.session()).rejects.toThrow(/EEXIST/);
     expect(recording.getFilePath()).toBeNull();
+    await expect(recording.flush()).rejects.toThrow(/EEXIST/);
+    expect(recording.isActive()).toBe(false);
+    expect(await readFile(occupiedPath, 'utf8')).toBe('');
+    await recording.dispose();
+    await rm(occupiedPath);
     expect(await readdir(config.chatsDir)).toStrictEqual([]);
-    const replacement = recording.prepareContentBatch([content('committed')]);
-    replacement.publish();
-    replacement.finalize();
-    await recording.flush();
-    const replay = await replaySession(
-      recordingPath(recording),
+    const next = owner();
+    await (await next.session()).append([content('committed')]);
+    await next.flush();
+    const replay = await readJournalSnapshot(
+      recordingPath(next),
       config.projectHash,
     );
-    if (!replay.ok) throw new Error(replay.error);
-    expect(replay.sequenceCorrupt).toBe(false);
     expect(replay.history).toStrictEqual([content('committed')]);
   });
 });

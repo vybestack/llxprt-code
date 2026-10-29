@@ -98,17 +98,18 @@ export async function dispatch(
     assembleTaskSchemaPolicy(new SettingsService()),
   );
   registry.registerTool(new DivideTool());
+  const runtimeBundle = createStatelessRuntimeBundle();
   const toolExecutorContext = createToolExecutionConfig(
-    createStatelessRuntimeBundle().telemetryRoot,
-    () =>
-      createStatelessRuntimeBundle().runtimeContext.readToolExecutionPolicy(),
-    () => createStatelessRuntimeBundle().runtimeContext.state.sessionId,
+    runtimeBundle.telemetryRoot,
+    () => runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+    () => runtimeBundle.runtimeContext.state.sessionId,
     registry,
   );
   // The processing context object is the scheduler registry owner for this
   // run: executeNonInteractiveTool acquires the 'subagent' entry keyed on it,
   // so the release below pairs on the same object and purpose.
   const processingContext = {
+    history: runtimeBundle.runtimeContext.history,
     output,
     subagentId: 'flag-test',
     logger: new DebugLogger('flag-test'),
@@ -143,6 +144,7 @@ export async function dispatch(
       processingContext,
     );
   } finally {
+    await runtimeBundle.runtimeContext.history.dispose();
     await config.dispose();
   }
 }

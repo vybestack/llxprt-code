@@ -1,17 +1,22 @@
+import type {
+  GeminiContent as Content,
+  GeminiContentPart as Part,
+} from '@vybestack/llxprt-code-core/llm-types/geminiContent.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+/// <reference lib="esnext.array" />
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { CompletedToolCall } from './coreToolScheduler.js';
-import type {
-  GeminiContent as Content,
-  GeminiContentPart as Part,
-} from '@vybestack/llxprt-code-core/llm-types/geminiContent.js';
+
 import { createSchedulerPolicyFixture } from './__tests__/scheduler-policy-fixture.js';
 
 import { describe, it, expect, vi } from 'bun:test';
-import type { WaitingToolCall } from './coreToolScheduler.js';
+import type {
+  CompletedToolCall,
+  WaitingToolCall,
+} from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
@@ -27,170 +32,201 @@ import {
 } from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler edit cancellation', () => {
-  it('should preserve diff when an edit is cancelled', async () => {
-    const mockEditTool = new MockEditTool();
-    const declarativeTool = mockEditTool;
-    const mockToolRegistry = {
-      getTool: () => declarativeTool,
-      getFunctionDeclarations: () => [],
-      tools: new Map(),
-      discovery: {},
-      registerTool: () => {},
-      getToolByName: () => declarativeTool,
-      getToolByDisplayName: () => declarativeTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-    } as unknown as ToolRegistry;
-
-    const onAllToolCallsComplete = vi.fn();
-    const onToolCallsUpdate = vi.fn();
-
-    let policyDecision = PolicyDecision.ALLOW;
-    policyDecision = PolicyDecision.ASK_USER;
-
-    const {
-      config: mockConfig,
-      settingsOwner,
-      messageBus: runtimeMessageBus,
-    } = createSchedulerPolicyFixture(
-      {
-        getSessionId: () => 'test-session-id',
-        getUsageStatisticsEnabled: () => true,
-        getDebugMode: () => false,
-        isInteractive: () => true,
-        getApprovalMode: () => ApprovalMode.DEFAULT,
-
-        getAllowedTools: () => [],
-        getContentGeneratorConfig: () => ({
-          model: 'test-model',
-        }),
-        getEnableHooks: () => false,
-        getModel: () => 'gemini-2.5-pro',
-      },
-      policyDecision,
-    );
-
-    const scheduler = new CoreToolScheduler({
-      telemetry: settingsOwner.telemetry,
-      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
-      getToolGovernance: () =>
-        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
-      config: mockConfig,
-      messageBus: runtimeMessageBus,
-      toolRegistry: mockToolRegistry,
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
-      getPreferredEditor: () => 'vscode',
-      onEditorClose: vi.fn(),
-    });
-
-    const abortController = new AbortController();
-    const request = {
-      callId: '1',
-      name: 'mockEditTool',
-      args: {},
-      isClientInitiated: false,
-      prompt_id: 'prompt-id-1',
-    };
-
-    await scheduler.schedule([request], abortController.signal);
-
-    const awaitingCall = (await waitForStatus(
-      onToolCallsUpdate,
-      'awaiting_approval',
-    )) as WaitingToolCall;
-
-    // Cancel the edit
-    const confirmationDetails = awaitingCall.confirmationDetails;
-    if (!('onConfirm' in confirmationDetails))
-      throw new Error('Expected live confirmation');
-    await confirmationDetails.onConfirm(ToolConfirmationOutcome.Cancel);
-
-    expect(onAllToolCallsComplete).toHaveBeenCalled();
-    const completedCalls = onAllToolCallsComplete.mock
-      .calls[0][0] as CompletedToolCall[];
-
-    expect(completedCalls[0].status).toBe('cancelled');
-
-    // Check that the diff is preserved
-    const cancelledCall = completedCalls[0];
-    expect(cancelledCall.response.resultDisplay).toBeDefined();
-    expect(
-      (cancelledCall.response.resultDisplay as { fileDiff: string }).fileDiff,
-    ).toBe(
-      '--- test.txt\n+++ test.txt\n@@ -1,1 +1,1 @@\n-old content\n+new content',
-    );
-    expect(
-      (cancelledCall.response.resultDisplay as { fileName: string }).fileName,
-    ).toBe('test.txt');
-
-    // Regression (Issue #864): ensure cancellation responseParts can be persisted
-    // into provider-visible history as a paired tool_call + tool_response.
-    // With the neutral block contract the cancelled response carries only the
-    // tool_response; the tool_call is recorded separately from the model's
-    // streamed assistant message. We simulate the combined turn content the
-    // way the agentic loop records it: an AI message with the tool_call
-    // followed by a user message with the tool_response from the cancelled
-    // call, and verify the converter pairs them into well-formed history.
-    const historyService = new HistoryService();
-    const turnKey = historyService.generateTurnKey();
-    const idGenerator = historyService.getIdGeneratorCallback(turnKey);
-
-    const assistantContent: Content = {
-      role: 'model',
-      parts: [
-        {
-          functionCall: {
-            id: request.callId,
-            name: request.name,
-            args: request.args,
-          },
-        },
-      ],
-    };
-    historyService.add(
-      ContentConverters.toIContent(
-        assistantContent,
-        idGenerator,
-        undefined,
-        turnKey,
-      ),
-    );
-
-    const toolResponseContent: Content = {
-      role: 'user',
-      parts: cancelledCall.response.responseParts as Part[],
-    };
-    historyService.add(
-      ContentConverters.toIContent(
-        toolResponseContent,
-        idGenerator,
-        undefined,
-        turnKey,
-      ),
-    );
-
-    const curated = historyService.getCuratedForProvider();
-    expect(curated.filter((c) => c.speaker === 'ai')).toHaveLength(1);
-    expect(curated.filter((c) => c.speaker === 'tool')).toHaveLength(1);
-    // The converter pairs the tool_call and tool_response into a single AI
-    // turn (tool_call) + tool turn (tool_response).
-    const toolCallMessage = curated.find((c) => c.speaker === 'ai');
-    const toolResponseMessage = curated.find((c) => c.speaker === 'tool');
-    expect(toolCallMessage).toBeDefined();
-    expect(toolResponseMessage).toBeDefined();
-    expect(toolCallMessage!.blocks[0]).toMatchObject({
-      type: 'tool_call',
-      name: 'mockEditTool',
-    });
-    const toolCallId = (toolCallMessage!.blocks[0] as ToolCallBlock).id;
-    expect(toolCallId).toMatch(/^hist_tool_[a-zA-Z0-9_-]+$/);
-    expect(toolResponseMessage!.blocks[0]).toMatchObject({
-      type: 'tool_response',
-      callId: toolCallId,
-      toolName: 'mockEditTool',
-    });
-  });
+  it('should preserve diff when an edit is cancelled', facadeCallback0);
 });
+
+async function facadeCallback0(): Promise<void> {
+  const mockEditTool = new MockEditTool();
+  const declarativeTool = mockEditTool;
+  const mockToolRegistry = editRegistry(declarativeTool);
+
+  const onAllToolCallsComplete = vi.fn();
+  const onToolCallsUpdate = vi.fn();
+
+  const fixture = createSchedulerPolicyFixture(
+    editConfig(),
+    PolicyDecision.ASK_USER,
+  );
+
+  const scheduler = editScheduler(
+    fixture,
+    mockToolRegistry,
+    onAllToolCallsComplete,
+    onToolCallsUpdate,
+  );
+
+  const abortController = new AbortController();
+  const request = {
+    callId: '1',
+    name: 'mockEditTool',
+    args: {},
+    isClientInitiated: false,
+    prompt_id: 'prompt-id-1',
+  };
+
+  await scheduler.schedule([request], abortController.signal);
+
+  const awaitingCall = (await waitForStatus(
+    onToolCallsUpdate,
+    'awaiting_approval',
+  )) as WaitingToolCall;
+
+  // Cancel the edit
+  const confirmationDetails = awaitingCall.confirmationDetails;
+  if (!('onConfirm' in confirmationDetails))
+    throw new Error('Expected live confirmation');
+  await confirmationDetails.onConfirm(ToolConfirmationOutcome.Cancel);
+
+  expect(onAllToolCallsComplete).toHaveBeenCalled();
+  const completedCalls = onAllToolCallsComplete.mock
+    .calls[0][0] as CompletedToolCall[];
+
+  expect(completedCalls[0].status).toBe('cancelled');
+
+  // Check that the diff is preserved
+  const cancelledCall = completedCalls[0];
+  expect(cancelledCall.response.resultDisplay).toBeDefined();
+  expect(
+    (cancelledCall.response.resultDisplay as { fileDiff: string }).fileDiff,
+  ).toBe(
+    '--- test.txt\n+++ test.txt\n@@ -1,1 +1,1 @@\n-old content\n+new content',
+  );
+  expect(
+    (cancelledCall.response.resultDisplay as { fileName: string }).fileName,
+  ).toBe('test.txt');
+
+  // Regression (Issue #864): ensure cancellation responseParts can be persisted
+  // into provider-visible history as a paired tool_call + tool_response.
+  // With the neutral block contract the cancelled response carries only the
+  // tool_response; the tool_call is recorded separately from the model's
+  // streamed assistant message. We simulate the combined turn content the
+  // way the agentic loop records it: an AI message with the tool_call
+  // followed by a user message with the tool_response from the cancelled
+  // call, and verify the converter pairs them into well-formed history.
+  const curated = await cancelledEditHistory(
+    request,
+    cancelledCall.response.responseParts as Part[],
+  );
+  expect(curated.filter((c) => c.speaker === 'ai')).toHaveLength(1);
+  expect(curated.filter((c) => c.speaker === 'tool')).toHaveLength(1);
+  // The converter pairs the tool_call and tool_response into a single AI
+  // turn (tool_call) + tool turn (tool_response).
+  const toolCallMessage = curated.find((c) => c.speaker === 'ai');
+  const toolResponseMessage = curated.find((c) => c.speaker === 'tool');
+  expect(toolCallMessage).toBeDefined();
+  expect(toolResponseMessage).toBeDefined();
+  expect(toolCallMessage!.blocks[0]).toMatchObject({
+    type: 'tool_call',
+    name: 'mockEditTool',
+  });
+  const toolCallId = (toolCallMessage!.blocks[0] as ToolCallBlock).id;
+  expect(toolCallId).toMatch(/^hist_tool_[a-zA-Z0-9_-]+$/);
+  expect(toolResponseMessage!.blocks[0]).toMatchObject({
+    type: 'tool_response',
+    callId: toolCallId,
+    toolName: 'mockEditTool',
+  });
+}
+
+function editRegistry(declarativeTool: MockEditTool): ToolRegistry {
+  return {
+    getTool: () => declarativeTool,
+    getFunctionDeclarations: () => [],
+    tools: new Map(),
+    discovery: {},
+    registerTool: () => {},
+    getToolByName: () => declarativeTool,
+    getToolByDisplayName: () => declarativeTool,
+    getTools: () => [],
+    discoverTools: async () => {},
+    getAllTools: () => [],
+    getToolsByServer: () => [],
+  } as unknown as ToolRegistry;
+}
+
+function editConfig() {
+  return {
+    getSessionId: () => 'test-session-id',
+    getUsageStatisticsEnabled: () => true,
+    getDebugMode: () => false,
+    isInteractive: () => true,
+    getApprovalMode: () => ApprovalMode.DEFAULT,
+    getAllowedTools: () => [],
+    getContentGeneratorConfig: () => ({
+      model: 'test-model',
+    }),
+    getEnableHooks: () => false,
+    getModel: () => 'gemini-2.5-pro',
+  };
+}
+
+function editScheduler(
+  fixture: ReturnType<typeof createSchedulerPolicyFixture>,
+  mockToolRegistry: ToolRegistry,
+  onAllToolCallsComplete: ReturnType<typeof vi.fn>,
+  onToolCallsUpdate: ReturnType<typeof vi.fn>,
+): CoreToolScheduler {
+  const { config, settingsOwner, messageBus } = fixture;
+  return new CoreToolScheduler({
+    telemetry: settingsOwner.telemetry,
+    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+    getToolGovernance: () =>
+      settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+    config,
+    messageBus,
+    toolRegistry: mockToolRegistry,
+    onAllToolCallsComplete,
+    onToolCallsUpdate,
+    getPreferredEditor: () => 'vscode',
+    onEditorClose: vi.fn(),
+  });
+}
+
+async function cancelledEditHistory(
+  request: { callId: string; name: string; args: Record<string, unknown> },
+  responseParts: Part[],
+): Promise<IContent[]> {
+  const historyService = new HistoryService();
+  const turnKey = historyService.generateTurnKey();
+  const idGenerator = historyService.getIdGeneratorCallback(turnKey);
+
+  const assistantContent: Content = {
+    role: 'model',
+    parts: [
+      {
+        functionCall: {
+          id: request.callId,
+          name: request.name,
+          args: request.args,
+        },
+      },
+    ],
+  };
+  historyService.add(
+    ContentConverters.toIContent(
+      assistantContent,
+      idGenerator,
+      undefined,
+      turnKey,
+    ),
+  );
+
+  const toolResponseContent: Content = {
+    role: 'user',
+    parts: responseParts,
+  };
+  historyService.add(
+    ContentConverters.toIContent(
+      toolResponseContent,
+      idGenerator,
+      undefined,
+      turnKey,
+    ),
+  );
+
+  const curated = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
+
+  return curated;
+}

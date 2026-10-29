@@ -16,7 +16,7 @@ import {
   renderWithProviders,
   createMockSettings,
 } from '../../__tests__/render.js';
-import { readFile } from 'node:fs/promises';
+import { readRecordedFacts } from '../../__tests__/journal-recording.js';
 import { useModelDialogHandler } from './modelDialogHandler.js';
 import { bindModelSwitchRecording } from '../utils/recordActiveProviderSwitch.js';
 import {
@@ -147,6 +147,7 @@ describe('useModelDialogHandler', () => {
     if (!path) throw new Error('No recording path');
     const store = createSeededStore();
     const rawWrite = vi.fn();
+    const switches: string[] = [];
     const { result, unmount } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
@@ -155,7 +156,10 @@ describe('useModelDialogHandler', () => {
         'openai',
         bindModelSwitchRecording(
           'agent',
-          (event) => agent.session.recordRecordingEvent(event),
+          (event) => {
+            switches.push(event.type);
+            return agent.session.recordRecordingEvent(event);
+          },
           { recordProviderSwitch: rawWrite },
         ),
       ),
@@ -164,11 +168,12 @@ describe('useModelDialogHandler', () => {
     await waitFor(() =>
       expect(hasDialogRequest(store, 'modelConfig')).toBe(true),
     );
-    const lines = (await readFile(path, 'utf8')).split('\n');
-    expect(
-      lines.filter((line) => line.includes('provider_switch')),
-    ).toHaveLength(1);
+    expect(await readRecordedFacts(path)).toMatchObject({
+      provider: 'openai',
+      model: 'new-model',
+    });
     expect(rawWrite).not.toHaveBeenCalled();
+    expect(switches).toStrictEqual(['provider_switch']);
     unmount();
   }, 30000);
 

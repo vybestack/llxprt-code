@@ -637,12 +637,12 @@ describe('InputPrompt', () => {
     const nativePlatform = process.platform;
     beforeEach(() => {
       Object.defineProperty(process, 'platform', { value: 'linux' });
+      enableMouseEvents();
     });
     afterEach(() => {
+      disableMouseEvents();
       Object.defineProperty(process, 'platform', { value: nativePlatform });
     });
-    beforeEach(() => enableMouseEvents());
-    afterEach(() => disableMouseEvents());
     afterEach(() => vi.restoreAllMocks());
 
     it('pastes PRIMARY once on middle press and ignores the generic release', async () => {

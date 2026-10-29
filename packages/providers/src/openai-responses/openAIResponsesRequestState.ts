@@ -12,7 +12,10 @@ import type {
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { sanitizePromptCacheKey } from './sanitizePromptCacheKey.js';
-import { computeStatefulConversation } from './openAIResponsesStateful.js';
+import {
+  planStatefulConversation,
+  type StatefulPlan,
+} from './openAIResponsesStateful.js';
 import { OPENAI_TRANSPORT_SELECTOR_KEYS } from '../openai/openaiModelPolicy.js';
 import {
   conservativeMediaTransportCapabilities,
@@ -86,7 +89,9 @@ export function translateRequestOverrides(
         );
       }
     } else {
-      requestOverrides[key] = value;
+      // The request-scoped body lease splices the arrays it owns, so an array
+      // shared with the caller's model params must be copied here.
+      requestOverrides[key] = Array.isArray(value) ? [...value] : value;
     }
   }
   return requestOverrides;
@@ -128,54 +133,29 @@ export interface ResponsesRequestShape {
   readonly systemPrompt: string;
   readonly requestOverrides: ReturnType<typeof buildRequestOverrides>;
   readonly explicitUserStore: boolean | undefined;
-  readonly stateful: ReturnType<typeof computeStatefulConversation>;
 }
 
 /**
  * Resolves everything the request shape depends on before any media is
- * reserved: the base URL, the Codex verdict, and whether this turn can chain
- * statefully. Statefulness needs both a transport that can carry the parent
- * (#3219) and media capabilities that survive continuation (#3199).
+ * reserved: the base URL, the Codex verdict and the request overrides. The
+ * stateful decision is separate ({@link resolveResponsesStatefulPlan}) because
+ * it reads the history rows.
  */
 export function resolveResponsesRequestShape(
   options: ResponsesRequest,
-  patchedContent: IContent[],
-  invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
-  forceStateless: boolean,
-  forceParentless = false,
 ): ResponsesRequestShape {
-  const rawBaseURL = resolveResponsesBaseURL(options);
-  const isCodex = deps.isCodexMode();
   const requestOverrides = buildRequestOverrides(options, deps);
-  const explicitUserStore = resolveExplicitUserStore(requestOverrides);
-  const statefulTransportSupported = supportsStatefulResponsesTransport(
-    forceStateless,
-    resolveMediaCapabilities(deps, isCodex),
-    deps.isWebSocketTransportActive?.() ?? false,
-  );
   return {
-    rawBaseURL,
-    isCodex,
+    rawBaseURL: resolveResponsesBaseURL(options),
+    isCodex: deps.isCodexMode(),
     // Issue #3136: the agent layer owns system-prompt assembly. The provider
     // transports options.systemInstruction verbatim (empty for projection).
     // options.userMemory is deliberately NOT read here: user memory is baked
     // into the assembled instruction upstream.
     systemPrompt: options.systemInstruction ?? '',
     requestOverrides,
-    explicitUserStore,
-    stateful: computeStatefulConversation(
-      options,
-      patchedContent,
-      invocationEphemerals,
-      explicitUserStore,
-      isCodex,
-      rawBaseURL,
-      (responseId) => deps.isRejectedStatefulParent?.(responseId) ?? false,
-      statefulTransportSupported,
-      deps.logger,
-      forceParentless,
-    ),
+    explicitUserStore: resolveExplicitUserStore(requestOverrides),
   };
 }
 
@@ -230,4 +210,37 @@ function estimationPlaceholder(block: MediaReferenceBlock): ContentBlock {
     // byte of the referenced object is read to produce it.
     data: 'A'.repeat(normalizedBase64Length),
   };
+}
+
+/**
+ * The stateful decision for a turn whose history is read from disk rows,
+ * stopping before the history scan.
+ */
+export function resolveResponsesStatefulPlan(
+  options: ResponsesRequest,
+  invocationEphemerals: Record<string, unknown>,
+  deps: ResponsesExecutorDeps,
+  forceStateless: boolean,
+  forceParentless: boolean,
+): StatefulPlan {
+  const rawBaseURL = resolveResponsesBaseURL(options);
+  const isCodex = deps.isCodexMode();
+  const explicitUserStore = resolveExplicitUserStore(
+    buildRequestOverrides(options, deps),
+  );
+  return planStatefulConversation(
+    options,
+    invocationEphemerals,
+    explicitUserStore,
+    isCodex,
+    rawBaseURL,
+    (responseId) => deps.isRejectedStatefulParent?.(responseId) ?? false,
+    supportsStatefulResponsesTransport(
+      forceStateless,
+      resolveMediaCapabilities(deps, isCodex),
+      deps.isWebSocketTransportActive?.() ?? false,
+    ),
+    deps.logger,
+    forceParentless,
+  );
 }

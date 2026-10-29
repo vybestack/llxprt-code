@@ -308,7 +308,7 @@ describe('P12: blocking BeforeModel hook (characterization)', () => {
     expect(visibleText(result)).toBe(blockReason);
     // committedHistory is the neutral HistoryService snapshot (the direct
     // path does not append model turns today; this pins that observable).
-    expect(committedHistory(historyService)).toStrictEqual([]);
+    expect(await committedHistory(historyService)).toStrictEqual([]);
   });
 
   // PROPERTY: for any non-empty blocking reason string, visible text === reason

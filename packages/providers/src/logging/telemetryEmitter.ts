@@ -10,7 +10,6 @@
  */
 
 import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
-
 import {
   TokenUsageEvent,
   ApiResponseEvent,
@@ -18,6 +17,7 @@ import {
 } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import type { TokenCounts } from './tokenCounts.js';
+import type { RequestLoggingPolicy } from './requestLoggingPolicy.js';
 
 export type ResponseTokenCounts = TokenCounts & {
   cache_creation_input_tokens: number | null;
@@ -174,7 +174,8 @@ export async function writeConversationLog(
   success: boolean,
   error: unknown,
   ctx: ResponseTelemetryContext,
-): Promise<void> {
+  policy?: RequestLoggingPolicy,
+): Promise<void | (() => void | Promise<void>)> {
   const event = new ConversationResponseEvent(
     ctx.providerName,
     ctx.conversationId,
@@ -185,15 +186,34 @@ export async function writeConversationLog(
     success,
     error != null ? String(error) : undefined,
   );
-  config.recordConversationResponse(event);
-
-  const fileWriter = getConversationFileWriter(config.conversationLogPath);
-  await fileWriter.writeResponse(ctx.providerName, redactedContent, {
+  const metadata = {
     conversationId: ctx.conversationId,
     turnNumber: ctx.turnNumber,
     promptId,
     duration,
     success,
     error: error != null ? String(error) : undefined,
-  });
+  };
+  if (policy?.strictDurableResponse === true) {
+    const fileWriter = getConversationFileWriter(config.conversationLogPath);
+    await fileWriter.writeEntryAcknowledged({
+      type: 'response',
+      provider: ctx.providerName,
+      response: redactedContent,
+      metadata,
+    });
+    if (policy.strictTelemetry)
+      return async (): Promise<void> => {
+        const accept = await config.acknowledgeTerminalTelemetry(
+          () => config.recordConversationResponse(event),
+          policy.signal,
+        );
+        accept();
+      };
+    return () => config.recordConversationResponse(event);
+  }
+  config.recordConversationResponse(event);
+  const fileWriter = getConversationFileWriter(config.conversationLogPath);
+  await fileWriter.writeResponse(ctx.providerName, redactedContent, metadata);
+  return undefined;
 }

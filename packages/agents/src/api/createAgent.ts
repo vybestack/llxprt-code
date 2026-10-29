@@ -13,8 +13,6 @@ import type { McpAssemblyOptions } from './mcpOAuthAssembly.js';
 import { PreferredAgentAssembly } from './agentRuntimeAssembly.js';
 import type { AgentRetainedProviderFile } from './provider-file-domain.js';
 
-import type { SessionClientOwner } from '../session/session-client-owner.js';
-
 import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 
 /**
@@ -114,11 +112,12 @@ export type CreatedAgentMcpOptions = McpAssemblyOptions &
   Pick<AgentConfig, 'imageOperation' | 'credentialAuthority'>;
 
 export async function initializeCreatedClient(
-  client: SessionClientOwner,
+  bindHostGitHub: (github: ReturnType<typeof assembleHostGitHubBroker>) => void,
+  initializeTools: () => Promise<void>,
   github: ReturnType<typeof assembleHostGitHubBroker>,
 ): Promise<void> {
-  client.bindHostGitHub(github);
-  await client.initializeTools();
+  bindHostGitHub(github);
+  await initializeTools();
 }
 
 export async function activateCreatedSession(
@@ -132,7 +131,7 @@ export async function activateCreatedSession(
   readRuntimeKind: () => RuntimeKind,
   messageBus: MessageBus,
   mcpRuntime: AgentActivationPort,
-  client: SessionClientOwner,
+  refreshAuth: (method?: string) => Promise<void>,
 ): ReturnType<typeof applyActivation> {
   return applyActivation(
     parsed,
@@ -145,13 +144,13 @@ export async function activateCreatedSession(
       providerManager,
       oauthManager,
       readRuntimeKind,
-      client.operations.refreshAuth,
+      refreshAuth,
       settingsOwner,
     ),
     settings,
     mcpRuntime,
     providerManager,
-    (method) => client.clients.refreshAuth(method),
+    refreshAuth,
     assembleModelSelection(settingsOwner),
     () => settingsOwner.readSelectedProvider(),
   );
@@ -316,11 +315,11 @@ export async function cleanupFailedCreatedAgent(
   primaryError: unknown,
   closeRuntime: () => void | Promise<void>,
   mediaOwner: SessionMediaOwner,
-  sessionClient: SessionClientOwner | undefined,
+  closeSessionClient: (() => Promise<void>) | undefined,
   disposeMcpRuntime: (() => Promise<void>) | undefined,
 ): Promise<never> {
   const mcpCleanup = await Promise.allSettled([disposeMcpRuntime?.()]);
-  const clientCleanup = await Promise.allSettled([sessionClient?.dispose()]);
+  const clientCleanup = await Promise.allSettled([closeSessionClient?.()]);
   const cleanup = await Promise.allSettled([closeRuntime()]);
   const mediaCleanup = await Promise.allSettled([mediaOwner.dispose()]);
   const failures = [

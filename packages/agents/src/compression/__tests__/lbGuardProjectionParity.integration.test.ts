@@ -1,3 +1,7 @@
+import { makeLoadBalancerInvocation } from '../../../../providers/src/__tests__/loadBalancerTestHelpers.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+/// <reference lib="esnext.array" />
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
@@ -10,11 +14,11 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
  * - a REAL LoadBalancingProvider whose delegate implements a REAL
  *   projectPromptEnvelope whose estimate (contents tokens + serialized
  *   tool-schema tokens) CHANGES after contents reduction;
- * - the REAL enforcement machinery (real ChatSession CompressionHandler →
- *   real ProviderContentEnforcer → real TopDownTruncationStrategy over a
- *   real HistoryService) attached as the LB compression callback;
- * - the projection-aware seam estimator from
- *   preparePromptEnvelopeAfterEnforcement (issue #3507 AC2).
+ * - the REAL enforcement machinery (real CompressionHandler source ladder →
+ *   real TopDownTruncationStrategy over a real HistoryService) attached as
+ *   the LB compression callback;
+ * - the projection-aware seam estimator built on prepareAtSendSeam
+ *   (issue #3507 AC2).
  *
  * Covered outcomes (conformance evidence for #2643/#2644):
  * - constant tool-schema overhead: the guard trips on the envelope estimate,
@@ -28,11 +32,13 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
  *   BEFORE the provider call, so the LB guard callback is never invoked.
  */
 
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
+
 import {
   LoadBalancerContextLimitError,
   LoadBalancingProvider,
@@ -45,18 +51,16 @@ import type {
   IProvider,
   ProviderToolset,
 } from '@vybestack/llxprt-code-providers/IProvider.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import {
-  buildMockContentGenerator,
-  buildRuntimeContext,
-} from '../../core/__tests__/chatSession-density-helpers.js';
-import { ChatSession } from '../../core/chatSession.js';
-import { chatSessionPorts } from '../../core/chatSessionPorts.js';
-import { preparePromptEnvelopeAfterEnforcement } from '../../core/promptEnvelopeSendSeam.js';
-import { makeLoadBalancerInvocation } from '../../../../providers/src/__tests__/loadBalancerTestHelpers.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
+import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
+import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
+import {
+  buildHandlerHarness,
+  type HandlerHarness,
+} from './support/handler-harness.js';
+import { prepareAtSendSeam } from '../../core/promptEnvelopeSendSeam.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
+import type { ProviderRequestSource } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
 const MODEL = 'test-model';
 const HISTORY_MESSAGES = 14;
@@ -110,6 +114,11 @@ function serializedToolTokens(tools: ProviderToolset | undefined): number {
   return Math.ceil(JSON.stringify(tools).length / 4);
 }
 
+/** Re-open eager rows as the provider-facing history stream (issue #854). */
+function toStream(rows: readonly IContent[]): ProviderRequestSource {
+  return callerOwnedRawProviderSource(rows);
+}
+
 /** Tokenizer factory whose prompt estimation defers to the projection. */
 const tokenizerFactory: RuntimeTokenizerFactory = {
   getTokenizer: () => undefined,
@@ -154,21 +163,26 @@ function createProjectingDelegate(options: {
     getModels: () => Promise.resolve([]),
     getDefaultModel: () => MODEL,
     async *generateChatCompletion(
-      request: GenerateChatOptions | IContent[],
+      request: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncGenerator<IContent> {
-      transport.payloads.push(
-        structuredClone(Array.isArray(request) ? request : request.contents),
-      );
+      const rows: IContent[] = [];
+      for await (const content of Symbol.asyncIterator in request
+        ? request
+        : request.contents) {
+        rows.push(content);
+      }
+      transport.payloads.push(structuredClone(rows));
       yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
     },
     async projectPromptEnvelope(
       request: GenerateChatOptions,
     ): Promise<PromptEnvelopeProjection> {
+      const rows: IContent[] = [];
+      for await (const content of request.contents) {
+        rows.push(content);
+      }
       const contentsTokens =
-        await options.historyService.estimateTokensForContents(
-          request.contents,
-          MODEL,
-        );
+        await options.historyService.estimateTokensForContents(rows, MODEL);
       const toolTokens = serializedToolTokens(request.tools);
       baselineContentsTokens ??= contentsTokens;
       const gapGrowth =
@@ -264,11 +278,11 @@ function recordGuardCallback(lb: LoadBalancingProvider): GuardCallbackRecorder {
         return;
       }
       const inner = callback;
-      original(async (contents, guard) => {
+      original(async (guard) => {
         if (guard !== undefined) {
           recorder.guardCalls.push(guard);
         }
-        return inner(contents, guard);
+        return inner(guard);
       });
     },
   );
@@ -286,37 +300,21 @@ async function consume(
 }
 
 /**
- * The #3499 session shape: real history, real ChatSession handler with the
+ * The #3499 session shape: real history, real CompressionHandler with the
  * real enforcement ladder, performCompression pinned to NOOP so the
  * truncation stage does the reduction deterministically.
  */
 function createEnforcementSession(options: {
   historyService: HistoryService;
   contextLimit: number;
-}): { handler: ChatSession['compressionHandler'] } {
+}): HandlerHarness {
   const runtimeContext = buildRuntimeContext(options.historyService, {
     contextLimit: options.contextLimit,
     compressionThreshold: 0.8,
   });
-  const chat = new ChatSession(
-    chatSessionPorts(runtimeContext),
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    buildMockContentGenerator(),
-    {},
-    [],
-  );
-  const handler = chat['compressionHandler'];
-  vi.spyOn(handler, 'performCompression').mockImplementation(async () => {
-    await Promise.resolve();
-    return PerformCompressionResult.NOOP;
+  return buildHandlerHarness(options.historyService, runtimeContext, {
+    realDiskFallback: true,
   });
-  return { handler };
 }
 
 describe('LB guard projection parity through real pre-send enforcement (issue #3507)', () => {
@@ -334,222 +332,262 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
         'Load balancer fixture cleanup failed',
       );
   });
-  beforeEach(() => {
-    vi.clearAllMocks();
+  beforeEach(facadeCallback0);
+
+  it(
+    'constant tool-schema overhead: guard trips on the envelope estimate, the real callback reduces to the guard target, the re-check accepts, and the send succeeds',
+    facadeCallback1,
+  );
+
+  it(
+    'growing envelope-vs-contents gap: the callback satisfies its own target but the LB re-check fails safely — LoadBalancerContextLimitError and no oversize request reaches the delegate',
+    facadeCallback2,
+  );
+
+  it(
+    'AC2 parity: contents-only under the limit but envelope over it — the seam estimator reduces BEFORE the provider call and the LB guard callback is never invoked',
+    facadeCallback3,
+  );
+});
+
+function facadeCallback0(): void {
+  vi.clearAllMocks();
+}
+
+async function facadeCallback1(): Promise<void> {
+  const historyService = new HistoryService();
+  seedHistory(historyService);
+  await historyService.waitForTokenUpdates();
+  const pending = makePending();
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+  const contentsOnlyTokens = await historyService.estimateTokensForContents(
+    contents,
+    MODEL,
+  );
+  const toolTokens = serializedToolTokens(TOOLSET);
+  const contextLimit = contentsOnlyTokens + toolTokens - 900;
+
+  const delegate = createProjectingDelegate({
+    name: 'constant-overhead-delegate',
+    historyService,
+  });
+  const lb = createLoadBalancer({
+    contextLimit,
+    delegate: delegate.provider,
+  });
+  const recorder = recordGuardCallback(lb);
+  const session = createEnforcementSession({
+    historyService,
+    contextLimit: GUARD_CASE_SESSION_LIMIT,
   });
 
-  it('constant tool-schema overhead: guard trips on the envelope estimate, the real callback reduces to the guard target, the re-check accepts, and the send succeeds', async () => {
-    const historyService = new HistoryService();
-    seedHistory(historyService);
-    await historyService.waitForTokenUpdates();
-    const pending = makePending();
-    const contents = historyService.getCuratedForProvider([pending]);
-    const contentsOnlyTokens = await historyService.estimateTokensForContents(
-      contents,
-      MODEL,
+  // Precondition: the envelope estimate (tools included) is over the LB
+  // limit even though the reduction target below is reachable.
+  const projection = await lb.projectPromptEnvelope({
+    contents: toStream(contents),
+    tools: TOOLSET,
+    invocation: makeLoadBalancerInvocation(),
+  });
+  expect(projection).toBeDefined();
+  const envelopeTokens = await projection!.legacyEstimate();
+  expect(envelopeTokens).toBe(contentsOnlyTokens + toolTokens);
+  expect(envelopeTokens).toBeGreaterThan(contextLimit);
+
+  let chunks: IContent[] = [];
+  await enforceProviderSourceForTest(
+    session.handler,
+    historyService,
+    [pending],
+    'prompt-3507-constant',
+    lb,
+    undefined,
+    true,
+    async () => {
+      chunks = await consume(
+        lb.generateChatCompletion({
+          contents: toStream(contents),
+          tools: TOOLSET,
+          invocation: makeLoadBalancerInvocation(),
+        }),
+      );
+    },
+  );
+
+  // The guard handed its real estimate and limit to the real callback.
+  expect(recorder.guardCalls).toStrictEqual([
+    { estimatedTokens: envelopeTokens, contextLimit },
+  ]);
+  expect(chunks.length).toBeGreaterThan(0);
+  expect(delegate.transport.payloads).toHaveLength(1);
+  const sentTokens = await historyService.estimateTokensForContents(
+    delegate.transport.payloads[0],
+    MODEL,
+  );
+  // Reduced to the guard target: contents fit contextLimit minus the
+  // constant tool overhead, and strictly less than the original payload.
+  expect(sentTokens).toBeLessThanOrEqual(contextLimit - toolTokens);
+  expect(sentTokens).toBeLessThan(contentsOnlyTokens);
+}
+
+async function facadeCallback2(): Promise<void> {
+  const historyService = new HistoryService();
+  seedHistory(historyService);
+  await historyService.waitForTokenUpdates();
+  const pending = makePending();
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+  const contentsOnlyTokens = await historyService.estimateTokensForContents(
+    contents,
+    MODEL,
+  );
+  const toolTokens = serializedToolTokens(TOOLSET);
+  const contextLimit = contentsOnlyTokens + toolTokens - 900;
+
+  const delegate = createProjectingDelegate({
+    name: 'growing-gap-delegate',
+    historyService,
+    growGap: true,
+  });
+  const lb = createLoadBalancer({
+    contextLimit,
+    delegate: delegate.provider,
+  });
+  const recorder = recordGuardCallback(lb);
+  const historyTokensBefore = historyService.getTotalTokens();
+  const session = createEnforcementSession({
+    historyService,
+    contextLimit: GUARD_CASE_SESSION_LIMIT,
+  });
+
+  let thrown: unknown = undefined;
+  const chunks: IContent[] = [];
+  await enforceProviderSourceForTest(
+    session.handler,
+    historyService,
+    [pending],
+    'prompt-3507-growing-gap',
+    lb,
+    undefined,
+    true,
+    async () => {
+      try {
+        for await (const chunk of lb.generateChatCompletion({
+          contents: toStream(contents),
+          tools: TOOLSET,
+          invocation: makeLoadBalancerInvocation(),
+        })) {
+          chunks.push(chunk);
+        }
+      } catch (error: unknown) {
+        thrown = error;
+      }
+    },
+  );
+
+  // The real callback ran and reduced history to satisfy its internal
+  // target (guard facts consumed, history shrank)...
+  expect(recorder.guardCalls).toHaveLength(1);
+  expect(recorder.guardCalls[0]?.contextLimit).toBe(contextLimit);
+  expect(historyService.getTotalTokens()).toBeLessThan(historyTokensBefore);
+  // ...yet the delegate's post-reduction envelope estimate grew past the
+  // limit, so the LB re-check pins the fail-safe outcome: the structured
+  // context-limit error, zero chunks, and the oversize payload never sent.
+  expect(thrown).toBeInstanceOf(LoadBalancerContextLimitError);
+  expect(chunks).toHaveLength(0);
+  expect(delegate.transport.payloads).toHaveLength(0);
+}
+
+async function facadeCallback3(): Promise<void> {
+  const historyService = new HistoryService();
+  seedHistory(historyService);
+  await historyService.waitForTokenUpdates();
+  const pending = makePending();
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+  const contentsOnlyTokens = await historyService.estimateTokensForContents(
+    contents,
+    MODEL,
+  );
+  const toolTokens = serializedToolTokens(TOOLSET);
+  // Session limit mirrors production (the LB's effective context limit):
+  // contents-only sits under the enforcement threshold while the envelope
+  // (tool schemas rendered) is over it.
+  const contextLimit = contentsOnlyTokens + toolTokens + 600;
+  const marginAdjustedLimit = computeMarginAdjustedLimit(contextLimit);
+  expect(contentsOnlyTokens).toBeLessThanOrEqual(marginAdjustedLimit);
+  expect(contentsOnlyTokens + toolTokens).toBeGreaterThan(marginAdjustedLimit);
+
+  const delegate = createProjectingDelegate({
+    name: 'parity-delegate',
+    historyService,
+  });
+  const lb = createLoadBalancer({
+    contextLimit,
+    delegate: delegate.provider,
+  });
+  const recorder = recordGuardCallback(lb);
+  const session = createEnforcementSession({
+    historyService,
+    contextLimit,
+  });
+
+  // Projection-aware candidate estimator: the provider's finalized envelope
+  // (tool schemas included), falling back to the contents-only estimate.
+  const estimateCandidate = async (candidate: IContent[]): Promise<number> => {
+    const prepared = await prepareAtSendSeam(
+      lb as unknown as Parameters<typeof prepareAtSendSeam>[0],
+      {
+        contents: toStream(candidate),
+        tools: TOOLSET,
+        invocation: makeLoadBalancerInvocation(),
+      },
+      tokenizerFactory,
     );
-    const toolTokens = serializedToolTokens(TOOLSET);
-    const contextLimit = contentsOnlyTokens + toolTokens - 900;
+    try {
+      return (
+        prepared.estimate?.estimatedPromptTokens ??
+        (await historyService.estimateTokensForContents(candidate, MODEL))
+      );
+    } finally {
+      await prepared.releaseIfUnsent?.();
+    }
+  };
+  const reduced = await enforceProviderSourceForTest(
+    session.handler,
+    historyService,
+    [pending],
+    'prompt-3507-parity',
+    lb as unknown as RuntimeProvider,
+    estimateCandidate,
+  );
 
-    const delegate = createProjectingDelegate({
-      name: 'constant-overhead-delegate',
-      historyService,
-    });
-    const lb = createLoadBalancer({
-      contextLimit,
-      delegate: delegate.provider,
-    });
-    const recorder = recordGuardCallback(lb);
-    const { handler } = createEnforcementSession({
-      historyService,
-      contextLimit: GUARD_CASE_SESSION_LIMIT,
-    });
+  const reducedTokens = await historyService.estimateTokensForContents(
+    reduced,
+    MODEL,
+  );
+  expect(reducedTokens).toBeLessThan(contentsOnlyTokens);
 
-    await handler.enforceProviderContents(
-      { contents, pendingContents: [pending] },
-      'prompt-3507-constant',
-      lb,
-    );
-
-    // Precondition: the envelope estimate (tools included) is over the LB
-    // limit even though the reduction target below is reachable.
-    const projection = await lb.projectPromptEnvelope({
-      contents,
+  const chunks = await consume(
+    lb.generateChatCompletion({
+      contents: toStream(reduced),
       tools: TOOLSET,
       invocation: makeLoadBalancerInvocation(),
-    });
-    expect(projection).toBeDefined();
-    const envelopeTokens = await projection!.legacyEstimate();
-    expect(envelopeTokens).toBe(contentsOnlyTokens + toolTokens);
-    expect(envelopeTokens).toBeGreaterThan(contextLimit);
+    }),
+  );
 
-    const chunks = await consume(
-      lb.generateChatCompletion({
-        contents,
-        tools: TOOLSET,
-        invocation: makeLoadBalancerInvocation(),
-      }),
-    );
-
-    // The guard handed its real estimate and limit to the real callback.
-    expect(recorder.guardCalls).toStrictEqual([
-      { estimatedTokens: envelopeTokens, contextLimit },
-    ]);
-    expect(chunks.length).toBeGreaterThan(0);
-    expect(delegate.transport.payloads).toHaveLength(1);
-    const sentTokens = await historyService.estimateTokensForContents(
-      delegate.transport.payloads[0],
-      MODEL,
-    );
-    // Reduced to the guard target: contents fit contextLimit minus the
-    // constant tool overhead, and strictly less than the original payload.
-    expect(sentTokens).toBeLessThanOrEqual(contextLimit - toolTokens);
-    expect(sentTokens).toBeLessThan(contentsOnlyTokens);
-  });
-
-  it('growing envelope-vs-contents gap: the callback satisfies its own target but the LB re-check fails safely — LoadBalancerContextLimitError and no oversize request reaches the delegate', async () => {
-    const historyService = new HistoryService();
-    seedHistory(historyService);
-    await historyService.waitForTokenUpdates();
-    const pending = makePending();
-    const contents = historyService.getCuratedForProvider([pending]);
-    const contentsOnlyTokens = await historyService.estimateTokensForContents(
-      contents,
-      MODEL,
-    );
-    const toolTokens = serializedToolTokens(TOOLSET);
-    const contextLimit = contentsOnlyTokens + toolTokens - 900;
-
-    const delegate = createProjectingDelegate({
-      name: 'growing-gap-delegate',
-      historyService,
-      growGap: true,
-    });
-    const lb = createLoadBalancer({
-      contextLimit,
-      delegate: delegate.provider,
-    });
-    const recorder = recordGuardCallback(lb);
-    const historyTokensBefore = historyService.getTotalTokens();
-    const { handler } = createEnforcementSession({
-      historyService,
-      contextLimit: GUARD_CASE_SESSION_LIMIT,
-    });
-
-    await handler.enforceProviderContents(
-      { contents, pendingContents: [pending] },
-      'prompt-3507-growing-gap',
-      lb,
-    );
-
-    let thrown: unknown = undefined;
-    const chunks: IContent[] = [];
-    try {
-      for await (const chunk of lb.generateChatCompletion({
-        contents,
-        tools: TOOLSET,
-        invocation: makeLoadBalancerInvocation(),
-      })) {
-        chunks.push(chunk);
-      }
-    } catch (error: unknown) {
-      thrown = error;
-    }
-
-    // The real callback ran and reduced history to satisfy its internal
-    // target (guard facts consumed, history shrank)...
-    expect(recorder.guardCalls).toHaveLength(1);
-    expect(recorder.guardCalls[0]?.contextLimit).toBe(contextLimit);
-    expect(historyService.getTotalTokens()).toBeLessThan(historyTokensBefore);
-    // ...yet the delegate's post-reduction envelope estimate grew past the
-    // limit, so the LB re-check pins the fail-safe outcome: the structured
-    // context-limit error, zero chunks, and the oversize payload never sent.
-    expect(thrown).toBeInstanceOf(LoadBalancerContextLimitError);
-    expect(chunks).toHaveLength(0);
-    expect(delegate.transport.payloads).toHaveLength(0);
-  });
-
-  it('AC2 parity: contents-only under the limit but envelope over it — the seam estimator reduces BEFORE the provider call and the LB guard callback is never invoked', async () => {
-    const historyService = new HistoryService();
-    seedHistory(historyService);
-    await historyService.waitForTokenUpdates();
-    const pending = makePending();
-    const contents = historyService.getCuratedForProvider([pending]);
-    const contentsOnlyTokens = await historyService.estimateTokensForContents(
-      contents,
-      MODEL,
-    );
-    const toolTokens = serializedToolTokens(TOOLSET);
-    // Session limit mirrors production (the LB's effective context limit):
-    // contents-only sits under the enforcement threshold while the envelope
-    // (tool schemas rendered) is over it.
-    const contextLimit = contentsOnlyTokens + toolTokens + 600;
-    const marginAdjustedLimit = computeMarginAdjustedLimit(contextLimit);
-    expect(contentsOnlyTokens).toBeLessThanOrEqual(marginAdjustedLimit);
-    expect(contentsOnlyTokens + toolTokens).toBeGreaterThan(
-      marginAdjustedLimit,
-    );
-
-    const delegate = createProjectingDelegate({
-      name: 'parity-delegate',
-      historyService,
-    });
-    const lb = createLoadBalancer({
-      contextLimit,
-      delegate: delegate.provider,
-    });
-    const recorder = recordGuardCallback(lb);
-    const { handler } = createEnforcementSession({
-      historyService,
-      contextLimit,
-    });
-
-    const { contents: reduced } = await preparePromptEnvelopeAfterEnforcement({
-      tokenizerFactory,
-      provider: lb as unknown as Parameters<
-        typeof preparePromptEnvelopeAfterEnforcement
-      >[0]['provider'],
-      contents,
-      buildOptions: (candidate) => ({
-        contents: candidate,
-        tools: TOOLSET,
-        invocation: makeLoadBalancerInvocation(),
-      }),
-      enforce: (candidate, estimate) =>
-        handler.enforceProviderContents(
-          { contents: candidate, pendingContents: [pending] },
-          'prompt-3507-parity',
-          lb,
-          estimate,
-        ),
-      fallbackEstimate: (candidate) =>
-        historyService.estimateTokensForContents(candidate, MODEL),
-    });
-
-    const reducedTokens = await historyService.estimateTokensForContents(
-      reduced,
-      MODEL,
-    );
-    expect(reducedTokens).toBeLessThan(contentsOnlyTokens);
-
-    const chunks = await consume(
-      lb.generateChatCompletion({
-        contents: reduced,
-        tools: TOOLSET,
-        invocation: makeLoadBalancerInvocation(),
-      }),
-    );
-
-    // The ordinary pre-send ladder already brought the envelope under the
-    // limit, so the guard never needed its callback, and the reduced payload
-    // is what reached the delegate.
-    expect(recorder.guardCalls).toHaveLength(0);
-    expect(chunks.length).toBeGreaterThan(0);
-    expect(delegate.transport.payloads).toHaveLength(1);
-    const sentTokens = await historyService.estimateTokensForContents(
-      delegate.transport.payloads[0],
-      MODEL,
-    );
-    expect(sentTokens).toBe(reducedTokens);
-  });
-});
+  // The ordinary pre-send ladder already brought the envelope under the
+  // limit, so the guard never needed its callback, and the reduced payload
+  // is what reached the delegate.
+  expect(recorder.guardCalls).toHaveLength(0);
+  expect(chunks.length).toBeGreaterThan(0);
+  expect(delegate.transport.payloads).toHaveLength(1);
+  const sentTokens = await historyService.estimateTokensForContents(
+    delegate.transport.payloads[0],
+    MODEL,
+  );
+  expect(sentTokens).toBe(reducedTokens);
+}

@@ -10,21 +10,19 @@ import type { PerformResumeActionReturn } from './ui/commands/types.js';
  * SPDX-License-Identifier: Apache-2.0
  */
 import {
-  SessionPersistenceService,
-  CheckpointService,
+  createCheckpointService,
   SessionDiscovery,
   SessionLockManager,
   deleteSession,
   getProjectHash,
   importSessionMediaPackage,
   type ContinueTarget,
-  type SessionRecordingService,
-  type SessionPersistenceServiceOptions,
+  type SessionRecordingPort,
+  type JournalReadCounters,
   type LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
 
 export interface CliSessionPersistencePort {
-  forRecording(sessionId: string): SessionPersistenceService;
   listBrowserTargetsDetailed: CliSessionPersistence['listBrowserTargetsDetailed'];
   resumeRecording: CliSessionPersistence['resumeRecording'];
   createCheckpoint: CliSessionPersistence['createCheckpoint'];
@@ -34,7 +32,6 @@ export interface CliSessionPersistencePort {
 }
 
 export class CliSessionPersistence implements CliSessionPersistencePort {
-  private readonly journals = new Map<string, SessionPersistenceService>();
   private closed = false;
 
   constructor(
@@ -42,7 +39,11 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
       readonly projectRoot: string;
       readonly chatsDir: string;
     },
-    private readonly options: SessionPersistenceServiceOptions,
+    private readonly options: {
+      readonly mediaStore?: LocalMediaStore;
+      readonly maxQueueBytes?: number;
+      readonly counters?: JournalReadCounters;
+    },
   ) {}
 
   get mediaStore(): LocalMediaStore | undefined {
@@ -50,23 +51,9 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
     return this.options.mediaStore;
   }
 
-  forRecording(sessionId: string): SessionPersistenceService {
-    if (this.closed) throw new Error('CLI session persistence is closed');
-    let journal = this.journals.get(sessionId);
-    if (journal === undefined) {
-      journal = new SessionPersistenceService(
-        this.paths,
-        sessionId,
-        this.options,
-      );
-      this.journals.set(sessionId, journal);
-    }
-    return journal;
-  }
-
   readonly resumeRecording = async (
     action: PerformResumeActionReturn,
-    context: Omit<ResumeContext, 'mediaStore' | 'persistenceFactory'>,
+    context: Omit<ResumeContext, 'mediaStore'>,
     resume: typeof performResume = performResume,
   ): Promise<PerformResumeResult> => {
     this.assertOpen();
@@ -75,7 +62,8 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
     const ownedContext: ResumeContext = {
       ...context,
       mediaStore,
-      persistenceFactory: (id) => this.forRecording(id),
+      maxQueueBytes: this.options.maxQueueBytes,
+      counters: this.options.counters,
     };
     if (action.sessionPackage === undefined)
       return resume(action.sessionRef, ownedContext);
@@ -102,12 +90,12 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
   };
 
   readonly createCheckpoint = async (
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     name: string,
     overwrite: boolean,
   ): Promise<void> => {
     this.assertOpen();
-    await new CheckpointService(this.options.mediaStore).createCheckpoint(
+    await createCheckpointService().createCheckpoint(
       recording,
       recording.getProjectHash(),
       name,
@@ -117,11 +105,11 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
 
   readonly deleteBrowserTarget = async (
     target: ContinueTarget,
-    recording: SessionRecordingService | null,
+    recording: SessionRecordingPort | null,
   ): Promise<void> => {
     this.assertOpen();
     if (target.kind === 'checkpoint') {
-      const checkpoints = new CheckpointService(this.options.mediaStore);
+      const checkpoints = createCheckpointService();
       if (recording?.getSessionId() === target.source.sessionId) {
         await checkpoints.deleteCheckpoint(
           recording,
@@ -155,13 +143,13 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
   };
 
   readonly renameCheckpoint = async (
-    recording: SessionRecordingService | null,
+    recording: SessionRecordingPort | null,
     target: Extract<ContinueTarget, { kind: 'checkpoint' }>,
     name: string,
     overwrite: boolean,
   ): Promise<void> => {
     this.assertOpen();
-    const checkpoints = new CheckpointService(this.options.mediaStore);
+    const checkpoints = createCheckpointService();
     if (recording?.getSessionId() === target.source.sessionId) {
       await checkpoints.renameCheckpoint(
         recording,
@@ -184,12 +172,12 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
   };
 
   readonly nameSession = async (
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     name: string,
     overwrite: boolean,
   ): Promise<void> => {
     this.assertOpen();
-    await new CheckpointService(this.options.mediaStore).setSessionName(
+    await createCheckpointService().setSessionName(
       recording,
       recording.getProjectHash(),
       name,
@@ -204,6 +192,5 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
   close(): void {
     if (this.closed) return;
     this.closed = true;
-    this.journals.clear();
   }
 }

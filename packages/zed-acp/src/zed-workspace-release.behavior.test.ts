@@ -1,3 +1,5 @@
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -7,11 +9,7 @@ import { describe, expect, it, vi } from 'bun:test';
 import { readFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  Config,
-  getProjectHash,
-  SessionRecordingService,
-} from '@vybestack/llxprt-code-core';
+import { Config, getProjectHash } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
@@ -24,7 +22,7 @@ async function materializeRecording(
   config: Config,
   sessionId: string,
 ): Promise<string> {
-  const recording = new SessionRecordingService({
+  const recording = JournalRecordingService.create({
     sessionId,
     projectHash: getProjectHash(config.getProjectRoot()),
     chatsDir: config.projectChatsDir,
@@ -33,21 +31,25 @@ async function materializeRecording(
     provider: 'fake',
     model: 'recorded-workspace-model',
   });
+  const history = new HistoryService({ recording });
   try {
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [
-        {
-          type: 'text',
-          text: 'Physical recorded session retained before release',
-        },
-      ],
-    });
+    await history.addBatch([
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: 'Physical recorded session retained before release',
+          },
+        ],
+      },
+    ]);
     await recording.flush();
     const file = recording.getFilePath();
     if (file === null) throw new Error('Recording did not materialize');
     return file;
   } finally {
+    await history.dispose();
     await recording.dispose();
   }
 }

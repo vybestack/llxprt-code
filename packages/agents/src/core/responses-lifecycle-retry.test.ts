@@ -5,6 +5,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { waitForCondition } from '../test-utils/eventLoop.js';
 import { z } from 'zod';
@@ -192,10 +193,10 @@ describe('Responses lifecycle recovery through real provider, parser, ChatSessio
       expect(turn.pendingToolCalls.map((call) => call.callId)).toStrictEqual(
         replacementTool ? ['successful-B'] : [],
       );
-      expect(JSON.stringify(history.getAll())).not.toContain('abandoned');
+      const rows = await collectRawHistory(history);
+      expect(JSON.stringify(rows)).not.toContain('abandoned');
       expect(
-        history
-          .getAll()
+        rows
           .filter((content) => content.speaker === 'ai')
           .map((content) =>
             content.blocks
@@ -204,7 +205,7 @@ describe('Responses lifecycle recovery through real provider, parser, ChatSessio
           ),
       ).toStrictEqual(['earlier committed answer', 'successful answer']);
       expect(
-        history.getAll().filter((content) => content.speaker === 'human'),
+        rows.filter((content) => content.speaker === 'human'),
       ).toHaveLength(2);
       expect(httpRequests()).toBe(0);
     });
@@ -228,7 +229,9 @@ describe('Responses lifecycle recovery through real provider, parser, ChatSessio
       true,
     );
     expect(
-      history.getAll().filter((content) => content.speaker === 'ai'),
+      (await collectRawHistory(history)).filter(
+        (content) => content.speaker === 'ai',
+      ),
     ).toHaveLength(0);
     expect(httpRequests()).toBe(0);
   });

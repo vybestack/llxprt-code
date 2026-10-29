@@ -6,6 +6,17 @@ import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
  */
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
+/** Throws every rejection among the settled results as one aggregate; does nothing when all fulfilled. */
+export function throwSettledFailures(
+  results: ReadonlyArray<PromiseSettledResult<unknown>>,
+  message: string,
+): void {
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
+  if (failures.length > 0) throw new AggregateError(failures, message);
+}
+
 export async function disposeClientAndFiles(
   client: Pick<AgentClientContract, 'dispose'>,
   releaseFiles: () => Promise<void>,

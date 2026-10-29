@@ -4,24 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import type { Part, Schema } from './geminiWireTypes.js';
+import type { Schema } from './geminiWireTypes.js';
 import { SchemaType } from './geminiWireTypes.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
-import { convertHistoryToGeminiFormat } from './GeminiMessageConverter.js';
-import {
-  ensureActiveLoopHasThoughtSignatures,
-  stripThoughtsFromHistory,
-} from './thoughtSignatures.js';
 import {
   cleanGeminiSchema,
   isMissingGeminiSchema,
 } from './geminiSchemaHelpers.js';
-import {
-  type ReasoningConfig,
-  type StripPolicy,
-} from './geminiReasoningConfig.js';
+import { type ReasoningConfig } from './geminiReasoningConfig.js';
 import { applyGeminiReasoningTranslation } from './geminiReasoningTranslation.js';
 
 export interface GeminiToolsResult {
@@ -135,37 +126,4 @@ export function buildRequestConfig(
     logger,
   });
   return requestConfig;
-}
-
-/** Strip thoughts and apply thought signatures. */
-export function prepareContentsWithSignatures(
-  contents: Array<{ role: string; parts: Part[] }>,
-  stripFromContext: StripPolicy,
-): Array<{ role: string; parts: Part[] }> {
-  const stripped = stripThoughtsFromHistory(contents, stripFromContext).map(
-    (entry) => ({
-      role: entry.role,
-      parts: entry.parts ?? [],
-    }),
-  );
-  return ensureActiveLoopHasThoughtSignatures(stripped).map((entry) => ({
-    role: entry.role,
-    parts: entry.parts ?? [],
-  }));
-}
-
-/** Convert IContent history to Gemini format. */
-export function convertToGeminiContents(
-  content: NormalizedGenerateChatOptions['contents'],
-  currentModel: string,
-  configForMessages: OutputLimitConfig | undefined,
-): Array<{ role: string; parts: Part[] }> {
-  return convertHistoryToGeminiFormat(
-    content,
-    currentModel,
-    configForMessages,
-  ).map((entry) => ({
-    role: entry.role,
-    parts: entry.parts,
-  }));
 }

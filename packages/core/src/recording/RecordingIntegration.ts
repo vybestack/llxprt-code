@@ -14,184 +14,142 @@
  * limitations under the License.
  */
 
-import { type IContent } from '../services/history/IContent.js';
+import type { HistoryService } from '../services/history/HistoryService.js';
+
+import type { SessionRecordingPort } from './recordingPort.js';
+
 import {
-  type HistoryBatchPublication,
-  type HistoryService,
-  type PreparedHistoryBatchEffect,
-} from '../services/history/HistoryService.js';
-import {
-  type PreparedContentBatch,
-  type SessionRecordingService,
-} from './SessionRecordingService.js';
-import type {
-  PreparedPersistenceSave,
-  SessionPersistenceService,
-} from '../storage/SessionPersistenceService.js';
+  RecordingFailureStore,
+  RecordingFailureNotice,
+} from './recording-failure-report.js';
 
-/**
- * Two independent 32-bit multiplicative hashes of `value`, concatenated in
- * base-36 to give a 64-bit comparison key.
- *
- * The low lane is FNV-1a (offset basis 0x811c9dc5, prime 0x01000193). The high
- * lane uses the same xor-then-multiply shape with a different seed and a
- * different odd multiplier (the murmur3 finalizer constant 0x85ebca6b) so the
- * two lanes do not move together.
- *
- * This shrinks a content payload to a comparison key and is never a security
- * boundary. A collision would additionally have to land on the same chronology
- * `seq` before it could suppress anything.
- */
-function fingerprint(value: string): string {
-  let low = 0x811c9dc5;
-  let high = 0x01000193;
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index);
-    low = Math.imul(low ^ code, 0x01000193);
-    high = Math.imul(high ^ code, 0x85ebca6b);
-  }
-  return `${(low >>> 0).toString(36)}.${(high >>> 0).toString(36)}`;
+interface PersistenceOutcome {
+  readonly failed: boolean;
+  readonly cause?: WeakRef<object>;
 }
 
 /**
- * The identity of a content record for duplicate detection: its chronology
- * `seq` paired with a fingerprint of the exact payload.
- *
- * Returns `null` when the content carries no chronology marker. Such content
- * has no identity, so it is always recorded rather than risk suppressing
- * something that was never written.
- *
- * `seq` alone is NOT sufficient. It is unique only within one `HistoryService`
- * instance, `ChronologyStamper.inherit` deliberately gives a replacement entry
- * the replaced entry's marker, and `merge` can import entries from a foreign
- * chronology. Pairing it with the payload fingerprint means suppression can
- * only ever discard content byte-identical to a record already written.
- *
- * @issue #3132
- */
-function acceptsOrigin(
-  owner: object | undefined,
-  origin: object | undefined,
-): boolean {
-  return owner === undefined || origin === undefined || origin === owner;
-}
-
-function contentIdentity(content: IContent): string | null {
-  const seq = content.metadata?.chronology?.seq;
-  if (typeof seq !== 'number') {
-    return null;
-  }
-  return `${seq}:${fingerprint(
-    JSON.stringify({
-      ...content,
-      metadata: { ...content.metadata, turnId: undefined },
-    }),
-  )}`;
-}
-
-function unstampedContentIdentity(content: IContent): string {
-  return fingerprint(
-    JSON.stringify({
-      ...content,
-      metadata: {
-        ...content.metadata,
-        chronology: undefined,
-        turnId: undefined,
-      },
-    }),
-  );
-}
-
-/**
- * Bridges HistoryService events to SessionRecordingService.
+ * Owns history journal attachment and turn-boundary persistence.
  *
  * @plan PLAN-20260211-SESSIONRECORDING.P14
  * @requirement REQ-INT-001, REQ-INT-002, REQ-INT-003, REQ-INT-004, REQ-INT-005, REQ-INT-006, REQ-INT-007
  * @pseudocode recording-integration.md lines 30-104
  */
 export class RecordingIntegration {
-  private readonly recording: SessionRecordingService;
+  private readonly recording: SessionRecordingPort;
   private historySubscription: (() => void) | null = null;
-  private owner: object | undefined;
-  private compressionInProgress = false;
-  /**
-   * Identities of the content records this recording already contains.
-   *
-   * Several production paths rebuild history wholesale by calling
-   * `HistoryService.clear()` and then re-`add()`ing the retained entries. Each
-   * re-`add()` emits `contentAdded`, so without this set the rebuild appends a
-   * byte-identical copy of every retained entry to the session file, and
-   * `ReplayEngine` replays those copies into doubled history on resume.
-   *
-   * Scoped to the one `SessionRecordingService` this integration wraps, so it
-   * is never reset while that file is open. Bounded by the number of distinct
-   * content records written to the session.
-   *
-   * @issue #3132
-   */
-  private readonly recordedIdentities = new Set<string>();
-  private readonly unstampedSnapshot = new Map<number, string>();
   private disposed = false;
-  private readonly persistence: SessionPersistenceService | undefined;
   private readonly pendingPersistence = new Map<number, Promise<void>>();
-  private readonly pendingBatches = new Set<Promise<void>>();
-  private readonly persistenceFailures = new Map<number, unknown>();
+  private readonly persistenceFailures: RecordingFailureStore;
   private nextPersistenceGeneration = 0;
+  private reportingFailure: WeakRef<Error> | undefined;
+  private reportingFailed = false;
+  private disposalFailureCount = 0;
+  private disposalFirstFailureGeneration = Infinity;
+  private disposalFirstFailureCause: WeakRef<object> | undefined;
   private disposePromise: Promise<void> | undefined;
+  private journalHistory: HistoryService | undefined;
+  private subscriptionGeneration = 0;
+  private detachmentSettlement: Promise<void> = Promise.resolve();
+  private detachmentFailure: { error: unknown } | undefined;
+  private pendingDetachments = 0;
+  private attachmentSettlement: Promise<void> = Promise.resolve();
+  private attachmentOperation: Promise<void> = Promise.resolve();
+  private attachmentFailure: { error: unknown } | undefined;
 
-  constructor(
-    recording: SessionRecordingService,
-    persistence?: SessionPersistenceService,
-  ) {
-    this.recording = recording;
-    this.persistence = persistence;
+  private async settleAttachment(): Promise<void> {
+    await this.attachmentSettlement;
+    const failure = this.attachmentFailure;
+    this.attachmentFailure = undefined;
+    if (failure !== undefined) throw failure.error;
   }
 
-  private persist(historyService: HistoryService): void {
-    if (this.persistence === undefined) return;
+  private detach(history: HistoryService): void {
+    this.pendingDetachments += 1;
+    const operation = history
+      .detachJournal(this.recording)
+      .catch((error: unknown) => {
+        this.detachmentFailure = {
+          error:
+            this.detachmentFailure === undefined
+              ? error
+              : new AggregateError(
+                  [this.detachmentFailure.error, error],
+                  'Journal detachment failed',
+                ),
+        };
+      })
+      .finally(() => {
+        this.pendingDetachments -= 1;
+      });
+    this.detachmentSettlement = Promise.all([
+      this.detachmentSettlement,
+      operation,
+    ]).then(() => undefined);
+  }
+
+  private async settleDetachments(): Promise<void> {
+    await this.detachmentSettlement;
+    const failure = this.detachmentFailure;
+    this.detachmentFailure = undefined;
+    if (failure !== undefined) throw failure.error;
+  }
+
+  constructor(
+    recording: SessionRecordingPort,
+    failureReportDirectory?: string,
+  ) {
+    this.recording = recording;
+    this.persistenceFailures = new RecordingFailureStore(
+      failureReportDirectory,
+    );
+  }
+
+  private persistJournal(history: HistoryService): Promise<PersistenceOutcome> {
     const generation = ++this.nextPersistenceGeneration;
-    let save: Promise<void>;
-    try {
-      save = this.persistence.save([...historyService.getAll()]);
-    } catch (error: unknown) {
-      this.persistenceFailures.set(generation, error);
-      return;
-    }
-    const settled = save.then(
+    const save = (async () => {
+      await history.waitForCommit();
+      await this.recording.flush();
+      return { failed: false };
+    })().catch((error: unknown) => {
+      const cause =
+        (typeof error === 'object' && error !== null) ||
+        typeof error === 'function'
+          ? new WeakRef(error)
+          : undefined;
+      if (this.disposed) {
+        this.disposalFailureCount += 1;
+        if (generation < this.disposalFirstFailureGeneration) {
+          this.disposalFirstFailureGeneration = generation;
+          this.disposalFirstFailureCause = cause;
+        }
+      }
+      try {
+        this.persistenceFailures.record(generation, error);
+        return { failed: true, cause };
+      } catch (reportError: unknown) {
+        this.reportingFailed = true;
+        if (reportError instanceof Error)
+          this.reportingFailure = new WeakRef(reportError);
+        throw reportError;
+      }
+    });
+    const settlement = save.then(
       () => {
         this.pendingPersistence.delete(generation);
       },
-      (error: unknown) => {
-        this.persistenceFailures.set(generation, error);
+      () => {
         this.pendingPersistence.delete(generation);
       },
     );
-    this.pendingPersistence.set(generation, settled);
+    this.pendingPersistence.set(generation, settlement);
+    return save;
   }
 
   private async awaitPersistenceThrough(generation: number): Promise<void> {
-    const pending = [...this.pendingPersistence.entries()]
-      .filter(([pendingGeneration]) => pendingGeneration <= generation)
-      .map(([, operation]) => operation);
-    await Promise.all(pending);
-  }
-
-  private takePersistenceFailuresThrough(generation: number): unknown[] {
-    const failures: unknown[] = [];
-    for (const [failedGeneration, error] of [
-      ...this.persistenceFailures.entries(),
-    ].sort(([left], [right]) => left - right)) {
-      if (failedGeneration > generation) continue;
-      this.persistenceFailures.delete(failedGeneration);
-      const detail = error instanceof Error ? error.message : String(error);
-      failures.push(
-        new Error(
-          `Session persistence generation ${failedGeneration} failed: ${detail}`,
-          { cause: error },
-        ),
-      );
+    for (const [pendingGeneration, operation] of this.pendingPersistence) {
+      if (pendingGeneration <= generation) await operation;
     }
-    return failures;
   }
 
   private throwFailures(failures: readonly unknown[], message: string): void {
@@ -199,247 +157,66 @@ export class RecordingIntegration {
     if (failures.length > 1) throw new AggregateError(failures, message);
   }
 
-  private async prepareBatch(
-    publication: HistoryBatchPublication,
-  ): Promise<PreparedHistoryBatchEffect> {
-    let releaseBatch: () => void = () => undefined;
-    const pending = new Promise<void>((resolve) => {
-      releaseBatch = resolve;
-    });
-    this.pendingBatches.add(pending);
-    const release = (): void => {
-      this.pendingBatches.delete(pending);
-      releaseBatch();
-    };
-    try {
-      const effect = await this.prepareBatchEffect(publication);
-      return {
-        publish: () => effect.publish(),
-        rollback: async () => {
-          try {
-            await effect.rollback();
-          } finally {
-            release();
-          }
-        },
-        finalize: async () => {
-          await effect.finalize?.();
-          release();
-        },
-      };
-    } catch (error: unknown) {
-      release();
-      throw error;
-    }
-  }
-
-  private async prepareBatchEffect(
-    publication: HistoryBatchPublication,
-  ): Promise<PreparedHistoryBatchEffect> {
-    await this.recording.flush();
-    if (!this.recording.isActive()) {
-      throw new Error('Cannot publish history batch: recording is not active');
-    }
-
-    let persistence: PreparedPersistenceSave | undefined;
-    let recording: PreparedContentBatch<void | Promise<void>> | undefined;
-    let batchContents: readonly IContent[] = [];
-    try {
-      persistence = await this.persistence?.prepareSave(
-        publication.nextHistory,
-      );
-      if (!this.compressionInProgress) {
-        batchContents = publication.contents.filter(
-          (content) => !this.hasRecordedContent(content),
-        );
-        if (batchContents.length > 0) {
-          recording = this.recording.prepareContentBatch(
-            batchContents,
-            publication.recordingCompletion,
-          );
-        }
-      }
-    } catch (error: unknown) {
-      if (persistence === undefined) throw error;
-      try {
-        await persistence.rollback();
-      } catch (rollbackError: unknown) {
-        throw new AggregateError(
-          [error, rollbackError],
-          'History batch preparation and persistence rollback failed',
-        );
-      }
-      throw error;
-    }
-
-    return {
-      publish: async () => {
-        recording?.publish();
-        await persistence?.publish();
-        for (const content of batchContents) this.markRecordedContent(content);
-      },
-      rollback: async () => {
-        const failures: unknown[] = [];
-        try {
-          recording?.rollback();
-        } catch (error: unknown) {
-          failures.push(error);
-        }
-        try {
-          await persistence?.rollback();
-        } catch (error: unknown) {
-          failures.push(error);
-        }
-        if (failures.length === 1) throw failures[0];
-        if (failures.length > 1) {
-          throw new AggregateError(failures, 'History batch rollback failed');
-        }
-      },
-      finalize: async () => {
-        await persistence?.finalize();
-        await recording?.finalize();
-      },
-    };
-  }
-
   /**
    * @plan PLAN-20260211-SESSIONRECORDING.P14
    * @requirement REQ-INT-001, REQ-INT-002
    * @pseudocode recording-integration.md lines 39-71
    */
-  subscribeToHistory(historyService: HistoryService, owner?: object): void {
+  subscribeToJournal(history: HistoryService, owner?: object): Promise<void> {
+    if (this.journalHistory === history) return this.attachmentOperation;
     this.unsubscribeFromHistory();
-    if (this.disposed) {
-      return;
-    }
-    this.owner = owner;
-
-    // Whatever is already in history at subscribe time is content this
-    // recording either already contains (resume and fork both attach to a
-    // seeded file) or has deliberately excluded, since content added before
-    // subscribing is never recorded. Either way a later rebuild must not
-    // append it (issue #3132).
-    this.rememberExistingHistory(historyService);
-
-    const onContentAdded = (content: IContent, origin?: object) => {
-      if (
-        this.disposed ||
-        this.compressionInProgress ||
-        !acceptsOrigin(owner, origin)
-      ) {
-        return;
-      }
-      if (this.hasRecordedContent(content)) return;
-      this.recording.recordContent(content);
-      this.markRecordedContent(content);
-      this.persist(historyService);
-    };
-
-    const onCompressionStarted = (origin?: object) => {
-      if (this.disposed || !acceptsOrigin(owner, origin)) return;
-      this.compressionInProgress = true;
-    };
-
-    const onCompressionLockReleased = (origin?: object) => {
-      if (this.disposed || !acceptsOrigin(owner, origin)) return;
-      this.compressionInProgress = false;
-    };
-
-    const onCompressionEnded = (
-      summary: IContent,
-      itemsCompressed: number,
-      origin?: object,
-    ) => {
-      if (this.disposed || !acceptsOrigin(owner, origin)) return;
-      this.compressionInProgress = false;
-      this.recording.recordCompressed(summary, itemsCompressed);
-      this.persist(historyService);
-    };
-
-    const unregisterBatchParticipant = historyService.registerBatchParticipant(
-      (publication) =>
-        acceptsOrigin(owner, publication.origin)
-          ? this.prepareBatch(publication)
-          : { publish: () => undefined, rollback: () => undefined },
-    );
-    this.historySubscription = () =>
-      this.removeSubscriptions([
-        unregisterBatchParticipant,
-        () => historyService.off('contentAdded', onContentAdded),
-        () => historyService.off('compressionStarted', onCompressionStarted),
-        () =>
-          historyService.off(
-            'compressionLockReleased',
-            onCompressionLockReleased,
-          ),
-        () => historyService.off('compressionEnded', onCompressionEnded),
-      ]);
-    try {
-      historyService.on('contentAdded', onContentAdded);
-      historyService.on('compressionStarted', onCompressionStarted);
-      historyService.on('compressionLockReleased', onCompressionLockReleased);
-      historyService.on('compressionEnded', onCompressionEnded);
-    } catch (error: unknown) {
-      try {
+    if (this.disposed) return Promise.resolve();
+    const generation = this.subscriptionGeneration;
+    this.journalHistory = history;
+    // The previous history must finish detaching before the new one starts its
+    // replace transaction, or its last writes land inside that transaction.
+    const operation =
+      this.pendingDetachments === 0 && this.detachmentFailure === undefined
+        ? this.attachJournal(history, owner, generation)
+        : this.settleDetachments().then(
+            () => this.attachJournal(history, owner, generation),
+            (error: unknown) => {
+              this.releaseSubscription(generation);
+              throw error;
+            },
+          );
+    this.attachmentOperation = operation;
+    this.attachmentSettlement = operation.catch((error: unknown) => {
+      if (generation === this.subscriptionGeneration)
         this.unsubscribeFromHistory();
-      } catch (cleanupError: unknown) {
-        throw new AggregateError(
-          [error, cleanupError],
-          'History subscription and cleanup failed',
-        );
-      }
+      this.attachmentFailure = { error };
+    });
+    return operation;
+  }
+
+  private releaseSubscription(generation: number): void {
+    if (generation !== this.subscriptionGeneration) return;
+    this.historySubscription?.();
+    this.historySubscription = null;
+    this.journalHistory = undefined;
+  }
+
+  private attachJournal(
+    history: HistoryService,
+    owner: object | undefined,
+    generation: number,
+  ): Promise<void> {
+    if (generation !== this.subscriptionGeneration) return Promise.resolve();
+    try {
+      return history.attachJournal(
+        this.recording,
+        true,
+        () => {
+          if (generation !== this.subscriptionGeneration) return;
+          this.historySubscription = history.onJournalRetired(() => {
+            this.unsubscribeFromHistory();
+          });
+        },
+        owner,
+      );
+    } catch (error) {
+      this.releaseSubscription(generation);
       throw error;
-    }
-  }
-
-  private removeSubscriptions(removals: ReadonlyArray<() => void>): void {
-    const failures: unknown[] = [];
-    for (const remove of removals) {
-      try {
-        remove();
-      } catch (error: unknown) {
-        failures.push(error);
-      }
-    }
-    this.throwFailures(failures, 'History subscription cleanup failed');
-  }
-
-  /**
-   * Seed {@link recordedIdentities} from the history that is already present
-   * on the service being subscribed to.
-   *
-   * @issue #3132
-   */
-  private hasRecordedContent(content: IContent): boolean {
-    const identity = contentIdentity(content);
-    if (identity !== null && this.recordedIdentities.has(identity)) return true;
-    const seq = content.metadata?.chronology?.seq;
-    return (
-      typeof seq === 'number' &&
-      this.unstampedSnapshot.get(seq) === unstampedContentIdentity(content)
-    );
-  }
-
-  private markRecordedContent(content: IContent): void {
-    const identity = contentIdentity(content);
-    if (identity !== null) this.recordedIdentities.add(identity);
-  }
-
-  private rememberExistingHistory(historyService: HistoryService): void {
-    this.rememberRecordedHistory(historyService.getAll());
-  }
-
-  rememberRecordedHistory(history: readonly IContent[]): void {
-    for (const [index, content] of history.entries()) {
-      const identity = contentIdentity(content);
-      if (identity !== null) {
-        this.recordedIdentities.add(identity);
-      } else {
-        this.unstampedSnapshot.set(
-          index + 1,
-          unstampedContentIdentity(content),
-        );
-      }
     }
   }
 
@@ -449,14 +226,16 @@ export class RecordingIntegration {
    * @pseudocode recording-integration.md lines 73-78
    */
   unsubscribeFromHistory(): void {
+    this.subscriptionGeneration += 1;
+    const history = this.journalHistory;
+    this.journalHistory = undefined;
+    if (history !== undefined) this.detach(history);
     if (!this.historySubscription) {
       return;
     }
 
-    const unsubscribe = this.historySubscription;
+    this.historySubscription();
     this.historySubscription = null;
-    this.compressionInProgress = false;
-    unsubscribe();
   }
 
   /**
@@ -505,19 +284,48 @@ export class RecordingIntegration {
    */
   async flushAtTurnBoundary(): Promise<void> {
     if (this.disposed) return;
+    if (this.reportingFailed)
+      throw (
+        this.reportingFailure?.deref() ??
+        new Error(
+          'Persistence failure report storage failed; integration requires disposal',
+        )
+      );
+    const history = this.journalHistory;
+    const save: Promise<PersistenceOutcome> =
+      history === undefined
+        ? Promise.resolve({ failed: false })
+        : this.persistJournal(history);
     const generation = this.nextPersistenceGeneration;
     const outcomes = await Promise.allSettled([
-      this.recording.flush(),
+      this.settleAttachment()
+        .then(() => this.settleDetachments())
+        .then(() =>
+          history === undefined ? this.recording.flush() : undefined,
+        ),
       this.awaitPersistenceThrough(generation),
+      save,
     ]);
     const failures = outcomes.flatMap((outcome) =>
       outcome.status === 'rejected' ? [outcome.reason] : [],
     );
-    failures.push(...this.takePersistenceFailuresThrough(generation));
+    const ownSave = outcomes[2];
+    const cause =
+      ownSave.status === 'fulfilled' ? ownSave.value.cause?.deref() : undefined;
+    const report = this.persistenceFailures.takeThrough(
+      generation,
+      'Recording and persistence flush failed',
+      cause,
+    );
+    if (report !== undefined) failures.push(report);
+    else if (ownSave.status === 'fulfilled' && ownSave.value.failed)
+      failures.push(
+        new RecordingFailureNotice(1, generation, ownSave.value.cause),
+      );
     this.throwFailures(failures, 'Recording and persistence flush failed');
   }
 
-  getRecordingService(): SessionRecordingService {
+  getRecordingService(): SessionRecordingPort {
     return this.recording;
   }
 
@@ -529,31 +337,44 @@ export class RecordingIntegration {
   dispose(): Promise<void> {
     if (this.disposePromise !== undefined) return this.disposePromise;
     this.disposed = true;
+    this.unsubscribeFromHistory();
     const generation = this.nextPersistenceGeneration;
     const operation = (async (): Promise<void> => {
-      const failures: unknown[] = [];
       try {
-        this.unsubscribeFromHistory();
-      } catch (error: unknown) {
-        failures.push(error);
+        const settlements = await Promise.allSettled([
+          this.awaitPersistenceThrough(generation),
+          this.settleAttachment(),
+          this.settleDetachments(),
+        ]);
+        const failures: unknown[] = settlements.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : [],
+        );
+        const report = this.persistenceFailures.takeThrough(
+          generation,
+          'Session persistence shutdown failed',
+        );
+        if (report !== undefined) failures.push(report);
+        else if (this.disposalFailureCount > 0)
+          failures.push(
+            new RecordingFailureNotice(
+              this.disposalFailureCount,
+              this.disposalFirstFailureGeneration,
+              this.disposalFirstFailureCause,
+            ),
+          );
+        if (this.reportingFailed)
+          failures.push(
+            this.reportingFailure?.deref() ??
+              new Error(
+                'Persistence diagnostic storage failed during shutdown',
+              ),
+          );
+        this.throwFailures(failures, 'Journal shutdown failed');
+      } finally {
+        this.disposePromise = Promise.resolve();
       }
-      await Promise.all([
-        this.awaitPersistenceThrough(generation),
-        ...this.pendingBatches,
-      ]);
-      failures.push(...this.takePersistenceFailuresThrough(generation));
-      this.throwFailures(failures, 'Recording integration shutdown failed');
     })();
     this.disposePromise = operation;
     return operation;
-  }
-
-  /**
-   * @plan PLAN-20260211-SESSIONRECORDING.P14
-   * @requirement REQ-INT-005
-   * @pseudocode recording-integration.md lines 102-104
-   */
-  onHistoryServiceReplaced(newHistoryService: HistoryService): void {
-    this.subscribeToHistory(newHistoryService, this.owner);
   }
 }

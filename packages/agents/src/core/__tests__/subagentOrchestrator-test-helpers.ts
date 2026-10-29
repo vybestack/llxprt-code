@@ -1,3 +1,4 @@
+import { makeRuntimeContext } from './structural-history-fixture.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 import { createTestChildOrchestrator } from './child-launch-fixture.js';
@@ -41,12 +42,29 @@ import {
 import { ToolRegistry, type ToolSelection } from '@vybestack/llxprt-code-tools';
 import { afterEach, vi } from 'bun:test';
 import type { SubAgentScopeFactory } from '../subagent.js';
-import type { ChildAgentScope } from '../subagentOrchestrator.js';
+import type {
+  ChildAgentScope,
+  SubagentOrchestrator,
+} from '../subagentOrchestrator.js';
 
 const foregroundConfigs: Config[] = [];
+const histories: HistoryService[] = [];
+const launches: Array<{ dispose(): Promise<void> }> = [];
 afterEach(async () => {
+  for (const launch of launches.splice(0)) await launch.dispose();
+  for (const history of histories.splice(0)) await history.dispose();
   for (const config of foregroundConfigs.splice(0)) await config.dispose();
 });
+
+export async function launchForTest(
+  orchestrator: SubagentOrchestrator,
+  request: Parameters<SubagentOrchestrator['launch']>[0],
+  parentSignal: AbortSignal = new AbortController().signal,
+): ReturnType<SubagentOrchestrator['launch']> {
+  const result = await orchestrator.launch(request, parentSignal);
+  launches.push(result);
+  return result;
+}
 
 export function makeForegroundConfig(
   initialSettings: Readonly<Record<string, unknown>> = {},
@@ -167,39 +185,42 @@ export function extractRunConfig(
   return factoryCall[0].run;
 }
 
-export function createRuntimeBundle(label = 'bundle') {
-  const ownedHistory = new HistoryService();
-  const history = {
-    clear: vi.fn(() => ownedHistory.clear()),
-    setTokenizerFactory: ownedHistory.setTokenizerFactory.bind(ownedHistory),
-    setActiveTokenizationTarget:
-      ownedHistory.setActiveTokenizationTarget.bind(ownedHistory),
-  };
-  const runtimeContext = {
-    state: { runtimeId: `${label}-runtime-id`, sessionId: `${label}-session` },
-    history,
-    ephemerals: {
-      compressionThreshold: () => 0.85,
-      contextLimit: () => 20_000,
-      preserveThreshold: () => 0.3,
-      toolFormatOverride: () => undefined,
+export function createRuntimeBundle(
+  label = 'bundle',
+  ownedHistory = new HistoryService(),
+) {
+  histories.push(ownedHistory);
+  vi.spyOn(ownedHistory, 'clear');
+  const base = makeRuntimeContext(false);
+  const runtimeContext: AgentRuntimeContext = {
+    ...base,
+    state: {
+      ...base.state,
+      runtimeId: label + '-runtime-id',
+      sessionId: label + '-session',
     },
-    telemetry: {},
-    provider: {},
-    tools: { listToolNames: () => [], getToolMetadata: () => undefined },
-    providerRuntime: {},
-  } as unknown as AgentRuntimeContext;
-
+    history: ownedHistory,
+  };
   return {
     runtimeContext,
-    history,
-    providerAdapter: {},
-    telemetryAdapter: {},
-    toolsView: {
-      listToolNames: () => [],
-      getToolMetadata: () => undefined,
+    history: ownedHistory,
+    providerAdapter: runtimeContext.provider,
+    telemetryAdapter: runtimeContext.telemetry,
+    telemetryRoot: createSessionSettingsFixture(makeForegroundConfig())
+      .settingsOwner.telemetry,
+    toolsView: runtimeContext.tools,
+    contentGenerator: {
+      generateContent: async (): Promise<never> => {
+        throw new Error('Unused content generator');
+      },
+      generateContentStream: async (): Promise<never> => {
+        throw new Error('Unused content stream');
+      },
+      countTokens: async () => ({ totalTokens: 0 }),
+      embedContent: async (): Promise<never> => {
+        throw new Error('Unused embedding');
+      },
     },
-    contentGenerator: {},
     toolRegistry: fixtureToolSelection(),
     settingsSnapshot: {},
   };

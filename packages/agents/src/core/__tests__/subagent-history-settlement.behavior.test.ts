@@ -89,7 +89,9 @@ describe('subagent history ownership settlement', () => {
                 { turnId: 'child-media-turn', source: 'clipboard' },
               );
               await bundle.history.replaceAll([admitted]);
-              expect(bundle.history.getAll()).toHaveLength(1);
+              expect(
+                await Array.fromAsync(bundle.history.streamRawHistory()),
+              ).toHaveLength(1);
               await bundle.history.waitForOwnershipSettlement();
               releasing = true;
               return bundle;

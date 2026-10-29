@@ -1,3 +1,4 @@
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -9,7 +10,8 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
+  type SessionRecordingPort,
   type IContent,
 } from '@vybestack/llxprt-code-core';
 import { readToolResultBody } from './toolResultTranscriptReader.js';
@@ -41,11 +43,11 @@ function textContent(speaker: 'human' | 'ai', text: string): IContent {
 
 describe('readToolResultBody — transcript-backed expansion (issue #3428)', () => {
   let tempDir: string;
-  let service: SessionRecordingService;
+  let service: SessionRecordingPort;
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), '3428-reader-'));
-    service = new SessionRecordingService({
+    service = createSessionRecorder({
       sessionId: 'test-session-3428',
       projectHash: 'testhash',
       chatsDir: tempDir,
@@ -60,11 +62,31 @@ describe('readToolResultBody — transcript-backed expansion (issue #3428)', () 
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
+  it('refuses a retired JSONL transcript instead of reading its body', async () => {
+    const retired = path.join(tempDir, 'session-retired.jsonl');
+    await fs.writeFile(
+      retired,
+      `${JSON.stringify({ type: 'content', payload: { content: toolResponseContent('retired', 'old body') } })}
+`,
+    );
+    await expect(readToolResultBody(retired, 'retired')).rejects.toThrow(
+      'retired JSONL journal format',
+    );
+  });
+
+  it('returns undefined from a native session with no rows', async () => {
+    service.recordSessionMetadata('empty native transcript');
+    await service.flush();
+    const file = service.getFilePath();
+    if (file === null) throw new Error('Missing native transcript');
+    expect(await readToolResultBody(file, 'absent')).toBeUndefined();
+  });
+
   it('returns the exact original string body for a capped callId', async () => {
     const body = largeBody('STR', 300);
-    service.recordContent(textContent('human', 'run the tool'));
-    service.recordContent(toolResponseContent('call-str', body));
-    service.recordContent(textContent('ai', 'done'));
+    await recordRowsForTest(service, [textContent('human', 'run the tool')]);
+    await recordRowsForTest(service, [toolResponseContent('call-str', body)]);
+    await recordRowsForTest(service, [textContent('ai', 'done')]);
     await service.flush();
 
     const result = await readToolResultBody(service.getFilePath()!, 'call-str');
@@ -73,7 +95,9 @@ describe('readToolResultBody — transcript-backed expansion (issue #3428)', () 
 
   it('pretty-prints object results the way the replay path displays them', async () => {
     const payload = { ok: true, rows: [1, 2, 3], note: 'hello' };
-    service.recordContent(toolResponseContent('call-obj', payload));
+    await recordRowsForTest(service, [
+      toolResponseContent('call-obj', payload),
+    ]);
     await service.flush();
 
     const result = await readToolResultBody(service.getFilePath()!, 'call-obj');
@@ -81,7 +105,9 @@ describe('readToolResultBody — transcript-backed expansion (issue #3428)', () 
   });
 
   it('returns undefined for a callId that is not in the transcript', async () => {
-    service.recordContent(toolResponseContent('call-str', 'present'));
+    await recordRowsForTest(service, [
+      toolResponseContent('call-str', 'present'),
+    ]);
     await service.flush();
 
     expect(
@@ -91,9 +117,9 @@ describe('readToolResultBody — transcript-backed expansion (issue #3428)', () 
 
   it('finds the matching response in a long session without confusing callIds', async () => {
     for (let i = 0; i < 40; i += 1) {
-      service.recordContent(
+      await recordRowsForTest(service, [
         toolResponseContent(`call-${i}`, `body-${i}-` + 'y'.repeat(2 * KIB)),
-      );
+      ]);
     }
     await service.flush();
 
@@ -104,8 +130,12 @@ describe('readToolResultBody — transcript-backed expansion (issue #3428)', () 
   it('returns the body for the LAST response when a callId repeats', async () => {
     // Tools can retry; replay shows the latest response, so expansion must
     // agree with it rather than resurrecting a superseded body.
-    service.recordContent(toolResponseContent('call-dup', 'first attempt'));
-    service.recordContent(toolResponseContent('call-dup', 'second attempt'));
+    await recordRowsForTest(service, [
+      toolResponseContent('call-dup', 'first attempt'),
+    ]);
+    await recordRowsForTest(service, [
+      toolResponseContent('call-dup', 'second attempt'),
+    ]);
     await service.flush();
 
     const result = await readToolResultBody(service.getFilePath()!, 'call-dup');

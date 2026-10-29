@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { z } from 'zod';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
@@ -85,8 +86,8 @@ function runTurn(
     provider.name,
   );
   return drain(
-    provider.generateChatCompletion(
-      createProviderCallOptions({
+    provider.generateChatCompletion({
+      ...createProviderCallOptions({
         providerName: provider.name,
         settings,
         config,
@@ -95,7 +96,9 @@ function runTurn(
         contents,
         systemInstruction: 'Test the Responses connection lifecycle.',
       }),
-    ),
+      requestRows: { ...inMemoryRequestSelection(contents), callerOwned: true },
+      contentCount: contents.length,
+    }),
   );
 }
 

@@ -1,3 +1,6 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('Unexpected fixture network request'));
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -25,16 +28,16 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/PromptResolver.js';
-import type { Logger } from '@vybestack/llxprt-code-core/utils/logger.js';
-import { MiddleOutStrategy } from '../MiddleOutStrategy.js';
-import { OneShotStrategy } from '../OneShotStrategy.js';
-import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
-
-const requestFetch: NetworkFetch = () =>
-  Promise.reject(new Error('This test must not make network requests'));
+import { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import {
+  compressMiddleOutViaDisk,
+  requireMiddleOutApplied,
+} from './support/middleout-disk-adapter.js';
+import {
+  compressOneShotViaDisk,
+  requireApplied,
+} from './support/oneshot-disk-adapter.js';
 
 // ---------------------------------------------------------------------------
 // Helpers: build IContent objects
@@ -145,42 +148,24 @@ function buildContext(
         compressionThreshold: () => 0.85,
         contextLimit: () => 128000,
         compressionProfile: () => undefined,
-        compressionStrategy: () => 'middle-out',
-        toolFormatOverride: () => undefined,
         densityCompressHeadroom: () => 0.6,
-        reasoning: {
-          enabled: () => false,
-          includeInContext: () => false,
-          includeInResponse: () => false,
-          format: () => 'native' as const,
-          stripFromContext: () => 'none' as const,
-          effort: () => undefined,
-          maxTokens: () => undefined,
-          adaptiveThinking: () => undefined,
-        },
       },
       providerRuntime: {
         runtimeId: 'test-provider-runtime',
         metadata: { source: 'test' },
       },
-    } as unknown as AgentRuntimeContext,
+    },
     runtimeState: {
       runtimeId: 'test',
       provider: 'test',
       model: 'test-model',
       sessionId: 'test',
       updatedAt: Date.now(),
-    } as unknown as AgentRuntimeState,
+    },
     estimateTokens: async (contents: readonly IContent[]) =>
       contents.length * 100,
     currentTokenCount: history.length * 100,
-    logger: {
-      debug: () => {},
-      info: () => {},
-      warn: () => {},
-      error: () => {},
-      log: () => {},
-    } as unknown as Logger,
+    logger: new DebugLogger('compression-usage-test'),
     resolveProvider: () => {
       const invocationSettings = new SettingsService();
       const runtime = {
@@ -204,12 +189,31 @@ function buildContext(
         runtime,
       };
     },
-    promptResolver: {
-      resolveFile: () => ({ found: false, path: null, source: null }),
-    } as unknown as PromptResolver,
+    promptResolver: new PromptResolver(),
     promptBaseDir: '/tmp/test',
     promptContext: { provider: 'test', model: 'test-model' },
     promptId: 'test-prompt',
+  };
+}
+
+/**
+ * Counts provider resolutions. The disk outcome carries no llmCallMade flag,
+ * so the call count is the observable fact behind "an LLM call was made".
+ */
+function withProviderCallCount(ctx: CompressionContext): {
+  ctx: CompressionContext;
+  providerCalls: () => number;
+} {
+  let providerCalls = 0;
+  return {
+    ctx: {
+      ...ctx,
+      resolveProvider: (profileName) => {
+        providerCalls++;
+        return ctx.resolveProvider(profileName);
+      },
+    },
+    providerCalls: () => providerCalls,
   };
 }
 
@@ -218,48 +222,16 @@ function buildContext(
 // ---------------------------------------------------------------------------
 
 describe('MiddleOutStrategy — usage propagation (Issue #1211)', () => {
-  it('result.metadata.usage is populated when provider emits usage', async () => {
-    const strategy = new MiddleOutStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    const ctx = buildContext();
-
-    const result = await strategy.compress(ctx);
-
-    // llmCallMade must be true — ensures we went through the provider
-    expect(result.metadata.llmCallMade).toBe(true);
-
-    // usage must be captured from provider
-    expect(result.metadata.usage).toBeDefined();
-    expect(result.metadata.usage?.totalTokens).toBe(MOCK_USAGE.totalTokens);
-    expect(result.metadata.usage?.promptTokens).toBe(MOCK_USAGE.promptTokens);
-    expect(result.metadata.usage?.completionTokens).toBe(
-      MOCK_USAGE.completionTokens,
-    );
-  });
-
-  it('result.metadata.usage is undefined when provider emits no usage', async () => {
-    const strategy = new MiddleOutStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    const provider = makeMockProviderNoUsage();
-    const ctx = buildContext({ provider });
-
-    const result = await strategy.compress(ctx);
-
-    expect(result.metadata.llmCallMade).toBe(true);
-    expect(result.metadata.usage).toBeUndefined();
-  });
-
   it('summary IContent has usage metadata attached when provider emits usage', async () => {
-    const { summaryEntry, usageObservation, totalTokensObservation } =
+    const {
+      summaryEntry,
+      usageObservation,
+      totalTokensObservation,
+      providerCalls,
+    } =
       await observeSummaryIContentHasUsageMetadataAttachedWhenProviderEmitsUsage();
+    // The provider must have been consulted for the usage to come from it.
+    expect(providerCalls).toBe(1);
     expect(summaryEntry).toBeDefined();
     expect(summaryEntry.speaker).toBe('human');
     expect(usageObservation).toBeDefined();
@@ -268,29 +240,36 @@ describe('MiddleOutStrategy — usage propagation (Issue #1211)', () => {
 
   const observeSummaryIContentHasUsageMetadataAttachedWhenProviderEmitsUsage =
     async () => {
-      const strategy = new MiddleOutStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      const ctx = buildContext();
+      const { ctx, providerCalls } = withProviderCallCount(buildContext());
 
-      const result = await strategy.compress(ctx);
+      const result = requireMiddleOutApplied(
+        await compressMiddleOutViaDisk(ctx),
+      );
 
       // Find the summary IContent — it's the first human entry after toKeepTop
       // In middle-out: [toKeepTop..., summary, continuationDirective, toKeepBottom...]
-      const topPreserved = result.metadata.topPreserved ?? 0;
-      const summaryEntry = result.newHistory[topPreserved];
+      const summaryEntry = result.newHistory[result.top];
+      expect(summaryEntry.metadata?.usage?.promptTokens).toBe(
+        MOCK_USAGE.promptTokens,
+      );
+      expect(summaryEntry.metadata?.usage?.completionTokens).toBe(
+        MOCK_USAGE.completionTokens,
+      );
 
       const usageObservation = summaryEntry.metadata?.usage;
       const totalTokensObservation = summaryEntry.metadata?.usage?.totalTokens;
-      return { summaryEntry, usageObservation, totalTokensObservation };
+      return {
+        summaryEntry,
+        usageObservation,
+        totalTokensObservation,
+        providerCalls: providerCalls(),
+      };
     };
 
   it('summary IContent has no usage metadata when provider emits no usage', async () => {
-    const { summaryEntry, usageObservation } =
+    const { summaryEntry, usageObservation, providerCalls } =
       await observeSummaryIContentHasNoUsageMetadataWhenProviderEmitsNoUsage();
+    expect(providerCalls).toBe(1);
     expect(summaryEntry).toBeDefined();
     expect(summaryEntry.speaker).toBe('human');
     expect(usageObservation).toBeUndefined();
@@ -298,41 +277,38 @@ describe('MiddleOutStrategy — usage propagation (Issue #1211)', () => {
 
   const observeSummaryIContentHasNoUsageMetadataWhenProviderEmitsNoUsage =
     async () => {
-      const strategy = new MiddleOutStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
       const provider = makeMockProviderNoUsage();
-      const ctx = buildContext({ provider });
+      const { ctx, providerCalls } = withProviderCallCount(
+        buildContext({ provider }),
+      );
 
-      const result = await strategy.compress(ctx);
+      const result = requireMiddleOutApplied(
+        await compressMiddleOutViaDisk(ctx),
+      );
 
-      const topPreserved = result.metadata.topPreserved ?? 0;
-      const summaryEntry = result.newHistory[topPreserved];
+      const summaryEntry = result.newHistory[result.top];
 
       // metadata.usage should be absent when provider gives no usage
 
       const usageObservation = summaryEntry.metadata?.usage;
-      return { summaryEntry, usageObservation };
+      return {
+        summaryEntry,
+        usageObservation,
+        providerCalls: providerCalls(),
+      };
     };
 
-  it('no compression returns result without usage (llmCallMade=false)', async () => {
-    const strategy = new MiddleOutStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
+  it('no compression makes no LLM call and produces no summary rows', async () => {
     // History too small to trigger compression (< 4 middle messages)
     const tinyHistory = [makeHumanMessage('hi'), makeAiMessage('hello')];
-    const ctx = buildContext({ history: tinyHistory });
+    const { ctx, providerCalls } = withProviderCallCount(
+      buildContext({ history: tinyHistory }),
+    );
 
-    const result = await strategy.compress(ctx);
+    const result = await compressMiddleOutViaDisk(ctx);
 
-    expect(result.metadata.llmCallMade).toBe(false);
-    expect(result.metadata.usage).toBeUndefined();
+    expect(result).toStrictEqual({ kind: 'noop', candidateRows: 0 });
+    expect(providerCalls()).toBe(0);
   });
 });
 
@@ -341,56 +317,13 @@ describe('MiddleOutStrategy — usage propagation (Issue #1211)', () => {
 // ---------------------------------------------------------------------------
 
 describe('OneShotStrategy — usage propagation (Issue #1211)', () => {
-  it('result.metadata.usage is populated when provider emits usage', async () => {
-    const strategy = new OneShotStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    const ctx = buildContext();
-
-    const result = await strategy.compress(ctx);
-
-    expect(result.metadata.llmCallMade).toBe(true);
-
-    expect(result.metadata.usage).toBeDefined();
-    expect(result.metadata.usage?.totalTokens).toBe(MOCK_USAGE.totalTokens);
-    expect(result.metadata.usage?.promptTokens).toBe(MOCK_USAGE.promptTokens);
-    expect(result.metadata.usage?.completionTokens).toBe(
-      MOCK_USAGE.completionTokens,
-    );
-  });
-
-  it('result.metadata.usage is undefined when provider emits no usage', async () => {
-    const strategy = new OneShotStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    const provider = makeMockProviderNoUsage();
-    const ctx = buildContext({ provider });
-
-    const result = await strategy.compress(ctx);
-
-    expect(result.metadata.llmCallMade).toBe(true);
-    expect(result.metadata.usage).toBeUndefined();
-  });
-
   it('summary IContent (first entry in newHistory) has usage metadata attached', async () => {
-    const strategy = new OneShotStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
     const ctx = buildContext();
 
-    const result = await strategy.compress(ctx);
+    const newHistory = requireApplied(await compressOneShotViaDisk(ctx));
 
     // In one-shot: [summary, continuationDirective, ...toKeep]
-    const summaryEntry = result.newHistory[0];
+    const summaryEntry = newHistory[0];
 
     expect(summaryEntry).toBeDefined();
     expect(summaryEntry.speaker).toBe('human');
@@ -398,41 +331,34 @@ describe('OneShotStrategy — usage propagation (Issue #1211)', () => {
     expect(summaryEntry.metadata?.usage?.totalTokens).toBe(
       MOCK_USAGE.totalTokens,
     );
+    expect(summaryEntry.metadata?.usage?.promptTokens).toBe(
+      MOCK_USAGE.promptTokens,
+    );
+    expect(summaryEntry.metadata?.usage?.completionTokens).toBe(
+      MOCK_USAGE.completionTokens,
+    );
   });
 
   it('summary IContent has no usage metadata when provider emits no usage', async () => {
-    const strategy = new OneShotStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
     const provider = makeMockProviderNoUsage();
     const ctx = buildContext({ provider });
 
-    const result = await strategy.compress(ctx);
+    const newHistory = requireApplied(await compressOneShotViaDisk(ctx));
 
-    const summaryEntry = result.newHistory[0];
+    const summaryEntry = newHistory[0];
     expect(summaryEntry).toBeDefined();
     expect(summaryEntry.speaker).toBe('human');
     expect(summaryEntry.metadata?.usage).toBeUndefined();
   });
 
-  it('no compression returns result without usage (llmCallMade=false)', async () => {
-    const strategy = new OneShotStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
+  it('no compression returns no summary rows', async () => {
     // History too small to trigger compression
     const tinyHistory = [makeHumanMessage('hi'), makeAiMessage('hello')];
     const ctx = buildContext({ history: tinyHistory });
 
-    const result = await strategy.compress(ctx);
+    const result = await compressOneShotViaDisk(ctx);
 
-    expect(result.metadata.llmCallMade).toBe(false);
-    expect(result.metadata.usage).toBeUndefined();
+    expect(result.kind).toBe('noop');
   });
 });
 
@@ -458,17 +384,13 @@ describe('CompressionResultMetadata — usage field type (Issue #1211)', () => {
 
   const observeUsageFieldMatchesUsageStatsInterfaceShapeWhenPresent =
     async () => {
-      const strategy = new MiddleOutStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
       const ctx = buildContext();
 
-      const result = await strategy.compress(ctx);
+      const result = requireMiddleOutApplied(
+        await compressMiddleOutViaDisk(ctx),
+      );
 
-      const usage = result.metadata.usage;
+      const usage = result.newHistory[result.top].metadata?.usage;
 
       const resolvedUsage = usage as UsageStats;
 
@@ -516,18 +438,13 @@ describe('CompressionResultMetadata — usage field type (Issue #1211)', () => {
       },
     } as unknown as IProvider;
 
-    const strategy = new MiddleOutStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
     const ctx = buildContext({ provider });
 
-    const result = await strategy.compress(ctx);
+    const result = requireMiddleOutApplied(await compressMiddleOutViaDisk(ctx));
+    const capturedUsage = result.newHistory[result.top].metadata?.usage;
 
     // Should capture the LAST (finalUsage), not the first
-    expect(result.metadata.usage?.totalTokens).toBe(finalUsage.totalTokens);
-    expect(result.metadata.usage?.promptTokens).toBe(finalUsage.promptTokens);
+    expect(capturedUsage?.totalTokens).toBe(finalUsage.totalTokens);
+    expect(capturedUsage?.promptTokens).toBe(finalUsage.promptTokens);
   });
 });

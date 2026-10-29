@@ -25,7 +25,7 @@
  * floored at the JSC heap size so it cannot be less than `heapUsed`; only
  * `heapUsed` is re-sourced from `bun:jsc`.
  *
- * LLxprt runs under Bun, so failure to load `bun:jsc` is a startup error rather
+ * LLxprt runs under Bun, so failure to load `bun:jsc` is a sampling error rather
  * than a reason to silently fall back to the inaccurate compatibility value.
  *
  * `heapStats()` must not be used for periodic monitoring. It enumerates live
@@ -60,7 +60,7 @@ interface JscHeapApi {
  * Bun populates `process.versions.bun`; Node leaves it undefined.
  *
  * Read through `globalThis` with optional chaining rather than touching
- * `process.versions` directly: this runs at module load, and suites that
+ * `process.versions` directly: suites that
  * substitute a partial `process` double would otherwise crash on import.
  * Mirrors the same defensive read in core's utils/runtime.ts.
  */
@@ -109,8 +109,8 @@ function defaultBaseSampler(): NodeJS.MemoryUsage {
   return proc.memoryUsage();
 }
 
-/** Resolved once: the runtime does not change under a running process. */
-const jscHeapApi = loadJscHeapApi();
+/** Resolved on the first sample; importing CLI modules does not sample memory. */
+let jscHeapApi: JscHeapApi | undefined;
 
 /**
  * Samples process memory, replacing `heapUsed` with JavaScriptCore's aggregate
@@ -123,8 +123,9 @@ const jscHeapApi = loadJscHeapApi();
 export function sampleMemoryUsage(
   baseSampler: () => NodeJS.MemoryUsage = defaultBaseSampler,
 ): NodeJS.MemoryUsage {
+  const jsc = (jscHeapApi ??= loadJscHeapApi());
   const base = baseSampler();
-  const heapUsed = jscHeapApi.heapSize();
+  const heapUsed = jsc.heapSize();
   return {
     ...base,
     heapUsed,

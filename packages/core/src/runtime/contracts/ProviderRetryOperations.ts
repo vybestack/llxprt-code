@@ -10,6 +10,8 @@ import type {
 } from '../../config/configTypes.js';
 
 export interface ProviderRetryOperations {
+  /** Durable recording transition, awaited before each physical transport attempt. */
+  onTransportAttempt?: (boundary?: 'wrapper') => Promise<void>;
   readRetryAuthToken?: () => Promise<string>;
   handleAuthError?: OnAuthErrorHandler['handleAuthError'];
   tryBucketFailover?: BucketFailoverHandler['tryFailover'];

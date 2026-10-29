@@ -1,3 +1,9 @@
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { openClientOwner } from './helpers/client-owner-session.js';
+import { captureSessionOwner } from './helpers/capture-session-owner.js';
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,7 +23,7 @@ import { createAgent } from '../createAgent.js';
 import { fromConfig } from '../fromConfig.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
+import type { RouteAAgent } from './helpers/route-a-agent.js';
 
 const PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
@@ -38,6 +44,55 @@ describe('Explicit session client lifetime', () => {
   });
   const credentials = useOwnedCredentials();
 
+  async function openEngine(options: { authority: CredentialAuthority }) {
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'engine-caller-')),
+    );
+    const caller = await openClientOwner(
+      options.authority,
+      {
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: 'shared-engine-label',
+        workingDir: directory,
+        harness: { includeProcessCwd: false },
+      },
+      { provider: 'fake', model: 'fake-model' },
+    );
+    await caller.client.addHistory({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'caller before adoption' }],
+    });
+    const settings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      caller.config.getInitialSettings(),
+    ))
+      settings.set(key, value);
+    const { value: agent, owner } = await captureSessionOwner(() =>
+      fromConfig(
+        caller.config,
+        settings,
+        { activation: { provider: 'fake', model: 'fake-model' } },
+        options.authority,
+      ),
+    );
+    return {
+      agent,
+      owner,
+      config: caller.config,
+      settings,
+      authority: options.authority,
+      directory,
+      caller,
+      close: () =>
+        runCleanupSteps([
+          () => agent.dispose(),
+          () => caller.close(),
+          () => rm(directory, { recursive: true, force: true }),
+        ]),
+    };
+  }
+
   /** A further facade over the first one's `Config`, with its own seeded settings. */
   async function openSibling(
     first: RouteAAgent,
@@ -53,7 +108,7 @@ describe('Explicit session client lifetime', () => {
 
   for (const firstClosed of [0, 1]) {
     it(`keeps the shared caller and surviving facade usable when facade ${firstClosed} closes first`, async () => {
-      const built = await openRouteAAgent({
+      const built = await openEngine({
         authority: credentials().authority,
       });
       let sibling: Agent | undefined;
@@ -73,11 +128,24 @@ describe('Explicit session client lifetime', () => {
           },
         ]);
         expect(
-          (await facades[1 - firstClosed].getHistory()).filter(
+          (await collectAgentHistory(facades[1 - firstClosed])).filter(
             (item) => item.speaker === 'human',
           ),
         ).toHaveLength(1);
         await facades[1 - firstClosed].dispose();
+        await built.caller.mcp.refreshContext();
+        await built.caller.client.addHistory({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'caller after both facades' }],
+        });
+        expect(
+          (await Array.fromAsync(built.caller.client.getHistory())).filter(
+            (row) => row.speaker === 'human',
+          ),
+        ).toHaveLength(2);
+        expect(
+          await built.caller.client.mediaStore?.getStoredByteLength(),
+        ).toBe(0);
       } finally {
         await sibling?.dispose();
         await built.close();
@@ -85,7 +153,7 @@ describe('Explicit session client lifetime', () => {
     }, 30000);
   }
   it('releases failed shared activation without losing a surviving facade or the caller MCP collaborator', async () => {
-    const built = await openRouteAAgent({ authority: credentials().authority });
+    const built = await openEngine({ authority: credentials().authority });
     const facade = built.agent;
     try {
       await expect(
@@ -98,9 +166,21 @@ describe('Explicit session client lifetime', () => {
         },
       ]);
       expect(
-        (await facade.getHistory()).filter((item) => item.speaker === 'human'),
+        (await collectAgentHistory(facade)).filter(
+          (item) => item.speaker === 'human',
+        ),
       ).toHaveLength(1);
       await facade.dispose();
+      await built.caller.mcp.refreshContext();
+      await built.caller.client.addHistory({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'caller survives failed sibling' }],
+      });
+      expect(
+        (await Array.fromAsync(built.caller.client.getHistory())).filter(
+          (row) => row.speaker === 'human',
+        ),
+      ).toHaveLength(2);
     } finally {
       await built.close();
     }
@@ -121,7 +201,12 @@ describe('Explicit session client lifetime', () => {
       try {
         return await readdir(join(location.projectTempDir, 'media-live'));
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+        if (
+          error instanceof Error &&
+          'code' in error &&
+          error.code === 'ENOENT'
+        )
+          return [];
         throw error;
       }
     };
@@ -148,11 +233,13 @@ describe('Explicit session client lifetime', () => {
           },
         ]);
         expect(
-          (await agent.getHistory()).filter((item) => item.speaker === 'human'),
+          (await collectAgentHistory(agent)).filter(
+            (item) => item.speaker === 'human',
+          ),
         ).toHaveLength(1);
         expect(await liveMedia()).toHaveLength(1);
         await agent.dispose();
-        await expect(agent.getHistory()).rejects.toThrow(/disposed/i);
+        await expect(collectAgentHistory(agent)).rejects.toThrow(/disposed/i);
         expect(await liveMedia()).toHaveLength(0);
       } finally {
         await agent.dispose();
@@ -160,6 +247,101 @@ describe('Explicit session client lifetime', () => {
     } finally {
       await location.dispose();
       await rm(directory, { recursive: true, force: true });
+    }
+  }, 30000);
+  type Engine = Awaited<ReturnType<typeof openEngine>>;
+  const replacements = [
+    {
+      name: 'model',
+      replace: async (
+        built: Engine,
+        prior: AgentClientContract,
+      ): Promise<void> => {
+        await built.agent.setModel('replacement-model');
+        expect(built.owner.clients.getAgentClient()).not.toBe(prior);
+      },
+    },
+    {
+      name: 'profile',
+      replace: async (
+        built: Engine,
+        _prior: AgentClientContract,
+      ): Promise<void> => {
+        await built.agent.profiles.applySnapshot({
+          version: 1,
+          provider: 'fake',
+          model: 'replacement-profile-model',
+          modelParams: {},
+          ephemeralSettings: {},
+        });
+        expect(built.agent.getModel()).toBe('replacement-profile-model');
+      },
+    },
+  ];
+  for (const replacement of replacements) {
+    it(`keeps the original caller alive after facade ${replacement.name} replacement and retirement`, async () => {
+      const built = await openEngine({ authority: credentials().authority });
+      const prior = built.owner.clients.getAgentClient();
+
+      try {
+        await built.agent.setHistory([
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'retained across replacement' }],
+          },
+        ]);
+        await replacement.replace(built, prior);
+        expect(
+          (await collectAgentHistory(built.agent)).filter(
+            (row) => row.speaker === 'human',
+          ),
+        ).toHaveLength(1);
+        await built.agent.dispose();
+        await built.caller.mcp.refreshContext();
+        await built.caller.client.addHistory({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'caller after replacement' }],
+        });
+        expect(
+          (await Array.fromAsync(built.caller.client.getHistory())).filter(
+            (row) => row.speaker === 'human',
+          ),
+        ).toHaveLength(2);
+        expect(
+          await built.caller.client.mediaStore?.getStoredByteLength(),
+        ).toBe(0);
+      } finally {
+        await built.close();
+      }
+    }, 30000);
+  }
+  it('isolates same-label caller clients and keeps the sibling usable after another facade closes', async () => {
+    const left = await openEngine({ authority: credentials().authority });
+    const right = await openEngine({ authority: credentials().authority });
+    try {
+      await left.agent.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'left only' }] },
+      ]);
+      await right.agent.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'right only' }] },
+      ]);
+      await left.agent.dispose();
+      await right.caller.mcp.refreshContext();
+      await right.owner.clients.getAgentClient().addHistory({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'right continues' }],
+      });
+      const rows = await collectAgentHistory(right.agent);
+      expect(rows.filter((row) => row.speaker === 'human')).toHaveLength(2);
+      expect(
+        rows
+          .flatMap((row) => row.blocks)
+          .flatMap((block) => (block.type === 'text' ? [block.text] : [])),
+      ).not.toContain('left only');
+      expect(left.config.getSessionId()).toBe(right.config.getSessionId());
+      expect(right.caller.client).not.toBe(left.caller.client);
+    } finally {
+      await runCleanupSteps([() => right.close(), () => left.close()]);
     }
   }, 30000);
 });

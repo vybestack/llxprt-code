@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+import { captureSessionOwner } from './helpers/capture-session-owner.js';
 import {
   jsonlHookCommand,
   removeJsonlHook,
@@ -28,7 +30,14 @@ import {
   cleanupAfterFailure,
   runCleanupSteps,
 } from '../../core/subagent-cleanup.js';
-import { CompressionStrategy } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { OneShotStrategy } from '../../compression/OneShotStrategy.js';
+import { summaryOutput } from '../../compression/summaryOutput.js';
+import { createRecordingExecution } from '../recordingExecution.js';
+import { SessionControl } from '../control/sessionControl.js';
+import type {
+  AgentChatRecordingExecution,
+  AgentClientContract,
+} from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
   MessageBusType,
   type HookExecutionRequest,
@@ -38,7 +47,6 @@ import {
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import * as compressionFactory from '../../compression/compressionStrategyFactory.js';
 
 /**
  * @license
@@ -65,28 +73,18 @@ async function inputsAt(path: string): Promise<CommandInput[]> {
     .map((line) => JSON.parse(line));
 }
 
-const strategy: CompressionStrategy = {
-  name: 'one-shot',
-  requiresLLM: false,
-  trigger: { mode: 'threshold', defaultThreshold: 0.8 },
-  compress: async (context) => ({
-    kind: 'applied',
-    newHistory: [
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'short summary' }],
-        metadata: { reason: 'compression-state-snapshot' },
-      },
-    ],
-    metadata: {
-      originalMessageCount: context.history.length,
-      compressedMessageCount: 1,
-      strategyUsed: 'one-shot',
-      llmCallMade: false,
-    },
-  }),
-};
-
+function spyOnSummaryStrategy() {
+  return spyOn(OneShotStrategy.prototype, 'prepareDisk').mockImplementation(
+    async (context) =>
+      summaryOutput(context.history, 0, context.history.length, [
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'short summary' }],
+          metadata: { reason: 'compression-state-snapshot' },
+        },
+      ]),
+  );
+}
 interface ContextLimitServer {
   readonly baseUrl: string;
   readonly requestCount: () => number;
@@ -151,13 +149,13 @@ interface HookedAgent {
  */
 async function openHookedAgent(
   directory: string,
-  baseUrl: string,
+  baseUrl: string | undefined,
   hooks: AgentHooks,
   authority: CredentialAuthority,
 ): Promise<HookedAgent> {
   const parameters = {
     ...toConfigParameters({
-      provider: 'openai',
+      provider: baseUrl === undefined ? 'fake' : 'openai',
       model: 'wire-model',
       sessionId: randomUUID(),
       workingDir: directory,
@@ -181,9 +179,11 @@ async function openHookedAgent(
       settings,
       {
         activation: {
-          provider: 'openai',
+          provider: baseUrl === undefined ? 'fake' : 'openai',
           model: 'wire-model',
-          cliOverrides: { key: 'local-test-key', baseUrl },
+          ...(baseUrl === undefined
+            ? {}
+            : { cliOverrides: { key: 'local-test-key', baseUrl } }),
         },
       },
       authority,
@@ -277,14 +277,156 @@ async function exerciseIndependentFacades(
   }
 }
 
+function executionFor(agent: Agent): AgentChatRecordingExecution {
+  if (!(agent.session instanceof SessionControl)) {
+    throw new Error('Expected a real recording session');
+  }
+  if (!(agent.hooks instanceof HookControl))
+    throw new Error('Expected real hook control');
+  return createRecordingExecution(
+    agent.session,
+    () => agent.getRuntimeId(),
+    agent.hooks,
+  );
+}
+
+async function exerciseFacades(
+  event: HookEventName,
+  authority: CredentialAuthority,
+  drive: (agent: Agent, client: AgentClientContract) => Promise<void>,
+): Promise<number> {
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), 'nonstream-hooks-')),
+  );
+  const output = join(directory, 'hooks.jsonl');
+  const previous = process.env.LLXPRT_FAKE_RESPONSES;
+  process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+    new URL('./fixtures/recording-remaining-hooks.jsonl', import.meta.url),
+  );
+  const hooks: AgentHooks = {
+    [event]: [
+      {
+        hooks: [{ type: HookType.Command, command: jsonlHookCommand(output) }],
+      },
+    ],
+  };
+  const opened: HookedAgent[] = [];
+  try {
+    const left = await captureSessionOwner(() =>
+      openHookedAgent(directory, undefined, hooks, authority),
+    );
+    opened.push(left.value);
+    const right = await captureSessionOwner(() =>
+      openHookedAgent(directory, undefined, hooks, authority),
+    );
+    opened.push(right.value);
+    const a = left.value.agent;
+    const b = right.value.agent;
+    const seed: Array<
+      import('@vybestack/llxprt-code-core/services/history/IContent.js').IContent
+    > = [{ speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] }];
+    await a.setHistory(seed);
+    await b.setHistory(seed);
+    expect(left.owner.clients.getAgentClient()).not.toBe(
+      right.owner.clients.getAgentClient(),
+    );
+    await a.session.setRecording({ enabled: true });
+    const aPath = pathOf(a);
+    const aSession = a.session.getSessionId();
+    await b.session.setRecording({ enabled: true });
+    const bPath = pathOf(b);
+    await drive(a, left.owner.clients.getAgentClient());
+    await drive(b, right.owner.clients.getAgentClient());
+    await a.session.setRecording({ enabled: false });
+    await drive(a, left.owner.clients.getAgentClient());
+    await a.session.resume(aSession);
+    const resumedPath = pathOf(a);
+    await drive(a, left.owner.clients.getAgentClient());
+    const matched = (await inputsAt(output)).filter(
+      (input) => input.hook_event_name === event,
+    );
+    expect(
+      matched.map((input) => [input.transcript_path, input.session_id]),
+    ).toStrictEqual([
+      [aPath, a.getRuntimeId()],
+      [bPath, b.getRuntimeId()],
+      ['', a.getRuntimeId()],
+      [resumedPath, a.getRuntimeId()],
+    ]);
+    expect(a.getRuntimeId()).not.toBe(b.getRuntimeId());
+    return matched.length;
+  } finally {
+    await runCleanupSteps([
+      ...opened.reverse().map(
+        ({ agent, config }) =>
+          () =>
+            runCleanupSteps([() => agent.dispose(), () => config.dispose()]),
+      ),
+      () => removeJsonlHook(output),
+      () => rm(directory, { recursive: true, force: true }),
+      () => {
+        if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+        else process.env.LLXPRT_FAKE_RESPONSES = previous;
+      },
+    ]);
+  }
+}
+
 describe('shared client non-stream and context-size 413 hook owner', () => {
   useRecordingPrompts();
   const credentials = useOwnedCredentials();
+  it('routes non-stream tool selection through the invoking facade without a shared owner slot', async () => {
+    expect(
+      await exerciseFacades(
+        HookEventName.BeforeToolSelection,
+        credentials().authority,
+        async (agent, client) => {
+          if (!client.hasChatInitialized()) await client.startChat();
+          await client
+            .getChat()
+            .sendMessage(
+              { message: 'non-stream' },
+              `non-stream-${randomUUID()}`,
+              executionFor(agent),
+            );
+        },
+      ),
+    ).toBe(4);
+  }, 30000);
+
+  it('routes non-stream automatic provider-content PreCompress through the invoking facade', async () => {
+    const strategySpy = spyOnSummaryStrategy();
+    try {
+      expect(
+        await exerciseFacades(
+          HookEventName.PreCompress,
+          credentials().authority,
+          async (agent, client) => {
+            agent.setEphemeralSetting('context-limit', 4096);
+            await agent.setHistory([
+              {
+                speaker: 'human',
+                blocks: [{ type: 'text', text: 'history '.repeat(9000) }],
+              },
+            ]);
+            if (!client.hasChatInitialized()) await client.startChat();
+            await client
+              .getChat()
+              .sendMessage(
+                { message: 'short prompt' },
+                `non-stream-compress-${randomUUID()}`,
+                executionFor(agent),
+              );
+          },
+        ),
+      ).toBe(4);
+    } finally {
+      strategySpy.mockRestore();
+    }
+  }, 30000);
+
   it('attributes PreCompress on real 413 context recovery and retries the original facade stream', async () => {
-    const strategySpy = spyOn(
-      compressionFactory,
-      'getCompressionStrategy',
-    ).mockReturnValue(strategy);
+    const strategySpy = spyOnSummaryStrategy();
     const server = await startContextLimitServer();
     let surfaced413 = 0;
     let returnedContent = 0;

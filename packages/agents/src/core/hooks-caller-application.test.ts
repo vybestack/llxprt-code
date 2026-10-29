@@ -774,33 +774,22 @@ describe('Hook Caller Application', () => {
         // This test verifies that stream handling passes systemMessage from hook
         // output to AgentExecutionStoppedError when a BeforeModel hook stops execution.
         //
-        // The code should look like:
-        //   const beforeModelResult = await triggerBeforeModelHook(...);
-        //   if (beforeModelResult?.shouldStopExecution()) {
-        //     throw new AgentExecutionStoppedError(
-        //       beforeModelResult.getEffectiveReason() || 'Execution stopped by BeforeModel hook',
-        //       beforeModelResult.systemMessage,  // <-- systemMessage must be passed here
-        //     );
-        //   }
-        //
-        // After decomposition, this logic lives in beforeModelHookDecision.ts
-        // (extracted from StreamProcessor.ts).
+        // The BeforeModel hook decision is enforced by enforceSnapshotDecision
+        // in beforeModelHookFire.ts (disk-route hook), which must pass the
+        // hook output's system message to AgentExecutionStoppedError.
 
         const fs = await import('node:fs/promises');
-        const hookDecisionPath = fileURLToPath(
-          new URL('../core/beforeModelHookDecision.ts', import.meta.url),
+        const hookFirePath = fileURLToPath(
+          new URL('../core/beforeModelHookFire.ts', import.meta.url),
         );
-        const sourceCode = await fs.readFile(hookDecisionPath, 'utf-8');
+        const sourceCode = await fs.readFile(hookFirePath, 'utf-8');
 
-        // Check that AgentExecutionStoppedError exists (constructor lives in chatSession.ts)
         const hasStoppedErrorReference = sourceCode.includes(
           'AgentExecutionStoppedError',
         );
 
-        // Check that systemMessage is passed when throwing AgentExecutionStoppedError after BeforeModel
-        // Look for pattern: beforeModelResult.systemMessage being passed to the error
         const passesSystemMessageToStoppedError =
-          sourceCode.includes('beforeModelResult.systemMessage') &&
+          sourceCode.includes('output.readSystemMessage()') &&
           sourceCode.includes('AgentExecutionStoppedError');
 
         return { hasStoppedErrorReference, passesSystemMessageToStoppedError };

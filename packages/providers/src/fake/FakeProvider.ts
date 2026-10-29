@@ -105,7 +105,7 @@ export class FakeProvider implements IProvider {
   }
 
   async *generateChatCompletion(
-    _optionsOrContent: GenerateChatOptions | IContent[],
+    _optionsOrContent: GenerateChatOptions | AsyncIterable<IContent>,
   ): AsyncIterableIterator<IContent> {
     const turnIndex = this.callCounter++;
     const turn = this.turns[turnIndex] as FakeResponseTurn | undefined;

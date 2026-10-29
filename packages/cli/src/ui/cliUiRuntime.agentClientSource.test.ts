@@ -237,7 +237,7 @@ describe('UI session client ownership', () => {
         ephemeralSettings: {},
       });
       expect(
-        (await agent.getHistory()).filter(
+        (await agent.session.getHistory()).filter(
           (content) => content.speaker === 'human',
         ),
       ).toHaveLength(1);
@@ -279,9 +279,11 @@ describe('UI session client ownership', () => {
         expect(initializationChatStates).toStrictEqual([false, false]);
         expect(detached.disposed).toBe(1);
         expect(primary.disposed).toBe(0);
-        expect(primary.getHistoryService()?.getRawHistory()).toHaveLength(0);
+        expect(await Array.fromAsync(primary.streamHistory())).toHaveLength(0);
         await primary.startChat();
-        expect(await primary.getHistory()).toStrictEqual([]);
+        expect(await Array.fromAsync(primary.streamHistory())).toStrictEqual(
+          [],
+        );
       },
     );
     expect(cleanup).toStrictEqual([]);

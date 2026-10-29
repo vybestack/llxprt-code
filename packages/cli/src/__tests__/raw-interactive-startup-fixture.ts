@@ -1,3 +1,4 @@
+import { displayBoot } from './resumeRows.js';
 import { ConfigurationManager } from '@vybestack/llxprt-code-telemetry';
 import { createObservationOwner } from '../observation/jspWiring.js';
 import { createTerminalHost } from '../session/terminalHost.js';
@@ -11,7 +12,7 @@ import type {
   IContent,
   LockHandle,
   RecordingIntegration,
-  SessionRecordingService,
+  SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
@@ -90,7 +91,7 @@ export function startInteractiveUI(
   workspaceRoot: string,
   recordingIntegration?: RecordingIntegration,
   resumedHistory?: IContent[],
-  initialRecordingService?: SessionRecordingService,
+  initialRecordingService?: SessionRecordingPort,
   initialLockHandle?: LockHandle | null,
   suppressStartupWelcome?: boolean,
   recordingOwner?: 'raw',
@@ -112,7 +113,8 @@ export function startInteractiveUI(
       runtimeSettings,
       sessionPersistence,
       recordingIntegration,
-      resumedHistory,
+      resumedBoot:
+        resumedHistory === undefined ? undefined : displayBoot(resumedHistory),
       initialRecordingService,
       initialLockHandle,
       suppressStartupWelcome,

@@ -3,14 +3,15 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { journalFileRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 
 /**
  * A compression summary carries the origin that produced it. Recording
  * subscribers bound to an owner record summaries from their own origin and
  * from no origin at all, and skip summaries tagged with another owner.
  *
- * Real HistoryService, real RecordingIntegration and SessionRecordingService
- * writing JSONL into temp directories. Assertions are on the recorded files.
+ * Real HistoryService, real RecordingIntegration and JournalRecordingService
+ * writing native journals into temp directories. Assertions are on the recorded files.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -21,11 +22,11 @@ import * as path from 'node:path';
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { JournalRecordingService } from './journalRecordingService.js';
 
 interface OwnedRecording {
   readonly owner: object;
-  readonly service: SessionRecordingService;
+  readonly service: JournalRecordingService;
   readonly integration: RecordingIntegration;
 }
 
@@ -36,13 +37,13 @@ function textContent(
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
-function openOwnedRecording(
+async function openOwnedRecording(
   tempDir: string,
   name: string,
   history: HistoryService,
-): OwnedRecording {
+): Promise<OwnedRecording> {
   const chatsDir = path.join(tempDir, name);
-  const service = new SessionRecordingService({
+  const service = JournalRecordingService.create({
     sessionId: `compression-origin-${name}-0001`,
     projectHash: 'project-hash-compression-origin',
     chatsDir,
@@ -52,27 +53,21 @@ function openOwnedRecording(
   });
   const integration = new RecordingIntegration(service);
   const owner = { name };
-  integration.subscribeToHistory(history, owner);
+  await integration.subscribeToJournal(history, owner);
   return { owner, service, integration };
 }
 
-/** The summary text of every `compressed` record in the owner's journal. */
+/** The text of every summary row in the owner's journal. */
 async function compressedSummaryTexts(
   recording: OwnedRecording,
 ): Promise<string[]> {
   await recording.integration.flushAtTurnBoundary();
-  const filePath = recording.service.getFilePath();
-  if (filePath === null) throw new Error('Missing recording path');
   const texts: string[] = [];
-  for (const line of (await fs.readFile(filePath, 'utf-8'))
-    .trim()
-    .split('\n')) {
-    const event = JSON.parse(line) as {
-      type: string;
-      payload?: { summary?: IContent };
-    };
-    if (event.type !== 'compressed') continue;
-    for (const block of event.payload?.summary?.blocks ?? []) {
+  const file = recording.service.getFilePath();
+  if (file === null) throw new Error('Missing recording path');
+  for await (const row of journalFileRows(file)) {
+    if (row.metadata?.isSummary !== true) continue;
+    for (const block of row.blocks) {
       if (block.type === 'text') texts.push(block.text);
     }
   }
@@ -90,8 +85,8 @@ describe('RecordingIntegration compression summary origin', () => {
       path.join(os.tmpdir(), 'recording-compression-origin-'),
     );
     history = new HistoryService();
-    first = openOwnedRecording(tempDir, 'first', history);
-    second = openOwnedRecording(tempDir, 'second', history);
+    first = await openOwnedRecording(tempDir, 'first', history);
+    second = await openOwnedRecording(tempDir, 'second', history);
   });
 
   afterEach(async () => {
@@ -99,7 +94,7 @@ describe('RecordingIntegration compression summary origin', () => {
       await recording.integration.dispose();
       await recording.service.dispose();
     }
-    history.dispose();
+    await history.dispose();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -108,7 +103,13 @@ describe('RecordingIntegration compression summary origin', () => {
     history.add(textContent('reply', 'ai'));
 
     history.startCompression();
-    history.endCompression(textContent('external-summary', 'ai'), 2);
+    history.endCompression();
+    await history.addBatch([
+      {
+        ...textContent('external-summary', 'ai'),
+        metadata: { isSummary: true },
+      },
+    ]);
 
     expect(await compressedSummaryTexts(first)).toStrictEqual([
       'external-summary',
@@ -118,10 +119,16 @@ describe('RecordingIntegration compression summary origin', () => {
     ]);
 
     history.startCompression(first.owner);
-    history.endCompression(
-      textContent('first-owned-summary', 'ai'),
-      2,
-      first.owner,
+    history.endCompression(undefined, undefined, first.owner);
+    await history.addBatch(
+      [
+        {
+          ...textContent('first-owned-summary', 'ai'),
+          metadata: { isSummary: true },
+        },
+      ],
+      undefined,
+      { origin: first.owner },
     );
 
     expect(await compressedSummaryTexts(first)).toStrictEqual([

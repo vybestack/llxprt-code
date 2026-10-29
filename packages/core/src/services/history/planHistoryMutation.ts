@@ -1,0 +1,315 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type {
+  HistoryCompensationMark,
+  HistoryJournalOp,
+  HistoryStorePort,
+} from './historyStorePort.js';
+import { isDeepStrictEqual } from 'node:util';
+import type { RowOwnership } from '../../recording/rowOwnership.js';
+import type { IContent } from './IContent.js';
+import {
+  replaceAllOps,
+  replaceOwnedRowsOps,
+  restoreRowsOps,
+  type OpenReplaceTracker,
+} from './historyReplaceOps.js';
+import type { HistoryRowOrigins } from './historyRowOrigins.js';
+import { HistoryDensityRows } from './historyDensityRows.js';
+import { planDiskDensityMutation } from './historyDiskDensity.js';
+import { historyOriginId } from './historyOriginId.js';
+import type { HistoryMutationInput } from './historyBatchContracts.js';
+import type { DensityResult } from '../../core/compression/types.js';
+import type { DensityReplacementRecordShape } from './historyJournalGuards.js';
+import { type HistoryMutationSnapshot } from './historyIndexedRows.js';
+import { historyRowAt, type HistoryRowSource } from './historyIndexedRows.js';
+
+const MAX_RETAINED_VALUE_OPS = 64;
+
+export function* planMutation(
+  previous: HistoryRowSource,
+  input: HistoryMutationInput,
+  ownership?: RowOwnership,
+): Generator<HistoryJournalOp, void, unknown> {
+  if (input.diskDensityResult !== undefined) {
+    if (
+      !('readRow' in previous) ||
+      !(input.nextHistory instanceof HistoryDensityRows)
+    )
+      throw new Error('Disk density requires indexed snapshots and candidates');
+    yield* planDiskDensityMutation(
+      previous,
+      input.nextHistory,
+      input.diskDensityResult,
+      ownership,
+    );
+    return;
+  }
+  if (input.options.replaceAll === true) {
+    yield* replacementOps(previous, input.nextHistory);
+    return;
+  }
+  yield* planHistoryMutation(previous, input.nextHistory, ownership);
+}
+
+export function planDensityMutation(
+  current: HistoryRowSource,
+  result: DensityResult,
+): HistoryJournalOp[] | null {
+  const removedSeqs: number[] = [];
+  for (const index of result.removals) {
+    const seq = chronSeqOf(historyRowAt(current, index));
+    if (seq === null) return null;
+    removedSeqs.push(seq);
+  }
+  const replacements: DensityReplacementRecordShape[] = [];
+  for (const [index, replacement] of result.replacements) {
+    const seq = chronSeqOf(historyRowAt(current, index));
+    if (seq === null) return null;
+    replacements.push({ replacedSeq: seq, replacement });
+  }
+  return [{ kind: 'density', payload: { removedSeqs, replacements } }];
+}
+
+/**
+ * Replace the whole history: a pure clear is one rewind, an empty history
+ * takes plain appends, anything else is one atomic replace transaction.
+ */
+function* replacementOps(
+  previous: HistoryRowSource,
+  next: HistoryRowSource,
+  nextOrigins?: HistoryRowOrigins,
+): Generator<HistoryJournalOp, void, unknown> {
+  if (previous.length === 0) {
+    let index = 0;
+    for (const content of next)
+      yield contentOp(content, nextOrigins?.originAt(index++));
+  } else if (next.length === 0) {
+    yield rewindAllOp(previous);
+  } else if (nextOrigins === undefined) {
+    yield* replaceAllOps(next);
+  } else {
+    yield* replaceOwnedRowsOps(nextOrigins.owned(next));
+  }
+}
+
+function contentOp(
+  content: IContent,
+  origin: string | undefined,
+): HistoryJournalOp {
+  return origin === undefined
+    ? { kind: 'content', content }
+    : { kind: 'content', content, origin };
+}
+
+/**
+ * The old store's compensation mark: the snapshot of the rows before the
+ * mutation, whose captured origins let a compensation put them back.
+ */
+export class SnapshotCompensationMark implements HistoryCompensationMark {
+  constructor(
+    readonly store: HistoryStorePort,
+    readonly previous: HistoryMutationSnapshot,
+    readonly input: HistoryMutationInput,
+    readonly replacements: OpenReplaceTracker,
+  ) {}
+}
+
+/**
+ * Undo the admitted prefix of a failed mutation. An unfinished replace
+ * transaction is aborted, which leaves the previous rows; anything else is put
+ * back by one replace transaction of the previous rows.
+ */
+export async function compensateMutation(
+  journal: HistoryStorePort,
+  previousHistory: HistoryMutationSnapshot,
+  input: HistoryMutationInput,
+  replacements: OpenReplaceTracker,
+): Promise<void> {
+  const nextHistory = input.nextHistory;
+  const awaitDurability =
+    input.streamPublication !== false &&
+    nextHistory instanceof HistoryDensityRows &&
+    !previousHistory.hasPendingRows;
+  const origin =
+    input.options.origin === undefined
+      ? undefined
+      : historyOriginId(input.options.origin);
+  const stamped = (op: HistoryJournalOp): HistoryJournalOp =>
+    origin === undefined ? op : { ...op, origin };
+  const abort = replacements.abortOp();
+  if (abort !== null) {
+    journal.apply(stamped(abort));
+    replacements.observe(abort);
+    if (awaitDurability) await journal.waitForDurable();
+    return;
+  }
+  // Every admitted prefix contains at most the old rows plus the new rows.
+  // A count-only rewind clears it even if admission stopped before a row
+  // needed by a seq-addressed inverse. Replay without another projection.
+  // Only the count-only rewind is the failed operation's own record. The rows
+  // put back return under the origins they had, not the operation's origin.
+  for (const op of restoreRowsOps(
+    previousHistory,
+    previousHistory.origins,
+    previousHistory.length + nextHistory.length,
+  )) {
+    journal.apply(op.kind === 'rewind' ? stamped(op) : op);
+    if (awaitDurability) await journal.waitForDurable();
+  }
+}
+
+function chronSeqOf(content: IContent): number | null {
+  const seq = content.metadata?.chronology?.seq;
+  return typeof seq === 'number' ? seq : null;
+}
+
+/** True when `next` extends or truncates `previous` at the same marked positions. */
+function isMarkedPrefix(
+  previous: HistoryRowSource,
+  next: HistoryRowSource,
+  length = next.length,
+): boolean {
+  if (length > previous.length) return false;
+  for (let index = 0; index < length; index += 1) {
+    const previousSeq = chronSeqOf(historyRowAt(previous, index));
+    if (
+      previousSeq === null ||
+      previousSeq !== chronSeqOf(historyRowAt(next, index))
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function rewindAllOp(rows: HistoryRowSource): HistoryJournalOp {
+  const firstSeq =
+    rows.length > 0
+      ? (chronSeqOf(historyRowAt(rows, 0)) ?? undefined)
+      : undefined;
+  return { kind: 'rewind', itemsRemoved: rows.length, cutSeq: firstSeq };
+}
+
+function* retainedValueOps(
+  previous: HistoryRowSource,
+  next: HistoryRowSource,
+  length = next.length,
+  ownership?: RowOwnership,
+): Generator<HistoryJournalOp, void, unknown> {
+  for (let index = 0; index < length; index += 1) {
+    const old = historyRowAt(previous, index);
+    const replacement = historyRowAt(next, index);
+    if (replacement === old || isDeepStrictEqual(replacement, old)) continue;
+    ownership?.retain(old);
+    try {
+      ownership?.retain(replacement);
+      try {
+        yield {
+          kind: 'density',
+          payload: {
+            removedSeqs: [],
+            replacements: [{ replacedSeq: chronSeqOf(old) ?? 0, replacement }],
+          },
+        };
+      } finally {
+        ownership?.release(replacement);
+      }
+    } finally {
+      ownership?.release(old);
+    }
+  }
+}
+
+function allMarked(previous: HistoryRowSource): boolean {
+  for (const row of previous) if (chronSeqOf(row) === null) return false;
+  return true;
+}
+
+function preferDetachedReplay(
+  previous: HistoryRowSource,
+  next: HistoryRowSource,
+): boolean {
+  if (!(next instanceof HistoryDensityRows)) return false;
+  let changes = 0;
+  for (let index = 0; index < Math.min(previous.length, next.length); index++) {
+    const original = historyRowAt(previous, index);
+    const replacement = historyRowAt(next, index);
+    if (
+      chronSeqOf(original) === null ||
+      chronSeqOf(original) !== chronSeqOf(replacement)
+    )
+      return false;
+    if (
+      !isDeepStrictEqual(original, replacement) &&
+      ++changes > MAX_RETAINED_VALUE_OPS
+    )
+      return true;
+  }
+  return false;
+}
+
+/**
+ * Plan the journal ops that turn `previous` into `next`. `nextOrigins` is
+ * given when `next` puts back rows that had owners (a rollback): the rows the
+ * plan writes then keep the origin they had, instead of becoming unowned.
+ *
+ *  - strict marked prefix, shorter → one `rewind` (count + cut seq);
+ *  - strict marked prefix, longer → `content` rows for the appended tail;
+ *  - single-item whole replacement over a marked history →
+ *    `compression_detail` + `compressed` (the compression shape);
+ *  - anything else → replace everything with `next` (see replacementOps).
+ */
+export function* planHistoryMutation(
+  previous: HistoryRowSource,
+  next: HistoryRowSource,
+  ownership?: RowOwnership,
+  nextOrigins?: HistoryRowOrigins,
+): Generator<HistoryJournalOp, void, unknown> {
+  if (preferDetachedReplay(previous, next)) {
+    yield* replacementOps(previous, next, nextOrigins);
+    return;
+  }
+  if (next.length === previous.length && isMarkedPrefix(previous, next)) {
+    yield* retainedValueOps(previous, next, next.length, ownership);
+    return;
+  }
+  if (
+    next.length > previous.length &&
+    isMarkedPrefix(previous, next, previous.length)
+  ) {
+    yield* retainedValueOps(previous, next, previous.length, ownership);
+    for (let index = previous.length; index < next.length; index++) {
+      yield contentOp(historyRowAt(next, index), nextOrigins?.originAt(index));
+    }
+    return;
+  }
+  if (next.length < previous.length && isMarkedPrefix(previous, next)) {
+    const firstRemoved = historyRowAt(previous, next.length);
+    yield {
+      kind: 'rewind',
+      itemsRemoved: previous.length - next.length,
+      cutSeq: chronSeqOf(firstRemoved) ?? undefined,
+    };
+    yield* retainedValueOps(previous, next, next.length, ownership);
+    return;
+  }
+  if (next.length === 1 && previous.length > 0 && allMarked(previous)) {
+    yield {
+      kind: 'compressionDetail',
+      payload: {
+        fromSeq: chronSeqOf(historyRowAt(previous, 0)) ?? 0,
+        toSeq: chronSeqOf(historyRowAt(previous, previous.length - 1)) ?? 0,
+        itemsCompressed: previous.length,
+      },
+    };
+    const summaryOrigin = nextOrigins?.originAt(0);
+    yield {
+      kind: 'compressed',
+      summary: historyRowAt(next, 0),
+      itemsCompressed: previous.length,
+      ...(summaryOrigin === undefined ? {} : { origin: summaryOrigin }),
+    };
+    return;
+  }
+  yield* replacementOps(previous, next, nextOrigins);
+}

@@ -5,11 +5,13 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { PinnedMediaLease } from '@vybestack/llxprt-code-core/storage/history-media-release-gate.js';
 import {
   assertRequestMediaBudget,
   DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
   type RequestMediaAccounting,
+  type RequestMediaReservations,
+  type RequestMediaResolutionService,
   type ResolvedMediaRequest,
 } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 
@@ -139,6 +141,8 @@ export async function resolveRequestMedia(
     readonly requestId: string;
     readonly aggregateBudgetBytes?: number;
     readonly resolver?: RequestMediaResolutionService;
+    readonly reservations?: RequestMediaReservations;
+    readonly lease?: PinnedMediaLease;
   },
   contents: IContent[],
   signal: AbortSignal | undefined,
@@ -165,6 +169,10 @@ export async function resolveRequestMedia(
     requestId: media.requestId,
     turnId: turnIdentity(contents),
     aggregateBudgetBytes,
+    ...(media.reservations === undefined
+      ? {}
+      : { reservations: media.reservations }),
+    ...(media.lease === undefined ? {} : { lease: media.lease }),
     ...(signal === undefined ? {} : { signal }),
   });
 }

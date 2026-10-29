@@ -1,18 +1,8 @@
-import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
-import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import { scopeInputs } from './__tests__/subagent-test-helpers.js';
-import type { SubagentTestInputs } from './__tests__/subagent-test-helpers.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createToolRegistryViewFromRegistry } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
 /**
  * SubAgentScope stream idle timeout behavioral tests.
@@ -30,14 +20,9 @@ import {
   expect,
   beforeEach,
   afterEach,
+  afterAll,
   type Mock,
 } from 'bun:test';
-import {
-  ContextState,
-  SubagentTerminateMode,
-  type ModelConfig,
-  type RunConfig,
-} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
 import { mockChunk } from './__tests__/turn-test-helpers.js';
 import {
@@ -46,24 +31,18 @@ import {
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
-import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { McpRuntimeOwner } from '../api/mcpRuntimeAssembly.js';
-import { createTestMcpRuntime } from '../api/__tests__/helpers/create-mcp-runtime.js';
+import {
+  ContextState,
+  SubagentTerminateMode,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import {
   waitForConditionInRealTime,
-  waitForConditionOnEventLoop,
   delayRealTime,
 } from '../test-utils/eventLoop.js';
-import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import { createIdleScope } from './__tests__/support/subagent-stream-idle-test-helpers.js';
+import { deferred } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 
-const requestFetch: NetworkFetch = () =>
-  Promise.reject(new Error('This test must not make network requests'));
 const realEnvironmentContextModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
 };
@@ -76,7 +55,7 @@ const { TodoStoreMock } = (() => {
   const TodoStoreMock = vi
     .fn()
     .mockImplementation(() => ({ readTodos: mockReadTodos }));
-  return { mockReadTodos, TodoStoreMock };
+  return { TodoStoreMock };
 })();
 
 const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
@@ -117,323 +96,104 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
 }));
 
-describe('subagent.ts', () => {
-  const workspaceOwners: McpRuntimeOwner[] = [];
+function mockSession(
+  config: Config,
+  runtimeBundle: AgentRuntimeLoaderResult,
+  stream: () => AsyncGenerator<{
+    type: StreamEventType;
+    value: ReturnType<typeof mockChunk>;
+  }>,
+): void {
+  (
+    ChatSession as unknown as Mock<(...args: never[]) => unknown>
+  ).mockImplementationOnce(
+    () =>
+      ({
+        sendMessageStream: vi.fn().mockImplementation(async () => stream()),
+        getConfig: () => config,
+        getStreamTimeoutPolicy: () =>
+          runtimeBundle.runtimeContext.readStreamTimeoutPolicy(),
+        getHistory: () => runtimeBundle.history.streamRawHistory(),
+        getHistoryService: () => runtimeBundle.history,
+      }) as unknown as ChatSession,
+  );
+  (
+    createContentGenerator as Mock<typeof createContentGenerator>
+  ).mockResolvedValue({} as ContentGenerator);
+  (
+    getEnvironmentContext as Mock<typeof getEnvironmentContext>
+  ).mockResolvedValue([]);
+}
 
-  afterEach(async () => {
-    const failures: unknown[] = [];
-    for (const owner of workspaceOwners.splice(0).reverse()) {
-      try {
-        await owner.dispose();
-      } catch (error) {
-        failures.push(error);
-      }
-    }
-    if (failures.length > 0)
-      throw new AggregateError(
-        failures,
-        'Idle stream workspace cleanup failed',
-      );
-  });
-  describe('stream idle timeout behavioral tests', () => {
-    const originalEnv = process.env;
-    const mockMessageBus = {} as MessageBus;
-
-    const localDefaultModelConfig: ModelConfig = {
-      model: 'gemini-1.5-flash-latest',
-      temp: 0.5,
-      top_p: 1,
-    };
-
-    const localDefaultRunConfig: RunConfig = {
-      max_time_minutes: 5,
-      max_turns: 10,
-    };
-
-    const createRuntimeBundle = (
-      config: Config,
-      settingsService: SettingsService,
-    ): AgentRuntimeLoaderResult => {
-      const { settingsOwner } = createSessionSettingsFixture(
-        config,
-        settingsService,
-      );
-      const history = new HistoryService();
-      const state = createAgentRuntimeState({
-        runtimeId: config.getSessionId(),
-        sessionId: config.getSessionId(),
-        provider: 'stub',
-        model: config.getModel(),
-        modelParams: {},
-      });
-      const provider = {
-        getActiveProvider: vi.fn(() => ({
-          name: 'stub',
-          isDefault: true,
-          getModels: async () => [],
-          generateChatCompletion: vi.fn(async function* () {}),
-          getDefaultModel: () => config.getModel(),
-        })),
-        setActiveProvider: vi.fn(),
-      };
-      const telemetry = {
-        logApiRequest: vi.fn(),
-        logApiResponse: vi.fn(),
-        logApiError: vi.fn(),
-      };
-      const toolRegistry = new ToolRegistry(config, mockMessageBus, () =>
-        settingsOwner.readRegistryPolicy([]),
-      );
-      const runtimeContext = createAgentRuntimeContext({
-        state,
-        history,
-        provider,
-        telemetry,
-        settings: settingsOwner.readRuntimePolicy(),
-        readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
-        providerRuntime: createProviderRuntimeContext({
-          runtimeId: state.runtimeId,
-        }),
-        prepareProviderInvocation: (name, parameters, signal) =>
-          settingsOwner.prepareProviderInvocation(
-            state.runtimeId,
-            name,
-            parameters,
-            signal,
-            undefined,
-            requestFetch,
-          ),
-        tools: createToolRegistryViewFromRegistry(toolRegistry),
-      });
-      return {
-        telemetryRoot: RootTelemetry.prepare({
-          enabled: false,
-          sessionId: 'child-idle',
-          maxBytes: 1024,
-          maxFiles: 1,
-        }),
-        runtimeContext,
-        history,
-        providerAdapter: provider,
-        telemetryAdapter: telemetry,
-        toolsView: runtimeContext.tools,
-        contentGenerator: {} as ContentGenerator,
-        toolRegistry,
-      };
-    };
-
-    beforeEach(() => {
-      vi.useFakeTimers();
-      process.env = { ...originalEnv };
-      delete process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS;
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-      vi.restoreAllMocks();
-      process.env = originalEnv;
-    });
-
+function registerConfigTimeout(): void {
+  describe('config timeout', () => {
     it('honors config setting: timeout fires after custom timeout value from config.getEphemeralSetting', async () => {
       const customTimeoutMs = 15_000; // 15 seconds
-
-      const settingsService = new SettingsService();
-      const configParams: ConfigParameters = {
-        sessionId: 'test-session',
-        model: 'gemini-2.5-pro',
-        targetDir: '.',
-        debugMode: false,
-        cwd: process.cwd(),
-        initialSettings: settingsService.getAllGlobalSettings(),
-      };
-      const configWithTimeout = new Config(configParams);
-      settingsService.set('stream-idle-timeout-ms', customTimeoutMs);
-      const mcpRuntime = await createTestMcpRuntime(
-        { oauth: createTestOAuthBinding(), config: configWithTimeout },
-        {},
-      );
-      workspaceOwners.push(mcpRuntime);
-      await mcpRuntime.initialize();
-
-      const runtimeBundle = createRuntimeBundle(
-        configWithTimeout,
-        settingsService,
-      );
-      const overrides: SubagentTestInputs = {
-        instructions: mcpRuntime.workspaceMemory.operations,
-        workspacePaths: mcpRuntime.workspaceFilesystem.paths,
-        readMcpInstructions: () => undefined,
-        runtimeBundle,
-        toolRegistry: new ToolRegistry(
-          configWithTimeout,
-          mockMessageBus,
-          assembleTaskSchemaPolicy(new SettingsService()),
-        ),
-      };
-
-      const scope = await createSubagentScope(
-        {
-          name: 'timeout-test-agent',
-          prompt: { systemPrompt: 'Test timeout behavior.' },
-          model: localDefaultModelConfig,
-          run: localDefaultRunConfig,
-          toolConfig: undefined,
-          outputConfig: undefined,
-        },
-        ...scopeInputs(configWithTimeout, overrides),
+      const { config, runtimeBundle, scope } = await createIdleScope(
+        customTimeoutMs,
+        'timeout-test-agent',
+        'Test timeout behavior.',
       );
 
       // Mock a slow stream that yields after the timeout
-      (
-        ChatSession as unknown as Mock<(...args: never[]) => unknown>
-      ).mockImplementationOnce(
-        () =>
-          ({
-            sendMessageStream: vi.fn().mockImplementation(async () => {
-              async function* slowStream() {
-                yield {
-                  type: StreamEventType.CHUNK,
-                  value: mockChunk({ text: 'Starting...' }),
-                };
-                // Wait past the custom timeout
-                await advanceTimersByTimeAsync(25_000);
-                yield {
-                  type: StreamEventType.CHUNK,
-                  value: mockChunk({ text: 'Late response' }),
-                };
-              }
-              return slowStream();
-            }),
-            getConfig: () => configWithTimeout,
-            getStreamTimeoutPolicy: () =>
-              runtimeBundle.runtimeContext.readStreamTimeoutPolicy(),
-            getHistory: vi.fn().mockReturnValue([]),
-            getHistoryService: vi.fn().mockReturnValue({
-              clear: vi.fn(),
-              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-              getCurated: vi.fn().mockReturnValue([]),
-              getTotalTokens: vi.fn().mockReturnValue(0),
-            }),
-          }) as unknown as ChatSession,
-      );
-
-      (
-        createContentGenerator as Mock<typeof createContentGenerator>
-      ).mockReturnValue({} as ContentGenerator);
-      (
-        getEnvironmentContext as Mock<typeof getEnvironmentContext>
-      ).mockResolvedValue('');
+      mockSession(config, runtimeBundle, async function* slowStream() {
+        yield {
+          type: StreamEventType.CHUNK,
+          value: mockChunk({ text: 'Starting...' }),
+        };
+        // Wait past the custom timeout
+        await advanceTimersByTimeAsync(25_000);
+        yield {
+          type: StreamEventType.CHUNK,
+          value: mockChunk({ text: 'Late response' }),
+        };
+      });
 
       const runPromise = scope.runNonInteractive(new ContextState());
-
       // Attach catch handler before advancing timers to prevent unhandled rejection
       const resultPromise = runPromise.catch((e) => e);
-
       // Advance past the custom timeout
       await advanceTimersByTimeAsync(20_000);
       await Promise.resolve();
-
       // Run to completion
       await runAllTimersAsync();
-
       // Scope should have timed out
-      const _result = await resultPromise;
+      await resultPromise;
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
     });
+  });
+}
 
+function registerDisabledTimeout(): void {
+  describe('disabled timeout', () => {
     it('disabled path: no timeout when setting is 0, even after extended period', async () => {
-      const settingsService = new SettingsService();
-      const configParams: ConfigParameters = {
-        sessionId: 'test-session',
-        model: 'gemini-2.5-pro',
-        targetDir: '.',
-        debugMode: false,
-        cwd: process.cwd(),
-        initialSettings: settingsService.getAllGlobalSettings(),
-      };
-      const configWithTimeout = new Config(configParams);
-      settingsService.set('stream-idle-timeout-ms', 0); // Disabled
-      const mcpRuntime = await createTestMcpRuntime(
-        { oauth: createTestOAuthBinding(), config: configWithTimeout },
-        {},
+      const { config, runtimeBundle, scope } = await createIdleScope(
+        0,
+        'no-timeout-agent',
+        'Test no timeout behavior.',
+        60, // Long enough for test
       );
-      workspaceOwners.push(mcpRuntime);
-      await mcpRuntime.initialize();
-
-      const runtimeBundle = createRuntimeBundle(
-        configWithTimeout,
-        settingsService,
-      );
-      const overrides: SubagentTestInputs = {
-        instructions: mcpRuntime.workspaceMemory.operations,
-        workspacePaths: mcpRuntime.workspaceFilesystem.paths,
-        readMcpInstructions: () => undefined,
-        runtimeBundle,
-        toolRegistry: new ToolRegistry(
-          configWithTimeout,
-          mockMessageBus,
-          assembleTaskSchemaPolicy(new SettingsService()),
-        ),
-      };
-
-      const scope = await createSubagentScope(
-        {
-          name: 'no-timeout-agent',
-          prompt: { systemPrompt: 'Test no timeout behavior.' },
-          model: localDefaultModelConfig,
-          run: { ...localDefaultRunConfig, max_time_minutes: 60 }, // Long enough for test
-          toolConfig: undefined,
-          outputConfig: undefined,
-        },
-        ...scopeInputs(configWithTimeout, overrides),
-      );
-
+      const stalled = deferred();
       let resolveIterator: () => void;
       let stallReached = false;
       const iteratorPromise = new Promise<void>((resolve) => {
         resolveIterator = resolve;
       });
 
-      (
-        ChatSession as unknown as Mock<(...args: never[]) => unknown>
-      ).mockImplementationOnce(
-        () =>
-          ({
-            sendMessageStream: vi.fn().mockImplementation(async () => {
-              async function* stalledStream() {
-                yield {
-                  type: StreamEventType.CHUNK,
-                  value: mockChunk({ text: 'Starting...' }),
-                };
-                stallReached = true;
-                // Wait indefinitely until manually resolved
-                await iteratorPromise;
-                yield {
-                  type: StreamEventType.CHUNK,
-                  value: mockChunk({ text: 'Finally done' }),
-                };
-              }
-              return stalledStream();
-            }),
-            getConfig: () => configWithTimeout,
-            getStreamTimeoutPolicy: () =>
-              runtimeBundle.runtimeContext.readStreamTimeoutPolicy(),
-            getHistory: vi.fn().mockReturnValue([]),
-            getHistoryService: vi.fn().mockReturnValue({
-              clear: vi.fn(),
-              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-              getCurated: vi.fn().mockReturnValue([]),
-              getTotalTokens: vi.fn().mockReturnValue(0),
-            }),
-          }) as unknown as ChatSession,
-      );
-
-      (
-        createContentGenerator as Mock<typeof createContentGenerator>
-      ).mockReturnValue({} as ContentGenerator);
-      (
-        getEnvironmentContext as Mock<typeof getEnvironmentContext>
-      ).mockResolvedValue('');
+      mockSession(config, runtimeBundle, async function* stalledStream() {
+        yield {
+          type: StreamEventType.CHUNK,
+          value: mockChunk({ text: 'Starting...' }),
+        };
+        stallReached = true;
+        stalled.resolve();
+        // Wait indefinitely until manually resolved
+        await iteratorPromise;
+        yield {
+          type: StreamEventType.CHUNK,
+          value: mockChunk({ text: 'Finally done' }),
+        };
+      });
 
       let runSettled = false;
       const runPromise = scope
@@ -442,10 +202,8 @@ describe('subagent.ts', () => {
           runSettled = true;
         });
 
-      // Reach the stall before moving the clock. A real event-loop yield is
-      // only reliable while the fake clock is still, so this gate has to come
-      // first; without it the advance races the stream start on slower hosts.
-      expect(await waitForConditionOnEventLoop(() => stallReached)).toBe(true);
+      await stalled.promise;
+      expect(stallReached).toBe(true);
 
       // Hold the stall open in real time to show the idle watchdog never
       // fires. The fake clock is not used for this: draining the pipeline to
@@ -470,7 +228,11 @@ describe('subagent.ts', () => {
         SubagentTerminateMode.TIMEOUT,
       );
     });
+  });
+}
 
+function registerEnvPrecedence(): void {
+  describe('environment precedence', () => {
     it('env var precedence: env var overrides config setting', async () => {
       // Real timers with small real durations. Bun's fake timers deadlock when
       // this pipeline is drained to completion, and the behaviour under test is
@@ -480,108 +242,40 @@ describe('subagent.ts', () => {
       vi.useRealTimers();
       const envTimeoutMs = 50; // from env
       const configTimeoutMs = 20_000; // from config (should be ignored)
-
       process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS = String(envTimeoutMs);
-
-      const settingsService = new SettingsService();
-      const configParams: ConfigParameters = {
-        sessionId: 'test-session',
-        model: 'gemini-2.5-pro',
-        targetDir: '.',
-        debugMode: false,
-        cwd: process.cwd(),
-        initialSettings: settingsService.getAllGlobalSettings(),
-      };
-      const configWithTimeout = new Config(configParams);
-      settingsService.set('stream-idle-timeout-ms', configTimeoutMs);
-      const mcpRuntime = await createTestMcpRuntime(
-        { oauth: createTestOAuthBinding(), config: configWithTimeout },
-        {},
-      );
-      workspaceOwners.push(mcpRuntime);
-      await mcpRuntime.initialize();
-
-      const runtimeBundle = createRuntimeBundle(
-        configWithTimeout,
-        settingsService,
-      );
-      const overrides: SubagentTestInputs = {
-        instructions: mcpRuntime.workspaceMemory.operations,
-        workspacePaths: mcpRuntime.workspaceFilesystem.paths,
-        readMcpInstructions: () => undefined,
-        runtimeBundle,
-        toolRegistry: new ToolRegistry(
-          configWithTimeout,
-          mockMessageBus,
-          assembleTaskSchemaPolicy(new SettingsService()),
-        ),
-      };
-
-      const scope = await createSubagentScope(
-        {
-          name: 'env-precedence-agent',
-          prompt: { systemPrompt: 'Test env precedence.' },
-          model: localDefaultModelConfig,
-          run: localDefaultRunConfig,
-          toolConfig: undefined,
-          outputConfig: undefined,
-        },
-        ...scopeInputs(configWithTimeout, overrides),
+      const { config, runtimeBundle, scope } = await createIdleScope(
+        configTimeoutMs,
+        'env-precedence-agent',
+        'Test env precedence.',
       );
 
+      const gap = deferred();
       let gapReached = false;
       let releaseGap: () => void;
       const gapPromise = new Promise<void>((resolve) => {
         releaseGap = resolve;
       });
-      (
-        ChatSession as unknown as Mock<(...args: never[]) => unknown>
-      ).mockImplementationOnce(
-        () =>
-          ({
-            sendMessageStream: vi.fn().mockImplementation(async () => {
-              async function* slowStream() {
-                yield {
-                  type: StreamEventType.CHUNK,
-                  value: mockChunk({ text: 'Starting...' }),
-                };
-                gapReached = true;
-                // The gap exceeds the env timeout: the stream produces nothing
-                // until the test releases it, so the env-driven watchdog fires
-                // first. It must be releasable — an async generator suspended
-                // on an await that never resolves cannot be returned, so the
-                // consumer could never unwind and the run would hang even after
-                // the watchdog fired.
-                await gapPromise;
-                yield {
-                  type: StreamEventType.CHUNK,
-                  value: mockChunk({ text: 'Late response' }),
-                };
-              }
-              return slowStream();
-            }),
-            getConfig: () => configWithTimeout,
-            getStreamTimeoutPolicy: () =>
-              runtimeBundle.runtimeContext.readStreamTimeoutPolicy(),
-            getHistory: vi.fn().mockReturnValue([]),
-            getHistoryService: vi.fn().mockReturnValue({
-              clear: vi.fn(),
-              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-              getCurated: vi.fn().mockReturnValue([]),
-              getTotalTokens: vi.fn().mockReturnValue(0),
-            }),
-          }) as unknown as ChatSession,
-      );
-
-      (
-        createContentGenerator as Mock<typeof createContentGenerator>
-      ).mockReturnValue({} as ContentGenerator);
-      (
-        getEnvironmentContext as Mock<typeof getEnvironmentContext>
-      ).mockResolvedValue('');
+      mockSession(config, runtimeBundle, async function* slowStream() {
+        yield {
+          type: StreamEventType.CHUNK,
+          value: mockChunk({ text: 'Starting...' }),
+        };
+        gapReached = true;
+        gap.resolve();
+        // The gap exceeds the env timeout: the stream produces nothing
+        // until the test releases it, so the env-driven watchdog fires
+        // first. It must be releasable — an async generator suspended
+        // on an await that never resolves cannot be returned, so the
+        // consumer could never unwind and the run would hang even after
+        // the watchdog fired.
+        await gapPromise;
+        yield {
+          type: StreamEventType.CHUNK,
+          value: mockChunk({ text: 'Late response' }),
+        };
+      });
 
       const runPromise = scope.runNonInteractive(new ContextState());
-
       // Attach catch handler before advancing timers to prevent unhandled rejection
       let resultSettled = false;
       const resultPromise = runPromise
@@ -589,8 +283,8 @@ describe('subagent.ts', () => {
         .finally(() => {
           resultSettled = true;
         });
-
-      expect(await waitForConditionInRealTime(() => gapReached)).toBe(true);
+      await gap.promise;
+      expect(gapReached).toBe(true);
 
       // The stream stalls after its first chunk, so the env-driven 50ms
       // watchdog fires. Were the 20s config value being used instead, the
@@ -603,9 +297,41 @@ describe('subagent.ts', () => {
 
       // Release the stall so the generator can unwind, then let the run finish.
       releaseGap!();
-      const _result = await resultPromise;
+      await resultPromise;
       expect(resultSettled).toBe(true);
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
     });
+  });
+}
+
+const originalEnv = process.env;
+describe('subagent.ts', () => {
+  afterAll(() => {
+    void vi.mock('./chatSession.js', () => __actual);
+    void vi.mock('@vybestack/llxprt-code-tools', () => actual);
+    void vi.mock(
+      './nonInteractiveToolExecutor.js',
+      () => realNonInteractiveToolExecutorModule,
+    );
+    void vi.mock(
+      '@vybestack/llxprt-code-core/utils/environmentContext.js',
+      () => realEnvironmentContextModule,
+    );
+  });
+
+  describe('stream idle timeout behavioral tests', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      process.env = { ...originalEnv };
+      delete process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS;
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+      process.env = originalEnv;
+    });
+    registerConfigTimeout();
+    registerDisabledTimeout();
+    registerEnvPrecedence();
   });
 });

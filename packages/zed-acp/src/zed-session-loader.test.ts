@@ -14,10 +14,14 @@
  * logic is mocked.
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
+
 import { Config } from '@vybestack/llxprt-code-core';
-import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
+import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { replayClient } from './__tests__/support/zed-history-stream-test-helpers.js';
 import {
   hasRecordedSessionFile,
   readAgentHistoryAsIContent,
@@ -42,7 +46,11 @@ const FIXED_SESSION_TIMESTAMP = '2026-07-11T10-00-00';
 
 /** The real recorded-file name shape for a session id. */
 function recordedName(sessionId: string): string {
-  return `session-${FIXED_SESSION_TIMESTAMP}-${sessionId.substring(0, 12)}.jsonl`;
+  return `session-${FIXED_SESSION_TIMESTAMP}-${sessionId.substring(0, 12)}${SESSION_FILE_EXTENSION}`;
+}
+
+function probeFailure(code: string, message: string): Error & { code: string } {
+  return Object.assign(new Error(message), { code });
 }
 
 describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
@@ -103,11 +111,10 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
       .spyOn(DebugLogger.prototype, 'warn')
       .mockImplementation(() => undefined);
     const lister: ChatSessionFileLister = async () => {
-      const error = new Error(
+      throw probeFailure(
+        'ENOENT',
         'ENOENT: no such file or directory, scandir chats',
-      ) as NodeJS.ErrnoException;
-      error.code = 'ENOENT';
-      throw error;
+      );
     };
 
     // Must resolve false (not reject): a missing directory routes to re-attach.
@@ -124,11 +131,7 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
 
   it('propagates a non-ENOENT probe failure instead of re-attaching without checking durable state', async () => {
     const lister: ChatSessionFileLister = async () => {
-      const error = new Error(
-        'EACCES: permission denied, scandir chats',
-      ) as NodeJS.ErrnoException;
-      error.code = 'EACCES';
-      throw error;
+      throw probeFailure('EACCES', 'EACCES: permission denied, scandir chats');
     };
 
     await expect(
@@ -157,33 +160,42 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
 });
 
 describe('readAgentHistoryAsIContent (issue #1604 re-attach replay bridge)', () => {
-  /** Fake agent exposing only getHistory (the sole method this helper uses). */
-  function buildAgent(history: readonly AgentMessage[]): {
-    agent: Agent;
-    getHistory: ReturnType<typeof vi.fn>;
-  } {
-    const getHistory = vi.fn(async () => history);
-    const agent = { getHistory } as unknown as Agent;
-    return { agent, getHistory };
-  }
-
   it('preserves the live neutral history without dropping blocks', async () => {
-    const history: readonly AgentMessage[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'hello there' }] },
-      { speaker: 'ai', blocks: [{ type: 'text', text: 'general kenobi' }] },
-    ];
-    const { agent, getHistory } = buildAgent(history);
-
-    const items = await readAgentHistoryAsIContent(() => agent.getHistory());
-
-    expect(getHistory).toHaveBeenCalledTimes(1);
-    expect(items).toStrictEqual(history);
-    expect(items).not.toBe(history);
+    await withSuffixFixture(
+      2,
+      async (history) => {
+        const client = replayClient(history);
+        let index = 0;
+        try {
+          for await (const row of readAgentHistoryAsIContent((signal) =>
+            client.streamHistory(signal),
+          )) {
+            expect(row).toStrictEqual(accountingRow(index++));
+          }
+          expect(index).toBe(2);
+        } finally {
+          await client.dispose();
+        }
+      },
+      2048,
+      accountingRow,
+    );
   });
 
-  it('returns an empty array for a fresh unprompted session (empty live history → zero replay updates)', async () => {
-    const { agent } = buildAgent([]);
-    const items = await readAgentHistoryAsIContent(() => agent.getHistory());
-    expect(items).toStrictEqual([]);
+  it('returns no rows for a fresh unprompted session (empty live history → zero replay updates)', async () => {
+    await withSuffixFixture(0, async (history) => {
+      const client = replayClient(history);
+      try {
+        expect(
+          (
+            await readAgentHistoryAsIContent((signal) =>
+              client.streamHistory(signal),
+            ).next()
+          ).done,
+        ).toBe(true);
+      } finally {
+        await client.dispose();
+      }
+    });
   });
 });

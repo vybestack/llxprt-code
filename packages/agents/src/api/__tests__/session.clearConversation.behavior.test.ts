@@ -1,7 +1,11 @@
+import { captureSessionOwner } from './helpers/capture-session-owner.js';
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
+import { nativeRows, rowTexts } from './helpers/native-session-fixture.js';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import type { SessionClientOwner } from '../../session/session-client-owner.js';
 import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
-import { openRouteBPreflight } from './helpers/route-b-preflight.js';
 import { openClientOwner } from './helpers/client-owner-session.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { ownerClients } from './helpers/session-client-capture.js';
@@ -19,11 +23,18 @@ import {
 import {
   SessionLockManager,
   SessionLockedError,
-  SessionRecordingService,
   RecordingIntegration,
+  type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
+import {
+  recordingSessionId,
+  verifyJournalSessionLayout,
+  withTelemetryAgent,
+  readinessTokenizer,
+  deferred,
+  textItem,
+  itemText,
+} from './support/clear-conversation-values.js';
 import { AgentClient } from '../../core/client.js';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { createAgent } from '../createAgent.js';
@@ -43,56 +54,14 @@ import { drain, isDoneEvent } from './helpers/agentHarness.js';
  * `prepareTokenizer` is the readiness step every candidate session client
  * awaits, so a scenario can make that step fail on the next switch.
  */
-function readinessTokenizer(): RuntimeTokenizerFactory {
-  return {
-    prepareTokenizer: async () => {},
-    getTokenizer: () => ({
-      fallbackPolicy: 'deny',
-      countTokens: () => 1,
-    }),
-    estimatePrompt: async (request) => ({
-      count: await request.legacyEstimate(),
-      method: 'calibrated',
-      family: 'test-readiness',
-      estimatorVersion: 'test-readiness-v1',
-      assetRevision: 'none',
-      projectionRevision: request.projectionRevision,
-    }),
-  };
+const RecordingService = JournalRecordingService;
+const observedDisposals = new WeakSet<Agent>();
+const owners = new WeakMap<Agent, SessionClientOwner>();
+function clientOwner(agent: Agent): SessionClientOwner {
+  const owner = owners.get(agent);
+  if (owner === undefined) throw new Error('Missing captured session owner');
+  return owner;
 }
-
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolvePromise = (): void => {
-    throw new Error('Barrier not initialized');
-  };
-  const promise = new Promise<void>((resolve) => {
-    resolvePromise = resolve;
-  });
-  return { promise, resolve: resolvePromise };
-}
-
-function textItem(speaker: 'human' | 'ai', text: string): AgentHistoryItem {
-  return { speaker, blocks: [{ type: 'text', text }] };
-}
-
-function itemText(item: AgentHistoryItem): string {
-  return item.blocks.map((b) => (b.type === 'text' ? b.text : '')).join('');
-}
-
-function recordingSessionId(path: string): string {
-  return z
-    .object({ payload: z.object({ sessionId: z.string() }) })
-    .parse(JSON.parse(readFileSync(path, 'utf8').split('\n')[0])).payload
-    .sessionId;
-}
-
-function recordedLineTypes(path: string): string[] {
-  return readFileSync(path, 'utf8')
-    .trim()
-    .split('\n')
-    .map((line) => z.object({ type: z.string() }).parse(JSON.parse(line)).type);
-}
-
 const RECORDED_CONVERSATION = [
   textItem('human', 'first question'),
   textItem('ai', 'first answer'),
@@ -113,16 +82,19 @@ async function withRecordedConversation<T>(
   overrides: Partial<AgentConfig> = {},
 ): Promise<T> {
   const workingDir = mkdtempSync(join(tmpdir(), 'llxprt-clear-conversation-'));
-  const agent = await createAgent({
-    provider: 'fake',
-    model: 'fake-model',
-    workingDir,
-    ...overrides,
-  });
+  const { value: agent, owner } = await captureSessionOwner(() =>
+    createAgent({
+      provider: 'fake',
+      model: 'fake-model',
+      workingDir,
+      ...overrides,
+    }),
+  );
+  owners.set(agent, owner);
   try {
     return await fn(agent, await seedRecordedConversation(agent));
   } finally {
-    await agent.dispose();
+    if (!observedDisposals.has(agent)) await agent.dispose();
     rmSync(workingDir, { recursive: true, force: true });
   }
 }
@@ -132,27 +104,6 @@ async function withRecordedConversation<T>(
  * `SessionSettingsOwner`: the telemetry root the agent logs through is
  * `settingsOwner.telemetry`.
  */
-async function withTelemetryAgent<T>(
-  fn: (agent: Agent, telemetry: RootTelemetry) => Promise<T>,
-  overrides: Partial<AgentConfig> = {},
-): Promise<T> {
-  const route = await openRouteBPreflight({ config: overrides });
-  const settingsOwner = new SessionSettingsOwner(route.settings);
-  let agent: Agent | undefined;
-  try {
-    await route.prepare({ settingsOwner });
-    agent = await route.createAgent();
-    return await fn(agent, settingsOwner.telemetry);
-  } finally {
-    await runCleanupSteps([
-      () => agent?.dispose(),
-      () => route.disposePreflight(),
-      () => route.close(),
-      () => settingsOwner.dispose(),
-    ]);
-  }
-}
-
 async function withTelemetryConversation<T>(
   fn: (
     agent: Agent,
@@ -168,15 +119,27 @@ async function withTelemetryConversation<T>(
 describe('starting a new conversation session', () => {
   useRecordingPrompts();
   useFakeResponsesReplay('plain-text.jsonl');
+  it('retires an empty client journal when starting another session', async () => {
+    await withRecordedConversation(async (agent) => {
+      await agent.session.startNewSession();
+      const retired = clientOwner(agent)
+        .clients.getAgentClient()
+        .getHistoryService();
+      if (retired === null) throw new Error('Missing empty session history');
+      await agent.session.startNewSession();
+      await expect(retired.getLastContent()).rejects.toThrow('disposed');
+    });
+  });
+
   it('rejects foreground turns and settings while recording retirement is paused', async () => {
     await withRecordedConversation(async (agent, oldPath) => {
       const entered = deferred();
       const release = deferred();
-      const original = SessionRecordingService.prototype.dispose;
+      const original = RecordingService.prototype.dispose;
       const pause = spyOn(
-        SessionRecordingService.prototype,
+        RecordingService.prototype,
         'dispose',
-      ).mockImplementationOnce(async function (this: SessionRecordingService) {
+      ).mockImplementationOnce(async function (this: JournalRecordingService) {
         entered.resolve();
         await release.promise;
         await original.call(this);
@@ -222,10 +185,12 @@ describe('starting a new conversation session', () => {
       const path = agent.session.getRecording().path;
       if (path === undefined)
         throw new Error('Expected recording after publication');
-      expect(readFileSync(path, 'utf8')).toContain(
+      expect(rowTexts(await nativeRows(path))).toContain(
         'recorded after publication',
       );
-      expect(readFileSync(path, 'utf8')).not.toContain('must not be admitted');
+      expect(rowTexts(await nativeRows(path))).not.toContain(
+        'must not be admitted',
+      );
     });
   });
 
@@ -236,16 +201,16 @@ describe('starting a new conversation session', () => {
     'recording',
     'telemetry',
     'integration',
-  ] as const) {
+  ]) {
     it(`preserves the old recorded conversation when ${stage} preparation fails`, async () => {
       const tokenizer = readinessTokenizer();
       await withRecordedConversation(
         async (agent, oldPath) => {
-          const oldId = recordingSessionId(oldPath);
+          const oldId = await recordingSessionId(oldPath);
           let candidateIds: readonly string[] = [];
-          const createLocked = SessionRecordingService.createLocked;
+          const createLocked = RecordingService.createLocked;
           const recordingAcquisition = spyOn(
-            SessionRecordingService,
+            RecordingService,
             'createLocked',
           ).mockImplementation(async (options) => {
             if (stage === 'recording')
@@ -286,7 +251,7 @@ describe('starting a new conversation session', () => {
               case 'integration':
                 return spyOn(
                   RecordingIntegration.prototype,
-                  'subscribeToHistory',
+                  'subscribeToJournal',
                 ).mockImplementationOnce(() => {
                   throw new Error('candidate preparation failed');
                 });
@@ -318,7 +283,9 @@ describe('starting a new conversation session', () => {
               enabled: true,
               path: oldPath,
             });
-            expect((await agent.getHistory()).map(itemText)).toStrictEqual([
+            expect(
+              (await collectAgentHistory(agent)).map(itemText),
+            ).toStrictEqual([
               'first question',
               'first answer',
               'second question',
@@ -340,7 +307,7 @@ describe('starting a new conversation session', () => {
           }
           await drain(agent.stream('still recorded after failure'));
           await agent.session.flushRecording();
-          expect(readFileSync(oldPath, 'utf8')).toContain(
+          expect(rowTexts(await nativeRows(oldPath))).toContain(
             'still recorded after failure',
           );
         },
@@ -351,16 +318,16 @@ describe('starting a new conversation session', () => {
 
   it('closes admission when recording retirement fails', async () => {
     await withRecordedConversation(async (agent, oldPath) => {
-      const original = SessionRecordingService.prototype.dispose;
+      const original = RecordingService.prototype.dispose;
       const failure = spyOn(
-        SessionRecordingService.prototype,
+        RecordingService.prototype,
         'dispose',
-      ).mockImplementationOnce(async function (this: SessionRecordingService) {
+      ).mockImplementationOnce(async function (this: JournalRecordingService) {
         await original.call(this);
         throw new Error('retirement failed');
       });
       try {
-        const oldId = recordingSessionId(oldPath);
+        const oldId = await recordingSessionId(oldPath);
         await expect(agent.session.startNewSession()).rejects.toThrow(
           'retirement failed',
         );
@@ -383,7 +350,7 @@ describe('starting a new conversation session', () => {
         new Error('retirement failed'),
       );
       try {
-        const oldId = recordingSessionId(oldPath);
+        const oldId = await recordingSessionId(oldPath);
         await expect(agent.session.startNewSession()).rejects.toThrow(
           'retirement failed',
         );
@@ -478,10 +445,52 @@ describe('starting a new conversation session', () => {
     }, 30000);
   });
 
+  it('releases the recorder even when both client and recorder retirement fail', async () => {
+    await withRecordedConversation(async (agent, oldPath) => {
+      const previous = clientOwner(agent).clients.getAgentClient();
+      const disposeClient = previous.dispose.bind(previous);
+      const clientFailure = spyOn(previous, 'dispose').mockImplementationOnce(
+        async () => {
+          await disposeClient();
+          throw new Error('client retirement failed');
+        },
+      );
+      const disposeRecorder = RecordingService.prototype.dispose;
+      const recorderFailure = spyOn(
+        RecordingService.prototype,
+        'dispose',
+      ).mockImplementationOnce(async function (this: SessionRecordingPort) {
+        await disposeRecorder.call(this);
+        throw new Error('recorder retirement failed');
+      });
+      try {
+        await expect(agent.session.startNewSession()).rejects.toMatchObject({
+          errors: [
+            { message: 'client retirement failed' },
+            { message: 'recorder retirement failed' },
+          ],
+        });
+        const lock = await SessionLockManager.acquire(
+          join(oldPath, '..'),
+          await recordingSessionId(oldPath),
+        );
+        await lock.release();
+        await expect(drain(agent.stream('closed'))).rejects.toThrow('closed');
+        await expect(agent.dispose()).rejects.toThrow(
+          'client retirement failed',
+        );
+        observedDisposals.add(agent);
+      } finally {
+        clientFailure.mockRestore();
+        recorderFailure.mockRestore();
+      }
+    });
+  });
+
   it('leaves no prior conversation turns for the next model request', async () => {
     const afterReset = await withRecordedConversation(async (agent) => {
       await agent.session.startNewSession();
-      return agent.getHistory();
+      return collectAgentHistory(agent);
     });
     expect(afterReset).toStrictEqual([]);
   });
@@ -590,12 +599,21 @@ describe('starting a new conversation session', () => {
       const capture = spyOn(
         FakeProvider.prototype,
         'generateChatCompletion',
-      ).mockImplementation(function (this: FakeProvider, options) {
-        observed = [
-          ...observed,
-          Array.isArray(options) ? options : options.contents,
-        ];
-        return original.call(this, options);
+      ).mockImplementation(async function* (this: FakeProvider, options) {
+        const rows: AgentHistoryItem[] = [];
+        if ('requestRows' in options && options.requestRows !== undefined) {
+          for await (const row of options.requestRows.openReader(
+            options.invocation?.signal,
+          ))
+            rows.push(row);
+        } else {
+          for await (const row of 'contents' in options
+            ? options.contents
+            : options)
+            rows.push(row);
+        }
+        observed = [...observed, rows];
+        yield* original.call(this, options);
       });
       try {
         const events = await drain(agent.stream('fresh start'));
@@ -617,7 +635,7 @@ describe('starting a new conversation session', () => {
       const oldSessions = await agent.session.listSessions();
       const oldSession = oldSessions[0];
       await agent.session.flushRecording();
-      const oldContents = readFileSync(oldPath, 'utf8');
+      const oldContents = readFileSync(oldPath);
       await agent.session.startNewSession();
       const nextId = agent.session.getSessionId();
       expect(nextId).not.toBe(oldSession.id);
@@ -632,20 +650,15 @@ describe('starting a new conversation session', () => {
       const newPath = agent.session.getRecording().path;
       if (newPath === undefined) throw new Error('Expected new recording');
       expect(newPath).not.toBe(oldPath);
-      expect(readFileSync(oldPath, 'utf8')).toBe(oldContents);
-      expect(
-        JSON.parse(readFileSync(newPath, 'utf8').split('\n')[0]),
-      ).toMatchObject({ payload: { sessionId: nextId } });
-      expect(
-        recordedLineTypes(oldPath).filter((type) => type === 'rewind'),
-      ).toStrictEqual([]);
-      expect(
-        recordedLineTypes(oldPath).filter((type) => type === 'content'),
-      ).toHaveLength(4);
+      expect(readFileSync(oldPath)).toStrictEqual(oldContents);
+      await verifyJournalSessionLayout(oldPath, newPath, nextId);
+
       expect(
         (await agent.session.listSessions()).map((session) => session.id),
       ).toHaveLength(2);
-      const restored = await agent.session.resume(oldSession.id);
+      const restored = await Array.fromAsync(
+        await agent.session.resume(oldSession.id),
+      );
       expect(restored.map(itemText)).toStrictEqual([
         'first question',
         'first answer',
@@ -656,7 +669,9 @@ describe('starting a new conversation session', () => {
         (session) => session.id !== oldSession.id,
       );
       if (newSession === undefined) throw new Error('Expected new session');
-      const postClear = await agent.session.resume(newSession.id);
+      const postClear = await Array.fromAsync(
+        await agent.session.resume(newSession.id),
+      );
       expect(postClear.map(itemText)).not.toContain('first question');
       expect(postClear.map(itemText)[0]).toBe('fresh start');
     });
@@ -673,7 +688,9 @@ describe('starting a new conversation session', () => {
       );
       await oldLock.release();
       await agent.session.setRecording({ enabled: false });
-      const restored = await agent.session.resume('latest');
+      const restored = await Array.fromAsync(
+        await agent.session.resume('latest'),
+      );
       expect(restored.map(itemText)).toStrictEqual([
         'first question',
         'first answer',
@@ -730,7 +747,7 @@ describe('starting a new conversation session', () => {
       await agent.session.startNewSession();
       expect(agent.session.getSessionId()).not.toBe(oldId);
       expect(agent.session.getRecording().enabled).toBe(false);
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await collectAgentHistory(agent)).toStrictEqual([]);
     });
   });
 
@@ -748,16 +765,16 @@ describe('starting a new conversation session', () => {
       const config = first.config;
       await agent.setHistory([textItem('human', 'shared conversation')]);
       await sibling.setHistory([textItem('human', 'shared conversation')]);
-      const prior = await sibling.getHistory();
+      const prior = await collectAgentHistory(sibling);
       const configId = config.getSessionId();
       await agent.session.setRecording({ enabled: true });
       await agent.session.startNewSession();
-      expect(await agent.getHistory()).toStrictEqual([]);
-      expect(await sibling.getHistory()).toStrictEqual(prior);
+      expect(await collectAgentHistory(agent)).toStrictEqual([]);
+      expect(await collectAgentHistory(sibling)).toStrictEqual(prior);
       expect(config.getSessionId()).toBe(configId);
       await agent.session.setRecording({ enabled: false });
       await agent.session.resume('latest');
-      expect((await agent.getHistory()).map(itemText)).toStrictEqual([
+      expect((await collectAgentHistory(agent)).map(itemText)).toStrictEqual([
         'shared conversation',
       ]);
     } finally {
@@ -806,7 +823,7 @@ describe('starting a new conversation session', () => {
   it('still retains the initial turn by default while recording', async () => {
     const texts = await withRecordedConversation(async (agent) => {
       await agent.resetChat();
-      return (await agent.getHistory()).map(itemText);
+      return (await collectAgentHistory(agent)).map(itemText);
     });
     expect(texts).toStrictEqual(['first question', 'first answer']);
   });

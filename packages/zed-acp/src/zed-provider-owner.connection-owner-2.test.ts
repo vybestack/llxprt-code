@@ -1,5 +1,7 @@
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
-import { mkdtemp, rm, readdir, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, readdir } from 'node:fs/promises';
+import { nativeRecordingContents } from './__tests__/native-recording-contents.js';
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -57,9 +59,11 @@ describe('Zed ACP provider ownership', () => {
       const journalNames = await readdir(owner.route.config.projectChatsDir);
       const journals = await Promise.all(
         journalNames
-          .filter((name) => name.endsWith('.jsonl'))
+          .filter((name) => name.endsWith(SESSION_FILE_EXTENSION))
           .map((name) =>
-            readFile(join(owner.route.config.projectChatsDir, name), 'utf8'),
+            nativeRecordingContents(
+              join(owner.route.config.projectChatsDir, name),
+            ),
           ),
       );
       expect(journals.join('\n')).toContain('surviving-session-marker');

@@ -6,6 +6,10 @@ import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
  */
 
 import { encoding_for_model } from '@dqbd/tiktoken';
+import {
+  encodingBpeRanks,
+  encodingLongTextCounter,
+} from './neutral-long-piece.js';
 import { TextDecoder } from 'node:util';
 
 import {
@@ -73,8 +77,23 @@ function encodeText(text: string): Uint32Array | null {
   }
 }
 
+export function prepareNeutralTokenCounter(): void {
+  getEncoder();
+  encodingBpeRanks('o200k_base');
+}
+
 // Token estimation using tiktoken for better accuracy
 export function estimateTokens(text: string): number {
+  if (text.length > 512 && !text.includes('<|endof')) {
+    const encoder = getEncoder();
+    if (encoder !== null)
+      return encodingLongTextCounter('o200k_base')(
+        text,
+        (piece) => encoder.encode(piece).length,
+        undefined,
+        'batched',
+      );
+  }
   const encoded = encodeText(text);
 
   if (encoded) {
@@ -87,6 +106,20 @@ export function estimateTokens(text: string): number {
 
 export function getEffectiveTokenLimit(maxTokens: number): number {
   return Math.floor(maxTokens * ESCAPE_BUFFER_PERCENTAGE);
+}
+/** The caller owns this cache for one unit's single/repeated projections only. */
+export function createUnitTokenCounter(): (text: string) => number {
+  const cache = new Map<string, number>();
+  return (text) => {
+    const encoder = getEncoder();
+    if (encoder === null || text.includes('<|endof'))
+      return estimateTokens(text);
+    return encodingLongTextCounter('o200k_base')(
+      text,
+      (piece) => encoder.encode(piece).length,
+      cache,
+    );
+  };
 }
 
 export interface OutputLimitConfig {
@@ -313,6 +346,11 @@ export function limitOutputTokensWithLimits(
     return { content, wasTruncated: false };
   }
   const effectiveLimit = getEffectiveTokenLimit(tokenLimit.maxTokens);
+  // A token spans at least one byte, so output with no more bytes than the
+  // limit cannot exceed it and needs no tokenizing.
+  if (Buffer.byteLength(content, 'utf8') <= effectiveLimit) {
+    return { content, wasTruncated: false };
+  }
 
   const encodedContent = encodeText(content);
   const tokens = encodedContent?.length ?? Math.ceil(content.length / 3);

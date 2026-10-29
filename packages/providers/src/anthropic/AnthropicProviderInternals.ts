@@ -9,7 +9,9 @@ import type { ClientOptions } from '@anthropic-ai/sdk';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
+import type { ProviderToolset } from '../IProvider.js';
+import type { AnthropicRequestFacts } from './AnthropicRequestPreparation.js';
+import type { PreparedAnthropicRequest } from './native-anthropic-request.js';
 
 /**
  * Shapes and pure helpers used by AnthropicProvider, kept beside it so the
@@ -24,10 +26,16 @@ export function hasHeaderName(
 }
 
 export interface PreparedAnthropicPromptEnvelope {
-  readonly requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>;
+  /** The one prepared body: the projection estimates it, the send posts it. */
+  readonly spooled: PreparedAnthropicRequest;
   readonly isOAuth: boolean;
   readonly authToken: string;
   readonly mediaRequest: ResolvedMediaRequest;
+  /** Source route: inputs the blanked send options must get back. */
+  readonly sourceInputs?: {
+    readonly systemInstruction: string | undefined;
+    readonly tools: ProviderToolset | undefined;
+  };
 }
 
 export interface AnthropicTransportPreparation {
@@ -44,7 +52,7 @@ export function isAnthropicMessageStream(
 
 export function withSemanticMediaPurgeCacheEvidence(
   content: IContent,
-  requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
+  requestContext: AnthropicRequestFacts,
 ): IContent {
   const evidence = requestContext.semanticMediaPurgeCacheWriteEvidence;
   const cacheCreationTokens =

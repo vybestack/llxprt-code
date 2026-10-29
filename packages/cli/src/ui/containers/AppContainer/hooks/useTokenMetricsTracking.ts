@@ -20,7 +20,7 @@ import {
  * @subscriptionStrategy Mixed (Stable subscription + Poll)
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { HistoryTokenSubscription } from './historyTokenSubscriptions.js';
 import {
   shouldUpdateTokenMetrics,
@@ -47,11 +47,29 @@ interface UseTokenMetricsTrackingOptions {
 
 export interface UseTokenMetricsTrackingResult {
   tokenMetrics: TokenMetrics;
+  stopTracking: () => void;
 }
+
+function registerTrackingCleanup(
+  signal: AbortSignal,
+  cleanup: () => void,
+): () => void {
+  let finish: (() => void) | undefined = cleanup;
+  const stop = (): void => {
+    signal.removeEventListener('abort', stop);
+    const current = finish;
+    finish = undefined;
+    current?.();
+  };
+  signal.addEventListener('abort', stop, { once: true });
+  return stop;
+}
+
 function useTokenMetricsPoll(
   readProviderMetrics: UseTokenMetricsTrackingOptions['readProviderMetrics'],
   readSessionTokenUsage: UseTokenMetricsTrackingOptions['readSessionTokenUsage'],
   setTokenTrackingMetrics: SessionMetricUpdates['setTokenTrackingMetrics'],
+  signal: AbortSignal,
 ): TokenMetrics {
   const [tokenMetrics, setTokenMetrics] = useState<TokenMetrics>({
     tokensPerMinute: 0,
@@ -63,6 +81,7 @@ function useTokenMetricsPoll(
   const tokenMetricsSnapshotRef = useRef<TokenMetricsSnapshot | null>(null);
 
   useEffect(() => {
+    if (signal.aborted) return undefined;
     const updateTokenMetrics = () => {
       const metrics = readProviderMetrics();
       const usage = readSessionTokenUsage();
@@ -102,8 +121,13 @@ function useTokenMetricsPoll(
     // Poll every second to show live updates
     const interval = setInterval(updateTokenMetrics, 1000);
 
-    return () => clearInterval(interval);
-  }, [readProviderMetrics, readSessionTokenUsage, setTokenTrackingMetrics]);
+    return registerTrackingCleanup(signal, () => clearInterval(interval));
+  }, [
+    readProviderMetrics,
+    readSessionTokenUsage,
+    setTokenTrackingMetrics,
+    signal,
+  ]);
 
   return tokenMetrics;
 }
@@ -116,15 +140,33 @@ export function useTokenMetricsTracking({
   readSessionTokenUsage,
   updateHistoryTokenCount,
 }: UseTokenMetricsTrackingOptions): UseTokenMetricsTrackingResult {
+  const controller = useMemo(() => new AbortController(), []);
+  const stopTracking = useCallback(() => controller.abort(), [controller]);
   useEffect(
-    () => subscribeHistoryTokens(updateHistoryTokenCount),
-    [subscribeHistoryTokens, updateHistoryTokenCount],
+    () =>
+      controller.signal.aborted
+        ? undefined
+        : registerTrackingCleanup(
+            controller.signal,
+            subscribeHistoryTokens(updateHistoryTokenCount),
+          ),
+    [controller, subscribeHistoryTokens, updateHistoryTokenCount],
   );
-  useEffect(subscribeRecordingHistory, [subscribeRecordingHistory]);
+  useEffect(
+    () =>
+      controller.signal.aborted
+        ? undefined
+        : registerTrackingCleanup(
+            controller.signal,
+            subscribeRecordingHistory(),
+          ),
+    [controller, subscribeRecordingHistory],
+  );
   const tokenMetrics = useTokenMetricsPoll(
     readProviderMetrics,
     readSessionTokenUsage,
     setTokenTrackingMetrics,
+    controller.signal,
   );
-  return { tokenMetrics };
+  return { tokenMetrics, stopTracking };
 }

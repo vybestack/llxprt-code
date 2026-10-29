@@ -1,0 +1,160 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { FanoutHarness } from './__tests__/support/fanout-harness.js';
+import type { IContent, ContentMetadata } from './IContent.js';
+import type { SealedHistoryRow } from './sealed-history-row.js';
+
+const harness = new FanoutHarness();
+const metadata: ContentMetadata = {
+  id: 'response',
+  chronology: { seq: 1, userTurn: 0, step: 1, recordedAt: 0 },
+};
+describe('response arrival publication effects', () => {
+  beforeEach(() => harness.setup());
+  afterEach(() => harness.teardown());
+  it('matches ordinary exported bytes, observers, counts and token publication', async () => {
+    const arrivalHistory = harness.history();
+    const ordinary = harness.history();
+    const observed: SealedHistoryRow[] = [];
+    arrivalHistory.on('contentSealed', (content: SealedHistoryRow) => {
+      observed.push(content);
+    });
+    const arrival = await arrivalHistory.openResponseArrival(
+      { id: 'one', submissionId: 'prompt' },
+      structuredClone(metadata),
+    );
+    await arrival.append({ type: 'text', text: 'quote " and ' });
+    await arrival.append({ type: 'text', text: 'unicode 🌙' });
+    await arrival.seal({});
+    ordinary.add({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'quote " and unicode 🌙' }],
+      metadata: structuredClone(metadata),
+    });
+    await arrivalHistory.waitForTokenUpdates();
+    await ordinary.waitForTokenUpdates();
+    expect((await Array.fromAsync(arrivalHistory.streamJSON())).join('')).toBe(
+      (await Array.fromAsync(ordinary.streamJSON())).join(''),
+    );
+    expect(observed).toHaveLength(1);
+    expect(observed[0].metadata).toStrictEqual(
+      (await harness.shared(ordinary))[0].metadata,
+    );
+    expect('blocks' in observed[0]).toBe(false);
+    expect(arrivalHistory.getTotalTokens()).toBe(ordinary.getTotalTokens());
+    expect(arrivalHistory.length()).toBe(1);
+  });
+  it('fans sealed rows out only to the selected origin', async () => {
+    const { service, ownerA, ownerB, a, b } = await harness.twoOrigins();
+    const arrival = await service.openResponseArrival(
+      { id: 'owned', submissionId: 'prompt' },
+      {},
+      ownerB,
+    );
+    await arrival.append({ type: 'text', text: 'owned response' });
+    await arrival.seal({});
+    service.add(
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'ordinary response' }] },
+      undefined,
+      ownerA,
+    );
+    await service.waitForCommit();
+    expect(await harness.replayed(a)).toStrictEqual([
+      'seed',
+      'ordinary response',
+    ]);
+    expect(await harness.replayed(b)).toStrictEqual(['seed', 'owned response']);
+    expect(service.length()).toBe(3);
+  });
+  it('interrupts without a context row and retains the prompt', async () => {
+    const service = harness.history();
+    await service.submitPrompt('prompt', [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'question' }] },
+    ]);
+    const arrival = await service.openResponseArrival({
+      id: 'cancel',
+      submissionId: 'prompt',
+    });
+    await arrival.append({ type: 'text', text: 'unfinished' });
+    await arrival.interrupt('cancelled');
+    expect(service.length()).toBe(1);
+    expect(await service.hasPromptSubmission('prompt')).toBe(true);
+    expect((await harness.shared(service))[0].speaker).toBe('human');
+  });
+  it('compensates a sealed row when an observer rejects publication', async () => {
+    const service = harness.history();
+    service.on('contentSealed', () => {
+      throw new Error('observer rejected');
+    });
+    const arrival = await service.openResponseArrival({
+      id: 'rejected',
+      submissionId: 'prompt',
+    });
+    await arrival.append({ type: 'text', text: 'rejected' });
+    await expect(arrival.seal({})).rejects.toThrow('observer rejected');
+    await service.waitForCommit();
+    expect(service.length()).toBe(0);
+    expect(service.getTotalTokens()).toBe(0);
+  });
+  it('acknowledges the sealed main row once after auxiliary publication', async () => {
+    const service = harness.history();
+    const arrival = await service.openResponseArrival({
+      id: 'receipt',
+      submissionId: 'prompt',
+    });
+    await arrival.replaceAfcHistory(
+      (async function* () {
+        yield {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'auxiliary' }],
+        };
+      })(),
+    );
+    await arrival.append({ type: 'text', text: 'main ' });
+    await arrival.append({ type: 'text', text: 'answer' });
+    const published: IContent[] = [];
+    const acknowledgedLengths: number[] = [];
+    await arrival.seal({}, undefined, async () => {
+      acknowledgedLengths.push(service.length());
+      const content = await service.getLastContent();
+      if (content === undefined) throw new Error('Missing published response');
+      published.push(content);
+    });
+    expect(published.map((content) => content.blocks)).toStrictEqual([
+      [{ type: 'text', text: 'main answer' }],
+    ]);
+    expect(acknowledgedLengths).toStrictEqual([2]);
+    expect(service.length()).toBe(2);
+  });
+  it('compensates sealed response rows when a batch observer rejects publication', async () => {
+    const service = harness.history();
+    service.on('contentBatchAdded', () => {
+      throw new Error('batch observer rejected');
+    });
+    const arrival = await service.openResponseArrival({
+      id: 'batch-rejected',
+      submissionId: 'prompt',
+    });
+    await arrival.append({ type: 'text', text: 'unpublished response' });
+    await expect(arrival.seal({})).rejects.toThrow('batch observer rejected');
+    await service.waitForTokenUpdates();
+    expect(service.length()).toBe(0);
+    expect(service.getTotalTokens()).toBe(0);
+  });
+  it('compensates the row and token ticket when the sealed-result consumer rejects', async () => {
+    const service = harness.history();
+    const arrival = await service.openResponseArrival({
+      id: 'rejected-consumer',
+      submissionId: 'prompt',
+    });
+    await arrival.append({ type: 'text', text: 'discarded answer' });
+    await expect(
+      arrival.seal({}, undefined, async () => {
+        throw new Error('consumer rejected');
+      }),
+    ).rejects.toThrow('consumer rejected');
+    await service.waitForTokenUpdates();
+    expect(service.length()).toBe(0);
+    expect(service.getTotalTokens()).toBe(0);
+  });
+});

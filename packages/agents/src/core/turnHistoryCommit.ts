@@ -42,13 +42,13 @@ interface CommitTurnHistoryOptions {
   readonly eagerlyRecordedToolResponseCallIds: Set<string>;
 }
 
-function afcHistoryEntries(
+async function afcHistoryEntries(
   historyService: HistoryService,
   afcHistory: IContent[],
   currentModel: string | undefined,
   baseUrl: string | undefined,
-): IContent[] {
-  const index = historyService.getCurated().length;
+): Promise<IContent[]> {
+  const index = await historyService.countCuratedRows();
   return afcHistory
     .slice(index)
     .map((content) => stampAiTurnModel(content, currentModel, baseUrl));
@@ -107,23 +107,6 @@ async function settlePublishedMediaAdmissions(
   }
 }
 
-export async function rollbackTurnHistory(
-  historyService: HistoryService,
-  historyBeforeTurn: IContent[],
-  currentModel: string | undefined,
-  primaryError: unknown,
-): Promise<unknown> {
-  try {
-    await historyService.replaceAll(historyBeforeTurn, currentModel);
-    return primaryError;
-  } catch (rollbackError: unknown) {
-    return new AggregateError(
-      [primaryError, rollbackError],
-      'Turn history commit failed and history rollback was incomplete',
-    );
-  }
-}
-
 export async function commitTurnHistory(
   options: CommitTurnHistoryOptions,
 ): Promise<void> {
@@ -136,10 +119,14 @@ export async function commitTurnHistory(
       options.response,
       options.preparedUserTurn.turnId,
     );
+    const submitted = await options.historyService.hasPromptSubmission(
+      options.promptId,
+    );
+    const userEntries = submitted ? [] : options.preparedUserTurn.userContents;
     const inputEntries =
       admitted.afcHistory === undefined
-        ? options.preparedUserTurn.userContents
-        : afcHistoryEntries(
+        ? userEntries
+        : await afcHistoryEntries(
             options.historyService,
             admitted.afcHistory,
             options.currentModel,
@@ -151,6 +138,7 @@ export async function commitTurnHistory(
     ];
     const mediaAdmissions = admitted.admissions;
     await options.historyService.addBatch(entries, options.currentModel, {
+      streamPublication: true,
       origin: options.origin,
       afterPublication: async () => {
         await syncAndRecordTurnUsage({

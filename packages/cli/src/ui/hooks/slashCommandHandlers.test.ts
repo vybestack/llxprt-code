@@ -9,20 +9,34 @@ import {
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { CommandHandlerFixture as SlashCommandHandlerDeps } from './slash-command-handler-deps-test-helpers.js';
-import type { CommandContext } from '../commands/types.js';
-import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
+import type {
+  CommandContext,
+  SlashCommandActionReturn,
+} from '../commands/types.js';
 
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
-import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
-import { directoriesChangedRecords } from '../../__tests__/recorded-directories.js';
 import {
-  bindFixtureHistoryLoader,
+  filterHistoryItems,
+  createEmojiFilter,
+  resolveEmojiFilterMode,
+} from '../utils/iContentToHistoryItems.js';
+import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { readJournalItems } from '../stores/turn/journal-turn-test-helpers.js';
+import {
+  assertNativeSlashEvent,
+  assertNativeDirectories,
+  useRecordingLogCapture,
+} from './__tests__/support/slashRecordingAssertions.js';
+import {
   bindFixtureOwnerResume,
   createCommands,
 } from '../../__tests__/command-history-result-fixture.js';
 import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
-import { createDeps } from './slash-command-handler-deps-test-helpers.js';
+import {
+  createDeps,
+  errorTexts,
+} from './slash-command-handler-deps-test-helpers.js';
 import { createDirectoryCommand } from '../commands/directoryCommand.js';
 import {
   bindDirectoryCommand,
@@ -34,7 +48,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CliSessionPersistence } from '../../cliSessionPersistence.js';
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import { openRouteAAgent } from '../../../../agents/src/api/__tests__/helpers/route-a-agent.js';
 import { useFakeResponsesReplay } from '../../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 import { createFakeAgent } from './agentStream/__tests__/helpers/createFakeAgent.js';
@@ -42,6 +56,8 @@ import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { getProjectHash, LocalMediaStore } from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core';
 
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { appendJournalUiItem } from './command-journal-output.js';
 import { CommandKind } from '../commands/types.js';
 import { MessageType } from '../types.js';
 import { processSlashCommand } from './slashCommandHandlers.js';
@@ -49,15 +65,9 @@ import { createSlashCommandCancellation } from './useSlashCommandCancellation.js
 import { computeIsAwaitingSlashCommandConfirmation } from '../containers/AppContainer/hooks/inputActivity.js';
 import type { HistoryItemWithoutId } from '../types.js';
 
-const performResumeMock = vi.fn();
-
 describe('slashCommandHandlers', () => {
+  const captureRecordingLog = useRecordingLogCapture();
   useFakeResponsesReplay('multi-turn-text.jsonl');
-  beforeEach(() => {
-    performResumeMock.mockReset();
-  });
-
-  type HistoryCall = [{ type: MessageType; text: string }, number];
 
   it('explains unknown MCP commands using the Agent discovery state without Config', async () => {
     const deps = createDeps(vi.fn());
@@ -73,12 +83,12 @@ describe('slashCommandHandlers', () => {
       {
         ...deps,
         isMcpDiscoveryPending: () => agent.mcp.discoveryState() === 'pending',
-        commandContext: Object.assign({}, deps.commandContext, {
+        commandContext: createMockCommandContext({
           ...deps.commandContext,
           services: { ...deps.commandContext.services, agent },
         }),
-        addMessage: (message) => {
-          if ('content' in message) messages.push(message.content);
+        writeOutput: async (item) => {
+          if (item.type === MessageType.ERROR) messages.push(item.text);
         },
       },
       '/arithmetic',
@@ -100,12 +110,14 @@ describe('slashCommandHandlers', () => {
       if (!path) throw new Error('No recording path');
       const deps = createDeps(vi.fn());
       const rawWrite = vi.fn();
+      const before = new Uint8Array(await readFile(path));
+      const logs = captureRecordingLog();
       await processSlashCommand(
         {
           ...deps,
           commandContext: Object.assign({}, deps.commandContext, {
             ...deps.commandContext,
-            recordingOwner: 'agent' as const,
+            recordingOwner: 'agent',
             services: { ...deps.commandContext.services, agent },
           }),
           commands: createCommands(() => ({
@@ -113,11 +125,13 @@ describe('slashCommandHandlers', () => {
             messageType: 'error',
             content: 'owner slash failure',
           })),
-          recordingIntegration: { recordSessionEvent: rawWrite } as never,
+          writeOutput: async (item) => {
+            await appendJournalUiItem(agent.session, undefined, item);
+          },
           resumeOwnedSession: null,
           isMcpDiscoveryPending: () => false,
           resumeRawSession: null,
-          replayResumedHistory: () => {},
+          refreshResumedHistory: () => {},
           recordCommandError: bindCommandErrorRecorder(
             agent.session.recordRecordingEvent.bind(agent.session),
             'agent',
@@ -128,9 +142,7 @@ describe('slashCommandHandlers', () => {
         },
         '/help',
       );
-      expect(
-        (await readFile(path, 'utf8')).match(/owner slash failure/g),
-      ).toHaveLength(1);
+      await assertNativeSlashEvent(path, before, 'owner slash failure', logs);
       expect(rawWrite).not.toHaveBeenCalled();
     } finally {
       await route.close();
@@ -159,21 +171,23 @@ describe('slashCommandHandlers', () => {
       const secondPath = next.session.getRecording().path;
       if (!secondPath) throw new Error('No second recording path');
       const deps = createDeps(vi.fn());
+      const before = new Uint8Array(await readFile(secondPath));
+      const logs = captureRecordingLog();
       await processSlashCommand(
         {
           ...deps,
-          commandContext: Object.assign(
-            {},
-            {
-              ...deps.commandContext,
-              recordingOwner: 'agent' as const,
-              services: { ...deps.commandContext.services, agent: next },
-            },
-          ),
+          commandContext: createMockCommandContext({
+            ...deps.commandContext,
+            recordingOwner: 'agent',
+            services: { ...deps.commandContext.services, agent: next },
+          }),
           resumeOwnedSession: null,
           isMcpDiscoveryPending: () => false,
           resumeRawSession: null,
-          replayResumedHistory: () => {},
+          refreshResumedHistory: () => {},
+          writeOutput: async (item) => {
+            await appendJournalUiItem(next.session, undefined, item);
+          },
           recordCommandError: bindCommandErrorRecorder(
             next.session.recordRecordingEvent.bind(next.session),
             'agent',
@@ -188,8 +202,11 @@ describe('slashCommandHandlers', () => {
       expect(await readFile(firstPath, 'utf8')).not.toContain(
         'resumed owner failure',
       );
-      expect(await readFile(secondPath, 'utf8')).toContain(
+      await assertNativeSlashEvent(
+        secondPath,
+        before,
         'resumed owner failure',
+        logs,
       );
     } finally {
       await liveRoute.close();
@@ -235,25 +252,19 @@ describe('slashCommandHandlers', () => {
                 ),
               ),
             ],
-            commandContext: Object.assign(
-              {},
-              {
-                ...deps.commandContext,
-                recordingOwner: 'agent' as const,
-                services: {
-                  ...deps.commandContext.services,
-                  agent,
-                  config: runtime,
-                },
+            commandContext: createMockCommandContext({
+              ...deps.commandContext,
+              recordingOwner: 'agent',
+              services: {
+                ...deps.commandContext.services,
+                agent,
+                config: runtime,
               },
-            ),
+            }),
           },
           `/directory add ${addedDirectory}`,
         );
-        const lines = (await readFile(path, 'utf8')).split('\n');
-        const records = directoriesChangedRecords(lines);
-        expect(records).toHaveLength(1);
-        expect(records[0]).toContain(addedDirectory);
+        await assertNativeDirectories(path, addedDirectory);
         expect(agent.workspace.containsPath(addedDirectory)).toBe(true);
       } finally {
         await rm(addedDirectory, { recursive: true, force: true });
@@ -285,12 +296,6 @@ describe('slashCommandHandlers', () => {
     return { deps, cancel: registry.cancelActiveSlashCommand, registered };
   }
 
-  function errorTexts(addItem: ReturnType<typeof vi.fn>): string[] {
-    return (addItem.mock.calls as HistoryCall[])
-      .filter(([item]) => item.type === MessageType.ERROR)
-      .map(([item]) => item.text);
-  }
-
   describe('processSlashCommand', () => {
     it('sanitizes whitespace-separated secure commands before adding history', async () => {
       const addItem = vi.fn();
@@ -298,7 +303,14 @@ describe('slashCommandHandlers', () => {
       await processSlashCommand(createDeps(addItem), '/key\tsk-abc123456');
 
       expect(addItem).toHaveBeenCalled();
-      const [historyItem] = addItem.mock.calls[0] as HistoryCall;
+      const [historyItem] = addItem.mock.calls[0];
+      if (
+        typeof historyItem !== 'object' ||
+        historyItem === null ||
+        !('type' in historyItem) ||
+        !('text' in historyItem)
+      )
+        throw new Error('Missing command history');
       expect(historyItem.type).toBe(MessageType.USER);
       expect(historyItem.text).toContain('/key');
       expect(historyItem.text).not.toContain('sk-abc123456');
@@ -337,7 +349,7 @@ describe('slashCommandHandlers', () => {
       });
 
       const pending = processSlashCommand(deps, '/help');
-      await Promise.resolve();
+      await waitFor(() => expect(releaseAction).toBeDefined());
       expect(cancel()).toBe(true);
       releaseAction?.();
       await pending;
@@ -357,7 +369,7 @@ describe('slashCommandHandlers', () => {
       );
 
       const pending = processSlashCommand(deps, '/help');
-      await Promise.resolve();
+      await waitFor(() => expect(rejectAction).toBeDefined());
       cancel();
       rejectAction?.(new Error('This operation was aborted'));
       const result = await pending;
@@ -373,15 +385,17 @@ describe('slashCommandHandlers', () => {
       const addItem = vi.fn();
       const { deps, cancel } = createCancellableDeps(addItem);
       let releaseAction: (() => void) | undefined;
-      deps.commands = createCommands(async () => {
-        await new Promise<void>((resolve) => {
-          releaseAction = resolve;
-        });
-        return { type: 'submit_prompt' as const, content: 'partial work' };
-      });
+      deps.commands = createCommands(
+        async (): Promise<SlashCommandActionReturn> => {
+          await new Promise<void>((resolve) => {
+            releaseAction = resolve;
+          });
+          return { type: 'submit_prompt', content: 'partial work' };
+        },
+      );
 
       const pending = processSlashCommand(deps, '/help');
-      await Promise.resolve();
+      await waitFor(() => expect(releaseAction).toBeDefined());
       cancel();
       releaseAction?.();
 
@@ -405,11 +419,12 @@ describe('slashCommandHandlers', () => {
       // approval this pipeline produces is exactly what
       // computeIsAwaitingSlashCommandConfirmation looks for.
       const addItem = vi.fn();
-      const setPendingItem = vi.fn();
+      const setPendingItem =
+        vi.fn<(item: HistoryItemWithoutId | null) => void>();
       const { deps } = createCancellableDeps(addItem);
       deps.setPendingItem = setPendingItem;
       deps.commands = createCommands(() => ({
-        type: 'confirm_shell_commands' as const,
+        type: 'confirm_shell_commands',
         commandsToConfirm: ['echo hi'],
         originalInvocation: { raw: '/help' },
       }));
@@ -418,7 +433,7 @@ describe('slashCommandHandlers', () => {
       await waitFor(() => expect(setPendingItem).toHaveBeenCalled());
 
       const pendingItems = setPendingItem.mock.calls
-        .map(([item]) => item as HistoryItemWithoutId | null)
+        .map(([item]) => item)
         .filter((item): item is HistoryItemWithoutId => item !== null);
       expect(pendingItems.length).toBeGreaterThan(0);
       expect(computeIsAwaitingSlashCommandConfirmation(pendingItems)).toBe(
@@ -475,20 +490,24 @@ describe('slashCommandHandlers', () => {
       deps.commandContext.services.config =
         emojiMode === null
           ? null
-          : ({
-              getEphemeralSetting: vi.fn().mockReturnValue(emojiMode),
-            } as unknown as typeof deps.commandContext.services.config);
-      deps.loadCommandHistory = bindFixtureHistoryLoader(deps.commandContext);
+          : createMockCommandContext({
+              services: { config: { getEphemeralSetting: () => emojiMode } },
+            }).services.config;
       deps.commands = [
         {
           name: 'loadhist',
           description: 'Load history for tests',
           kind: CommandKind.BUILT_IN,
-          action: vi.fn(async () => ({
-            type: 'load_history' as const,
-            history,
-            clientHistory,
-          })),
+          action: async () => {
+            await deps.commandContext.services.agent?.setHistory(clientHistory);
+            for (const item of filterHistoryItems(
+              history,
+              createEmojiFilter(
+                resolveEmojiFilterMode(deps.commandContext.services.config),
+              ),
+            ))
+              addItem(item, Date.now());
+          },
         },
       ];
       return deps;
@@ -608,26 +627,30 @@ describe('slashCommandHandlers', () => {
       const setHistory = vi.fn();
       const deps = createDeps(addItem);
       deps.commandContext.services.agent = createFakeAgent([], { setHistory });
-      deps.commandContext.services.config = {
-        getEphemeralSetting: vi.fn().mockReturnValue('auto'),
-      } as never;
+      deps.commandContext.services.config = createMockCommandContext({
+        services: { config: { getEphemeralSetting: () => 'auto' } },
+      }).services.config;
       const clientHistory: IContent[] = [
         { speaker: 'human', blocks: [{ type: 'text', text: 'q' }] },
       ];
       const history: HistoryItemWithoutId[] = [
         { type: 'gemini', text: MODEL_TEXT },
       ];
-      deps.loadCommandHistory = bindFixtureHistoryLoader(deps.commandContext);
       deps.commands = [
         {
           name: 'loadhist',
           description: 'Load history for tests',
           kind: CommandKind.BUILT_IN,
-          action: vi.fn(async () => ({
-            type: 'load_history' as const,
-            history,
-            clientHistory,
-          })),
+          action: async () => {
+            await deps.commandContext.services.agent?.setHistory(clientHistory);
+            for (const item of filterHistoryItems(
+              history,
+              createEmojiFilter(
+                resolveEmojiFilterMode(deps.commandContext.services.config),
+              ),
+            ))
+              addItem(item, Date.now());
+          },
         },
       ];
 
@@ -643,79 +666,47 @@ describe('slashCommandHandlers', () => {
     });
 
     it('filters resumed session model text on perform_resume (#2888)', async () => {
-      const addItem = vi.fn();
-      const deps = createDeps(addItem);
-      const resumeRuntime = {
-        getEphemeralSetting: vi.fn().mockReturnValue('auto'),
-        projectTempDir: '/tmp/chats',
-        getSessionRecordingQueueByteLimit: () => 0,
-        logSlashCommand: () => {},
-        // #3199 threads the media store through buildResumeContext.
-        getLocalMediaStore: () => undefined,
-        getProjectRoot: vi.fn().mockReturnValue('/tmp/project'),
-        getSessionId: vi.fn().mockReturnValue('session-1'),
-        getProvider: vi.fn().mockReturnValue('test-provider'),
-        getModel: vi.fn().mockReturnValue('test-model'),
-        directories: () => ['/tmp/project'],
-        adoptSessionId: vi.fn(),
-      } as never;
-      deps.config = resumeRuntime;
-      deps.commandContext.services.config = resumeRuntime;
-      const owner = await createUiSessionOwner();
-      deps.commandContext.services.agent = createFakeAgent([], {
-        workspace: owner.workspace,
-        sessionClient: owner.sessionClient,
-      });
-      const callbacks = {} as never;
-      const persistence = new CliSessionPersistence(
-        { projectRoot: '/tmp/project', chatsDir: '/tmp/project/chats' },
-        {
-          mediaStore: new LocalMediaStore({
-            rootDirectory: join(tmpdir(), 'slash-resume-text-only-media'),
-            quotaBytes: 1024,
-          }),
-        },
-      );
-      // Injected instead of vi.mock: bun module mocks leak across test files.
-      installFixtureRawResume(
-        deps,
-        resumeRuntime,
-        persistence,
-        callbacks,
-        performResumeMock,
-      );
-      deps.commands = [
-        {
-          name: 'resumecmd',
-          description: 'Resume for tests',
-          kind: CommandKind.BUILT_IN,
-          action: vi.fn(async () => ({
-            type: 'perform_resume' as const,
-            sessionRef: 'abc',
-          })),
-        },
-      ];
-      performResumeMock.mockResolvedValue({
-        ok: true,
-        warnings: [],
-        history: [
+      await withRecordingLifetimeFixture(async ({ agent, borrow, config }) => {
+        await agent.setHistory([
           { speaker: 'human', blocks: [{ type: 'text', text: USER_TEXT }] },
           { speaker: 'ai', blocks: [{ type: 'text', text: MODEL_TEXT }] },
-        ],
+        ]);
+        await agent.session.setRecording({ enabled: true });
+        const id = (await agent.session.listSessions()).at(0)?.id;
+        if (!id) throw new Error('Missing source session');
+        await agent.session.setRecording({ enabled: false });
+        const next = await borrow();
+        await next.session.setRecording({ enabled: true });
+        const deps = createDeps(vi.fn());
+        deps.config = composeFixtureRuntime(config);
+        deps.commandContext.services.agent = next;
+        deps.commandContext.recordingOwner = 'agent';
+        deps.resumeOwnedSession = bindFixtureOwnerResume(
+          deps.commandContext,
+          deps.commandContext.services.config,
+        );
+        deps.commands = [
+          {
+            name: 'resumecmd',
+            description: 'Resume',
+            kind: CommandKind.BUILT_IN,
+            action: async () => ({ type: 'perform_resume', sessionRef: id }),
+          },
+        ];
+        await processSlashCommand(deps, '/resumecmd');
+        const items = await readJournalItems(next);
+        expect(items.map((item) => [item.type, item.text])).toStrictEqual([
+          ['user', USER_TEXT],
+          ['gemini', 'Done [OK]'],
+        ]);
+        const raw = await Array.fromAsync(next.streamHistory());
+        expect(
+          raw
+            .flatMap((row) => row.blocks)
+            .filter((block) => block.type === 'text')
+            .map((block) => block.text),
+        ).toContain(MODEL_TEXT);
       });
-
-      await processSlashCommand(deps, '/resumecmd');
-
-      expect(performResumeMock).toHaveBeenCalledTimes(1);
-      expect(deps.commandContext.ui.clear).toHaveBeenCalled();
-      expect(addItem).toHaveBeenCalledWith(
-        expect.objectContaining({ type: MessageType.USER, text: USER_TEXT }),
-        expect.any(Number),
-      );
-      expect(addItem).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'gemini', text: 'Done [OK]' }),
-        expect.any(Number),
-      );
     });
   });
   it('resumes legacy slash media through explicit client and recording owners without Config media lookup', async () => {
@@ -741,13 +732,7 @@ describe('slashCommandHandlers', () => {
           semanticMetadata: {},
         });
         const deps = createDeps(vi.fn());
-        const displayed: string[] = [];
-        deps.commandContext.ui.addItem = (item) => {
-          if (item.type === MessageType.USER && item.text !== undefined) {
-            displayed.push(item.text);
-          }
-          return displayed.length;
-        };
+        await agent.session.setRecording({ enabled: true });
         deps.config = composeFixtureRuntime(config);
         deps.commandContext.services.config = composeFixtureRuntime(config);
         deps.commandContext.services.agent = agent;
@@ -755,6 +740,7 @@ describe('slashCommandHandlers', () => {
           getCurrentRecording: () => null,
           getCurrentIntegration: () => null,
           getCurrentLockHandle: () => null,
+          getCurrentMetadata: () => null,
           setRecording: () => {
             throw new Error('Mocked resume must not swap recordings');
           },
@@ -762,10 +748,17 @@ describe('slashCommandHandlers', () => {
         const resume: typeof performResume = async (_sessionRef, context) => {
           const bytes = await context.mediaStore?.readVerified(reference);
           if (bytes === undefined) throw new Error('Missing owner media store');
+          await agent.setHistory([
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: new TextDecoder().decode(bytes) }],
+            },
+          ]);
           return {
             ok: true,
             warnings: [],
             metadata: {
+              kind: 'main',
               sessionId: config.getSessionId(),
               projectHash: getProjectHash(config.getProjectRoot()),
               provider: config.getProvider() ?? 'unknown',
@@ -773,19 +766,29 @@ describe('slashCommandHandlers', () => {
               workspaceDirs: [...agent.workspace.getDirectories()],
               startTime: new Date().toISOString(),
             },
-            history: [
-              {
+            history: (async function* (): AsyncGenerator<IContent> {
+              yield {
                 speaker: 'human',
                 blocks: [
                   { type: 'text', text: new TextDecoder().decode(bytes) },
                 ],
-              },
-            ],
+              };
+            })(),
           };
         };
+        const persistence = new CliSessionPersistence(
+          {
+            projectRoot: config.getProjectRoot(),
+            chatsDir: config.projectChatsDir,
+          },
+          { mediaStore: store },
+        );
         installFixtureRawResume(
           deps,
-          deps.commandContext.services.config as never,
+          {
+            ...composeFixtureRuntime(config),
+            getSessionRecordingQueueByteLimit: () => 0,
+          },
           persistence,
           callbacks,
           resume,
@@ -804,7 +807,11 @@ describe('slashCommandHandlers', () => {
 
         await processSlashCommand(deps, '/continue shared-label');
 
-        expect(displayed).toContain('owned media');
+        expect(
+          (await readJournalItems(agent))
+            .filter((item) => item.type === 'user')
+            .map((item) => item.text),
+        ).toContain('owned media');
       } finally {
         persistence.close();
         await store.close();
@@ -844,12 +851,6 @@ describe('slashCommandHandlers', () => {
       deps.config = composeFixtureRuntime(config);
       deps.commandContext.services.agent = next;
       deps.commandContext.recordingOwner = 'agent';
-      let loaded:
-        | Parameters<CommandOwnerFixture['ui']['loadHistory']>[0]
-        | undefined;
-      deps.commandContext.ui.loadHistory = (history) => {
-        loaded = history;
-      };
       deps.commands = [
         {
           name: 'continue',
@@ -867,7 +868,7 @@ describe('slashCommandHandlers', () => {
       );
       await processSlashCommand(deps, `/continue ${sourceId}`);
       expect(
-        loaded?.some(
+        (await readJournalItems(next)).some(
           (item) => item.type === 'user' && item.text === 'slash replay',
         ),
       ).toBe(true);

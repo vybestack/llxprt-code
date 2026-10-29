@@ -1,3 +1,5 @@
+import { readJournalItems } from '../stores/turn/read-journal-items.js';
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -26,11 +28,14 @@ describe('registered restore command owner', () => {
     await decoy.setHistory([
       { speaker: 'human', blocks: [{ type: 'text', text: 'decoy history' }] },
     ]);
+    const decoyBefore = await collectResumeRows(decoy.streamHistory());
+    expect(decoyBefore).toMatchObject([
+      { speaker: 'human', blocks: [{ type: 'text', text: 'decoy history' }] },
+    ]);
     const checkpointDirectory = await mkdtemp(join(tmpdir(), 'restore-owner-'));
     const restoredUiHistory = [
       { type: 'user' as const, text: 'owner restored' },
     ];
-    const ownerUiHistory: unknown[] = [];
     const restoredHistory = [
       {
         speaker: 'human' as const,
@@ -38,6 +43,7 @@ describe('registered restore command owner', () => {
       },
     ];
 
+    await owner.session.setRecording({ enabled: true });
     try {
       await mkdir(checkpointDirectory, { recursive: true });
       await writeFile(
@@ -52,14 +58,12 @@ describe('registered restore command owner', () => {
         {
           enabled: true,
           checkpointDirectory,
-          setClientHistory: (history) => owner.setHistory(history),
-          restoreProjectSnapshot: undefined,
+          replaceHistoryFromSource: owner.session.replaceHistoryFromSource.bind(
+            owner.session,
+          ),
+          git: undefined,
         },
         () => true,
-        (history) => {
-          ownerUiHistory.push(...history);
-        },
-        () => 0,
       );
       if (!command?.action) throw new Error('Restore command is unavailable');
       const registry = await CommandService.create(
@@ -87,13 +91,19 @@ describe('registered restore command owner', () => {
         toolName: 'read_file',
         toolArgs: { file_path: 'notes.txt' },
       });
-      expect(await owner.getHistory()).toMatchObject([
+      expect(await collectResumeRows(owner.streamHistory())).toMatchObject([
         { blocks: [{ text: 'owner restored' }] },
       ]);
+      const ownerUiHistory = (await readJournalItems(owner, 64, true)).map(
+        (item) => ({
+          type: item.type,
+          ...('text' in item ? { text: item.text } : {}),
+        }),
+      );
       expect(ownerUiHistory).toStrictEqual(restoredUiHistory);
-      expect(await decoy.getHistory()).toStrictEqual([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'decoy history' }] },
-      ]);
+      expect(await collectResumeRows(decoy.streamHistory())).toStrictEqual(
+        decoyBefore,
+      );
     } finally {
       await rm(checkpointDirectory, { recursive: true, force: true });
     }

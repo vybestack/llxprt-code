@@ -20,7 +20,10 @@ import {
   createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { acquireSessionClient } from '../session/session-client-binding.js';
-import { cleanupProviderScope } from '../session/session-client-cleanup.js';
+import {
+  cleanupProviderScope,
+  rethrowAfterCleanup,
+} from '../session/session-client-cleanup.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
 import type {
   PreflightActivationInput,
@@ -48,11 +51,6 @@ export interface ActivationSessionResources {
   workspaceDefinitions: WorkspaceDefinitionOwner;
 }
 
-export interface ActivationSessionClient {
-  readonly client: SessionClientOwner;
-  readonly switcher: ProviderSwitcher;
-}
-
 /**
  * Acquires the session resources of a preflight activation. On failure it
  * rolls back what it acquired; on success the caller owns retirement of the
@@ -66,7 +64,8 @@ export async function acquireActivationSession<T>(
   auth: PreflightAuthInput,
   complete: (
     resources: ActivationSessionResources,
-    session: ActivationSessionClient,
+    client: SessionClientOwner,
+    switcher: ProviderSwitcher,
   ) => T,
 ): Promise<T> {
   const release = new AcquisitionRelease();
@@ -96,7 +95,21 @@ export async function acquireActivationSession<T>(
       auth,
       settings.settingsOwner,
       definitions,
-      client,
+      {
+        images: {
+          hasImageComposition: client.hasImageComposition,
+          bindImageOperation: client.bindImageOperation.bind(client),
+        },
+        bindProviderFiles: client.clients.bindProviderFiles.bind(
+          client.clients,
+        ),
+        bindDefinitionReads: client.clients.bindDefinitionReads.bind(
+          client.clients,
+        ),
+        bindWorkspaceInstructions:
+          client.bindWorkspaceInstructions.bind(client),
+        refreshAuth: client.operations.refreshAuth,
+      },
     );
     return complete(
       {
@@ -109,18 +122,15 @@ export async function acquireActivationSession<T>(
         workspaceMemory: activation.memory,
         workspaceDefinitions: definitions,
       },
-      { client, switcher },
+      client,
+      switcher,
     );
   } catch (error) {
-    try {
-      await release.rollback();
-    } catch (cleanupError) {
-      throw new AggregateError(
-        [error, cleanupError],
-        'Activation acquisition cleanup failed',
-      );
-    }
-    throw error;
+    return rethrowAfterCleanup(
+      error,
+      () => release.rollback(),
+      'Activation acquisition cleanup failed',
+    );
   }
 }
 
@@ -203,37 +213,39 @@ function bindActivationClient(
   auth: PreflightAuthInput,
   settingsOwner: SessionSettingsOwner,
   definitions: WorkspaceDefinitionOwner,
-  client: SessionClientOwner,
+  binding: {
+    readonly images: Parameters<typeof assembleSessionImages>[0];
+    readonly bindProviderFiles: SessionClientOwner['clients']['bindProviderFiles'];
+    readonly bindDefinitionReads: SessionClientOwner['clients']['bindDefinitionReads'];
+    readonly bindWorkspaceInstructions: SessionClientOwner['bindWorkspaceInstructions'];
+    readonly refreshAuth: (method?: string) => Promise<void>;
+  },
 ): ProviderSwitcher {
   const { files } = activation;
   assembleSessionImages(
-    {
-      hasImageComposition: () => client.hasImageComposition(),
-      bindImageOperation: (run, dispose) =>
-        client.bindImageOperation(run, dispose),
-    },
+    binding.images,
     config.getTargetDir(),
     providers.manager,
     auth.oauth,
     providers.settings,
   );
-  client.clients.bindProviderFiles(
+  binding.bindProviderFiles(
     files,
     (provider) => auth.oauth.composeRetryOperations(provider),
     (scope) => cleanupProviderScope(files, scope),
   );
-  client.clients.bindDefinitionReads(
+  binding.bindDefinitionReads(
     definitions.profileReads,
     definitions.subagentReads,
   );
-  client.bindWorkspaceInstructions(activation.memory);
+  binding.bindWorkspaceInstructions(activation.memory);
   return assembleProviderSwitch(
     config,
     providers.settings,
     providers.manager,
     auth.oauth,
     activation.readKind,
-    () => client.clients.refreshAuth(),
+    binding.refreshAuth,
     settingsOwner,
   );
 }

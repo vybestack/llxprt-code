@@ -28,8 +28,7 @@ export function createRecordingExecution(
     historyOrigin: session,
     hookOwner: hooks?.execution(identity) ?? identity,
     transcriptPath: () => currentRecordingPath(session),
-    persistSemanticMediaPurge: (history, frontier) =>
-      session.persistSemanticMediaPurge(history, frontier),
+    persistSemanticMediaPurge: () => session.persistSemanticMediaPurge(),
   };
 }
 

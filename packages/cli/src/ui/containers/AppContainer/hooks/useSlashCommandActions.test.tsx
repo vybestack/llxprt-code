@@ -3,6 +3,10 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  readJournalItems,
+  withJournalTurn,
+} from '../../../stores/turn/journal-turn-test-helpers.js';
 
 import { describe, it, expect, vi } from 'bun:test';
 import { act } from 'react';
@@ -66,74 +70,77 @@ function withRealStoreDialogs() {
 
 describe('useSlashCommandActions', () => {
   it('reports NO_COLOR without requesting a theme dialog through slash dispatch', async () => {
-    const previous = process.env.NO_COLOR;
-    process.env.NO_COLOR = '1';
-    const { store, dialogs } = withRealStoreDialogs();
-    const turn = createTurnStore();
-    const settingsStore = createSettingsProfileStore();
-    const settings = createMockSettings({ ui: { theme: 'Dracula' } });
-    const { result, unmount } = renderHook(
-      () => {
-        const theme = useThemeCommand(
-          settings,
-          dialogs,
-          turn.commands.addItem,
-          settingsStore.commands.setThemeError,
-        );
-        return useSlashCommandActions({
-          ...baseCallbacks(),
-          dialogs,
-          openThemeDialog: theme.openThemeDialog,
+    await withJournalTurn(async (turn, agent) => {
+      const previous = process.env.NO_COLOR;
+      process.env.NO_COLOR = '1';
+      const { store, dialogs } = withRealStoreDialogs();
+      const settingsStore = createSettingsProfileStore();
+      const settings = createMockSettings({ ui: { theme: 'Dracula' } });
+      const { result, unmount } = renderHook(
+        () => {
+          const theme = useThemeCommand(
+            settings,
+            dialogs,
+            turn.commands.addItem,
+            settingsStore.commands.setThemeError,
+          );
+          return useSlashCommandActions({
+            ...baseCallbacks(),
+            dialogs,
+            openThemeDialog: theme.openThemeDialog,
+          });
+        },
+        {
+          wrapper: ({ children }) => (
+            <AppDispatchProvider value={() => {}}>
+              {children}
+            </AppDispatchProvider>
+          ),
+        },
+      );
+      try {
+        await act(async () => {
+          await processSlashCommand(
+            {
+              commands: [themeCommand],
+              config: null,
+              commandContext: createMockCommandContext(),
+              actions: { ...result.current, openSubagentDialog: () => {} },
+              addItem: turn.commands.addItem,
+              addMessage: () => {},
+              setIsProcessing: () => {},
+              setLocalIsProcessing: () => {},
+              setPendingItem: () => {},
+              setSessionShellAllowlist: () => {},
+              setConfirmationRequest: () => {},
+              confirmationLogger: new DebugLogger('test'),
+              slashCommandLogger: new DebugLogger('test'),
+              beginSlashCommandAction: () => new AbortController(),
+              endSlashCommandAction: () => {},
+              resumeOwnedSession: null,
+              isMcpDiscoveryPending: () => false,
+              resumeRawSession: null,
+              refreshResumedHistory: () => {},
+              recordCommandError: async () => {},
+              writeOutput: async (item) => {
+                turn.commands.addItem(item, Date.now());
+              },
+            },
+            '/theme',
+          );
         });
-      },
-      {
-        wrapper: ({ children }) => (
-          <AppDispatchProvider value={() => {}}>{children}</AppDispatchProvider>
-        ),
-      },
-    );
-    try {
-      await act(async () => {
-        await processSlashCommand(
-          {
-            commands: [themeCommand],
-            config: null,
-            commandContext: createMockCommandContext(),
-            actions: { ...result.current, openSubagentDialog: () => {} },
-            addItem: turn.commands.addItem,
-            addMessage: () => {},
-            setIsProcessing: () => {},
-            setLocalIsProcessing: () => {},
-            setPendingItem: () => {},
-            setSessionShellAllowlist: () => {},
-            setConfirmationRequest: () => {},
-            confirmationLogger: new DebugLogger('test'),
-            slashCommandLogger: new DebugLogger('test'),
-            beginSlashCommandAction: () => new AbortController(),
-            endSlashCommandAction: () => {},
-            resumeOwnedSession: null,
-            isMcpDiscoveryPending: () => false,
-            resumeRawSession: null,
-            replayResumedHistory: () => {},
-            recordCommandError: async () => {},
-            loadCommandHistory: async () => {},
-          },
-          '/theme',
-        );
-      });
-      expect(
-        turn.store
-          .getState()
-          .history.some(
+        expect(
+          (await readJournalItems(agent)).some(
             (item) => item.type === 'info' && item.text.includes('NO_COLOR'),
           ),
-      ).toBe(true);
-      expect(store.store.getState().requests).toHaveLength(0);
-    } finally {
-      unmount();
-      if (previous === undefined) delete process.env.NO_COLOR;
-      else process.env.NO_COLOR = previous;
-    }
+        ).toBe(true);
+        expect(store.store.getState().requests).toHaveLength(0);
+      } finally {
+        unmount();
+        if (previous === undefined) delete process.env.NO_COLOR;
+        else process.env.NO_COLOR = previous;
+      }
+    });
   });
 
   it('retains command-context identity for equal input fields and updates changed fields', () => {
@@ -156,7 +163,7 @@ describe('useSlashCommandActions', () => {
         return useCommandContext({
           addItem: turn.commands.addItem,
           clearItems: turn.commands.clearItems,
-          loadHistory: turn.commands.loadHistory,
+
           refreshStatic,
           toggleVimEnabled,
           setLlxprtMdFileCount: setCount,
@@ -480,79 +487,82 @@ describe('logging data boundary', () => {
 
 describe('domain dialog routes', () => {
   it('opens the selected subagent through the real slash-command processor', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'subagent-route-2536-'));
-    const { store, dialogs } = withRealStoreDialogs();
-    const turn = createTurnStore();
-    const { result, unmount } = renderHook(() =>
-      useSlashCommandActions({ ...baseCallbacks(), dialogs }),
-    );
-    try {
-      const profiles = new ProfileManager(join(directory, 'profiles'));
-      await profiles.saveProfile('testprofile', {
-        version: 1,
-        provider: 'openai',
-        model: 'test',
-        modelParams: {},
-        ephemeralSettings: {},
-      });
-      const subagents = new SubagentManager(
-        join(directory, 'subagents'),
-        profiles,
+    await withJournalTurn(async (turn) => {
+      const directory = await mkdtemp(join(tmpdir(), 'subagent-route-2536-'));
+      const { store, dialogs } = withRealStoreDialogs();
+      const { result, unmount } = renderHook(() =>
+        useSlashCommandActions({ ...baseCallbacks(), dialogs }),
       );
-      await subagents.saveSubagent(
-        'researcher',
-        'testprofile',
-        'Research the subject',
-      );
-      const context = createMockCommandContext();
-      await processSlashCommand(
-        {
-          commands: [
-            registerSubagentCommand(
-              createMockCommandContext({
-                services: { subagentManager: subagents },
-              }),
-            ),
-          ],
-          config: null,
-          commandContext: createMockCommandContext({
-            ...context,
-            services: { ...context.services, subagentManager: subagents },
-          }),
-          actions: result.current,
-          addItem: turn.commands.addItem,
-          addMessage: () => {},
-          setIsProcessing: () => {},
-          setLocalIsProcessing: () => {},
-          setPendingItem: () => {},
-          setSessionShellAllowlist: () => {},
-          setConfirmationRequest: () => {},
-          confirmationLogger: new DebugLogger('test'),
-          slashCommandLogger: new DebugLogger('test'),
-          beginSlashCommandAction: () => new AbortController(),
-          endSlashCommandAction: () => {},
-          resumeOwnedSession: null,
-          isMcpDiscoveryPending: () => false,
-          resumeRawSession: null,
-          replayResumedHistory: () => {},
-          recordCommandError: async () => {},
-          loadCommandHistory: async () => {},
-        },
-        '/subagent show researcher',
-      );
-      expect(store.store.getState().requests).toStrictEqual([
-        {
-          kind: 'subagent',
-          payload: {
-            initialView: SubagentView.SHOW,
-            initialName: 'researcher',
+      try {
+        const profiles = new ProfileManager(join(directory, 'profiles'));
+        await profiles.saveProfile('testprofile', {
+          version: 1,
+          provider: 'openai',
+          model: 'test',
+          modelParams: {},
+          ephemeralSettings: {},
+        });
+        const subagents = new SubagentManager(
+          join(directory, 'subagents'),
+          profiles,
+        );
+        await subagents.saveSubagent(
+          'researcher',
+          'testprofile',
+          'Research the subject',
+        );
+        const context = createMockCommandContext();
+        await processSlashCommand(
+          {
+            commands: [
+              registerSubagentCommand(
+                createMockCommandContext({
+                  services: { subagentManager: subagents },
+                }),
+              ),
+            ],
+            config: null,
+            commandContext: createMockCommandContext({
+              ...context,
+              services: { ...context.services, subagentManager: subagents },
+            }),
+            actions: result.current,
+            addItem: turn.commands.addItem,
+            addMessage: () => {},
+            setIsProcessing: () => {},
+            setLocalIsProcessing: () => {},
+            setPendingItem: () => {},
+            setSessionShellAllowlist: () => {},
+            setConfirmationRequest: () => {},
+            confirmationLogger: new DebugLogger('test'),
+            slashCommandLogger: new DebugLogger('test'),
+            beginSlashCommandAction: () => new AbortController(),
+            endSlashCommandAction: () => {},
+            resumeOwnedSession: null,
+            isMcpDiscoveryPending: () => false,
+            resumeRawSession: null,
+            refreshResumedHistory: () => {},
+            recordCommandError: async () => {},
+            writeOutput: async (item) => {
+              turn.commands.addItem(item, Date.now());
+            },
           },
-        },
-      ]);
-    } finally {
-      unmount();
-      await rm(directory, { recursive: true, force: true });
-    }
+          '/subagent show researcher',
+        );
+        expect(store.store.getState().requests).toStrictEqual([
+          {
+            kind: 'subagent',
+            payload: {
+              initialView: SubagentView.SHOW,
+              initialName: 'researcher',
+            },
+          },
+        ]);
+      } finally {
+        unmount();
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
   });
 
   it('clears a stale editor banner when the slash opener starts a new session', () => {

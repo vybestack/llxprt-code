@@ -1,0 +1,98 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
+import type { TurnProcessorRuntime } from './chatSessionPorts.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type {
+  RuntimeGenerateChatOptions,
+  RuntimeProviderToolset,
+} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { CompressionHandler } from '../compression/CompressionHandler.js';
+import type { PreparedSourcePromptEnvelopeSend } from './prompt-envelope-source-send.js';
+import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
+import { streamSemanticPurgeRequest } from './streamRequestHelpers.js';
+import { streamDiskSource } from './streamprocessor-disk-source.js';
+import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
+import { historySourceFailure } from './historySourceError.js';
+
+export interface TurnSourceRequestInput {
+  readonly runtime: TurnProcessorRuntime;
+  readonly compression: CompressionHandler;
+  readonly history: HistoryService;
+  readonly provider: RuntimeProvider;
+  readonly promptId: string;
+  readonly userContents: IContent[];
+  readonly semanticMediaPurge: SemanticMediaPurgeAttempt | undefined;
+  readonly tools: RuntimeProviderToolset | undefined;
+  readonly signal: AbortSignal | undefined;
+  readonly recordingExecution?: AgentChatRecordingExecution;
+  readonly hookOwner?: HookExecutionOwner;
+  readonly modelParameters?: AdmittedModelParameters;
+  readonly log: (message: string) => void;
+  readonly buildOptions: (
+    contents: AsyncIterable<IContent>,
+  ) => RuntimeGenerateChatOptions;
+  readonly onPrepared: (
+    prepared: PreparedSourcePromptEnvelopeSend,
+    attemptIndex: number,
+  ) => void | Promise<void>;
+  /** One provider attempt: transport plus full consumption of its response. */
+  readonly attempt: (
+    prepared: PreparedSourcePromptEnvelopeSend,
+    attemptIndex: number,
+  ) => Promise<void>;
+}
+
+async function* singleResponse(
+  run: () => Promise<void>,
+): AsyncGenerator<IContent, void, unknown> {
+  await run();
+  yield { speaker: 'ai', blocks: [] };
+}
+
+/**
+ * Non-streaming turn send through the shared source pipeline. The provider
+ * response is consumed inside each attempt so the retry policy covers the whole
+ * exchange, exactly as the direct-send retry loop did.
+ */
+export async function sendTurnSource(
+  input: TurnSourceRequestInput,
+): Promise<void> {
+  const stream = await streamDiskSource({
+    runtime: input.runtime,
+    compression: input.compression,
+    history: input.history,
+    userContent: input.userContents,
+    promptId: input.promptId,
+    provider: input.provider,
+    tools: input.tools,
+    log: input.log,
+    signal: input.signal,
+    recordingExecution: input.recordingExecution,
+    hookOwner: input.hookOwner,
+    modelParameters: input.modelParameters,
+    historyOverride: streamSemanticPurgeRequest(
+      input.semanticMediaPurge,
+      input.signal,
+    ),
+    buildOptions: (contents) => input.buildOptions(contents),
+    onPrepared: input.onPrepared,
+    shouldRetryOnError: shouldRetryDirectProviderError,
+    send: (prepared, attemptIndex) =>
+      singleResponse(() => input.attempt(prepared, attemptIndex)),
+  }).catch((error: unknown) => {
+    const source = historySourceFailure(error);
+    throw source === undefined ? error : source.error;
+  });
+  for await (const _completed of stream) {
+    /* The attempt owns its journal response, not this request source. */
+  }
+}

@@ -1,0 +1,93 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
+import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
+import {
+  recordedChatRows,
+  withChatMutationFixture,
+} from './__tests__/support/chat-mutation-test-helpers.js';
+
+async function projectedText(path: string, count: number): Promise<string[]> {
+  const cursor = await NativeJournalCursor.open(path, {}, count);
+  try {
+    const page = await cursor.pageBack(count);
+    return page.entries
+      .flatMap((entry) => {
+        if (entry.kind !== 'projected' || entry.contextState !== 'in-context')
+          return [];
+        return entry.item.type === 'user' || entry.item.type === 'gemini'
+          ? [entry.item.text]
+          : [];
+      })
+      .reverse();
+  } finally {
+    await cursor.close();
+  }
+}
+
+for (const size of [65]) {
+  for (const name of ['clear', 'restore']) {
+    describe(`${name} live chat stream ${size}`, () => {
+      it('restores the human-turn prefix in live history, UI and the settled recording', async () => {
+        await withChatMutationFixture(
+          size,
+          async ({
+            chatCommand,
+            context,
+            history,
+            client,
+            recording,
+            reader,
+          }) => {
+            let displayed = 0;
+            context.ui.addItem = () => ++displayed;
+            const result = await chatCommand.subCommands
+              ?.find((command) => command.name === name)
+              ?.action?.(context, name === 'restore' ? '1' : '');
+            expect(result).toBeUndefined();
+            const expectedCount =
+              name === 'clear' ? 3 : size - 1 - ((size - 1) % 3);
+            const actual = createHash('sha256');
+            const expected = createHash('sha256');
+            let count = 0;
+            for await (const row of client.getChat().getHistory()) {
+              actual.update(JSON.stringify(row.blocks));
+              expected.update(JSON.stringify(accountingRow(count++).blocks));
+            }
+            expect({ count, digest: actual.digest('hex') }).toStrictEqual({
+              count: expectedCount,
+              digest: expected.digest('hex'),
+            });
+            expect(displayed).toBe(0);
+            expect(reader.snapshot().liveRows).toBe(0);
+            expect(reader.snapshot().peakRows).toBeLessThanOrEqual(440);
+            const path = recording.getFilePath();
+            if (path === null) throw new Error('Missing recording path');
+            expect(await projectedText(path, size * 4)).toStrictEqual(
+              Array.from({ length: expectedCount }, (_, index) => index)
+                .filter((index) => index % 3 !== 2)
+                .map((index) => `row:${index}:${'x'.repeat(2048)}`),
+            );
+            const durable = createHash('sha256');
+            const durableExpected = createHash('sha256');
+            let durableCount = 0;
+            for await (const row of recordedChatRows(recording, history)) {
+              durable.update(JSON.stringify(row.blocks));
+              durableExpected.update(
+                JSON.stringify(accountingRow(durableCount++).blocks),
+              );
+            }
+            expect({
+              count: durableCount,
+              digest: durable.digest('hex'),
+            }).toStrictEqual({
+              count: expectedCount,
+              digest: durableExpected.digest('hex'),
+            });
+          },
+        );
+      }, 180_000);
+    });
+  }
+}

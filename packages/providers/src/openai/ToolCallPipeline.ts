@@ -21,6 +21,9 @@
  * Tool execution is handled by the Core layer, not Provider layer.
  */
 
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { firstTruthyString } from '../utils/falsyFallback.js';
+import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { ToolCallCollector } from './ToolCallCollector.js';
 import {
@@ -78,8 +81,26 @@ export class ToolCallPipeline {
   /**
    * Add tool call fragment
    */
-  addFragment(index: number, fragment: Partial<ToolCallFragment>): void {
-    this.collector.addFragment(index, fragment);
+  addFragment(
+    index: number,
+    fragment: Partial<ToolCallFragment>,
+  ): IContent | undefined {
+    const accepted = this.collector.addFragment(index, fragment);
+    if (accepted?.name === undefined || accepted.id === undefined)
+      return undefined;
+    return {
+      speaker: 'ai',
+      blocks: [],
+      toolArgumentDelta: {
+        sourceId: String(index),
+        id: normalizeToHistoryToolId(
+          firstTruthyString(accepted.id, `call_${index}`),
+        ),
+        name: this.normalizeToolName(accepted.name),
+        nameMode: 'replace',
+        arguments: accepted.args ?? '',
+      },
+    };
   }
 
   /**

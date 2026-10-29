@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 import { InteractiveApplication } from '../../session/interactiveApplication.js';
 /**
  * @license
@@ -45,9 +46,9 @@ describe('application input producer', () => {
         'actual application captured request',
         'turn one reply',
       ]);
-      expect(JSON.stringify(await owner.getHistory())).toContain(
-        'actual application captured request',
-      );
+      expect(
+        JSON.stringify(await collectResumeRows(owner.streamHistory())),
+      ).toContain('actual application captured request');
     } finally {
       app.unmount();
       await config.dispose();
@@ -119,7 +120,7 @@ async function historyContaining(
   try {
     await new Promise<void>((resolve, reject) => {
       const check = (): void => {
-        agent.getHistory().then((history) => {
+        collectResumeRows(agent.streamHistory()).then((history) => {
           const text = JSON.stringify(history);
           if (fragments.every((fragment) => text.includes(fragment))) {
             resolve();
@@ -161,7 +162,23 @@ function renderApplication(
       <AppWrapper
         {...new InteractiveApplication({
           addHistory: owner.addHistory.bind(owner),
-          getHistory: owner.getHistory.bind(owner),
+          readJournal: () => ({
+            appendDisplay: owner.session.appendDisplay.bind(owner.session),
+            length: () => owner.session.getJournalLength(),
+          }),
+          subscribeContextRange: owner.session.subscribeContextRange.bind(
+            owner.session,
+          ),
+          openDumpSnapshot: owner.session.openDumpSnapshot.bind(owner.session),
+          replaceHistoryFromSource: owner.session.replaceHistoryFromSource.bind(
+            owner.session,
+          ),
+          resumeHistory: {
+            adoptResumeBoot: owner.session.adoptResumeBoot.bind(owner.session),
+            attachRecording: (integration) =>
+              owner.session.attachRecording(integration),
+          },
+          streamHistory: owner.streamHistory.bind(owner),
           stream: owner.stream.bind(owner),
           injectSteer: owner.injectSteer.bind(owner),
           getProviderContextLimit: owner.getProviderContextLimit.bind(owner),

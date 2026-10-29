@@ -4,18 +4,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import { forwardPreconnect } from '../utils/fetchPreconnect.js';
+
 /** Avoid runtime-native stream iteration in the OpenAI SDK's SSE reader. */
 export function createReaderBasedStreamFetch(
-  innerFetch: typeof fetch,
-): typeof fetch {
-  return async (input, init) => {
-    const response = await innerFetch(input, init);
-    return response.ok &&
-      response.body &&
-      Boolean(Reflect.get(response.body, Symbol.asyncIterator))
-      ? wrapResponseWithReaderIteratedBody(response)
-      : response;
-  };
+  innerFetch: NetworkFetch,
+): NetworkFetch & ReturnType<typeof forwardPreconnect> {
+  return Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await innerFetch(input, init);
+      return response.ok &&
+        response.body &&
+        Boolean(Reflect.get(response.body, Symbol.asyncIterator))
+        ? wrapResponseWithReaderIteratedBody(response)
+        : response;
+    },
+    forwardPreconnect(() => innerFetch),
+  );
 }
 
 /** Delegate Response methods to their original internal slots. */
@@ -43,7 +49,7 @@ function createBodyDelegatingWrapper(
   let bodySource = initialBodySource;
   let currentBody = initialBody;
   let wrappedBody = createReaderIteratedBody(currentBody);
-  return {
+  const wrapper = {
     get status() {
       return metadataSource.status;
     },
@@ -102,12 +108,15 @@ function createBodyDelegatingWrapper(
       );
     },
     text: () => bodySource.text(),
+    textStream: (): ReadableStream<string> =>
+      currentBody.pipeThrough(new TextDecoderStream()),
     json: () => bodySource.json(),
     arrayBuffer: () => bodySource.arrayBuffer(),
     bytes: () => bodySource.bytes(),
     blob: () => bodySource.blob(),
     formData: () => bodySource.formData(),
   };
+  return wrapper;
 }
 
 type ReaderIteratedBody<T extends Uint8Array> = ReadableStream<T> & {

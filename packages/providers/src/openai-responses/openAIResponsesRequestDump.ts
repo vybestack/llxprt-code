@@ -116,17 +116,25 @@ export async function dumpFinalizedRequest(
   const result = await bestEffortDump(
     'request',
     deps.providerName,
-    () =>
-      dumpSDKRequestContext(
-        deps.providerName,
-        '/responses',
-        requestContext.request,
-        baseURLForDump,
-        dumpMetadata,
-      ),
+    () => dumpRequest(requestContext, deps, baseURLForDump, dumpMetadata),
     deps.logger,
   );
   return { baseId: result?.baseId, dumpMode };
+}
+
+function dumpRequest(
+  requestContext: RequestContext,
+  deps: ResponsesExecutorDeps,
+  baseURL: string,
+  metadata: RequestDumpMetadata,
+): ReturnType<typeof dumpSDKRequestContext> {
+  return dumpSDKRequestContext(
+    deps.providerName,
+    '/responses',
+    requestContext.sourcePrompt.dump,
+    baseURL,
+    metadata,
+  );
 }
 
 /**

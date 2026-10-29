@@ -70,7 +70,10 @@ export class ToolCallCollector {
   /**
    * Add tool call fragment
    */
-  addFragment(index: number, fragment: Partial<ToolCallFragment>): void {
+  addFragment(
+    index: number,
+    fragment: Partial<ToolCallFragment>,
+  ): ToolCallFragment | undefined {
     let existingFragments = this.fragments.get(index);
     if (existingFragments === undefined) {
       existingFragments = [];
@@ -113,7 +116,9 @@ export class ToolCallCollector {
       this.retainedBytes.set(index, nextRetainedBytes);
       existingFragments.push(completeFragment);
       logger.debug(`Added fragment to tool call ${index}`);
+      return arrivalFragment(existingFragments, completeFragment);
     }
+    return undefined;
   }
 
   private fragmentByteLength(fragment: ToolCallFragment): number {
@@ -243,4 +248,29 @@ export class ToolCallCollector {
     this.retainedBytes.clear();
     logger.debug('ToolCallCollector reset');
   }
+}
+
+function arrivalFragment(
+  fragments: readonly ToolCallFragment[],
+  fragment: ToolCallFragment,
+): ToolCallFragment {
+  let id: string | undefined;
+  let name: string | undefined;
+  let previouslyReady = false;
+  for (const [index, part] of fragments.entries()) {
+    if (id === undefined && part.id !== undefined && part.id !== '')
+      id = part.id;
+    if (part.name !== undefined && part.name !== '') name = part.name;
+    if (index < fragments.length - 1 && id !== undefined && name !== undefined)
+      previouslyReady = true;
+  }
+  return {
+    ...fragment,
+    id,
+    name,
+    args:
+      !previouslyReady && id !== undefined && name !== undefined
+        ? fragments.map((part) => part.args ?? '').join('')
+        : fragment.args,
+  };
 }

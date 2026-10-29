@@ -31,7 +31,9 @@ async function collectResponseFromProvider(
   responses: string[],
 ): Promise<void> {
   const iterator = provider.generateChatCompletion({
-    contents: [{ role: 'user', parts: [{ text: testText }] }],
+    contents: [
+      { speaker: 'human', blocks: [{ type: 'text', text: testText }] },
+    ],
   });
   for await (const chunk of iterator) {
     const text = extractTextFromChunk(chunk);
@@ -155,7 +157,9 @@ describe('LoadBalancingProvider', () => {
       try {
         // First call
         const iterator1 = provider.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
         });
         // Consume the iterator to trigger the delegation
         for await (const _chunk of iterator1) {
@@ -164,7 +168,9 @@ describe('LoadBalancingProvider', () => {
 
         // Second call
         const iterator2 = provider.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
         });
         for await (const _chunk of iterator2) {
           // Consume iterator
@@ -228,7 +234,9 @@ describe('LoadBalancingProvider', () => {
       try {
         // First call should go to gemini
         const iterator1 = provider.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: 'test1' }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test1' }] },
+          ],
         });
         for await (const _chunk of iterator1) {
           // Consume
@@ -236,7 +244,9 @@ describe('LoadBalancingProvider', () => {
 
         // Second call should go to openai
         const iterator2 = provider.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test2' }] },
+          ],
         });
         for await (const _chunk of iterator2) {
           // Consume
@@ -287,7 +297,9 @@ describe('LoadBalancingProvider', () => {
 
       try {
         const iterator = provider.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
         });
         for await (const _chunk of iterator) {
           // Consume
@@ -341,7 +353,9 @@ describe('LoadBalancingProvider', () => {
       try {
         // Pass existing resolved options with an authToken from a previous profile
         const iterator = provider.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
           resolved: {
             model: 'original-model',
             baseURL: 'https://original.api.com',
@@ -400,7 +414,9 @@ describe('LoadBalancingProvider', () => {
 
       try {
         const iterator = provider.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
           resolved: {
             model: 'original-model',
             baseURL: 'https://original.api.com',
@@ -457,7 +473,9 @@ describe('LoadBalancingProvider', () => {
       try {
         // Pass existing resolved options that should be overridden
         const iterator = provider.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
           resolved: {
             model: 'original-model',
             baseURL: 'https://original.api.com',
@@ -618,7 +636,12 @@ describe('LoadBalancingProvider', () => {
         // Make 2 calls to cycle through providers
         for (let i = 0; i < 2; i++) {
           const iterator = provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: `test ${i}` }] }],
+            contents: [
+              {
+                speaker: 'human',
+                blocks: [{ type: 'text', text: `test ${i}` }],
+              },
+            ],
           });
           for await (const _chunk of iterator) {
             // Consume

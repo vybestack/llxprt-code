@@ -1,6 +1,7 @@
 import { bindTurnModel } from '../../../session/bind-turn-model.js';
 import { TurnToolExecutionOwner } from '../../../session/turn-tool-execution-owner.js';
 import { CoreToolScheduler } from '../../coreToolScheduler.js';
+import { DeferredMaintenance } from '@vybestack/llxprt-code-core/journal/deferred-maintenance.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -47,6 +48,16 @@ void vi.mock('@vybestack/llxprt-code-tools', () => {
 
 describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
   it('ProceedOnce continues the loop and the tool executes (side effect observable)', async () => {
+    let maintenanceRuns = 0;
+    let toolMaintenanceRuns: number | undefined;
+    const maintenance = new DeferredMaintenance(
+      async () => {
+        maintenanceRuns++;
+      },
+      (error) => {
+        throw error;
+      },
+    );
     const tool = new MockTool({
       name: 'record_tool',
       execute: async () => ({
@@ -55,9 +66,11 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
       }),
     });
     tool.shouldConfirm = true;
-    tool.executeFn.mockResolvedValue({
-      llmContent: 'recorded-ok',
-      returnDisplay: 'recorded-ok',
+    tool.executeFn.mockImplementation(async () => {
+      maintenance.request();
+      await maintenance.settle();
+      toolMaintenanceRuns = maintenanceRuns;
+      return { llmContent: 'recorded-ok', returnDisplay: 'recorded-ok' };
     });
 
     const toolRegistry = createToolRegistryForTest([tool]);
@@ -148,6 +161,9 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     );
     expect(hasFnResponseInTurn2).toBe(true);
     expect(hasFunctionResponse(history)).toBe(true);
+    expect(toolMaintenanceRuns).toBe(0);
+    await maintenance.settle();
+    expect(maintenanceRuns).toBe(1);
   });
 
   it('Cancel aborts the tool and the loop records cancelled history then stops', async () => {

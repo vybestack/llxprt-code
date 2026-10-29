@@ -1270,17 +1270,16 @@ console.log(JSON.stringify({
 
       expect(sessionStartLog).toBeDefined();
 
-      // Verify the API request contained the injected context
-      // rig.readAllApiRequest() gives us telemetry on API requests.
-      const apiRequests = rig.readAllApiRequest();
+      // Verify the API request contained the injected context. Request bodies
+      // are exported as chunked, hash-verified artifacts rather than inline
+      // request_text, so reassemble them from the telemetry log.
+      const requestTexts = rig.readAllApiRequestTexts();
       // We expect at least one API request
-      expect(apiRequests.length).toBeGreaterThan(0);
+      expect(requestTexts.length).toBeGreaterThan(0);
 
       // The injected context should be in the request text
       // For non-interactive mode, I prepended it to input: "context\n\ninput"
-      // The telemetry `request_text` should contain it.
-      const requestText = apiRequests[0].attributes?.request_text || '';
-      expect(requestText).toContain('protocol droid');
+      expect(requestTexts[0]).toContain('protocol droid');
     });
 
     // Skipped: flaky interactive pty/Ink rendering in CI. See #1904.

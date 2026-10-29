@@ -1,0 +1,174 @@
+{
+  "name": "append-and-pop",
+  "description": "add, addAll, pop and removeLast over a short history",
+  "steps": [
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "one"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "11fe63fcca5f0e60b0c2acde1e0257fc96f8bf7cb3571487bb0c5b1b38a20057",
+          "tags": ["c1fd098ed0ad92ef"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "11fe63fcca5f0e60b0c2acde1e0257fc96f8bf7cb3571487bb0c5b1b38a20057",
+          "tags": ["c1fd098ed0ad92ef"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "addAll",
+        "rows": [
+          {
+            "speaker": "ai",
+            "text": "two"
+          },
+          {
+            "speaker": "human",
+            "text": "three"
+          },
+          {
+            "speaker": "ai",
+            "text": "four"
+          }
+        ]
+      },
+      "observed": {
+        "live": {
+          "length": 4,
+          "digest": "9265ac6371a55341f6bac2a18832e485eb19f2e562c693af9d66dafa6968743a",
+          "tags": [
+            "c1fd098ed0ad92ef",
+            "e386445e077ca673",
+            "827c0dee668e8174",
+            "339e4ea072ebcd3e"
+          ]
+        },
+        "resumed": {
+          "length": 4,
+          "digest": "9265ac6371a55341f6bac2a18832e485eb19f2e562c693af9d66dafa6968743a",
+          "tags": [
+            "c1fd098ed0ad92ef",
+            "e386445e077ca673",
+            "827c0dee668e8174",
+            "339e4ea072ebcd3e"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "90b728e028596543a02f0dd8064dccc852cd421e5203fd8239782d110a1db372",
+          "tags": ["c1fd098ed0ad92ef", "e386445e077ca673", "827c0dee668e8174"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "90b728e028596543a02f0dd8064dccc852cd421e5203fd8239782d110a1db372",
+          "tags": ["c1fd098ed0ad92ef", "e386445e077ca673", "827c0dee668e8174"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "removeLast"
+      },
+      "observed": {
+        "live": {
+          "length": 2,
+          "digest": "cc41db0404361b241c7d8193d216d88b1cef232629c92227bef92f10ddf142a9",
+          "tags": ["c1fd098ed0ad92ef", "e386445e077ca673"]
+        },
+        "resumed": {
+          "length": 2,
+          "digest": "cc41db0404361b241c7d8193d216d88b1cef232629c92227bef92f10ddf142a9",
+          "tags": ["c1fd098ed0ad92ef", "e386445e077ca673"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "five"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "de582c0a81317f428a0b76a9e74c2ba52a6b1d4713d052a7f0b91da51f2bfde0",
+          "tags": ["c1fd098ed0ad92ef", "e386445e077ca673", "6af2d1481ed4bbbc"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "de582c0a81317f428a0b76a9e74c2ba52a6b1d4713d052a7f0b91da51f2bfde0",
+          "tags": ["c1fd098ed0ad92ef", "e386445e077ca673", "6af2d1481ed4bbbc"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 2,
+          "digest": "cc41db0404361b241c7d8193d216d88b1cef232629c92227bef92f10ddf142a9",
+          "tags": ["c1fd098ed0ad92ef", "e386445e077ca673"]
+        },
+        "resumed": {
+          "length": 2,
+          "digest": "cc41db0404361b241c7d8193d216d88b1cef232629c92227bef92f10ddf142a9",
+          "tags": ["c1fd098ed0ad92ef", "e386445e077ca673"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "11fe63fcca5f0e60b0c2acde1e0257fc96f8bf7cb3571487bb0c5b1b38a20057",
+          "tags": ["c1fd098ed0ad92ef"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "11fe63fcca5f0e60b0c2acde1e0257fc96f8bf7cb3571487bb0c5b1b38a20057",
+          "tags": ["c1fd098ed0ad92ef"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        },
+        "resumed": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        }
+      }
+    }
+  ]
+}

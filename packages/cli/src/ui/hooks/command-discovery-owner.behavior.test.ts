@@ -108,9 +108,12 @@ describe('command discovery owner', () => {
       beginSlashCommandAction: () => new AbortController(),
       endSlashCommandAction: () => {},
       resumeRawSession: null,
-      replayResumedHistory: () => {},
+      refreshResumedHistory: () => {},
+      writeOutput: async (item) => {
+        if ('text' in item && typeof item.text === 'string')
+          messages.push(item.text);
+      },
       recordCommandError: async () => {},
-      loadCommandHistory: async () => {},
       resumeOwnedSession: null,
       isMcpDiscoveryPending: () => owner.mcp.discoveryState() === 'pending',
     };

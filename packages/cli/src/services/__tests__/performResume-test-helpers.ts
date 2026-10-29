@@ -3,17 +3,19 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { readRecordedRows } from '../../__tests__/journal-recording.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
+  type SessionRecordingPort,
   SessionLockManager,
   type RecordingIntegration,
   type LockHandle,
   type SessionRecordingServiceConfig,
-  type SessionRecordLine,
   type IContent,
 } from '@vybestack/llxprt-code-core';
 import {
@@ -23,15 +25,15 @@ import {
   type PerformResumeResult,
 } from '../performResume.js';
 
-export { performResume, SessionRecordingService, SessionLockManager };
+export { performResume, createSessionRecorder, SessionLockManager };
 export type {
   ResumeContext,
   RecordingSwapCallbacks,
   PerformResumeResult,
   RecordingIntegration,
+  SessionRecordingPort,
   LockHandle,
   SessionRecordingServiceConfig,
-  SessionRecordLine,
   IContent,
 };
 
@@ -40,6 +42,9 @@ type HasPropertyAssertion = {
 };
 
 type ExpectLike = (actual: unknown) => HasPropertyAssertion;
+
+const resumedRecordings = new Set<SessionRecordingPort>();
+const resumedIntegrations = new Set<RecordingIntegration>();
 
 export const PROJECT_HASH = 'test-project-hash-pr';
 
@@ -76,7 +81,7 @@ export async function createTestSession(
 ): Promise<{
   filePath: string;
   sessionId: string;
-  service: SessionRecordingService;
+  service: SessionRecordingPort;
 }> {
   const sessionId = opts.sessionId ?? crypto.randomUUID();
   const config = makeConfig(chatsDir, {
@@ -85,11 +90,11 @@ export async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = new SessionRecordingService(config);
+  const svc = createSessionRecorder(config);
 
   const contents = opts.contents ?? [makeContent('hello')];
   for (const content of contents) {
-    svc.recordContent(content);
+    await recordRowsForTest(svc, [content]);
   }
   await svc.flush();
 
@@ -98,39 +103,13 @@ export async function createTestSession(
   return { filePath, sessionId, service: svc };
 }
 
-export async function createSessionWithCorruptLine(
-  chatsDir: string,
-  sessionId: string,
-): Promise<string> {
-  const config = makeConfig(chatsDir, { sessionId, projectHash: PROJECT_HASH });
-  const svc = new SessionRecordingService(config);
-
-  svc.recordContent(makeContent('Show me the file', 'human'));
-
-  await svc.flush();
-
-  const filePath = svc.getFilePath()!;
-  await svc.dispose();
-
-  const fileContent = await fs.readFile(filePath, 'utf-8');
-  const lines = fileContent.trim().split('\n');
-
-  const corruptLine = '{this is not valid JSON}';
-
-  const newContent =
-    [lines[0], corruptLine, ...lines.slice(1)].join('\n') + '\n';
-  await fs.writeFile(filePath, newContent);
-
-  return filePath;
-}
-
 export function makeResumeContext(
   chatsDir: string,
   opts: {
     currentSessionId?: string;
     provider?: string;
     model?: string;
-    currentRecording?: SessionRecordingService | null;
+    currentRecording?: SessionRecordingPort | null;
     currentIntegration?: RecordingIntegration | null;
     currentLockHandle?: LockHandle | null;
   } = {},
@@ -138,16 +117,21 @@ export function makeResumeContext(
   let recording = opts.currentRecording ?? null;
   let integration = opts.currentIntegration ?? null;
   let lockHandle = opts.currentLockHandle ?? null;
+  let metadata: ReturnType<RecordingSwapCallbacks['getCurrentMetadata']> = null;
   void opts.currentSessionId;
 
   const callbacks: RecordingSwapCallbacks = {
     getCurrentRecording: () => recording,
     getCurrentIntegration: () => integration,
     getCurrentLockHandle: () => lockHandle,
-    setRecording: (newRecording, newIntegration, newLock, _newMetadata) => {
+    getCurrentMetadata: () => metadata,
+    setRecording: (newRecording, newIntegration, newLock, newMetadata) => {
+      if (newRecording !== null) resumedRecordings.add(newRecording);
+      if (newIntegration !== null) resumedIntegrations.add(newIntegration);
       recording = newRecording;
       integration = newIntegration;
       lockHandle = newLock;
+      metadata = newMetadata;
     },
   };
 
@@ -162,22 +146,13 @@ export function makeResumeContext(
   };
 }
 
-export async function readJsonlFile(
-  filePath: string,
-): Promise<SessionRecordLine[]> {
-  const raw = await fs.readFile(filePath, 'utf-8');
-  const lines = raw.trim().split('\n');
-  return lines.map((line) => JSON.parse(line) as SessionRecordLine);
-}
-
 export async function countFileEvents(filePath: string): Promise<number> {
-  const raw = await fs.readFile(filePath, 'utf-8');
-  return raw.trim().split('\n').length;
+  return (await readRecordedRows(filePath)).length;
 }
 
 export function extractSessionId(filePath: string): string {
   const basename = path.basename(filePath);
-  const match = basename.match(/^session-(.+)\.jsonl$/);
+  const match = basename.match(/^session-(.+)\.llxj$/);
   if (!match) throw new Error(`Invalid session file path: ${filePath}`);
   return match[1];
 }
@@ -272,7 +247,7 @@ export class ResumeTestSetup {
   tempDir = '';
   chatsDir = '';
   lockHandles: LockHandle[] = [];
-  recordingsToDispose: SessionRecordingService[] = [];
+  recordingsToDispose: SessionRecordingPort[] = [];
 
   async beforeEach(): Promise<void> {
     this.tempDir = await fs.mkdtemp(
@@ -285,6 +260,10 @@ export class ResumeTestSetup {
   }
 
   async afterEach(): Promise<void> {
+    for (const integration of resumedIntegrations) await integration.dispose();
+    resumedIntegrations.clear();
+    for (const recording of resumedRecordings) await recording.dispose();
+    resumedRecordings.clear();
     for (const handle of this.lockHandles) {
       try {
         await handle.release();

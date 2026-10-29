@@ -20,18 +20,25 @@ export type SessionRecordingEvent =
       readonly type: 'session_event';
       readonly severity: 'info' | 'warning' | 'error';
       readonly message: string;
+      readonly presentation?: 'already-appended';
     };
 
-export function recordSessionEvent(
+export async function recordSessionEvent(
   integration: RecordingIntegration | null,
-  event?: SessionRecordingEvent,
-): void {
-  if (integration === null || event === undefined) return;
+  event: SessionRecordingEvent,
+  appendDisplay: (
+    descriptor: { readonly type: 'info' | 'warning' | 'error' },
+    message: string,
+  ) => Promise<unknown>,
+): Promise<void> {
+  if (integration === null) return;
   if (event.type === 'provider_switch') {
     integration.recordProviderSwitch(event.provider, event.model);
   } else if (event.type === 'directories_changed') {
     integration.recordDirectoriesChanged([...event.directories]);
   } else {
     integration.recordSessionEvent(event.severity, event.message);
+    if (event.presentation !== 'already-appended')
+      await appendDisplay({ type: event.severity }, event.message);
   }
 }

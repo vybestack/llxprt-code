@@ -35,25 +35,23 @@ import {
   isNetworkTransientError,
 } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { recordTransportAttempt, recordingOnly } from '../transportArrival.js';
 import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
 import { getDelayDuration, hasRetryAfterHeader } from '../retryDelayPolicy.js';
 import {
   shouldDumpSDKContext,
-  dumpSDKRequestContext,
+  dumpSDKRequestContextBodyBytes,
   dumpSDKResponseContext,
   dumpSDKErrorRequestResponse,
   bestEffortDump,
   type RequestDumpMetadata,
 } from '../utils/dumpSDKContext.js';
+import type { dumpSDKRequestContext } from '../utils/dumpSDKContext.js';
 import { redactSensitiveHeaders, type DumpMode } from '../utils/dumpContext.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import {
-  BoundedJsonBody,
-  DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
-  DEFAULT_STREAMING_JSON_CHUNK_BYTES,
-} from '../utils/boundedJsonBody.js';
+import { ProgressiveJsonBody } from '../utils/progressive-json-body.js';
 
 export {
   DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
@@ -86,12 +84,26 @@ export interface StreamResponsesParams {
   normalizedOptions: ResponsesRequest;
   dumpBaseId?: string;
   dumpMode?: DumpMode;
+  /** The request body bytes, read from the prompt segment files. */
+  streamRequestBody: () => AsyncIterable<Uint8Array>;
+  /**
+   * The exact byte length `streamRequestBody` yields, so the upload declares a
+   * Content-Length.
+   */
+  streamRequestBodyLength: () => Promise<number>;
+  /**
+   * The request as a diagnostic dump records it, because `request` holds empty
+   * placeholders for input, instructions and tools.
+   */
+  streamDumpBody: () => AsyncIterable<Uint8Array>;
+  /** The complete WebSocket `response.create` frame bytes. */
+  streamWebSocketFrame: () => AsyncIterable<Uint8Array>;
 }
 
 interface FetchStreamParams {
   responsesURL: string;
   headers: Record<string, string>;
-  body: BoundedJsonBody;
+  body: ProgressiveJsonBody;
   abortSignal?: AbortSignal;
   includeThinkingInResponse: boolean;
   responsesStored: boolean;
@@ -141,16 +153,21 @@ function transportCleanupError(
   transportError: unknown,
   disposalError: unknown,
   message: string,
-): AggregateError {
-  return new AggregateError(
-    [
-      ...new Set([
-        ...flattenTransportErrors(transportError),
-        ...flattenTransportErrors(disposalError),
-      ]),
-    ],
-    message,
-  );
+): unknown {
+  const distinct = [
+    ...new Set([
+      ...flattenTransportErrors(transportError),
+      ...flattenTransportErrors(disposalError),
+    ]),
+  ];
+  // A body that failed while materializing re-reports that same failure on
+  // disposal. That is the transport error itself, not a second cleanup failure.
+  if (distinct.length === 1) return distinct[0];
+  return new AggregateError(distinct, message);
+}
+
+function bodyTransportDescription(body: ProgressiveJsonBody): string {
+  return `Request body transport: demand-driven streaming-json, envelopeBytes=${body.byteLength}`;
 }
 
 export async function* streamOverHttp(
@@ -158,10 +175,10 @@ export async function* streamOverHttp(
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
   const contentType = resolveResponsesContentType(params);
-  const body = new BoundedJsonBody(params.request, {
-    maxChunkBytes: DEFAULT_STREAMING_JSON_CHUNK_BYTES,
-    maxEnvelopeBytes: DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
-  });
+  // The length comes from the segment files and is declared up front, so the
+  // upload carries a Content-Length that a short or long body cannot violate.
+  const byteLength = await params.streamRequestBodyLength();
+  const body = new ProgressiveJsonBody(params.streamRequestBody, byteLength);
   const headers = {
     ...(await buildResponsesHeaders(
       params.apiKey,
@@ -170,12 +187,9 @@ export async function* streamOverHttp(
       params.normalizedOptions,
       deps,
     )),
-    'Content-Length': String(body.byteLength),
+    'Content-Length': String(byteLength),
   };
-  deps.logger.debug(
-    () =>
-      `Request body transport: streaming-json, envelopeBytes=${body.byteLength}`,
-  );
+  deps.logger.debug(() => bodyTransportDescription(body));
   deps.logger.debug(
     () => `Request body keys: ${JSON.stringify(Object.keys(params.request))}`,
   );
@@ -207,7 +221,6 @@ export async function* streamOverHttp(
       }
     }
   } catch (error) {
-    await dumpErrorOnFailure(error, params, deps, headers);
     if (disposalFailed) {
       throw transportCleanupError(
         error,
@@ -267,6 +280,10 @@ async function* fetchStreamWithRetries(
   params: FetchStreamParams,
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
+  if (!(params.maxStreamingAttempts >= 1))
+    throw new Error(
+      `Responses streaming needs at least one attempt, received ${String(params.maxStreamingAttempts)}`,
+    );
   let streamingAttempt = 0;
   let currentDelay = params.streamRetryInitialDelayMs;
   let lastError: unknown;
@@ -286,6 +303,7 @@ async function* fetchStreamWithRetries(
       throw lastError;
     }
 
+    await recordTransportAttempt(params.normalizedOptions);
     const yieldedForAttempt: { value: boolean } = { value: false };
     try {
       const response = await fetchResponse(
@@ -319,7 +337,7 @@ async function fetchResponse(
   params: {
     responsesURL: string;
     headers: Record<string, string>;
-    body: BoundedJsonBody;
+    body: ProgressiveJsonBody;
     abortSignal?: AbortSignal;
   },
   requestFetch: (
@@ -361,10 +379,10 @@ async function* parseSuccessfulResponse(
   yieldedMarker: { value: boolean },
 ): AsyncIterableIterator<IContent> {
   if (!response.ok) await throwApiError(response, deps);
-  if (!response.body) {
-    deps.logger.debug(() => 'Response body missing, returning early');
-    return;
-  }
+  if (!response.body)
+    throw new Error(
+      'OpenAI Responses returned a successful response with no body',
+    );
 
   const streamOptions: ParseResponsesStreamOptions = {
     includeThinkingInResponse: params.includeThinkingInResponse,
@@ -378,7 +396,7 @@ async function* parseSuccessfulResponse(
     response.body,
     streamOptions,
   )) {
-    yieldedMarker.value = true;
+    if (!recordingOnly(message)) yieldedMarker.value = true;
     yield message;
   }
 }
@@ -505,7 +523,7 @@ async function dumpErrorOnFailure(
       params.request,
       payload,
       params.baseURL,
-      dumpSDKRequestContext,
+      dumpParamsRequest(params),
       dumpSDKResponseContext,
       { headers, transport: { type: 'http' } },
     );
@@ -528,7 +546,7 @@ export async function dumpFallbackHttpRequest(
     return undefined;
   }
   const result = await bestEffortDump('request', deps.providerName, async () =>
-    dumpSDKRequestContext(
+    dumpParamsRequest(params)(
       deps.providerName,
       '/responses',
       params.request,
@@ -537,4 +555,19 @@ export async function dumpFallbackHttpRequest(
     ),
   );
   return result?.baseId;
+}
+
+/** Dumps the request the transport carries, not the disk route's placeholders. */
+function dumpParamsRequest(
+  params: StreamResponsesParams,
+): typeof dumpSDKRequestContext {
+  return (providerName, endpoint, _request, baseURL, metadata) =>
+    dumpSDKRequestContextBodyBytes(
+      providerName,
+      endpoint,
+      params.streamDumpBody(),
+      baseURL,
+      metadata,
+      params.abortSignal,
+    );
 }

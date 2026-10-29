@@ -701,3 +701,92 @@ describe('filterHistoryItems', () => {
     });
   });
 });
+
+/**
+ * @plan PLAN-20260917-ISSUE854.P01
+ * @requirement REQ-854-003
+ * Replay-path chronology stamping: point seqs on text items, a 2-entry
+ * adjacent span on tool groups, and no stamps on entries without markers.
+ */
+describe('iContentToHistoryItems chronology stamps', () => {
+  it('stamps user items with the human entry chronology seq', () => {
+    const input: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello' }],
+        metadata: {
+          chronology: { seq: 7, userTurn: 1, step: 1, recordedAt: 0 },
+        },
+      },
+    ];
+
+    const output = iContentToHistoryItems(input);
+    expect(output).toHaveLength(1);
+    expect(output[0]?.chronologySeq).toBe(7);
+    expect(output[0]?.seqSpan).toBeUndefined();
+  });
+
+  it('stamps ai text items with the ai entry chronology seq', () => {
+    const input: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Reply' }],
+        metadata: {
+          chronology: { seq: 12, userTurn: 1, step: 1, recordedAt: 0 },
+        },
+      },
+    ];
+
+    const output = iContentToHistoryItems(input);
+    expect(output).toHaveLength(1);
+    expect(output[0]?.chronologySeq).toBe(12);
+    expect(output[0]?.seqSpan).toBeUndefined();
+  });
+
+  it('stamps tool groups with the adjacent ai/tool entry span and no point seq', () => {
+    const input: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          { type: 'tool_call', id: 'c1', name: 'read_file', parameters: {} },
+        ],
+        metadata: {
+          chronology: { seq: 20, userTurn: 1, step: 1, recordedAt: 0 },
+        },
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'c1',
+            toolName: 'read_file',
+            result: { ok: true },
+          },
+        ],
+        metadata: {
+          chronology: { seq: 21, userTurn: 1, step: 2, recordedAt: 0 },
+        },
+      },
+    ];
+
+    const output = iContentToHistoryItems(input);
+    const group = output.find((item) => item.type === 'tool_group');
+    expect(group).toBeDefined();
+    expect(group?.seqSpan).toStrictEqual([20, 21]);
+    expect(group?.chronologySeq).toBeUndefined();
+  });
+
+  it('leaves items unstamped when entries carry no chronology marker', () => {
+    const input: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'Yo' }] },
+    ];
+
+    const output = iContentToHistoryItems(input);
+    expect(output.map((item) => item.chronologySeq)).toStrictEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+});

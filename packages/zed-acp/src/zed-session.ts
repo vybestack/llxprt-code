@@ -29,7 +29,7 @@ import {
 } from './zed-tool-handler.js';
 import type { TerminalManager } from './zed-terminal-manager.js';
 import { disposeZedSession } from './zed-session-agent.js';
-import { streamZedHistory } from './zed-session-loader.js';
+import { deliverHistoryUpdates } from './zed-session-replay.js';
 import { readAgentHistoryForReplay } from './zed-session-loader.js';
 
 import type { LifecycleSession } from './zed-session-pagination.js';
@@ -64,7 +64,7 @@ export interface SessionPorts {
   readonly readContextLimit: Agent['getProviderContextLimit'];
   readonly readApprovalMode: Agent['getApprovalMode'];
   readonly writeApprovalMode: Agent['setApprovalMode'];
-  readonly readHistory: Agent['getHistory'];
+  readonly readHistory: Agent['streamHistory'];
   readonly compressHistory: Agent['compress'];
   readonly retireAgent: Agent['dispose'];
   readonly lookupTool: Agent['tools']['get'];
@@ -484,19 +484,25 @@ export class Session {
   debug(msg: string) {
     if (this.ports.readDebugMode()) debugLogger.warn(msg);
   }
-  streamHistory(items: readonly IContent[]): Promise<void> {
+  streamHistory(
+    items: AsyncIterable<IContent> | Iterable<IContent>,
+  ): Promise<void> {
     return this.admitWork(() => this.replayHistory(items));
   }
-  private async replayHistory(items: readonly IContent[]): Promise<void> {
-    await streamZedHistory(this.ports.id, items, (update) =>
-      this.sendUpdateStrict(update),
+  private async replayHistory(
+    items: AsyncIterable<IContent> | Iterable<IContent>,
+  ): Promise<void> {
+    await deliverHistoryUpdates(
+      items,
+      this.sessionInfo,
+      this.ports.id,
+      (update) => this.sendUpdateStrict(update),
     );
-    this.sessionInfo.hydrateFromHistory(items);
   }
   replayLiveHistory(): Promise<void> {
     return this.admitWork(async () => {
       await this.replayHistory(
-        await readAgentHistoryForReplay(this.ports.readHistory, this.ports.id),
+        readAgentHistoryForReplay(this.ports.readHistory, this.ports.id),
       );
     });
   }

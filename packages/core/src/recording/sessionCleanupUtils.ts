@@ -27,6 +27,9 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+
+import { readSessionHeaderInfo } from './janitor/sessionHeaderReader.js';
+import { SESSION_FILE_EXTENSION } from './sessionFileExtension.js';
 import { SessionLockManager } from './SessionLockManager.js';
 
 /**
@@ -58,6 +61,9 @@ export interface JsonlSessionFileEntry {
 async function readSessionHeader(
   filePath: string,
 ): Promise<{ sessionId: string; startTime: string } | null> {
+  if (filePath.endsWith(SESSION_FILE_EXTENSION)) {
+    return readSessionHeaderInfo(filePath);
+  }
   try {
     const fd = await fs.open(filePath, 'r');
     try {
@@ -143,8 +149,11 @@ export async function getAllJsonlSessionFiles(
     throw error;
   }
 
+  // Retired `.jsonl` files are not listed on the journal backend: this helper
+  // deletes a file whose header cannot be read, and no age policy applies here.
+  const extension = SESSION_FILE_EXTENSION;
   const sessionFiles = files.filter(
-    (f) => f.startsWith('session-') && f.endsWith('.jsonl'),
+    (f) => f.startsWith('session-') && f.endsWith(extension),
   );
 
   const entries: JsonlSessionFileEntry[] = [];

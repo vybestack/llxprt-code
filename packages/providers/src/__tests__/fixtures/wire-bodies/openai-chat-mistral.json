@@ -1,0 +1,313 @@
+{
+  "route": "openai-chat-mistral",
+  "cases": {
+    "text-only": {
+      "stream": {
+        "sha256": "041d1d604d1ec65b590df92452a8dd94f7dfdcffd22aee1959d446166649875e",
+        "length": 296,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"hello\"},{\"role\":\"assistant\",\"content\":\"hi there\"},{\"role\":\"user\",\"content\":\"what is 2+2?\"},{\"role\":\"assistant\",\"content\":\"4\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":false}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "041d1d604d1ec65b590df92452a8dd94f7dfdcffd22aee1959d446166649875e",
+        "length": 296,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"hello\"},{\"role\":\"assistant\",\"content\":\"hi there\"},{\"role\":\"user\",\"content\":\"what is 2+2?\"},{\"role\":\"assistant\",\"content\":\"4\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":false}",
+        "contentLength": "present"
+      }
+    },
+    "system-and-tools": {
+      "stream": {
+        "sha256": "334211adeb23a25daecbdcbdb8858c2a150f1a146914dc1a7f1626480ad0ecdb",
+        "length": 535,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris?\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "334211adeb23a25daecbdcbdb8858c2a150f1a146914dc1a7f1626480ad0ecdb",
+        "length": 535,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris?\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      }
+    },
+    "tool-calls-with-results": {
+      "stream": {
+        "sha256": "5d30a098fe2fdec78c595a890556ea0980b52004b040e504976b17894473f8aa",
+        "length": 1246,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris and London?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"qLhJWVaft\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\n{\\n  \\\"temp\\\": 21\\n}\",\"tool_call_id\":\"qLhJWVaft\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"0F4hRzP0f\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"London\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nrainy, 14C\",\"tool_call_id\":\"0F4hRzP0f\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"content\":\"Paris 21C, London rainy 14C.\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "5d30a098fe2fdec78c595a890556ea0980b52004b040e504976b17894473f8aa",
+        "length": 1246,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris and London?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"qLhJWVaft\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\n{\\n  \\\"temp\\\": 21\\n}\",\"tool_call_id\":\"qLhJWVaft\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"0F4hRzP0f\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"London\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nrainy, 14C\",\"tool_call_id\":\"0F4hRzP0f\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"content\":\"Paris 21C, London rainy 14C.\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      }
+    },
+    "parallel-tool-calls": {
+      "stream": {
+        "sha256": "d0564378af54dd01c72b572deae5b7f7b8a9a03f18d1f4c3cba16ac831478f72",
+        "length": 1098,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read both files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"kerpIsw3t\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"6ewNE1WM1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nalpha\",\"tool_call_id\":\"kerpIsw3t\",\"name\":\"read_file\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"6ewNE1WM1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"summarise\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "d0564378af54dd01c72b572deae5b7f7b8a9a03f18d1f4c3cba16ac831478f72",
+        "length": 1098,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read both files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"kerpIsw3t\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"6ewNE1WM1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nalpha\",\"tool_call_id\":\"kerpIsw3t\",\"name\":\"read_file\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"6ewNE1WM1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"summarise\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      }
+    },
+    "orphan-tool-call": {
+      "stream": {
+        "sha256": "51ac5818daf3602b2b40fca3d7c410cd3127a97d1356df58a67ffb1d0329dd3a",
+        "length": 708,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read it\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"CwUVqHr36\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/lost.txt\\\"}\"}}]},{\"role\":\"user\",\"content\":\"never mind, say hi\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "51ac5818daf3602b2b40fca3d7c410cd3127a97d1356df58a67ffb1d0329dd3a",
+        "length": 708,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read it\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"CwUVqHr36\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/lost.txt\\\"}\"}}]},{\"role\":\"user\",\"content\":\"never mind, say hi\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      }
+    },
+    "orphan-tool-result": {
+      "stream": {
+        "sha256": "abf3e2691b15a2af19560513881a1e181a111c15b73d2a02bedd345d07f5cad9",
+        "length": 740,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"start\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nfrom nowhere\",\"tool_call_id\":\"tNcKWJMm2\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":\"continue\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "abf3e2691b15a2af19560513881a1e181a111c15b73d2a02bedd345d07f5cad9",
+        "length": 740,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"start\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nfrom nowhere\",\"tool_call_id\":\"tNcKWJMm2\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":\"continue\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      }
+    },
+    "interleaved-tool-results": {
+      "stream": {
+        "sha256": "48667b3bc24217e5ab6a2cefa77aea83a96b85827fa28611e656c438863018f9",
+        "length": 1028,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read two files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"kerpIsw3t\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"6ewNE1WM1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"6ewNE1WM1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"hurry up\"},{\"role\":\"assistant\",\"content\":\"Both read.\"},{\"role\":\"user\",\"content\":\"good\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "48667b3bc24217e5ab6a2cefa77aea83a96b85827fa28611e656c438863018f9",
+        "length": 1028,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read two files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"kerpIsw3t\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"6ewNE1WM1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"6ewNE1WM1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"hurry up\"},{\"role\":\"assistant\",\"content\":\"Both read.\"},{\"role\":\"user\",\"content\":\"good\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      }
+    },
+    "displaced-tool-result": {
+      "stream": {
+        "sha256": "cdb2b48720c8350735d92be368cf90e4ebe8c435b78fd6aac1b79b5663c0645e",
+        "length": 1161,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"EAHeaXApF\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/1.txt\\\"}\"}}]},{\"role\":\"assistant\",\"content\":\"while waiting\"},{\"role\":\"user\",\"content\":\"second\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"MruIl5dU1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/2.txt\\\"}\"}},{\"id\":\"FpO0Sd782\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/3.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntwo\",\"tool_call_id\":\"MruIl5dU1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"done?\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "cdb2b48720c8350735d92be368cf90e4ebe8c435b78fd6aac1b79b5663c0645e",
+        "length": 1161,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"EAHeaXApF\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/1.txt\\\"}\"}}]},{\"role\":\"assistant\",\"content\":\"while waiting\"},{\"role\":\"user\",\"content\":\"second\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"MruIl5dU1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/2.txt\\\"}\"}},{\"id\":\"FpO0Sd782\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/3.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntwo\",\"tool_call_id\":\"MruIl5dU1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"done?\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      }
+    },
+    "tool-id-shapes": {
+      "stream": {
+        "sha256": "321c24df6794ca4fc4589e3991d60e00d403c9b1170dcabb82a3e39ae482ffed",
+        "length": 1363,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"VQ5H0c93P\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/x\\\"}\"}},{\"id\":\"gcmjBzBaz\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Oslo\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nx-body\",\"tool_call_id\":\"VQ5H0c93P\",\"name\":\"read_file\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\ncold\",\"tool_call_id\":\"gcmjBzBaz\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"VQ5H0c93P\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/y\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ny-body\",\"tool_call_id\":\"VQ5H0c93P\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "321c24df6794ca4fc4589e3991d60e00d403c9b1170dcabb82a3e39ae482ffed",
+        "length": 1363,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"VQ5H0c93P\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/x\\\"}\"}},{\"id\":\"gcmjBzBaz\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Oslo\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nx-body\",\"tool_call_id\":\"VQ5H0c93P\",\"name\":\"read_file\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\ncold\",\"tool_call_id\":\"gcmjBzBaz\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"VQ5H0c93P\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/y\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ny-body\",\"tool_call_id\":\"VQ5H0c93P\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      }
+    },
+    "reasoning-thinking": {
+      "stream": {
+        "sha256": "6ec4df5a5dc49929b48ba7c23a63210870c8965e5ae62a37f2a2fcfe8f9b2323",
+        "length": 978,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"think hard\"},{\"role\":\"assistant\",\"content\":\"first answer\"},{\"role\":\"user\",\"content\":\"again\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"wNUgGWJDG\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Rome\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nsunny\",\"tool_call_id\":\"wNUgGWJDG\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"content\":\"It is sunny.\"},{\"role\":\"user\",\"content\":\"and tomorrow?\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "6ec4df5a5dc49929b48ba7c23a63210870c8965e5ae62a37f2a2fcfe8f9b2323",
+        "length": 978,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"think hard\"},{\"role\":\"assistant\",\"content\":\"first answer\"},{\"role\":\"user\",\"content\":\"again\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"wNUgGWJDG\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Rome\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nsunny\",\"tool_call_id\":\"wNUgGWJDG\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"content\":\"It is sunny.\"},{\"role\":\"user\",\"content\":\"and tomorrow?\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      }
+    },
+    "thinking-only-chain": {
+      "stream": {
+        "sha256": "150426c06a4869d551ed7583633e2648f400be5e677222b59c464bca0b541df2",
+        "length": 291,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"content\":\"\"},{\"role\":\"assistant\",\"content\":\"part one\"},{\"role\":\"assistant\",\"content\":\"part two\"},{\"role\":\"user\",\"content\":\"next\"}],\"stream\":false}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "150426c06a4869d551ed7583633e2648f400be5e677222b59c464bca0b541df2",
+        "length": 291,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"content\":\"\"},{\"role\":\"assistant\",\"content\":\"part one\"},{\"role\":\"assistant\",\"content\":\"part two\"},{\"role\":\"user\",\"content\":\"next\"}],\"stream\":false}",
+        "contentLength": "present"
+      }
+    },
+    "media-inline-image": {
+      "stream": {
+        "sha256": "b7f2a2e1e567e43476c3601040aa5e6be3b2962ef59565cc9e097884dae724d4",
+        "length": 526,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is this?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"and the url one?\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://example.test/pixel.png\"}}]}],\"stream\":false}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "b7f2a2e1e567e43476c3601040aa5e6be3b2962ef59565cc9e097884dae724d4",
+        "length": 526,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is this?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"and the url one?\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://example.test/pixel.png\"}}]}],\"stream\":false}",
+        "contentLength": "present"
+      }
+    },
+    "media-reference-image": {
+      "stream": {
+        "sha256": "8925da21d378961679d7140eb752e019f52b7dbca8d009969a83dfdd72f4f282",
+        "length": 337,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is in the stored image?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AQID\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":false}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "8925da21d378961679d7140eb752e019f52b7dbca8d009969a83dfdd72f4f282",
+        "length": 337,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is in the stored image?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AQID\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":false}",
+        "contentLength": "present"
+      }
+    },
+    "unicode-edges": {
+      "stream": {
+        "sha256": "48c8c9ff671955c037292b3802c4c7c779a9ecbb28fc36d3d3206a42a979acf1",
+        "length": 1024,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"edge \\ud800 lone high, \\udc00 lone low,     \\u0000 \\u001f\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"FcOyQu3oh\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"2\\\":\\\"two\\\",\\\"10\\\":\\\"ten\\\",\\\"path\\\":\\\"/ü/雪.txt\\\",\\\"b\\\":1,\\\"a\\\":[1,2,{\\\"z\\\":null}]}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nline1\\nline2\\t\\\"quoted\\\"\",\"tool_call_id\":\"FcOyQu3oh\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"content\":\"emoji 😀 done\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "48c8c9ff671955c037292b3802c4c7c779a9ecbb28fc36d3d3206a42a979acf1",
+        "length": 1024,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"edge \\ud800 lone high, \\udc00 lone low,     \\u0000 \\u001f\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"FcOyQu3oh\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"2\\\":\\\"two\\\",\\\"10\\\":\\\"ten\\\",\\\"path\\\":\\\"/ü/雪.txt\\\",\\\"b\\\":1,\\\"a\\\":[1,2,{\\\"z\\\":null}]}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nline1\\nline2\\t\\\"quoted\\\"\",\"tool_call_id\":\"FcOyQu3oh\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"content\":\"emoji 😀 done\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      }
+    },
+    "cache-tail-user": {
+      "stream": {
+        "sha256": "bcc1cf7085ac3fe78bca298beca1f0e34c88faa5de98974888e6e060eb6c22f2",
+        "length": 729,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"},{\"role\":\"user\",\"content\":\"five\"},{\"role\":\"assistant\",\"content\":\"six\"},{\"role\":\"user\",\"content\":\"seven\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "bcc1cf7085ac3fe78bca298beca1f0e34c88faa5de98974888e6e060eb6c22f2",
+        "length": 729,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"},{\"role\":\"user\",\"content\":\"five\"},{\"role\":\"assistant\",\"content\":\"six\"},{\"role\":\"user\",\"content\":\"seven\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      }
+    },
+    "cache-tail-tool-result": {
+      "stream": {
+        "sha256": "ff2fca33e6d19f077c649fe59e673fb82be11bac6483f88c25fdfec21e268bc8",
+        "length": 806,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"qddPWpets\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/t.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntail body\",\"tool_call_id\":\"qddPWpets\",\"name\":\"read_file\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "ff2fca33e6d19f077c649fe59e673fb82be11bac6483f88c25fdfec21e268bc8",
+        "length": 806,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"qddPWpets\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/t.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntail body\",\"tool_call_id\":\"qddPWpets\",\"name\":\"read_file\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      }
+    },
+    "cache-tail-assistant": {
+      "stream": {
+        "sha256": "d73761b24c3b8c83b208bc4a84e018a57ed73c6fcb63e41a7d43b97de49925ae",
+        "length": 250,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"}],\"stream\":false}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "d73761b24c3b8c83b208bc4a84e018a57ed73c6fcb63e41a7d43b97de49925ae",
+        "length": 250,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"}],\"stream\":false}",
+        "contentLength": "present"
+      }
+    },
+    "cache-anchor": {
+      "stream": {
+        "sha256": "2da465506093cf1a17952b400721d4bdde8825845c70928985f5997f464a9892",
+        "length": 340,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"summary of earlier work\"},{\"role\":\"assistant\",\"content\":\"acknowledged\"},{\"role\":\"user\",\"content\":\"new question\"},{\"role\":\"assistant\",\"content\":\"new answer\"},{\"role\":\"user\",\"content\":\"another question\"}],\"stream\":false}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "2da465506093cf1a17952b400721d4bdde8825845c70928985f5997f464a9892",
+        "length": 340,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"summary of earlier work\"},{\"role\":\"assistant\",\"content\":\"acknowledged\"},{\"role\":\"user\",\"content\":\"new question\"},{\"role\":\"assistant\",\"content\":\"new answer\"},{\"role\":\"user\",\"content\":\"another question\"}],\"stream\":false}",
+        "contentLength": "present"
+      }
+    },
+    "cache-tail-thinking": {
+      "stream": {
+        "sha256": "b3ea4e2e4364ec60b0e0d03d8e8ad2e5ce92e71a52ba1e8b6651409e62703710",
+        "length": 189,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"visible answer\"}],\"stream\":false}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "b3ea4e2e4364ec60b0e0d03d8e8ad2e5ce92e71a52ba1e8b6651409e62703710",
+        "length": 189,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"visible answer\"}],\"stream\":false}",
+        "contentLength": "present"
+      }
+    },
+    "cache-media-purge-boundary": {
+      "stream": {
+        "sha256": "ca14e40fe320fd2fe1371e6b41dc991e10bdf7383fd70004e46ecf9cadedc0b0",
+        "length": 412,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"stable prefix\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":\"tail\"}],\"stream\":false}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "ca14e40fe320fd2fe1371e6b41dc991e10bdf7383fd70004e46ecf9cadedc0b0",
+        "length": 412,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"stable prefix\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":\"tail\"}],\"stream\":false}",
+        "contentLength": "present"
+      }
+    },
+    "responses-stateful-parent": {
+      "stream": {
+        "sha256": "cf7b197a47fd3715821df1dc95981d41a8b4819f953aaad6ead7e6a672683295",
+        "length": 756,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first question\"},{\"role\":\"assistant\",\"content\":\"stored answer\"},{\"role\":\"user\",\"content\":\"second question\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"IPkrF38I2\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/s.txt\\\"}\"}}]}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "cf7b197a47fd3715821df1dc95981d41a8b4819f953aaad6ead7e6a672683295",
+        "length": 756,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first question\"},{\"role\":\"assistant\",\"content\":\"stored answer\"},{\"role\":\"user\",\"content\":\"second question\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"IPkrF38I2\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/s.txt\\\"}\"}}]}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\"}",
+        "contentLength": "present"
+      }
+    },
+    "blockless-row": {
+      "stream": {
+        "sha256": "c7a64be3bc06210dfb656c12cb34770caf86e29767cd92039d4953c8349e045d",
+        "length": 215,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"before\"},{\"role\":\"assistant\",\"content\":\"after\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":false}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "c7a64be3bc06210dfb656c12cb34770caf86e29767cd92039d4953c8349e045d",
+        "length": 215,
+        "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"before\"},{\"role\":\"assistant\",\"content\":\"after\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":false}",
+        "contentLength": "present"
+      }
+    }
+  }
+}

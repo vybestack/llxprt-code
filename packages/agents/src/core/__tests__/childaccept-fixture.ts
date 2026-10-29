@@ -1,0 +1,157 @@
+import {
+  loadAgentRuntime,
+  type ToolSelectedRuntimeLoaderResult,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import { SubAgentScope } from '../subagent.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import {
+  JournalResumeBoot,
+  resumePointOf,
+} from '@vybestack/llxprt-code-core/recording/journalResume.js';
+import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+import { mkdir, mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { dirname, join } from 'node:path';
+import {
+  createSessionSettingsFixture,
+  subagentSessionPorts,
+} from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { type SubagentLaunchResult } from '../subagentOrchestrator.js';
+import { fixtureToolSelection } from './subagentOrchestrator-test-helpers.js';
+
+const createWorkspaceFilesystem = installTestWorkspaceFilesystem();
+
+export async function acceptanceDirectory(
+  prefix: string,
+  parent = tmpdir(),
+): Promise<string> {
+  await mkdir(parent, { recursive: true });
+  return mkdtemp(join(parent, prefix));
+}
+
+export async function launchAcceptanceChild(
+  directory: string,
+  baseUrl: string,
+): Promise<{
+  child: AcceptanceChild;
+  config: Config;
+  close(): Promise<void>;
+}> {
+  await mkdir(directory, { recursive: true });
+  const config = new Config({
+    sessionId: 'childaccept-parent',
+    targetDir: directory,
+    cwd: directory,
+    debugMode: false,
+    model: 'gpt-5.2',
+    usageStatisticsEnabled: false,
+  });
+  const session = createSessionSettingsFixture(config);
+  const workspace = createWorkspaceFilesystem({
+    targetDir: directory,
+    isTrusted: () => true,
+  });
+  const profileManager = new ProfileManager(join(directory, 'profiles'));
+  await profileManager.saveProfile('local', {
+    version: 1,
+    provider: 'openai-responses',
+    model: 'gpt-5.2',
+    modelParams: {},
+    ephemeralSettings: {
+      'auth-key': 'childaccept-not-a-credential',
+      'base-url': baseUrl,
+      'prompt-caching': 'off',
+      'responses-stateful': true,
+    },
+  });
+  const subagentManager = new SubagentManager(
+    join(directory, 'subagents'),
+    profileManager,
+  );
+  await subagentManager.saveSubagent('child', 'local', 'child acceptance');
+  let runtime: ToolSelectedRuntimeLoaderResult | undefined;
+  let scopeHistory: HistoryService | undefined;
+  const orchestrator = createTestChildOrchestrator({
+    credentialAuthority: new CredentialAuthority(),
+    runtimeLoader: async (options) => {
+      runtime = await loadAgentRuntime(options);
+      return runtime;
+    },
+    scopeFactory: async (...args) => {
+      scopeHistory = args[1].admittedRuntime.history;
+      return SubAgentScope.create(...args);
+    },
+    ...subagentSessionPorts(session),
+    instructions: emptyInstructionReads,
+    toolRegistry: fixtureToolSelection(),
+    workspacePaths: workspace.paths,
+    readMcpInstructions: () => undefined,
+    subagentManager,
+    profileManager,
+    foregroundConfig: config,
+    messageBus: new MessageBus(),
+  });
+  const child = await orchestrator.launch(
+    {
+      name: 'child',
+      toolConfig: { tools: [] },
+    },
+    new AbortController().signal,
+  );
+  if (runtime === undefined || scopeHistory === undefined)
+    throw new Error('Missing assembled child runtime');
+  return {
+    child: { ...child, runtime, scopeHistory },
+    config,
+    close: async () => {
+      await child.dispose();
+      await config.dispose();
+    },
+  };
+}
+
+export function childJournalExtension(): '.jsonl' | '.llxj' {
+  return '.llxj';
+}
+
+export async function openChildResumeBoot(path: string): Promise<{
+  streamRows(): AsyncIterable<IContent>;
+  close(): Promise<void>;
+}> {
+  const found = await readJournalFileFacts(path);
+  if (found === undefined) throw new Error('Missing committed child facts');
+  const { facts } = found;
+  const recording = await JournalRecordingService.open(
+    {
+      sessionId: facts.sessionId,
+      projectHash: facts.start.projectHash,
+      chatsDir: dirname(path),
+      workspaceDirs: facts.directories,
+      provider: facts.provider,
+      model: facts.model,
+    },
+    path,
+  );
+  const boot = new JournalResumeBoot(recording, await resumePointOf(recording));
+  return {
+    streamRows: () => boot.streamRows(),
+    close: () => recording.dispose(),
+  };
+}
+
+export interface AcceptanceChild extends SubagentLaunchResult {
+  readonly runtime: ToolSelectedRuntimeLoaderResult;
+  readonly scopeHistory: HistoryService;
+}

@@ -1,3 +1,4 @@
+import { bindTurnModel } from '../../../session/bind-turn-model.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -89,6 +90,7 @@ describe('turn execution ownership effects', () => {
       ),
     );
     const loop = new AgenticLoop({
+      ...bindTurnModel(scripted.client),
       config,
       tools,
       streamModel: (message, signal, promptId, recording, parameters) => {
@@ -176,6 +178,7 @@ describe('turn execution ownership effects', () => {
       [toolCallRequestEvent('denied', 'denied-call'), finishedEvent()],
     ]);
     const loop = new AgenticLoop({
+      ...bindTurnModel(scripted.client),
       config,
       tools: new TurnToolExecutionOwner(
         bus,

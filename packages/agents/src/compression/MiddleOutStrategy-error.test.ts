@@ -21,7 +21,7 @@ import {
   EmptySummaryError,
   isTransientCompressionError,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import { MiddleOutStrategy } from './MiddleOutStrategy.js';
+import { compressMiddleOutViaDisk } from './__tests__/support/middleout-disk-adapter.js';
 import {
   buildContext,
   createFakeProvider,
@@ -34,20 +34,14 @@ const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
 
 /**
- * Helper: runs compress and returns the thrown error, asserting it throws.
+ * Helper: runs the disk route and returns the thrown error, asserting it throws.
  */
 async function captureCompressError(
-  ctx: Parameters<MiddleOutStrategy['compress']>[0],
+  ctx: Parameters<typeof compressMiddleOutViaDisk>[0],
 ): Promise<unknown> {
-  const strategy = new MiddleOutStrategy(
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-  );
   try {
-    await strategy.compress(ctx);
-    throw new Error('Expected compress() to throw but it did not');
+    await compressMiddleOutViaDisk(ctx);
+    throw new Error('Expected compressDisk() to throw but it did not');
   } catch (error) {
     return error;
   }

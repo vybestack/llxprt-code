@@ -3,7 +3,6 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
 
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
@@ -35,14 +34,13 @@ describe('registered chat command ownership', () => {
                 (checkpointId) => agent.session.deleteCheckpoint(checkpointId),
                 (checkpointId, name, options) =>
                   agent.session.renameCheckpoint(checkpointId, name, options),
-                () => agent.session.getHistory(),
-                () => agent.session.clearHistory(),
-                (turns) => agent.session.restoreTurns(turns),
+                () => agent.session.getJournalLength(),
+                (options) => agent.session.clearHistory(options),
+                (turns, options) => agent.session.restoreTurns(turns, options),
                 (name, options) =>
                   agent.session.nameCurrentSession(name, options),
                 () => agent.session.getRecording().path,
                 () => agent.getModel(),
-                () => resolveEmojiFilterMode(null),
               ),
               () => true,
             ),
@@ -224,7 +222,6 @@ describe('registered chat command ownership', () => {
         () => {
           throw new Error('No session owner available');
         },
-        () => resolveEmojiFilterMode(null),
       ),
       () => true,
     );

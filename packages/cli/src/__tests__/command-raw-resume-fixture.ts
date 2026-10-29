@@ -7,11 +7,8 @@ import {
   bindCommandRawResume,
   type ResumeSessionReads,
 } from '../ui/hooks/commandRawResumeHost.js';
-import { bindResumedHistoryReplay } from '../ui/hooks/commandHistoryLoaderHost.js';
-import {
-  resolveEmojiFilterMode,
-  type EmojiFilterSettingsSource,
-} from '../ui/utils/iContentToHistoryItems.js';
+import { bindPublishedHistoryRefresh } from '../ui/hooks/commandHistoryLoaderHost.js';
+import { type EmojiFilterSettingsSource } from '../ui/utils/iContentToHistoryItems.js';
 import {
   performResume,
   type RecordingSwapCallbacks,
@@ -38,9 +35,5 @@ export function installFixtureRawResume(
     deps.slashCommandLogger,
     resume,
   );
-  deps.replayResumedHistory = bindResumedHistoryReplay(
-    () => resolveEmojiFilterMode(config),
-    deps.commandContext.ui.clear,
-    deps.commandContext.ui.addItem,
-  );
+  deps.refreshResumedHistory = bindPublishedHistoryRefresh(() => {});
 }

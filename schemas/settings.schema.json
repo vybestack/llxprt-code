@@ -602,19 +602,23 @@
           "minimum": 512,
           "multipleOf": 1
         },
-        "historyMaxItems": {
-          "title": "History Max Items",
-          "description": "Maximum number of history items to keep.",
-          "markdownDescription": "Maximum number of history items to keep.\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `100`",
-          "default": 100,
-          "type": "number"
+        "scrollbackMarginViewports": {
+          "title": "Scrollback Margin Viewports",
+          "description": "Scrollback pager residency margin, in viewports beyond the visible window, kept before off-screen rows are evicted. Read once at startup.",
+          "markdownDescription": "Scrollback pager residency margin, in viewports beyond the visible window, kept before off-screen rows are evicted. Read once at startup.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `2`",
+          "default": 2,
+          "type": "number",
+          "minimum": 0,
+          "multipleOf": 1
         },
-        "historyMaxBytes": {
-          "title": "History Max Bytes",
-          "description": "Maximum size of history in bytes.",
-          "markdownDescription": "Maximum size of history in bytes.\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `1048576`",
-          "default": 1048576,
-          "type": "number"
+        "scrollbackByteFloorKiB": {
+          "title": "Scrollback Byte Floor (KiB)",
+          "description": "Scrollback pager residency byte floor in KiB: off-screen eviction stops once resident rows shrink to this size. Read once at startup.",
+          "markdownDescription": "Scrollback pager residency byte floor in KiB: off-screen eviction stops once resident rows shrink to this size. Read once at startup.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `256`",
+          "default": 256,
+          "type": "number",
+          "minimum": 0,
+          "multipleOf": 1
         },
         "memoryImportFormat": {
           "title": "Memory Import Format",

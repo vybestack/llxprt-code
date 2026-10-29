@@ -18,7 +18,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
 import { loadProviderAliasEntries } from '../../composition/providerAliases.js';
 import { computeModelDefaults } from '../../model-defaults.js';
-import { prepareRequest } from '../OpenAIRequestPreparation.js';
+import { prepareRequestBody as prepareRequest } from './support/prepareRequestBody.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = (input, init) =>

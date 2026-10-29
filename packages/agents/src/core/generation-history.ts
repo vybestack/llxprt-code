@@ -3,7 +3,11 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
+import {
+  admitSessionHistory,
+  hasLocalMedia,
+} from './sessionHistoryAdmission.js';
 import type { AgentHistoryAdmission } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -38,9 +42,8 @@ export async function appendGenerationHistory(
   const ownership = await admit(entries);
   try {
     signal.throwIfAborted();
-    await history.addBatch(ownership?.history ?? entries, model, {
+    await history.detachedValues.append(ownership?.rows ?? entries, model, {
       origin: historyOrigin,
-      recordingCompletion: 'appended',
       afterPublication: () => signal.throwIfAborted(),
     });
   } catch (error) {
@@ -60,26 +63,15 @@ export class ChatHistoryAdmissions {
 
   async admit(
     history: readonly IContent[],
-    media: AgentRuntimeContext['mediaAdmission'],
+    media: MediaAdmissionService | undefined,
   ): Promise<AgentHistoryAdmission | undefined> {
-    const hasLocalMedia = history.some((content) =>
-      content.blocks.some(
-        (block) =>
-          block.type === 'media' &&
-          (block.encoding === 'base64' || block.encoding === 'reference'),
-      ),
-    );
-    if (media === undefined || !hasLocalMedia) return undefined;
+    if (media === undefined || !hasLocalMedia(history)) return undefined;
     this.sequence += 1;
-    const context = {
-      turnId: `set-history:${this.sequence}`,
-      source: `set-history:${this.sequence}`,
-    };
-    const admitted = await media.admitContents(history, context);
-    const ownership = {
-      history: admitted,
-      release: () => media.releaseContents(admitted, context),
-    };
+    const ownership = admitSessionHistory(
+      history,
+      media,
+      `set-history:${this.sequence}`,
+    );
     this.all = [...this.all, ownership];
     return ownership;
   }

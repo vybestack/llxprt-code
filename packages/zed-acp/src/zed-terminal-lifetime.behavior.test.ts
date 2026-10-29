@@ -725,7 +725,7 @@ describe('ACP physical terminal acceptance and mandatory release', () => {
         unusedProfileApplication,
         () => new SettingsService(),
         async () =>
-          corrupt ? [`session-test-${sessionId.slice(0, 12)}.jsonl`] : [],
+          corrupt ? [`session-test-${sessionId.slice(0, 12)}.llxj`] : [],
         undefined,
         undefined,
         { credentialAuthority: authority },

@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -73,7 +74,9 @@ describe('generateAutoPrompt', () => {
             -1,
           ),
         );
-        expect(await agent.getHistory()).toStrictEqual([]);
+        expect(await collectResumeRows(agent.streamHistory())).toStrictEqual(
+          [],
+        );
       },
       false,
       false,

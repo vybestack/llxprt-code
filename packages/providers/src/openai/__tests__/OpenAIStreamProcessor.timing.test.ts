@@ -168,6 +168,30 @@ async function collectResults(
   return results;
 }
 
+function expectReasoningToolOutput(results: readonly IContent[]): void {
+  expect(
+    results.map((chunk) => chunk.blocks.map((block) => block.type)),
+  ).toStrictEqual([[], ['thinking', 'tool_call']]);
+  expect(results[0].toolArgumentDelta).toMatchObject({
+    sourceId: '0',
+    name: 'get_weather',
+    arguments: '{"city":"SF"}',
+  });
+  expect(results[0].metadata).toBeUndefined();
+  expect(results[1].blocks[1]).toMatchObject({
+    type: 'tool_call',
+    name: 'get_weather',
+    parameters: { city: 'SF' },
+  });
+  expect(results[1].toolArgumentDelta).toMatchObject({
+    sourceId: '0',
+    name: 'get_weather',
+    complete: true,
+    arguments: '',
+    replacementArguments: '{"city":"SF"}',
+  });
+}
+
 function collectText(chunks: readonly IContent[]): string {
   let out = '';
   for (const chunk of chunks) {
@@ -197,10 +221,6 @@ function createProviderStream(
     options?.rawStream ?? createDelayedChunkStream(chunks, delayMs),
     'test-model',
     format,
-    undefined,
-    { model: 'test-model', messages: [], stream: true },
-    [],
-    new OpenAI({ apiKey: 'test-api-key' }),
     undefined,
     undefined,
     { ...makeDeps(), onRawTokenDelta: options?.onRawTokenDelta },
@@ -357,7 +377,7 @@ describe('issue #3473: OpenAI stream timing at raw token-bearing deltas', () => 
   // B3: GREEN guard post-remediation: visible stream contract (pins AC-7).
   // Pre-remediation this was RED: the provider stream itself carried
   // metadata-only timing marker chunks (F2).
-  it('B3: reasoning + tool-call stream yields exactly one blocks-bearing chunk and no non-visible chunks', async () => {
+  it('B3: reasoning + tool-call stream yields only argument arrival, thinking and the completed call', async () => {
     const chunks = [
       ...makeReasoningChunks(12),
       ...makeToolCallChunks(3),
@@ -368,13 +388,8 @@ describe('issue #3473: OpenAI stream timing at raw token-bearing deltas', () => 
       createProviderStream(chunks, 5, 'openai'),
     );
 
-    // Timing never travels as stream output: the raw provider stream
-    // contains only the single terminal combined chunk.
-    expect(results).toHaveLength(1);
-
-    const blockTypes = results[0].blocks.map((b) => b.type);
-    expect(blockTypes).toContain('thinking');
-    expect(blockTypes).toContain('tool_call');
+    expect(results).toHaveLength(2);
+    expectReasoningToolOutput(results);
   });
 
   // B1: RED: reasoning + tool-call timing (AC-4, AC-5)
@@ -396,10 +411,7 @@ describe('issue #3473: OpenAI stream timing at raw token-bearing deltas', () => 
     const event = events[0];
     expectPositiveTimingWindow(event);
 
-    // Markers are consumed by the wrapper: the consumer sees only the
-    // single terminal combined chunk, and usage/finish survive intact.
-    expect(results.length).toBe(1);
-    expect(results[0].blocks.map((b) => b.type)).toContain('thinking');
+    expectReasoningToolOutput(results);
     expect(event.output_token_count).toBe(100);
     expect(event.usage_metadata_present).toBe(true);
     expect(event.finish_reasons).toContain('stop');
@@ -548,12 +560,9 @@ describe('issue #3473: OpenAI stream timing at raw token-bearing deltas', () => 
     expect(windowMs).toBeGreaterThan(0);
     expect(windowMs).toBeLessThan(TERMINAL_GAP_MS);
 
-    // The terminal chunk still carries usage, finish, and the single
-    // visible combined emission.
     expect(event.output_token_count).toBe(120);
     expect(event.finish_reasons).toContain('stop');
-    const blocksBearing = results.filter((r) => r.blocks.length > 0);
-    expect(blocksBearing).toHaveLength(1);
+    expectReasoningToolOutput(results);
   });
 
   // DT-3: a raw choice carrying several token-bearing fields (reasoning

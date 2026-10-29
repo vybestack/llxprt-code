@@ -9,11 +9,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { Storage } from '@vybestack/llxprt-code-settings';
-import { SessionRecordingService } from '../packages/core/src/recording/SessionRecordingService.js';
+import { createSessionRecorder } from '../packages/core/src/recording/sessionRecorderFactory.js';
+import type { SessionRecordingPort } from '../packages/core/src/recording/recordingPort.js';
+import { requireJournalRecorder } from '../packages/core/src/services/history/recorderBackend.js';
+import { NativeRecordingProbe } from '../packages/core/src/storage/native-recording-probe.test-support.js';
 import { HistoryService } from '../packages/core/src/services/history/HistoryService.js';
 import type { IContent } from '../packages/core/src/services/history/IContent.js';
-import { SessionPersistenceService } from '../packages/core/src/storage/SessionPersistenceService.js';
+import { JournalSession } from '../packages/core/src/services/history/journalSession.js';
 import { HistoryMediaOwnership } from '../packages/core/src/storage/history-media-ownership.js';
 import { LocalMediaStore } from '../packages/core/src/storage/local-media-store.js';
 import { MediaAdmissionService } from '../packages/core/src/storage/media-admission-service.js';
@@ -30,11 +32,17 @@ import {
 } from './issue-3199-media-memory-benchmark.js';
 import {
   admittedMediaContentId,
+  hasHistoryMediaReservation,
   cleanupMediaProbeResources,
   completeTurnResources,
   type MediaProbeResources,
   settleOperation,
 } from './issue-3199-media-memory-lifecycle.js';
+import { resolveMediaProbeHistory } from './issue-3199-media-memory-resolution.js';
+import {
+  saveMediaProbeHistory,
+  countMediaProbeHistory,
+} from './issue-3199-media-memory-persistence.js';
 
 const IMAGE_BYTES = 512 * 1024;
 const STREAM_CHUNK_BYTES = 64 * 1024;
@@ -130,11 +138,14 @@ async function forceFullGc(): Promise<void> {
 interface MediaProbeRuntime {
   readonly admission: MediaAdmissionService;
   readonly store: LocalMediaStore;
+  readonly storeRoot: string;
   readonly history: HistoryService;
   readonly providerRetention: ProviderFileLifecycle;
   readonly resolver: RequestMediaResolver;
-  readonly recording: SessionRecordingService;
-  readonly persistence: SessionPersistenceService;
+  readonly recording: SessionRecordingPort;
+  readonly recordingProbe: NativeRecordingProbe;
+  readonly persistence: NativeRecordingProbe;
+  readonly persistedSession: JournalSession;
   readonly metrics: MediaLifecycleMetrics;
 }
 
@@ -148,35 +159,39 @@ async function measureActiveTurn(
   admitted: IContent,
   resolved: Awaited<ReturnType<RequestMediaResolver['resolve']>>,
 ): Promise<ActiveTurnMeasurements> {
-  let turnFailure: unknown;
   let active: MediaProbeTurnSample['active'] | undefined;
   let transportBytes: number | undefined;
+  const session = await requireJournalRecorder(runtime.recording).session();
   const persistenceSave = settleOperation(() =>
-    runtime.persistence.save(runtime.history.getAll()),
-  );
-  try {
-    runtime.recording.recordContent(admitted);
-    active = await runtime.metrics.snapshot();
-    const body = resolved.withContents(
-      (contents) =>
-        new BoundedJsonBody(
-          { model: 'probe', messages: contents, stream: true },
-          {
-            maxChunkBytes: STREAM_CHUNK_BYTES,
-            maxEnvelopeBytes: ENVELOPE_BUDGET_BYTES,
+    saveMediaProbeHistory(
+      runtime.history,
+      runtime.persistedSession,
+      runtime.persistence,
+      () =>
+        runtime.recordingProbe.measureWrite(
+          () => session.append([admitted]).then(() => undefined),
+          async () => {
+            active = await runtime.metrics.snapshot();
+            const body = resolved.withContents(
+              (contents) =>
+                new BoundedJsonBody(
+                  { model: 'probe', messages: contents, stream: true },
+                  {
+                    maxChunkBytes: STREAM_CHUNK_BYTES,
+                    maxEnvelopeBytes: ENVELOPE_BUDGET_BYTES,
+                  },
+                ),
+            );
+            transportBytes = await consumeTransport(body);
           },
         ),
-    );
-    transportBytes = await consumeTransport(body);
-  } catch (error) {
-    turnFailure = error;
-  } finally {
-    turnFailure = await completeTurnResources(
-      persistenceSave,
-      resolved.release,
-      turnFailure,
-    );
-  }
+    ).then(() => undefined),
+  );
+  const turnFailure = await completeTurnResources(
+    persistenceSave,
+    resolved.release,
+    undefined,
+  );
   if (turnFailure !== undefined) throw turnFailure;
   if (active === undefined || transportBytes === undefined) {
     throw new Error('Media probe turn completed without measurements');
@@ -201,12 +216,15 @@ async function collectTurnSample(
   );
   await runtime.history.replaceAll([admitted]);
   const contentId = admittedMediaContentId(admitted, turn);
-  const resolved = await runtime.resolver.resolve({
-    contents: runtime.history.getRawHistory(),
-    requestId: `media-probe-request-${turn}`,
-    turnId: `media-probe-${turn}`,
-    aggregateBudgetBytes: REQUEST_BUDGET_BYTES,
-  });
+  const resolved = await resolveMediaProbeHistory(
+    runtime.history.streamRawHistory(),
+    runtime.resolver,
+    {
+      requestId: `media-probe-request-${turn}`,
+      turnId: `media-probe-${turn}`,
+      aggregateBudgetBytes: REQUEST_BUDGET_BYTES,
+    },
+  );
   const measured = await measureActiveTurn(runtime, admitted, resolved);
   await runtime.recording.flush();
   await forceFullGc();
@@ -214,7 +232,7 @@ async function collectTurnSample(
   const resolution = runtime.resolver.accounting();
   const supersededReservationStates = await Promise.all(
     priorSamples.map((sample) =>
-      runtime.store.hasReservations(sample.contentId),
+      hasHistoryMediaReservation(runtime.storeRoot, sample.contentId),
     ),
   );
   return {
@@ -229,7 +247,7 @@ async function collectTurnSample(
     settledStoreReadCount: resolution.storeReadCount,
     settledProviderFileCount:
       runtime.providerRetention.snapshot().retainedFiles,
-    settledHistoryContentCount: runtime.history.getAll().length,
+    settledHistoryContentCount: await countMediaProbeHistory(runtime.history),
     settledSupersededHistoryOwnerCount:
       supersededReservationStates.filter(Boolean).length,
     bounds: probeBounds,
@@ -258,31 +276,30 @@ try {
   });
   resources.store = store;
   const history = new HistoryService();
-  history.registerMediaOwner(new HistoryMediaOwnership(store));
+  await history.registerMediaOwner(new HistoryMediaOwnership(store));
   resources.history = history;
   const admission = new MediaAdmissionService(store);
   const resolver = new RequestMediaResolver(store);
   resources.resolver = resolver;
-  const recording = new SessionRecordingService({
+  const recordingProbe = new NativeRecordingProbe();
+  const recording = createSessionRecorder({
     sessionId: `media-probe-${runtimeName()}`,
     projectHash: 'media-probe',
     chatsDir: join(directory, 'recording'),
     workspaceDirs: [directory],
     provider: 'probe',
     model: 'probe',
-    maxQueueBytes: QUEUE_BUDGET_BYTES,
     mediaStore: store,
+    journal: recordingProbe.options,
   });
   resources.recording = recording;
-  const persistence = new SessionPersistenceService(
-    {
-      projectRoot: directory,
-      chatsDir: new Storage(directory).getProjectChatsDir(),
-    },
-    `media-probe-${runtimeName()}`,
-    { mediaStore: store, maxQueueBytes: QUEUE_BUDGET_BYTES },
+  const persistence = new NativeRecordingProbe();
+  const persistedSession = await JournalSession.create(
+    join(directory, 'persisted.llxj'),
+    persistence.options,
   );
   resources.persistence = persistence;
+  resources.persistedSession = persistedSession;
   const providerRetention = new ProviderFileLifecycle({
     maxFiles: 1,
     maxBytes: IMAGE_BYTES,
@@ -312,7 +329,7 @@ try {
     store,
     history,
     requestResolver: resolver,
-    recording,
+    recording: recordingProbe,
     persistence,
     providerFileRetention: providerRetention,
   });
@@ -320,11 +337,14 @@ try {
     {
       admission,
       store,
+      storeRoot: join(directory, 'media'),
       history,
       providerRetention,
       resolver,
       recording,
+      recordingProbe,
       persistence,
+      persistedSession,
       metrics,
     },
     turns,

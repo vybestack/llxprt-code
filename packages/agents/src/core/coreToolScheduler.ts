@@ -1,3 +1,4 @@
+import { ApprovalPublicationError } from '@vybestack/llxprt-code-core/scheduler/approval-lifecycle.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
@@ -26,6 +27,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { canonicalizeToolName, type ToolGovernance } from './toolGovernance.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 import { triggerToolNotificationHook } from '@vybestack/llxprt-code-core/core/coreToolHookTriggers.js';
+import { rememberCallId } from '../scheduler/request-admission.js';
 import { ToolExecutor } from '../scheduler/tool-executor.js';
 import { ToolDispatcher } from '../scheduler/tool-dispatcher.js';
 import { launchCallsWithSamePathOrdering } from '../scheduler/mutation-ordering.js';
@@ -186,6 +188,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
         this.attemptExecutionOfScheduledCalls(signal),
       getToolCalls: () => this.toolCalls,
       getHookOwner: (callId) => this.hookOwners.get(callId),
+      persistApproval: options.persistApproval,
     };
     const editorCallbacks: EditorCallbacks = {
       getPreferredEditor: () => this.getPreferredEditor(),
@@ -407,7 +410,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       } else {
         freshRequests.push(r);
         batchCallIds.add(r.callId);
-        this.rememberCallId(r.callId);
+        rememberCallId(this.seenCallIds, r.callId, MAX_SEEN_CALL_IDS);
       }
     }
     if (duplicates.length > 0) {
@@ -416,20 +419,6 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       );
     }
     return freshRequests;
-  }
-
-  /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-05 */
-  private rememberCallId(callId: string): void {
-    this.seenCallIds.add(callId);
-    if (this.seenCallIds.size <= MAX_SEEN_CALL_IDS) {
-      return;
-    }
-    // The size check above guarantees at least one entry, so this loop
-    // body runs exactly once to evict the oldest-inserted ID.
-    for (const oldest of this.seenCallIds) {
-      this.seenCallIds.delete(oldest);
-      break;
-    }
   }
 
   private isHookRestrictedRequest(req: ToolCallRequestInfo): boolean {
@@ -470,6 +459,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
     return this.confirmationCoordinator
       .evaluateAndRoute(toolCall, signal)
       .catch((error) => {
+        if (error instanceof ApprovalPublicationError) throw error;
         if (signal.aborted) {
           this.setStatusInternal(
             reqInfo.callId,
@@ -933,7 +923,22 @@ export class CoreToolScheduler implements ToolSchedulerContract {
    * Note: The actual async execution of tools is interrupted by the AbortSignal
    * passed during scheduling, which the caller is responsible for aborting.
    */
-  cancelAll(): void {
+  cancelAll(): void | Promise<void> {
+    if (
+      this.toolCalls.some(
+        (call) =>
+          call.status === 'awaiting_approval' &&
+          call.request.journalIdentity !== undefined,
+      )
+    ) {
+      return this.confirmationCoordinator
+        .cancelPendingApprovals()
+        .then(() => this.cancelAllImmediately());
+    }
+    this.cancelAllImmediately();
+  }
+
+  private cancelAllImmediately(): void {
     // 1. Cancel all queued requests
     while (this.requestQueue.length > 0) {
       const item = this.requestQueue.shift();

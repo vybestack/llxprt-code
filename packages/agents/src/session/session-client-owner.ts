@@ -19,7 +19,7 @@ import {
 import { ChildAgentAssembly } from '../api/child-agent-assembly.js';
 import type { EditorCallbacks } from '../api/config-types.js';
 import { createAgentHookControl } from '../api/control/hooks.js';
-import { SessionControl } from '../api/control/sessionControl.js';
+import type { SessionControl } from '../api/control/sessionControl.js';
 import { ToolControl } from '../api/control/toolControl.js';
 import { SubAgentScope } from '../core/subagent.js';
 import { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
@@ -151,7 +151,7 @@ export class SessionClientOwner {
     readProvider: () => string,
     readModel: () => string,
   ): SessionControl {
-    return new SessionControl(
+    return this.clients.conversationBinding.createSessionControl(
       {
         storageRoot: this.environment.config.storageRoot,
         projectTempDir: this.environment.config.projectTempDir,
@@ -168,7 +168,6 @@ export class SessionClientOwner {
       this.clients.workspaceDirectories,
       identityOwnership,
       sessionId,
-      this.clients.conversationBinding.nativeHistory,
       transition,
       closeAdmission,
       (id) => this.clients.prepareNewSession(id, rebuild),

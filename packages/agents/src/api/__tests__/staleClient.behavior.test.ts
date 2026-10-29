@@ -113,7 +113,7 @@ describe('stale-client rebuild guard + recordCompletedToolCalls (issue #2372 Pha
     try {
       await drain(agent.stream('initialize history'));
       agent.tools.recordCompletedToolCalls(SAMPLE_COMPLETED);
-      expect(JSON.stringify(await agent.getHistory())).toContain(
+      expect(JSON.stringify(await agent.session.getHistory())).toContain(
         'caller-call-1',
       );
       await agent.setModel('replacement-recording-model');
@@ -131,7 +131,7 @@ describe('stale-client rebuild guard + recordCompletedToolCalls (issue #2372 Pha
         },
       }));
       agent.tools.recordCompletedToolCalls(next);
-      const history = JSON.stringify(await agent.getHistory());
+      const history = JSON.stringify(await agent.session.getHistory());
       expect(history).toContain('caller-call-1');
       expect(history).toContain('replacement-call-2');
       expect(agent.getModel()).toBe('replacement-recording-model');
@@ -155,7 +155,7 @@ describe('stale-client rebuild guard + recordCompletedToolCalls (issue #2372 Pha
       const events: AgentEvent[] = await drain(agent.stream('second turn'));
       expect(countType(events, 'done')).toBe(1);
       expect(countType(events, 'error')).toBe(0);
-      const history = JSON.stringify(await agent.getHistory());
+      const history = JSON.stringify(await agent.session.getHistory());
       expect(history).toContain('first turn');
       expect(history).toContain('second turn');
     } finally {
@@ -174,7 +174,7 @@ describe('stale-client rebuild guard + recordCompletedToolCalls (issue #2372 Pha
       const events = await drain(agent.stream('second'));
       expect(countType(events, 'done')).toBe(1);
       expect(countType(events, 'error')).toBe(0);
-      const history = JSON.stringify(await agent.getHistory());
+      const history = JSON.stringify(await agent.session.getHistory());
       expect(history).toContain('first');
       expect(history).toContain('second');
     } finally {

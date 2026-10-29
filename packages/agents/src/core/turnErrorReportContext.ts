@@ -14,17 +14,24 @@ const TURN_REPORT_HISTORY_TAIL = 8;
  * @pseudocode lines 300-322
  * Adds endpoint diagnostics for error reports (@issue #2231).
  */
-export function buildErrorReportContext(
-  // Accepts the read-only view getHistory() now returns (#3109). Only
-  // `.slice()` and `.length` are used, both of which are readonly-safe.
-  history: readonly IContent[],
+export async function buildErrorReportContext(
+  history: Iterable<IContent> | AsyncIterable<IContent>,
   request: string | object | readonly unknown[],
   baseUrl?: string,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
+  let recentHistory: readonly IContent[] = [];
+  let count = 0;
+  for await (const row of history) {
+    recentHistory = [
+      ...recentHistory.slice(-(TURN_REPORT_HISTORY_TAIL - 1)),
+      row,
+    ];
+    count++;
+  }
   return {
     request,
-    recentHistory: history.slice(-TURN_REPORT_HISTORY_TAIL),
-    omittedHistoryCount: Math.max(0, history.length - TURN_REPORT_HISTORY_TAIL),
+    recentHistory,
+    omittedHistoryCount: Math.max(0, count - TURN_REPORT_HISTORY_TAIL),
     ...(baseUrl === undefined ? {} : { baseUrl }),
   };
 }

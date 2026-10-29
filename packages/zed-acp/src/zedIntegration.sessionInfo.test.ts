@@ -6,7 +6,13 @@ import {
   type RouteAAgent,
 } from '../../agents/src/api/__tests__/helpers/route-a-agent.js';
 import { afterEach, describe, expect, it } from 'bun:test';
-import { readFile } from 'node:fs/promises';
+import {
+  decodeSessionFact,
+  SESSION_KEYS,
+} from '@vybestack/llxprt-code-core/recording/sessionMetaKeys.js';
+import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
+import { stateReaderOf } from '@vybestack/llxprt-code-core/journal/journalReaderState.js';
+import { sha256KeyHash } from '@vybestack/llxprt-code-core/journal/idKeys.js';
 import type { Session } from './zed-session.js';
 import {
   buildFakeAgent,
@@ -28,6 +34,20 @@ import {
  * - Finding 3: slash command success/failure shares exact-once metadata finally.
  * - Finding 4: pre-turn listing timestamp stable (initialized once).
  */
+
+async function assertDurableTitle(path: string): Promise<void> {
+  const reader = await openJournalReadOnly(path);
+  try {
+    const bytes = await stateReaderOf(
+      reader,
+      sha256KeyHash,
+    )(SESSION_KEYS.title);
+    if (bytes === undefined) throw new Error('Missing durable title');
+    expect(decodeSessionFact(bytes)).toBe('/tools owner title');
+  } finally {
+    await reader.close();
+  }
+}
 
 describe('Zed Session recording title owner', () => {
   useRecordingPrompts();
@@ -59,9 +79,7 @@ describe('Zed Session recording title owner', () => {
     expect(first.stopReason).toBe('end_turn');
     const path = agent.session.getRecording().path;
     if (path === undefined) throw new Error('Recording was not materialized');
-    expect(await readFile(path, 'utf8')).toContain(
-      '"title":"/tools owner title"',
-    );
+    await assertDurableTitle(path);
     await owned.prompt({
       sessionId: 'test-session-id',
       prompt: [{ type: 'text', text: '/tools second prompt' }],

@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -60,15 +61,15 @@ describe('session initialization operation ownership', () => {
     const sibling = await makeOwner('initialize-sibling');
     await startSession(owner, sibling);
     expect(
-      (await owner.getHistory())
+      (await collectResumeRows(owner.streamHistory()))
         .flatMap((entry) => entry.blocks)
         .filter((block) => block.type === 'text')
         .map((block) => block.text)
         .join('\n'),
     ).toContain(`Loaded model ${owner.getModel()}`);
-    expect(await sibling.getHistory()).toHaveLength(0);
+    expect(await collectResumeRows(sibling.streamHistory())).toHaveLength(0);
     await owner.dispose();
     await startSession(sibling, owner);
-    expect(await sibling.getHistory()).toHaveLength(1);
+    expect(await collectResumeRows(sibling.streamHistory())).toHaveLength(1);
   });
 });

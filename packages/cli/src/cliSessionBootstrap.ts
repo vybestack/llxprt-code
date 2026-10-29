@@ -2,6 +2,7 @@ import {
   CONTINUE_LATEST,
   type Config,
   type IContent,
+  type ResumeBootHandle,
   deleteSession,
   getProjectHash,
   listSessions,
@@ -195,12 +196,14 @@ export function setupObservation(
   });
 }
 
+export type OwnerResumedRows = Pick<ResumeBootHandle, 'streamRows'>;
+
 async function resumeOwnerRecording(
   session: Pick<Agent['session'], 'resume' | 'setRecording'>,
   listTargets: Agent['session']['listBrowserTargetsDetailed'],
   continueRef: string,
   startupWarnings: string[],
-): Promise<IContent[] | null> {
+): Promise<OwnerResumedRows | null> {
   // Discovery here only classifies the reference against unreadable recordings
   // so they can be reported to the user; the owner performs the actual resume.
   const { targets, unreadableRecordings } = await listTargets();
@@ -224,7 +227,7 @@ async function resumeOwnerRecording(
     await session.setRecording({ enabled: true });
     return null;
   }
-  let resumed: readonly IContent[];
+  let resumed: AsyncIterable<IContent>;
   let restoreWarning: string | undefined;
   try {
     resumed = await session.resume(
@@ -255,7 +258,11 @@ async function resumeOwnerRecording(
     await session.setRecording({ enabled: true });
     return null;
   }
-  return [...resumed];
+  return {
+    async *streamRows() {
+      yield* resumed;
+    },
+  };
 }
 
 export async function setupOwnerSessionRecording(
@@ -273,7 +280,7 @@ export async function setupOwnerSessionRecording(
   bootstrapSelection: BootstrapSelection | null,
   startupWarnings: string[] = [],
 ): Promise<{
-  history: IContent[] | null;
+  resumedBoot: OwnerResumedRows | null;
   observation: ReturnType<typeof setupObservation>;
 }> {
   const projectHash = getProjectHash(config.getProjectRoot());
@@ -283,9 +290,9 @@ export async function setupOwnerSessionRecording(
 
   try {
     const continueRef = config.getContinueSessionRef();
-    let history: IContent[] | null;
+    let resumedBoot: OwnerResumedRows | null;
     if (continueRef) {
-      history = await resumeOwnerRecording(
+      resumedBoot = await resumeOwnerRecording(
         session,
         listTargets,
         continueRef,
@@ -293,12 +300,12 @@ export async function setupOwnerSessionRecording(
       );
     } else {
       await session.setRecording({ enabled: true });
-      history = null;
+      resumedBoot = null;
     }
 
     const observation = setupObservation(config, bootstrapSelection);
     registerCleanup(() => observation.cleanup());
-    return { history, observation };
+    return { resumedBoot, observation };
   } catch (error: unknown) {
     if (session.getRecording().enabled) {
       try {

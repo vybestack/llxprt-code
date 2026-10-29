@@ -10,18 +10,34 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import {
   createRuntimeInvocationContext,
+  readInvocationPolicyRecord,
   type RuntimeInvocationContext,
 } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { MissingProviderRuntimeError } from './errors.js';
-import type { GenerateChatOptions, ProviderToolset } from './IProvider.js';
+import type {
+  MaterializedGenerateChatOptions,
+  ProviderToolset,
+} from './IProvider.js';
 import type {
   BaseProviderConfig,
   BaseProvider,
   NormalizedGenerateChatOptions,
 } from './BaseProvider.js';
 import type { ResolvedAuthToken } from './types/providerRuntime.js';
+import { getRequestSignal, isAbortSignal } from './utils/abortSignal.js';
+import {
+  collectContents,
+  isAsyncIterableContents,
+} from './utils/collectContents.js';
+import {
+  acquireRequestRows,
+  type RequestRowsScope,
+} from './utils/requestRowsLease.js';
+import { providerRowsOf } from './utils/providerRows.js';
+import { copyProviderRequestOptions } from './requestAdmission.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { GenerateChatOptions } from './IProvider.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
-import { isAbortSignal } from './utils/abortSignal.js';
 
 interface RuntimeGuardInput {
   providerKey: string;
@@ -40,6 +56,12 @@ interface ResolvedRuntimeShape {
   authToken?: unknown;
 }
 
+interface ProviderSettings {
+  temperature?: number;
+  maxTokens?: number;
+  streaming?: boolean;
+}
+
 interface NormalizationDependencies {
   providerName: string;
   maybeTools?: ProviderToolset;
@@ -47,11 +69,7 @@ interface NormalizationDependencies {
   authFailure?: CredentialResolutionError;
   resolvedModel: string;
   resolvedBaseURL?: string;
-  providerSettings: {
-    temperature?: number;
-    maxTokens?: number;
-    streaming?: boolean;
-  };
+  providerSettings: ProviderSettings;
   ephemeralsSnapshot: Readonly<Record<string, unknown>>;
   providerDefaults: Readonly<Record<string, unknown>>;
   configuredHeaders: Readonly<Record<string, string>>;
@@ -96,6 +114,155 @@ function buildRuntimeMetadata(
   };
 }
 
+/**
+ * True when the call carries `requestRows`, which the provider's concrete
+ * transport reads itself instead of receiving them through `contents`.
+ */
+export function readsRequestRowsAtTransport(
+  options: Pick<GenerateChatOptions, 'requestRows'>,
+): boolean {
+  return options.requestRows !== undefined;
+}
+
+/**
+ * Sanitized copy of the caller's options that also carries the neutral
+ * request selection, which the shared admission copy does not know about.
+ */
+function copyRequestSelection(
+  input: GenerateChatOptions,
+): Omit<GenerateChatOptions, 'contents'> {
+  const { contents: _contents, ...copied } = copyProviderRequestOptions(input);
+  return {
+    ...copied,
+    ...(input.requestRows === undefined
+      ? {}
+      : { requestRows: input.requestRows }),
+    ...(input.contentCount === undefined
+      ? {}
+      : { contentCount: input.contentCount }),
+  };
+}
+
+/**
+ * The single history source of a call. A neutral `requestRows` selection is
+ * authoritative and read once through a reader bound to the request signal;
+ * otherwise the caller's `contents` stream is the source.
+ */
+function historySourceOf(
+  contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
+): AsyncIterable<IContent> {
+  if (isAsyncIterableContents(contentsOrOptions)) return contentsOrOptions;
+  const rows = contentsOrOptions.requestRows;
+  if (rows === undefined) return contentsOrOptions.contents;
+  const signal = getRequestSignal(contentsOrOptions);
+  signal?.throwIfAborted();
+  return { [Symbol.asyncIterator]: () => rows.openReader(signal) };
+}
+
+/**
+ * The prompt inputs a source-route send gives up because its prepared token
+ * already carries them (issue #854 WP08).
+ */
+function blankedSourceInputs(
+  options: Pick<GenerateChatOptions, 'promptEnvelopeTransportToken'>,
+): Pick<
+  GenerateChatOptions,
+  'systemInstruction' | 'tools' | 'userMemory' | 'systemPromptAssembler'
+> {
+  return options.promptEnvelopeTransportToken === undefined
+    ? {}
+    : {
+        systemInstruction: '',
+        tools: [],
+        userMemory: undefined,
+        systemPromptAssembler: undefined,
+      };
+}
+
+/**
+ * Materialize the caller's history source for provider use (issue #854
+ * P05b4). A call that carries `requestRows` and a provider that reads them at
+ * its transport receive no collected history. A provider on the rows route
+ * (`stagesRows`) receives its history later, from {@link attachDeferredHistory}.
+ * Only a provider that keeps arrays by decision (the Vercel provider and the
+ * Gemini plugin, GitHub #3869) is handed a collected array here.
+ */
+export async function materializeCallOptions(
+  contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
+  maybeTools: ProviderToolset | undefined,
+  readsRowsAtTransport = false,
+  stagesRows = false,
+): Promise<MaterializedGenerateChatOptions> {
+  if (readsRowsAtTransport && !isAsyncIterableContents(contentsOrOptions)) {
+    return {
+      ...copyRequestSelection(contentsOrOptions),
+      contents: [],
+      ...blankedSourceInputs(contentsOrOptions),
+    };
+  }
+  const contents = stagesRows
+    ? []
+    : await collectContents(historySourceOf(contentsOrOptions));
+  if (isAsyncIterableContents(contentsOrOptions)) {
+    return { contents, tools: maybeTools };
+  }
+  const rows = contentsOrOptions.requestRows;
+  if (rows !== undefined && !stagesRows && contents.length !== rows.count)
+    throw new Error('Provider request rows count changed');
+  return { ...copyRequestSelection(contentsOrOptions), contents };
+}
+
+/**
+ * Completes a call normalized for the rows route. The history is staged on the
+ * request's scratch disk one row at a time and the call carries `requestRows`,
+ * so no history array exists.
+ */
+export async function attachDeferredHistory(
+  normalized: NormalizedGenerateChatOptions,
+  contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
+): Promise<NormalizedGenerateChatOptions> {
+  const source = isAsyncIterableContents(contentsOrOptions)
+    ? { contents: contentsOrOptions, tools: normalized.tools }
+    : contentsOrOptions;
+  const scope = acquireRequestRows(
+    source,
+    undefined,
+    getRequestSignal(normalized),
+  );
+  try {
+    const rows = await providerRowsOf(scope.options);
+    return {
+      ...normalized,
+      contents: [],
+      requestRows: { ...rows, close: () => scope.close() },
+      contentCount: rows.count,
+      stagedRows: scope,
+      ...blankedSourceInputs(normalized),
+    };
+  } catch (error) {
+    return closeStagedRowsAfterFailure(scope, error);
+  }
+}
+
+/**
+ * Closes the staging of a call that failed and rethrows the failure. A close
+ * that also fails is reported together with the primary failure.
+ */
+export async function closeStagedRowsAfterFailure(
+  staged: Pick<RequestRowsScope, 'close'> | undefined,
+  error: unknown,
+): Promise<never> {
+  try {
+    await staged?.close();
+  } catch (closeError) {
+    throw new AggregateError(
+      [error, closeError],
+      'Request failed and its staged rows could not be closed',
+    );
+  }
+  throw error;
+}
+
 export function assertProviderRequestData(
   input: RuntimeGuardInput,
 ): RuntimeGuardResult {
@@ -117,7 +284,7 @@ export function assertProviderRequestData(
 }
 
 function createResolvedOptions(
-  providedOptions: GenerateChatOptions,
+  providedOptions: MaterializedGenerateChatOptions,
   deps: NormalizationDependencies,
 ): NormalizedGenerateChatOptions['resolved'] {
   const admitted = providedOptions.modelParameters?.modelParams;
@@ -152,7 +319,7 @@ function createResolvedOptions(
 }
 
 function mergeInvocationMetadata(
-  providedOptions: GenerateChatOptions,
+  providedOptions: MaterializedGenerateChatOptions,
 ): Record<string, unknown> {
   return {
     ...(providedOptions.metadata ?? {}),
@@ -272,7 +439,7 @@ function createNormalizedInvocation(
 
 export function normalizeProviderGenerateChatOptions(
   provider: BaseProvider,
-  providedOptions: GenerateChatOptions,
+  providedOptions: MaterializedGenerateChatOptions,
   deps: NormalizationDependencies,
 ): NormalizedGenerateChatOptions {
   const metadata = mergeInvocationMetadata(providedOptions);
@@ -316,6 +483,24 @@ export function normalizeProviderGenerateChatOptions(
     metadata: guard.metadata,
     resolved,
     invocation,
+  };
+}
+
+/** The provider's own temperature, token limit and streaming policy. */
+export function readProviderSettings(
+  capturedPolicy: Readonly<Record<string, unknown>>,
+  providerName: string,
+): ProviderSettings {
+  const snapshot = readInvocationPolicyRecord(capturedPolicy[providerName]);
+  return {
+    temperature:
+      typeof snapshot.temperature === 'number'
+        ? snapshot.temperature
+        : undefined,
+    maxTokens:
+      typeof snapshot.maxTokens === 'number' ? snapshot.maxTokens : undefined,
+    streaming:
+      typeof snapshot.streaming === 'boolean' ? snapshot.streaming : undefined,
   };
 }
 

@@ -34,7 +34,7 @@ import { TiktokenRuntime } from './tiktokenRuntime.js';
  * NFC normalization is applied before tokenization, matching the upstream
  * normalizer.
  */
-const MINIMAX_PAT_STR =
+export const MINIMAX_PAT_STR =
   String.raw`[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|` +
   String.raw`[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?|` +
   String.raw`\p{N}{1,3}|` +

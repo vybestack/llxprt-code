@@ -1,3 +1,4 @@
+import { withFetchPreconnect } from '@vybestack/llxprt-code-test-utils/fetch-test-helpers.js';
 import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -124,11 +125,13 @@ describe('connected MCP disposal', () => {
     const released = gate();
     const agent = await connectedAgent();
     await awaitReadiness(agent);
-    const network = spyOn(globalThis, 'fetch').mockImplementation(async () => {
-      entered.release();
-      await released.promise;
-      return new Response(null, { status: 401 });
-    });
+    const network = spyOn(globalThis, 'fetch').mockImplementation(
+      withFetchPreconnect(async () => {
+        entered.release();
+        await released.promise;
+        return new Response(null, { status: 401 });
+      }),
+    );
     let authentication: Promise<unknown> | undefined;
     let disposal: Promise<void> | undefined;
     try {

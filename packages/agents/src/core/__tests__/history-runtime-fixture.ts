@@ -42,6 +42,10 @@ export function createHistoryRuntimeFixture(options: {
     options.policy.preserveThreshold,
   );
   settingsService.set(
+    'compression-top-preserve-threshold',
+    options.policy.topPreserveThreshold,
+  );
+  settingsService.set(
     'reasoning.includeInContext',
     options.policy['reasoning.includeInContext'],
   );

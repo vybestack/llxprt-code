@@ -1,3 +1,12 @@
+import { FakeProvider } from '@vybestack/llxprt-code-providers';
+import { CoreToolHostAdapter } from '@vybestack/llxprt-code-core';
+import { ReadFileTool } from '@vybestack/llxprt-code-tools';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
+import { openClientOwner } from './helpers/client-owner-session.js';
+import { fromConfig } from '../fromConfig.js';
+import { spyOn } from 'bun:test';
+import { writeFile } from 'node:fs/promises';
 import { mkdtemp, realpath, rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -62,7 +71,7 @@ describe('production filesystem roots', () => {
     await rm(promptDirectory, { recursive: true, force: true });
   });
 
-  useFakeResponsesReplay('plain-text.jsonl');
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   const credentials = useOwnedCredentials();
 
   it('publishes live MCP roots and trust changes without affecting a same-label sibling', async () => {
@@ -165,4 +174,155 @@ describe('production filesystem roots', () => {
       ]);
     }
   });
+  it('replacement clients read current owner directories rather than an initial snapshot', async () => {
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'replacement-roots-')),
+    );
+    const workingDir = await realpath(
+      await mkdtemp(join(tmpdir(), 'workspace-current-')),
+    );
+    const built = await openClientOwner(
+      credentials().authority,
+      {
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: 'same-label',
+        interactive: true,
+        workingDir,
+      },
+      { provider: 'fake', model: 'fake-model' },
+    );
+    const before = built.owner.clients.getAgentClient();
+    try {
+      built.mcp.workspaceFilesystem.addDirectory(directory);
+      await built.owner.clients.refreshAuth();
+      expect(before).not.toBe(built.owner.clients.getAgentClient());
+      expect(built.mcp.workspacePaths.directories()).toContain(directory);
+      await built.owner.clients.getAgentClient().startChat();
+      const generate = FakeProvider.prototype.generateChatCompletion;
+      const requests: string[] = [];
+      const observation = spyOn(
+        FakeProvider.prototype,
+        'generateChatCompletion',
+      ).mockImplementation(async function* (this: FakeProvider, input) {
+        if (!('contents' in input)) throw new Error('Expected chat options');
+        const contents = await Array.fromAsync(input.contents);
+        requests.push(
+          JSON.stringify({
+            contents,
+            systemInstruction: input.systemInstruction,
+          }),
+        );
+        yield* generate.call(this, {
+          ...input,
+          contents: (async function* () {
+            yield* contents;
+          })(),
+        });
+      });
+      for await (const event of built.owner.clients
+        .getAgentClient()
+        .sendMessageStream(
+          'Observe current workspace',
+          new AbortController().signal,
+          'workspace-added',
+        )) {
+        if (event.type === 'error') throw new Error(JSON.stringify(event));
+      }
+      expect(requests.join('\n')).toContain(directory);
+      requests.length = 0;
+      built.mcp.workspaceFilesystem.setDirectories([
+        built.config.getTargetDir(),
+      ]);
+      await built.owner.clients.refreshAuth();
+      expect(built.mcp.workspacePaths.directories()).not.toContain(directory);
+      await built.owner.clients.getAgentClient().startChat();
+      for await (const event of built.owner.clients
+        .getAgentClient()
+        .sendMessageStream(
+          'Observe removed workspace',
+          new AbortController().signal,
+          'workspace-removed',
+        )) {
+        if (event.type === 'error') throw new Error(JSON.stringify(event));
+      }
+      expect(requests.join('\n')).not.toContain(directory);
+      observation.mockRestore();
+    } finally {
+      await built.close();
+      await rm(workingDir, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+  it.each([
+    { name: 'utf8', bytes: Buffer.from('Plain UTF-8 λ') },
+    {
+      name: 'utf8-bom',
+      bytes: Buffer.concat([
+        Buffer.from([0xef, 0xbb, 0xbf]),
+        Buffer.from('UTF-8 BOM λ'),
+      ]),
+    },
+    {
+      name: 'utf16le',
+      bytes: Buffer.concat([
+        Buffer.from([0xff, 0xfe]),
+        Buffer.from('UTF-16 λ', 'utf16le'),
+      ]),
+    },
+  ])(
+    'keeps default public read_file decoding before and after adoption: $name',
+    async ({ bytes }) => {
+      const directory = await realpath(
+        await mkdtemp(join(tmpdir(), 'public-bom-')),
+      );
+      const file = join(directory, 'input.txt');
+      await writeFile(file, bytes);
+      const built = await buildCliStyleConfig('plain-text.jsonl', {
+        workingDir: directory,
+      });
+      const tool = new ReadFileTool(
+        new CoreToolHostAdapter(
+          built.config,
+          built.mcpRuntime.workspacePaths,
+          built.mcpRuntime.workspaceFiles,
+          built.mcpRuntime.workspaceIgnore,
+          built.mcpRuntime.workspaceScans,
+          () => built.settingsOwner.readToolExecutionPolicy(),
+          built.mcpRuntime.trust,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-caller-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
+        ),
+      );
+      const before = await tool
+        .build({ absolute_path: file })
+        .execute(new AbortController().signal);
+      const agent = await fromConfig(
+        built.config,
+        built.settingsService,
+        {},
+        credentials().authority,
+      );
+      try {
+        const reader = agent.tools.get('read_file');
+        if (!reader) throw new Error('Missing public read_file');
+        const after = await reader.buildAndExecute(
+          { file_path: file },
+          new AbortController().signal,
+        );
+        expect(before.error).toBeUndefined();
+        expect(after.error).toBeUndefined();
+        expect(after.llmContent).toContain('λ');
+        expect(after.llmContent).toBe(before.llmContent);
+      } finally {
+        await agent.dispose();
+        await built.cleanup();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 });

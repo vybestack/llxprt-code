@@ -18,6 +18,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { assertTruthy } from '../__tests__/assertions.js';
 import fc from 'fast-check';
+import { disposeResumeContext } from './dispose-resume-context.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -30,13 +31,6 @@ import {
   makeResumeContext,
   SessionBrowserTestState,
 } from './sessionBrowserE2E.helpers.js';
-
-async function releaseCurrentLock(
-  context: ReturnType<typeof makeResumeContext>,
-): Promise<void> {
-  const newLock = context.recordingCallbacks.getCurrentLockHandle();
-  if (newLock) await newLock.release();
-}
 
 describe('Property-based tests #2', () => {
   let state: SessionBrowserTestState;
@@ -72,15 +66,15 @@ describe('Property-based tests #2', () => {
           const localChatsDir = path.join(localTempDir, 'chats');
           await fs.mkdir(localChatsDir, { recursive: true });
 
+          const context = makeResumeContext(localChatsDir, {
+            currentSessionId: 'other-session',
+          });
+
           try {
             await createTestSession(localChatsDir, {
               sessionId,
               projectHash: PROJECT_HASH,
               messages: [{ speaker: 'user', text: 'content' }],
-            });
-
-            const context = makeResumeContext(localChatsDir, {
-              currentSessionId: 'other-session',
             });
 
             // Use the unique prefix "unique-"
@@ -89,10 +83,12 @@ describe('Property-based tests #2', () => {
             expect(result.ok).toBe(true);
             assertTruthy(result.ok);
             expect(result.metadata.sessionId).toBe(sessionId);
-
-            await releaseCurrentLock(context);
           } finally {
-            await fs.rm(localTempDir, { recursive: true, force: true });
+            try {
+              await disposeResumeContext(context);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
+            }
           }
         },
       ),

@@ -30,13 +30,19 @@ describe('manual MCP authentication lifetime', () => {
     let signal: AbortSignal | null | undefined;
     let requests = 0;
     const network = spyOn(globalThis, 'fetch').mockImplementation(
-      async (_input, init) => {
-        requests++;
-        signal = init?.signal;
-        entered.release();
-        await released.promise;
-        return new Response(null, { status: 401 });
-      },
+      Object.assign(
+        async (
+          _input: Parameters<typeof fetch>[0],
+          init?: Parameters<typeof fetch>[1],
+        ): Promise<Response> => {
+          requests++;
+          signal = init?.signal;
+          entered.release();
+          await released.promise;
+          return new Response(null, { status: 401 });
+        },
+        { preconnect: globalThis.fetch.preconnect },
+      ),
     );
     const built = await buildAgent('multi-turn-text.jsonl', {
       folderTrust: false,

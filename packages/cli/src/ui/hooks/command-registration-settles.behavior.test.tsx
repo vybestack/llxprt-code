@@ -126,6 +126,7 @@ function inputs(): UseSlashCommandProcessorCoreArgs {
     ...createCommandRegistryFixture(null),
     ...createCommandRegistrationFixture(),
     ...createUnconfiguredHistoryReaders(),
+    writeOutput: async () => {},
     registerIdeCommand: (addItem) =>
       createIdeCommand(
         bindIdeCommand(
@@ -143,7 +144,6 @@ function inputs(): UseSlashCommandProcessorCoreArgs {
     settings,
     addItem: () => 0,
     clearItems: () => {},
-    loadHistory: () => {},
     refreshStatic: () => {},
     toggleVimEnabled: async () => true,
     setIsProcessing: () => {},

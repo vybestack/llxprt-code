@@ -5,6 +5,7 @@
  */
 
 import chalk from 'chalk';
+import { basename } from 'node:path';
 import {
   CONTINUE_LATEST,
   SessionDiscovery,
@@ -72,10 +73,21 @@ export function classifyContinueRef(
         : continueRef;
     return { resumeRef: sessionId, namedUnreadable: [] };
   }
-  const namedUnreadable = matchUnreadableRecordings(
+  const references = unreadableRecordings.map((recording) => {
+    if (recording.sessionId !== undefined) return recording;
+    const match =
+      /^session-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-(.+)\.jsonl$/.exec(
+        basename(recording.filePath),
+      );
+    return match === null ? recording : { ...recording, sessionId: match[1] };
+  });
+  const matches = matchUnreadableRecordings(
     continueRef,
     resolved.error,
-    unreadableRecordings,
+    references,
+  );
+  const namedUnreadable = unreadableRecordings.filter((_recording, index) =>
+    matches.includes(references[index]),
   );
   return { resumeRef: continueRef, namedUnreadable };
 }

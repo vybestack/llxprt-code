@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { JournalRecordingService } from './journalRecordingService.js';
 import {
   deleteSession,
   deleteSessionWithDiagnostics,
@@ -32,7 +32,7 @@ describe('deleteSessionWithDiagnostics (issue #3839)', () => {
   });
 
   async function writeHealthySession(sessionId: string): Promise<string> {
-    const recording = new SessionRecordingService({
+    const recording = JournalRecordingService.create({
       chatsDir,
       sessionId,
       projectHash: PROJECT_HASH,
@@ -41,10 +41,14 @@ describe('deleteSessionWithDiagnostics (issue #3839)', () => {
       model: 'claude-4',
     });
     try {
-      recording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'hello' }],
-      });
+      await (
+        await recording.session()
+      ).append([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello' }],
+        },
+      ]);
       await recording.flush();
       const filePath = recording.getFilePath();
       if (filePath === null) {

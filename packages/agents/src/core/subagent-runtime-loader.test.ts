@@ -102,8 +102,12 @@ describe('explicit child runtime loader inputs', () => {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'Only the first child history' }],
       });
-      expect(first.history.getCurated()).toHaveLength(1);
-      expect(second.history.getCurated()).toHaveLength(0);
+      expect(
+        await Array.fromAsync(first.history.streamCuratedHistory()),
+      ).toHaveLength(1);
+      expect(
+        await Array.fromAsync(second.history.streamCuratedHistory()),
+      ).toHaveLength(0);
       expect(first.runtimeContext.state.sessionId).toBe('child-session');
       expect(first.toolRegistry).toBe(tools);
       expect(first.settingsSnapshot).toBe(snapshot);
@@ -132,9 +136,11 @@ describe('explicit child runtime loader inputs', () => {
       expect(signalled.signal).toBe(signal);
       await settingsOwner.dispose();
       expect(() => options.profile.readRuntimeSettings?.()).toThrow('closed');
-      expect(second.history.getCurated()).toHaveLength(0);
-      first.history.dispose();
-      second.history.dispose();
+      expect(
+        await Array.fromAsync(second.history.streamCuratedHistory()),
+      ).toHaveLength(0);
+      await first.history.dispose();
+      await second.history.dispose();
     } finally {
       await closeLoaderFixture(directory, [
         () => manager.dispose(),

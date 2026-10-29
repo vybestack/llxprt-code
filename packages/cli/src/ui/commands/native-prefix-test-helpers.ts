@@ -1,0 +1,215 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  createLockedSessionRecorder,
+  type AgentClientContract,
+  type IContent,
+  type SessionRecordingPort,
+  type LocalMediaStore,
+} from '@vybestack/llxprt-code-core';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { readRecordedRows } from '../../__tests__/journal-recording.js';
+import {
+  buildAgent,
+  drain,
+  type Agent,
+} from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import type { HistoryItem } from '../types.js';
+import { rawClientChatCommand } from '../../__tests__/raw-chat-command.fixture.js';
+import { captureSessionOwner } from '../../../../agents/src/api/__tests__/helpers/capture-session-owner.js';
+import type { CommandContext } from './types.js';
+import { expect, spyOn } from 'bun:test';
+import {
+  NativeHistoryPrefixOwner,
+  type NativeHistoryPrefix,
+} from '@vybestack/llxprt-code-core/services/history/native-history-prefix.js';
+
+export function row(index: number): IContent {
+  return {
+    speaker: index % 2 === 0 ? 'human' : 'ai',
+    blocks: [{ type: 'text', text: `cli prefix ${index}` }],
+  };
+}
+
+export async function contents(
+  source: AsyncIterable<IContent>,
+): Promise<IContent[]> {
+  const result: IContent[] = [];
+  for await (const content of source) result.push(content);
+  return result;
+}
+
+const cliClients = new WeakMap<
+  CommandContext,
+  { client: AgentClientContract; recording: SessionRecordingPort }
+>();
+
+export async function runCommand(
+  context: CommandContext,
+  name: string,
+  args = '',
+): Promise<unknown> {
+  const owned = cliClients.get(context);
+  if (owned === undefined) throw new Error('Missing command client');
+  const failure: { observed?: { error: unknown } } = {};
+  const recording = new Proxy(owned.recording, {
+    get(target, property, receiver) {
+      if (property === 'flush') {
+        return async (): Promise<void> => {
+          try {
+            await target.flush();
+          } catch (error) {
+            failure.observed = { error };
+            throw error;
+          }
+        };
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const chatCommand = rawClientChatCommand(
+    owned.client,
+    () => recording,
+    () => 'fake-model',
+  );
+  const command = chatCommand.subCommands?.find((item) => item.name === name);
+  if (command?.action === undefined) throw new Error('Missing chat command');
+  const withPrefix = NativeHistoryPrefixOwner.prototype.withPrefix;
+  const observation = spyOn(
+    NativeHistoryPrefixOwner.prototype,
+    'withPrefix',
+  ).mockImplementation(async function <T>(
+    this: NativeHistoryPrefixOwner,
+    turns: number,
+    fromEnd: boolean,
+    store: LocalMediaStore | undefined,
+    execute: (prefix: NativeHistoryPrefix) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    try {
+      return await withPrefix.bind(this)(
+        turns,
+        fromEnd,
+        store,
+        execute,
+        signal,
+      );
+    } catch (error) {
+      failure.observed = { error };
+      throw error;
+    }
+  });
+  try {
+    const result = await command.action(context, args);
+    if (failure.observed !== undefined) {
+      const error = failure.observed.error;
+      const detail = error instanceof Error ? error.message : String(error);
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to ${name} history: ${detail}`,
+      });
+      // Preserve the owner's error identity and aggregate assertions while
+      // checking that the command reports the failure to the UI.
+      throw error;
+    }
+    return result;
+  } finally {
+    observation.mockRestore();
+  }
+}
+
+export interface LiveCLI {
+  readonly agent: Agent;
+  readonly client: AgentClientContract;
+  readonly history: HistoryService;
+  readonly context: CommandContext;
+  readonly recording: SessionRecordingPort;
+  readonly displayed: Array<Omit<HistoryItem, 'id'>>;
+  uiTokens(): number;
+}
+
+export async function withCLI(
+  root: string,
+  size: number,
+  execute: (cli: LiveCLI) => Promise<void>,
+  seed?: readonly IContent[],
+  beforeRecording?: (history: HistoryService) => Promise<void>,
+): Promise<void> {
+  const {
+    value: { agent, cleanup },
+    owner,
+  } = await captureSessionOwner(() =>
+    buildAgent('plain-text.jsonl', {
+      workingDir: root,
+    }),
+  );
+  let recording: SessionRecordingPort | undefined;
+  try {
+    await drain(agent.stream('initialize CLI'));
+    await agent.setHistory(
+      seed ?? Array.from({ length: size }, (_, i) => row(i)),
+    );
+    const client = owner.clients.getAgentClient();
+    const history = client.getHistoryService();
+    if (history === null) throw new Error('Missing initialized history');
+    await beforeRecording?.(history);
+    recording = await createLockedSessionRecorder({
+      sessionId: crypto.randomUUID(),
+      projectHash: 'cli-native-prefix',
+      chatsDir: `${root}/chats`,
+      workspaceDirs: [root],
+      cwd: root,
+      provider: 'fake',
+      model: 'fake-model',
+    });
+    await history.attachJournal(recording, true);
+    await history.waitForCommit();
+    const currentRecording = recording;
+    const displayed: Array<Omit<HistoryItem, 'id'>> = [];
+    let tokens = -1;
+    const context = createMockCommandContext({
+      services: { agent },
+      recordingSwapCallbacks: { getCurrentRecording: () => currentRecording },
+    });
+    cliClients.set(context, { client, recording: currentRecording });
+    context.ui.clear = () => {
+      displayed.length = 0;
+    };
+    context.ui.addItem = (item) => {
+      displayed.push(item);
+      return displayed.length;
+    };
+    context.ui.updateHistoryTokenCount = (count) => {
+      tokens = count;
+    };
+    await execute({
+      agent,
+      client,
+      history,
+      context,
+      recording,
+      displayed,
+      uiTokens: () => tokens,
+    });
+  } finally {
+    await cleanup();
+    await recording?.dispose();
+  }
+}
+
+export function blocks(rows: readonly IContent[]): Array<IContent['blocks']> {
+  return rows.map((content) => content.blocks);
+}
+
+export async function persistedContents(
+  recording: SessionRecordingPort,
+): Promise<IContent[]> {
+  const path = recording.getFilePath();
+  if (path === null) throw new Error('Missing recording path');
+
+  return readRecordedRows(path);
+}
+
+export { operationFileCreates } from '../../../../agents/src/compression/__tests__/support/operation-file-creates.js';
+export { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';

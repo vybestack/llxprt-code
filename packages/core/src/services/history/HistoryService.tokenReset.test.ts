@@ -157,7 +157,7 @@ describe('HistoryService - Token Accounting Reset (provider switch)', () => {
 
       service.syncTotalTokens(80000);
 
-      service.clear();
+      await service.clear();
       await service.waitForTokenUpdates();
 
       expect(service.getBaseTokenOffset()).toBe(0);
@@ -173,7 +173,7 @@ describe('HistoryService - Token Accounting Reset (provider switch)', () => {
 
       service.syncTotalTokens(80000);
 
-      service.dispose();
+      await service.dispose();
 
       expect(service.getBaseTokenOffset()).toBe(0);
       expect(service.getTotalTokens()).toBe(0);

@@ -15,12 +15,15 @@
  */
 
 import type { CanonicalFinishReason } from '../../llm-types/finishReasons.js';
+import type { ToolArgumentDelta } from './tool-argument-delta.js';
 
 /**
  * Universal content representation that is provider-agnostic.
  * All conversation content is represented as blocks within a speaker's turn.
  */
 export interface IContent {
+  toolArgumentDelta?: ToolArgumentDelta;
+  responseAttemptId?: string;
   /**
    * Who is speaking in this content
    * - 'human': The user
@@ -101,6 +104,8 @@ export interface SemanticMediaPurgeCacheWriteEvidence {
 }
 
 export interface ContentMetadata {
+  /** Original submitted query, before file attachments are resolved for the model. */
+  displayText?: string;
   /** When this content was created */
   timestamp?: number;
 

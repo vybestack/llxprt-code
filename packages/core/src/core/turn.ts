@@ -132,6 +132,10 @@ export interface ToolCallRequestInfo {
   prompt_id: string;
   agentId?: string;
   checkpoint?: string;
+  journalIdentity?: {
+    readonly transcriptId: string;
+    readonly attemptId: string;
+  };
   hookRestrictedAllowedTools?: string[];
 }
 

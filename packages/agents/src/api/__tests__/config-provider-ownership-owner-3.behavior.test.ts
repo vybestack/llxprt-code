@@ -323,7 +323,9 @@ describe('explicit session authentication lifecycle', () => {
           .listeners(CoreEvent.ModelChanged)
           .filter((listener) => previousListeners.includes(listener)),
       ).toStrictEqual([]);
-      await sessionClient().startChat(await sessionClient().getHistory());
+      await sessionClient().startChat(
+        await Array.fromAsync(sessionClient().getHistory()),
+      );
       expect(sessionClient().isInitialized()).toBe(true);
     });
   });

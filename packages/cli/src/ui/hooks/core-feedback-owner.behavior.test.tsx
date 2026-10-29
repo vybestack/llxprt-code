@@ -1,3 +1,4 @@
+import { appendJournalUiItem } from './command-journal-output.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -38,12 +39,21 @@ describe('bound core feedback recording', () => {
       },
       {
         readDebugMode: () => false,
-        recordFeedback: (severity: 'warning' | 'error', message: string) =>
-          owner.session.recordRecordingEvent({
+        recordFeedback: async (
+          severity: 'warning' | 'error' | 'info',
+          message: string,
+        ): Promise<void> => {
+          await appendJournalUiItem(owner.session, undefined, {
+            type: severity,
+            text: message,
+          });
+          await owner.session.recordRecordingEvent({
             type: 'session_event',
             severity,
             message,
-          }),
+            presentation: 'already-appended',
+          });
+        },
         handleNewMessage: (message: ConsoleMessageItem) =>
           messages.push(message),
       },

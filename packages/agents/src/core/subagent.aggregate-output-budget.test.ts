@@ -130,10 +130,21 @@ async function createBudgetScope(
       throw new Error('Test provider adapter has no key storage');
     },
   };
-  const runtimeBundle = createStatelessRuntimeBundle({
+  const baseBundle = createStatelessRuntimeBundle({
     providerAdapter,
     history: new HistoryService(),
   });
+  // The disk request path reads the live runtime config, as production runtimes provide.
+  const runtimeBundle = {
+    ...baseBundle,
+    runtimeContext: {
+      ...baseBundle.runtimeContext,
+      providerRuntime: {
+        ...baseBundle.runtimeContext.providerRuntime,
+        config,
+      },
+    },
+  };
   const { overrides } = createRuntimeOverrides(workspacePaths, {
     runtimeBundle,
   });

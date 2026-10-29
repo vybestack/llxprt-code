@@ -1,3 +1,4 @@
+import { collectResumeRows } from './__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -135,7 +136,9 @@ describe('createForegroundAgent preferred construction and cleanup', () => {
     expect(created.getModel()).toBe('gemini-2.5-pro');
     expect((await activation.preflight(intent)).authFailed).toBe(true);
     await expect(create()).rejects.toThrow('already');
-    await expect(created.getHistory()).resolves.toStrictEqual([]);
+    await expect(
+      collectResumeRows(created.streamHistory()),
+    ).resolves.toStrictEqual([]);
   });
 
   it('returns the exact ready agent retained by the owner and disposes it on cleanup', async () => {

@@ -3,6 +3,9 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { seedSessionRows } from '../../../__tests__/journal-recording.js';
+
+import { displayBoot } from '../../../__tests__/resumeRows.js';
 
 import {
   rawBrowserCatalog,
@@ -39,7 +42,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
   SessionLockManager,
   type IContent,
   type SessionRecordingServiceConfig,
@@ -81,7 +84,7 @@ function makeContent(
 }
 
 /**
- * Create a real session file using SessionRecordingService.
+ * Create a real session file using createSessionRecorder.
  */
 async function createTestSession(
   chatsDir: string,
@@ -103,11 +106,11 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = new SessionRecordingService(config);
+  const svc = createSessionRecorder(config);
 
   const contents = opts.contents ?? [makeContent('hello')];
   for (const content of contents) {
-    svc.recordContent(content);
+    await seedSessionRows(svc, [content]);
   }
   await svc.flush();
 
@@ -153,8 +156,9 @@ function makeHookProps(
       overrides.onSelect ??
       (async (): Promise<PerformResumeResult> => ({
         ok: true,
-        history: [],
+        history: displayBoot([]).streamRows(),
         metadata: {
+          kind: 'main',
           sessionId: 'resumed',
           projectHash: PROJECT_HASH,
           startTime: new Date().toISOString(),
@@ -172,39 +176,42 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+let tempDir: string;
+let chatsDir: string;
+let lockHandles: Array<{ release: () => Promise<void> }>;
+
+async function setUpSessionBrowserFixture(): Promise<void> {
+  tempDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'use-session-browser-test-'),
+  );
+  chatsDir = path.join(tempDir, 'chats');
+  await fs.mkdir(chatsDir, { recursive: true });
+  lockHandles = [];
+}
+
+async function tearDownSessionBrowserFixture(): Promise<void> {
+  await Promise.all(lockHandles.map((handle) => handle.release()));
+  await fs.rm(tempDir, { recursive: true, force: true }).catch((err) => {
+    // Retry once on ENOTEMPTY — the hook's async session refresh may
+    // still be writing a lock file, causing a directory-not-empty race.
+    if ((err as NodeJS.ErrnoException).code !== 'ENOTEMPTY') throw err;
+    return new Promise<void>((resolve, reject) => {
+      setTimeout(() => {
+        void fs
+          .rm(tempDir, { recursive: true, force: true })
+          .then(resolve, reject);
+      }, 100);
+    });
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Test Suite
 // ---------------------------------------------------------------------------
 
 describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
-  let tempDir: string;
-  let chatsDir: string;
-  let lockHandles: Array<{ release: () => Promise<void> }>;
-
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'use-session-browser-test-'),
-    );
-    chatsDir = path.join(tempDir, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
-    lockHandles = [];
-  });
-
-  afterEach(async () => {
-    await Promise.all(lockHandles.map((handle) => handle.release()));
-    await fs.rm(tempDir, { recursive: true, force: true }).catch((err) => {
-      // Retry once on ENOTEMPTY — the hook's async session refresh may
-      // still be writing a lock file, causing a directory-not-empty race.
-      if ((err as NodeJS.ErrnoException).code !== 'ENOTEMPTY') throw err;
-      return new Promise<void>((resolve, reject) => {
-        setTimeout(() => {
-          void fs
-            .rm(tempDir, { recursive: true, force: true })
-            .then(resolve, reject);
-        }, 100);
-      });
-    });
-  });
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
 
   describe('Delete Flow @requirement:REQ-DL-001', () => {
     /**
@@ -306,7 +313,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         ).toBe(false);
       });
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 2)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Delete Flow @requirement:REQ-DL-001', () => {
     /**
      * Test 47: N dismisses confirmation (REQ-DL-005)
      * GIVEN: Delete confirmation showing
@@ -388,7 +402,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       expect(result.current.selectedIndex).toBe(stateBefore.selectedIndex);
       expect(result.current.searchTerm).toBe(stateBefore.searchTerm);
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 3)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Delete Flow @requirement:REQ-DL-001', () => {
     /**
      * Test 50: Locked session delete shows error (REQ-DL-010)
      * GIVEN: Selected session is locked
@@ -486,7 +507,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         ).toBe(true);
       });
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 4)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Delete Flow @requirement:REQ-DL-001', () => {
     /**
      * Test 53: Selection falls back to same index after delete (REQ-DL-008)
      * GIVEN: Selected session is deleted

@@ -6,12 +6,30 @@
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'bun:test';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { mkdir, mkdtemp, writeFile as write } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile as write } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { act } from 'react';
 import headless from '@xterm/headless';
 import stripAnsi from 'strip-ansi';
-import type { HistoryItem } from '../types.js';
+import {
+  message,
+  count,
+  serializedBytes,
+  sizedMessage,
+} from './cap-payload.fixtures.js';
+import { rowIdentityKey } from '../utils/rowIdentity.js';
+import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
+import { registerNativeCapScenarios } from './cap-native-scenarios.test-helper.js';
+import {
+  JournalSession,
+  NativeJournalPageReader,
+} from '@vybestack/llxprt-code-core';
+import {
+  createScrollbackPagerStore,
+  type ScrollbackPagerStore,
+} from '../stores/turn/scrollbackPager.js';
+import { JournalDisplayWriter } from '@vybestack/llxprt-code-core/journal/display-recording.js';
+import { encodeJournalUiItem } from '../stores/turn/journal-ui-item.js';
 import type { TurnStore } from '../stores/turn/turnStore.js';
 
 interface Fiber {
@@ -21,22 +39,32 @@ interface Fiber {
   child: Fiber | null;
   sibling: Fiber | null;
 }
-let renderedIds: number[] = [];
+let renderedKeys: string[] = [];
 let mountedItems = 0;
 let staticOwners = 0;
-function observe(fiber: Fiber | null): void {
-  if (!fiber) return;
-  const name =
-    typeof fiber.type === 'function' || typeof fiber.type === 'object'
-      ? fiber.type?.name
-      : undefined;
-  if (name === 'HistoryItemDisplay' && fiber.memoizedProps?.item) {
-    mountedItems += 1;
-    if ((fiber.flags & 1) !== 0) renderedIds.push(fiber.memoizedProps.item.id);
+function observe(root: Fiber | null): void {
+  const pending: Fiber[] = [];
+  if (root) pending.push(root);
+  while (pending.length > 0) {
+    const fiber = pending.pop();
+    if (!fiber) continue;
+    const name =
+      typeof fiber.type === 'function' || typeof fiber.type === 'object'
+        ? fiber.type?.name
+        : undefined;
+    if (name === 'HistoryItemDisplay' && fiber.memoizedProps?.item) {
+      mountedItems++;
+      if ((fiber.flags & 1) !== 0)
+        renderedKeys.push(
+          fiber.memoizedProps.item.rowIdentity
+            ? rowIdentityKey(fiber.memoizedProps.item.rowIdentity)
+            : String(fiber.memoizedProps.item.id),
+        );
+    }
+    if (fiber.memoizedProps?.internal_static === true) staticOwners++;
+    if (fiber.sibling) pending.push(fiber.sibling);
+    if (fiber.child) pending.push(fiber.child);
   }
-  if (fiber.memoizedProps?.internal_static === true) staticOwners += 1;
-  observe(fiber.child);
-  observe(fiber.sibling);
 }
 const devtoolsDescriptor = Object.getOwnPropertyDescriptor(
   globalThis,
@@ -83,7 +111,7 @@ const { Config } = await import('@vybestack/llxprt-code-core');
 const { createUiSessionOwner } = await import(
   '../../__tests__/uiSessionOwner.js'
 );
-const { wrapWithProviders, createMockSettings } = await import(
+const { wrapWithProviders, createMockSettings, waitFor } = await import(
   '../../__tests__/render.js'
 );
 const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
@@ -113,53 +141,33 @@ const actEnvironment = Object.getOwnPropertyDescriptor(
   'IS_REACT_ACT_ENVIRONMENT',
 );
 
-function message(id: number, text = `MSG_${id}_END`): HistoryItem {
-  return { id, type: 'gemini_content', text: `**${text}**` };
-}
-function count(text: string, sentinel: string): number {
-  return text.split(sentinel).length - 1;
-}
-function serializedBytes(items: readonly HistoryItem[]): number {
-  return items.reduce(
-    (sum, item) => sum + Buffer.byteLength(JSON.stringify(item)),
-    0,
-  );
-}
-function sizedMessage(
-  id: number,
-  bytes: number,
-  multibyte = false,
-): HistoryItem {
-  const empty: HistoryItem = { id, type: 'gemini_content', text: '```\n\n```' };
-  const budget = bytes - serializedBytes([empty]);
-  const line = (multibyte ? '界' : 'x').repeat(20) + '\n';
-  const lineBytes = Buffer.byteLength(line) + 1;
-  return {
-    ...empty,
-    text:
-      '```\n' +
-      line.repeat(Math.floor(budget / lineBytes)) +
-      'x'.repeat(budget % lineBytes) +
-      '\n```',
-  };
-}
 interface Delta {
   terminalText: string;
   text: string;
   bytes: number;
-  renderedIds: number[];
+  renderedKeys: string[];
   mountedItems: number;
   staticOwners: number;
 }
-interface Harness {
+export interface Harness {
   turn: TurnStore;
+  pager: ScrollbackPagerStore;
+  writer: JournalDisplayWriter;
+  session: JournalSession;
+  append: (
+    item: Extract<HistoryItemWithoutId, { type: 'gemini_content' }>,
+  ) => Promise<Delta>;
+  durableRows: () => Promise<number>;
   initial: Delta;
-  update: (command: () => void) => Promise<Delta>;
+  update: (command: () => void | Promise<void>) => Promise<Delta>;
   resize: (width: number, height: number) => Promise<Delta>;
 }
 async function settle(): Promise<void> {
   await act(async () => {
-    await sleep(40);
+    await sleep(110);
+  });
+  await act(async () => {
+    await sleep(0);
   });
 }
 async function withLayout(
@@ -168,6 +176,7 @@ async function withLayout(
   run: (harness: Harness) => Promise<void>,
   header = false,
   screenReader = false,
+  captureTerminal = true,
 ): Promise<void> {
   const columns = Object.getOwnPropertyDescriptor(process.stdout, 'columns');
   const rows = Object.getOwnPropertyDescriptor(process.stdout, 'rows');
@@ -180,21 +189,23 @@ async function withLayout(
     rows: { configurable: true, writable: true, value: 40 },
   });
   let output = '';
-  const emulator = new headless.Terminal({
-    cols: 100,
-    rows: 40,
-    scrollback: 10000,
-    convertEol: true,
-    allowProposedApi: true,
-  });
-  renderedIds = [];
+  const emulator = captureTerminal
+    ? new headless.Terminal({
+        cols: 100,
+        rows: 40,
+        scrollback: 10000,
+        convertEol: true,
+        allowProposedApi: true,
+      })
+    : undefined;
+  renderedKeys = [];
   const capture = vi
     .spyOn(process.stdout, 'write')
     .mockImplementation((chunk: string | Uint8Array): boolean => {
       const text =
         typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString();
       output += text;
-      emulator.write(text);
+      emulator?.write(text);
       return true;
     });
   const terminal = createTerminalStore({
@@ -206,8 +217,24 @@ async function withLayout(
     isInputActive: false,
   });
   const turn = createTurnStore();
-  turn.commands.setHistoryLimits({ maxItems, maxBytes: MAX_BYTES });
-  turn.commands.loadHistory(history);
+  const directory = await mkdtemp(resolve(evidenceDirectory, 'journal-'));
+  const filePath = resolve(directory, 'session.llxj');
+  const session = await JournalSession.create(filePath);
+  const writer = new JournalDisplayWriter(session.store);
+  for (const item of history)
+    await writer.append({ type: 'ui-item' }, encodeJournalUiItem(item));
+  const viewport = {
+    visibleKeys: [],
+    viewportLines: maxItems,
+    rowHeightLines: () => 1,
+  };
+  const pager = createScrollbackPagerStore({
+    filePath,
+    viewport,
+    pageRows: maxItems,
+    settings: { marginViewports: 0, byteFloorBytes: 256, purgeDebounceMs: 0 },
+  });
+  await pager.resumeFromJournal();
   const settings = createMockSettings({
     ui: {
       useAlternateBuffer: screenReader,
@@ -234,6 +261,8 @@ async function withLayout(
         <TerminalProvider store={terminal}>
           <TurnProvider store={turn}>
             <DefaultAppLayout
+              subscribeContextRange={() => () => {}}
+              scrollbackPager={{ store: pager, viewport }}
               readIdeMode={() => false}
               readIdeDiffingEnabled={() => false}
               subscribeIdeDiffing={() => () => {}}
@@ -270,29 +299,30 @@ async function withLayout(
     );
   });
   async function take(): Promise<Delta> {
-    await new Promise<void>((resolve) => {
-      emulator.write('', resolve);
-    });
-    const buffer = emulator.buffer.active;
+    if (emulator !== undefined)
+      await new Promise<void>((resolve) => {
+        emulator.write('', resolve);
+      });
+    const buffer = emulator?.buffer.active;
     const lines: string[] = [];
-    for (let index = 0; index < buffer.length; index += 1) {
-      lines.push(buffer.getLine(index)?.translateToString(true) ?? '');
+    for (let index = 0; index < (buffer?.length ?? 0); index += 1) {
+      lines.push(buffer?.getLine(index)?.translateToString(true) ?? '');
     }
     const delta = {
       terminalText: lines.join('\n'),
       text: stripAnsi(output),
       bytes: Buffer.byteLength(output),
-      renderedIds,
+      renderedKeys,
       mountedItems,
       staticOwners,
     };
     output = '';
-    renderedIds = [];
+    renderedKeys = [];
     return delta;
   }
-  async function update(command: () => void): Promise<Delta> {
+  async function update(command: () => void | Promise<void>): Promise<Delta> {
     await act(async () => {
-      command();
+      await command();
     });
     await settle();
     return take();
@@ -301,13 +331,44 @@ async function withLayout(
     await settle();
     await run({
       turn,
+      pager,
+      writer,
+      session,
+      append: async (item) => {
+        await act(async () => {
+          await writer.append({ type: 'ui-item' }, encodeJournalUiItem(item));
+        });
+        await waitFor(
+          async () => {
+            await act(async () => {
+              await sleep(10);
+            });
+            expect(stripAnsi(output)).toContain(
+              item.text.replaceAll('**', '').split(' ')[0].slice(0, 16),
+            );
+          },
+          { interval: 1 },
+        );
+        await act(async () => {
+          await sleep(0);
+        });
+        return take();
+      },
+      durableRows: async () => {
+        const reader = await NativeJournalPageReader.open(filePath);
+        try {
+          return reader.rows;
+        } finally {
+          await reader.close();
+        }
+      },
       initial: await take(),
       update,
       resize: async (width, height): Promise<Delta> =>
         update(() => {
           process.stdout.columns = width;
           process.stdout.rows = height;
-          emulator.resize(width, height);
+          emulator?.resize(width, height);
           process.stdout.emit('resize');
           terminal.commands.setDimensions({
             terminalWidth: width,
@@ -323,7 +384,11 @@ async function withLayout(
       view?.unmount();
     });
     capture.mockRestore();
-    emulator.dispose();
+    emulator?.dispose();
+    await pager.close();
+    await session.close();
+    await config.dispose();
+    await rm(directory, { recursive: true, force: true });
     if (columns) Object.defineProperty(process.stdout, 'columns', columns);
     else Reflect.deleteProperty(process.stdout, 'columns');
     if (rows) Object.defineProperty(process.stdout, 'rows', rows);
@@ -336,7 +401,8 @@ async function withLayout(
   }
 }
 
-describe('bounded production standard-buffer emission', () => {
+describe('bounded production standard-buffer journal emission', () => {
+  registerNativeCapScenarios(withLayout);
   beforeAll(() => {
     Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
   });
@@ -361,39 +427,31 @@ describe('bounded production standard-buffer emission', () => {
     );
   });
 
-  it('keeps screen-reader output on the standard transcript path even with alternate-buffer settings', async () => {
+  it('keeps screen-reader output on the standard transcript path with alternate-buffer settings', async () => {
     await withLayout(
       [message(1), message(2)],
       2,
-      async ({ turn, initial, update, resize }) => {
+      async ({ initial, append, resize }) => {
         expect(initial.text).toContain('MSG_1_END');
-        const delta = await update(() => {
-          turn.commands.addItem(
-            { type: 'gemini_content', text: 'ACCESSIBLE3434' },
-            -100,
-            true,
-          );
+        const delta = await append({
+          type: 'gemini_content',
+          text: 'ACCESSIBLE3434',
         });
         expect(count(delta.text, 'ACCESSIBLE3434')).toBe(1);
         expect(delta.text).not.toContain('MSG_2_END');
         expect((await resize(40, 4)).text).not.toContain('ACCESSIBLE3434');
-        const refresh = await update(() => {
-          turn.commands.refreshStatic();
-        });
-        expect(count(refresh.text, 'ACCESSIBLE3434')).toBe(1);
-        expect(count(refresh.text, 'MSG_2_END')).toBe(1);
       },
       false,
       true,
     );
   });
 
-  it('keeps newly committed output visible when live pending content overflows a short terminal', async () => {
+  it('keeps committed output visible when pending content overflows a short terminal', async () => {
     await withLayout(
       [message(1), message(2)],
       2,
-      async ({ turn, update, resize }) => {
-        await update(() => {
+      async ({ turn, update, append, resize }) => {
+        await update(() =>
           turn.commands.setPendingHistoryItems([
             {
               type: 'gemini_content',
@@ -403,14 +461,12 @@ describe('bounded production standard-buffer emission', () => {
                   `Pending paragraph ${index} with several words to wrap.`,
               ).join('\n\n'),
             },
-          ]);
-        });
+          ]),
+        );
         await resize(40, 4);
-        const delta = await update(() => {
-          turn.commands.addItem({
-            type: 'gemini_content',
-            text: 'VISIBLE3434',
-          });
+        const delta = await append({
+          type: 'gemini_content',
+          text: 'VISIBLE3434',
         });
         expect(count(delta.text, 'VISIBLE3434')).toBe(1);
         expect(delta.terminalText).toContain('VISIBLE3434');
@@ -419,34 +475,31 @@ describe('bounded production standard-buffer emission', () => {
     );
   });
 
-  it('emits C and D once after A/B hit cap 2, without replaying history or header', async () => {
+  it('emits each append once after a two-row page without replaying history or header', async () => {
     await withLayout(
       [message(1), message(2)],
       2,
-      async ({ turn, initial, update, resize }) => {
+      async ({ turn, initial, append, resize, durableRows, pager }) => {
         expect(count(initial.text, HEADER)).toBe(1);
         expect(count(initial.text, 'MSG_1_END')).toBe(1);
         for (const label of ['C3434', 'D3434', 'E3434']) {
-          const delta = await update(() => {
-            turn.commands.addItem({
-              type: 'gemini_content',
-              text: `**${label}**`,
-            });
+          const delta = await append({
+            type: 'gemini_content',
+            text: `**${label}**`,
           });
           expect(count(delta.text, label)).toBe(1);
           expect(delta.text).not.toContain('MSG_1_END');
           expect(delta.text).not.toContain('MSG_2_END');
           expect(delta.text).not.toContain(HEADER);
-          expect(turn.store.getState().history).toHaveLength(2);
+          expect(pager.metrics().residentRows).toBeLessThanOrEqual(2);
         }
+        expect(await durableRows()).toBe(5);
         const resized = await resize(30, 4);
         expect(resized.text).not.toContain('D3434');
-        expect(resized.renderedIds).toHaveLength(0);
-        const delta = await update(() => {
-          turn.commands.addItem({
-            type: 'gemini_content',
-            text: 'NEW_WIDTH words follow the narrow terminal and wrap here.',
-          });
+        expect(resized.renderedKeys).toHaveLength(0);
+        const delta = await append({
+          type: 'gemini_content',
+          text: 'NEW_WIDTH words follow the narrow terminal and wrap here.',
         });
         expect(delta.text).toContain('NEW_WIDTH words follow\n');
         expect(turn.store.getState().staticKey).toBe(0);
@@ -455,224 +508,231 @@ describe('bounded production standard-buffer emission', () => {
     );
   });
 
-  it('reports genuine evictions outside the budget and resets on clear/load with overlapping IDs', async () => {
-    await withLayout([message(1), message(2)], 2, async ({ turn, update }) => {
-      const c = await update(() => {
-        turn.commands.addItem({ type: 'gemini_content', text: 'C3434' });
-      });
-      expect(c.text).toContain('[1 earlier messages truncated]');
-      const d = await update(() => {
-        turn.commands.addItem({ type: 'gemini_content', text: 'D3434' });
-      });
-      expect(d.text).toContain('[2 earlier messages truncated]');
-      await update(() => {
-        turn.commands.clearItems();
-      });
-      const loaded = await update(() => {
-        turn.commands.loadHistory([message(1, 'REPLACEMENT3434'), message(2)]);
-      });
-      expect(count(loaded.text, 'REPLACEMENT3434')).toBe(1);
-      expect(count(loaded.text, 'MSG_2_END')).toBe(1);
-      expect(loaded.text).not.toContain('earlier messages truncated');
-      const replay = await update(() => {
-        turn.commands.loadHistory([message(1, 'SAME_ID3434'), message(2)]);
-      });
-      expect(count(replay.text, 'SAME_ID3434')).toBe(1);
-      expect(count(replay.text, 'MSG_2_END')).toBe(1);
-      const cappedLoad = await update(() => {
-        turn.commands.loadHistory([
-          message(7),
-          message(8),
-          message(9),
-          message(10),
-        ]);
-      });
-      expect(cappedLoad.text).toContain('[2 earlier messages truncated]');
-      expect(cappedLoad.text).not.toContain('MSG_7_END');
-      expect(count(cappedLoad.text, 'MSG_10_END')).toBe(1);
-    });
-  });
-
-  it('refreshes only retained markdown, handles retractions, lower timestamps and disjoint batches', async () => {
+  it('keeps disjoint durable batches ordered without replaying printed rows', async () => {
     await withLayout(
       [message(900), message(800)],
       2,
-      async ({ turn, update }) => {
-        const delta = await update(() => {
-          turn.commands.removeItems([900]);
-          turn.commands.addItem(
-            { type: 'gemini_content', text: '**LOW_TIME3434**' },
-            -100,
+      async ({ writer, update, durableRows }) => {
+        const batch = await update(async () => {
+          await writer.append(
+            { type: 'ui-item' },
+            encodeJournalUiItem({
+              type: 'gemini_content',
+              text: 'BATCH_F3434',
+            }),
           );
-        });
-        expect(count(delta.text, 'LOW_TIME3434')).toBe(1);
-        expect(delta.text).not.toContain('MSG_800_END');
-        expect(delta.text).not.toContain('earlier messages truncated');
-        const updated = await update(() => {
-          turn.commands.updateItem(800, { text: '**UPDATED3434**' });
-        });
-        expect(updated.text).not.toContain('UPDATED3434');
-        const refresh = await update(() => {
-          turn.commands.refreshStatic();
-        });
-        expect(count(refresh.text, 'UPDATED3434')).toBe(1);
-        expect(refresh.text).not.toContain('**UPDATED3434**');
-        expect(refresh.text).not.toContain('MSG_900_END');
-        const batch = await update(() => {
-          turn.commands.addItem({
-            type: 'gemini_content',
-            text: 'BATCH_F3434',
-          });
-          turn.commands.addItem({
-            type: 'gemini_content',
-            text: 'BATCH_G3434',
-          });
+          await writer.append(
+            { type: 'ui-item' },
+            encodeJournalUiItem({
+              type: 'gemini_content',
+              text: 'BATCH_G3434',
+            }),
+          );
         });
         expect(count(batch.text, 'BATCH_F3434')).toBe(1);
         expect(count(batch.text, 'BATCH_G3434')).toBe(1);
         expect(batch.text.indexOf('BATCH_F3434')).toBeLessThan(
           batch.text.indexOf('BATCH_G3434'),
         );
-        expect(batch.text).not.toContain('UPDATED3434');
-        await update(() => {
-          turn.commands.removeItems(
-            turn.store.getState().history.map((item) => item.id),
-          );
-        });
-        const appended = await update(() => {
-          turn.commands.addItem({
-            type: 'gemini_content',
-            text: 'AFTER_REMOVAL3434',
-          });
-        });
-        expect(count(appended.text, 'AFTER_REMOVAL3434')).toBe(1);
+        expect(batch.text).not.toContain('MSG_900_END');
+        expect(batch.text).not.toContain('MSG_800_END');
+        expect(await durableRows()).toBe(4);
       },
     );
   });
 
-  it('emits only the appended suffix after removing the prior tail in the same commit', async () => {
+  it('retracts only the selected journal handle while later commits remain visible', async () => {
     await withLayout(
-      [message(90), message(80), message(70)],
-      3,
-      async ({ turn, update }) => {
-        const delta = await update(() => {
-          turn.commands.removeItems([70]);
-          turn.commands.addItem(
-            { type: 'gemini_content', text: 'TAIL_REPLACEMENT3434' },
-            -200,
+      [message(1)],
+      2,
+      async ({ writer, update, append, pager }) => {
+        let handle:
+          | Awaited<ReturnType<JournalDisplayWriter['append']>>
+          | undefined;
+        await update(async () => {
+          handle = await writer.append(
+            { type: 'ui-item' },
+            encodeJournalUiItem({ type: 'warning', text: 'TRANSIENT3434' }),
           );
         });
-        expect(count(delta.text, 'TAIL_REPLACEMENT3434')).toBe(1);
-        expect(delta.text).not.toContain('MSG_90_END');
-        expect(delta.text).not.toContain('MSG_80_END');
-        expect(delta.text).not.toContain('MSG_70_END');
-        const removed = await update(() => {
-          turn.commands.removeItems([90]);
+        await update(async () => {
+          if (handle === undefined)
+            throw new Error('Missing durable display handle');
+          await writer.retract(handle);
         });
-        expect(removed.renderedIds).toHaveLength(0);
-        const appended = await update(() => {
-          turn.commands.addItem(
-            { type: 'gemini_content', text: 'AFTER_HEAD3434' },
-            -300,
-          );
+        const delta = await append({
+          type: 'gemini_content',
+          text: 'AFTER_RETRACTION3434',
         });
-        expect(count(appended.text, 'AFTER_HEAD3434')).toBe(1);
-        expect(appended.text).not.toContain('TAIL_REPLACEMENT3434');
+        expect(count(delta.text, 'AFTER_RETRACTION3434')).toBe(1);
+        expect(delta.text).not.toContain('TRANSIENT3434');
+        expect(delta.text).not.toContain('MSG_1_END');
+        await pager.invalidate();
+        await pager.resumeFromJournal();
+        expect(
+          pager
+            .getState()
+            .rows.some(
+              (row) => 'text' in row.item && row.item.text === 'TRANSIENT3434',
+            ),
+        ).toBe(false);
+        expect(
+          pager
+            .getState()
+            .rows.some(
+              (row) =>
+                'text' in row.item && row.item.text === 'AFTER_RETRACTION3434',
+            ),
+        ).toBe(true);
       },
     );
   });
 
-  it('does not emit no-ops or rejected items and does not count body fitting as a head eviction', async () => {
-    await withLayout([], 2, async ({ turn, update }) => {
-      const first = await update(() => {
-        turn.commands.addItem({ type: 'user', text: 'DUP3434' });
-      });
-      expect(count(first.text, 'DUP3434')).toBe(1);
-      const unchanged = await update(() => {
-        turn.commands.addItem({ type: 'user', text: 'DUP3434' });
-        turn.commands.updateItem(-1, { text: 'ABSENT3434' });
-        turn.commands.removeItems([]);
-      });
-      expect(unchanged.text).not.toContain('DUP3434');
-      expect(unchanged.renderedIds).toHaveLength(0);
-      expect(turn.store.getState().historyTruncatedItems).toBe(0);
-      await update(() => {
-        turn.commands.clearItems();
-      });
-      const fitted = await update(() => {
-        turn.commands.loadHistory([sizedMessage(8, MAX_BYTES + 1, true)]);
-      });
-      expect(
-        serializedBytes(turn.store.getState().history),
-      ).toBeLessThanOrEqual(MAX_BYTES);
-      expect(turn.store.getState().historyTruncatedItems).toBe(0);
-      expect(fitted.text).not.toContain('earlier messages truncated');
-      await update(() => {
-        turn.commands.setHistoryLimits({ maxItems: 0, maxBytes: 0 });
-      });
-      const rejected = await update(() => {
-        turn.commands.addItem({ type: 'gemini_content', text: 'REJECTED3434' });
-      });
-      expect(rejected.text).not.toContain('REJECTED3434');
-      expect(rejected.renderedIds).toHaveLength(0);
-      expect(turn.store.getState().history).toHaveLength(0);
-      expect(turn.store.getState().historyTruncatedItems).toBe(1);
-    });
-  });
-
-  it('replays the header and bounded retained snapshot only on explicit refresh', async () => {
+  it('keeps clear and resume boundaries durable without replaying printed rows or colliding presentation IDs', async () => {
     await withLayout(
       [message(1), message(2)],
       2,
-      async ({ turn, update }) => {
-        await update(() => {
-          turn.commands.addItem({
-            type: 'gemini_content',
-            text: 'RETAINED3434',
-          });
+      async ({ session, writer, update, append, pager, durableRows }) => {
+        const clear = await update(async () => {
+          await session.store.commit([{ kind: 'clear' }]);
         });
-        const refreshed = await update(() => {
+        expect(clear.text).not.toContain('MSG_1_END');
+        expect(clear.text).not.toContain('MSG_2_END');
+        const replacement = await append({
+          type: 'gemini_content',
+          text: '**REPLACEMENT3434**',
+        });
+        expect(count(replacement.text, 'REPLACEMENT3434')).toBe(1);
+        expect(replacement.text).not.toContain('earlier messages truncated');
+        const resumed = await update(async () => {
+          await pager.invalidate();
+          await pager.resumeFromJournal();
+        });
+        expect(resumed.text).not.toContain('REPLACEMENT3434');
+        expect(resumed.renderedKeys).toHaveLength(0);
+        const sameId = await append({
+          type: 'gemini_content',
+          text: '**SAME_ID3434**',
+        });
+        expect(count(sameId.text, 'SAME_ID3434')).toBe(1);
+        expect(sameId.text).not.toContain('REPLACEMENT3434');
+        const batch = await update(async () => {
+          for (const id of [7, 8, 9, 10])
+            await writer.append(
+              { type: 'ui-item' },
+              encodeJournalUiItem(message(id)),
+            );
+        });
+        for (const id of [7, 8, 9, 10])
+          expect(count(batch.text, 'MSG_' + id + '_END')).toBe(1);
+        expect(batch.text.indexOf('MSG_7_END')).toBeLessThan(
+          batch.text.indexOf('MSG_10_END'),
+        );
+        expect(batch.text).not.toContain('SAME_ID3434');
+        expect(await durableRows()).toBe(9);
+        expect(pager.metrics().residentRows).toBeLessThanOrEqual(2);
+      },
+    );
+  });
+
+  it('preserves context-boundary membership across native clear and resume without replaying old output', async () => {
+    await withLayout([], 10, async ({ session, update, pager }) => {
+      const first = await update(async () => {
+        await session.append([
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'CONTEXT_OLD_USER3434' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'CONTEXT_OLD_AI3434' }],
+          },
+        ]);
+      });
+      expect(count(first.text, 'CONTEXT_OLD_USER3434')).toBe(1);
+      expect(count(first.text, 'CONTEXT_OLD_AI3434')).toBe(1);
+      const boundary = await update(async () => {
+        await session.store.commit([{ kind: 'clear' }]);
+        await session.append([
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'CONTEXT_NEW3434' }],
+          },
+        ]);
+        await pager.invalidate();
+        await pager.resumeFromJournal();
+      });
+      expect(boundary.text).not.toContain('CONTEXT_OLD_USER3434');
+      expect(boundary.text).not.toContain('CONTEXT_OLD_AI3434');
+      expect(count(boundary.text, 'CONTEXT_NEW3434')).toBe(1);
+      await pager.invalidate();
+      await pager.resumeFromJournal();
+      const rows = pager.getState().rows;
+      expect(
+        rows
+          .filter(
+            (row) =>
+              typeof row.item.text === 'string' &&
+              row.item.text.startsWith('CONTEXT_'),
+          )
+          .map((row) => row.contextState),
+      ).toStrictEqual(['purged', 'purged', 'in-context']);
+      const resumed = await update(async () => {
+        await pager.invalidate();
+        await pager.resumeFromJournal();
+      });
+      expect(resumed.text).not.toContain('CONTEXT_NEW3434');
+      expect(resumed.renderedKeys).toHaveLength(0);
+    });
+  });
+
+  it('replays the header and bounded durable page only on explicit refresh', async () => {
+    await withLayout(
+      [message(1), message(2)],
+      2,
+      async ({ turn, append, update, pager }) => {
+        await append({ type: 'gemini_content', text: '**RETAINED3434**' });
+        const unchanged = await update(() => {});
+        expect(unchanged.renderedKeys).toHaveLength(0);
+        expect(unchanged.text).not.toContain('RETAINED3434');
+        const refreshed = await update(async () => {
+          await pager.invalidate();
+          await pager.resumeFromJournal();
           turn.commands.refreshStatic();
         });
         expect(count(refreshed.text, HEADER)).toBe(1);
         expect(count(refreshed.text, 'MSG_2_END')).toBe(1);
         expect(count(refreshed.text, 'RETAINED3434')).toBe(1);
         expect(refreshed.text).not.toContain('MSG_1_END');
-        expect(refreshed.text).toContain('[1 earlier messages truncated]');
+        expect(refreshed.text).not.toContain('**RETAINED3434**');
       },
       true,
     );
   });
 
-  it('emits the default 399/400/401 boundary and every later committed entry', async () => {
+  it('emits the 399/400/401 boundary and every later durable entry without a retained ledger', async () => {
     await withLayout(
       Array.from({ length: 399 }, (_, id) => message(id)),
       400,
-      async ({ turn, initial, update }) => {
+      async ({ initial, append, pager, durableRows }) => {
         expect(count(initial.text, 'MSG_398_END')).toBe(1);
-        for (let n = 399; n < 440; n += 1) {
-          const oldIds = new Set(
-            turn.store.getState().history.map((item) => item.id),
-          );
-          const delta = await update(() => {
-            turn.commands.addItem({
-              type: 'gemini_content',
-              text: `SEQ_${n}_END`,
-            });
+        for (let n = 399; n < 440; n++) {
+          const delta = await append({
+            type: 'gemini_content',
+            text: `SEQ_${n}_END`,
           });
           expect(count(delta.text, `SEQ_${n}_END`)).toBe(1);
-          expect(delta.renderedIds.filter((id) => oldIds.has(id))).toHaveLength(
-            0,
-          );
+          expect(delta.renderedKeys).toHaveLength(1);
           expect(delta.text).not.toContain('MSG_398_END');
+          expect(pager.metrics().residentRows).toBeLessThanOrEqual(400);
         }
-        expect(turn.store.getState().history).toHaveLength(400);
+        expect(await durableRows()).toBe(440);
       },
     );
   }, 30000);
 
   it.each([false, true])(
-    'retains exactly 4MiB serialized UTF8 and counts multiple head evictions (multibyte %s)',
+    'pages a 4MiB UTF8 row without replaying it after an append, multibyte=%s',
     async (multibyte) => {
       const small = [message(1), message(2)];
       const large = sizedMessage(
@@ -681,21 +741,21 @@ describe('bounded production standard-buffer emission', () => {
         multibyte,
       );
       expect(serializedBytes([...small, large])).toBe(MAX_BYTES);
-      await withLayout([...small, large], 400, async ({ turn, update }) => {
-        expect(serializedBytes(turn.store.getState().history)).toBe(MAX_BYTES);
-        const delta = await update(() => {
-          turn.commands.addItem({
+      await withLayout(
+        [...small, large],
+        400,
+        async ({ append, pager, durableRows }) => {
+          const delta = await append({
             type: 'gemini_content',
             text: 'MULTI_HEAD3434'.repeat(20),
           });
-        });
-        expect(delta.text).toContain('MULTI_HEAD3434');
-        expect(delta.text).toContain('[3 earlier messages truncated]');
-        expect(turn.store.getState().history).toHaveLength(1);
-        expect(
-          serializedBytes(turn.store.getState().history),
-        ).toBeLessThanOrEqual(MAX_BYTES);
-      });
+          expect(delta.text).toContain('MULTI_HEAD3434');
+          expect(delta.text).not.toContain('MSG_1_END');
+          expect(delta.renderedKeys).toHaveLength(1);
+          expect(pager.metrics().residentBytes).toBeLessThanOrEqual(MAX_BYTES);
+          expect(await durableRows()).toBe(4);
+        },
+      );
     },
     30000,
   );
@@ -706,75 +766,56 @@ describe('bounded production standard-buffer emission', () => {
     [400, false],
     [400, true],
   ] satisfies Array<[number, boolean]>)(
-    'keeps committed renders and emitted bytes delta-sized after cap %s over 220 commits (near byte cap %s)',
+    'keeps renders and output delta-sized over 220 commits, page=%s near-byte-cap=%s',
     async (cap, nearBytes) => {
-      const initialHistory = Array.from({ length: cap }, (_, id) =>
-        message(id),
-      );
-      if (nearBytes) {
-        initialHistory[cap - 1] = sizedMessage(
+      const history = Array.from({ length: cap }, (_, id) => message(id));
+      if (nearBytes)
+        history[cap - 1] = sizedMessage(
           cap - 1,
-          MAX_BYTES - 4096 - serializedBytes(initialHistory.slice(0, -1)),
+          MAX_BYTES - 4096 - serializedBytes(history.slice(0, -1)),
           true,
         );
-      }
       await withLayout(
-        initialHistory,
+        history,
         cap,
-        async ({ turn, initial, update }) => {
-          expect(initial.renderedIds.length).toBeGreaterThanOrEqual(cap);
+        async ({ initial, append, pager, durableRows }) => {
+          expect(initial.renderedKeys.length).toBeGreaterThanOrEqual(cap);
           expect(initial.staticOwners).toBe(1);
           const samples: number[] = [];
-          const retainedByteSamples: number[] = [];
           let oldRenders = 0;
-          for (let n = 0; n < 220; n += 1) {
-            const oldIds = new Set(
-              turn.store.getState().history.map((item) => item.id),
-            );
-            const delta = await update(() => {
-              turn.commands.addItem({
-                type: 'gemini_content',
-                text: `CHURN_${String(n).padStart(3, '0')}_END`,
-              });
-            });
-            expect(
-              count(delta.text, `CHURN_${String(n).padStart(3, '0')}_END`),
-            ).toBe(1);
-            oldRenders += delta.renderedIds.filter((id) =>
-              oldIds.has(id),
+          const printed = new Set(initial.renderedKeys);
+          for (let n = 0; n < 220; n++) {
+            const label = `CHURN_${String(n).padStart(3, '0')}_END`;
+            const delta = await append({ type: 'gemini_content', text: label });
+            expect(count(delta.text, label)).toBe(1);
+            oldRenders += delta.renderedKeys.filter((id) =>
+              printed.has(id),
             ).length;
+            for (const id of delta.renderedKeys) printed.add(id);
             expect(delta.mountedItems).toBe(0);
             expect(delta.staticOwners).toBe(1);
-            expect(delta.renderedIds).toHaveLength(1);
-            expect(delta.text.match(/CHURN_\d{3}_END/g)).toStrictEqual([
-              `CHURN_${String(n).padStart(3, '0')}_END`,
-            ]);
-            expect(turn.store.getState().history).toHaveLength(cap);
-            const retainedBytes = serializedBytes(
-              turn.store.getState().history,
-            );
-            expect(retainedBytes).toBeLessThanOrEqual(MAX_BYTES);
-            expect(retainedBytes).toBeGreaterThan(
-              nearBytes ? MAX_BYTES - 8192 : 0,
+            expect(delta.renderedKeys).toHaveLength(1);
+            expect(delta.text.match(/CHURN_\d{3}_END/g)).toStrictEqual([label]);
+            expect(pager.metrics().residentRows).toBeLessThanOrEqual(cap);
+            expect(pager.metrics().residentBytes).toBeLessThanOrEqual(
+              MAX_BYTES,
             );
             samples.push(delta.bytes);
-            retainedByteSamples.push(retainedBytes);
           }
           expect(oldRenders).toBe(0);
           expect(Math.max(...samples)).toBeLessThan(350);
+          expect(await durableRows()).toBe(cap + 220);
           metrics.push({
             cap,
             nearBytes,
             commits: samples.length,
             oldRenders,
-            minBytes: Math.min(...samples),
             maxBytes: Math.max(...samples),
-            minRetainedBytes: Math.min(...retainedByteSamples),
-            maxRetainedBytes: Math.max(...retainedByteSamples),
-            meanBytes:
-              samples.reduce((sum, bytes) => sum + bytes, 0) / samples.length,
           });
         },
+        false,
+        false,
+        false,
       );
     },
     30000,

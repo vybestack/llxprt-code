@@ -1,0 +1,948 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { DeferredMaintenance } from './deferred-maintenance.js';
+import { rootRef } from './groupSegments.js';
+import type { ArrivalStore } from './arrival-group.js';
+import {
+  recordingMutations,
+  interruptRecordingOrphans,
+  readRecordingField,
+} from './store-recording.js';
+import {
+  compactStoreFile,
+  AutomaticCompaction,
+} from './store-compaction-run.js';
+import { openStoreIdFacts } from './store-id-facts.js';
+import { CommittedIdNodes } from './committed-id-nodes.js';
+import { writtenLabelsOf, type SpineEntry } from './journal-store-state.js';
+import { JournalAdmissions } from './row-admission.js';
+import type { NeutralRowFactRegistration } from './neutralRowFacts.js';
+import { retainNamedWriter } from './named-writer-ownership.js';
+import { journalLabelSorter } from './ordered-labels.js';
+import {
+  finishStoreFormats,
+  nativeFactRegistration,
+} from './store-format-fill.js';
+import {
+  readContextSpans,
+  type ContextSpan,
+  type ContextSpanPolicy,
+} from './contextSpanFacts.js';
+import { pinnedRequestPreparation } from './pinned-format-fill.js';
+import {
+  warmToolRanking,
+  toolRankingPolicy,
+  type ToolRankingPolicy,
+} from './tool-ranking-fill.js';
+import { warmDensityFiles, densityFilePolicy } from './density-file-fill.js';
+import type { DensityFilePolicy } from './density-file-facts.js';
+import type { RecencyFactPolicy } from './recencyFacts.js';
+import { warmNativeFacts } from './nativeFactFill.js';
+import type { NativeFactIndexRegistration } from './nativeFactIndex.js';
+import {
+  checkpointKey,
+  parseCheckpointEntry,
+  type CheckpointDescriptor,
+} from './checkpointDescriptor.js';
+import { listCheckpoints, type ListedCheckpoint } from './checkpointList.js';
+import { JournalFormatError } from './errors.js';
+import {
+  effectAppender,
+  rollbackEffect,
+  type CommitEffectFactory,
+} from './commitEffect.js';
+import { removeStaleCompaction } from './compaction.js';
+import {
+  realFileOperations,
+  swapInUnlinkedCandidate,
+  type FileOperations,
+  type SwapOutcome,
+} from './compactionSwap.js';
+import { mapReader, type BuildContext, type BuiltGroup } from './groupBuild.js';
+import type { CommitEffect } from './commitEffect.js';
+import type { OccurrencePlanner, VersionEdit } from './groupEdits.js';
+import type { RecordAppender } from './groupAppender.js';
+import type { JournalFileHandle } from './positionalFile.js';
+import {
+  prepareTranscriptBuild as prepareBuild,
+  finishTranscript,
+} from './transcript-group.js';
+import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
+import type { CommitAck, JournalGroupWriter } from './groupWriter.js';
+import type { IdFactDeps } from './idFactQueries.js';
+import { BoundedIdNodeCache, type IdNodeCache } from './idTrieCache.js';
+import {
+  createJournal,
+  createSynchronousJournal,
+  openJournalForOwner,
+  type JournalOpenDependencies,
+} from './journalWriterOpen.js';
+import { FIRST_NEXT_LABEL } from './labels.js';
+import { LineageChain, loadChain } from './lineageChain.js';
+import {
+  createRecordAccess,
+  groupReadAccess,
+  type RecordAccess,
+} from './recordAccess.js';
+import { PinLease, PinnedRead } from './pinLease.js';
+import { JournalMediaPins } from './journalMediaPins.js';
+import type { PinnedIdFacts } from './pinnedIdFacts.js';
+import type { RowEntry } from './rowEntry.js';
+import type { RightSpine, RowTreeAlgebra } from './rowTreeBuilder.js';
+import { iterateRowEntries, loadRightSpine } from './rowTreeReader.js';
+import {
+  readRowIds,
+  readStoredRow,
+  type RowIds,
+  type StoredRow,
+} from './rowReads.js';
+import { readVersionAt } from './trailerAccess.js';
+import { versionOf, type Version } from './version.js';
+import { VersionSnapshot } from './versionSnapshot.js';
+import {
+  writeUnlinkedCompactionCandidate,
+  transcriptCompactionDue,
+} from './storeCompaction.js';
+import type { SlotKinds } from './aggregateComposition.js';
+import {
+  type fillRowFormats,
+  warmRowFormat,
+  type RegisteredRowFormat,
+} from './formatFill.js';
+
+/** What the store is built from: the file seams, the hash, the two normalizers and the planner. */
+export interface JournalStoreDependencies {
+  readonly journal: JournalOpenDependencies;
+  readonly idDeps: IdFactDeps;
+  readonly planOccurrences: OccurrencePlanner;
+  readonly recencyFactPolicy?: RecencyFactPolicy;
+  readonly contextSpanPolicy?: ContextSpanPolicy;
+  readonly neutralRowFacts?: NeutralRowFactRegistration;
+  readonly eagerNeutralRowFacts?: boolean;
+  /** The aggregate algebra of the row tree for a slot table. */
+  readonly algebra: (kinds: SlotKinds) => RowTreeAlgebra;
+  /** One capped cache each for the id trie, the meta map and the state map. */
+  readonly createCache?: () => IdNodeCache;
+  /** The rename, close and open of the compaction swap (design 4.11); the real ones by default. */
+  readonly fileOperations?: FileOperations;
+  /** Whether the file has outgrown its version (design 4.11); a test lowers the floor through it. */
+  readonly compactionDue?: (version: Version, notBefore: number) => boolean;
+}
+
+/** What a store with no file name is called in its errors. */
+export const UNLINKED_JOURNAL_LABEL = '(unlinked journal)';
+
+import {
+  noop,
+  assertCompactionUsable,
+  unchangedGroup,
+  committedGroup,
+} from './journal-store-state.js';
+
+export type { CommittedGroup } from './journal-store-state.js';
+import type { CommittedGroup } from './journal-store-state.js';
+
+/** The labels of the rows a group writes. A replace streams its rows, so it names none. */
+
+/**
+ * One journal as a versioned store: the single writer of the file, the
+ * published version, and the maps and facts that version names. Edits are
+ * applied to a tentative version that exists only inside a commit group; the
+ * published version moves in one place, after the group's trailer is acked
+ * (design 4.1), so a version is never readable before it is durable.
+ */
+export class JournalStore {
+  private rowFormats: readonly RegisteredRowFormat[] = [];
+  private factIndex: NativeFactIndexRegistration | undefined;
+  private toolRanking: ToolRankingPolicy | undefined;
+  private densityFiles: DensityFilePolicy | undefined;
+  private commitEffect: CommitEffectFactory | undefined;
+
+  setCommitEffect(factory: CommitEffectFactory): void {
+    this.commitEffect = factory;
+  }
+
+  private currentVersion: Version | undefined;
+  private access: RecordAccess | undefined;
+  private chain: LineageChain | undefined;
+  private spineEntry: SpineEntry | undefined;
+  private tail: Promise<void> = Promise.resolve();
+  private idCache: IdNodeCache;
+  private metaCache: IdNodeCache;
+  private stateCache: IdNodeCache;
+  /** Commits submitted and not yet finished; compaction runs when none is waiting. */
+  private queued = 0;
+  private closing = false;
+  /** Readers that hold a version across awaits; a swap waits for none (design 10.1). */
+  private pins = 0;
+  readonly mediaPins = new JournalMediaPins();
+
+  /** A compaction was due but a pin held it off; the last pin released evaluates the trigger again. */
+  private deferredByPin = false;
+  /** The file size below which the trigger is not evaluated, set after a refused swap. */
+  private rearmAt = 0;
+  /** The compaction in progress; a pin or a read waits for it (design 10.1). */
+  private readonly maintenance = new DeferredMaintenance(
+    () => (this.tail = this.tail.then(() => this.compactWhenIdle())),
+    (error) => (this.compactionFailure = { error }),
+  );
+  private readonly automaticCompaction = new AutomaticCompaction();
+  private compactionFailure: { readonly error: unknown } | undefined;
+  private readonly fileOperations: FileOperations;
+  private neutralRowFactsEnabled: boolean;
+
+  private constructor(
+    readonly path: string,
+    private readonly writer: JournalGroupWriter,
+    private readonly deps: JournalStoreDependencies,
+    /** The file has no name: `path` is a label, and a compaction swaps descriptors instead of renaming. */
+    private readonly unlinked = false,
+    private readonly releaseNamedWriter?: () => void,
+  ) {
+    this.admissions = new JournalAdmissions(
+      writer,
+      () => !this.closing && this.automaticCompaction.running === undefined,
+    );
+    this.neutralRowFactsEnabled = deps.eagerNeutralRowFacts ?? false;
+    this.fileOperations =
+      deps.fileOperations ?? realFileOperations(deps.journal.open);
+    this.idCache = this.makeCache();
+    this.metaCache = this.makeCache();
+    this.stateCache = this.makeCache();
+    this.install(writer.published?.trailer);
+  }
+
+  static async create(
+    path: string,
+    deps: JournalStoreDependencies,
+  ): Promise<JournalStore> {
+    const release = await retainNamedWriter(path, true);
+    try {
+      return new JournalStore(
+        path,
+        await createJournal(path, deps.journal),
+        deps,
+        false,
+        release,
+      );
+    } catch (error) {
+      release();
+      throw error;
+    }
+  }
+
+  /**
+   * A new journal in a file with no name (design 4.12). `deps.journal.open`
+   * makes the file and ignores the path, which is only the label the store
+   * goes by.
+   */
+  static async createUnlinked(
+    deps: JournalStoreDependencies,
+  ): Promise<JournalStore> {
+    return new JournalStore(
+      UNLINKED_JOURNAL_LABEL,
+      await createJournal(UNLINKED_JOURNAL_LABEL, deps.journal),
+      deps,
+      true,
+    );
+  }
+
+  static createSynchronousUnlinked(
+    handle: JournalFileHandle,
+    deps: JournalStoreDependencies,
+  ): JournalStore {
+    return new JournalStore(
+      UNLINKED_JOURNAL_LABEL,
+      createSynchronousJournal(handle, deps.journal),
+      deps,
+      true,
+    );
+  }
+
+  /**
+   * A new store in a file with no name that holds the published version of
+   * this one (design 4.8): the streaming copy of compaction, so the copy keeps
+   * the commit sequence, the labels and the checkpoints. The source is pinned
+   * for the copy, so no compaction moves it, and stays as it was. `open` makes
+   * the nameless file.
+   */
+  async cloneUnlinked(
+    open: JournalOpenDependencies['open'],
+  ): Promise<JournalStore> {
+    const deps = { ...this.deps, journal: { ...this.deps.journal, open } };
+    const candidate = await this.whilePinned(() =>
+      writeUnlinkedCompactionCandidate(
+        UNLINKED_JOURNAL_LABEL,
+        this.requireAccess(),
+        this.requireVersion(),
+        deps.journal,
+        deps.idDeps.hasher,
+      ),
+    );
+    let clone: JournalStore;
+    try {
+      clone = await JournalStore.createUnlinked(deps);
+    } catch (error) {
+      await candidate.handle.close();
+      throw error;
+    }
+    await swapInUnlinkedCandidate(
+      clone.writer,
+      clone.fileOperations,
+      candidate,
+    );
+    clone.restartOnNewFile();
+    clone.rowFormats = this.rowFormats;
+    clone.factIndex = this.factIndex;
+    clone.densityFiles = this.densityFiles;
+    clone.neutralRowFactsEnabled = this.neutralRowFactsEnabled;
+    return clone;
+  }
+
+  /**
+   * Opens an existing journal for its owner; the last committed version is the
+   * published one. A candidate a crashed compaction left is removed first, and
+   * the trigger is evaluated once (design 4.11).
+   */
+  static async open(
+    path: string,
+    deps: JournalStoreDependencies,
+  ): Promise<JournalStore> {
+    const release = await retainNamedWriter(path, false);
+    try {
+      await removeStaleCompaction(path);
+      const { writer } = await openJournalForOwner(path, deps.journal);
+      const store = new JournalStore(path, writer, deps, false, release);
+      await interruptRecordingOrphans(store, () => store.requireAccess());
+      store.maintenance.request();
+      return store;
+    } catch (error) {
+      release();
+      throw error;
+    }
+  }
+
+  readonly admissions: JournalAdmissions;
+
+  /** The last version whose trailer was acked, or undefined before the first group. */
+  get published(): Version | undefined {
+    return this.currentVersion;
+  }
+
+  /**
+   * Applies the edits in order to a tentative version and commits it as one
+   * group. Groups run one at a time in the order they are submitted.
+   */
+  commit(edits: readonly VersionEdit[]): Promise<CommitAck> {
+    return this.commitDetailed(edits).then(async (group) => {
+      await group.close();
+      return group.ack;
+    });
+  }
+
+  /**
+   * `commit`, returning the group with the versions around it, for the fan-out
+   * to mirrors (design 5.2). The group holds a pin until the caller closes it.
+   */
+  commitDetailed(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
+    return this.enqueueCommit(() => this.runCommit(edits));
+  }
+
+  readonly readRecordingField = (
+    ...args: Parameters<ArrivalStore['readRecordingField']>
+  ) => this.whilePinned(() => readRecordingField(this.buildContext(), ...args));
+
+  readonly mutateRecording = recordingMutations({
+    enqueue: (run) => this.enqueueCommit(run),
+    writer: () => this.writer,
+    context: () => this.buildContext(),
+    installed: (result, written) => {
+      const trailer = this.writer.published?.trailer;
+      this.install(trailer, written);
+      if (trailer !== undefined)
+        this.chain = result.built.chainBase.push(trailer.selfOffset);
+      if (result.built.spine !== undefined && trailer !== undefined)
+        this.spineEntry = {
+          rowRoot: trailer.rowRoot,
+          spine: result.built.spine,
+        };
+    },
+  });
+
+  private async enqueueCommit<T>(run: () => Promise<T>): Promise<T> {
+    if (this.closing) throw new Error('The journal store is closed');
+    this.queued += 1;
+    const turn = this.tail.then(run);
+    this.tail = turn.then(noop, noop).then(() => {
+      this.queued -= 1;
+      if (!this.closing) this.maintenance.request();
+    });
+    return turn;
+  }
+
+  /** Settles durable writes without pulling deferred maintenance onto the commit path. */
+  flushCommitted = (): Promise<void> =>
+    this.enqueueCommit(() => {
+      assertCompactionUsable(this.compactionFailure);
+      return this.writer.flushCommitted();
+    });
+
+  settleCommitted = (): Promise<void> => this.tail;
+
+  /** Resolves after queued commits and automatic maintenance, reporting maintenance failures. */
+  async idle(): Promise<void> {
+    await this.tail;
+    await this.maintenance.settle();
+    if (this.compactionFailure !== undefined)
+      throw this.compactionFailure.error;
+  }
+
+  /**
+   * Holds the published version across awaits: a compaction does not run
+   * while a pin is live, because it moves every record (design 4.11 and
+   * 10.1). A pin asked for while a compaction runs waits for it. The returned
+   * function releases the pin; calling it twice is a mistake and throws. The
+   * reads of this class pin for their own duration; a caller that keeps a
+   * `snapshot()`, a `recordAccess()` or a `CommittedGroup` across awaits pins.
+   */
+  async pin(): Promise<() => void | Promise<void>> {
+    const read = await this.openRead();
+    return () => read.close();
+  }
+
+  /**
+   * The published version with the reads that reach its records, pinned until
+   * the returned read is closed. This and the reads built on it (`snapshot`,
+   * `idFacts`, a committed group) are the only way to a `RecordAccess`.
+   */
+  async openRead(): Promise<PinnedRead> {
+    while (this.automaticCompaction.running !== undefined) {
+      await this.automaticCompaction.running.catch(noop);
+    }
+    if (this.closing) throw new Error('The journal store is closed');
+    return this.readOfPublished();
+  }
+
+  /** Synchronous so that nothing, not even a compaction, runs between taking the pin and naming the version. */
+  private readOfPublished(): PinnedRead {
+    return new PinnedRead(this.currentVersion, this.access, this.newLease());
+  }
+
+  private newLease(): PinLease {
+    const release = this.writer.retainReader();
+    const version = this.currentVersion?.commitSeq ?? 0;
+    const releaseVersion = this.mediaPins.retain(version);
+    this.pins += 1;
+    return new PinLease(() => {
+      this.pins -= 1;
+      releaseVersion();
+      if (!this.closing && this.pins === 0 && this.deferredByPin) {
+        this.deferredByPin = false;
+        this.maintenance.request();
+      }
+      return this.mediaPins.afterReaderRelease(release);
+    });
+  }
+
+  private async whilePinned<T>(work: () => Promise<T>): Promise<T> {
+    const read = await this.openRead();
+    try {
+      return await work();
+    } finally {
+      await read.close();
+    }
+  }
+
+  /**
+   * Compacts now, at the next point the commit queue is free (design 4.11).
+   * Refuses while a pin is live. Resolves to `refused` when the platform
+   * would not rename over the open file.
+   */
+  compact(): Promise<SwapOutcome> {
+    if (this.closing)
+      return Promise.reject(new Error('The journal store is closed'));
+    if (
+      this.pins > 0 ||
+      this.admissions.pending ||
+      this.mediaPins.releasePending
+    ) {
+      return Promise.reject(
+        new Error('A journal with a live pin cannot compact'),
+      );
+    }
+    const turn = this.tail.then(() => this.runCompaction());
+    this.tail = turn.then(noop, noop);
+    return turn;
+  }
+
+  async close(): Promise<void> {
+    this.closing = true;
+    this.automaticCompaction.cancel();
+    await this.tail;
+    await this.writer.close();
+    this.releaseNamedWriter?.();
+  }
+
+  contextSpans(): ContextSpan[] {
+    return readContextSpans(
+      this.writer.currentFile().handle.fd,
+      this.currentVersion,
+      this.deps.idDeps.hasher,
+      this.idCache,
+    );
+  }
+
+  /** A meta map entry of the published version. */
+  getMeta(key: string): Promise<Uint8Array | undefined> {
+    return this.whilePinned(() =>
+      mapReader(this.buildContext(), 'meta').get(
+        this.currentVersion?.roots.metaRoot ?? 0,
+        key,
+      ),
+    );
+  }
+
+  /** A state map entry of the published version. */
+  getState(key: string): Promise<Uint8Array | undefined> {
+    return this.whilePinned(() => this.getStateUnpinned(key));
+  }
+
+  private getStateUnpinned(key: string): Promise<Uint8Array | undefined> {
+    return mapReader(this.buildContext(), 'state').get(
+      this.currentVersion?.roots.stateRoot ?? 0,
+      key,
+    );
+  }
+
+  /** The live checkpoints of the published version (design 4.9). */
+  async *checkpoints(): AsyncGenerator<ListedCheckpoint> {
+    const read = await this.openRead();
+    try {
+      yield* listCheckpoints(
+        this.requireAccess(),
+        this.stateCache,
+        this.currentVersion?.roots.stateRoot ?? 0,
+      );
+    } finally {
+      await read.close();
+    }
+  }
+
+  /** One checkpoint of the published version; undefined when it does not exist or was deleted. */
+  async checkpoint(id: string): Promise<CheckpointDescriptor | undefined> {
+    const bytes = await this.getState(checkpointKey(id));
+    return bytes === undefined ? undefined : parseCheckpointEntry(bytes);
+  }
+
+  /** Id facts of the published version; close them when the queries are done (they hold a pin). */
+  async idFacts(): Promise<PinnedIdFacts> {
+    return openStoreIdFacts(
+      await this.openRead(),
+      this.idCache,
+      this.deps.idDeps,
+    );
+  }
+
+  /** The live rows of the published version, in label order. */
+  async *rows(from = 0): AsyncGenerator<RowEntry> {
+    const read = await this.openRead();
+    try {
+      const root =
+        this.currentVersion === undefined
+          ? undefined
+          : rootRef(this.currentVersion);
+      if (root === undefined || this.access === undefined) return;
+      yield* iterateRowEntries(this.access, root, from);
+    } finally {
+      await read.close();
+    }
+  }
+
+  /** The published version with the reads that reach it, taken together and pinned until `close` (see `VersionSnapshot`). */
+  async snapshot(): Promise<VersionSnapshot> {
+    const read = await this.openRead();
+    return new VersionSnapshot(
+      read,
+      this.deps.idDeps,
+      this.idCache,
+      this.sortedLabels,
+      this.writer.reader,
+    );
+  }
+
+  readonly sortedLabels = journalLabelSorter({
+    openRead: () => this.openRead(),
+    enqueue: (run) => this.enqueueCommit(run),
+    writer: () => this.writer,
+    context: () => ({ build: this.buildContext(), plan: this.planContext() }),
+    installed: () => this.install(this.writer.published?.trailer),
+  });
+
+  private readonly preparePinnedRequest = pinnedRequestPreparation({
+    enqueue: (run) => this.enqueueCommit(run),
+    writer: () => this.writer,
+    context: () => ({ build: this.buildContext(), plan: this.planContext() }),
+    installed: () => this.install(this.writer.published?.trailer),
+  });
+
+  prepareSnapshotFormat(
+    snapshot: VersionSnapshot,
+    registration: RegisteredRowFormat['registration'],
+  ): Promise<VersionSnapshot> {
+    return this.preparePinnedRequest(snapshot, registration);
+  }
+
+  prepareSnapshotKimi(snapshot: VersionSnapshot): Promise<VersionSnapshot> {
+    return this.preparePinnedRequest(snapshot, 'kimi');
+  }
+
+  prepareSnapshotFacts(
+    snapshot: VersionSnapshot,
+    nativeFacts: NonNullable<
+      RegisteredRowFormat['registration']['nativeFacts']
+    >,
+  ): Promise<VersionSnapshot> {
+    return this.preparePinnedRequest(snapshot, { nativeFacts });
+  }
+
+  restorationOf(saved: VersionSnapshot): VersionEdit {
+    return saved.restorationIn(this.writer.reader);
+  }
+
+  /** The header and raw id strings of the row an entry points at (design 4.6), without its blocks. */
+  readRowIds(entry: RowEntry): Promise<RowIds> {
+    return this.whilePinned(() => readRowIds(this.requireAccess(), entry));
+  }
+
+  /** The whole row an entry points at. */
+  readRow(entry: RowEntry): Promise<StoredRow> {
+    return this.whilePinned(() => readStoredRow(this.requireAccess(), entry));
+  }
+
+  /** The version a trailer at `offset` carries. */
+  readVersion(offset: number): Promise<Version> {
+    return this.whilePinned(() => readVersionAt(this.requireAccess(), offset));
+  }
+
+  private readonly makeCache = (): IdNodeCache =>
+    this.deps.createCache?.() ?? new BoundedIdNodeCache();
+
+  /** The idle point of design 4.11: nothing queued, no pin, the queue held by the caller. */
+  private async compactWhenIdle(): Promise<void> {
+    const version = this.currentVersion;
+    if (
+      version === undefined ||
+      this.closing ||
+      this.queued > 0 ||
+      this.compactionFailure !== undefined
+    ) {
+      return;
+    }
+    const readState = this.getStateUnpinned.bind(this);
+    const due =
+      this.deps.compactionDue?.(version, this.rearmAt) ??
+      (await transcriptCompactionDue(version, this.rearmAt, readState));
+    if (!due || this.queued > 0) return;
+    if (
+      this.pins > 0 ||
+      this.admissions.pending ||
+      this.mediaPins.releasePending
+    ) {
+      this.deferredByPin = true;
+      return;
+    }
+    try {
+      await this.runCompaction(true);
+    } catch (error) {
+      this.compactionFailure = { error };
+    }
+  }
+
+  private runCompaction(automatic = false): Promise<SwapOutcome> {
+    this.maintenance.consumeRequests();
+    return this.automaticCompaction.run(
+      (signal) =>
+        compactStoreFile({
+          signal,
+          path: this.path,
+          unlinked: this.unlinked,
+          writer: this.writer,
+          access: this.requireAccess(),
+          version: this.requireVersion(),
+          deps: this.deps,
+          fileOperations: this.fileOperations,
+          restart: () => this.restartOnNewFile(),
+          rearm: (value) => {
+            this.rearmAt = value;
+          },
+        }),
+      automatic,
+    );
+  }
+
+  /** Every offset a cache or a chain holds belongs to the old file. */
+  private restartOnNewFile(): void {
+    this.idCache = this.makeCache();
+    this.metaCache = this.makeCache();
+    this.stateCache = this.makeCache();
+    this.spineEntry = undefined;
+    this.chain = undefined;
+    this.install(this.writer.published?.trailer);
+    this.rearmAt = 0;
+  }
+
+  private async reuseRowFormat(
+    edits: readonly VersionEdit[],
+  ): Promise<CommittedGroup | undefined> {
+    const before = this.currentVersion;
+    const warm = await warmRowFormat(
+      this.buildContext(),
+      edits,
+      this.rowFormats,
+    );
+    const facts = await warmNativeFacts(this.buildContext(), edits);
+    const ranking = await warmToolRanking(this.buildContext(), edits);
+    const files = await warmDensityFiles(this.buildContext(), edits);
+    if (
+      [warm, facts, ranking, files].every((value) => value === undefined) ||
+      before === undefined
+    )
+      return undefined;
+    if (ranking !== undefined) this.toolRanking = ranking;
+    if (files !== undefined) this.densityFiles = files;
+    if (warm !== undefined) this.rowFormats = warm;
+    if (facts !== undefined) this.factIndex = facts;
+    const read = this.readOfPublished();
+    return {
+      ack: {
+        commitSeq: before.commitSeq,
+        durableEnd: before.durableEnd,
+        groupTag: before.groupTag,
+      },
+      before,
+      after: before,
+      read,
+      writtenLabels: [],
+      close: () => read.close(),
+    };
+  }
+
+  private async runCommit(
+    edits: readonly VersionEdit[],
+  ): Promise<CommittedGroup> {
+    assertCompactionUsable(this.compactionFailure);
+    const before = this.currentVersion;
+    const warm = await this.reuseRowFormat(edits);
+    if (warm !== undefined) return warm;
+    let resolvedEdits = edits;
+    let publication: Awaited<ReturnType<typeof prepareBuild>> | undefined;
+    let factIndex = this.factIndex;
+    let plan: GroupPlan | undefined;
+    let built: BuiltGroup | undefined;
+    const effect = this.beginCommitEffect();
+    let ack: CommitAck | undefined;
+    let rowFormats = this.rowFormats;
+    const writtenNodes = new CommittedIdNodes();
+    try {
+      ack = await writtenNodes.prepareGroup(this.writer, async (appender) => {
+        try {
+          const prepared = await prepareBuild(
+            this.buildContext(),
+            this.planContext(),
+            edits,
+            appender,
+            effect === undefined ? appender : effectAppender(appender, effect),
+            this.registerNativeFacts(),
+          );
+          ({ plan, built, edits: resolvedEdits, facts: factIndex } = prepared);
+          publication = prepared;
+          if (built === undefined) {
+            await effect?.settle(false);
+            return undefined;
+          }
+          const filled = await this.finishBuilt(
+            await finishTranscript(built),
+            appender,
+            resolvedEdits,
+            factIndex,
+            effect,
+          );
+          built = filled.built;
+          rowFormats = filled.registered;
+          return built.state;
+        } catch (error) {
+          return rollbackEffect(effect, error);
+        }
+      });
+    } catch (error) {
+      return rollbackEffect(effect, error);
+    }
+    if (ack === undefined)
+      return unchangedGroup(this.readOfPublished(), this.currentVersion);
+    const trailer = this.writer.published?.trailer;
+    if (built === undefined || trailer === undefined || plan === undefined) {
+      throw new JournalFormatError('A committed group left no trailer');
+    }
+    this.install(trailer, writtenNodes);
+    this.rowFormats = rowFormats;
+    this.factIndex = factIndex;
+    this.toolRanking = toolRankingPolicy(resolvedEdits, this.toolRanking);
+    this.densityFiles = densityFilePolicy(resolvedEdits, this.densityFiles);
+    this.chain = built.chainBase.push(trailer.selfOffset);
+    if (built.spine !== undefined) {
+      this.spineEntry = { rowRoot: trailer.rowRoot, spine: built.spine };
+    }
+    await effect?.settle(true);
+    // Pinned before anything else can run, so no compaction separates the ack from its reader.
+    return committedGroup(
+      {
+        ack,
+        before,
+        after: this.requireVersion(),
+        read: this.readOfPublished(),
+        writtenLabels: writtenLabelsOf(plan, publication?.streamedAppend),
+        streamedAppend: publication?.streamedAppend,
+        retainedMetadataKeys: publication?.retainedMetadataKeys,
+      },
+      resolvedEdits,
+    );
+  }
+
+  private registerNativeFacts(): ReturnType<typeof nativeFactRegistration> {
+    return nativeFactRegistration(
+      this.buildContext(),
+      this.rowFormats,
+      this.factIndex,
+    );
+  }
+
+  private beginCommitEffect(): CommitEffect | undefined {
+    return this.commitEffect?.({
+      read: this.buildContext().readGroup,
+      getState: (key) => this.getStateUnpinned(key),
+    });
+  }
+
+  private async finishBuilt(
+    built: BuiltGroup,
+    appender: RecordAppender,
+    edits: readonly VersionEdit[],
+    facts: NativeFactIndexRegistration | undefined,
+    effect: CommitEffect | undefined,
+  ): ReturnType<typeof fillRowFormats> {
+    return finishStoreFormats(
+      this.buildContext(),
+      built,
+      appender,
+      edits,
+      {
+        ranking: this.toolRanking,
+        files: this.densityFiles,
+        facts,
+        formats: this.rowFormats,
+      },
+      effect,
+    );
+  }
+
+  private requireVersion(): Version {
+    if (this.currentVersion === undefined) {
+      throw new JournalFormatError('The journal has no committed group');
+    }
+    return this.currentVersion;
+  }
+
+  /** The only place the published version moves. */
+  private install(
+    trailer: Parameters<typeof versionOf>[0] | undefined,
+    writtenNodes?: CommittedIdNodes,
+  ): void {
+    if (trailer === undefined) return;
+    writtenNodes?.publish(
+      trailer,
+      this.idCache,
+      this.metaCache,
+      this.stateCache,
+    );
+    this.currentVersion = versionOf(trailer);
+    this.access = createRecordAccess(
+      this.path,
+      this.writer.reader,
+      trailer,
+      true,
+      true,
+      writtenNodes?.nodeExtents,
+    );
+  }
+
+  private requireAccess(): RecordAccess {
+    if (this.access === undefined) {
+      throw new JournalFormatError('The journal has no committed group');
+    }
+    return this.access;
+  }
+
+  private planContext(): PlanContext {
+    return {
+      access: this.access,
+      published: this.currentVersion,
+      readVersion: (offset) => readVersionAt(this.requireAccess(), offset),
+      firstNextLabel: FIRST_NEXT_LABEL,
+      readState: (key) => this.getStateUnpinned(key),
+    };
+  }
+
+  enableNeutralRowFacts(): boolean {
+    if (this.neutralRowFactsEnabled || this.deps.neutralRowFacts === undefined)
+      return false;
+    this.neutralRowFactsEnabled = true;
+    return true;
+  }
+
+  private buildContext(): BuildContext {
+    return {
+      sortedLabels: this.sortedLabels,
+      measureFormats: this.rowFormats.length > 0,
+      access: this.access,
+      readGroup: groupReadAccess(this.path, this.writer, this.currentVersion),
+      published: this.currentVersion,
+      hasher: this.deps.idDeps.hasher,
+      idDeps: this.deps.idDeps,
+      planOccurrences: this.deps.planOccurrences,
+      recencyFactPolicy: this.deps.recencyFactPolicy,
+      contextSpanPolicy: this.deps.contextSpanPolicy,
+      neutralRowFacts: this.deps.neutralRowFacts,
+      deferNeutralRowFacts: !this.neutralRowFactsEnabled,
+      idCache: this.idCache,
+      metaCache: this.metaCache,
+      stateCache: this.stateCache,
+      algebra: this.deps.algebra,
+      spineFor: (version) => this.spineFor(version),
+      chainFor: (parent) => this.chainFor(parent),
+      commitSeq: (this.currentVersion?.commitSeq ?? 0) + 1,
+    };
+  }
+
+  private async spineFor(version: Version): Promise<RightSpine> {
+    if (this.spineEntry?.rowRoot === version.roots.rowRoot) {
+      return this.spineEntry.spine;
+    }
+    const spine = await loadRightSpine(this.requireAccess(), {
+      offset: version.roots.rowRoot,
+      rows: version.rows,
+    });
+    this.spineEntry = { rowRoot: version.roots.rowRoot, spine };
+    return spine;
+  }
+
+  private async chainFor(parent: Version | undefined): Promise<LineageChain> {
+    if (parent === undefined) return LineageChain.NONE;
+    const held = this.chain?.truncatedTo(parent.lineageDepth);
+    if (held?.offsetAtDepth(parent.lineageDepth) === parent.selfOffset) {
+      return held;
+    }
+    return loadChain(
+      (offset) => readVersionAt(this.requireAccess(), offset),
+      parent,
+    );
+  }
+}

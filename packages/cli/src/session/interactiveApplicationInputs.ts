@@ -3,14 +3,17 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { RestoreCommandOperations } from '../ui/commands/restoreCommand.js';
+import type { ResumeContext } from '../services/performResume.js';
+import type { DumpcontextOwnerBindings } from '../ui/commands/dumpcontextCommandHost.js';
 import type { WorkspaceCommandRuntime } from '../ui/hooks/workspaceCommandOwners.js';
 import type { AppProps } from '../ui/App.js';
 import type { ReactNode } from 'react';
 import type {
   ApprovalMode,
-  IContent,
+  ResumeBootHandle,
   RecordingIntegration,
-  SessionRecordingService,
+  SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import type {
   BrowserResumeRuntime,
@@ -59,7 +62,7 @@ export interface InteractiveApplicationInputs
   extends Pick<
     Agent,
     | 'addHistory'
-    | 'getHistory'
+    | 'streamHistory'
     | 'stream'
     | 'injectSteer'
     | 'getProviderContextLimit'
@@ -81,6 +84,11 @@ export interface InteractiveApplicationInputs
     | 'setDefaultProfileName'
     | 'listProviders'
   > {
+  readJournal: AppProps['readJournal'];
+  subscribeContextRange: AppProps['subscribeContextRange'];
+  openDumpSnapshot: DumpcontextOwnerBindings['readHistory'];
+  replaceHistoryFromSource: RestoreCommandOperations['replaceHistoryFromSource'];
+  resumeHistory: ResumeContext['history'];
   containerApp: ContainerAppReads;
   containerSession: ContainerSessionReads;
   containerTerminal: ContainerTerminalReads;
@@ -111,6 +119,7 @@ export interface InteractiveApplicationInputs
     | 'listBrowserTargetsDetailed'
     | 'importSession'
     | 'getHistory'
+    | 'getJournalLength'
     | 'replaceHistory'
     | 'recordRecordingEvent'
     | 'startNewSession'
@@ -212,14 +221,14 @@ export interface InteractiveApplicationInputs
   oauthControl: OAuthControl;
   settings: LoadedSettings;
   startupWarnings?: string[];
-  resumedHistory?: IContent[];
+  resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
   version: string;
   terminalBackgroundColor?: string;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
   recordingIntegration?: RecordingIntegration;
   recordingOwner?: 'agent' | 'raw';
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
-  initialRecordingService?: SessionRecordingService;
+  initialRecordingService?: SessionRecordingPort;
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
   initialLockHandle?: AppContainerProps['initialLockHandle'];
   suppressStartupWelcome?: boolean;

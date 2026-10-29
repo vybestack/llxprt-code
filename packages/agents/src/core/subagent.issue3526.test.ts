@@ -1,6 +1,3 @@
-import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
-import { scopeInputs } from './__tests__/subagent-test-helpers.js';
-import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -10,19 +7,34 @@ import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/tool
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
+import {
+  afterAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type {
-  ContentBlock,
-  IContent,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import {
+  OUTPUT_CONFIG,
+  declarationsFrom,
+  emitCall,
+  findMissingOutputNudge,
+  hermesEmissions,
+  nativeEmissions,
+  requestText,
+  stopped,
+  toolCall,
+} from './__tests__/support/subagent.issue3526-test-helpers.js';
 import type {
   RuntimeGenerateChatOptions as GenerateChatOptions,
   RuntimeProviderToolset,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type {
-  AgentRuntimeContext,
   AgentRuntimeProviderAdapter,
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -35,6 +47,7 @@ import {
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import type { ChildAgentScope } from './subagentOrchestrator.js';
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
 import {
   createCompletedToolCallResponse,
@@ -43,6 +56,7 @@ import {
   createSubagentConfig,
   acquireSubagentSettings,
   acquireSubagentWorkspace,
+  scopeInputs,
   createRuntimeOverrides,
   createStatelessRuntimeBundle,
   defaultModelConfig,
@@ -66,15 +80,6 @@ void vi.mock('@vybestack/llxprt-code-tools', () => ({
   ...toolsModule,
   LocalTodoStore: TodoStoreMock,
 }));
-
-const OUTPUT_CONFIG: OutputConfig = {
-  outputs: {
-    alpha: 'first value',
-    beta: 'second value',
-    gamma: 'third value',
-    delta: 'fourth value',
-  },
-};
 
 const EXPECTED_EMIT_SCHEMA = {
   type: 'object',
@@ -181,80 +186,6 @@ function mockCancelledPause(callId: string): void {
   });
 }
 
-function toolCall(
-  name: string,
-  parameters: Readonly<Record<string, unknown>>,
-  id = name,
-): ContentBlock {
-  return { type: 'tool_call', id, name, parameters };
-}
-
-function emitCall(
-  name: keyof typeof OUTPUT_CONFIG.outputs,
-  value: string,
-): ContentBlock {
-  return toolCall(
-    'self_emitvalue',
-    { emit_variable_name: name, emit_variable_value: value },
-    `emit-${name}`,
-  );
-}
-
-function nativeEmissions(
-  entries: ReadonlyArray<readonly [keyof typeof OUTPUT_CONFIG.outputs, string]>,
-): IContent {
-  return {
-    speaker: 'ai',
-    blocks: entries.map(([name, value]) => emitCall(name, value)),
-  };
-}
-
-function hermesEmissions(
-  entries: ReadonlyArray<readonly [keyof typeof OUTPUT_CONFIG.outputs, string]>,
-): IContent {
-  const text = entries
-    .map(
-      ([name, value]) =>
-        `<tool_call>\n${JSON.stringify({ name: 'self_emitvalue', arguments: { emit_variable_name: name, emit_variable_value: value } })}\n</tool_call>`,
-    )
-    .join('\n');
-  return { speaker: 'ai', blocks: [{ type: 'text', text }] };
-}
-
-function stopped(text = 'Done.'): IContent {
-  return { speaker: 'ai', blocks: [{ type: 'text', text }] };
-}
-
-function declarationsFrom(options: GenerateChatOptions): ToolDeclaration[] {
-  if (options.tools === undefined) {
-    throw new Error('Expected provider request tool declarations.');
-  }
-  return options.tools;
-}
-
-function requestText(options: GenerateChatOptions): string {
-  return options.contents
-    .flatMap((content) => content.blocks)
-    .map((block) => {
-      if (block.type === 'text') return block.text;
-      if (block.type !== 'tool_response') return '';
-      return JSON.stringify(block.result);
-    })
-    .join('\n');
-}
-
-function findMissingOutputNudge(
-  requests: readonly GenerateChatOptions[],
-): GenerateChatOptions {
-  const request = requests.find((candidate) =>
-    requestText(candidate).includes('not emitted'),
-  );
-  if (request === undefined) {
-    throw new Error('Expected a missing-output nudge request.');
-  }
-  return request;
-}
-
 function createHookExecution(
   config: Config,
   mode: HookMode,
@@ -278,59 +209,83 @@ function createHookExecution(
   };
 }
 
-async function createHarness(
-  retainSubagentCleanup: (close: () => void | Promise<void>) => () => void,
-  params: {
-    readonly responses: readonly IContent[];
-    readonly hookMode?: HookMode;
-    readonly toolConfig?: { readonly tools: readonly string[] };
-    readonly outputConfig?: OutputConfig | null;
-  },
-): Promise<RuntimeHarness> {
-  const configSettings = seedSubagentSettings();
-  const config = createSubagentConfig(configSettings, retainSubagentCleanup);
-  await acquireSubagentSettings(config, configSettings, retainSubagentCleanup);
+/** Providers consume the request snapshot during the call; later assertions replay the rows. */
+async function captureRequest(
+  input: GenerateChatOptions,
+): Promise<GenerateChatOptions> {
+  const rows: IContent[] = [];
+  for await (const row of input.contents) rows.push(row);
+  return {
+    ...input,
+    contents: {
+      async *[Symbol.asyncIterator]() {
+        yield* rows;
+      },
+    },
+  };
+}
+
+function createScriptedProvider(
+  responses: readonly IContent[],
+  requests: GenerateChatOptions[],
+): IProvider {
+  let responseIndex = 0;
+  function generateChatCompletion(
+    options: GenerateChatOptions,
+  ): AsyncIterableIterator<IContent>;
+  function generateChatCompletion(
+    content: AsyncIterable<IContent>,
+    tools?: RuntimeProviderToolset,
+    signal?: AbortSignal,
+  ): AsyncIterableIterator<IContent>;
+  function generateChatCompletion(
+    input: GenerateChatOptions | AsyncIterable<IContent>,
+  ): AsyncIterableIterator<IContent> {
+    return (async function* () {
+      if (Symbol.asyncIterator in input) {
+        throw new Error('Expected request options from the runtime.');
+      }
+      requests.push(await captureRequest(input));
+      const response = responses[responseIndex] ?? stopped();
+      responseIndex += 1;
+      yield response;
+    })();
+  }
+  return {
+    name: 'gemini',
+    getModels: async () => [],
+    getDefaultModel: () => defaultModelConfig.model,
+    generateChatCompletion,
+  };
+}
+
+const retainSubagentCleanup = installSubagentCleanup();
+
+async function createHarness(params: {
+  readonly responses: readonly IContent[];
+  readonly hookMode?: HookMode;
+  readonly toolConfig?: { readonly tools: readonly string[] };
+  readonly outputConfig?: OutputConfig | null;
+}): Promise<RuntimeHarness> {
+  const settings = seedSubagentSettings();
+  const config = createSubagentConfig(settings, retainSubagentCleanup);
+  await acquireSubagentSettings(config, settings, retainSubagentCleanup);
   const mcpRuntime = await acquireSubagentWorkspace(
     config,
     retainSubagentCleanup,
   );
   const toolRegistry = mcpRuntime.toolSelection;
   const requests: GenerateChatOptions[] = [];
-  let responseIndex = 0;
-  function generateChatCompletion(
-    options: GenerateChatOptions,
-  ): AsyncIterableIterator<IContent>;
-  function generateChatCompletion(
-    content: IContent[],
-    tools?: RuntimeProviderToolset,
-    signal?: AbortSignal,
-  ): AsyncIterableIterator<IContent>;
-  function generateChatCompletion(
-    input: GenerateChatOptions | IContent[],
-  ): AsyncIterableIterator<IContent> {
-    return (async function* () {
-      if (Array.isArray(input)) {
-        throw new Error('Expected request options from the runtime.');
-      }
-      requests.push(input);
-      const response = params.responses[responseIndex] ?? stopped();
-      responseIndex += 1;
-      yield response;
-    })();
-  }
-  const provider: IProvider = {
-    name: 'gemini',
-    getModels: async () => [],
-    getDefaultModel: () => defaultModelConfig.model,
-    generateChatCompletion,
-  };
+  const provider = createScriptedProvider(params.responses, requests);
   const providerAdapter: AgentRuntimeProviderAdapter = {
+    getProviderKeys: () => {
+      throw new Error(
+        'Output-emitter fixture does not use provider credentials',
+      );
+    },
     getActiveProvider: () => provider,
     getProviderByName: () => provider,
     setActiveProvider: vi.fn(),
-    getProviderKeys: () => {
-      throw new Error('Test provider adapter has no key storage');
-    },
   };
   const toolsView: ToolRegistryView = {
     listToolNames: () => ['read_file', 'run_shell_command', 'todo_pause'],
@@ -345,18 +300,13 @@ async function createHarness(
     toolRegistry,
     toolsView,
     history: new HistoryService(),
+    settings,
   });
   const hookOwner = createHookExecution(
     config,
     params.hookMode ?? { enabled: false },
   );
-  const runtimeContext: AgentRuntimeContext = {
-    ...baseBundle.runtimeContext,
-    providerRuntime: {
-      ...baseBundle.runtimeContext.providerRuntime,
-    },
-  };
-  const runtimeBundle = { ...baseBundle, runtimeContext };
+  const runtimeBundle = baseBundle;
   const { overrides } = createRuntimeOverrides(
     mcpRuntime.workspaceFilesystem.paths,
     { runtimeBundle, toolRegistry },
@@ -391,389 +341,203 @@ const FOUR_VALUES = [
 ] as const;
 
 describe('non-interactive scope-local output emitter', () => {
-  const retainSubagentCleanup = installSubagentCleanup();
+  afterAll(() => {
+    void vi.mock(
+      './nonInteractiveToolExecutor.js',
+      () => realNonInteractiveToolExecutorModule,
+    );
+    void vi.mock('@vybestack/llxprt-code-tools', () => toolsModule);
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
     readTodos.mockResolvedValue([]);
   });
 
-  it.each([
-    [
-      'no whitelist with hooks disabled',
-      undefined,
-      { enabled: false } as const,
-    ],
-    [
-      'empty whitelist with hooks disabled',
-      { tools: [] as const },
-      { enabled: false } as const,
-    ],
-    [
-      'hook without allowedFunctionNames',
-      undefined,
-      { enabled: true } as const,
-    ],
-  ])(
-    'provides one correctly shaped emitter for %s',
-    async (_name, toolConfig, hookMode) => {
-      const harness = await createHarness(retainSubagentCleanup, {
-        responses: [nativeEmissions(FOUR_VALUES), stopped()],
-        toolConfig,
-        hookMode,
-      });
+  registerCase1();
 
-      await harness.scope.runNonInteractive(new ContextState());
+  registerCase2();
 
-      const emitters = declarationsFrom(harness.requests[0]).filter(
-        (declaration) => declaration.name === 'self_emitvalue',
-      );
-      expect(emitters).toStrictEqual([
-        expect.objectContaining({
-          name: 'self_emitvalue',
-          parametersJsonSchema: EXPECTED_EMIT_SCHEMA,
-        }),
-      ]);
-    },
-  );
+  registerCase3();
 
-  it.each([
-    ['ordinary allowlist', ['read_file'] as const, ['read_file']],
-    [
-      'allowlist omitting emitter',
-      ['run_shell_command'] as const,
-      ['run_shell_command'],
-    ],
-    ['empty allowlist', [] as const, []],
-  ])(
-    'retains the emitter while filtering ordinary tools for %s',
-    async (_name, allowedFunctionNames, expectedOrdinaryNames) => {
-      const harness = await createHarness(retainSubagentCleanup, {
-        responses: [nativeEmissions(FOUR_VALUES), stopped()],
-        hookMode: { enabled: true, allowedFunctionNames },
-      });
+  registerCase4();
 
-      await harness.scope.runNonInteractive(new ContextState());
+  registerCase5();
 
-      const names = declarationsFrom(harness.requests[0]).map(
-        (declaration) => declaration.name,
-      );
-      expect(names.filter((name) => name === 'self_emitvalue')).toHaveLength(1);
-      expect(names.filter((name) => name !== 'self_emitvalue')).toStrictEqual(
-        expectedOrdinaryNames,
-      );
-    },
-  );
+  registerCase6();
 
-  it('completes four native emissions with GOAL after one provider request', async () => {
-    const harness = await createHarness(retainSubagentCleanup, {
-      responses: [nativeEmissions(FOUR_VALUES)],
-    });
+  registerCase7();
 
-    await harness.scope.runNonInteractive(new ContextState());
+  registerCase8();
 
-    expect(harness.scope.output.emitted_vars).toStrictEqual({
-      alpha: 'A',
-      beta: 'B',
-      gamma: 'C',
-      delta: 'D',
-    });
-    expect(harness.scope.output.terminate_reason).toBe(
-      SubagentTerminateMode.GOAL,
-    );
-    expect(harness.requests).toHaveLength(1);
-    expect(harness.requests.map(requestText).join('\n')).not.toContain(
-      'not emitted',
-    );
-  });
+  registerCase9();
 
-  it('completes four Hermes emissions with GOAL after one provider request', async () => {
-    const harness = await createHarness(retainSubagentCleanup, {
-      responses: [hermesEmissions(FOUR_VALUES)],
-    });
+  registerCase10();
 
-    await harness.scope.runNonInteractive(new ContextState());
+  registerCase11();
 
-    expect(harness.scope.output.emitted_vars).toStrictEqual({
-      alpha: 'A',
-      beta: 'B',
-      gamma: 'C',
-      delta: 'D',
-    });
-    expect(harness.scope.output.terminate_reason).toBe(
-      SubagentTerminateMode.GOAL,
-    );
-    expect(harness.requests).toHaveLength(1);
-    expect(harness.requests.map(requestText).join('\n')).not.toContain(
-      'not emitted',
-    );
-  });
+  registerCase12();
+});
 
-  it('terminates on the provider request containing the final partial emissions', async () => {
-    const harness = await createHarness(retainSubagentCleanup, {
-      responses: [
-        nativeEmissions(FOUR_VALUES.slice(0, 2)),
-        stopped('Waiting.'),
-        nativeEmissions(FOUR_VALUES.slice(2)),
+function registerCase1(): void {
+  describe('emitter declaration shape', () => {
+    it.each([
+      [
+        'no whitelist with hooks disabled',
+        undefined,
+        { enabled: false } as const,
       ],
-    });
-
-    await harness.scope.runNonInteractive(new ContextState());
-
-    const nudgeRequest = findMissingOutputNudge(harness.requests);
-    expect(requestText(nudgeRequest)).toContain('gamma, delta');
-    expect(requestText(nudgeRequest)).not.toContain('alpha, beta');
-    expect(
-      declarationsFrom(nudgeRequest).filter(
-        (declaration) => declaration.name === 'self_emitvalue',
-      ),
-    ).toHaveLength(1);
-    expect(
-      harness.requests.map(
-        (request) =>
-          declarationsFrom(request).filter(
-            (declaration) => declaration.name === 'self_emitvalue',
-          ).length,
-      ),
-    ).toStrictEqual([1, 1, 1]);
-    expect(harness.requests).toHaveLength(3);
-    expect(harness.scope.output.terminate_reason).toBe(
-      SubagentTerminateMode.GOAL,
-    );
-    expect(harness.scope.output.emitted_vars).toStrictEqual({
-      alpha: 'A',
-      beta: 'B',
-      gamma: 'C',
-      delta: 'D',
-    });
-  });
-
-  it('stops immediately with ERROR after a successful case-insensitive todo_pause', async () => {
-    const harness = await createHarness(retainSubagentCleanup, {
-      responses: [
-        {
-          speaker: 'ai',
-          blocks: [
-            toolCall('TODO_PAUSE', { reason: 'blocked' }, 'pause-success'),
-          ],
-        },
+      [
+        'empty whitelist with hooks disabled',
+        { tools: [] as const },
+        { enabled: false } as const,
       ],
-    });
+      [
+        'hook without allowedFunctionNames',
+        undefined,
+        { enabled: true } as const,
+      ],
+    ])(
+      'provides one correctly shaped emitter for %s',
+      async (_name, toolConfig, hookMode) => {
+        const harness = await createHarness({
+          responses: [nativeEmissions(FOUR_VALUES), stopped()],
+          toolConfig,
+          hookMode,
+        });
 
-    mockSuccessfulPause('pause-success', 'TODO_PAUSE');
+        await harness.scope.runNonInteractive(new ContextState());
 
-    await harness.scope.runNonInteractive(new ContextState());
-
-    expect(harness.scope.output.terminate_reason).toBe(
-      SubagentTerminateMode.ERROR,
-    );
-    expect(harness.scope.output.final_message).toContain(
-      'todo_pause before completing required outputs: alpha, beta, gamma, delta',
-    );
-    expect(harness.requests).toHaveLength(1);
-    expect(harness.requests.map(requestText).join('\n')).not.toContain(
-      'not emitted',
+        const emitters = declarationsFrom(harness.requests[0]).filter(
+          (declaration) => declaration.name === 'self_emitvalue',
+        );
+        expect(emitters).toStrictEqual([
+          expect.objectContaining({
+            name: 'self_emitvalue',
+            parametersJsonSchema: EXPECTED_EMIT_SCHEMA,
+          }),
+        ]);
+      },
     );
   });
+}
 
-  it.each([
-    ['no output configuration', null],
-    ['an empty output map', { outputs: {} } satisfies OutputConfig],
-  ])(
-    'reports GOAL when successful todo_pause has %s',
-    async (_name, outputConfig) => {
-      const harness = await createHarness(retainSubagentCleanup, {
-        responses: [
-          {
-            speaker: 'ai',
-            blocks: [
-              toolCall(
-                'todo_pause',
-                { reason: 'complete' },
-                'pause-no-outputs',
-              ),
-            ],
-          },
-        ],
-        outputConfig,
+function registerCase2(): void {
+  describe('ordinary tool filtering', () => {
+    it.each([
+      ['ordinary allowlist', ['read_file'] as const, ['read_file']],
+      [
+        'allowlist omitting emitter',
+        ['run_shell_command'] as const,
+        ['run_shell_command'],
+      ],
+      ['empty allowlist', [] as const, []],
+    ])(
+      'retains the emitter while filtering ordinary tools for %s',
+      async (_name, allowedFunctionNames, expectedOrdinaryNames) => {
+        const harness = await createHarness({
+          responses: [nativeEmissions(FOUR_VALUES), stopped()],
+          hookMode: { enabled: true, allowedFunctionNames },
+        });
+
+        await harness.scope.runNonInteractive(new ContextState());
+
+        const names = declarationsFrom(harness.requests[0]).map(
+          (declaration) => declaration.name,
+        );
+        expect(names.filter((name) => name === 'self_emitvalue')).toHaveLength(
+          1,
+        );
+        expect(names.filter((name) => name !== 'self_emitvalue')).toStrictEqual(
+          expectedOrdinaryNames,
+        );
+      },
+    );
+  });
+}
+
+function registerCase3(): void {
+  describe('native output completion', () => {
+    it('completes four native emissions with GOAL after one provider request', async () => {
+      const harness = await createHarness({
+        responses: [nativeEmissions(FOUR_VALUES)],
       });
-      mockSuccessfulPause('pause-no-outputs');
 
       await harness.scope.runNonInteractive(new ContextState());
 
+      expect(harness.scope.output.emitted_vars).toStrictEqual({
+        alpha: 'A',
+        beta: 'B',
+        gamma: 'C',
+        delta: 'D',
+      });
       expect(harness.scope.output.terminate_reason).toBe(
         SubagentTerminateMode.GOAL,
       );
       expect(harness.requests).toHaveLength(1);
-    },
-  );
-
-  it('does not treat an inherited emitted_vars property as a completed output before todo_pause', async () => {
-    const harness = await createHarness(retainSubagentCleanup, {
-      responses: [
-        {
-          speaker: 'ai',
-          blocks: [
-            toolCall(
-              'todo_pause',
-              { reason: 'blocked' },
-              'pause-inherited-key',
-            ),
-          ],
-        },
-      ],
-      outputConfig: { outputs: { toString: 'required value' } },
-    });
-    mockSuccessfulPause('pause-inherited-key');
-
-    await harness.scope.runNonInteractive(new ContextState());
-
-    expect(harness.scope.output.terminate_reason).toBe(
-      SubagentTerminateMode.ERROR,
-    );
-    expect(harness.scope.output.final_message).toContain('toString');
-  });
-
-  it('reports GOAL when successful todo_pause follows the final required emissions', async () => {
-    const harness = await createHarness(retainSubagentCleanup, {
-      responses: [
-        {
-          speaker: 'ai',
-          blocks: [
-            ...FOUR_VALUES.map(([name, value]) => emitCall(name, value)),
-            toolCall('TODO_PAUSE', { reason: 'complete' }, 'pause-complete'),
-          ],
-        },
-      ],
-    });
-
-    mockSuccessfulPause('pause-complete', 'TODO_PAUSE');
-
-    await harness.scope.runNonInteractive(new ContextState());
-
-    expect(harness.scope.output.emitted_vars).toStrictEqual({
-      alpha: 'A',
-      beta: 'B',
-      gamma: 'C',
-      delta: 'D',
-    });
-    expect(harness.scope.output.terminate_reason).toBe(
-      SubagentTerminateMode.GOAL,
-    );
-    expect(harness.requests).toHaveLength(1);
-  });
-
-  it('does not count shell output as declared output emission', async () => {
-    const harness = await createHarness(retainSubagentCleanup, {
-      responses: [
-        {
-          speaker: 'ai',
-          blocks: [
-            toolCall(
-              'run_shell_command',
-              { command: 'printf "alpha=A beta=B gamma=C delta=D"' },
-              'shell-output',
-            ),
-          ],
-        },
-        stopped('Shell command completed.'),
-        nativeEmissions(FOUR_VALUES),
-        stopped(),
-      ],
-    });
-    mockCompletedToolCall(
-      createCompletedToolCallResponse({
-        callId: 'shell-output',
-        responseParts: [
-          { type: 'text', text: 'alpha=A beta=B gamma=C delta=D' },
-        ],
-      }),
-    );
-
-    await harness.scope.runNonInteractive(new ContextState());
-
-    expect(requestText(findMissingOutputNudge(harness.requests))).toContain(
-      'alpha, beta, gamma, delta',
-    );
-    expect(harness.scope.output.terminate_reason).toBe(
-      SubagentTerminateMode.GOAL,
-    );
-    expect(harness.scope.output.emitted_vars).toStrictEqual({
-      alpha: 'A',
-      beta: 'B',
-      gamma: 'C',
-      delta: 'D',
+      expect(
+        (await Promise.all(harness.requests.map(requestText))).join('\n'),
+      ).not.toContain('not emitted');
     });
   });
+}
 
-  it('returns a cancelled todo_pause result to the model and continues', async () => {
-    const harness = await createHarness(retainSubagentCleanup, {
-      responses: [
-        {
-          speaker: 'ai',
-          blocks: [toolCall('todo_pause', {}, 'pause-cancelled')],
-        },
-        nativeEmissions(FOUR_VALUES),
-      ],
-    });
-    mockCancelledPause('pause-cancelled');
-
-    await harness.scope.runNonInteractive(new ContextState());
-
-    expect(requestText(harness.requests[1])).toContain('cancelled');
-    expect(harness.requests).toHaveLength(2);
-    expect(harness.scope.output.terminate_reason).toBe(
-      SubagentTerminateMode.GOAL,
-    );
-    expect(harness.scope.output.emitted_vars).toStrictEqual({
-      alpha: 'A',
-      beta: 'B',
-      gamma: 'C',
-      delta: 'D',
-    });
-  });
-
-  it.each([
-    ['failed', 'pause rejected', new Error('pause rejected'), undefined],
-    [
-      'malformed',
-      'reason is required',
-      undefined,
-      ToolErrorType.INVALID_TOOL_PARAMS,
-    ],
-  ])(
-    'returns a %s todo_pause failure to the model and continues',
-    async (_name, errorMessage, error, errorType) => {
-      const harness = await createHarness(retainSubagentCleanup, {
-        responses: [
-          {
-            speaker: 'ai',
-            blocks: [toolCall('todo_pause', {}, 'pause-failure')],
-          },
-          nativeEmissions(FOUR_VALUES),
-          stopped(),
-        ],
+function registerCase4(): void {
+  describe('Hermes output completion', () => {
+    it('completes four Hermes emissions with GOAL after one provider request', async () => {
+      const harness = await createHarness({
+        responses: [hermesEmissions(FOUR_VALUES)],
       });
-      mockCompletedToolCall(
-        createCompletedToolCallResponse({
-          callId: 'pause-failure',
-          responseParts: [
-            {
-              type: 'tool_response',
-              callId: 'pause-failure',
-              toolName: 'todo_pause',
-              result: { error: errorMessage },
-              error: errorMessage,
-            },
-          ],
-          error,
-          errorType,
-        }),
-      );
 
       await harness.scope.runNonInteractive(new ContextState());
 
-      expect(requestText(harness.requests[1])).toContain(errorMessage);
+      expect(harness.scope.output.emitted_vars).toStrictEqual({
+        alpha: 'A',
+        beta: 'B',
+        gamma: 'C',
+        delta: 'D',
+      });
+      expect(harness.scope.output.terminate_reason).toBe(
+        SubagentTerminateMode.GOAL,
+      );
+      expect(harness.requests).toHaveLength(1);
+      expect(
+        (await Promise.all(harness.requests.map(requestText))).join('\n'),
+      ).not.toContain('not emitted');
+    });
+  });
+}
+
+function registerCase5(): void {
+  describe('partial output completion', () => {
+    it('terminates on the provider request containing the final partial emissions', async () => {
+      const harness = await createHarness({
+        responses: [
+          nativeEmissions(FOUR_VALUES.slice(0, 2)),
+          stopped('Waiting.'),
+          nativeEmissions(FOUR_VALUES.slice(2)),
+        ],
+      });
+
+      await harness.scope.runNonInteractive(new ContextState());
+
+      const nudgeRequest = await findMissingOutputNudge(harness.requests);
+      expect(await requestText(nudgeRequest)).toContain('gamma, delta');
+      expect(await requestText(nudgeRequest)).not.toContain('alpha, beta');
+      expect(
+        declarationsFrom(nudgeRequest).filter(
+          (declaration) => declaration.name === 'self_emitvalue',
+        ),
+      ).toHaveLength(1);
+      expect(
+        harness.requests.map(
+          (request) =>
+            declarationsFrom(request).filter(
+              (declaration) => declaration.name === 'self_emitvalue',
+            ).length,
+        ),
+      ).toStrictEqual([1, 1, 1]);
+      expect(harness.requests).toHaveLength(3);
       expect(harness.scope.output.terminate_reason).toBe(
         SubagentTerminateMode.GOAL,
       );
@@ -783,6 +547,272 @@ describe('non-interactive scope-local output emitter', () => {
         gamma: 'C',
         delta: 'D',
       });
-    },
-  );
-});
+    });
+  });
+}
+
+function registerCase6(): void {
+  describe('successful pause', () => {
+    it('stops immediately with ERROR after a successful case-insensitive todo_pause', async () => {
+      const harness = await createHarness({
+        responses: [
+          {
+            speaker: 'ai',
+            blocks: [
+              toolCall('TODO_PAUSE', { reason: 'blocked' }, 'pause-success'),
+            ],
+          },
+        ],
+      });
+
+      mockSuccessfulPause('pause-success', 'TODO_PAUSE');
+
+      await harness.scope.runNonInteractive(new ContextState());
+
+      expect(harness.scope.output.terminate_reason).toBe(
+        SubagentTerminateMode.ERROR,
+      );
+      expect(harness.scope.output.final_message).toContain(
+        'todo_pause before completing required outputs: alpha, beta, gamma, delta',
+      );
+      expect(harness.requests).toHaveLength(1);
+      expect(
+        (await Promise.all(harness.requests.map(requestText))).join('\n'),
+      ).not.toContain('not emitted');
+    });
+  });
+}
+
+function registerCase7(): void {
+  describe('pause without required outputs', () => {
+    it.each([
+      ['no output configuration', null],
+      ['an empty output map', { outputs: {} } satisfies OutputConfig],
+    ])(
+      'reports GOAL when successful todo_pause has %s',
+      async (_name, outputConfig) => {
+        const harness = await createHarness({
+          responses: [
+            {
+              speaker: 'ai',
+              blocks: [
+                toolCall(
+                  'todo_pause',
+                  { reason: 'complete' },
+                  'pause-no-outputs',
+                ),
+              ],
+            },
+          ],
+          outputConfig,
+        });
+        mockSuccessfulPause('pause-no-outputs');
+
+        await harness.scope.runNonInteractive(new ContextState());
+
+        expect(harness.scope.output.terminate_reason).toBe(
+          SubagentTerminateMode.GOAL,
+        );
+        expect(harness.requests).toHaveLength(1);
+      },
+    );
+  });
+}
+
+function registerCase8(): void {
+  describe('inherited output properties', () => {
+    it('does not treat an inherited emitted_vars property as a completed output before todo_pause', async () => {
+      const harness = await createHarness({
+        responses: [
+          {
+            speaker: 'ai',
+            blocks: [
+              toolCall(
+                'todo_pause',
+                { reason: 'blocked' },
+                'pause-inherited-key',
+              ),
+            ],
+          },
+        ],
+        outputConfig: { outputs: { toString: 'required value' } },
+      });
+      mockSuccessfulPause('pause-inherited-key');
+
+      await harness.scope.runNonInteractive(new ContextState());
+
+      expect(harness.scope.output.terminate_reason).toBe(
+        SubagentTerminateMode.ERROR,
+      );
+      expect(harness.scope.output.final_message).toContain('toString');
+    });
+  });
+}
+
+function registerCase9(): void {
+  describe('pause after emissions', () => {
+    it('reports GOAL when successful todo_pause follows the final required emissions', async () => {
+      const harness = await createHarness({
+        responses: [
+          {
+            speaker: 'ai',
+            blocks: [
+              ...FOUR_VALUES.map(([name, value]) => emitCall(name, value)),
+              toolCall('TODO_PAUSE', { reason: 'complete' }, 'pause-complete'),
+            ],
+          },
+        ],
+      });
+
+      mockSuccessfulPause('pause-complete', 'TODO_PAUSE');
+
+      await harness.scope.runNonInteractive(new ContextState());
+
+      expect(harness.scope.output.emitted_vars).toStrictEqual({
+        alpha: 'A',
+        beta: 'B',
+        gamma: 'C',
+        delta: 'D',
+      });
+      expect(harness.scope.output.terminate_reason).toBe(
+        SubagentTerminateMode.GOAL,
+      );
+      expect(harness.requests).toHaveLength(1);
+    });
+  });
+}
+
+function registerCase10(): void {
+  describe('shell output isolation', () => {
+    it('does not count shell output as declared output emission', async () => {
+      const harness = await createHarness({
+        responses: [
+          {
+            speaker: 'ai',
+            blocks: [
+              toolCall(
+                'run_shell_command',
+                { command: 'printf "alpha=A beta=B gamma=C delta=D"' },
+                'shell-output',
+              ),
+            ],
+          },
+          stopped('Shell command completed.'),
+          nativeEmissions(FOUR_VALUES),
+          stopped(),
+        ],
+      });
+      mockCompletedToolCall(
+        createCompletedToolCallResponse({
+          callId: 'shell-output',
+          responseParts: [
+            { type: 'text', text: 'alpha=A beta=B gamma=C delta=D' },
+          ],
+        }),
+      );
+
+      await harness.scope.runNonInteractive(new ContextState());
+
+      expect(
+        await requestText(await findMissingOutputNudge(harness.requests)),
+      ).toContain('alpha, beta, gamma, delta');
+      expect(harness.scope.output.terminate_reason).toBe(
+        SubagentTerminateMode.GOAL,
+      );
+      expect(harness.scope.output.emitted_vars).toStrictEqual({
+        alpha: 'A',
+        beta: 'B',
+        gamma: 'C',
+        delta: 'D',
+      });
+    });
+  });
+}
+
+function registerCase11(): void {
+  describe('cancelled pause', () => {
+    it('returns a cancelled todo_pause result to the model and continues', async () => {
+      const harness = await createHarness({
+        responses: [
+          {
+            speaker: 'ai',
+            blocks: [toolCall('todo_pause', {}, 'pause-cancelled')],
+          },
+          nativeEmissions(FOUR_VALUES),
+        ],
+      });
+      mockCancelledPause('pause-cancelled');
+
+      await harness.scope.runNonInteractive(new ContextState());
+
+      expect(await requestText(harness.requests[1])).toContain('cancelled');
+      expect(harness.requests).toHaveLength(2);
+      expect(harness.scope.output.terminate_reason).toBe(
+        SubagentTerminateMode.GOAL,
+      );
+      expect(harness.scope.output.emitted_vars).toStrictEqual({
+        alpha: 'A',
+        beta: 'B',
+        gamma: 'C',
+        delta: 'D',
+      });
+    });
+  });
+}
+
+function registerCase12(): void {
+  describe('failed pause', () => {
+    it.each([
+      ['failed', 'pause rejected', new Error('pause rejected'), undefined],
+      [
+        'malformed',
+        'reason is required',
+        undefined,
+        ToolErrorType.INVALID_TOOL_PARAMS,
+      ],
+    ])(
+      'returns a %s todo_pause failure to the model and continues',
+      async (_name, errorMessage, error, errorType) => {
+        const harness = await createHarness({
+          responses: [
+            {
+              speaker: 'ai',
+              blocks: [toolCall('todo_pause', {}, 'pause-failure')],
+            },
+            nativeEmissions(FOUR_VALUES),
+            stopped(),
+          ],
+        });
+        mockCompletedToolCall(
+          createCompletedToolCallResponse({
+            callId: 'pause-failure',
+            responseParts: [
+              {
+                type: 'tool_response',
+                callId: 'pause-failure',
+                toolName: 'todo_pause',
+                result: { error: errorMessage },
+                error: errorMessage,
+              },
+            ],
+            error,
+            errorType,
+          }),
+        );
+
+        await harness.scope.runNonInteractive(new ContextState());
+
+        expect(await requestText(harness.requests[1])).toContain(errorMessage);
+        expect(harness.scope.output.terminate_reason).toBe(
+          SubagentTerminateMode.GOAL,
+        );
+        expect(harness.scope.output.emitted_vars).toStrictEqual({
+          alpha: 'A',
+          beta: 'B',
+          gamma: 'C',
+          delta: 'D',
+        });
+      },
+    );
+  });
+}

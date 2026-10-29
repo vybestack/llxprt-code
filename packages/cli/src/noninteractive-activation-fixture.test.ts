@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { Config, PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-core';
 import { buildNonInteractiveActivationIntent } from './__tests__/noninteractive-run-fixture.js';
-import { makeBootstrapProfileArgs } from './test-utils/bootstrap-config.js';
+import { makeBootstrapProfileArgs } from './test-utils/bootstrap-config.test-helper.js';
 
 const configs: Config[] = [];
 function makeConfig(model: string): Config {

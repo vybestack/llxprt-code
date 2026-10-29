@@ -1,181 +1,126 @@
-/**
- * Copyright 2026 Vybestack LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-/**
- * Behavioral tests for the canonical JSONL session header reader (AC-1).
- *
- * Creates sessions using the real SessionRecordingService and proves the
- * header reader discovers them. Covers BOM-prefixed and long first-line
- * (>4096 bytes) behavior.
- */
-
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, it, expect } from 'bun:test';
 import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
 import * as path from 'node:path';
-import { readSessionJsonlHeader } from './sessionHeaderReader.js';
-import { SessionRecordingService } from '../SessionRecordingService.js';
-import type { SessionRecordingServiceConfig } from '../types.js';
+import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
+import { JournalSession } from '../../services/history/journalSession.js';
+import { journalSeams } from '../__tests__/support/recordedJournals.js';
+import { SessionDiscovery } from '../SessionDiscovery.js';
+import {
+  JournalRecordingService,
+  type JournalRecordingConfig,
+} from '../journalRecordingService.js';
+import { sessionFactEdit } from '../sessionEdits.js';
+import { SESSION_KEYS } from '../sessionMetaKeys.js';
+import { readSessionHeaderInfo } from './sessionHeaderReader.js';
 
-function makeTempDir(): Promise<string> {
-  return fs.mkdtemp(path.join(os.tmpdir(), 'janitor-header-'));
-}
+describe('native session header reader', () => {
+  const tempDir = useTempDir('janitor-header-');
 
-function makeConfig(chatsDir: string): SessionRecordingServiceConfig {
-  return {
-    sessionId: 'test-session-' + crypto.randomUUID(),
-    projectHash: crypto.randomUUID().replace(/-/g, '').slice(0, 64),
-    chatsDir,
-    workspaceDirs: [chatsDir],
-    provider: 'test-provider',
-    model: 'test-model',
-  };
-}
+  function makeConfig(): JournalRecordingConfig {
+    return {
+      sessionId: 'test-session-' + crypto.randomUUID(),
+      projectHash: crypto.randomUUID().replace(/-/g, '').repeat(2),
+      chatsDir: tempDir(),
+      workspaceDirs: [tempDir()],
+      provider: 'test-provider',
+      model: 'test-model',
+      journal: journalSeams(),
+    };
+  }
 
-describe('readSessionJsonlHeader — real recorder output', () => {
-  let tempDir: string;
+  async function record(config: JournalRecordingConfig): Promise<string> {
+    const recording = JournalRecordingService.create(config);
+    try {
+      const session = await recording.session();
+      await session.append([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+      ]);
+      await recording.flush();
+      const filePath = recording.getFilePath();
+      expect(filePath).not.toBeNull();
+      if (filePath === null) throw new Error('Expected a session file');
+      return filePath;
+    } finally {
+      await recording.dispose();
+    }
+  }
 
-  beforeEach(async () => {
-    tempDir = await makeTempDir();
-  });
-
-  afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
-  });
-
-  it('reads the header from a real SessionRecordingService file', async () => {
-    const config = makeConfig(tempDir);
-    const svc = new SessionRecordingService(config);
-    svc.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'hello' }],
-    });
-    await svc.dispose();
-
-    const filePath = svc.getFilePath();
-    expect(filePath).not.toBeNull();
-
-    const header = await readSessionJsonlHeader(filePath!);
+  it('reads the header from a real native recorder file', async () => {
+    const config = makeConfig();
+    const filePath = await record(config);
+    const header = await readSessionHeaderInfo(filePath);
     expect(header).not.toBeNull();
-    expect(header!.sessionId).toBe(config.sessionId);
-    // The service writes the actual startTime from the session_start event —
-    // assert it is a real ISO timestamp, not a truthy placeholder.
-    expect(typeof header!.startTime).toBe('string');
-    expect(header!.startTime.length).toBeGreaterThan(0);
-    // Ensure it parses as a valid date.
-    expect(new Date(header!.startTime).getTime()).not.toBeNaN();
+    expect(header?.sessionId).toBe(config.sessionId);
+    expect(typeof header?.startTime).toBe('string');
+    expect(header?.startTime.length).toBeGreaterThan(0);
+    expect(new Date(header?.startTime ?? '').getTime()).not.toBeNaN();
+    expect(header?.projectHash).toBe(config.projectHash);
   });
 
   it('returns null for an empty file', async () => {
-    const filePath = path.join(tempDir, 'session-empty.jsonl');
+    const filePath = path.join(tempDir(), 'session-empty.llxj');
     await fs.writeFile(filePath, '');
-    const header = await readSessionJsonlHeader(filePath);
-    expect(header).toBeNull();
+    expect(await readSessionHeaderInfo(filePath)).toBeNull();
   });
 
-  it('returns null for a file with no session_start event', async () => {
-    const filePath = path.join(tempDir, 'session-noheader.jsonl');
-    await fs.writeFile(
-      filePath,
-      JSON.stringify({ type: 'content', payload: {} }) + '\n',
-    );
-    const header = await readSessionJsonlHeader(filePath);
-    expect(header).toBeNull();
+  it('returns null for a journal with no session facts', async () => {
+    const filePath = path.join(tempDir(), 'session-noheader.llxj');
+    const session = await JournalSession.create(filePath, journalSeams());
+    await session.close();
+    expect(await readSessionHeaderInfo(filePath)).toBeNull();
   });
 
   it('returns null for a non-existent file', async () => {
-    const header = await readSessionJsonlHeader(
-      path.join(tempDir, 'nonexistent.jsonl'),
+    expect(
+      await readSessionHeaderInfo(path.join(tempDir(), 'nonexistent.llxj')),
+    ).toBeNull();
+  });
+
+  it('reads session facts larger than 4096 bytes', async () => {
+    const config = { ...makeConfig(), workspaceDirs: ['x'.repeat(5000)] };
+    expect(JSON.stringify(config.workspaceDirs).length).toBeGreaterThan(4096);
+    const filePath = await record(config);
+    const discovered = await SessionDiscovery.readSessionHeader(filePath);
+    const header = await readSessionHeaderInfo(filePath);
+    expect(header).not.toBeNull();
+    expect(header?.sessionId).toBe(config.sessionId);
+    expect(header?.startTime).toBe(discovered?.startTime);
+    expect(discovered?.workspaceDirs).toStrictEqual(config.workspaceDirs);
+  });
+
+  it('returns null for corrupted session bytes', async () => {
+    const filePath = path.join(tempDir(), 'session-bad.llxj');
+    await fs.writeFile(filePath, 'this is not a journal\n');
+    expect(await readSessionHeaderInfo(filePath)).toBeNull();
+  });
+
+  it('returns null for native session facts with an unsafe/path-like sessionId', async () => {
+    const filePath = await record(makeConfig());
+    const session = await JournalSession.open(filePath, journalSeams());
+    try {
+      await session.store.commit([
+        sessionFactEdit(SESSION_KEYS.id, '../../etc/passwd'),
+      ]);
+    } finally {
+      await session.close();
+    }
+    expect(await readSessionHeaderInfo(filePath)).toBeNull();
+  });
+
+  it('does not read a retired JSONL header as a usable session', async () => {
+    const filePath = path.join(tempDir(), 'session-retired.jsonl');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        type: 'session_start',
+        payload: {
+          sessionId: 'retired-session',
+          startTime: new Date().toISOString(),
+          projectHash: 'project',
+        },
+      }) + '\n',
     );
-    expect(header).toBeNull();
-  });
-
-  it('handles BOM-prefixed JSONL (AC-1)', async () => {
-    const sessionId = 'bom-test-session-id';
-    const startTime = new Date().toISOString();
-    const payload = JSON.stringify({
-      v: 1,
-      seq: 0,
-      ts: startTime,
-      type: 'session_start',
-      payload: { sessionId, startTime, projectHash: 'abc123' },
-    });
-
-    const filePath = path.join(tempDir, 'session-bom.jsonl');
-    // Write with UTF-8 BOM prefix
-    await fs.writeFile(filePath, '\uFEFF' + payload + '\n');
-
-    const header = await readSessionJsonlHeader(filePath);
-    expect(header).not.toBeNull();
-    expect(header!.sessionId).toBe(sessionId);
-    expect(header!.startTime).toBe(startTime);
-  });
-
-  it('handles first header line larger than 4096 bytes (AC-1)', async () => {
-    const sessionId = 'long-header-session-id';
-    const startTime = new Date().toISOString();
-    // Create a payload with a very long workspaceDirs entry to exceed 4096 bytes
-    const longPath = 'x'.repeat(5000);
-    const payload = JSON.stringify({
-      v: 1,
-      seq: 0,
-      ts: startTime,
-      type: 'session_start',
-      payload: {
-        sessionId,
-        startTime,
-        projectHash: 'abc123',
-        workspaceDirs: [longPath],
-      },
-    });
-
-    expect(payload.length).toBeGreaterThan(4096);
-
-    const filePath = path.join(tempDir, 'session-long.jsonl');
-    await fs.writeFile(filePath, payload + '\n');
-
-    const header = await readSessionJsonlHeader(filePath);
-    expect(header).not.toBeNull();
-    expect(header!.sessionId).toBe(sessionId);
-    expect(header!.startTime).toBe(startTime);
-  });
-
-  it('returns null for corrupted/unparseable JSON first line', async () => {
-    const filePath = path.join(tempDir, 'session-bad.jsonl');
-    await fs.writeFile(filePath, 'this is not json\n');
-    const header = await readSessionJsonlHeader(filePath);
-    expect(header).toBeNull();
-  });
-
-  it('returns null for a valid session_start with an unsafe/path-like sessionId', async () => {
-    const startTime = new Date().toISOString();
-    const payload = JSON.stringify({
-      v: 1,
-      seq: 0,
-      ts: startTime,
-      type: 'session_start',
-      payload: {
-        sessionId: '../../etc/passwd',
-        startTime,
-        projectHash: 'abc123',
-      },
-    });
-    const filePath = path.join(tempDir, 'session-unsafe.jsonl');
-    await fs.writeFile(filePath, payload + '\n');
-    const header = await readSessionJsonlHeader(filePath);
-    expect(header).toBeNull();
+    expect(await readSessionHeaderInfo(filePath)).toBeNull();
   });
 });

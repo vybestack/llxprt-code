@@ -21,7 +21,7 @@ export interface BugCommandOperations {
   readonly getModel: () => string;
   readonly getReportUrlTemplate: () => string | undefined;
   readonly getIdeDisplayName: () => string;
-  readonly getConversationHistory: () => readonly IContent[] | undefined;
+  readonly getConversationHistory: () => AsyncIterable<IContent> | undefined;
   readonly addItem: UseHistoryManagerReturn['addItem'];
 }
 
@@ -83,12 +83,12 @@ async function appendHistoryExport(
   info: string,
 ): Promise<string> {
   const history = dependencies.getConversationHistory();
-  if (history === undefined || history.length === 0) {
+  if (history === undefined) {
     return info;
   }
 
   try {
-    const { filePath } = await exportHistoryForBugReport([...history]);
+    const { filePath } = await exportHistoryForBugReport(history);
     info += `* **Conversation Transcript:** Exported to \`${filePath}\` (please attach to your bug report)\n`;
 
     dependencies.addItem(

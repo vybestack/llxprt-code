@@ -27,17 +27,52 @@ import {
 } from './openAIResponsesHttpStream.js';
 import {
   isStatefulConnectionRenewalError,
+  DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES,
   streamOverWebSocketOrFallback,
   type StreamResponseOptions,
   type WebSocketTransport,
 } from './openAIResponsesWebSocketTransport.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
+import { reportRequestSize } from '../logging/requestSizeReport.js';
+import {
+  DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
+  envelopeTooLargeError,
+} from '../utils/boundedJsonBody.js';
+import { jsonValueByteLength } from '../utils/progressive-json-body.js';
+
+async function webSocketFrameLength(
+  params: StreamResponsesParams,
+): Promise<number> {
+  return (
+    (await params.streamRequestBodyLength()) +
+    jsonValueByteLength({ type: 'response.create' }) -
+    1
+  );
+}
+
+async function planResponsesRequest(
+  params: StreamResponsesParams,
+  websocket: boolean,
+): Promise<void> {
+  const bodyLength = await params.streamRequestBodyLength();
+  const envelopeLength = websocket
+    ? bodyLength + jsonValueByteLength({ type: 'response.create' }) - 1
+    : bodyLength;
+  const limit = websocket
+    ? DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES
+    : DEFAULT_HTTP_JSON_ENVELOPE_BYTES;
+  if (envelopeLength > limit) {
+    throw envelopeTooLargeError(limit, envelopeLength);
+  }
+  reportRequestSize(params.normalizedOptions.metadata, bodyLength);
+}
 
 export async function* streamResponses(
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
   const transport = deps.getWebSocketTransport?.();
+  await planResponsesRequest(params, params.isCodex && transport !== undefined);
   if (params.isCodex && transport !== undefined) {
     yield* streamOverWebSocketWithRenewal(params, deps, transport);
     return;
@@ -84,7 +119,7 @@ async function* streamOverWebSocketWithRenewal(
     ) {
       throw error;
     }
-    deps.markStatefulParentRejected?.(parentId);
+    await deps.markStatefulParentRejected?.(parentId);
     deps.logger.debug(
       () =>
         `Codex WebSocket renewal: retiring rejected previous_response_id ${parentId} and retrying once statelessly over WebSocket (#3446).`,
@@ -92,10 +127,16 @@ async function* streamOverWebSocketWithRenewal(
     const rebuilt = await params.rebuildStateless();
     let outcome: MediaRequestOutcome = { status: 'succeeded' };
     try {
+      await planResponsesRequest(rebuilt, true);
+      const { requestFrameBytes: _stale, ...baseOptions } = streamOptions;
       yield* streamOverWebSocketOrFallback(
         transport,
         rebuilt.request,
-        streamOptions,
+        {
+          ...baseOptions,
+          requestFrameBytes: rebuilt.streamWebSocketFrame,
+          requestFrameByteLength: await webSocketFrameLength(rebuilt),
+        },
         () => streamOverHttp(rebuilt, deps),
         deps.onWebSocketFallback,
         deps.logger,
@@ -122,6 +163,9 @@ async function buildWebSocketStreamOptions(
     includeThinkingInResponse: params.includeThinkingInResponse,
     responsesStored: params.responsesStored,
     onStreamLiveness: params.normalizedOptions.onStreamLiveness,
+    onTransportAttempt: params.normalizedOptions.onTransportAttempt,
+    requestFrameBytes: params.streamWebSocketFrame,
+    requestFrameByteLength: await webSocketFrameLength(params),
   };
 }
 
@@ -151,6 +195,7 @@ async function* streamOverHttpWithoutStatefulness(
   const rebuilt = await params.rebuildStateless();
   let outcome: MediaRequestOutcome = { status: 'succeeded' };
   try {
+    await planResponsesRequest(rebuilt, false);
     yield* streamOverHttp(rebuilt, deps);
   } catch (error) {
     outcome = { status: 'failed', error };

@@ -24,7 +24,9 @@ async function expectClientBacked(agent: Agent): Promise<void> {
   await agent.setHistory([
     { speaker: 'human', blocks: [{ type: 'text', text: 'client-probe' }] },
   ]);
-  expect(JSON.stringify(await agent.getHistory())).toContain('client-probe');
+  expect(JSON.stringify(await agent.session.getHistory())).toContain(
+    'client-probe',
+  );
 }
 
 function activeProviderName(agent: Agent): string | undefined {

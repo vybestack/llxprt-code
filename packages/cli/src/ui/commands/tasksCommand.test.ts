@@ -56,7 +56,7 @@ describe('tasksCommand', () => {
         setDebugMessage: vi.fn(),
         pendingItem: null,
         setPendingItem: vi.fn(),
-        loadHistory: vi.fn(),
+
         toggleCorgiMode: vi.fn(),
         toggleDebugProfiler: vi.fn(),
         toggleVimEnabled: vi.fn(),

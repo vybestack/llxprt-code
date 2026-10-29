@@ -9,8 +9,20 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import {
+  configHistoryRows,
+  readConfigHistory,
+} from '@vybestack/llxprt-code-core/config/config-stream-test-helpers.js';
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
+import type { BaseLLMClient } from './baseLlmClient.js';
+import type { Turn } from './turn.js';
+import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
@@ -20,17 +32,11 @@ import {
   type ServerAgentStreamEvent,
   type ModelInfo,
 } from './turn.js';
-import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 import {
   fromAsync,
   setupAgentClient,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
-
-// Mock prompts module before imports
-const realConfigModule = {
-  ...(await import('@vybestack/llxprt-code-core/config/config.js')),
-};
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(() =>
@@ -124,7 +130,7 @@ void vi.mock('@vybestack/llxprt-code-tools', () => ({
   ...actual,
   LocalTodoStore: mockTodoStoreConstructor,
 }));
-const __actual = { ...(await import('./turn')) };
+const __actual = { ...(await import('./turn.js')) };
 void vi.mock('./turn', () => {
   const result = __actual as
     | typeof import('./turn.js')
@@ -145,10 +151,6 @@ void vi.mock('./turn', () => {
     Turn: MockTurn,
   };
 });
-
-void vi.mock('@vybestack/llxprt-code-core/config/config.js', () =>
-  automock(realConfigModule),
-);
 
 void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
@@ -200,311 +202,532 @@ void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
     ),
   };
 });
+void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
+  uiTelemetryService: {
+    setLastPromptTokenCount: vi.fn(),
+    getLastPromptTokenCount: vi.fn(),
+  },
+}));
 
-describe('AgentClient (client.ts)', () => {
-  let client: AgentClient;
-  let notifications: ReturnType<typeof createSessionPolicyFixture>;
+let client: AgentClient;
+let notifications: ReturnType<typeof createSessionPolicyFixture>;
 
-  beforeEach(async () => {
-    const ctx = await setupAgentClient({
+let getModelSpy: ReturnType<typeof vi.spyOn>;
+
+let routedModel = 'test-model';
+
+let mediaRoot: string;
+
+/**
+ * Helper: collect only ModelInfo events from a stream.
+ */
+async function collectModelInfos(
+  stream: AsyncIterable<ServerAgentStreamEvent>,
+): Promise<ModelInfo[]> {
+  const events: ServerAgentStreamEvent[] = [];
+  for await (const event of stream) events.push(event);
+  return events
+    .filter(
+      (
+        e,
+      ): e is ServerAgentStreamEvent & {
+        type: typeof AgentEventType.ModelInfo;
+        value: ModelInfo;
+      } => e.type === AgentEventType.ModelInfo,
+    )
+    .map((e) => e.value);
+}
+
+async function disposeClientFixture(): Promise<void> {
+  await client.dispose();
+  vi.restoreAllMocks();
+  rmSync(mediaRoot, { recursive: true, force: true });
+}
+
+async function setupClientFixture(): Promise<void> {
+  vi.clearAllMocks();
+  const ctx = await setupAgentClient(
+    {
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,
-    });
-    client = ctx.client;
-    notifications = createSessionPolicyFixture();
-    notifications.owner.initializeProviderSelection('gemini', 'initial-model');
-    client.bindModelNotifications((listener) =>
-      notifications.owner.subscribeModelChanges(listener),
-    );
-
-    mockTodoStoreConstructor.mockImplementation(() => ({
-      readTodos: todoStoreReadMock,
-      readPausedState: todoStoreReadPausedMock,
-      writePausedState: todoStoreWritePausedMock,
-    }));
-    todoStoreReadMock.mockResolvedValue([]);
-    todoStoreReadPausedMock.mockResolvedValue(false);
-    todoStoreWritePausedMock.mockResolvedValue(undefined);
+    },
+    { useInjectedConfig: true },
+  );
+  client = ctx.client;
+  notifications = createSessionPolicyFixture();
+  notifications.owner.initializeProviderSelection('gemini', 'initial-model');
+  client.bindModelNotifications((listener) =>
+    notifications.owner.subscribeModelChanges(listener),
+  );
+  mediaRoot = mkdtempSync(join(tmpdir(), 'model-profile-media-'));
+  const mediaStore = new LocalMediaStore({
+    rootDirectory: mediaRoot,
+    quotaBytes: 1024 * 1024,
   });
+  Object.assign(client['config'], { getLocalMediaStore: () => mediaStore });
 
-  afterEach(async () => {
-    await client.dispose();
-    vi.restoreAllMocks();
+  mockTodoStoreConstructor.mockImplementation(() => ({
+    readTodos: todoStoreReadMock,
+    readPausedState: todoStoreReadPausedMock,
+    writePausedState: todoStoreWritePausedMock,
+  }));
+  todoStoreReadMock.mockResolvedValue([]);
+  todoStoreReadPausedMock.mockResolvedValue(false);
+  todoStoreWritePausedMock.mockResolvedValue(undefined);
+}
+
+function verifyProfileSequenceReset(): void {
+  // Set a sticky model
+  client['currentSequenceModel'] = 'sticky-model';
+
+  expect(client.getCurrentSequenceModel()).toBe('sticky-model');
+
+  // Emit ModelProfileChanged — should reset the sticky model
+  notifications.owner.publishModelProfile({
+    model: 'new-model',
+    providerName: 'anthropic',
+    profileName: null,
+    displayLabel: 'new-model',
   });
+}
 
-  describe('ModelProfileChanged resets sequence model (issue #1770)', () => {
-    it('resets currentSequenceModel when ModelProfileChanged fires', () => {
-      // Set a sticky model
-      client['currentSequenceModel'] = 'sticky-model';
-      expect(client.getCurrentSequenceModel()).toBe('sticky-model');
+function verifyProfileInvalidation(): {
+  historyService: HistoryService;
+  contentGenerator: ContentGenerator;
+} {
+  const historyService = new HistoryService();
 
-      // Emit ModelProfileChanged — should reset the sticky model
-      notifications.owner.publishModelProfile({
-        model: 'new-model',
-        providerName: 'anthropic',
-        profileName: null,
-        displayLabel: 'new-model',
-      });
+  const mockChat: Partial<ChatSession> = {
+    getHistoryService: vi.fn().mockReturnValue(historyService),
+  };
 
-      // currentSequenceModel should now be null
-      expect(client.getCurrentSequenceModel()).toBeNull();
-    });
+  const contentGenerator = {} as ContentGenerator;
 
-    it('invalidates active chat state when ModelProfileChanged fires so profile context-limit is rebuilt', () => {
-      const historyService = {
-        clear: vi.fn(),
-        findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-        getCurated: vi.fn().mockReturnValue([]),
-        getTotalTokens: vi.fn().mockReturnValue(0),
-      };
-      const mockChat: Partial<ChatSession> = {
-        getHistoryService: vi.fn().mockReturnValue(historyService),
-      };
-      const contentGenerator = {} as ContentGenerator;
-      client['chat'] = mockChat as ChatSession;
-      client['contentGenerator'] = contentGenerator;
-      client['_baseLlmClient'] = {} as BaseLLMClient;
-      client['_pendingConfig'] = {
-        model: 'test-model',
-        apiKey: 'old-key',
-        vertexai: false,
-      };
+  client['chat'] = mockChat as ChatSession;
 
-      expect(client.hasChatInitialized()).toBe(true);
+  client['contentGenerator'] = contentGenerator;
 
+  client['_baseLlmClient'] = {} as BaseLLMClient;
+
+  client['sessionContentGeneratorConfig'] = {
+    model: 'test-model',
+    apiKey: 'old-key',
+    vertexai: false,
+  };
+
+  expect(client.hasChatInitialized()).toBe(true);
+
+  notifications.owner.publishModelProfile({
+    model: 'claude-opus-4-8',
+    providerName: 'anthropic',
+    profileName: 'opusthinking',
+    displayLabel: 'opusthinking',
+  });
+  return { historyService, contentGenerator };
+}
+
+async function verifyDeferredInvalidation(): Promise<{
+  executeSpy: unknown;
+  historyService: HistoryService;
+}> {
+  const historyService = new HistoryService();
+
+  const mockChat: Partial<ChatSession> = {
+    getHistoryService: vi.fn().mockReturnValue(historyService),
+  };
+
+  client['chat'] = mockChat as ChatSession;
+
+  client['contentGenerator'] = {} as ContentGenerator;
+
+  const executeSpy = vi
+    .spyOn(client['messageStreamOrchestrator'], 'execute')
+    .mockImplementation(async function* () {
       notifications.owner.publishModelProfile({
         model: 'claude-opus-4-8',
         providerName: 'anthropic',
         profileName: 'opusthinking',
         displayLabel: 'opusthinking',
       });
+      expect(client.hasChatInitialized()).toBe(true);
+      yield { type: AgentEventType.Content, value: 'done' };
+      return {} as Turn;
+    });
 
+  await fromAsync(
+    client.sendMessageStream('hello', new AbortController().signal, 'prompt'),
+  );
+  return { executeSpy, historyService };
+}
+
+async function verifyLiveHistory(): Promise<{ liveHistory: IContent[] }> {
+  const storedHistory = configHistoryRows({
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'old turn' }],
+  });
+  const liveHistory = configHistoryRows(...storedHistory, {
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: 'new committed turn' }],
+  });
+  const history = new HistoryService();
+  const root = mkdtempSync(join(tmpdir(), 'model-profile-stream-'));
+  Object.assign(client['config'], {
+    getTokenizerFactory: () => undefined,
+    getLocalMediaStore: () =>
+      new LocalMediaStore({ rootDirectory: root, quotaBytes: 1024 * 1024 }),
+  });
+  try {
+    await history.detachedValues.replace(liveHistory, undefined, {
+      publishTokens: true,
+    });
+    const mockChat: Partial<ChatSession> = {
+      waitForIdle: async (): Promise<void> => {},
+      streamHistory: (signal) => history.streamRawHistory(signal),
+      clearHistory: async (): Promise<void> => {
+        await history.clear();
+        await history.waitForOwnershipSettlement();
+      },
+      getHistoryService: () => history,
+    };
+    client['chat'] = mockChat as ChatSession;
+    await client.initialize({
+      model: 'new-model',
+      apiKey: 'test-key',
+      vertexai: false,
+    });
+    return { liveHistory };
+  } finally {
+    await history.dispose();
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+async function verifyStoredHistoryOnToolsRefresh(): Promise<{
+  restoredHistory: readonly IContent[];
+  committedHistory: IContent[];
+}> {
+  const committedHistory: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'We are fixing issue 2049.' }],
+    },
+    {
+      speaker: 'ai',
+      blocks: [
+        { type: 'text', text: 'Profile switches must preserve context.' },
+      ],
+    },
+  ];
+
+  const pendingSend = Promise.withResolvers<void>();
+
+  await client.storeHistoryForLaterUse(committedHistory);
+
+  client['chat'] = undefined;
+
+  const startChatSpy = vi.spyOn(client, 'startChat').mockImplementation(() => {
+    const stored = client['_storedHistoryService'];
+    if (stored === undefined) throw new Error('Missing stored history');
+    const chat = {
+      waitForIdle: async (): Promise<void> => {
+        await pendingSend.promise.catch(() => undefined);
+      },
+      streamHistory: (signal?: AbortSignal) => stored.streamRawHistory(signal),
+      clearHistory: async (): Promise<void> => {
+        await stored.clear();
+        await stored.waitForOwnershipSettlement();
+      },
+      clearHistoryForDisposal: async (): Promise<void> => {
+        await stored.clear();
+        await stored.waitForOwnershipSettlement();
+      },
+      getHistoryService: vi.fn().mockReturnValue(stored),
+      getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+      setTools: vi.fn(),
+    } as unknown as ChatSession;
+    client['chat'] = chat;
+    return Promise.resolve(chat);
+  });
+
+  await client.setTools();
+
+  // History is carried by the stored journal, never as an array handoff.
+  expect(startChatSpy).toHaveBeenCalledWith([]);
+
+  // Exercise the real idle-gated reader rather than the helper's stub.
+  vi.spyOn(client, 'streamHistory').mockRestore();
+  let historyState = 'pending';
+
+  const historyRequest = readConfigHistory(
+    AgentClient.prototype.getHistory.call(client),
+  ).then((history) => {
+    historyState = 'settled';
+    return history;
+  });
+
+  await Bun.sleep(0);
+
+  const historyStateBeforeIdle = historyState;
+
+  pendingSend.resolve();
+
+  expect(historyStateBeforeIdle).toBe('pending');
+
+  const restoredHistory = await historyRequest;
+  return { restoredHistory, committedHistory };
+}
+
+function verifyModelChangedSequenceReset(): void {
+  client['currentSequenceModel'] = 'sticky-model';
+
+  const publication = notifications.owner.beginModelPublication();
+  notifications.owner.chooseModel('other-model');
+  publication.commit();
+}
+
+async function verifyContinuationModelChange(): Promise<{
+  infos: ModelInfo[];
+}> {
+  // Stream 2: continuation succeeds
+  const mockStream2 = (async function* () {
+    yield { type: AgentEventType.Content, value: 'Continued' };
+    yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
+  })();
+
+  getModelSpy.mockReturnValue('test-model');
+
+  // Intercept between stream1 and stream2 to simulate a model change.
+  // After the first Turn.run returns InvalidStream, change config.getModel
+  // so the continuation's _buildModelInfo reads a different effective model.
+  mockTurnRunFn.mockReset();
+
+  let callCount = 0;
+
+  mockTurnRunFn.mockImplementation(() => {
+    callCount++;
+    if (callCount === 1) {
+      const stream = (async function* () {
+        yield { type: AgentEventType.InvalidStream };
+      })();
+      // Simulate model change before continuation
+      notifications.owner.publishModelProfile({
+        model: 'changed-model',
+        providerName: 'anthropic',
+        profileName: null,
+        displayLabel: 'changed-model',
+      });
+      routedModel = 'changed-model';
+      return stream;
+    }
+    return mockStream2;
+  });
+
+  const stream = client.sendMessageStream(
+    [{ type: 'text', text: 'Hi' }],
+    new AbortController().signal,
+    'prompt-change-mid-seq',
+  );
+
+  const infos = await collectModelInfos(stream);
+  return { infos };
+}
+
+async function verifyContinuationStableModel(): Promise<{
+  infos: ModelInfo[];
+}> {
+  const mockStream1 = (async function* () {
+    yield { type: AgentEventType.InvalidStream };
+  })();
+
+  const mockStream2 = (async function* () {
+    yield { type: AgentEventType.Content, value: 'Continued' };
+    yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
+  })();
+
+  getModelSpy.mockReturnValue('test-model');
+
+  mockTurnRunFn.mockReset();
+
+  mockTurnRunFn.mockReturnValueOnce(mockStream1).mockReturnValue(mockStream2);
+
+  const stream = client.sendMessageStream(
+    [{ type: 'text', text: 'Hi' }],
+    new AbortController().signal,
+    'prompt-same-identity',
+  );
+
+  const infos = await collectModelInfos(stream);
+  return { infos };
+}
+
+async function verifyContinuationStableProvider(): Promise<{
+  infos: ModelInfo[];
+}> {
+  const mockStream2 = (async function* () {
+    yield { type: AgentEventType.Content, value: 'ok' };
+    yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
+  })();
+
+  getModelSpy.mockReturnValue('test-model');
+
+  // The orchestrator's _getProviderName reads from
+  // getContentGeneratorConfig().providerManager?.getActiveProviderName().
+  // We spy on getContentGeneratorConfig to return different provider info
+  // after the first stream.
+  const getContentGenSpy = vi.spyOn(
+    client['config'],
+    'getContentGeneratorConfig',
+  );
+
+  getContentGenSpy.mockReturnValue({
+    model: 'test-model',
+    apiKey: 'test-key',
+    vertexai: false,
+  });
+
+  mockTurnRunFn.mockReset();
+
+  let callCount = 0;
+
+  mockTurnRunFn.mockImplementation(() => {
+    callCount++;
+    if (callCount === 1) {
+      const stream = (async function* () {
+        yield { type: AgentEventType.InvalidStream };
+      })();
+      // Simulate provider change before continuation: now the config
+      // returns a providerManager with a different active provider.
+      getContentGenSpy.mockReturnValue({
+        model: 'test-model',
+        apiKey: 'test-key',
+        vertexai: false,
+        providerManager: {
+          getActiveProviderName: () => 'anthropic',
+          getActiveProvider: () => ({
+            name: 'anthropic',
+            getDefaultModel: () => 'test-model',
+          }),
+        },
+      } as unknown as ContentGeneratorConfig);
+      // Reset sequence model so orchestrator re-reads
+      notifications.owner.publishModelProfile({
+        model: 'test-model',
+        providerName: 'anthropic',
+        profileName: null,
+        displayLabel: 'test-model',
+      });
+      return stream;
+    }
+    return mockStream2;
+  });
+
+  const stream = client.sendMessageStream(
+    [{ type: 'text', text: 'Hi' }],
+    new AbortController().signal,
+    'prompt-provider-change',
+  );
+
+  const infos = await collectModelInfos(stream);
+
+  getContentGenSpy.mockRestore();
+  return { infos };
+}
+
+function setupContinuationChat(): void {
+  const historyService = new HistoryService();
+  routedModel = 'test-model';
+  vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+    true,
+  );
+
+  const mockChat: Partial<ChatSession> = {
+    resolveProviderForRuntime: () => ({
+      name: 'gemini',
+      getCurrentModel: () => routedModel,
+      getModels: async () => [],
+      generateChatCompletion(): AsyncGenerator<IContent> {
+        throw new Error('Unexpected transport in model-info test');
+      },
+    }),
+    addHistory: vi.fn(),
+    getHistory: vi.fn().mockReturnValue([]),
+    getHistoryService: () => historyService,
+    clearHistoryForDisposal: async (): Promise<void> => {
+      await historyService.dispose();
+    },
+    getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+    getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+    getContextLimit: vi.fn().mockReturnValue(1000000),
+  };
+  client['chat'] = mockChat as ChatSession;
+  getModelSpy = vi.spyOn(client['config'], 'getModel');
+}
+
+describe('AgentClient (client.ts)', () => {
+  beforeEach(setupClientFixture);
+  afterEach(disposeClientFixture);
+  describe('ModelProfileChanged resets sequence model (issue #1770)', () => {
+    it('resets currentSequenceModel when ModelProfileChanged fires', () => {
+      verifyProfileSequenceReset();
+      // currentSequenceModel should now be null
+      expect(client.getCurrentSequenceModel()).toBeNull();
+    });
+
+    it('invalidates active chat state when ModelProfileChanged fires so profile context-limit is rebuilt', () => {
+      const { historyService, contentGenerator } = verifyProfileInvalidation();
       expect(client.hasChatInitialized()).toBe(false);
       expect(client['contentGenerator']).toBe(contentGenerator);
       expect(client['_baseLlmClient']).toBeUndefined();
-      expect(client['_pendingConfig']).toStrictEqual({
+      expect(client['sessionContentGeneratorConfig']).toStrictEqual({
         model: 'test-model',
         apiKey: 'old-key',
         vertexai: false,
       });
       expect(client['_storedHistoryService']).toBe(historyService);
       expect(client.getHistoryService()).toBe(historyService);
-      expect(client['_previousHistory']).toBeUndefined();
     });
 
     it('defers chat invalidation until active streams finish', async () => {
-      const historyService = {
-        clear: vi.fn(),
-        findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-        getCurated: vi.fn().mockReturnValue([]),
-        getTotalTokens: vi.fn().mockReturnValue(0),
-      };
-      const mockChat: Partial<ChatSession> = {
-        getHistoryService: vi.fn().mockReturnValue(historyService),
-      };
-      client['chat'] = mockChat as ChatSession;
-      client['contentGenerator'] = {} as ContentGenerator;
-      const executeSpy = vi
-        .spyOn(client['messageStreamOrchestrator'], 'execute')
-        .mockImplementation(async function* () {
-          notifications.owner.publishModelProfile({
-            model: 'claude-opus-4-8',
-            providerName: 'anthropic',
-            profileName: 'opusthinking',
-            displayLabel: 'opusthinking',
-          });
-          expect(client.hasChatInitialized()).toBe(true);
-          yield { type: AgentEventType.Content, value: 'done' };
-          return {} as Turn;
-        });
-
-      await fromAsync(
-        client.sendMessageStream(
-          'hello',
-          new AbortController().signal,
-          'prompt',
-        ),
-      );
-
+      const { executeSpy, historyService } = await verifyDeferredInvalidation();
       expect(executeSpy).toHaveBeenCalledOnce();
       expect(client.hasChatInitialized()).toBe(false);
       expect(client['_storedHistoryService']).toBe(historyService);
     });
 
-    it('uses live chat history instead of a stale stored snapshot when reinitializing', async () => {
-      const storedHistory: IContent[] = [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'old turn' }] },
-      ];
-      const liveHistory: IContent[] = [
-        ...storedHistory,
-        {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'new committed turn' }],
-        },
-      ];
-      const mockChat: Partial<ChatSession> = {
-        getHistory: vi.fn().mockReturnValue(liveHistory),
-      };
-      client['chat'] = mockChat as ChatSession;
-      client['_previousHistory'] = storedHistory;
-
-      await client.initialize({
-        model: 'new-model',
-        apiKey: 'test-key',
-        vertexai: false,
-      });
-
-      expect(client['_previousHistory']).toBe(liveHistory);
+    it('uses live chat history when reinitializing', async () => {
+      const { liveHistory } = await verifyLiveHistory();
+      const stored = client.getHistoryService();
+      if (stored === null) throw new Error('Missing reinitialized history');
+      expect(await readConfigHistory(stored.streamRawHistory())).toStrictEqual(
+        liveHistory,
+      );
     });
 
     it('preserves stored conversation history when refreshing tools before the next turn', async () => {
-      const committedHistory: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'We are fixing issue 2049.' }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [
-            { type: 'text', text: 'Profile switches must preserve context.' },
-          ],
-        },
-      ];
-      await client.storeHistoryForLaterUse(committedHistory);
-      client['chat'] = undefined;
-      const startChatSpy = vi
-        .spyOn(client, 'startChat')
-        .mockImplementation(async (extraHistory?: IContent[]) => {
-          const restoredHistory = extraHistory ?? [];
-          return {
-            getHistory: vi.fn().mockReturnValue(restoredHistory),
-            getHistoryService: vi.fn().mockReturnValue({
-              clear: vi.fn(),
-              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-              getCurated: vi.fn().mockReturnValue([]),
-              getTotalTokens: vi.fn().mockReturnValue(0),
-            }),
-            getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-            getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-            setTools: vi.fn(),
-          } as unknown as ChatSession;
-        });
-
-      await client.setTools();
-
-      expect(startChatSpy).toHaveBeenCalledWith(committedHistory);
-      const restoredHistory =
-        await AgentClient.prototype.getHistory.call(client);
-      expect(restoredHistory).toStrictEqual(committedHistory);
+      const { restoredHistory, committedHistory } =
+        await verifyStoredHistoryOnToolsRefresh();
+      // The journal stamps chronology metadata onto stored rows.
+      expect(
+        restoredHistory.map(({ speaker, blocks }) => ({ speaker, blocks })),
+      ).toStrictEqual(committedHistory);
     });
     it('also resets currentSequenceModel on ModelChanged', () => {
-      client['currentSequenceModel'] = 'sticky-model';
-      const publication = notifications.owner.beginModelPublication();
-      notifications.owner.chooseModel('other-model');
-      publication.commit();
+      verifyModelChangedSequenceReset();
       expect(client.getCurrentSequenceModel()).toBeNull();
     });
   });
 
   describe('ModelInfo during InvalidStream continuation when model changes mid-sequence (issue #1770)', () => {
-    let getModelSpy: ReturnType<typeof vi.spyOn>;
-
-    let routedModel = 'test-model';
-
-    beforeEach(() => {
-      routedModel = 'test-model';
-      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
-        true,
-      );
-
-      const mockChat: Partial<ChatSession> = {
-        resolveProviderForRuntime: () => ({
-          name: 'gemini',
-          getCurrentModel: () => routedModel,
-          getModels: async () => [],
-          generateChatCompletion(): AsyncGenerator<IContent> {
-            throw new Error('Unexpected transport in model-info test');
-          },
-        }),
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getHistoryService: vi.fn().mockReturnValue({
-          clear: vi.fn(),
-          findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-          getCurated: vi.fn().mockReturnValue([]),
-          getTotalTokens: vi.fn().mockReturnValue(0),
-        }),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-        getContextLimit: vi.fn().mockReturnValue(1000000),
-      };
-      client['chat'] = mockChat as ChatSession;
-      getModelSpy = vi.spyOn(client['config'], 'getModel');
-    });
+    beforeEach(setupContinuationChat);
 
     afterEach(() => {
       getModelSpy.mockRestore();
     });
 
-    /**
-     * Helper: collect only ModelInfo events from a stream.
-     */
-    async function collectModelInfos(
-      stream: AsyncIterable<ServerAgentStreamEvent>,
-    ): Promise<ModelInfo[]> {
-      const events = await fromAsync(stream);
-      return events
-        .filter(
-          (
-            e,
-          ): e is ServerAgentStreamEvent & {
-            type: typeof AgentEventType.ModelInfo;
-            value: ModelInfo;
-          } => e.type === AgentEventType.ModelInfo,
-        )
-        .map((e) => e.value);
-    }
-
     it('emits exactly one additional ModelInfo when model changes during InvalidStream continuation', async () => {
-      // Stream 2: continuation succeeds
-      const mockStream2 = (async function* () {
-        yield { type: AgentEventType.Content, value: 'Continued' };
-        yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
-      })();
-
-      getModelSpy.mockReturnValue('test-model');
-
-      // Intercept between stream1 and stream2 to simulate a model change.
-      mockTurnRunFn.mockReset();
-      let callCount = 0;
-      mockTurnRunFn.mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) {
-          const stream = (async function* () {
-            yield { type: AgentEventType.InvalidStream };
-          })();
-          // Simulate model change before continuation
-          notifications.owner.publishModelProfile({
-            model: 'changed-model',
-            providerName: 'anthropic',
-            profileName: null,
-            displayLabel: 'changed-model',
-          });
-          routedModel = 'changed-model';
-          return stream;
-        }
-        return mockStream2;
-      });
-
-      const stream = client.sendMessageStream(
-        [{ type: 'text', text: 'Hi' }],
-        new AbortController().signal,
-        'prompt-change-mid-seq',
-      );
-
-      const infos = await collectModelInfos(stream);
-
+      const { infos } = await verifyContinuationModelChange();
       // First emission for the initial model, then exactly one additional
       // ModelInfo for the changed identity — no duplicates.
       expect(infos).toHaveLength(2);
@@ -513,99 +736,14 @@ describe('AgentClient (client.ts)', () => {
     });
 
     it('does not emit additional ModelInfo when identity is unchanged during continuation', async () => {
-      const mockStream1 = (async function* () {
-        yield { type: AgentEventType.InvalidStream };
-      })();
-      const mockStream2 = (async function* () {
-        yield { type: AgentEventType.Content, value: 'Continued' };
-        yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
-      })();
-
-      getModelSpy.mockReturnValue('test-model');
-      mockTurnRunFn.mockReset();
-      mockTurnRunFn
-        .mockReturnValueOnce(mockStream1)
-        .mockReturnValue(mockStream2);
-
-      const stream = client.sendMessageStream(
-        [{ type: 'text', text: 'Hi' }],
-        new AbortController().signal,
-        'prompt-same-identity',
-      );
-
-      const infos = await collectModelInfos(stream);
-
+      const { infos } = await verifyContinuationStableModel();
       // Same model/provider/profile across continuation → only one ModelInfo
       expect(infos).toHaveLength(1);
       expect(infos[0]?.model).toBe('test-model');
     });
 
     it('keeps the routed provider stable during continuation', async () => {
-      const mockStream2 = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-        yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
-      })();
-
-      getModelSpy.mockReturnValue('test-model');
-
-      // The orchestrator's _getProviderName reads from
-      // getContentGeneratorConfig().providerManager?.getActiveProviderName().
-      // We spy on getContentGeneratorConfig to return different provider info
-      // after the first stream.
-      const getContentGenSpy = vi.spyOn(
-        client['config'],
-        'getContentGeneratorConfig',
-      );
-      getContentGenSpy.mockReturnValue({
-        model: 'test-model',
-        apiKey: 'test-key',
-        vertexai: false,
-      });
-
-      mockTurnRunFn.mockReset();
-      let callCount = 0;
-      mockTurnRunFn.mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) {
-          const stream = (async function* () {
-            yield { type: AgentEventType.InvalidStream };
-          })();
-          // Simulate provider change before continuation: now the config
-          // returns a providerManager with a different active provider.
-          getContentGenSpy.mockReturnValue({
-            model: 'test-model',
-            apiKey: 'test-key',
-            vertexai: false,
-            providerManager: {
-              getActiveProviderName: () => 'anthropic',
-              getActiveProvider: () => ({
-                name: 'anthropic',
-                getDefaultModel: () => 'test-model',
-              }),
-            },
-          } as unknown as ContentGeneratorConfig);
-          // Reset sequence model so orchestrator re-reads
-          notifications.owner.publishModelProfile({
-            model: 'test-model',
-            providerName: 'anthropic',
-            profileName: null,
-            displayLabel: 'test-model',
-          });
-          return stream;
-        }
-        return mockStream2;
-      });
-
-      const stream = client.sendMessageStream(
-        [{ type: 'text', text: 'Hi' }],
-        new AbortController().signal,
-        'prompt-provider-change',
-      );
-
-      const infos = await collectModelInfos(stream);
-
-      getContentGenSpy.mockRestore();
-
+      const { infos } = await verifyContinuationStableProvider();
       expect(infos).toHaveLength(1);
       expect(infos[0]?.providerName).toBe('gemini');
     });

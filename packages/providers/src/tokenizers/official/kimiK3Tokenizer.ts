@@ -37,7 +37,7 @@ const KIMI_K3_RESERVED_SPECIAL = 256;
  * own pieces and excluding them from the Latin letter runs via the
  * `&&[^\p{Han}]` character-class intersection.
  */
-const KIMI_K3_PAT_STR = [
+export const KIMI_K3_PAT_STR = [
   String.raw`[\p{Han}]+`,
   String.raw`[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]*[\p{Ll}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?`,
   String.raw`[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]+[\p{Ll}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?`,
@@ -155,7 +155,7 @@ export class KimiK3Tokenizer implements RuntimeTokenizer {
       if (seg.text.length === 0) {
         continue;
       }
-      total += this.runtime.encode(seg.text, seg.allowSpecial).length;
+      total += this.runtime.count(seg.text, seg.allowSpecial);
     }
     return total;
   }

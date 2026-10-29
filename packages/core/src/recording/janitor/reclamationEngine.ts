@@ -58,7 +58,7 @@ import {
 } from './sessionGrouping.js';
 import { compressToArchive } from './archiveCompressor.js';
 import { SessionLockManager, type LockHandle } from '../SessionLockManager.js';
-import { readSessionJsonlHeader } from './sessionHeaderReader.js';
+import { readSessionHeaderInfo } from './sessionHeaderReader.js';
 import { isRegularNonSymlinkFile, isPathContainedIn } from './sessionSafety.js';
 import { ARCHIVE_DIR_NAME, scanGlobalSessions } from './sessionScanner.js';
 
@@ -452,7 +452,7 @@ async function revalidateRawCandidate(
 ): Promise<boolean> {
   if (!(await isRegularNonSymlinkFile(candidate.filePath))) return false;
 
-  const header = await readSessionJsonlHeader(candidate.filePath);
+  const header = await readSessionHeaderInfo(candidate.filePath);
   if (header === null || header.sessionId !== expectedSessionId) return false;
 
   try {

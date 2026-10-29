@@ -33,7 +33,6 @@ import {
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import type { QueuedSubmission } from '../types.js';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
@@ -159,11 +158,11 @@ function renderUseSubmitQuery(
     onAuthError: deps.onAuthError,
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: vi.fn(),
-    pendingResponse: new PendingResponseBuffer(undefined),
+
     pendingHistoryItemRef: {
       current: null,
     } as React.MutableRefObject<HistoryItemWithoutId | null>,
-    thinkingBlocksRef: { current: [] },
+
     turnCancelledRef: { current: false },
     queuedSubmissionsRef: { current: [] },
     drainSuppressedRef: { current: false },

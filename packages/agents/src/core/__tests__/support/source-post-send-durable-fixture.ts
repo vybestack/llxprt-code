@@ -1,0 +1,287 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
+import { settleInducedExportFailure } from './induced-export-failure.js';
+import { mkdirSync } from 'node:fs';
+import { appendFile, readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import type {
+  IContent,
+  UsageStats,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { RetryOrchestrator } from '@vybestack/llxprt-code-providers';
+import { LoggingProviderWrapper } from '../../../../../providers/src/LoggingProviderWrapper.js';
+import {
+  getPerfPhaseObserver,
+  setPerfPhaseObserver,
+  type PerfProviderAttemptStartInfo,
+  type PerfProviderAttemptEndInfo,
+} from '@vybestack/llxprt-code-core/perf/perfPhaseObserver.js';
+import { LOGICAL_REQUEST_ID_KEY } from '@vybestack/llxprt-code-providers/logging/attemptLifecycle.js';
+import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
+import {} from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
+import {
+  flushTelemetry,
+  initializeTelemetry,
+  shutdownTelemetry,
+} from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
+import { createTelemetrySession } from './source-telemetry-session-fixture.js';
+import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
+import { assembleStrictBase } from './source-strict-logger-fixture.js';
+import {
+  preflightDisk,
+  preflightInstructions,
+  barrier,
+} from './source-preflight-fixture.js';
+import {
+  buildSourceProviderChatOptions,
+  enforceAndStreamSourcePromptEnvelopeRetries,
+} from '../../prompt-envelope-source-send.js';
+
+function observeAttempts() {
+  const previous = getPerfPhaseObserver();
+  const starts: PerfProviderAttemptStartInfo[] = [];
+  const ends: PerfProviderAttemptEndInfo[] = [];
+  setPerfPhaseObserver({
+    onProviderAttemptStart(info): void {
+      starts.push({ ...info });
+    },
+    onProviderAttemptEnd(info): void {
+      ends.push({ ...info });
+    },
+    onToolCallCompleted(): void {},
+  });
+  return { starts, ends, close: (): void => setPerfPhaseObserver(previous) };
+}
+type Input = Awaited<ReturnType<typeof assembleStrictBase>> & {
+  readonly wrapper: LoggingProviderWrapper;
+};
+interface Result {
+  readonly output: string;
+  readonly usage: readonly UsageStats[];
+  readonly finishes: readonly unknown[];
+  readonly error: {
+    name: string;
+    message: string;
+    code: unknown;
+    path: unknown;
+    syscall: unknown;
+    stack: string | undefined;
+  } | null;
+}
+function failure(
+  error: unknown,
+  output = '',
+  usage: UsageStats[] = [],
+  finishes: unknown[] = [],
+): Result {
+  return {
+    output,
+    usage,
+    finishes,
+    error: {
+      name: error instanceof Error ? error.name : 'unknown',
+      message: String(error),
+      code: error instanceof Error && 'code' in error ? error.code : null,
+      path: error instanceof Error && 'path' in error ? error.path : null,
+      syscall:
+        error instanceof Error && 'syscall' in error ? error.syscall : null,
+      stack: error instanceof Error ? error.stack : undefined,
+    },
+  };
+}
+async function consume(stream: AsyncIterable<IContent>): Promise<Result> {
+  let output = '';
+  const usage: UsageStats[] = [];
+  const finishes: unknown[] = [];
+  try {
+    for await (const row of stream) {
+      output += row.blocks
+        .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+        .join('');
+      if (row.metadata?.usage !== undefined) usage.push(row.metadata.usage);
+      if (row.metadata?.finishReason !== undefined)
+        finishes.push(row.metadata.finishReason);
+    }
+    return { output, usage, finishes, error: null };
+  } catch (error: unknown) {
+    return failure(error, output, usage, finishes);
+  }
+}
+async function sendSource(input: Input): Promise<Result> {
+  try {
+    const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
+      provider: input.wrapper,
+      source: input.fixture.source,
+      signal: input.controller.signal,
+      buildOptions: (rows) => ({
+        ...buildSourceProviderChatOptions(
+          rows,
+          undefined,
+          undefined,
+          input.setup.invocation,
+          undefined,
+          preflightInstructions,
+        ),
+        resolved: { model: 'gpt-5.6' },
+        metadata: { [LOGICAL_REQUEST_ID_KEY]: 'post-source' },
+      }),
+      enforce: async (rows, estimate) => {
+        await estimate(rows);
+        return rows;
+      },
+      shouldRetryOnError: () => false,
+      tokenizerFactory: input.setup.tokenizerFactory,
+    });
+    return await consume(stream);
+  } catch (error: unknown) {
+    return failure(error);
+  }
+}
+async function sendEager(
+  input: Input,
+  disk: Awaited<ReturnType<typeof preflightDisk>>,
+): Promise<Result> {
+  const contents = await Array.fromAsync(disk.source.openReader());
+  return consume(
+    input.wrapper.generateChatCompletion({
+      contents: callerOwnedRawProviderSource(contents),
+      invocation: input.setup.invocation,
+      systemInstruction: preflightInstructions,
+      resolved: { model: 'gpt-5.6' },
+      metadata: { [LOGICAL_REQUEST_ID_KEY]: 'post-eager' },
+    }),
+  );
+}
+async function witness(path: string | undefined): Promise<string | null> {
+  if (path === undefined) return null;
+  try {
+    await appendFile(path, 'witness');
+    throw new Error('Expected EISDIR');
+  } catch (error: unknown) {
+    if (error instanceof Error && 'code' in error && error.code === 'EISDIR')
+      return error.code;
+    throw error;
+  }
+}
+type PostFault = 'none' | 'conversation-response' | 'api-response';
+async function prepareMixed(
+  root: string,
+  fault: PostFault,
+  eagerFirst: boolean,
+  externalLifecycle: boolean,
+) {
+  const uploaded = barrier();
+  const observations = { uploads: 0, priorRequestLog: '' };
+  const conversationPath = join(
+    root,
+    `conversation-${new Date().toISOString().split('T')[0]}.jsonl`,
+  );
+  const assembled = await assembleStrictBase(root, fault, async () => {
+    observations.uploads++;
+    if (observations.uploads === 2) {
+      observations.priorRequestLog = await readFile(conversationPath, 'utf8');
+      uploaded.release();
+    }
+    await uploaded.wait;
+  });
+  const telemetryPath = join(root, 'strict.jsonl');
+  const { config, settingsOwner, telemetry, manager, diagnostics } =
+    createTelemetrySession({
+      root,
+      telemetryPath,
+      privacy: {
+        logPrompts: true,
+        logConversations: true,
+        logApiBodies: true,
+        maxChars: 32 * 1024 * 1024,
+      },
+      settingsService: assembled.setup.context.settingsService,
+      provider: assembled.setup.provider,
+      logger: assembled.exporter,
+    });
+  await initializeTelemetry(telemetry);
+  const input = {
+    ...assembled,
+    telemetry,
+    cleanup: async (): Promise<void> => {
+      manager.dispose();
+      await settleInducedExportFailure(assembled.faultPath !== undefined, () =>
+        shutdownTelemetry(telemetry),
+      );
+      await settingsOwner.dispose();
+      await config.dispose();
+    },
+    wrapper: new LoggingProviderWrapper(
+      externalLifecycle
+        ? new RetryOrchestrator(assembled.setup.provider, {
+            maxAttempts: 2,
+            initialDelayMs: 0,
+            maxDelayMs: 0,
+          })
+        : assembled.setup.provider,
+      undefined,
+      undefined,
+      () => diagnostics,
+    ),
+  };
+  const eagerRoot = join(root, 'eager-disk');
+  mkdirSync(eagerRoot);
+  const disk = await preflightDisk(eagerRoot, false);
+  return { input, disk, manager, observations, conversationPath };
+}
+export async function mixedPostSendProbe(
+  root: string,
+  fault: PostFault,
+  eagerFirst: boolean,
+  externalLifecycle = false,
+) {
+  const { input, disk, manager, observations, conversationPath } =
+    await prepareMixed(root, fault, eagerFirst, externalLifecycle);
+  const attempts = observeAttempts();
+  try {
+    const tasks = eagerFirst
+      ? [sendEager(input, disk), sendSource(input)]
+      : [sendSource(input), sendEager(input, disk)];
+    const results = await Promise.all(tasks);
+    await disk.source.close();
+    await settleInducedExportFailure(input.faultPath !== undefined, () =>
+      flushTelemetry(input.telemetry),
+    );
+    const receipt = {
+      source: results[eagerFirst ? 1 : 0],
+      eager: results[eagerFirst ? 0 : 1],
+      bodies: input.http.bodies,
+      uploads: observations.uploads,
+      priorRequests: observations.priorRequestLog
+        .trim()
+        .split('\n')
+        .map((line): unknown => JSON.parse(line)),
+      conversationLog:
+        fault === 'conversation-response'
+          ? null
+          : await readFile(conversationPath, 'utf8'),
+      artifacts: (await readdir(root)).filter((path) =>
+        /^request-.*\.jsonl$/.test(path),
+      ),
+      attemptStarts: attempts.starts,
+      attemptEnds: attempts.ends,
+      events: input.exporter.events,
+      rejected: input.exporter.rejected,
+      writeFault: await witness(input.faultPath),
+      faultPath: input.faultPath,
+      performance: input.wrapper.getPerformanceMetrics(),
+      sessionTokens: manager.getSessionTokenUsage(),
+      sourceClosed: input.fixture.state.closed,
+      eagerClosed: disk.state.closed,
+      activeReaders: input.fixture.state.active + disk.state.active,
+      activeBodies: activeRequestBodyCount(),
+    };
+    return receipt;
+  } finally {
+    attempts.close();
+    await input.http.server.stop(true);
+    await input.cleanup();
+    await input.setup.config.dispose();
+    resetConversationFileWriterForTesting();
+  }
+}

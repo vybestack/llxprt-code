@@ -1,3 +1,4 @@
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -20,13 +21,15 @@ describe('AnthropicDeviceFlow redirect selection', () => {
 
   it('exchanges a manually entered code with the redirect shown in its URL', async () => {
     const requests: string[] = [];
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
-      requests.push(String(init?.body));
-      return new Response(
-        JSON.stringify({ access_token: 'manual-access-token' }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      );
-    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      withFetchPreconnect(async (_input, init) => {
+        requests.push(String(init?.body));
+        return new Response(
+          JSON.stringify({ access_token: 'manual-access-token' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }),
+    );
     const flow = new AnthropicDeviceFlow(globalThis.fetch);
 
     await flow.initiateDeviceFlow();
@@ -41,13 +44,15 @@ describe('AnthropicDeviceFlow redirect selection', () => {
 
   it('uses the localhost redirect for a code returned by the callback URL', async () => {
     const requests: string[] = [];
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
-      requests.push(String(init?.body));
-      return new Response(
-        JSON.stringify({ access_token: 'callback-access-token' }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      );
-    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      withFetchPreconnect(async (_input, init) => {
+        requests.push(String(init?.body));
+        return new Response(
+          JSON.stringify({ access_token: 'callback-access-token' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }),
+    );
     const flow = new AnthropicDeviceFlow(globalThis.fetch);
 
     await flow.initiateDeviceFlow();

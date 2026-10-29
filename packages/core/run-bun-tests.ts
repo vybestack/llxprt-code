@@ -35,6 +35,11 @@ import {
   junitReportContainsPerTestTimeout,
   JUNIT_SCAN_CHUNK_BYTES,
 } from '../../scripts/lib/bun-test-retry.js';
+import {
+  PARTITION_ENV_VAR,
+  parsePartitionIdentity,
+  selectWeightedPartition,
+} from '../../scripts/lib/bun-test-partition.js';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { writeReportFile } from '../../scripts/lib/junit-report-writer.js';
 import { mkdtempSync, readdirSync, statSync } from 'node:fs';
@@ -119,6 +124,14 @@ export function discoverTestFiles(root: string): string[] {
     results.push(...findTestFiles(join(root, testRoot)));
   }
   return results;
+}
+
+export function selectCoreTestFiles(root: string, identity?: string): string[] {
+  return selectWeightedPartition(
+    discoverTestFiles(root).map((file) => ({ file })),
+    parsePartitionIdentity(identity),
+    join(root, '../..'),
+  ).map((entry) => entry.file);
 }
 
 export interface TestResult {
@@ -380,9 +393,10 @@ function exitWithPendingChildren(): void {
 }
 
 async function main(): Promise<void> {
-  const testFiles = discoverTestFiles(WORKSPACE_ROOT).map((file) =>
-    relative(WORKSPACE_ROOT, file),
-  );
+  const testFiles = selectCoreTestFiles(
+    WORKSPACE_ROOT,
+    process.env[PARTITION_ENV_VAR],
+  ).map((file) => relative(WORKSPACE_ROOT, file));
   if (testFiles.length === 0) {
     console.error('No test files found');
     process.exit(1);

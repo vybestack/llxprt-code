@@ -47,7 +47,7 @@ describe('addHistory after setHistory', () => {
       const { agent } = route;
       await agent.setHistory([human('restored first')]);
       await agent.addHistory(human('added second'));
-      expect(humanTexts(await agent.getHistory())).toStrictEqual([
+      expect(humanTexts(await agent.session.getHistory())).toStrictEqual([
         'restored first',
         'added second',
       ]);
@@ -63,7 +63,7 @@ describe('addHistory after setHistory', () => {
       await agent.chat('start the chat');
       await agent.setHistory([human('restored first')]);
       await agent.addHistory(human('added second'));
-      expect(humanTexts(await agent.getHistory())).toStrictEqual([
+      expect(humanTexts(await agent.session.getHistory())).toStrictEqual([
         'restored first',
         'added second',
       ]);

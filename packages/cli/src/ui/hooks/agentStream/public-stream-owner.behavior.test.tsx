@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -55,7 +56,7 @@ async function submit(owner: Agent, decoy: Agent): Promise<void> {
     readShellExecutionConfig: () => runtime.shell.getShellExecutionConfig(),
     readPtyWidth: () => runtime.shell.getPtyTerminalWidth(),
     readPtyHeight: () => runtime.shell.getPtyTerminalHeight(),
-    readHistory: owner.getHistory.bind(owner),
+    readHistory: owner.streamHistory.bind(owner),
     isCheckpointingEnabled: () => false,
     projectCheckpointsDir: runtime.projectCheckpointsDir,
     history: [],
@@ -77,7 +78,7 @@ async function submit(owner: Agent, decoy: Agent): Promise<void> {
     tasks: decoy.tasks,
     session: decoy.session,
     addHistory: decoy.addHistory.bind(decoy),
-    getHistory: decoy.getHistory.bind(decoy),
+    getHistory: decoy.streamHistory.bind(decoy),
     getProviderContextLimit: owner.getProviderContextLimit.bind(owner),
   });
   const wrapper = ({
@@ -109,14 +110,14 @@ describe('public stream operation owner', () => {
     const owner = await makeOwner('public-stream-owner');
     const sibling = await makeOwner('public-stream-sibling');
     await submit(owner, sibling);
-    expect(JSON.stringify(await owner.getHistory())).toContain(
-      'public captured conversation',
-    );
-    expect(await sibling.getHistory()).toStrictEqual([]);
+    expect(
+      JSON.stringify(await collectResumeRows(owner.streamHistory())),
+    ).toContain('public captured conversation');
+    expect(await collectResumeRows(sibling.streamHistory())).toStrictEqual([]);
     await owner.dispose();
     await submit(sibling, owner);
-    expect(JSON.stringify(await sibling.getHistory())).toContain(
-      'public captured conversation',
-    );
+    expect(
+      JSON.stringify(await collectResumeRows(sibling.streamHistory())),
+    ).toContain('public captured conversation');
   });
 });

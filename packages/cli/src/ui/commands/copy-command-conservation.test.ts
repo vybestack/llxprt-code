@@ -19,7 +19,9 @@ async function copyHistory(
   const command = createCopyCommand(
     bindCopyCommandHistoryRead(
       () => initialized,
-      async () => history,
+      async function* () {
+        yield* history;
+      },
     ),
     async (text) => {
       clipboard.push(text);

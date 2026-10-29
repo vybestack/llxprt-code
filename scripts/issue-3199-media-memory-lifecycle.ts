@@ -4,14 +4,41 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { rm, stat } from 'node:fs/promises';
+import { join } from 'node:path';
+import { historyOwnerIdFor } from '../packages/core/src/storage/media-admission-service.js';
 import type { IContent } from '../packages/core/src/services/history/IContent.js';
-import type { SessionRecordingService } from '../packages/core/src/recording/SessionRecordingService.js';
+import type { SessionRecordingPort } from '../packages/core/src/recording/recordingPort.js';
 import type { HistoryService } from '../packages/core/src/services/history/HistoryService.js';
-import type { SessionPersistenceService } from '../packages/core/src/storage/SessionPersistenceService.js';
+import type { NativeRecordingProbe } from '../packages/core/src/storage/native-recording-probe.test-support.js';
+import type { JournalSession } from '../packages/core/src/services/history/journalSession.js';
 import type { LocalMediaStore } from '../packages/core/src/storage/local-media-store.js';
 import type { RequestMediaResolver } from '../packages/core/src/storage/request-media-resolver.js';
 import type { ProviderFileLifecycle } from '../packages/providers/src/providerFilePolicy.js';
+
+export async function hasHistoryMediaReservation(
+  rootDirectory: string,
+  contentId: string,
+): Promise<boolean> {
+  const ownerDigest = createHash('sha256')
+    .update(historyOwnerIdFor(contentId))
+    .digest('hex');
+  const path = join(
+    rootDirectory,
+    'references',
+    'sha256',
+    contentId.slice('sha256:'.length),
+    ownerDigest,
+  );
+  try {
+    return (await stat(path)).isFile();
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
+      return false;
+    throw error;
+  }
+}
 
 export interface OperationOutcome {
   readonly success: boolean;
@@ -88,8 +115,9 @@ export interface MediaProbeResources {
   store?: LocalMediaStore;
   history?: HistoryService;
   resolver?: RequestMediaResolver;
-  recording?: SessionRecordingService;
-  persistence?: SessionPersistenceService;
+  recording?: SessionRecordingPort;
+  persistence?: NativeRecordingProbe;
+  persistedSession?: JournalSession;
   providerRetention?: ProviderFileLifecycle;
 }
 
@@ -116,6 +144,9 @@ export async function cleanupMediaProbeResources(
   if (recording !== undefined) {
     cleanupSteps.push(() => recording.dispose());
   }
+  const persistedSession = resources.persistedSession;
+  if (persistedSession !== undefined)
+    cleanupSteps.push(() => persistedSession.close());
   const persistence = resources.persistence;
   if (persistence !== undefined) {
     cleanupSteps.push(() => {

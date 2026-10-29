@@ -1,3 +1,5 @@
+import { persistToolPresentations } from '../core/agenticLoop/toolPresentationRecording.js';
+import { persistApprovalLifecycle } from '../core/agenticLoop/approvalLifecycleRecording.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -11,10 +13,16 @@ import { recordCompletedToolHistory } from '../core/agenticLoop/loopHelpers.js';
 interface TurnModelExecution {
   readonly streamModel: AgenticLoopOptions['streamModel'];
   readonly recordToolHistory: AgenticLoopOptions['recordToolHistory'];
+  readonly recordToolPresentations: AgenticLoopOptions['recordToolPresentations'];
+  readonly persistApproval: AgenticLoopOptions['persistApproval'];
 }
 
 export function bindTurnModel(client: AgentClientContract): TurnModelExecution {
   return {
+    recordToolPresentations: (calls, origin) =>
+      persistToolPresentations(calls, client.getHistoryService(), origin),
+    persistApproval: (record, origin) =>
+      persistApprovalLifecycle(record, client.getHistoryService(), origin),
     streamModel: (message, signal, promptId, recording, parameters) =>
       client.sendMessageStream(
         message,

@@ -21,7 +21,7 @@ export function buildStreamChatOptions(
   providerName: string,
   promptId: string,
   requestPayload: {
-    contents: IContent[];
+    contents: Iterable<IContent> | AsyncIterable<IContent>;
     tools: ToolDeclaration[] | undefined;
   },
   metadata: Readonly<Record<string, unknown>> | undefined,
@@ -30,8 +30,14 @@ export function buildStreamChatOptions(
   rawTokenDeltaBridge: RawTokenDeltaBridge | null,
 ): GenerateChatOptions {
   return {
-    contents: requestPayload.contents,
-
+    // Estimation and transport each receive a fresh pass over the request rows.
+    contents: {
+      async *[Symbol.asyncIterator]() {
+        for await (const content of requestPayload.contents) {
+          yield content;
+        }
+      },
+    },
     invocation: prepareInvocation(
       params.modelParameters?.providerName ?? providerName,
       params.modelParameters,

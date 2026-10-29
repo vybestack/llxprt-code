@@ -1,3 +1,4 @@
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,7 +9,7 @@
  * Expansion state for capped tool results (issue #3428 section D).
  *
  * The transcript is the source of truth: these tests record real sessions
- * through the real SessionRecordingService into real temp files, cap the
+ * through the real journal recorder into real temp files, cap the
  * display copy through the shared retention boundary, and read the full body
  * back through the store under test. No transcript stand-ins.
  */
@@ -18,7 +19,8 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
+  type SessionRecordingPort,
   type IContent,
 } from '@vybestack/llxprt-code-core';
 import {
@@ -53,11 +55,11 @@ function toolResponseContent(callId: string, result: unknown): IContent {
 
 describe('toolResultExpansionStore — transcript-backed expansion (#3428)', () => {
   let tempDir: string;
-  let service: SessionRecordingService;
+  let service: SessionRecordingPort;
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), '3428-expansion-'));
-    service = new SessionRecordingService({
+    service = createSessionRecorder({
       sessionId: 'test-session-3428-expansion',
       projectHash: 'testhash',
       chatsDir: tempDir,
@@ -84,7 +86,7 @@ describe('toolResultExpansionStore — transcript-backed expansion (#3428)', () 
     expect(capped.wasCapped).toBe(true);
     expect(capped.text.length).toBeLessThan(body.length);
 
-    service.recordContent(toolResponseContent('call-big', body));
+    await recordRowsForTest(service, [toolResponseContent('call-big', body)]);
     await service.flush();
 
     const store = createStore();
@@ -95,9 +97,9 @@ describe('toolResultExpansionStore — transcript-backed expansion (#3428)', () 
 
   it('retains only the most recently expanded bodies, evicting the oldest', async () => {
     for (let i = 0; i < TOOL_RESULT_EXPANSION_LIMIT + 1; i += 1) {
-      service.recordContent(
+      await recordRowsForTest(service, [
         toolResponseContent(`call-${i}`, `body-${i}-` + 'y'.repeat(2 * KIB)),
-      );
+      ]);
     }
     await service.flush();
 
@@ -113,9 +115,9 @@ describe('toolResultExpansionStore — transcript-backed expansion (#3428)', () 
   });
 
   it('purge drops every expanded body (no permanent re-retention)', async () => {
-    service.recordContent(
+    await recordRowsForTest(service, [
       toolResponseContent('call-purge', largeBody('P', 300)),
-    );
+    ]);
     await service.flush();
 
     const store = createStore();
@@ -128,7 +130,7 @@ describe('toolResultExpansionStore — transcript-backed expansion (#3428)', () 
 
   it('discards a read that settles after a purge ran while it was pending', async () => {
     const body = largeBody('RACE', 300);
-    service.recordContent(toolResponseContent('call-race', body));
+    await recordRowsForTest(service, [toolResponseContent('call-race', body)]);
     await service.flush();
 
     const store = createStore();
@@ -149,7 +151,9 @@ describe('toolResultExpansionStore — transcript-backed expansion (#3428)', () 
   });
 
   it('leaves the map empty when the transcript has no such callId', async () => {
-    service.recordContent(toolResponseContent('call-present', 'present body'));
+    await recordRowsForTest(service, [
+      toolResponseContent('call-present', 'present body'),
+    ]);
     await service.flush();
 
     const store = createStore();

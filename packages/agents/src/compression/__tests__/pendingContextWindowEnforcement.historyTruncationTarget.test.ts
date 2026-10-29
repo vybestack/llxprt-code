@@ -31,8 +31,7 @@ import {
   PendingContextWindowEnforcer,
   type PendingContextWindowEnforcerDeps,
 } from '../pendingContextWindowEnforcement.js';
-import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
-import { buildCompressionContext } from '../compressionContextBuilder.js';
+import { runDiskProviderFallback } from '../diskProviderFallback.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
 
 const MODEL = 'test-model';
@@ -116,8 +115,9 @@ async function buildHarness(): Promise<Harness> {
     // Middle-out and one-shot both refuse on a small number of large
     // messages, which is the shape the reported session hit.
     performCompression: async () => PerformCompressionResult.NOOP,
-    buildCompressionContext: (promptId, targetTokenCount) =>
-      buildCompressionContext(
+    performFallbackCompression: async (promptId, install, targetTokenCount) => {
+      const result = await runDiskProviderFallback(
+        install,
         promptId,
         runtimeContext,
         undefined,
@@ -127,15 +127,11 @@ async function buildHarness(): Promise<Harness> {
         undefined,
         logger,
         { targetTokenCount },
-      ),
-    compressWithFallbackStrategy: (context) =>
-      new TopDownTruncationStrategy().compress(context),
-    applyFallbackCompressionResult: async (result, applyResult) => {
-      if (result.kind === 'noop') {
-        return;
-      }
-      await applyResult(result.newHistory, undefined, 0);
+      );
+      return result.outcome === 'applied';
     },
+    getLastPromptTokenCount: () => null,
+    restoreLastPromptTokenCount: () => {},
     setSuppressDensityDirty: () => {},
     recordCompressionFailure: () => {},
     resetLastPromptTokenCount: () => {},

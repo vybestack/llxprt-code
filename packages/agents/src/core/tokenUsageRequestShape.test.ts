@@ -13,10 +13,11 @@
  * behavioral: they assert on the computed values, not on internal state.
  */
 
+import { retainedShapeEntries } from './__tests__/support/token-usage-source-fixture.js';
 import { describe, it, expect } from 'bun:test';
 import {
   computeRequestShape,
-  RequestShapeSessionMemory,
+  RequestShapeTracker,
   UNRESOLVED_TOOL_NAME,
   TOOL_OUTPUT_TRUNCATION_MARKER,
 } from './tokenUsageRequestShape.js';
@@ -84,7 +85,7 @@ describe('tokenUsageRequestShape — buckets partition (AC-6)', () => {
       tools: [],
       instructionsText: 'system instructions',
       countTokens: charCounter,
-      previouslySentCallIds: new Set(),
+      lastSendSequence: 0n,
       previousFingerprint: undefined,
     });
 
@@ -159,7 +160,7 @@ describe('tokenUsageRequestShape — buckets partition (AC-6)', () => {
         tools: [],
         instructionsText: undefined,
         countTokens: charCounter,
-        previouslySentCallIds: new Set(),
+        lastSendSequence: 0n,
         previousFingerprint: undefined,
       });
 
@@ -178,7 +179,7 @@ describe('tokenUsageRequestShape — buckets partition (AC-6)', () => {
       tools: [{ name: 'tool_a' }, { name: 'tool_b' }],
       instructionsText: 'sys',
       countTokens: charCounter,
-      previouslySentCallIds: new Set(),
+      lastSendSequence: 0n,
       previousFingerprint: undefined,
     });
 
@@ -208,7 +209,7 @@ describe('tokenUsageRequestShape — buckets partition (AC-6)', () => {
       tools: [],
       instructionsText: undefined,
       countTokens: charCounter,
-      previouslySentCallIds: new Set(),
+      lastSendSequence: 0n,
       previousFingerprint: undefined,
     });
 
@@ -231,7 +232,7 @@ describe('tokenUsageRequestShape — tool attribution (AC-5)', () => {
       tools: [],
       instructionsText: undefined,
       countTokens: charCounter,
-      previouslySentCallIds: new Set(),
+      lastSendSequence: 0n,
       previousFingerprint: undefined,
     });
 
@@ -249,7 +250,7 @@ describe('tokenUsageRequestShape — tool attribution (AC-5)', () => {
       tools: [],
       instructionsText: undefined,
       countTokens: charCounter,
-      previouslySentCallIds: new Set(),
+      lastSendSequence: 0n,
       previousFingerprint: undefined,
     });
 
@@ -268,7 +269,7 @@ describe('tokenUsageRequestShape — tool attribution (AC-5)', () => {
       tools: [],
       instructionsText: undefined,
       countTokens: charCounter,
-      previouslySentCallIds: new Set(),
+      lastSendSequence: 0n,
       previousFingerprint: undefined,
     });
 
@@ -286,7 +287,7 @@ describe('tokenUsageRequestShape — tool attribution (AC-5)', () => {
       tools: [],
       instructionsText: undefined,
       countTokens: charCounter,
-      previouslySentCallIds: new Set(),
+      lastSendSequence: 0n,
       previousFingerprint: undefined,
     });
 
@@ -298,7 +299,7 @@ describe('tokenUsageRequestShape — tool attribution (AC-5)', () => {
 
 describe('tokenUsageRequestShape — new vs carried split (AC-5)', () => {
   it('classifies a tool result as new on the first send and carried on the second', () => {
-    const memory = new RequestShapeSessionMemory();
+    const memory = new RequestShapeTracker();
     const contents: IContent[] = [
       toolCall('call-x', 'search'),
       toolResponse('call-x', 'search result body'),
@@ -327,7 +328,7 @@ describe('tokenUsageRequestShape — new vs carried split (AC-5)', () => {
   });
 
   it('counts mixed new and carried tool results in the same send', () => {
-    const memory = new RequestShapeSessionMemory();
+    const memory = new RequestShapeTracker();
 
     // First send: only call-1
     memory.recordRequestShape({
@@ -360,7 +361,7 @@ describe('tokenUsageRequestShape — new vs carried split (AC-5)', () => {
 
 describe('tokenUsageRequestShape — prefix fingerprint (AC-6)', () => {
   it('is null for prefixFingerprintChanged on the first send', () => {
-    const memory = new RequestShapeSessionMemory();
+    const memory = new RequestShapeTracker();
     const result = memory.recordRequestShape({
       requestContents: [textContent('hello')],
       tools: [],
@@ -373,8 +374,8 @@ describe('tokenUsageRequestShape — prefix fingerprint (AC-6)', () => {
   });
 
   it('is stable for an identical prefix', () => {
-    const memory1 = new RequestShapeSessionMemory();
-    const memory2 = new RequestShapeSessionMemory();
+    const memory1 = new RequestShapeTracker();
+    const memory2 = new RequestShapeTracker();
     const inputs = {
       requestContents: [textContent('hello'), aiTextContent('world')],
       tools: [{ name: 'tool_a' }],
@@ -389,7 +390,7 @@ describe('tokenUsageRequestShape — prefix fingerprint (AC-6)', () => {
   });
 
   it('is false for prefixFingerprintChanged when the second prefix is identical', () => {
-    const memory = new RequestShapeSessionMemory();
+    const memory = new RequestShapeTracker();
     const inputs = {
       requestContents: [textContent('hello')],
       tools: [{ name: 't' }] as const,
@@ -404,7 +405,7 @@ describe('tokenUsageRequestShape — prefix fingerprint (AC-6)', () => {
   });
 
   it('changes when the prefix (instructions) changes', () => {
-    const memory = new RequestShapeSessionMemory();
+    const memory = new RequestShapeTracker();
     const base = {
       requestContents: [textContent('hello')],
       tools: [],
@@ -425,7 +426,7 @@ describe('tokenUsageRequestShape — prefix fingerprint (AC-6)', () => {
   });
 
   it('changes when the tool schemas change', () => {
-    const memory = new RequestShapeSessionMemory();
+    const memory = new RequestShapeTracker();
     const base = {
       requestContents: [textContent('hello')],
       instructionsText: 'sys',
@@ -442,7 +443,7 @@ describe('tokenUsageRequestShape — prefix fingerprint (AC-6)', () => {
   });
 
   it('changes when the history contents change', () => {
-    const memory = new RequestShapeSessionMemory();
+    const memory = new RequestShapeTracker();
     const base = {
       tools: [],
       instructionsText: 'sys',
@@ -464,7 +465,7 @@ describe('tokenUsageRequestShape — prefix fingerprint (AC-6)', () => {
 
 describe('tokenUsageRequestShape — callId memory is bounded', () => {
   it('never grows beyond its capacity regardless of how many distinct callIds are sent', () => {
-    const memory = new RequestShapeSessionMemory(5);
+    const memory = new RequestShapeTracker();
 
     for (let i = 0; i < 50; i++) {
       memory.recordRequestShape({
@@ -478,6 +479,6 @@ describe('tokenUsageRequestShape — callId memory is bounded', () => {
       });
     }
 
-    expect(memory.sentCallIdCount).toBeLessThanOrEqual(5);
+    expect(retainedShapeEntries(memory)).toBe(0);
   });
 });

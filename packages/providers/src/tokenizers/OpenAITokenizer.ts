@@ -17,6 +17,7 @@
 import { encoding_for_model, type TiktokenModel } from '@dqbd/tiktoken';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { type ITokenizer } from './ITokenizer.js';
+import { encodingLongTextCounter } from '@vybestack/llxprt-code-core/utils/neutral-long-piece.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 
 export class OpenAITokenizer implements ITokenizer {
@@ -46,9 +47,13 @@ export class OpenAITokenizer implements ITokenizer {
         }
       }
 
-      // Count tokens
-      const tokens = encoder.encode(text);
-      return tokens.length;
+      const resolved = encoder;
+      if (resolved.name === undefined)
+        throw new Error('Missing tokenizer encoding name');
+      return encodingLongTextCounter(resolved.name)(
+        text,
+        (piece) => resolved.encode(piece).length,
+      );
     } catch (error) {
       debugLogger.error('Error counting tokens:', error);
       // Fallback: rough estimate based on characters

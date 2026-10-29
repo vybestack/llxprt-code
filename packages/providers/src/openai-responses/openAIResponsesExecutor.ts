@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+import { recordingOnly } from '../transportArrival.js';
 /**
  * Package-internal stateless executor for the OpenAI Responses API.
  *
@@ -29,36 +29,34 @@
  * custom headers, Codex account ID) as pure functions.
  */
 
+import {
+  resolveInvocationEphemerals,
+  normalizeBaseURL,
+  resolveApiKey,
+  createRequest,
+  applyInstructionsAndTools,
+  applyReasoningSettings,
+  applyTextVerbosity,
+  applyCodexRequestSettings,
+  applyPromptCaching,
+} from './responses-request-fields.js';
 import { dumpFinalizedRequest } from './openAIResponsesRequestDump.js';
-import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponsesRequest } from './responses-request.js';
-import { convertToolsToOpenAIResponses } from './schemaConverter.js';
-import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
-import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { isPreviousResponseNotFoundError } from './openAIResponsesStatefulRecovery.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { buildOpenAIResponsesInput } from './OpenAIResponsesInputBuilder.js';
+import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 import {
-  applyOpenAIResponsesReasoning,
-  type AppliedOpenAIResponsesReasoning,
-} from './openai-responses-reasoning.js';
-import { sanitizePromptCacheKey } from './sanitizePromptCacheKey.js';
-import type {
-  OpenAIResponsesRequest,
-  ResponsesInputItem,
-} from './OpenAIResponsesTypes.js';
-import type { computeStatefulConversation } from './openAIResponsesStateful.js';
-import { applyStatefulConversation } from './openAIResponsesStateful.js';
+  applyStatefulConversation,
+  type StatefulConversation,
+} from './openAIResponsesStateful.js';
 import {
   resolveResponsesBaseURL,
   resolveResponsesRequestShape,
-  toEstimationContents,
 } from './openAIResponsesRequestState.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { type WebSocketTransport } from './openAIResponsesWebSocketTransport.js';
-import type { OpenAIResponsesProjectionContext } from '../runtime/promptEnvelopeProjections.js';
 import {
   finishMediaRequest,
   type MediaRequestOutcome,
@@ -67,6 +65,7 @@ import {
 import type { StreamResponsesParams } from './openAIResponsesHttpStream.js';
 import { streamResponses } from './openAIResponsesStreaming.js';
 import type { resolveMediaCapabilities } from './openAIResponsesRequestState.js';
+import type { NativeResponsesPrompt } from './native-responses-body.js';
 
 /**
  * Provider-specific capabilities that the executor needs to do its work.
@@ -125,7 +124,9 @@ export interface ResponsesExecutorDeps {
    * session replay full history forever instead of starting a new chain
    * (#3134 Fix 1).
    */
-  readonly markStatefulParentRejected?: (responseId: string) => void;
+  readonly markStatefulParentRejected?: (
+    responseId: string,
+  ) => void | Promise<void>;
   /**
    * Whether this request will go over the Codex Responses WebSocket.
    *
@@ -146,46 +147,36 @@ export interface PreparedResponsesRequestContext {
   readonly includeThinkingInResponse: boolean;
   readonly responsesStored: boolean;
   readonly request: OpenAIResponsesRequest;
-  readonly projectionContext: OpenAIResponsesProjectionContext;
   readonly mediaRequest: ResolvedMediaRequest;
+  /** The native prompt body and its pinned request selection. */
+  readonly sourcePrompt: NativeResponsesPrompt;
+  /** Whether the stateful plan was enabled when prepared. */
+  readonly statefulEnabled: boolean;
+  /**
+   * The request rebuilds itself for the stateful retries (rejected parent,
+   * WebSocket->HTTP fallback), since its history is not in memory.
+   */
+  readonly rebuildFromRows: (
+    mode: RebuildMode,
+  ) => Promise<PreparedResponsesRequestContext>;
+  /**
+   * The provider staged the rows from the call's `contents`, so a send that
+   * carries `contents` instead of `requestRows` may use this context.
+   */
+  readonly rowsStagedFromContents?: boolean;
+  readonly stagedRows?: { close(): Promise<void> };
+}
+
+export interface RebuildMode {
+  readonly forceStateless: boolean;
+  readonly forceParentless: boolean;
+  /** The request's synthesized reasoning-id time, carried across rebuilds. */
+  readonly reasoningIdTime?: number;
 }
 
 export interface RequestContext extends PreparedResponsesRequestContext {
   readonly apiKey: string;
   readonly baseURL: string;
-}
-
-function resolveInvocationEphemerals(
-  options: ResponsesRequest,
-): Record<string, unknown> {
-  return options.invocation.ephemerals;
-}
-
-/**
- * Build the finalized Responses request context exactly the way transport
- * does — including the synthetic tool-response patching that precedes it.
- *
- * Shared by transport and by prompt-envelope projection (issue #2817) so the
- * estimate can never drift from what is actually sent.
- */
-export async function buildResponsesRequestContextForProjection(
-  options: ResponsesRequest,
-  deps: ResponsesExecutorDeps,
-  invocationEphemerals = resolveInvocationEphemerals(options),
-  forceStateless = false,
-  forceParentless = false,
-): Promise<PreparedResponsesRequestContext> {
-  const patchedContent = SyntheticToolResponseHandler.patchMessageHistory(
-    options.contents,
-  );
-  return buildRequestContext(
-    options,
-    patchedContent,
-    invocationEphemerals,
-    deps,
-    forceStateless,
-    forceParentless,
-  );
 }
 
 interface ResponsesExecutionSetup {
@@ -198,18 +189,10 @@ interface ResponsesExecutionSetup {
 async function prepareResponsesExecution(
   options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
-  preparedRequestContext: PreparedResponsesRequestContext | undefined,
+  prepared: PreparedResponsesRequestContext,
 ): Promise<ResponsesExecutionSetup> {
-  requireAssembledSystemInstruction(options.systemInstruction);
   const abortSignal = getRequestSignal(options);
   const invocationEphemerals = resolveInvocationEphemerals(options);
-  const prepared =
-    preparedRequestContext ??
-    (await buildResponsesRequestContextForProjection(
-      options,
-      deps,
-      invocationEphemerals,
-    ));
   const requestContext = await resolveResponsesTransportContext(
     options,
     prepared,
@@ -234,7 +217,7 @@ async function prepareResponsesExecution(
 export async function* executeOpenAIResponsesRequest(
   options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
-  preparedRequestContext?: PreparedResponsesRequestContext,
+  preparedRequestContext: PreparedResponsesRequestContext,
 ): AsyncIterableIterator<IContent> {
   const { abortSignal, invocationEphemerals, requestContext, dumpResult } =
     await prepareResponsesExecution(options, deps, preparedRequestContext);
@@ -252,21 +235,21 @@ export async function* executeOpenAIResponsesRequest(
         options,
         deps,
         invocationEphemerals,
-        abortSignal,
+        requestContext.rebuildFromRows,
       );
     },
   };
 
   // #3134 Fix 1: one-shot recovery when previous_response_id is rejected.
-  // The safe replay boundary is "no IContent has been yielded to the consumer"
-  // — if even one chunk escaped we cannot retry without duplicating output.
+  // Recording-only argument pieces are retained in the superseded attempt.
+  // Semantic output still makes parent recovery unsafe.
   let contentYielded = false;
   let rejectedParentId: string | undefined;
   let outcome: MediaRequestOutcome = { status: 'succeeded' };
   try {
     try {
       for await (const content of streamResponses(streamParams, deps)) {
-        contentYielded = true;
+        contentYielded = contentYielded || !recordingOnly(content);
         yield content;
       }
       return;
@@ -310,6 +293,7 @@ export async function* executeOpenAIResponsesRequest(
     abortSignal,
     rejectedParentId,
     recoverParentless,
+    requestContext.rebuildFromRows,
   );
 }
 
@@ -338,6 +322,7 @@ async function* retryWithoutStatefulness(
   abortSignal: AbortSignal | undefined,
   rejectedParentId: string,
   recoverParentless: boolean,
+  rebuildFromRows: PreparedResponsesRequestContext['rebuildFromRows'],
 ): AsyncIterableIterator<IContent> {
   // Retire only the dead id, then rebuild. The retry therefore sends full
   // history with no parent, and — because the parent scan takes the NEWEST
@@ -348,14 +333,11 @@ async function* retryWithoutStatefulness(
   // This matters most on `--continue`: resumed history carries parents scoped
   // to a WebSocket connection that no longer exists, so the first turn of a
   // resumed session always spends one rejected request here.
-  deps.markStatefulParentRejected?.(rejectedParentId);
-  const recoveryPrepared = await buildResponsesRequestContextForProjection(
-    options,
-    deps,
-    invocationEphemerals,
-    /* forceStateless */ false,
-    /* forceParentless */ recoverParentless,
-  );
+  await deps.markStatefulParentRejected?.(rejectedParentId);
+  const recoveryPrepared = await rebuildFromRows({
+    forceStateless: false,
+    forceParentless: recoverParentless,
+  });
   const recoveryContext = await resolveResponsesTransportContext(
     options,
     recoveryPrepared,
@@ -418,14 +400,12 @@ async function buildStatelessTurn(
   options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
   invocationEphemerals: Record<string, unknown>,
-  abortSignal: AbortSignal | undefined,
+  rebuildFromRows: PreparedResponsesRequestContext['rebuildFromRows'],
 ): Promise<StreamResponsesParams> {
-  const prepared = await buildResponsesRequestContextForProjection(
-    options,
-    deps,
-    invocationEphemerals,
-    /* forceStateless */ true,
-  );
+  const prepared = await rebuildFromRows({
+    forceStateless: true,
+    forceParentless: false,
+  });
   const context = await resolveResponsesTransportContext(
     options,
     prepared,
@@ -449,11 +429,25 @@ async function buildStatelessTurn(
   }
   return buildStreamParams(
     context,
-    abortSignal,
+    getRequestSignal(options),
     invocationEphemerals,
     options,
     dumpResult,
   );
+}
+
+/**
+ * `retries` counts retries, so `0` still makes the one initial attempt (the
+ * same reading RetryOrchestrator applies). A budget of zero attempts would end
+ * the stream without ever sending the request.
+ */
+function streamingAttemptBudget(retries: unknown): number {
+  if (retries === undefined) return 6;
+  if (typeof retries !== 'number' || !Number.isInteger(retries) || retries < 0)
+    throw new Error(
+      `The retries setting must be a non-negative integer, received ${String(retries)}`,
+    );
+  return Math.max(1, retries);
 }
 
 function buildStreamParams(
@@ -465,94 +459,68 @@ function buildStreamParams(
 ): StreamResponsesParams {
   return {
     ...requestContext,
+    ...responseBodyStreams(requestContext),
     abortSignal,
-    maxStreamingAttempts:
-      (invocationEphemerals['retries'] as number | undefined) ?? 6,
+    maxStreamingAttempts: streamingAttemptBudget(
+      invocationEphemerals['retries'],
+    ),
     streamRetryInitialDelayMs:
-      (invocationEphemerals['retrywait'] as number | undefined) ?? 4000,
+      typeof invocationEphemerals['retrywait'] === 'number'
+        ? invocationEphemerals['retrywait']
+        : 4000,
     normalizedOptions: options,
     dumpBaseId: dumpResult.baseId,
     dumpMode: dumpResult.dumpMode,
   };
 }
 
-function buildResponsesProjectionContext(
-  request: OpenAIResponsesRequest,
-  options: ResponsesRequest,
-  patchedContent: IContent[],
-  invocationEphemerals: Record<string, unknown>,
-  deps: ResponsesExecutorDeps,
-  stateful: ReturnType<typeof computeStatefulConversation>,
-): OpenAIResponsesProjectionContext {
-  const statefulParentUsed = stateful.parentId !== undefined;
-  if (!statefulParentUsed) {
-    return {
-      statefulParentUsed,
-      incrementalRequest: request,
-    };
-  }
-  if (stateful.parentRetainedTokens !== undefined) {
-    return {
-      statefulParentUsed,
-      incrementalRequest: request,
-      retainedBaselineTokens: stateful.parentRetainedTokens,
-    };
-  }
+function responseBodyStreams(
+  requestContext: RequestContext,
+): Pick<
+  StreamResponsesParams,
+  | 'streamRequestBody'
+  | 'streamRequestBodyLength'
+  | 'streamWebSocketFrame'
+  | 'streamDumpBody'
+> {
+  const prompt = requestContext.sourcePrompt;
   return {
-    statefulParentUsed,
-    incrementalRequest: request,
-    fullHistoryRequest: {
-      ...request,
-      input: buildInput(
-        options,
-        toEstimationContents(patchedContent),
-        deps,
-        false,
-      ),
-    },
+    streamRequestBody: () => prompt.body(requestContext.request),
+    streamRequestBodyLength: () => Promise.resolve(prompt.byteLength),
+    streamWebSocketFrame: () => prompt.frame(requestContext.request),
+    streamDumpBody: () => prompt.body(requestContext.request, 'dump'),
   };
 }
 
-export async function buildRequestContext(
+/**
+ * The request skeleton of a disk text send: everything but the prompt keys
+ * (`input`, `instructions`, `tools`), which the caller converts lazily from
+ * its row selection. The caller selects the stateful parent from that view.
+ */
+export type ResponsesRequestShell = Omit<
+  PreparedResponsesRequestContext,
+  'sourcePrompt' | 'statefulEnabled' | 'rebuildFromRows'
+>;
+
+export async function buildResponsesRequestShell(
   options: ResponsesRequest,
-  patchedContent: IContent[],
-  invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
-  forceStateless = false,
-  forceParentless = false,
-): Promise<PreparedResponsesRequestContext> {
-  const {
-    rawBaseURL,
-    isCodex,
-    systemPrompt,
-    requestOverrides,
-    explicitUserStore,
-    stateful,
-  } = resolveResponsesRequestShape(
-    options,
-    patchedContent,
-    invocationEphemerals,
-    deps,
-    forceStateless,
-    forceParentless,
-  );
+  stateful: StatefulConversation,
+): Promise<ResponsesRequestShell> {
+  const shape = resolveResponsesRequestShape(options, deps);
+  const { rawBaseURL, isCodex, systemPrompt, requestOverrides } = shape;
+  const { explicitUserStore } = shape;
   const mediaRequest = await resolveRequestMedia(
     {
       requestId: options.mediaRequestId,
       aggregateBudgetBytes: options.mediaBudgetBytes,
       resolver: options.mediaResolver,
     },
-    stateful.content,
+    [],
     getRequestSignal(options),
   );
   try {
-    const input = buildInput(
-      options,
-      mediaRequest.withContents((contents) => contents),
-      deps,
-      stateful.parentId !== undefined,
-    );
-    const request = createRequest(options, input, requestOverrides);
+    const request = createRequest(options, [], requestOverrides);
     applyInstructionsAndTools(request, systemPrompt, options);
     const reasoning = applyReasoningSettings(request, options, deps);
     applyTextVerbosity(request, options, deps);
@@ -565,23 +533,10 @@ export async function buildRequestContext(
       isCodex,
       deps.logger,
     );
-    mediaRequest.registerCleanup(() => {
-      request.input.splice(0);
-      request.tools?.splice(0);
-      request.include?.splice(0);
-    });
     return {
       rawBaseURL,
       isCodex,
       request,
-      projectionContext: buildResponsesProjectionContext(
-        request,
-        options,
-        patchedContent,
-        invocationEphemerals,
-        deps,
-        stateful,
-      ),
       includeThinkingInResponse: reasoning.includeThinkingInResponse,
       // Codex cannot use `store` (the backend rejects store=true), so its
       // continuation is tracked by the connection instead. A stateful Codex turn
@@ -619,180 +574,4 @@ async function resolveResponsesTransportContext(
   }
 }
 
-async function resolveApiKey(
-  options: ResponsesRequest,
-  deps: ResponsesExecutorDeps,
-): Promise<string> {
-  const promptAuthToken = await deps.resolveAuthTokenForPrompt();
-  // Strict guard on the value that becomes the Authorization header:
-  // only forward a genuine non-empty string. Provider implementations
-  // can resolve to '' from deeper auth paths, and a defensive runtime
-  // typeof check ensures a non-string (undefined/null from a loosely
-  // typed implementation) is never injected into the header.
-  if (typeof promptAuthToken === 'string' && promptAuthToken !== '') {
-    return promptAuthToken;
-  }
-  const runtimeToken = await resolveRuntimeAuthToken(
-    options.resolved.authToken,
-  );
-  if (typeof runtimeToken === 'string' && runtimeToken !== '') {
-    return runtimeToken;
-  }
-
-  const isCodex = deps.isCodexMode();
-  throw new Error(
-    isCodex
-      ? 'Codex authentication required. Run /auth codex enable to authenticate.'
-      : 'OpenAI API key is required',
-  );
-}
-
-export function isResponsesPdfEnabled(options: ResponsesRequest): boolean {
-  return options.pdfEnabled;
-}
-
-function buildInput(
-  options: ResponsesRequest,
-  patchedContent: IContent[],
-  deps: ResponsesExecutorDeps,
-  serverSideParentActive: boolean = false,
-): ResponsesInputItem[] {
-  return buildOpenAIResponsesInput(patchedContent, {
-    includeReasoningInContext: options.includeReasoningInContext,
-    outputLimits: options.outputLimits,
-    debug: (messageFactory) => deps.logger.debug(messageFactory),
-    serverSideParentActive,
-    mediaPdfEnabled: isResponsesPdfEnabled(options),
-  });
-}
-
-function normalizeBaseURL(baseURLCandidate: string): string {
-  let baseURL = baseURLCandidate;
-  while (baseURL.endsWith('/')) baseURL = baseURL.slice(0, -1);
-  return baseURL;
-}
-
-function createRequest(
-  options: ResponsesRequest,
-  input: ResponsesInputItem[],
-  requestOverrides: Record<string, unknown>,
-): OpenAIResponsesRequest {
-  return {
-    model: options.resolved.model,
-    input,
-    stream: true,
-    ...requestOverrides,
-  };
-}
-
-function applyInstructionsAndTools(
-  request: OpenAIResponsesRequest,
-  systemPrompt: string,
-  options: ResponsesRequest,
-): void {
-  if (systemPrompt) request.instructions = systemPrompt;
-
-  const responsesTools = convertToolsToOpenAIResponses(options.tools);
-  if (responsesTools === undefined || responsesTools.length === 0) return;
-
-  request.tools = responsesTools;
-  if (
-    request.tool_choice === undefined ||
-    request.tool_choice === null ||
-    request.tool_choice === ''
-  ) {
-    request.tool_choice = 'auto';
-  }
-  request.parallel_tool_calls = true;
-}
-
-function applyReasoningSettings(
-  request: OpenAIResponsesRequest,
-  options: ResponsesRequest,
-  deps: ResponsesExecutorDeps,
-): AppliedOpenAIResponsesReasoning {
-  const reasoning = applyOpenAIResponsesReasoning({
-    request,
-    modelBehavior: options.invocation.modelBehavior,
-    fallbacks: options.reasoningFallbacks,
-    providerName: deps.providerName,
-    logger: deps.logger,
-  });
-  deps.logger.debug(
-    () =>
-      `Reasoning check: enabled=${String(reasoning.enabled)}, effort=${String(reasoning.effort)}, summary=${String(reasoning.summary)}, shouldRequest=${reasoning.selected}, includeInResponse=${reasoning.includeThinkingInResponse}`,
-  );
-  if (reasoning.selected) {
-    request.include = ['reasoning.encrypted_content'];
-    deps.logger.debug(
-      () => `Added include parameter: ${JSON.stringify(request.include)}`,
-    );
-  }
-  deps.logger.debug(
-    () => `Full request reasoning config: ${JSON.stringify(request.reasoning)}`,
-  );
-  return reasoning;
-}
-
-function applyTextVerbosity(
-  request: OpenAIResponsesRequest,
-  options: ResponsesRequest,
-  deps: ResponsesExecutorDeps,
-): void {
-  const textVerbosity = options.textVerbosity;
-  if (
-    typeof textVerbosity !== 'string' ||
-    textVerbosity === '' ||
-    !['low', 'medium', 'high'].includes(textVerbosity.toLowerCase())
-  ) {
-    return;
-  }
-  request.text = { verbosity: textVerbosity.toLowerCase() };
-  deps.logger.debug(() => `Added text.verbosity to request: ${textVerbosity}`);
-}
-
-function applyCodexRequestSettings(
-  request: OpenAIResponsesRequest,
-  isCodex: boolean,
-  deps: ResponsesExecutorDeps,
-): void {
-  if (!isCodex) return;
-
-  // store=false is only the Codex DEFAULT. applyStatefulConversation runs
-  // after this and raises it to store=true whenever statefulness is active.
-  // See the design rationale doc comment on applyStatefulConversation in
-  // openAIResponsesStateful.ts for the full trade-off discussion (#3134).
-  request.store = false;
-  for (const parameter of deps.getUnallowedModelParameters(request.model)) {
-    delete request[parameter];
-  }
-  if ('max_output_tokens' in request) {
-    delete request.max_output_tokens;
-    deps.logger.debug(
-      () => 'Codex mode: removed unsupported max_output_tokens from request',
-    );
-  }
-}
-
-function applyPromptCaching(
-  request: OpenAIResponsesRequest,
-  options: ResponsesRequest,
-  isCodex: boolean,
-): void {
-  const promptCachingSetting = options.promptCaching;
-  if (promptCachingSetting === 'off') return;
-
-  if (
-    typeof request.prompt_cache_key === 'string' &&
-    request.prompt_cache_key.trim() !== ''
-  ) {
-    if (!isCodex) request.prompt_cache_retention = '24h';
-    return;
-  }
-
-  const cacheKey = options.invocation.runtimeId;
-  if (typeof cacheKey !== 'string' || cacheKey.trim() === '') return;
-
-  request.prompt_cache_key = sanitizePromptCacheKey(cacheKey);
-  if (!isCodex) request.prompt_cache_retention = '24h';
-}
+export { isResponsesPdfEnabled } from './responses-request-fields.js';

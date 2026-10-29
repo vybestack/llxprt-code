@@ -1,3 +1,4 @@
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -8,6 +9,7 @@ import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { JsonFormatter } from '@vybestack/llxprt-code-core';
 import type { GenerateChatOptions } from '../IProvider.js';
+import { replayableContents } from '../utils/collectContents.js';
 import { permitsBucketFailover, RetriesExhaustedError } from '../errors.js';
 import { requireTransportAttempt } from '../loadBalancing/delegateAttempt.js';
 import { rethrowIfAborted } from '../loadBalancing/requestAbort.js';
@@ -42,7 +44,7 @@ function optionsWithEphemerals(
   ephemerals: Record<string, unknown>,
 ): GenerateChatOptions {
   return {
-    contents: [],
+    contents: replayableContents([]),
     invocation: { ephemerals } as GenerateChatOptions['invocation'],
   };
 }
@@ -61,7 +63,7 @@ describe('request-scoped retry infrastructure', () => {
   });
   it('keeps two observation owners separate and renews retired decorated options', () => {
     const options: GenerateChatOptions = {
-      contents: [],
+      contents: callerOwnedRawProviderSource([]),
       onProviderError: () => undefined,
     };
     const failure = new Error('shared upstream failure');
@@ -80,7 +82,10 @@ describe('request-scoped retry infrastructure', () => {
   it('rejects observation claims without an explicit request owner', () => {
     expect(() =>
       claimProviderErrorObservation(
-        { contents: [], onProviderError: () => undefined },
+        {
+          contents: callerOwnedRawProviderSource([]),
+          onProviderError: () => undefined,
+        },
         new Error('failure'),
       ),
     ).toThrow('Provider error observation context was not attached');
@@ -89,7 +94,7 @@ describe('request-scoped retry infrastructure', () => {
   it('shares a budget through nested wrappers without mutating reusable caller context', () => {
     const callerContext: Record<string, unknown> = { requestLabel: 'caller' };
     const originalOptions: GenerateChatOptions = {
-      contents: [],
+      contents: replayableContents([]),
       metadata: { _retryRequestContext: callerContext },
     };
 
@@ -117,7 +122,7 @@ describe('request-scoped retry infrastructure', () => {
 
   it('rejects array-shaped request contexts and attaches an isolated budget', () => {
     const originalOptions: GenerateChatOptions = {
-      contents: [],
+      contents: replayableContents([]),
       metadata: { _retryRequestContext: [] },
     };
 
@@ -136,7 +141,7 @@ describe('request-scoped retry infrastructure', () => {
     -1,
   ])('bounds invalid transport limit %s to one attempt', (limit) => {
     const { options, budget } = attachTransportAttemptBudget(
-      { contents: [] },
+      { contents: replayableContents([]) },
       limit,
     );
 
@@ -149,7 +154,7 @@ describe('request-scoped retry infrastructure', () => {
     const malformed = { limit: 2, used: 3 };
     const request = attachTransportAttemptBudget(
       {
-        contents: [],
+        contents: replayableContents([]),
         metadata: {
           _retryRequestContext: { transportAttemptBudget: malformed },
         },
@@ -163,7 +168,7 @@ describe('request-scoped retry infrastructure', () => {
 
   it('admits no more concurrent consumers than the shared budget limit', async () => {
     const { options, budget } = attachTransportAttemptBudget(
-      { contents: [] },
+      { contents: replayableContents([]) },
       2,
     );
 
@@ -231,7 +236,10 @@ describe('request-scoped retry infrastructure', () => {
   });
 
   it('reports transport budget exhaustion as a classified terminal JSON error', () => {
-    const { options } = attachTransportAttemptBudget({ contents: [] }, 1);
+    const { options } = attachTransportAttemptBudget(
+      { contents: replayableContents([]) },
+      1,
+    );
     requireTransportAttempt(options);
     const captureFailure = (): Error => {
       try {
@@ -315,7 +323,7 @@ describe('request-scoped retry infrastructure', () => {
 
   it('claims the same explicitly scoped error only once', () => {
     const options: GenerateChatOptions = {
-      contents: [],
+      contents: replayableContents([]),
       onProviderError: () => undefined,
     };
     const owned = attachProviderErrorObservationContext(options);
@@ -327,7 +335,7 @@ describe('request-scoped retry infrastructure', () => {
 
   it('preserves claims when a nested observation owner is attached', () => {
     const options: GenerateChatOptions = {
-      contents: [],
+      contents: replayableContents([]),
       onProviderError: () => undefined,
     };
     const owned = attachProviderErrorObservationContext(options);
@@ -341,7 +349,7 @@ describe('request-scoped retry infrastructure', () => {
 
   it('starts fresh observation deduplication after a request lifecycle ends', () => {
     const options: GenerateChatOptions = {
-      contents: [],
+      contents: replayableContents([]),
       onProviderError: () => undefined,
     };
     const error = new Error('delegate failure');
@@ -364,7 +372,7 @@ describe('request-scoped retry infrastructure', () => {
 
   it('bounds request-owned primitive error deduplication', () => {
     const options: GenerateChatOptions = {
-      contents: [],
+      contents: replayableContents([]),
       onProviderError: () => undefined,
     };
 
@@ -423,7 +431,7 @@ describe('request-scoped retry infrastructure', () => {
 
     expect(() =>
       rethrowIfAborted(providerFailure, {
-        contents: [],
+        contents: replayableContents([]),
         metadata: { abortSignal: controller.signal },
       }),
     ).toThrowError(

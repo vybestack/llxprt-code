@@ -1,5 +1,6 @@
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
-const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -19,12 +20,20 @@ import {
   type LoadBalancingProviderConfig,
   type ResolvedSubProfile,
 } from '../LoadBalancingProvider.js';
-import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
 import { LoadBalancerAllContextLimitsExceededError } from '../loadBalancing/contextLimitError.js';
+import {
+  collectContents,
+  replayableContents,
+} from '../utils/collectContents.js';
+
+import {
+  trackedRequestRows,
+  type TrackedRequestRows,
+} from './requestRowsTestSupport.js';
 
 function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -86,6 +95,14 @@ function createTokenizerFactory(
   reportSource?: (model: string) => void,
 ): RuntimeTokenizerFactory {
   return {
+    estimatePrompt: async (request) => ({
+      count: await request.legacyEstimate(),
+      method: 'calibrated',
+      family: 'test',
+      estimatorVersion: 'test',
+      assetRevision: 'test',
+      projectionRevision: request.projectionRevision,
+    }),
     getTokenizer: (
       providerName: string,
       model?: string,
@@ -106,21 +123,455 @@ async function consumeIterator(
   const results: IContent[] = [];
   for await (const chunk of provider.generateChatCompletion({
     invocation: makeLoadBalancerInvocation(),
-    contents,
-  } as GenerateChatOptions)) {
+    contents: replayableContents(contents),
+  })) {
     results.push(chunk);
   }
   return results;
 }
 
-describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
-  let settingsService: SettingsService;
-  let config: Config;
-  let providerManager: ProviderManager;
+let providerManager: ProviderManager;
 
+function createFailoverCompressionConfig(): LoadBalancingProviderConfig {
+  return {
+    profileName: 'failover-compression',
+    strategy: 'failover',
+    contextLimit: 4,
+    lbProfileEphemeralSettings: {
+      failover_retry_count: 1,
+      failover_retry_delay_ms: 0,
+    },
+    subProfiles: [
+      createResolvedSubProfile({
+        name: 'gpt',
+        providerName: 'openai',
+        model: 'gpt-4.1',
+      }),
+      createResolvedSubProfile({
+        name: 'opus',
+        providerName: 'anthropic',
+        model: 'claude-opus-4',
+      }),
+    ],
+  };
+}
+
+function registerCompressionCase01(): void {
+  describe('replacement request selection', () => {
+    it('asks for a fresh replacement selection per failover target and sends it as the request', async () => {
+      const originalReads: string[] = [];
+      const observeOriginal = (text: string): void => {
+        if (text.includes('this message needs compression'))
+          originalReads.push(text);
+      };
+      const factory = createTokenizerFactory({
+        'gpt-4.1': createCountingTokenizer(observeOriginal),
+        'claude-opus-4': createCountingTokenizer(observeOriginal),
+      });
+      providerManager.setTokenizerFactory(factory);
+
+      const sentToAnthropic: IContent[][] = [];
+      let openAiAttempts = 0;
+      providerManager.registerProvider({
+        name: 'openai',
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          openAiAttempts++;
+          yield* [];
+          throw new Error('429 rate limited');
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'gpt-4.1',
+      });
+      providerManager.registerProvider({
+        name: 'anthropic',
+        async *generateChatCompletion(
+          optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
+        ): AsyncGenerator<IContent> {
+          const options = optionsOnly(optionsOrStream);
+          sentToAnthropic.push(await collectContents(options.contents));
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'claude-opus-4',
+      });
+
+      const provider = new LoadBalancingProvider(
+        createFailoverCompressionConfig(),
+        providerManager,
+      );
+      const replacements: TrackedRequestRows[] = [];
+      const compressionCallback = vi.fn(async () => {
+        const replacement = trackedRequestRows([createTextContent('ok')]);
+        replacements.push(replacement);
+        return replacement;
+      });
+      provider.setCompressionCallback(compressionCallback);
+
+      await consumeIterator(provider, [
+        createTextContent('this message needs compression'),
+      ]);
+
+      expect(openAiAttempts).toBe(1);
+      expect(compressionCallback).toHaveBeenCalledTimes(2);
+      expect(originalReads).toHaveLength(2);
+      expect(originalReads[0]).toBe(originalReads[1]);
+      expect(replacements).toHaveLength(2);
+      expect(sentToAnthropic).toStrictEqual([[createTextContent('ok')]]);
+      // The load balancer only reads replacement selections; the preparer
+      // that produced them owns closing them.
+      expect(replacements.map((r) => r.closeCount())).toStrictEqual([0, 0]);
+      expect(replacements.map((r) => r.openReaders())).toStrictEqual([0, 0]);
+    });
+  });
+}
+
+function registerCompressionCase02(): void {
+  describe('threshold-triggered compression', () => {
+    it('invokes compression callback when estimate exceeds limit', async () => {
+      const factory = createTokenizerFactory({
+        'gpt-4.1': createCountingTokenizer(() => {}),
+      });
+
+      providerManager.setTokenizerFactory(factory);
+      const sentToOpenAi: IContent[][] = [];
+      providerManager.registerProvider(
+        createMockProvider({
+          name: 'openai',
+          async *generateChatCompletion(
+            optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
+          ): AsyncGenerator<IContent> {
+            const options = optionsOnly(optionsOrStream);
+            sentToOpenAi.push(
+              structuredClone(await collectContents(options.contents)),
+            );
+            yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+          },
+        }),
+      );
+
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'compress-test',
+        strategy: 'round-robin',
+        contextLimit: 10,
+        subProfiles: [
+          createResolvedSubProfile({
+            name: 'gpt',
+            providerName: 'openai',
+            model: 'gpt-4.1',
+          }),
+        ],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+
+      const compressionCallback = vi.fn(async () =>
+        trackedRequestRows([createTextContent('compressed')]),
+      );
+      provider.setCompressionCallback(compressionCallback);
+
+      const result = await consumeIterator(provider, [
+        createTextContent('this is a very long message that exceeds the limit'),
+      ]);
+
+      expect(compressionCallback).toHaveBeenCalledTimes(1);
+      expect(sentToOpenAi).toStrictEqual([[createTextContent('compressed')]]);
+      expect(result.length).toBeGreaterThan(0);
+    });
+  });
+}
+
+function registerCompressionCase03(): void {
+  describe('exact-limit boundary', () => {
+    it('does not trigger compression when estimate equals the limit exactly', async () => {
+      const factory = createTokenizerFactory({
+        'gpt-4.1': createCountingTokenizer(() => {}),
+      });
+      providerManager.setTokenizerFactory(factory);
+      const sentToOpenAi: IContent[][] = [];
+      providerManager.registerProvider(
+        createMockProvider({
+          name: 'openai',
+          async *generateChatCompletion(
+            optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
+          ): AsyncGenerator<IContent> {
+            const options = optionsOnly(optionsOrStream);
+            sentToOpenAi.push(
+              structuredClone(await collectContents(options.contents)),
+            );
+            yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+          },
+        }),
+      );
+
+      const provider = new LoadBalancingProvider(
+        {
+          profileName: 'boundary-test',
+          strategy: 'round-robin',
+          contextLimit: 3,
+          subProfiles: [
+            createResolvedSubProfile({
+              name: 'gpt',
+              providerName: 'openai',
+              model: 'gpt-4.1',
+            }),
+          ],
+        },
+        providerManager,
+      );
+      const compressionCallback = vi.fn(async () =>
+        trackedRequestRows([createTextContent('abcdefghij')]),
+      );
+      provider.setCompressionCallback(compressionCallback);
+
+      await consumeIterator(provider, [createTextContent('abcdefghij')]);
+
+      expect(compressionCallback).not.toHaveBeenCalled();
+      expect(sentToOpenAi).toStrictEqual([[createTextContent('abcdefghij')]]);
+    });
+  });
+}
+
+function registerCompressionCase04(): void {
+  describe('missing callback', () => {
+    it('throws when no compression callback is set and limit exceeded', async () => {
+      const factory = createTokenizerFactory({
+        'gpt-4.1': createCountingTokenizer(() => {}),
+      });
+
+      providerManager.setTokenizerFactory(factory);
+      providerManager.registerProvider(createMockProvider({ name: 'openai' }));
+
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'no-callback-test',
+        strategy: 'round-robin',
+        contextLimit: 5,
+        subProfiles: [
+          createResolvedSubProfile({
+            name: 'gpt',
+            providerName: 'openai',
+            model: 'gpt-4.1',
+          }),
+        ],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+
+      await expect(
+        consumeIterator(provider, [
+          createTextContent(
+            'this is a very long message that will exceed the tiny limit',
+          ),
+        ]),
+      ).rejects.toThrow(/context limit exceeded/i);
+    });
+  });
+}
+
+function registerCompressionCase05(): void {
+  describe('all targets over limit', () => {
+    it('throws aggregate context-limit error when all failover targets exceed the limit', async () => {
+      const factory = createTokenizerFactory({
+        'gpt-4.1': createFixedTokenizer(50),
+        'claude-opus-4': createFixedTokenizer(60),
+      });
+      providerManager.setTokenizerFactory(factory);
+      providerManager.registerProvider(createMockProvider({ name: 'openai' }));
+      providerManager.registerProvider(
+        createMockProvider({ name: 'anthropic' }),
+      );
+
+      const provider = new LoadBalancingProvider(
+        {
+          profileName: 'aggregate-limit-test',
+          strategy: 'failover',
+          contextLimit: 10,
+          lbProfileEphemeralSettings: {
+            failover_retry_count: 1,
+            failover_retry_delay_ms: 0,
+          },
+          subProfiles: [
+            createResolvedSubProfile({
+              name: 'gpt',
+              providerName: 'openai',
+              model: 'gpt-4.1',
+            }),
+            createResolvedSubProfile({
+              name: 'opus',
+              providerName: 'anthropic',
+              model: 'claude-opus-4',
+            }),
+          ],
+        },
+        providerManager,
+      );
+
+      await expect(
+        consumeIterator(provider, [createTextContent('too large everywhere')]),
+      ).rejects.toThrow(LoadBalancerAllContextLimitsExceededError);
+    });
+  });
+}
+
+function registerCompressionCase06(): void {
+  describe('callback failure during failover', () => {
+    it('continues failover after compression callback failure', async () => {
+      const factory = createTokenizerFactory({
+        'gpt-4.1': createFixedTokenizer(50),
+        'claude-opus-4': createFixedTokenizer(2),
+      });
+      providerManager.setTokenizerFactory(factory);
+      const openAiCalls = vi.fn();
+      const anthropicCalls = vi.fn();
+      providerManager.registerProvider(
+        createMockProvider({
+          name: 'openai',
+          async *generateChatCompletion(): AsyncGenerator<IContent> {
+            openAiCalls();
+            yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+          },
+        }),
+      );
+      providerManager.registerProvider(
+        createMockProvider({
+          name: 'anthropic',
+          async *generateChatCompletion(): AsyncGenerator<IContent> {
+            anthropicCalls();
+            yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+          },
+        }),
+      );
+
+      const provider = new LoadBalancingProvider(
+        {
+          profileName: 'callback-failure-test',
+          strategy: 'failover',
+          contextLimit: 10,
+          lbProfileEphemeralSettings: {
+            failover_retry_count: 1,
+            failover_retry_delay_ms: 0,
+          },
+          subProfiles: [
+            createResolvedSubProfile({
+              name: 'gpt',
+              providerName: 'openai',
+              model: 'gpt-4.1',
+            }),
+            createResolvedSubProfile({
+              name: 'opus',
+              providerName: 'anthropic',
+              model: 'claude-opus-4',
+            }),
+          ],
+        },
+        providerManager,
+      );
+      provider.setCompressionCallback(async () => {
+        throw new Error('compression callback failed');
+      });
+
+      const results = await consumeIterator(provider, [
+        createTextContent('needs compression'),
+      ]);
+
+      expect(openAiCalls).not.toHaveBeenCalled();
+      expect(anthropicCalls).toHaveBeenCalledTimes(1);
+      expect(results).toStrictEqual([
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] },
+      ]);
+    });
+  });
+}
+
+function registerCompressionCase07(): void {
+  describe('mixed tokenizer failover', () => {
+    it('GPT-first with Opus failover uses GPT tokenizer then Opus on failover', async () => {
+      const tokenizersUsed: string[] = [];
+      const resolverEvents: string[] = [];
+      const factory = createTokenizerFactory(
+        {
+          'gpt-4.1': createCountingTokenizer(() => {
+            tokenizersUsed.push('gpt-4.1');
+          }),
+          'claude-opus-4': createCountingTokenizer(() => {
+            tokenizersUsed.push('claude-opus-4');
+          }),
+        },
+        (model) => resolverEvents.push(model),
+      );
+
+      providerManager.setTokenizerFactory(factory);
+
+      let gptCallCount = 0;
+      providerManager.registerProvider({
+        name: 'openai',
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          gptCallCount++;
+          if (gptCallCount === 1) {
+            throw new Error('429 rate limited');
+          }
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'gpt-4.1',
+      });
+      let anthropicCallCount = 0;
+      providerManager.registerProvider(
+        createMockProvider({
+          name: 'anthropic',
+          async *generateChatCompletion(): AsyncGenerator<IContent> {
+            anthropicCallCount++;
+            yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+          },
+          getDefaultModel: () => 'claude-opus-4',
+        }),
+      );
+
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'gptfirst',
+        strategy: 'failover',
+        contextLimit: 100000,
+        lbProfileEphemeralSettings: {
+          failover_retry_count: 1,
+          failover_retry_delay_ms: 0,
+        },
+        subProfiles: [
+          createResolvedSubProfile({
+            name: 'gpt',
+            providerName: 'openai',
+            model: 'gpt-4.1',
+            contextWindow: 128000,
+          }),
+          createResolvedSubProfile({
+            name: 'opus',
+            providerName: 'anthropic',
+            model: 'claude-opus-4',
+            contextWindow: 200000,
+          }),
+        ],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+      await consumeIterator(provider, [
+        createTextContent('hello from mixed profile test'),
+      ]);
+
+      expect(anthropicCallCount).toBe(1);
+      expect(gptCallCount).toBe(1);
+      expect(resolverEvents).toContain('gpt-4.1');
+      expect(resolverEvents).toContain('claude-opus-4');
+      expect(tokenizersUsed).toContain('gpt-4.1');
+      expect(tokenizersUsed).toContain('claude-opus-4');
+      expect(tokenizersUsed.indexOf('gpt-4.1')).toBeLessThan(
+        tokenizersUsed.indexOf('claude-opus-4'),
+      );
+    });
+  });
+}
+
+describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
   beforeEach(() => {
-    settingsService = new SettingsService();
-    config = createRuntimeConfigStub(settingsService);
+    const settingsService = new SettingsService();
+    const config: Config = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
       undefined,
       undefined,
@@ -130,402 +581,29 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
       config,
       undefined,
       undefined,
-      fixtureOwnersBorrowedSettings(config, settingsService),
+      borrowedSettings(config, settingsService),
     );
   });
 
-  it('compresses each failover target from the original request contents', async () => {
-    const factory = createTokenizerFactory({
-      'gpt-4.1': createCountingTokenizer(() => {}),
-      'claude-opus-4': createCountingTokenizer(() => {}),
-    });
-    providerManager.setTokenizerFactory(factory);
+  registerCompressionCase01();
 
-    const sentToAnthropic: IContent[][] = [];
-    let openAiAttempts = 0;
-    providerManager.registerProvider({
-      name: 'openai',
-      async *generateChatCompletion(): AsyncGenerator<IContent> {
-        openAiAttempts++;
-        yield* [];
-        throw new Error('429 rate limited');
-      },
-      getModels: async () => [],
-      getDefaultModel: () => 'gpt-4.1',
-    });
-    providerManager.registerProvider({
-      name: 'anthropic',
-      async *generateChatCompletion(
-        options: GenerateChatOptions,
-      ): AsyncGenerator<IContent> {
-        sentToAnthropic.push(structuredClone(options.contents));
-        options.contents[0].blocks[0] = {
-          type: 'text',
-          text: 'mutated by delegate provider',
-        };
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-      },
-      getModels: async () => [],
-      getDefaultModel: () => 'claude-opus-4',
-    });
+  registerCompressionCase02();
 
-    const lbConfig: LoadBalancingProviderConfig = {
-      profileName: 'failover-compression',
-      strategy: 'failover',
-      contextLimit: 4,
-      lbProfileEphemeralSettings: {
-        failover_retry_count: 1,
-        failover_retry_delay_ms: 0,
-      },
-      subProfiles: [
-        createResolvedSubProfile({
-          name: 'gpt',
-          providerName: 'openai',
-          model: 'gpt-4.1',
-        }),
-        createResolvedSubProfile({
-          name: 'opus',
-          providerName: 'anthropic',
-          model: 'claude-opus-4',
-        }),
-      ],
-    };
-    const provider = new LoadBalancingProvider(lbConfig, providerManager);
-    const compressionInputs: IContent[][] = [];
-    const compressionCallback = vi.fn(async (contents: IContent[]) => {
-      compressionInputs.push(structuredClone(contents));
-      contents[0].blocks[0] = {
-        type: 'text',
-        text: 'mutated during first compression attempt',
-      };
-      return [createTextContent('ok')];
-    });
-    provider.setCompressionCallback(compressionCallback);
+  registerCompressionCase03();
 
-    const originalContents = [
-      createTextContent('this message needs compression'),
-    ];
-    await consumeIterator(provider, originalContents);
+  registerCompressionCase04();
 
-    expect(openAiAttempts).toBe(1);
-    expect(compressionCallback).toHaveBeenCalledTimes(2);
-    expect(compressionInputs).toStrictEqual([
-      originalContents,
-      originalContents,
-    ]);
-    expect(sentToAnthropic).toHaveLength(1);
-    expect(sentToAnthropic[0][0].blocks[0]).toStrictEqual({
-      type: 'text',
-      text: 'ok',
-    });
-  });
+  registerCompressionCase05();
 
-  it('invokes compression callback when estimate exceeds limit', async () => {
-    const factory = createTokenizerFactory({
-      'gpt-4.1': createCountingTokenizer(() => {}),
-    });
+  registerCompressionCase06();
 
-    providerManager.setTokenizerFactory(factory);
-    const sentToOpenAi: IContent[][] = [];
-    providerManager.registerProvider(
-      createMockProvider({
-        name: 'openai',
-        async *generateChatCompletion(
-          options: GenerateChatOptions,
-        ): AsyncGenerator<IContent> {
-          sentToOpenAi.push(structuredClone(options.contents));
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-        },
-      }),
-    );
-
-    const lbConfig: LoadBalancingProviderConfig = {
-      profileName: 'compress-test',
-      strategy: 'round-robin',
-      contextLimit: 10,
-      subProfiles: [
-        createResolvedSubProfile({
-          name: 'gpt',
-          providerName: 'openai',
-          model: 'gpt-4.1',
-        }),
-      ],
-    };
-
-    const provider = new LoadBalancingProvider(lbConfig, providerManager);
-
-    const compressionCallback = vi.fn(async (_contents: IContent[]) => [
-      createTextContent('compressed'),
-    ]);
-    provider.setCompressionCallback(compressionCallback);
-
-    const result = await consumeIterator(provider, [
-      createTextContent('this is a very long message that exceeds the limit'),
-    ]);
-
-    expect(compressionCallback).toHaveBeenCalledTimes(1);
-    expect(sentToOpenAi).toStrictEqual([[createTextContent('compressed')]]);
-    expect(result.length).toBeGreaterThan(0);
-  });
-
-  it('does not trigger compression when estimate equals the limit exactly', async () => {
-    const factory = createTokenizerFactory({
-      'gpt-4.1': createCountingTokenizer(() => {}),
-    });
-    providerManager.setTokenizerFactory(factory);
-    const sentToOpenAi: IContent[][] = [];
-    providerManager.registerProvider(
-      createMockProvider({
-        name: 'openai',
-        async *generateChatCompletion(
-          options: GenerateChatOptions,
-        ): AsyncGenerator<IContent> {
-          sentToOpenAi.push(structuredClone(options.contents));
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-        },
-      }),
-    );
-
-    const provider = new LoadBalancingProvider(
-      {
-        profileName: 'boundary-test',
-        strategy: 'round-robin',
-        contextLimit: 3,
-        subProfiles: [
-          createResolvedSubProfile({
-            name: 'gpt',
-            providerName: 'openai',
-            model: 'gpt-4.1',
-          }),
-        ],
-      },
-      providerManager,
-    );
-    const compressionCallback = vi.fn(async (contents: IContent[]) => contents);
-    provider.setCompressionCallback(compressionCallback);
-
-    await consumeIterator(provider, [createTextContent('abcdefghij')]);
-
-    expect(compressionCallback).not.toHaveBeenCalled();
-    expect(sentToOpenAi).toStrictEqual([[createTextContent('abcdefghij')]]);
-  });
-
-  it('throws when no compression callback is set and limit exceeded', async () => {
-    const factory = createTokenizerFactory({
-      'gpt-4.1': createCountingTokenizer(() => {}),
-    });
-
-    providerManager.setTokenizerFactory(factory);
-    providerManager.registerProvider(createMockProvider({ name: 'openai' }));
-
-    const lbConfig: LoadBalancingProviderConfig = {
-      profileName: 'no-callback-test',
-      strategy: 'round-robin',
-      contextLimit: 5,
-      subProfiles: [
-        createResolvedSubProfile({
-          name: 'gpt',
-          providerName: 'openai',
-          model: 'gpt-4.1',
-        }),
-      ],
-    };
-
-    const provider = new LoadBalancingProvider(lbConfig, providerManager);
-
-    await expect(
-      consumeIterator(provider, [
-        createTextContent(
-          'this is a very long message that will exceed the tiny limit',
-        ),
-      ]),
-    ).rejects.toThrow(/context limit exceeded/i);
-  });
-
-  it('throws aggregate context-limit error when all failover targets exceed the limit', async () => {
-    const factory = createTokenizerFactory({
-      'gpt-4.1': createFixedTokenizer(50),
-      'claude-opus-4': createFixedTokenizer(60),
-    });
-    providerManager.setTokenizerFactory(factory);
-    providerManager.registerProvider(createMockProvider({ name: 'openai' }));
-    providerManager.registerProvider(createMockProvider({ name: 'anthropic' }));
-
-    const provider = new LoadBalancingProvider(
-      {
-        profileName: 'aggregate-limit-test',
-        strategy: 'failover',
-        contextLimit: 10,
-        lbProfileEphemeralSettings: {
-          failover_retry_count: 1,
-          failover_retry_delay_ms: 0,
-        },
-        subProfiles: [
-          createResolvedSubProfile({
-            name: 'gpt',
-            providerName: 'openai',
-            model: 'gpt-4.1',
-          }),
-          createResolvedSubProfile({
-            name: 'opus',
-            providerName: 'anthropic',
-            model: 'claude-opus-4',
-          }),
-        ],
-      },
-      providerManager,
-    );
-
-    await expect(
-      consumeIterator(provider, [createTextContent('too large everywhere')]),
-    ).rejects.toThrow(LoadBalancerAllContextLimitsExceededError);
-  });
-
-  it('continues failover after compression callback failure', async () => {
-    const factory = createTokenizerFactory({
-      'gpt-4.1': createFixedTokenizer(50),
-      'claude-opus-4': createFixedTokenizer(2),
-    });
-    providerManager.setTokenizerFactory(factory);
-    const openAiCalls = vi.fn();
-    const anthropicCalls = vi.fn();
-    providerManager.registerProvider(
-      createMockProvider({
-        name: 'openai',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          openAiCalls();
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-        },
-      }),
-    );
-    providerManager.registerProvider(
-      createMockProvider({
-        name: 'anthropic',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          anthropicCalls();
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-        },
-      }),
-    );
-
-    const provider = new LoadBalancingProvider(
-      {
-        profileName: 'callback-failure-test',
-        strategy: 'failover',
-        contextLimit: 10,
-        lbProfileEphemeralSettings: {
-          failover_retry_count: 1,
-          failover_retry_delay_ms: 0,
-        },
-        subProfiles: [
-          createResolvedSubProfile({
-            name: 'gpt',
-            providerName: 'openai',
-            model: 'gpt-4.1',
-          }),
-          createResolvedSubProfile({
-            name: 'opus',
-            providerName: 'anthropic',
-            model: 'claude-opus-4',
-          }),
-        ],
-      },
-      providerManager,
-    );
-    provider.setCompressionCallback(async () => {
-      throw new Error('compression callback failed');
-    });
-
-    const results = await consumeIterator(provider, [
-      createTextContent('needs compression'),
-    ]);
-
-    expect(openAiCalls).not.toHaveBeenCalled();
-    expect(anthropicCalls).toHaveBeenCalledTimes(1);
-    expect(results).toStrictEqual([
-      { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] },
-    ]);
-  });
-
-  it('GPT-first with Opus failover uses GPT tokenizer then Opus on failover', async () => {
-    const tokenizersUsed: string[] = [];
-    const resolverEvents: string[] = [];
-    const factory = createTokenizerFactory(
-      {
-        'gpt-4.1': createCountingTokenizer(() => {
-          tokenizersUsed.push('gpt-4.1');
-        }),
-        'claude-opus-4': createCountingTokenizer(() => {
-          tokenizersUsed.push('claude-opus-4');
-        }),
-      },
-      (model) => resolverEvents.push(model),
-    );
-
-    providerManager.setTokenizerFactory(factory);
-
-    let gptCallCount = 0;
-    providerManager.registerProvider({
-      name: 'openai',
-      async *generateChatCompletion(): AsyncGenerator<IContent> {
-        gptCallCount++;
-        if (gptCallCount === 1) {
-          throw new Error('429 rate limited');
-        }
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-      },
-      getModels: async () => [],
-      getDefaultModel: () => 'gpt-4.1',
-    });
-    let anthropicCallCount = 0;
-    providerManager.registerProvider(
-      createMockProvider({
-        name: 'anthropic',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          anthropicCallCount++;
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-        },
-        getDefaultModel: () => 'claude-opus-4',
-      }),
-    );
-
-    const lbConfig: LoadBalancingProviderConfig = {
-      profileName: 'gptfirst',
-      strategy: 'failover',
-      contextLimit: 100000,
-      lbProfileEphemeralSettings: {
-        failover_retry_count: 1,
-        failover_retry_delay_ms: 0,
-      },
-      subProfiles: [
-        createResolvedSubProfile({
-          name: 'gpt',
-          providerName: 'openai',
-          model: 'gpt-4.1',
-          contextWindow: 128000,
-        }),
-        createResolvedSubProfile({
-          name: 'opus',
-          providerName: 'anthropic',
-          model: 'claude-opus-4',
-          contextWindow: 200000,
-        }),
-      ],
-    };
-
-    const provider = new LoadBalancingProvider(lbConfig, providerManager);
-    await consumeIterator(provider, [
-      createTextContent('hello from mixed profile test'),
-    ]);
-
-    expect(anthropicCallCount).toBe(1);
-    expect(gptCallCount).toBe(1);
-    expect(resolverEvents).toContain('gpt-4.1');
-    expect(resolverEvents).toContain('claude-opus-4');
-    expect(tokenizersUsed).toContain('gpt-4.1');
-    expect(tokenizersUsed).toContain('claude-opus-4');
-    expect(tokenizersUsed.indexOf('gpt-4.1')).toBeLessThan(
-      tokenizersUsed.indexOf('claude-opus-4'),
-    );
-  });
+  registerCompressionCase07();
 });
+
+function optionsOnly(
+  options: GenerateChatOptions | AsyncIterable<IContent>,
+): GenerateChatOptions {
+  if (Symbol.asyncIterator in options)
+    throw new Error('Expected request options');
+  return options;
+}

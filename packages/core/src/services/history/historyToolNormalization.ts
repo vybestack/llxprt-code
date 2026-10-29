@@ -15,6 +15,10 @@
  */
 
 import type { DebugLogger } from '../../debug/index.js';
+import {
+  logReconstructedCalls,
+  logUnmatchedResponse,
+} from './providerDiagnostics.js';
 import type {
   IContent,
   ToolCallBlock,
@@ -189,10 +193,7 @@ export class HistoryToolNormalization {
       description: 'Reconstructed tool call after compression',
     }));
 
-    logger.warn('Synthesizing missing tool_call for responses', {
-      callIds: reconstructedBlocks.map((block) => block.id),
-      toolNames: reconstructedBlocks.map((block) => block.name),
-    });
+    logReconstructedCalls(logger, reconstructedBlocks);
 
     for (const block of reconstructedBlocks) {
       seenToolCallIds.add(block.id);
@@ -423,10 +424,7 @@ export class HistoryToolNormalization {
 
     const toolCallIndex = toolCallIndexById.get(callId);
     if (toolCallIndex === undefined) {
-      logger.warn('Tool response missing matching tool call', {
-        callId,
-        toolName: toolResponse.toolName,
-      });
+      logUnmatchedResponse(logger, toolResponse);
       return mediaAssignedToIndex;
     }
 

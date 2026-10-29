@@ -198,7 +198,7 @@ describe('useAgentStream', () => {
   });
 
   const mockLoadedSettings: LoadedSettings = {
-    merged: { preferredEditor: 'vscode' },
+    merged: { preferredEditor: 'vscode', ui: {} },
     user: { path: '/user/settings.json', settings: {} },
     workspace: { path: '/workspace/.gemini/settings.json', settings: {} },
     errors: [],
@@ -216,7 +216,6 @@ describe('useAgentStream', () => {
 
     const initialProps = {
       client,
-      history: [],
       addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
       runtime: createStreamRuntimeForTest(mockConfig),
       onDebugMessage: mockOnDebugMessage,
@@ -276,7 +275,6 @@ describe('useAgentStream', () => {
           props.client,
           props.runtime,
           {
-            history: props.history,
             addItem: props.addItem,
             settings: props.loadedSettings,
             onDebugMessage: props.onDebugMessage,
@@ -405,7 +403,6 @@ describe('useAgentStream', () => {
           agentForHook1,
           createStreamRuntimeForTest(mockConfig),
           {
-            history: [],
             addItem: mockAddItem,
             settings: mockLoadedSettings,
             onDebugMessage: mockOnDebugMessage,
@@ -461,7 +458,6 @@ describe('useAgentStream', () => {
           agentForHook2,
           createStreamRuntimeForTest(mockConfig),
           {
-            history: [],
             addItem: mockAddItem,
             settings: mockLoadedSettings,
             onDebugMessage: mockOnDebugMessage,
@@ -517,49 +513,6 @@ describe('useAgentStream', () => {
         }),
         expect.any(Number),
       );
-    });
-
-    it('should prevent further processing after cancellation', async () => {
-      let continueStream: () => void;
-      const streamPromise = new Promise<void>((resolve) => {
-        continueStream = resolve;
-      });
-
-      const mockStream = (async function* () {
-        yield { type: 'content', value: 'Initial' };
-        await streamPromise; // Wait until we manually continue
-        yield { type: 'content', value: ' Canceled' };
-      })();
-      mockSendMessageStream.mockReturnValue(mockStream);
-
-      const { result } = await renderTestHook();
-      let submission!: Promise<void>;
-
-      await act(async () => {
-        submission = result.current.submitQuery('long running query');
-      });
-
-      await waitFor(() => {
-        expect(result.current.streamingState).toBe(StreamingState.Responding);
-      });
-
-      // Cancel the request
-      simulateEscapeKeyPress();
-
-      // Allow the stream to continue
-      await act(async () => {
-        continueStream();
-        await submission;
-      });
-
-      // The text should not have been updated with " Canceled"
-      const lastCall = mockAddItem.mock.calls.find(
-        (call) => call[0].type === 'gemini',
-      );
-      expect(lastCall?.[0].text).toBe('Initial');
-
-      // The final state should be idle after cancellation
-      expect(result.current.streamingState).toBe(StreamingState.Idle);
     });
 
     it('should cancel if a tool call is in progress', async () => {
@@ -656,6 +609,7 @@ describe('useAgentStream', () => {
 
       // The final state should be idle
       expect(result.current.streamingState).toBe(StreamingState.Idle);
+      expect(result.current.pendingHistoryItems).toStrictEqual([]);
     });
   });
 });

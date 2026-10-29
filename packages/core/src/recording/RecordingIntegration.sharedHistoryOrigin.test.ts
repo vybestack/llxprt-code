@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { recordedRows } from './__tests__/support/native-integration-fixture.js';
 
 /**
  * Domain-level batch publication behavior of two RecordingIntegration
@@ -20,11 +21,11 @@ import * as path from 'node:path';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { JournalRecordingService } from './journalRecordingService.js';
 
 interface Subscriber {
   readonly owner: object;
-  readonly recording: SessionRecordingService;
+  readonly recording: JournalRecordingService;
   readonly integration: RecordingIntegration;
 }
 
@@ -41,7 +42,7 @@ describe('RecordingIntegration shared history batch origin', () => {
   async function openSubscriber(name: string): Promise<Subscriber> {
     const chatsDir = path.join(tempDir, name);
     await fs.mkdir(chatsDir, { recursive: true });
-    const recording = new SessionRecordingService({
+    const recording = JournalRecordingService.create({
       sessionId: `recording-origin-${name}-0001`,
       projectHash: 'project-hash-recording-origin',
       chatsDir,
@@ -51,15 +52,14 @@ describe('RecordingIntegration shared history batch origin', () => {
     });
     const integration = new RecordingIntegration(recording);
     const owner = {};
-    integration.subscribeToHistory(history, owner);
+    await integration.subscribeToJournal(history, owner);
     return { owner, recording, integration };
   }
 
   async function readJournal(subscriber: Subscriber): Promise<string> {
     await subscriber.recording.flush();
-    const journal = subscriber.recording.getFilePath();
-    if (journal === null) throw new Error('Recording journal missing');
-    return fs.readFile(journal, 'utf8');
+    await history.waitForCommit();
+    return JSON.stringify(await recordedRows(subscriber.recording));
   }
 
   beforeEach(async () => {
@@ -78,6 +78,7 @@ describe('RecordingIntegration shared history batch origin', () => {
         [first, second].map((subscriber) => subscriber.integration.dispose()),
       );
     } finally {
+      await history.dispose();
       await Promise.all(
         [first, second].map((subscriber) => subscriber.recording.dispose()),
       );

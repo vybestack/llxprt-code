@@ -653,7 +653,7 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     this.#runImage = activation.sessionClient.runImageOperation.bind(
       activation.sessionClient,
     );
-    this.#readHistory = () => activation.readHistory();
+    this.#readHistory = () => activation.streamHistory();
     this.#profiles = assembleProfileApplication(
       this.#settings,
       this.#manager,
@@ -706,7 +706,9 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
       this.#profiles = undefined;
       this.#readProfiles = retiredRead;
       this.#runImage = retiredRead;
-      this.#readHistory = retiredRead;
+      this.#readHistory = () => {
+        throw new Error('Preflight history ownership was transferred');
+      };
     }
     return this.#foregroundPending;
   }

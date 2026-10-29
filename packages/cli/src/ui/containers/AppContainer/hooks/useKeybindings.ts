@@ -54,7 +54,13 @@ export interface DisplayKeybindingDeps {
   constrainHeight: boolean;
   setConstrainHeight: (v: boolean) => void;
   refreshStatic: () => void;
-  addItem: (item: { type: MessageType; text: string }, ts: number) => number;
+  addItem: (
+    item: {
+      type: MessageType.INFO | MessageType.WARNING | MessageType.ERROR;
+      text: string;
+    },
+    ts: number,
+  ) => number;
   handleSlashCommand: (cmd: string) => Promise<unknown>;
 }
 

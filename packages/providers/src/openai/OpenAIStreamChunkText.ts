@@ -15,6 +15,10 @@
  */
 
 import type OpenAI from 'openai';
+import type {
+  IContent,
+  TextBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
 import {
@@ -80,4 +84,41 @@ export function extractContinuationChunkText(
     onRawTokenDelta?.();
   }
   return sanitizedText;
+}
+
+/**
+ * The visible text of a continuation response, one non-empty piece per chunk,
+ * ending early when the request is aborted. Continuation raw deltas are
+ * token-bearing output of the same attempt (issue #3473): each token-bearing
+ * delta (content, reasoning, or tool-call fragments) fires the raw-timing
+ * signal exactly once so the attempt window spans the whole continuation
+ * decode; only content changes visible output.
+ */
+export async function* continuationTexts(
+  response: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
+  abortSignal: AbortSignal | undefined,
+  logger: DebugLogger,
+  reasoningFieldName?: string,
+  onRawTokenDelta?: () => void,
+): AsyncGenerator<string, void, unknown> {
+  for await (const chunk of response) {
+    if (abortSignal?.aborted === true) {
+      return;
+    }
+    const text = extractContinuationChunkText(
+      chunk,
+      logger,
+      reasoningFieldName,
+      onRawTokenDelta,
+    );
+    if (text !== '') {
+      yield text;
+    }
+  }
+}
+
+/** A model reply that holds one piece of text. */
+export function aiTextContent(text: string): IContent {
+  const block: TextBlock = { type: 'text', text };
+  return { speaker: 'ai', blocks: [block] };
 }

@@ -72,12 +72,8 @@ describe('assignContainerName', () => {
     const version = execFileSync(process.execPath, ['--version'], {
       encoding: 'utf8',
     });
-    const bunVersion = process.versions.bun;
-    if (bunVersion === undefined) {
-      throw new Error('This Bun test did not run under Bun');
-    }
 
-    expect(version.trim()).toBe(bunVersion);
+    expect(version.trim()).toBe(process.versions.bun);
   });
 
   it('claims distinct names for concurrent launches that see the same runtime snapshot', () => {

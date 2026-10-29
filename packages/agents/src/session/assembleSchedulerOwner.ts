@@ -125,6 +125,7 @@ function createDefaultToolSchedulerFactory(options: {
       : schedulerOptions.toolRegistry;
     return new CoreToolScheduler({
       telemetry: schedulerOptions.telemetry,
+      persistApproval: schedulerOptions.persistApproval,
       config: schedulerOptions.config,
       readExecutionPolicy: schedulerOptions.readExecutionPolicy,
       readApprovalMode: schedulerOptions.readApprovalMode,

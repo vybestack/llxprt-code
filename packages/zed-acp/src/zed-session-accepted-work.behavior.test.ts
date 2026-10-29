@@ -84,12 +84,20 @@ describe('ACP Session accepted work across shutdown', () => {
     const started = gate();
     const held = gate();
     releases.push(held.release);
-    const read = agent.getHistory.bind(agent);
-    agent.getHistory = async () => {
-      const history = await read();
-      started.release();
-      await held.promise;
-      return history;
+    const read = agent.streamHistory.bind(agent);
+    agent.streamHistory = async function* (signal) {
+      const history = read(signal);
+      try {
+        const first = await history.next();
+        started.release();
+        await held.promise;
+        if (first.done !== true) {
+          yield first.value;
+          yield* history;
+        }
+      } finally {
+        await history.return();
+      }
     };
     const current = session();
     const replay = current.replayLiveHistory();

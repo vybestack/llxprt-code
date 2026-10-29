@@ -193,7 +193,7 @@ describe('Agent.generate lifetimes', () => {
             }),
           ).toBe('turn one reply');
           expect(
-            (await primary.getHistory()).map((turn) => ({
+            (await Array.fromAsync(primary.getHistory())).map((turn) => ({
               speaker: turn.speaker,
               blocks: turn.blocks,
             })),
@@ -239,7 +239,9 @@ describe('Agent.generate lifetimes', () => {
           expect(preparations).toBe(0);
           expect(clients).toHaveLength(2);
           expect(provider.requests).toStrictEqual([]);
-          expect(await clients[1].getHistory()).toStrictEqual([]);
+          expect(await Array.fromAsync(clients[1].getHistory())).toStrictEqual(
+            [],
+          );
         },
       );
       expect(cleanup).toStrictEqual([]);
@@ -271,7 +273,9 @@ describe('Agent.generate lifetimes', () => {
             expect(provider.requests[0].invocation.signal?.aborted).toBe(true);
             held.release();
             expect(await result).toMatchObject({ name: 'AbortError' });
-            expect(await clients[1].getHistory()).toStrictEqual([]);
+            expect(
+              await Array.fromAsync(clients[1].getHistory()),
+            ).toStrictEqual([]);
             provider.generating = undefined;
             expect(await generate(owner, 'next request', undefined)).toBe(
               'turn two reply',
@@ -326,7 +330,9 @@ describe('Agent.generate lifetimes', () => {
             expect(clients[2].disposed).toBe(1);
             expect(clients[2].initialized).toBe(1);
             expect(clients[1].disposed).toBe(0);
-            expect(await clients[1].getHistory()).toStrictEqual([]);
+            expect(
+              await Array.fromAsync(clients[1].getHistory()),
+            ).toStrictEqual([]);
           },
         );
         expect(cleanup.flatMap(leaves)).toStrictEqual([cleanupFailure]);
@@ -382,7 +388,7 @@ describe('Agent.generate lifetimes', () => {
           }),
         ).rejects.toThrow('cancel before admission');
         expect(transport.requests()).toStrictEqual([]);
-        expect(await agent.getHistory()).toStrictEqual([]);
+        expect(await agent.session.getHistory()).toStrictEqual([]);
         expect(await agent.generate('Still usable')).toBe(
           'Transport completed.',
         );
@@ -415,7 +421,7 @@ describe('Agent.generate lifetimes', () => {
           expect(await settled).toBe('cancelled');
           await closed;
           expect(peerTransport.requests()).toHaveLength(1);
-          expect(await peer.getHistory()).toStrictEqual([]);
+          expect(await peer.session.getHistory()).toStrictEqual([]);
         }),
       ).resolves.toBeUndefined();
     });
@@ -497,7 +503,9 @@ describe('Agent.generate lifetimes', () => {
             },
           ]);
           expect(
-            (await primary.getHistory()).map((turn) => turn.blocks),
+            (await Array.fromAsync(primary.getHistory())).map(
+              (turn) => turn.blocks,
+            ),
           ).toStrictEqual([[{ type: 'text', text: 'primary seed' }]]);
           await owner.dispose();
           await owner.dispose();
@@ -530,13 +538,15 @@ describe('Agent.generate lifetimes', () => {
               speaker: 'human',
               blocks: [{ type: 'text', text: 'retained primary seed' }],
             });
-            const history = await primary.getHistory();
+            const history = await Array.fromAsync(primary.getHistory());
             await expect(
               generate(owner, 'rejected preparation', { readHistory: true }),
             ).rejects.toBe(failure);
             expect(clients).toHaveLength(2);
             expect(provider.requests).toHaveLength(0);
-            expect(await primary.getHistory()).toStrictEqual(history);
+            expect(await Array.fromAsync(primary.getHistory())).toStrictEqual(
+              history,
+            );
             expect(primary.disposed).toBe(0);
             rejectPreparation = false;
             expect(
@@ -547,7 +557,9 @@ describe('Agent.generate lifetimes', () => {
             expect(clients).toHaveLength(3);
             expect(clients[2].disposed).toBe(1);
             expect(primary.disposed).toBe(0);
-            expect(await primary.getHistory()).toStrictEqual(history);
+            expect(await Array.fromAsync(primary.getHistory())).toStrictEqual(
+              history,
+            );
           },
         );
         expect(cleanup).toStrictEqual([]);

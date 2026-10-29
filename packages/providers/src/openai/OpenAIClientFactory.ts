@@ -169,7 +169,7 @@ export function resolveRuntimeKey(
 function fetchWithHeadersTimeout(
   headersTimeoutMs: number,
   requestFetch: NetworkFetch,
-): typeof fetch {
+): NetworkFetch {
   if (!Number.isSafeInteger(headersTimeoutMs) || headersTimeoutMs <= 0) {
     throw new Error('openai-headers-timeout-ms must be a positive integer');
   }

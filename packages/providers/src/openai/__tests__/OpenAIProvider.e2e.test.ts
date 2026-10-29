@@ -14,7 +14,7 @@ import type {
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../../__tests__/streamCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type OpenAI from 'openai';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';

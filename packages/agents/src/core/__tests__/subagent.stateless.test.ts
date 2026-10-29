@@ -1,5 +1,5 @@
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createSubagentScope } from './helpers/create-subagent-scope.js';
-import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import {
   createStatelessRuntimeBundle as createRunnableRuntimeBundle,
   scopeInputs,
@@ -37,7 +37,6 @@ import {
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import * as RuntimeLoader from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type {
   AgentRuntimeContext,
   AgentRuntimeProviderAdapter,
@@ -45,21 +44,40 @@ import type {
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { PromptConfig, ModelConfig, RunConfig } from '../subagentTypes.js';
+import type {
+  PromptConfig,
+  ModelConfig,
+  RunConfig,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import type { ContentGenerator } from '../contentGenerator.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 
+class StatelessConfig extends Config {
+  setModel(): never {
+    throw new Error('Forbidden foreground model mutation');
+  }
+  setProvider(): never {
+    throw new Error('Forbidden foreground provider mutation');
+  }
+  getToolRegistry(): never {
+    throw new Error('Forbidden Config tool discovery');
+  }
+  getEphemeralSetting(): never {
+    throw new Error('Forbidden Config settings discovery');
+  }
+  getEphemeralSettings(): never {
+    throw new Error('Forbidden Config settings discovery');
+  }
+}
 /**
  * Test helper: Create minimal Config for testing
  */
 function createTestConfig(overrides?: {
   model?: string;
   provider?: string;
-}): Config {
-  const config = new Config({
+}): StatelessConfig {
+  const config = new StatelessConfig({
     sessionId: 'test-session-id',
     targetDir: '/tmp/test-dir',
     cwd: '/tmp/test-dir',
@@ -111,109 +129,23 @@ function createStatelessRuntimeBundle(options?: {
   historyService?: HistoryService;
   providerRuntime?: ProviderRuntimeContext;
   toolRegistry?: ToolRegistry;
-}): AgentRuntimeLoaderResult {
-  const providerAdapter =
-    options?.providerAdapter ??
-    ({
-      getActiveProvider: vi.fn(
-        () =>
-          ({
-            name: 'gemini',
-            generateChatCompletion: vi.fn(async function* () {
-              yield { speaker: 'ai', blocks: [] };
-            }),
-            getDefaultModel: () =>
-              options?.model ?? 'gemini-2.0-flash-thinking-exp',
-          }) as IProvider,
-      ),
-      setActiveProvider: vi.fn(),
-    } as AgentRuntimeProviderAdapter);
-
-  const telemetryAdapter =
-    options?.telemetryAdapter ??
-    ({
-      logApiRequest: vi.fn(),
-      logApiResponse: vi.fn(),
-      logApiError: vi.fn(),
-    } as AgentRuntimeTelemetryAdapter);
-
-  const toolsView =
-    options?.toolsView ??
-    ({
-      listToolNames: vi.fn(() => []),
-      getToolMetadata: vi.fn(() => undefined),
-    } as ToolRegistryView);
-
-  const history =
-    options?.historyService ??
-    ({
-      clear: vi.fn(),
-      add: vi.fn(),
-      getCuratedForProvider: vi.fn(() => []),
-      getIdGeneratorCallback: vi.fn(() => vi.fn()),
-      findUnmatchedToolCalls: vi.fn(() => []),
-    } as unknown as HistoryService);
-
-  const providerRuntime =
-    options?.providerRuntime ??
-    ({
-      runtimeId: 'runtime-bundle',
-      metadata: {},
-    } as unknown as ProviderRuntimeContext);
-
-  const toolRegistry =
-    options?.toolRegistry ??
-    ({
-      getTool: vi.fn(),
-      getFunctionDeclarationsFiltered: vi.fn(() => []),
-      getAllTools: vi.fn(() => []),
-    } as unknown as ToolRegistry);
-
-  const runtimeState = Object.freeze({
-    runtimeId: 'runtime-bundle',
-    provider: 'gemini',
-    model: options?.model ?? 'gemini-2.0-flash-thinking-exp',
-    sessionId: 'runtime-session',
-    proxyUrl: undefined,
-    modelParams: {
-      temperature: 0.7,
-      topP: 0.9,
-    },
+}): ReturnType<typeof createRunnableRuntimeBundle> {
+  const fixture = createRunnableRuntimeBundle({
+    providerAdapter: options?.providerAdapter,
+    telemetryAdapter: options?.telemetryAdapter,
+    toolsView: options?.toolsView,
+    history: options?.historyService,
+    toolRegistry: options?.toolRegistry,
   });
-
-  const runtimeContext: AgentRuntimeContext = Object.freeze({
-    state: runtimeState,
-    history,
-    ephemerals: {
-      compressionThreshold: () => 0.8,
-      contextLimit: () => 60_000,
-      preserveThreshold: () => 0.2,
-      toolFormatOverride: () => undefined,
-    },
-    telemetry: telemetryAdapter,
-    provider: providerAdapter,
-    tools: toolsView,
-    providerRuntime,
-  });
-
   return {
-    telemetryRoot: RootTelemetry.prepare({
-      enabled: false,
-      sessionId: 'stateless-child',
-      maxBytes: 1024,
-      maxFiles: 1,
+    ...fixture,
+    runtimeContext: Object.freeze({
+      ...fixture.runtimeContext,
+      state: Object.freeze({
+        ...fixture.runtimeContext.state,
+        model: options?.model ?? 'gemini-2.0-flash-thinking-exp',
+      }),
     }),
-    runtimeContext,
-    history,
-    providerAdapter,
-    telemetryAdapter,
-    toolsView,
-    contentGenerator: {
-      generateContent: vi.fn(),
-      generateContentStream: vi.fn(),
-      countTokens: vi.fn(),
-    } as unknown as ContentGenerator,
-    toolRegistry,
   };
 }
 
@@ -230,13 +162,13 @@ const createEnvironmentLoader = (): EnvironmentLoader =>
 
 function createRuntimeOverrides(
   options: {
-    runtimeBundle?: AgentRuntimeLoaderResult;
+    runtimeBundle?: ReturnType<typeof createRunnableRuntimeBundle>;
     environmentLoader?: EnvironmentLoader;
     toolRegistry?: ToolRegistry;
   } = {},
 ): {
   overrides: SubagentTestInputs;
-  runtimeBundle: AgentRuntimeLoaderResult;
+  runtimeBundle: ReturnType<typeof createRunnableRuntimeBundle>;
   environmentLoader: EnvironmentLoader;
 } {
   const runtimeBundle =
@@ -246,6 +178,13 @@ function createRuntimeOverrides(
     options.environmentLoader ?? createEnvironmentLoader();
 
   const overrides: SubagentTestInputs = {
+    instructions: emptyInstructionReads,
+    workspacePaths: {
+      resolve: (path) => path,
+      directories: () => [],
+      contains: () => true,
+      validate: () => null,
+    },
     readMcpInstructions: () => undefined,
     runtimeBundle,
     environmentContextLoader: environmentLoader,
@@ -259,7 +198,7 @@ function createRuntimeOverrides(
 }
 
 describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
-  let foregroundConfig: Config;
+  let foregroundConfig: StatelessConfig;
 
   beforeEach(() => {
     // Clear all mocks before each test
@@ -516,15 +455,20 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       });
 
       const providerAdapter: AgentRuntimeProviderAdapter = {
-        getActiveProvider: () =>
-          ({
-            name: 'gemini',
-            getDefaultModel: () => modelConfig.model,
-            generateChatCompletion: vi.fn(async function* () {
+        getActiveProvider: () => ({
+          name: 'gemini',
+          getModels: async () => [],
+          getDefaultModel: () => modelConfig.model,
+          generateChatCompletion: vi.fn(
+            async function* (): AsyncGenerator<IContent> {
               yield { speaker: 'ai', blocks: [] };
-            }),
-          }) as IProvider,
+            },
+          ),
+        }),
         setActiveProvider: vi.fn(),
+        getProviderKeys: () => {
+          throw new Error('Fixture has no key storage');
+        },
       };
 
       const telemetryAdapter: AgentRuntimeTelemetryAdapter = {
@@ -599,21 +543,24 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
     }): Promise<RecordedRun> {
       const requests: RuntimeGenerateChatOptions[] = [];
       const providerAdapter: AgentRuntimeProviderAdapter = {
-        getActiveProvider: () =>
-          ({
-            name: options.provider,
-            getDefaultModel: () => options.runtimeModel,
-            getModels: async () => [],
-            generateChatCompletion(request: RuntimeGenerateChatOptions) {
-              requests.push(request);
-              return (async function* () {
-                yield {
-                  speaker: 'ai' as const,
-                  blocks: [{ type: 'text' as const, text: options.reply }],
-                };
-              })();
-            },
-          }) as unknown as IProvider,
+        getActiveProvider: () => ({
+          name: options.provider,
+          getDefaultModel: () => options.runtimeModel,
+          getModels: async () => [],
+          generateChatCompletion(
+            request: RuntimeGenerateChatOptions | AsyncIterable<IContent>,
+          ) {
+            if (!('contents' in request))
+              throw new Error('Expected options-form generation');
+            requests.push(request);
+            return (async function* () {
+              yield {
+                speaker: 'ai',
+                blocks: [{ type: 'text', text: options.reply }],
+              };
+            })();
+          },
+        }),
         setActiveProvider: vi.fn(),
         getProviderKeys: () => {
           throw new Error('Test provider adapter has no key storage');
@@ -630,7 +577,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
           sessionId: options.sessionId,
         }),
       });
-      const runtimeBundle: AgentRuntimeLoaderResult = {
+      const runtimeBundle: ReturnType<typeof createRunnableRuntimeBundle> = {
         ...fixture,
         runtimeContext,
       };
@@ -670,14 +617,15 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       };
     }
 
-    function textOf(content: { blocks: readonly unknown[] }): string {
-      return content.blocks
-        .map((block) => (block as { text?: string }).text ?? '')
-        .join('');
-    }
-
-    function historyTexts(history: HistoryService): string[] {
-      return history.getAll().map((entry) => textOf(entry));
+    async function historyTexts(history: HistoryService): Promise<string[]> {
+      const texts: string[] = [];
+      for await (const row of history.streamRawHistory())
+        texts.push(
+          row.blocks
+            .map((block) => (block.type === 'text' ? block.text : ''))
+            .join(''),
+        );
+      return texts;
     }
 
     it('uses the supplied runtime model at the content-generation boundary', async () => {
@@ -703,9 +651,9 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       expect(systemInstructionOf(recorded.requests[0])).not.toContain(
         'foreground-model',
       );
-      const reply = recorded.history
-        .getAll()
-        .find((entry) => entry.speaker === 'ai');
+      const reply = (
+        await Array.fromAsync(recorded.history.streamRawHistory())
+      ).find((entry) => entry.speaker === 'ai');
       expect(reply?.metadata?.model).toBe('subagent-runtime-model');
       expect(foregroundConfig.getModel()).toBe('foreground-model');
       expect(setModelSpy).not.toHaveBeenCalled();
@@ -749,7 +697,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         'with runtime-model via runtime-provider',
       );
       expect(systemInstructionOf(request)).not.toContain('foreground-');
-      expect(historyTexts(recorded.history)).toContain('STATE-PROMPT');
+      expect(await historyTexts(recorded.history)).toContain('STATE-PROMPT');
       expect(setModelSpy).not.toHaveBeenCalled();
       expect(setProviderSpy).not.toHaveBeenCalled();
       expect(foregroundConfig.getModel()).toBe('foreground-model');
@@ -782,16 +730,16 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       expect(first.history).not.toBe(second.history);
 
       await first.run();
-      const afterFirst = historyTexts(first.history);
+      const afterFirst = await historyTexts(first.history);
       expect(afterFirst).toStrictEqual(['PROMPT-FOR-A', 'REPLY-FROM-A']);
-      expect(historyTexts(second.history)).toStrictEqual([]);
+      expect(await historyTexts(second.history)).toStrictEqual([]);
 
       await second.run();
-      expect(historyTexts(second.history)).toStrictEqual([
+      expect(await historyTexts(second.history)).toStrictEqual([
         'PROMPT-FOR-B',
         'REPLY-FROM-B',
       ]);
-      expect(historyTexts(first.history)).toStrictEqual(afterFirst);
+      expect(await historyTexts(first.history)).toStrictEqual(afterFirst);
     });
 
     it('leaves the supplied runtime context and state frozen and unchanged after a run', async () => {

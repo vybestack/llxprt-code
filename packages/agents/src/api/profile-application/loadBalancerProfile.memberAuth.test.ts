@@ -21,6 +21,10 @@ import type {
   IProvider,
 } from '@vybestack/llxprt-code-providers';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  isAsyncIterableContents,
+  replayableContents,
+} from '../../../../providers/src/utils/collectContents.js';
 import { resolveLoadBalancerSubProfile } from './loadBalancerProfile.js';
 import { makeLoadBalancerInvocation } from '../../../../providers/src/__tests__/loadBalancerTestHelpers.js';
 import { resolveMemberAuthentication } from '../../../../providers/src/loadBalancing/memberAuthentication.js';
@@ -218,10 +222,11 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
           getModels: async () => [],
           getDefaultModel: () => 'test-model',
           async *generateChatCompletion(
-            options: GenerateChatOptions | IContent[],
+            options: GenerateChatOptions | AsyncIterable<IContent>,
           ): AsyncGenerator<IContent> {
-            if (Array.isArray(options))
+            if (isAsyncIterableContents(options)) {
               throw new Error('Expected delegate options');
+            }
             const token = options.resolved?.authToken;
             if (typeof token !== 'string')
               throw new Error('Expected resolved key');
@@ -252,9 +257,9 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
           getModels: async () => [],
           getDefaultModel: () => 'test-model',
           async *generateChatCompletion(
-            options: GenerateChatOptions | IContent[],
+            options: GenerateChatOptions | AsyncIterable<IContent>,
           ): AsyncGenerator<IContent> {
-            if (Array.isArray(options))
+            if (isAsyncIterableContents(options))
               throw new Error('Expected delegate options');
             yield {
               speaker: 'ai',
@@ -299,13 +304,13 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
           await storage.saveKey(keyName, value);
           await fs.writeFile(keyfile, value);
           for await (const chunk of selected.generateChatCompletion({
-            contents: [],
+            contents: replayableContents([]),
             invocation: makeLoadBalancerInvocation(),
           })) {
             observed.push(chunk);
           }
           for await (const chunk of siblingSelected.generateChatCompletion({
-            contents: [],
+            contents: replayableContents([]),
             invocation: makeLoadBalancerInvocation(),
           })) {
             siblingObserved.push(chunk);

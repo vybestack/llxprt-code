@@ -11,12 +11,17 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import { renderHook } from '../../../__tests__/render.js';
 import { useCommandOwners } from '../../../__tests__/command-owner-fixture.js';
 import { useToolSchedulerSetup } from './useAgentStreamLifecycle.js';
+import { mapToDisplay } from '../toolMapping.js';
 
 async function scheduleRead(owner: Agent, decoy: Agent): Promise<string> {
   const file = join(owner.workspace.getWorkingDirectory(), 'entry.txt');
   await writeFile(file, 'captured lifecycle workspace');
+  const completed: unknown[] = [];
   const openClientChannel = Object.assign(
-    () => owner.tools.openClientChannel(),
+    () =>
+      owner.tools.openClientChannel((calls) => {
+        completed.push(mapToDisplay(calls));
+      }),
     { tools: decoy.tools },
   );
   const subscribeChildTools = owner.tools.subscribeChildTools.bind(owner.tools);
@@ -24,8 +29,9 @@ async function scheduleRead(owner: Agent, decoy: Agent): Promise<string> {
   const getPreferredEditor = (): undefined => undefined;
   const onEditorClose = (): void => {};
   const onEditorOpen = (): void => {};
-  const completed: unknown[] = [];
-  const addItem = (item: unknown): number => completed.push(item);
+  const addItem = (): number => {
+    throw new Error('Journal-owned tools must not write a second UI history');
+  };
   const hook = renderHook(() =>
     useToolSchedulerSetup(
       setPendingHistoryItem,

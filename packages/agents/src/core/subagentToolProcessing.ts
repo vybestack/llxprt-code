@@ -1,3 +1,4 @@
+import { responseToolIdentity } from './responseArrival.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -635,6 +636,7 @@ export async function processFunctionCalls(
         isClientInitiated: true,
         prompt_id: promptId,
         agentId: ctx.subagentId,
+        journalIdentity: responseToolIdentity(functionCall),
       };
 
       ctx.logger.debug(

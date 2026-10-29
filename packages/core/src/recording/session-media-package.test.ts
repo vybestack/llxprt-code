@@ -5,7 +5,8 @@
  */
 
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import {
   mkdir,
   mkdtemp,
@@ -17,13 +18,20 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { retiredJournalMessage } from '../journal/journalRefusal.js';
 import type {
   IContent,
   MediaReferenceBlock,
 } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
-import { replaySession } from './ReplayEngine.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { SessionLockManager } from './SessionLockManager.js';
+import {
+  createPackageRecorder,
+  packageRecordingName,
+  readPackageRows,
+} from './__tests__/support/packageRecording.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+
 import {
   exportSessionMediaPackage,
   importSessionMediaPackage,
@@ -77,7 +85,7 @@ describe('internal session media package', () => {
       mimeType: 'application/octet-stream',
       semanticMetadata: { origin: 'fixture' },
     });
-    const recording = new SessionRecordingService({
+    const recording = createPackageRecorder({
       sessionId: 'portable-session',
       projectHash: PROJECT_HASH,
       chatsDir: join(tempDirectory, 'source-project', 'chats'),
@@ -86,7 +94,7 @@ describe('internal session media package', () => {
       model: 'test',
       mediaStore: sourceStore,
     });
-    recording.recordContent(content(reference));
+    await recordRowsForTest(recording, [content(reference)]);
     await recording.flush();
     const sourceRecording = recording.getFilePath();
     assertNotNull(sourceRecording, 'Expected recording path');
@@ -119,11 +127,8 @@ describe('internal session media package', () => {
       PROJECT_HASH,
       destinationStore,
     );
-    const replay = await replaySession(imported.recordingPath, PROJECT_HASH, {
-      mediaStore: destinationStore,
-    });
-
-    expect(replay.ok).toBe(true);
+    const rows = await readPackageRows(imported.recordingPath, PROJECT_HASH);
+    expect(rows.map((row) => row.blocks)).toStrictEqual([[reference]]);
     expect(await destinationStore.readVerified(reference)).toStrictEqual(
       new Uint8Array([11, 22, 33, 44]),
     );
@@ -146,7 +151,7 @@ describe('internal session media package', () => {
       },
       semanticMetadata: {},
     });
-    const recording = new SessionRecordingService({
+    const recording = createPackageRecorder({
       sessionId: 'derived-session',
       projectHash: PROJECT_HASH,
       chatsDir: join(tempDirectory, 'derived-source-chats'),
@@ -155,7 +160,7 @@ describe('internal session media package', () => {
       model: 'test',
       mediaStore: sourceStore,
     });
-    recording.recordContent(content(reference));
+    await recordRowsForTest(recording, [content(reference)]);
     await recording.flush();
     const recordingPath = recording.getFilePath();
     assertNotNull(recordingPath, 'Expected recording path');
@@ -202,7 +207,7 @@ describe('internal session media package', () => {
       mimeType: 'application/octet-stream',
       semanticMetadata: {},
     });
-    const recording = new SessionRecordingService({
+    const recording = createPackageRecorder({
       sessionId: 'atomic-session',
       projectHash: PROJECT_HASH,
       chatsDir: join(tempDirectory, 'source-chats'),
@@ -211,7 +216,7 @@ describe('internal session media package', () => {
       model: 'test',
       mediaStore: sourceStore,
     });
-    recording.recordContent(content(reference));
+    await recordRowsForTest(recording, [content(reference)]);
     await recording.flush();
     const sourceRecording = recording.getFilePath();
     assertNotNull(sourceRecording, 'Expected recording path');
@@ -264,7 +269,7 @@ describe('internal session media package', () => {
       mimeType: 'application/octet-stream',
       semanticMetadata: {},
     });
-    const recording = new SessionRecordingService({
+    const recording = createPackageRecorder({
       sessionId: 'release-order-source',
       projectHash: PROJECT_HASH,
       chatsDir: join(tempDirectory, 'release-source-chats'),
@@ -274,7 +279,7 @@ describe('internal session media package', () => {
       mediaStore: sourceStore,
     });
     try {
-      recording.recordContent(content(reference));
+      await recordRowsForTest(recording, [content(reference)]);
       await recording.flush();
       const recordingPath = recording.getFilePath();
       assertNotNull(recordingPath, 'Expected recording path');
@@ -332,12 +337,25 @@ describe('internal session media package', () => {
       quotaBytes: 1024,
     });
     sourceStore.failOnReleaseAttempt(2);
+    const acquire = SessionLockManager.acquire.bind(SessionLockManager);
+    const lockFailure = spyOn(SessionLockManager, 'acquire').mockImplementation(
+      async (chats, id) => {
+        const lock = await acquire(chats, id);
+        return {
+          ...lock,
+          release: async () => {
+            await lock.release();
+            throw new Error('injected export lock release failure');
+          },
+        };
+      },
+    );
     const reference = await sourceStore.admit({
       bytes: new Uint8Array([65, 66, 67]),
       mimeType: 'application/octet-stream',
       semanticMetadata: {},
     });
-    const recording = new SessionRecordingService({
+    const recording = createPackageRecorder({
       sessionId: 'export-release-source',
       projectHash: PROJECT_HASH,
       chatsDir: join(tempDirectory, 'export-release-chats'),
@@ -348,7 +366,7 @@ describe('internal session media package', () => {
     });
     const packageDirectory = join(tempDirectory, 'export-release-package');
     try {
-      recording.recordContent(content(reference));
+      await recordRowsForTest(recording, [content(reference)]);
       await recording.flush();
       const recordingPath = recording.getFilePath();
       assertNotNull(recordingPath, 'Expected recording path');
@@ -360,11 +378,12 @@ describe('internal session media package', () => {
           sourceStore,
           packageDirectory,
         ),
-      ).rejects.toThrow(/owner release|reservation release/i);
+      ).rejects.toThrow('injected export lock release failure');
       await expect(stat(packageDirectory)).rejects.toMatchObject({
         code: 'ENOENT',
       });
     } finally {
+      lockFailure.mockRestore();
       await recording.dispose().catch(() => undefined);
     }
   });
@@ -374,7 +393,7 @@ describe('internal session media package', () => {
       rootDirectory: join(tempDirectory, 'publish-media'),
       quotaBytes: 1024,
     });
-    const recording = new SessionRecordingService({
+    const recording = createPackageRecorder({
       sessionId: 'publish-source',
       projectHash: PROJECT_HASH,
       chatsDir: join(tempDirectory, 'publish-chats'),
@@ -384,10 +403,12 @@ describe('internal session media package', () => {
       mediaStore: sourceStore,
     });
     try {
-      recording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'publish me once' }],
-      });
+      await recordRowsForTest(recording, [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'publish me once' }],
+        },
+      ]);
       await recording.flush();
       const recordingPath = recording.getFilePath();
       assertNotNull(recordingPath, 'Expected recording path');
@@ -462,7 +483,7 @@ describe('internal session media package', () => {
       mimeType: 'image/png',
       semanticMetadata: {},
     });
-    const recording = new SessionRecordingService({
+    const recording = createPackageRecorder({
       sessionId: 'transaction-source',
       projectHash: PROJECT_HASH,
       chatsDir: join(tempDirectory, 'transaction-source-chats'),
@@ -471,8 +492,8 @@ describe('internal session media package', () => {
       model: 'test',
       mediaStore: sourceStore,
     });
-    recording.recordContent(content(deduplicatedReference));
-    recording.recordContent(content(newReference));
+    await recordRowsForTest(recording, [content(deduplicatedReference)]);
+    await recordRowsForTest(recording, [content(newReference)]);
     await recording.flush();
     const recordingPath = recording.getFilePath();
     assertNotNull(recordingPath, 'Expected recording path');
@@ -534,67 +555,78 @@ describe('internal session media package', () => {
     expect(chatEntries).toStrictEqual([]);
   });
 
-  it('packages media from rewound recording events and sibling persisted session state', async () => {
-    const sourceRoot = join(tempDirectory, 'complete-source');
-    const sourceStore = new LocalMediaStore({
-      rootDirectory: join(sourceRoot, 'media'),
+  it('packages media retained by native popped rows and checkpoint state', async () => {
+    const media = new LocalMediaStore({
+      rootDirectory: join(tempDirectory, 'native-media'),
       quotaBytes: 1024,
     });
-    const recordingOnly = await sourceStore.admit({
+    const first = await media.admit({
       bytes: new Uint8Array([1, 3, 5]),
       mimeType: 'image/png',
       semanticMetadata: {},
     });
-    const persistedOnly = await sourceStore.admit({
+    const second = await media.admit({
       bytes: new Uint8Array([2, 4, 6, 8]),
       mimeType: 'image/png',
       semanticMetadata: {},
     });
-    const recording = new SessionRecordingService({
-      sessionId: 'complete-session',
+    const recorder = createPackageRecorder({
+      chatsDir: join(tempDirectory, 'native-chats'),
       projectHash: PROJECT_HASH,
-      chatsDir: join(sourceRoot, 'chats'),
-      workspaceDirs: [join(sourceRoot, 'workspace')],
-      cwd: sourceRoot,
-      provider: 'test',
-      model: 'test',
-      mediaStore: sourceStore,
     });
-    recording.recordContent(content(recordingOnly));
-    recording.recordRewind(1);
-    await recording.flush();
-    const recordingPath = recording.getFilePath();
-    assertNotNull(recordingPath, 'Expected recording path');
-    await writeFile(
-      join(sourceRoot, 'chats', 'persisted-session-extra.json'),
-      JSON.stringify({
-        version: 1,
-        sessionId: 'complete-session',
-        projectHash: PROJECT_HASH,
-        createdAt: new Date(0).toISOString(),
-        updatedAt: new Date(0).toISOString(),
-        history: [content(persistedOnly)],
-      }),
-    );
-    const packageDirectory = join(tempDirectory, 'complete-package');
-
+    if (!(recorder instanceof JournalRecordingService))
+      throw new Error('Expected native recorder');
+    const session = await recorder.session();
+    try {
+      await recordRowsForTest(recorder, [content(first), content(second)]);
+      await recorder.createCheckpoint('Retained');
+      const snapshot = await session.store.snapshot();
+      try {
+        await session.store.commit([
+          {
+            kind: 'pop',
+            cutLabel: (await snapshot.entryAt(0)).label,
+            expectedRemoved: 2,
+          },
+        ]);
+      } finally {
+        await snapshot.close();
+      }
+      await recordRowsForTest(recorder, [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'current' }] },
+      ]);
+    } finally {
+      await recorder.dispose();
+    }
+    const directory = join(tempDirectory, 'native-package');
     await exportSessionMediaPackage(
-      recordingPath,
+      session.path,
       PROJECT_HASH,
-      sourceStore,
-      packageDirectory,
+      media,
+      directory,
     );
-    await recording.dispose();
-
-    const packagedObjects = await readdir(
-      join(packageDirectory, 'blobs', 'sha256'),
+    expect(await readdir(join(directory, 'blobs', 'sha256'))).toHaveLength(2);
+    const destination = new LocalMediaStore({
+      rootDirectory: join(tempDirectory, 'native-destination-media'),
+      quotaBytes: 1024,
+    });
+    const imported = await importSessionMediaPackage(
+      directory,
+      join(tempDirectory, 'native-destination-chats'),
+      PROJECT_HASH,
+      destination,
     );
-    const packagedRecording = await readFile(
-      join(packageDirectory, 'session.jsonl'),
-      'utf8',
+    expect(await destination.readVerified(first)).toStrictEqual(
+      new Uint8Array([1, 3, 5]),
     );
-    expect(packagedObjects).toHaveLength(2);
-    expect(packagedRecording).not.toContain(sourceRoot);
+    expect(await destination.readVerified(second)).toStrictEqual(
+      new Uint8Array([2, 4, 6, 8]),
+    );
+    expect(
+      (await readPackageRows(imported.recordingPath, PROJECT_HASH)).map(
+        (row) => row.blocks,
+      ),
+    ).toStrictEqual([[{ type: 'text', text: 'current' }]]);
   });
 
   it('rejects unsupported package and recording versions before changing the destination', async () => {
@@ -607,7 +639,7 @@ describe('internal session media package', () => {
       mimeType: 'image/png',
       semanticMetadata: {},
     });
-    const recording = new SessionRecordingService({
+    const recording = createPackageRecorder({
       sessionId: 'version-session',
       projectHash: PROJECT_HASH,
       chatsDir: join(tempDirectory, 'version-source-chats'),
@@ -616,7 +648,7 @@ describe('internal session media package', () => {
       model: 'test',
       mediaStore: sourceStore,
     });
-    recording.recordContent(content(reference));
+    await recordRowsForTest(recording, [content(reference)]);
     await recording.flush();
     const recordingPath = recording.getFilePath();
     assertNotNull(recordingPath, 'Expected recording path');
@@ -664,7 +696,7 @@ describe('internal session media package', () => {
       mimeType: 'image/png',
       semanticMetadata: {},
     });
-    const recording = new SessionRecordingService({
+    const recording = createPackageRecorder({
       sessionId: 'rollback-session',
       projectHash: PROJECT_HASH,
       chatsDir: join(tempDirectory, 'rollback-source-chats'),
@@ -673,7 +705,7 @@ describe('internal session media package', () => {
       model: 'test',
       mediaStore: sourceStore,
     });
-    recording.recordContent(content(reference));
+    await recordRowsForTest(recording, [content(reference)]);
     await recording.flush();
     const recordingPath = recording.getFilePath();
     assertNotNull(recordingPath, 'Expected recording path');
@@ -685,13 +717,16 @@ describe('internal session media package', () => {
       packageDirectory,
     );
     await recording.dispose();
-    const packagedRecordingPath = join(packageDirectory, 'session.jsonl');
-    const lines = (await readFile(packagedRecordingPath, 'utf8'))
-      .trim()
-      .split('\n');
-    const contentLine = JSON.parse(lines[1] ?? '{}');
-    lines[1] = JSON.stringify({ ...contentLine, v: 999 });
-    await writeFile(packagedRecordingPath, `${lines.join('\n')}\n`);
+    const packagedRecordingPath = join(
+      packageDirectory,
+      packageRecordingName(),
+    );
+
+    await writeFile(
+      packagedRecordingPath,
+      JSON.stringify({ v: 1, seq: 1, type: 'session_start', payload: {} }),
+    );
+
     const destinationStore = new LocalMediaStore({
       rootDirectory: join(tempDirectory, 'rollback-destination-media'),
       quotaBytes: 1024,
@@ -705,7 +740,7 @@ describe('internal session media package', () => {
         PROJECT_HASH,
         destinationStore,
       ),
-    ).rejects.toThrow(/recording version/i);
+    ).rejects.toThrow(retiredJournalMessage(packagedRecordingPath));
     expect(await destinationStore.getStoredByteLength()).toBe(0);
     await expect(readdir(destinationChats)).rejects.toMatchObject({
       code: 'ENOENT',

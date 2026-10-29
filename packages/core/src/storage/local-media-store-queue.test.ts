@@ -141,7 +141,7 @@ describe('LocalMediaStore local contention', () => {
           message: expect.stringContaining('Local media store queue wait'),
           details: [
             {
-              root: holder.rootDirectory,
+              root: await realpath(holder.rootDirectory),
               operation: 'measure spool quota',
               waitedMs: 30_000,
             },

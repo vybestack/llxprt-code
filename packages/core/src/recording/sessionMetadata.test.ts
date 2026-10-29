@@ -1,327 +1,148 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- *
- * Behavioral tests for the session_metadata recording event (issue #1611).
- *
- * Verifies:
- * - recordSessionMetadata writes a typed session_metadata event (not a
- *   session_event sentinel) to the JSONL file.
- * - The title is tri-state: string (concrete), null (explicit untitled).
- * - session_metadata materializes the recording file BEFORE any content event,
- *   so slash/failure sessions persist their metadata.
- * - ReplayEngine restores the tri-state title from session_metadata events.
- * - SessionDiscovery.readSessionMetadataTitle extracts the tri-state title.
- */
-
-import { strict as assert } from 'node:assert';
-import { describe, it, expect, afterEach } from 'bun:test';
+/** Copyright 2026 Vybestack LLC. SPDX-License-Identifier: Apache-2.0 */
+import { afterEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import * as os from 'node:os';
-import { SessionRecordingService } from './SessionRecordingService.js';
-import { replaySession } from './ReplayEngine.js';
+import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { readJournalFileFacts } from './journalSessionListing.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
-import {
-  makeConfig,
-  sessionStartLine,
-  sessionMetadataLine,
-  contentLine,
-  makeContent,
-  writeJsonlFile,
-  PROJECT_HASH,
-  assertReplayError,
-  assertReplayOk,
-} from './__tests__/replay-test-helpers.js';
 
-const tempDirs: string[] = [];
-const services: SessionRecordingService[] = [];
+const PROJECT_HASH = 'session-metadata-project';
 
-function assertString(value: unknown): asserts value is string {
-  if (typeof value !== 'string') {
-    throw new TypeError('Expected a string value');
-  }
-}
+describe('journal session metadata (issue #1611)', () => {
+  const directory = useTempDir('session-metadata-');
+  const recordings: JournalRecordingService[] = [];
 
-describe('session_metadata recording (issue #1611)', () => {
   afterEach(async () => {
-    await Promise.allSettled(
-      services.splice(0).map((service) => service.dispose()),
-    );
-    await Promise.allSettled(
-      tempDirs
-        .splice(0)
-        .map((dir) => fs.rm(dir, { recursive: true, force: true })),
-    );
+    for (const recording of recordings.splice(0)) await recording.dispose();
   });
 
-  async function makeTempChatsDir(): Promise<string> {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'session-metadata-'));
-    tempDirs.push(dir);
-    const chatsDir = path.join(dir, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
-    return chatsDir;
+  function create(): JournalRecordingService {
+    const recording = JournalRecordingService.create({
+      sessionId: crypto.randomUUID(),
+      projectHash: PROJECT_HASH,
+      chatsDir: directory(),
+      workspaceDirs: ['/test'],
+      provider: 'test',
+      model: 'test-model',
+    });
+    recordings.push(recording);
+    return recording;
   }
 
-  describe('SessionRecordingService.recordSessionMetadata', () => {
-    it('writes a typed session_metadata event (not a session_event sentinel)', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const service = new SessionRecordingService(makeConfig({ chatsDir }));
-      services.push(service);
+  function fileOf(recording: JournalRecordingService): string {
+    const filePath = recording.getFilePath();
+    if (filePath === null) throw new Error('No session file');
+    return filePath;
+  }
 
-      service.recordSessionMetadata('My session title');
-      await service.flush();
+  async function recordTitles(
+    titles: ReadonlyArray<string | null>,
+  ): Promise<string> {
+    const recording = create();
+    for (const title of titles) recording.recordSessionMetadata(title);
+    await recording.session();
+    await recording.flush();
+    return fileOf(recording);
+  }
 
-      const filePath = service.getFilePath();
-      assert(filePath !== null);
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      const lines = fileContent.trim().split('\n');
-      const types = lines.map((line) => JSON.parse(line).type);
-
-      expect(types).toContain('session_metadata');
-      const metadataLine = lines
-        .map((line) => JSON.parse(line))
-        .find((line) => line.type === 'session_metadata');
-      expect(metadataLine.payload).toStrictEqual({ title: 'My session title' });
-    });
-
-    it('records a null title for explicit untitled', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const service = new SessionRecordingService(makeConfig({ chatsDir }));
-      services.push(service);
-
-      service.recordSessionMetadata(null);
-      await service.flush();
-
-      const filePath = service.getFilePath();
-      assert(filePath !== null);
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      const metadataLine = fileContent
-        .trim()
-        .split('\n')
-        .map((line) => JSON.parse(line))
-        .find((line) => line.type === 'session_metadata');
-      expect(metadataLine.payload).toStrictEqual({ title: null });
-    });
-
-    it('materializes the recording without any content event (slash/failure sessions)', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const service = new SessionRecordingService(makeConfig({ chatsDir }));
-      services.push(service);
-
-      service.recordSessionMetadata('Slash command title');
-
-      const filePath = service.getFilePath();
-      assert(filePath !== null);
-      await service.flush();
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      const types = fileContent
-        .trim()
-        .split('\n')
-        .map((line) => JSON.parse(line).type);
-      expect(types).toContain('session_start');
-      expect(types).toContain('session_metadata');
-      expect(types).not.toContain('content');
-    });
-
-    it('preserves ordering: session_start before session_metadata before content', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const service = new SessionRecordingService(makeConfig({ chatsDir }));
-      services.push(service);
-
-      service.recordSessionMetadata('Ordered title');
-      service.recordContent(makeContent('hello'));
-      await service.flush();
-
-      const filePath = service.getFilePath();
-      assert(filePath !== null);
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      const types = fileContent
-        .trim()
-        .split('\n')
-        .map((line) => JSON.parse(line).type);
-      const startIdx = types.indexOf('session_start');
-      const metaIdx = types.indexOf('session_metadata');
-      const contentIdx = types.indexOf('content');
-      expect(startIdx).toBeLessThan(metaIdx);
-      expect(metaIdx).toBeLessThan(contentIdx);
-    });
+  it('persists a concrete title in session state', async () => {
+    const filePath = await recordTitles(['My session title']);
+    expect((await readJournalFileFacts(filePath))?.facts.title).toBe(
+      'My session title',
+    );
   });
 
-  describe('ReplayEngine session_metadata handling', () => {
-    it('replays a string title from session_metadata', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const filePath = path.join(chatsDir, 'session-test-meta-str.jsonl');
-      await writeJsonlFile(filePath, [
-        sessionStartLine(1),
-        sessionMetadataLine(2, 'Replayed title'),
-        contentLine(3, makeContent('hello')),
-      ]);
+  it('records a null title for explicit untitled', async () => {
+    const filePath = await recordTitles([null]);
+    expect((await readJournalFileFacts(filePath))?.facts.title).toBeNull();
+  });
 
-      const result = await replaySession(filePath, PROJECT_HASH);
-      assertReplayOk(result);
-      expect(result.metadata.title).toBe('Replayed title');
-    });
+  it('materializes metadata without a content row for slash and failure sessions', async () => {
+    const recording = create();
+    recording.recordSessionMetadata('Slash command title');
+    await recording.flush();
+    const facts = await readJournalFileFacts(fileOf(recording));
+    expect(facts?.facts.title).toBe('Slash command title');
+    expect(facts?.facts.sessionId).toBe(recording.getSessionId());
+    expect(facts?.rows).toBe(0);
+  });
 
-    it('replays a null title (explicit untitled)', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const filePath = path.join(chatsDir, 'session-test-meta-null.jsonl');
-      await writeJsonlFile(filePath, [
-        sessionStartLine(1),
-        sessionMetadataLine(2, null),
-        contentLine(3, makeContent('hello')),
-      ]);
-
-      const result = await replaySession(filePath, PROJECT_HASH);
-      assertReplayOk(result);
-      expect(result.metadata.title).toBeNull();
-    });
-
-    it('leaves title undefined (legacy) when no session_metadata event exists', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const filePath = path.join(chatsDir, 'session-test-legacy.jsonl');
-      await writeJsonlFile(filePath, [
-        sessionStartLine(1),
-        contentLine(2, makeContent('hello')),
-      ]);
-
-      const result = await replaySession(filePath, PROJECT_HASH);
-      assertReplayOk(result);
-      expect(result.metadata.title).toBeUndefined();
-    });
-
-    it('last session_metadata title wins when multiple exist', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const filePath = path.join(chatsDir, 'session-test-meta-multi.jsonl');
-      await writeJsonlFile(filePath, [
-        sessionStartLine(1),
-        sessionMetadataLine(2, 'First title'),
-        contentLine(3, makeContent('turn 1')),
-        sessionMetadataLine(4, 'Updated title'),
-        contentLine(5, makeContent('turn 2')),
-      ]);
-
-      const result = await replaySession(filePath, PROJECT_HASH);
-      assertReplayOk(result);
-      expect(result.metadata.title).toBe('Updated title');
-    });
-
-    it('returns a specific fatal error when session_metadata precedes session_start', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const filePath = path.join(chatsDir, 'session-test-meta-early.jsonl');
-      await writeJsonlFile(filePath, [
-        sessionMetadataLine(1, 'Too early'),
-        sessionStartLine(2),
-      ]);
-
-      const result = await replaySession(filePath, PROJECT_HASH);
-      assertReplayError(result);
-      expect(result.error).toContain('session_start');
-    });
-
-    it('records a warning for malformed session_metadata title (non-string, non-null)', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const filePath = path.join(chatsDir, 'session-test-meta-malformed.jsonl');
-      await writeJsonlFile(filePath, [
-        sessionStartLine(1),
-        JSON.stringify({
-          v: 1,
-          seq: 2,
-          ts: '2026-07-12T00:00:00.000Z',
-          type: 'session_metadata',
-          payload: { title: 12345 },
-        }),
-        contentLine(3, makeContent('hello')),
-      ]);
-
-      const result = await replaySession(filePath, PROJECT_HASH);
-      assertReplayOk(result);
-      expect(
-        result.warnings.some((w) => w.includes('malformed session_metadata')),
-      ).toBe(true);
-    });
+  it('commits metadata before a subsequent content append', async () => {
+    const recording = create();
+    recording.recordSessionMetadata('Ordered title');
+    const session = await recording.session();
+    const before = await readJournalFileFacts(fileOf(recording));
+    expect(before?.facts.title).toBe('Ordered title');
+    expect(before?.rows).toBe(0);
+    await session.append([
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+    ]);
+    const after = await readJournalFileFacts(fileOf(recording));
+    expect(after?.facts.title).toBe('Ordered title');
+    expect(after?.rows).toBe(1);
   });
 
   describe('SessionDiscovery.readSessionMetadataTitle', () => {
-    it('reads a string title from a session_metadata event', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const filePath = path.join(chatsDir, 'session-discovery-str.jsonl');
-      await writeJsonlFile(filePath, [
-        sessionStartLine(1),
-        sessionMetadataLine(2, 'Discovery title'),
-      ]);
-
-      const title = await SessionDiscovery.readSessionMetadataTitle(filePath);
-      expect(title).toBe('Discovery title');
+    it('reads a string title', async () => {
+      const filePath = await recordTitles(['Discovery title']);
+      expect(await SessionDiscovery.readSessionMetadataTitle(filePath)).toBe(
+        'Discovery title',
+      );
     });
 
     it('reads null for explicit untitled', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const filePath = path.join(chatsDir, 'session-discovery-null.jsonl');
-      await writeJsonlFile(filePath, [
-        sessionStartLine(1),
-        sessionMetadataLine(2, null),
-      ]);
-
-      const title = await SessionDiscovery.readSessionMetadataTitle(filePath);
-      expect(title).toBeNull();
+      const filePath = await recordTitles([null]);
+      expect(
+        await SessionDiscovery.readSessionMetadataTitle(filePath),
+      ).toBeNull();
     });
 
-    it('returns undefined when no session_metadata event exists (legacy)', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const filePath = path.join(chatsDir, 'session-discovery-legacy.jsonl');
-      await writeJsonlFile(filePath, [
-        sessionStartLine(1),
-        contentLine(2, makeContent('hello')),
-      ]);
-
-      const title = await SessionDiscovery.readSessionMetadataTitle(filePath);
-      expect(title).toBeUndefined();
+    it('returns undefined when no title has been set', async () => {
+      const filePath = await recordTitles([]);
+      expect(
+        await SessionDiscovery.readSessionMetadataTitle(filePath),
+      ).toBeUndefined();
     });
 
-    it('returns undefined when the source stream cannot be opened', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const filePath = path.join(chatsDir, 'missing-session.jsonl');
-
-      const title = await SessionDiscovery.readSessionMetadataTitle(filePath);
-
-      expect(title).toBeUndefined();
+    it('returns undefined when the source cannot be opened', async () => {
+      expect(
+        await SessionDiscovery.readSessionMetadataTitle(
+          path.join(directory(), 'missing-session.llxj'),
+        ),
+      ).toBeUndefined();
     });
 
-    it('reads the last valid session_metadata title when multiple exist', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const filePath = path.join(chatsDir, 'session-discovery-multi.jsonl');
-      await writeJsonlFile(filePath, [
-        sessionStartLine(1),
-        sessionMetadataLine(2, 'First metadata'),
-        contentLine(3, makeContent('turn')),
-        sessionMetadataLine(4, 'Second metadata'),
+    it('reads the last committed title when multiple titles were recorded', async () => {
+      const filePath = await recordTitles([
+        'First metadata',
+        'Second metadata',
       ]);
-
-      const title = await SessionDiscovery.readSessionMetadataTitle(filePath);
-      expect(title).toBe('Second metadata');
+      expect(await SessionDiscovery.readSessionMetadataTitle(filePath)).toBe(
+        'Second metadata',
+      );
     });
   });
 
-  describe('SessionSummary createdAt (immutable ordering)', () => {
-    it('includes createdAt from session_start.startTime', async () => {
-      const chatsDir = await makeTempChatsDir();
-      const service = new SessionRecordingService(makeConfig({ chatsDir }));
-      services.push(service);
-      service.recordContent(makeContent('hello'));
-      await service.flush();
-
-      const sessions = await SessionDiscovery.listSessions(
-        chatsDir,
-        PROJECT_HASH,
-      );
-      expect(sessions).toHaveLength(1);
-      const createdAt = sessions[0].createdAt;
-      expect(createdAt).toBeDefined();
-      expect(typeof createdAt).toBe('string');
-      assertString(createdAt);
-      expect(Number.isNaN(Date.parse(createdAt))).toBe(false);
-    });
+  it('keeps createdAt unchanged when the session title and modification time change', async () => {
+    const filePath = await recordTitles(['Original']);
+    const [before] = await SessionDiscovery.listSessions(
+      directory(),
+      PROJECT_HASH,
+    );
+    expect(before.createdAt).toBeDefined();
+    expect(typeof before.createdAt).toBe('string');
+    expect(Number.isNaN(Date.parse(before.createdAt ?? ''))).toBe(false);
+    const recording = recordings[0];
+    recording.recordSessionMetadata('Updated');
+    await recording.flush();
+    const later = new Date(Date.now() + 1000);
+    await fs.utimes(filePath, later, later);
+    const [after] = await SessionDiscovery.listSessions(
+      directory(),
+      PROJECT_HASH,
+    );
+    expect(after.createdAt).toBe(before.createdAt);
+    expect(after.title).toBe('Updated');
   });
 });

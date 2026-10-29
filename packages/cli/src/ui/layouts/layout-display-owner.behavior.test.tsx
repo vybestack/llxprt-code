@@ -37,6 +37,7 @@ describe('layout display inputs', () => {
       wrapWithProviders(
         <StreamingContext.Provider value={StreamingState.Responding}>
           <ComposerRegion
+            subscribeContextRange={() => () => {}}
             readIdeMode={owner.ide.getIdeMode.bind(owner.ide)}
             readIdeDiffingEnabled={() =>
               owner.ide.readConnection().diffingEnabled

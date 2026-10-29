@@ -1,3 +1,4 @@
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import type { AuxiliaryWork } from '../core/auxiliary-work.js';
 /**
  * @license
@@ -84,8 +85,7 @@ export class SessionTextGeneration {
       );
       signal.throwIfAborted();
       if (writeHistory) {
-        if (!primary.hasChatInitialized())
-          await primary.startChat(await primary.getHistory());
+        if (!primary.hasChatInitialized()) await primary.startChat();
         signal.throwIfAborted();
         await primary
           .getChat()
@@ -188,7 +188,12 @@ export class SessionTextGeneration {
     const writeHistory = options?.writeHistory === true;
     const history =
       options?.readHistory === true
-        ? primary.getHistory().then((contents) => structuredClone(contents))
+        ? (tail: IContent[], requestSignal?: AbortSignal) => {
+            const history = primary.getHistoryService();
+            return history === null
+              ? callerOwnedRawProviderSource(tail)
+              : history.getCuratedForProviderStream(tail, requestSignal);
+          }
         : undefined;
     const release = this.ledger.retain(primary);
     try {
@@ -197,7 +202,7 @@ export class SessionTextGeneration {
         state,
         provider.name.toLowerCase() === 'gemini',
         supplied,
-        { ...request, message: supplied, historyPrefix: await history },
+        { ...request, message: supplied, historyPrefix: history },
         promptId,
         writeHistory,
         signal,

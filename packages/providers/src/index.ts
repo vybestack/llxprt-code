@@ -186,10 +186,10 @@ export { getOpenAIProviderInfo } from './openai/getOpenAIProviderInfo.js';
 
 // --- Additional types needed for provider construction ---
 export type { DumpMode } from './utils/dumpContext.js';
-export { dumpRequestContext } from './utils/dumpContext.js';
 export {
-  buildAnthropicDumpMessages,
-  buildOpenAIDumpMessages,
-  buildProviderDumpBody,
-} from './utils/providerRequestConversion.js';
+  dumpRequestContext,
+  dumpRequestContextStream,
+} from './utils/dumpContext.js';
+export { buildProviderDumpBodyStream } from './utils/providerRequestConversion.js';
 export { wrapStreamWithDump } from './utils/dumpSDKContext.js';
+export { streamPrettyJson } from './utils/streamPrettyJson.js';

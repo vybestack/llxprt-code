@@ -27,6 +27,7 @@
  *   --junit <path>        Write a JUnit XML report to this path after the run
  *   --json-report <path>  Write a Vitest-compatible JSON report (per-test results)
  *   --dry-run             List files that would be run without executing them
+ *   --partition <NofM>    Run only the round-robin slice N of M of the files
  */
 
 import './tests/browser-launch-guard.js';
@@ -56,6 +57,13 @@ import {
   reapStaleBunTestProcesses,
   killTimedOutChild,
 } from './lib/bun-test-retry.js';
+import {
+  PARTITION_ENV_VAR,
+  parsePartitionIdentity,
+  reportEmptySelection,
+  selectWeightedPartition,
+  type PartitionIdentity,
+} from './lib/bun-test-partition.js';
 import {
   buildSessionEnv,
   createTestSessionRoot,
@@ -175,6 +183,8 @@ interface CliOptions {
   filters: string[];
   /** Regex forwarded to Bun as `--test-name-pattern`. */
   testNamePattern: string | null;
+  /** One-based `NofM` slice of the resolved files; null runs them all. */
+  partition: PartitionIdentity | null;
 }
 
 function readOptionValue(
@@ -204,7 +214,7 @@ export function resolveTsconfigOverride(
   throw new Error(`Tsconfig override is not a file: ${absolutePath}`);
 }
 
-function parseArgs(argv: string[]): CliOptions {
+function parseArgs(argv: string[], partition?: string): CliOptions {
   const options: CliOptions = {
     workspace: null,
     tsconfig: null,
@@ -218,6 +228,7 @@ function parseArgs(argv: string[]): CliOptions {
     exclude: [],
     filters: [],
     testNamePattern: null,
+    partition: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -259,6 +270,11 @@ function parseArgs(argv: string[]): CliOptions {
       case '--testNamePattern':
         options.testNamePattern = readOptionValue(argv, i++, arg);
         break;
+      case '--partition':
+        options.partition = parsePartitionIdentity(
+          readOptionValue(argv, i++, arg),
+        );
+        break;
       default: {
         // `--exclude=<glob>` / `--testNamePattern=<regex>` (the forms the e2e
         // workflow uses) as well as their space-separated spellings, matching
@@ -284,6 +300,7 @@ function parseArgs(argv: string[]): CliOptions {
     }
   }
 
+  options.partition ??= parsePartitionIdentity(partition);
   return options;
 }
 
@@ -562,18 +579,17 @@ export async function runBunTests(
   argv: string[],
   dependencies: BunTestRunnerDependencies,
 ): Promise<number> {
-  const options = parseArgs(argv);
+  const options = parseArgs(argv, dependencies.environment[PARTITION_ENV_VAR]);
   const tsconfigOverride = resolveTsconfig(options, dependencies);
-  const files = resolveSelectedFiles(options, dependencies);
+  const all = resolveSelectedFiles(options, dependencies);
+  const files = selectWeightedPartition(
+    all,
+    options.partition,
+    dependencies.repoRoot,
+  );
 
-  if (files.length === 0) {
-    const scope = options.workspace
-      ? `workspace "${options.workspace}"`
-      : 'any workspace';
-    dependencies.stderr(`No native Bun test files found for ${scope}.`);
-    dependencies.stderr('Roots must be declared in scripts/bun-test-roots.ts.');
-    return 1;
-  }
+  if (files.length === 0)
+    return reportEmptySelection(options, dependencies, all.length);
 
   if (options.dryRun) {
     dependencies.stdout(`Dry run: ${files.length} files would be executed:`);
@@ -622,6 +638,7 @@ export async function runBunTests(
     guard.captureBaseline();
     await startGlobalSetups(files, started, dependencies);
     const sessionEnv = buildSessionEnv(dependencies.environment, session);
+    delete sessionEnv[PARTITION_ENV_VAR];
     const outcome = await runAllFiles(
       files,
       tsconfigOverride,

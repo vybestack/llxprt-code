@@ -123,6 +123,12 @@ export class LocalMediaStoreFiles {
 
   private async createDirectory(path: string): Promise<void> {
     try {
+      await lstat(path);
+      return;
+    } catch (error) {
+      if (!hasErrnoCode(error, 'ENOENT')) throw error;
+    }
+    try {
       await mkdir(path, { mode: DIRECTORY_MODE });
     } catch (error) {
       if (!hasErrnoCode(error, 'EEXIST')) throw error;

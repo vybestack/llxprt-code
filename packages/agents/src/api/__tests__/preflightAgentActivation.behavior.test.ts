@@ -107,7 +107,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
     expect(route.preflight.getActiveProviderName()).toBe('fake');
 
     if (!first.token) throw new Error('Missing token');
-    const history = await route.preflight.captureHistory();
+    const history = await Array.fromAsync(route.preflight.captureHistory());
     const contentConfig = route.config.getContentGeneratorConfig();
     const agent = await AgentProfilePreflight.createForegroundAgent(
       route.preflight,
@@ -115,7 +115,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
       intent,
       {},
     );
-    expect(await agent.getHistory()).toStrictEqual(history);
+    expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual(history);
     expect(route.config.getContentGeneratorConfig()).toBe(contentConfig);
     expect(route.preflight.getActiveProviderName()).toBe('fake');
     await agent.dispose();

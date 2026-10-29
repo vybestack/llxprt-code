@@ -1,3 +1,4 @@
+import { serve } from 'bun';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -27,14 +28,16 @@ import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/r
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type { Logger } from '@vybestack/llxprt-code-core/core/logger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { OneShotStrategy } from './OneShotStrategy.js';
+import { compressOneShotViaDisk } from './__tests__/support/oneshot-disk-adapter.js';
 import { buildCompressionSystemInstruction } from './compressionSystemPrompt.js';
-import { MiddleOutStrategy } from './MiddleOutStrategy.js';
+import { compressMiddleOutViaDisk } from './__tests__/support/middleout-disk-adapter.js';
 import { runVerificationPass } from './utils.js';
+import { OpenAIProvider } from '@vybestack/llxprt-code-providers/openai/OpenAIProvider.js';
+import { operationFileCreates } from './__tests__/support/operation-file-creates.js';
 import {
   CompressionLoadBalancingProvider,
   type CompressionLoadBalancerCandidate,
@@ -84,13 +87,7 @@ function generateHistory(count: number): IContent[] {
   return messages;
 }
 
-const noopLogger = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  log: () => {},
-} as unknown as Logger;
+const noopLogger = new DebugLogger('llxprt:test:compression');
 
 /**
  * Fake provider that captures every `generateChatCompletion` call's options
@@ -122,6 +119,7 @@ function buildContext(
     compressionVerification: boolean;
     subagentName: string;
     config: Config;
+    fetch: NetworkFetch;
   }> = {},
 ): CompressionContext {
   const invocationSettings = new SettingsService();
@@ -133,7 +131,7 @@ function buildContext(
   const resolveProvider = (): CompressionProviderResult => ({
     invocation: captureProviderInvocation(
       {
-        fetch: requestFetch,
+        fetch: overrides.fetch ?? requestFetch,
         runtimeId: contextProviderRuntime.runtimeId,
         metadata: contextProviderRuntime.metadata,
         globalSettings: invocationSettings.getAllGlobalSettings(),
@@ -216,13 +214,7 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
     const history = generateHistory(20);
     const context = buildContext(provider, { history });
 
-    const strategy = new OneShotStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    const result = await strategy.compress(context);
+    const result = await compressOneShotViaDisk(context);
 
     expect(result.kind).toBe('applied');
     expect(captured.length).toBeGreaterThanOrEqual(1);
@@ -241,13 +233,7 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
       preserveThreshold: 0.2,
     });
 
-    const strategy = new MiddleOutStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    const result = await strategy.compress(context);
+    const result = await compressMiddleOutViaDisk(context);
 
     expect(result.kind).toBe('applied');
     expect(captured.length).toBeGreaterThanOrEqual(1);
@@ -262,7 +248,7 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
     const provider = createCapturingProvider(captured, 'VERIFIED');
     const context = buildContext(provider);
 
-    const resolved = context.resolveProvider();
+    const resolved = await context.resolveProvider();
     await runVerificationPass(
       provider,
       'initial summary',
@@ -293,13 +279,7 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
       compressionVerification: true,
     });
 
-    const strategy = new OneShotStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    await strategy.compress(context);
+    await compressOneShotViaDisk(context);
 
     // First call = initial compression, second = verification pass
     expect(captured.length).toBe(2);
@@ -336,13 +316,7 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
       subagentName: 'typescript-expert',
     });
 
-    const strategy = new OneShotStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    await strategy.compress(context);
+    await compressOneShotViaDisk(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
     expect(captured[0].systemInstruction).toContain('mode=subagent');
@@ -358,13 +332,7 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
       config: makeInteractiveConfig(true),
     });
 
-    const strategy = new OneShotStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    await strategy.compress(context);
+    await compressOneShotViaDisk(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
     const sysInstr = captured[0].systemInstruction as string;
@@ -381,13 +349,7 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
       config: makeInteractiveConfig(false),
     });
 
-    const strategy = new OneShotStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    await strategy.compress(context);
+    await compressOneShotViaDisk(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
     const sysInstr = captured[0].systemInstruction as string;
@@ -404,13 +366,7 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
     const history = generateHistory(20);
     const context = buildContext(provider, { history });
 
-    const strategy = new OneShotStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    await strategy.compress(context);
+    await compressOneShotViaDisk(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
     const sysInstr = captured[0].systemInstruction as string;
@@ -424,13 +380,7 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
     (provider as { name: string }).name = 'load-balancer';
     const context = buildContext(provider, { history: generateHistory(20) });
 
-    const strategy = new OneShotStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    await strategy.compress(context);
+    await compressOneShotViaDisk(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
     expect(captured[0].systemInstruction).toContain('provider=load-balancer');
@@ -456,6 +406,8 @@ function createLoadBalancerCandidate(
   (provider as { name: string }).name = providerName;
   if (failure) {
     provider.generateChatCompletion = (options) => {
+      if (!('contents' in options))
+        throw new Error('Expected structured request options');
       captured.push(options);
       throw failure;
     };
@@ -489,7 +441,7 @@ describe('Load-balanced compression prompt assembly (issue #3176, D5+D8)', () =>
     );
 
     for await (const _chunk of provider.generateChatCompletion({
-      contents: [],
+      contents: (async function* (): AsyncGenerator<IContent> {})(),
     })) {
       // Drain the selected provider response.
     }
@@ -524,7 +476,7 @@ describe('Load-balanced compression prompt assembly (issue #3176, D5+D8)', () =>
     );
 
     for await (const _chunk of provider.generateChatCompletion({
-      contents: [],
+      contents: (async function* (): AsyncGenerator<IContent> {})(),
     })) {
       // Drain the successful failover response.
     }
@@ -557,16 +509,76 @@ describe('Load-balanced compression prompt assembly (issue #3176, D5+D8)', () =>
       subagentName: 'worker',
     });
 
-    await new OneShotStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    ).compress(context);
+    await compressOneShotViaDisk(context);
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledTimes(1);
     expect(calls[0].systemInstruction).toContain(
       'mode=subagent provider=provider-a model=model-a',
     );
+  });
+});
+
+describe('verification native request rows', () => {
+  it('preserves verification request bytes and returns an improved summary without scratch files', async () => {
+    const bodies: string[] = [];
+    const improved = '<state_snapshot>checked summary</state_snapshot>';
+    const server = serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      async fetch(request) {
+        bodies.push(await request.text());
+        return new Response(
+          'data: ' +
+            JSON.stringify({
+              id: 'verify',
+              object: 'chat.completion.chunk',
+              created: 1,
+              model: 'test-model',
+              choices: [
+                { index: 0, delta: { content: improved }, finish_reason: null },
+              ],
+            }) +
+            '\n\ndata: [DONE]\n\n',
+          { headers: { 'content-type': 'text/event-stream' } },
+        );
+      },
+    });
+    const provider = new OpenAIProvider(
+      'test-key',
+      `http://127.0.0.1:${server.port}/v1`,
+    );
+    const context = buildContext(provider, {
+      fetch: (input, init) => globalThis.fetch(input, init),
+    });
+    const resolved = await context.resolveProvider();
+    const verify = () =>
+      runVerificationPass(
+        provider,
+        'initial summary',
+        context,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        resolved.runtime,
+        undefined,
+        {
+          model: 'test-model',
+          baseURL: `http://127.0.0.1:${server.port}/v1`,
+          authToken: 'test-key',
+        },
+        resolved.invocation,
+      );
+    try {
+      expect(await verify()).toBe(improved);
+      const created = await operationFileCreates(async () => {
+        expect(await verify()).toBe(improved);
+      }, true);
+      expect(created).toStrictEqual({ files: [], directories: [] });
+      expect(bodies).toHaveLength(2);
+      expect(bodies[1]).toBe(bodies[0]);
+    } finally {
+      await server.stop(true);
+    }
   });
 });

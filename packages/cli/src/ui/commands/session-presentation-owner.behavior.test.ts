@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -65,10 +66,12 @@ describe('registered session and presentation commands', () => {
     });
     await clear.action(invocation, '');
     expect(owner.session.getSessionId()).not.toBe(initialSessionId);
-    expect(await owner.getHistory()).toStrictEqual([]);
+    expect(await collectResumeRows(owner.streamHistory())).toStrictEqual([]);
     expect(sibling.session.getSessionId()).toBe(initialSessionId);
     expect(
-      (await sibling.getHistory()).flatMap((item) => item.blocks),
+      (await collectResumeRows(sibling.streamHistory())).flatMap(
+        (item) => item.blocks,
+      ),
     ).toStrictEqual([{ type: 'text', text: 'retained question' }]);
     expect(events.slice(-2)).toStrictEqual(['tokens:0', 'clear']);
   });

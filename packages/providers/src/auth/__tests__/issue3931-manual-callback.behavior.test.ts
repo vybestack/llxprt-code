@@ -5,6 +5,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
@@ -116,18 +117,20 @@ function harness(persistence?: {
 
 function interceptExchange(): string[] {
   const requests: string[] = [];
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
-    requests.push(String(init?.body));
-    return new Response(
-      JSON.stringify({
-        access_token: 'synthetic-session-token',
-        expires_in: 3600,
-      }),
-      {
-        headers: { 'Content-Type': 'application/json' },
-      },
-    );
-  });
+  vi.spyOn(globalThis, 'fetch').mockImplementation(
+    withFetchPreconnect(async (_input, init) => {
+      requests.push(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          access_token: 'synthetic-session-token',
+          expires_in: 3600,
+        }),
+        {
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }),
+  );
   return requests;
 }
 

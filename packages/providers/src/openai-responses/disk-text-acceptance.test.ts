@@ -1,0 +1,345 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
+import {
+  median,
+  settledHeap,
+} from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import {
+  estimatePromptEnvelope,
+  type PromptEnvelopeEstimate,
+} from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { requestSelection } from './__tests__/support/request-selection.js';
+import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
+import { NativeResponsesEstimateProjection } from './native-responses-estimate.js';
+import { nativeDiskRows } from './__tests__/support/native-disk-text-rows.js';
+import {
+  projectSourcePrompt,
+  sourcePromptText,
+} from './__tests__/support/source-prompt-text.js';
+import {
+  diskTextFixture,
+  diskTextRow,
+  diskTextWireOracle,
+} from './__tests__/support/disk-text-fixture.js';
+import {
+  projectionEndpoint,
+  projectionRuntime,
+} from './__tests__/support/projection-ownership-fixture.js';
+import { observeDiskBody } from './__tests__/support/disk-text-body-observer.js';
+import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
+
+type Setup = Awaited<ReturnType<typeof projectionRuntime>>;
+type BodyObservation = ReturnType<typeof observeDiskBody>;
+// The median of three settled readings keeps allocator jitter of a few
+// hundred KiB, which is unrelated to what is retained, out of the 1 MiB gate.
+async function heap(): Promise<number> {
+  return median([
+    await settledHeap(),
+    await settledHeap(),
+    await settledHeap(),
+  ]);
+}
+const HEAP_GATE_BYTES = 1024 * 1024;
+const MEASURED_RUNS = 3;
+function gateDelta(facts: Awaited<ReturnType<typeof acceptance>>): number {
+  return (
+    Math.max(
+      facts.preparedHeap,
+      facts.firstChunkHeap,
+      facts.pausedHeap,
+      facts.lastChunkHeap,
+      facts.responseHeap,
+      facts.finalHeap,
+    ) - facts.baseline
+  );
+}
+async function nativeEstimate(
+  setup: Setup,
+  large: boolean,
+): Promise<PromptEnvelopeEstimate> {
+  const rows = {
+    count: 64,
+    readAt: (index: number) => diskTextRow(index, large),
+    async *openReader() {
+      for (let index = 0; index < 64; index++) yield diskTextRow(index, large);
+    },
+  };
+  const projection = await setup.provider.projectPromptEnvelope({
+    ...setup.options(requestSelection(rows)),
+    requestRows: undefined,
+  });
+  try {
+    return await estimatePromptEnvelope(
+      setup.provider.name,
+      projection,
+      setup.factory,
+    );
+  } finally {
+    await projection.releaseIfUnsent?.();
+  }
+}
+function segmentDescriptors(): string[] {
+  const result = spawnSync('lsof', ['-p', String(process.pid), '-Fn'], {
+    encoding: 'utf8',
+  });
+  if (result.status !== 0)
+    throw new Error(`Descriptor inspection failed: ${result.stderr}`);
+  return result.stdout
+    .split('\n')
+    .filter(
+      (line) =>
+        line.includes('/responses-prompt-keys-') ||
+        line.includes('/provider-normalization-'),
+    );
+}
+async function warmRuntime(setup: Setup): Promise<void> {
+  let requests = 0;
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    async fetch(request) {
+      await request.arrayBuffer();
+      if (++requests === 1)
+        return new Response('{"error":{"message":"warm retry"}}', {
+          status: 503,
+        });
+      return new Response(
+        'data: {"type":"response.completed","response":{"id":"resp_warm","status":"completed","output":[]}}\n\ndata: [DONE]\n\n',
+        { headers: { 'content-type': 'text/event-stream' } },
+      );
+    },
+  });
+  // The second row carries pieces beyond the WASM bound so that one-time
+  // state of the large-piece estimator path exists before the baseline.
+  const rows = requestSelection({
+    count: 2,
+    readAt: (index: number) =>
+      index === 0 ? diskTextRow(0, false) : diskTextRow(63, 2),
+    async *openReader() {
+      yield diskTextRow(0, false);
+      yield diskTextRow(63, 2);
+    },
+  });
+  const options = {
+    ...setup.options(rows),
+    resolved: { baseURL: `http://127.0.0.1:${server.port}/v1` },
+  };
+  const projection = await setup.provider.projectPromptEnvelope(options);
+  const observer = observeDiskBody();
+  observer.resume.release();
+  try {
+    await estimatePromptEnvelope(
+      setup.provider.name,
+      projection,
+      withGpt56DiskSources(setup.factory, tmpdir()),
+    );
+    if (
+      !(
+        projection.finalizedProjection instanceof
+        NativeResponsesEstimateProjection
+      )
+    )
+      throw new Error('Missing warm source');
+    segmentDescriptors();
+    for await (const row of setup.provider.generateChatCompletion({
+      ...options,
+      promptEnvelopeTransportToken: projection.transportToken,
+    }))
+      expect(row.speaker).toBe('ai');
+  } finally {
+    observer.restore();
+    await projection.releaseIfUnsent?.();
+    await server.stop(true);
+  }
+}
+async function uploadMeasurements(
+  stream: AsyncIterableIterator<
+    import('@vybestack/llxprt-code-core/services/history/IContent.js').IContent
+  >,
+  http: ReturnType<typeof projectionEndpoint>,
+  observer: BodyObservation,
+): Promise<{
+  firstChunkHeap: number;
+  firstDemand: BodyObservation['state'];
+  pausedHeap: number;
+  lastChunkHeap: number;
+  responseHeap: number;
+  finalHeap: number;
+  descriptorsAtUpload: string[];
+}> {
+  const first = stream.next();
+  await Promise.race([
+    observer.first.wait,
+    first.then(() => {
+      throw new Error('No actual BODY demand');
+    }),
+  ]);
+  const firstChunkHeap = await heap();
+  const firstDemand = { ...observer.state };
+  observer.resume.release();
+  await http.arrived.wait;
+  const pausedHeap = await heap();
+  http.readBody.release();
+  await http.uploaded.wait;
+  await observer.last.wait;
+  const lastChunkHeap = await heap();
+  const descriptorsAtUpload = segmentDescriptors();
+  http.respond.release();
+  if ((await first).done === true)
+    throw new Error('Missing actual provider response');
+  const responseHeap = await heap();
+  for await (const row of stream) expect(row.speaker).toBe('ai');
+  const finalHeap = await heap();
+  return {
+    firstChunkHeap,
+    firstDemand,
+    pausedHeap,
+    lastChunkHeap,
+    responseHeap,
+    finalHeap,
+    descriptorsAtUpload,
+  };
+}
+
+function largestRowSize(large: boolean): number {
+  return diskTextRow(63, large).blocks.reduce(
+    (sum, block) =>
+      sum + (block.type === 'text' ? Buffer.byteLength(block.text) : 0),
+    0,
+  );
+}
+function requireSource(value: unknown): NativeResponsesEstimateProjection {
+  if (!(value instanceof NativeResponsesEstimateProjection))
+    throw new Error('Missing actual provider source projection');
+  return value;
+}
+async function acceptance(large: boolean, retainRows = false) {
+  const disk = diskTextFixture(large, retainRows);
+  const native = await nativeDiskRows(disk, retainRows);
+  const http = projectionEndpoint(true);
+  const setup = await projectionRuntime(
+    `http://127.0.0.1:${http.server.port}/v1`,
+    disk.root,
+  );
+  const expected = diskTextWireOracle(large);
+  const oracle = await nativeEstimate(setup, large);
+  const largestRowBytes = largestRowSize(large);
+  await warmRuntime(setup);
+  const baseline = await heap();
+  const options = setup.options(native.selection);
+  const projection = await projectSourcePrompt(setup.provider, options);
+  requireSource(projection.finalizedProjection);
+  const estimate = await estimatePromptEnvelope(
+    setup.provider.name,
+    projection,
+    withGpt56DiskSources(setup.factory, tmpdir()),
+  );
+  const preparedHeap = await heap();
+  const preparedScan = disk.state.pulled;
+  const livePreparedRows = disk.references.filter(
+    (row) => row.deref() !== undefined,
+  ).length;
+  const observer = observeDiskBody();
+  const stream = setup.provider.generateChatCompletion({
+    ...options,
+    promptEnvelopeTransportToken: projection.transportToken,
+  });
+  try {
+    const measurements = await uploadMeasurements(stream, http, observer);
+    const liveFinalRows = disk.references.filter(
+      (row) => row.deref() !== undefined,
+    ).length;
+    const facts = {
+      large,
+      expected,
+      oracle,
+      estimate,
+      largestRowBytes,
+      preparedScan,
+      finalScan: disk.state.pulled,
+      livePreparedRows,
+      liveFinalRows,
+      bodyDemand: { ...observer.state },
+      baseline,
+      preparedHeap,
+      ...measurements,
+      finalDescriptors: segmentDescriptors(),
+      pathsRemoved: await sourcePromptText(projection).then(
+        () => false,
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message === 'Native Responses prompt is closed',
+      ),
+      bodies: http.bodies,
+      activeBodies: activeRequestBodyCount(),
+    };
+    return facts;
+  } finally {
+    observer.resume.release();
+    http.readBody.release();
+    http.respond.release();
+    await stream.return?.();
+    await projection.releaseIfUnsent?.();
+    observer.restore();
+    await native.close();
+    disk.close();
+    await http.server.stop(true);
+    await setup.config.dispose();
+  }
+}
+
+function assertOwners(facts: Awaited<ReturnType<typeof acceptance>>): void {
+  expect(facts.estimate).toStrictEqual(facts.oracle);
+  expect(facts.bodies).toStrictEqual([facts.expected, facts.expected]);
+  expect(facts.preparedScan).toBe(64);
+  expect(facts.finalScan).toBe(64);
+  expect(facts.livePreparedRows).toBe(0);
+  expect(facts.liveFinalRows).toBe(0);
+  expect(facts.bodyDemand.bytes).toBe(2 * facts.expected.bytes);
+  expect(facts.bodyDemand.attempts).toBe(2);
+  expect(facts.bodyDemand.active).toBe(0);
+  expect(facts.descriptorsAtUpload).toHaveLength(0);
+  expect(facts.finalDescriptors).toHaveLength(0);
+  expect(facts.pathsRemoved).toBe(true);
+  expect(facts.activeBodies).toBe(0);
+}
+// One unmeasured full-size run takes the one-time state of this exact path
+// (code blocks, encoder and WASM growth) before three measured runs. Owner
+// facts must hold in every run; the 1 MiB heap gate applies to the median of
+// the measured runs, so a single noisy checkpoint cannot decide it while
+// retention that exists in every run still does.
+async function measuredAcceptance(large: boolean, retainRows = false) {
+  await acceptance(large, retainRows);
+  const runs: Array<Awaited<ReturnType<typeof acceptance>>> = [];
+  for (let run = 0; run < MEASURED_RUNS; run++)
+    runs.push(await acceptance(large, retainRows));
+  return { runs, gate: median(runs.map(gateDelta)) };
+}
+function assertAcceptance(
+  measured: Awaited<ReturnType<typeof measuredAcceptance>>,
+): void {
+  for (const facts of measured.runs) assertOwners(facts);
+  expect(measured.gate).toBeLessThanOrEqual(HEAP_GATE_BYTES);
+}
+describe('actual stateless disk provider ownership acceptance', () => {
+  it.each([false, true])(
+    'preserves native metadata and independent HTTP bytes with bounded live owners, oversized=%s',
+    async (large) => {
+      const measured = await measuredAcceptance(large);
+      for (const facts of measured.runs)
+        expect(facts.largestRowBytes).toBeGreaterThan(
+          large ? 10 * 1024 * 1024 : 500,
+        );
+      assertAcceptance(measured);
+    },
+    600000,
+  );
+  it('trap: rows deliberately held by the test fail the live-row gate', async () => {
+    const measured = await measuredAcceptance(false, true);
+    expect(() => assertAcceptance(measured)).toThrow('expect(received)');
+    for (const facts of measured.runs)
+      expect(facts.livePreparedRows).toBeGreaterThan(0);
+  }, 600000);
+});

@@ -1,3 +1,4 @@
+import { collectResumeRows } from './__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -10,7 +11,7 @@ import {
   AgentProfilePreflight,
   type Agent,
 } from '@vybestack/llxprt-code-agents';
-import { handoffCliConfig } from './test-utils/bootstrap-config.js';
+import { handoffCliConfig } from './test-utils/bootstrap-config.test-helper.js';
 
 import {
   describe,
@@ -312,7 +313,7 @@ describe('cli.tsx main function', () => {
       expect(owner.getRuntimeId()).toBe(peer.getRuntimeId());
       await peer.dispose();
       await expect(main()).rejects.toMatchObject({ code: 0 });
-      expect(await owner.getHistory()).toStrictEqual(
+      expect(await collectResumeRows(owner.streamHistory())).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({
             speaker: 'human',

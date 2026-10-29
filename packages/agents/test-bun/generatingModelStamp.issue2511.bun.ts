@@ -23,6 +23,8 @@ import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
  *    (2 tests, AC1/AC2 and the throw-fallback AC3).
  */
 
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { afterEach, describe, it, expect } from 'bun:test';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { emptyModelOutput } from '@vybestack/llxprt-code-core/llm-types/modelEnvelope.js';
 import {
@@ -44,7 +46,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { afterEach, describe, expect, it } from 'bun:test';
+
 import { ConversationManager } from '../src/core/ConversationManager.js';
 import { createConfigParams } from '../src/core/chatSession-runtime-helpers.js';
 import { ChatSession } from '../src/core/chatSession.js';
@@ -198,8 +200,10 @@ describe('ConversationManager stamps the live provider model, not the stale snap
 
     await recordSimpleAiTurn(conversationManager);
 
-    const ai = historyService.getAll().find((c) => c.speaker === 'ai');
-    expect(ai?.metadata?.model).toBe(LIVE_PROVIDER_MODEL);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const ai = rows.find((c) => c.speaker === 'ai');
+      expect(ai?.metadata?.model).toBe(LIVE_PROVIDER_MODEL);
+    });
   });
 
   it('AC3: falls back to the runtime-state model when the live accessor returns a blank string', async () => {
@@ -211,8 +215,10 @@ describe('ConversationManager stamps the live provider model, not the stale snap
 
     await recordSimpleAiTurn(conversationManager);
 
-    const ai = historyService.getAll().find((c) => c.speaker === 'ai');
-    expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const ai = rows.find((c) => c.speaker === 'ai');
+      expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
+    });
   });
 
   it('AC3: falls back to the runtime-state model when the live accessor throws', async () => {
@@ -224,8 +230,10 @@ describe('ConversationManager stamps the live provider model, not the stale snap
 
     await recordSimpleAiTurn(conversationManager);
 
-    const ai = historyService.getAll().find((c) => c.speaker === 'ai');
-    expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const ai = rows.find((c) => c.speaker === 'ai');
+      expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
+    });
   });
 
   it('AC3: falls back to the runtime-state model when the provider omits getCurrentModel entirely', async () => {
@@ -239,8 +247,10 @@ describe('ConversationManager stamps the live provider model, not the stale snap
 
     await recordSimpleAiTurn(conversationManager);
 
-    const ai = historyService.getAll().find((c) => c.speaker === 'ai');
-    expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const ai = rows.find((c) => c.speaker === 'ai');
+      expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
+    });
   });
 });
 
@@ -372,8 +382,10 @@ describe('TurnProcessor._commitSendResult stamps the live provider model (issue 
       'test-prompt-id',
     );
 
-    const ai = historyService.getAll().find((c) => c.speaker === 'ai');
-    expect(ai?.metadata?.model).toBe(LIVE_PROVIDER_MODEL);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const ai = rows.find((c) => c.speaker === 'ai');
+      expect(ai?.metadata?.model).toBe(LIVE_PROVIDER_MODEL);
+    });
   });
 
   it('AC3: falls back to the runtime-state model when the live accessor throws', async () => {
@@ -387,8 +399,10 @@ describe('TurnProcessor._commitSendResult stamps the live provider model (issue 
       'test-prompt-id',
     );
 
-    const ai = historyService.getAll().find((c) => c.speaker === 'ai');
-    expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const ai = rows.find((c) => c.speaker === 'ai');
+      expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
+    });
   });
 
   it('AC3: falls back to the runtime-state model when the provider omits getCurrentModel entirely', async () => {
@@ -400,7 +414,9 @@ describe('TurnProcessor._commitSendResult stamps the live provider model (issue 
       'test-prompt-id',
     );
 
-    const ai = historyService.getAll().find((c) => c.speaker === 'ai');
-    expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const ai = rows.find((c) => c.speaker === 'ai');
+      expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
+    });
   });
 });

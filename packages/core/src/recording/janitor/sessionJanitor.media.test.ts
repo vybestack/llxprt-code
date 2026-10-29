@@ -24,7 +24,7 @@ import type {
   MediaReferenceBlock,
 } from '../../services/history/IContent.js';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
-import { SessionRecordingService } from '../SessionRecordingService.js';
+import { JournalRecordingService } from '../journalRecordingService.js';
 import { runSessionCleanup } from './sessionJanitor.js';
 
 const PROJECT_HASH = 'a'.repeat(64);
@@ -117,7 +117,7 @@ describe('SessionJanitor media reclamation', () => {
     });
     await store.reserve(reserved, 'in-flight-request');
 
-    const recording = new SessionRecordingService({
+    const recording = JournalRecordingService.create({
       sessionId: 'janitor-media-session',
       projectHash: PROJECT_HASH,
       chatsDir: join(projectDir, 'chats'),
@@ -126,8 +126,9 @@ describe('SessionJanitor media reclamation', () => {
       model: 'test',
       mediaStore: store,
     });
-    recording.recordContent(referenceContent(kept));
-    recording.recordContent(referenceContent(kept));
+    await (
+      await recording.session()
+    ).append([referenceContent(kept), referenceContent(kept)]);
     await recording.flush();
     await recording.dispose();
 
@@ -195,7 +196,7 @@ describe('SessionJanitor media reclamation', () => {
       mimeType: 'application/octet-stream',
       semanticMetadata: {},
     });
-    const recording = new SessionRecordingService({
+    const recording = JournalRecordingService.create({
       sessionId: 'janitor-failure-session',
       projectHash: PROJECT_HASH,
       chatsDir: join(projectDir, 'chats'),
@@ -205,7 +206,7 @@ describe('SessionJanitor media reclamation', () => {
     });
 
     try {
-      recording.recordContent(referenceContent(reference));
+      await (await recording.session()).append([referenceContent(reference)]);
       await recording.flush();
       const malformedActiveHistory: IContent[] = [
         {

@@ -1,10 +1,9 @@
-import * as ownedPersistence from '../../../../agents/src/api/control/recordedHistoryPersistence.js';
 import type { SessionControl } from '../../../../agents/src/api/control/sessionControl.js';
-import { spyOn, afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 
 import { createCapturedSessionOwner } from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
 import type { CommandHandlerFixture as SlashCommandHandlerDeps } from './slash-command-handler-deps-test-helpers.js';
-import { installFixtureRawResume } from '../../__tests__/command-raw-resume-fixture.js';
+import { bindCommandRawResume } from './commandRawResumeHost.js';
 import { buildSettingsRuntime } from '../../runtime/createRuntimeOwnerFeatures.js';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -42,12 +41,20 @@ import {
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import {
-  assertDefined,
-  assertNotNull,
-} from '@vybestack/llxprt-code-test-utils';
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
+import { createPortablePackage as createPackage } from '../../__tests__/support/portable-package.js';
+import { recordedRows } from '../../../../agents/src/api/__tests__/support/recorded-rows.js';
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  readFile,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -56,16 +63,14 @@ import {
   LocalMediaStore,
   PerformCompressionResult,
   SessionDiscovery,
-  SessionRecordingService,
+  type SessionRecordingPort,
   emptyModelOutput,
-  exportSessionMediaPackage,
   getProjectHash,
   type AgentChatContract,
   type AgentClientContract,
   type IContent,
   type RuntimeProviderManager,
   type LockHandle,
-  type MediaReferenceBlock,
   type RecordingIntegration,
   type SessionMetadata,
 } from '@vybestack/llxprt-code-core';
@@ -74,8 +79,11 @@ import { createContinueCommandForTest } from '../commands/__tests__/continue-com
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 import { processSlashCommand } from './slashCommandHandlers.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { RecordingSwapCallbacks } from '../../services/performResume.js';
-import type { Message } from '../types.js';
+import {
+  performResume,
+  type RecordingSwapCallbacks,
+} from '../../services/performResume.js';
+import { MessageType, type Message } from '../types.js';
 import { CliSessionPersistence } from '../../cliSessionPersistence.js';
 import { setupOwnerSessionRecording } from '../../cliSessionBootstrap.js';
 import {
@@ -85,15 +93,10 @@ import {
 } from '../../utils/cleanup.js';
 
 interface ActiveRecordingState {
-  recording: SessionRecordingService | null;
+  recording: SessionRecordingPort | null;
   integration: RecordingIntegration | null;
   lock: LockHandle | null;
   metadata: SessionMetadata | null;
-}
-
-interface PackageFixture {
-  readonly directory: string;
-  readonly references: readonly MediaReferenceBlock[];
 }
 
 function createAgentClient(
@@ -108,10 +111,15 @@ function createAgentClient(
       throw new Error('Fixture chat does not publish detached generation');
     },
     takeHistoryAdmissions: () => [],
-    sendMessage: async () => emptyModelOutput(),
+    sendMessage: async (_params, promptId) => ({
+      status: 'empty',
+      promptId,
+      turnId: 'unused',
+    }),
     sendMessageStream: async () => emptyStream(),
     generateDirectMessage: async () => emptyModelOutput(),
-    getHistory: () => history.getAll(),
+    getHistory: (_curated, signal) => history.streamRawHistory(signal),
+    streamHistory: (signal) => history.streamRawHistory(signal),
     setHistory: (next) => history.replaceAll([...next]),
     clearHistory: () => history.clear(),
     getHistoryService: () => history,
@@ -121,10 +129,6 @@ function createAgentClient(
   };
   let tools: AgentClientContract['tools'] | undefined;
   return {
-    bindModelNotifications: () => {},
-    bindIdeContext: () => {},
-    bindWorkspaceDefinitions: () => {},
-    bindProviderFiles: () => {},
     bindTokenization: () => {},
     bindProviderSelection: () => {},
     get tools() {
@@ -132,6 +136,10 @@ function createAgentClient(
         throw new Error('Missing fixture tool selection');
       return tools;
     },
+    bindModelNotifications: () => {},
+    bindIdeContext: () => {},
+    bindWorkspaceDefinitions: () => {},
+    bindProviderFiles: () => {},
     bindRuntimeSettings: () => {},
     bindTelemetry: () => {},
     bindProviderInvocation: () => {},
@@ -150,7 +158,8 @@ function createAgentClient(
     isInitialized: () => true,
     hasChatInitialized: () => true,
     getChat: () => chat,
-    getHistory: async () => history.getAll(),
+    getHistory: (_curated, signal) => history.streamRawHistory(signal),
+    streamHistory: (signal) => history.streamRawHistory(signal),
     getHistoryService: () => history,
     storeHistoryServiceForReuse: () => {},
     prepareHistoryRebind: () => {
@@ -158,7 +167,13 @@ function createAgentClient(
         'Profile history rebinding is not used by session resume tests',
       );
     },
-    storeHistoryForLaterUse: async () => {},
+    storeHistoryForLaterUse: async (source) => {
+      await history.replaceAll(await Array.fromAsync(source));
+    },
+    discardDeferredHistory: async () => {},
+    setHistoryFromSource: async (source) => {
+      await history.replaceAll(await Array.fromAsync(source));
+    },
     dispose: async () => {},
     setTools: async () => {},
     clearTools: () => {},
@@ -193,7 +208,6 @@ async function createConfig(
   sessionClient: SessionClientOwner;
   settingsOwner: SessionSettingsOwner;
   session: SessionControl;
-  sessionPersistence: ownedPersistence.AgentSessionPersistence;
   dispose(): Promise<void>;
 }> {
   await mkdir(projectRoot, { recursive: true });
@@ -240,41 +254,24 @@ async function createConfig(
   );
 
   sessionClient.clients.conversationBinding.initializeConversation();
-  let sessionPersistence: ownedPersistence.AgentSessionPersistence | undefined;
-  const createPersistence = ownedPersistence.createAgentSessionPersistence;
-  const acquisition = spyOn(
-    ownedPersistence,
-    'createAgentSessionPersistence',
-  ).mockImplementation((...args) => {
-    const persistence = createPersistence(...args);
-    sessionPersistence = persistence;
-    return persistence;
-  });
-  let session: SessionControl;
-  try {
-    session = sessionClient.createSessionControl(
-      'config',
-      () => config.getSessionId(),
-      (operation) => operation(),
-      () => {},
-      () => {},
-      () => config.getProvider() ?? '',
-      () => config.getModel(),
-    );
-  } finally {
-    acquisition.mockRestore();
-  }
-  if (sessionPersistence === undefined)
-    throw new Error('No actual persistence acquisition');
+  const session = sessionClient.createSessionControl(
+    'config',
+    () => config.getSessionId(),
+    (operation) => operation(),
+    () => {},
+    () => {},
+    () => config.getProvider() ?? '',
+    () => config.getModel(),
+  );
   return {
     config,
     client,
     sessionClient,
     settingsOwner,
     session,
-    sessionPersistence,
     dispose: async () => {
       await session.dispose();
+      await history.dispose();
       await sessionClient.dispose();
       await settingsOwner.dispose();
       await client.dispose();
@@ -284,56 +281,6 @@ async function createConfig(
       await store.close();
     },
   };
-}
-
-async function createPackage(
-  root: string,
-  media: readonly Uint8Array[],
-): Promise<PackageFixture> {
-  const projectHash = 'portable-source-project';
-  const sourceRoot = join(root, `source-${randomUUID()}`);
-  const sourceStore = new LocalMediaStore({
-    rootDirectory: join(sourceRoot, 'media'),
-    quotaBytes: 1024 * 1024,
-  });
-  const references: MediaReferenceBlock[] = [];
-  for (const bytes of media) {
-    references.push(
-      await sourceStore.admit({
-        bytes,
-        mimeType: 'image/png',
-        semanticMetadata: {},
-      }),
-    );
-  }
-  const recording = new SessionRecordingService({
-    sessionId: randomUUID(),
-    projectHash,
-    chatsDir: join(sourceRoot, 'chats'),
-    workspaceDirs: [],
-    provider: 'source-provider',
-    model: 'source-model',
-    mediaStore: sourceStore,
-  });
-  recording.recordContent({
-    speaker: 'human',
-    blocks: [
-      { type: 'text', text: 'history restored through perform_resume' },
-      ...references,
-    ],
-  });
-  await recording.flush();
-  const recordingPath = recording.getFilePath();
-  assertNotNull(recordingPath, 'Expected source recording');
-  const directory = join(root, `package-${randomUUID()}`);
-  await exportSessionMediaPackage(
-    recordingPath,
-    projectHash,
-    sourceStore,
-    directory,
-  );
-  await recording.dispose();
-  return { directory, references };
 }
 
 function createActions(): SlashCommandProcessorActions {
@@ -373,6 +320,7 @@ function createRecordingCallbacks(
     getCurrentRecording: () => state.recording,
     getCurrentIntegration: () => state.integration,
     getCurrentLockHandle: () => state.lock,
+    getCurrentMetadata: () => state.metadata,
     setRecording: (recording, integration, lock, metadata) => {
       if (failActivation) throw new Error('resume activation rejected');
       state.recording = recording;
@@ -396,13 +344,13 @@ async function createHandlerDeps(
       config,
       agent: {
         session: {
-          getHistory: async () => client.getHistory(),
+          getHistory: async () => Array.fromAsync(client.getHistory()),
           replaceHistory: async (next: readonly IContent[]) =>
             client.setHistory(next),
-          attachRecordingHistory: (recording: RecordingIntegration) => {
+          attachRecordingHistory: async (recording: RecordingIntegration) => {
             const current = client.getHistoryService();
             if (!current) throw new Error('Missing fixture history');
-            recording.onHistoryServiceReplaced(current);
+            await recording.subscribeToJournal(current);
           },
         },
         setHistory: async (next: readonly IContent[]) =>
@@ -442,11 +390,39 @@ async function createHandlerDeps(
     resumeOwnedSession: null,
     isMcpDiscoveryPending: () => false,
     resumeRawSession: null,
-    replayResumedHistory: () => {},
+    refreshResumedHistory: () => {},
+    writeOutput: async (item) => {
+      if (item.type === MessageType.ERROR || item.type === MessageType.INFO)
+        messages.push({
+          type:
+            item.type === MessageType.ERROR
+              ? MessageType.ERROR
+              : MessageType.INFO,
+          content: item.text,
+          timestamp: new Date(),
+        });
+    },
     recordCommandError: async () => {},
-    loadCommandHistory: async () => {},
   };
-  installFixtureRawResume(deps, resumeRuntime as never, persistence, callbacks);
+  deps.resumeRawSession = bindCommandRawResume(
+    resumeRuntime,
+    persistence,
+    {
+      adoptResumeBoot: async (recording, boot, publish) => {
+        const history = client.getHistoryService();
+        if (history === null) throw new Error('Missing native history');
+        return history.adoptResumeBoot(recording, boot, publish);
+      },
+      attachRecording: async (integration) => {
+        const history = client.getHistoryService();
+        if (history === null) throw new Error('Missing native history');
+        await integration.subscribeToJournal(history);
+      },
+    },
+    callbacks,
+    deps.slashCommandLogger,
+    performResume,
+  );
   return deps;
 }
 
@@ -463,6 +439,13 @@ function historyText(history: readonly IContent[]): string {
     .map((block) => block.text)
     .join('\n');
 }
+async function readHistoryText(history: HistoryService): Promise<string> {
+  let text = '';
+  await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+    text = historyText(rows);
+  });
+  return text;
+}
 
 describe('continue package perform_resume integration', () => {
   afterEach(() => {
@@ -472,6 +455,10 @@ describe('continue package perform_resume integration', () => {
   it('publishes the validated package and assigns it only after real resume activation succeeds', async () => {
     const root = await mkdtemp(join(tmpdir(), 'continue-package-resume-'));
     const history = new HistoryService();
+    history.add({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'prior session history' }],
+    });
     const originalSessionId = randomUUID();
     const built = await createConfig(
       join(root, 'destination-workspace'),
@@ -488,11 +475,11 @@ describe('continue package perform_resume integration', () => {
     };
     const messages: Message[] = [];
     const persistence = new CliSessionPersistence(
-      { projectRoot: config.storageRoot, chatsDir: config.projectChatsDir },
       {
-        mediaStore: requireMediaStore(built.client),
-        maxQueueBytes: config.getSessionPersistenceQueueByteLimit(),
+        projectRoot: config.getProjectRoot(),
+        chatsDir: config.projectChatsDir,
       },
+      { mediaStore: requireMediaStore(built.client) },
     );
     Object.defineProperty(config, 'createSessionPersistenceService', {
       value: () => {
@@ -501,7 +488,8 @@ describe('continue package perform_resume integration', () => {
     });
 
     try {
-      const sessionPackage = await createPackage(root, []);
+      const mediaBytes = new Uint8Array([3, 1, 4, 1, 5]);
+      const sessionPackage = await createPackage(root, [mediaBytes]);
       const result = await processSlashCommand(
         await createHandlerDeps(
           config,
@@ -520,15 +508,39 @@ describe('continue package perform_resume integration', () => {
 
       expect(result).toStrictEqual({ type: 'handled' });
       expect(sessions).toHaveLength(1);
+      expect(sessions[0]).toMatchObject({
+        projectHash: getProjectHash(config.getProjectRoot()),
+        ...{ title: 'Portable title', name: 'portable-name' },
+      });
       expect(config.getSessionId()).toBe(sessions[0]?.sessionId);
       expect(state.recording?.getSessionId()).toBe(config.getSessionId());
-      expect(historyText(history.getAll())).toContain(
+      const path = state.recording?.getFilePath();
+      if (path === undefined || path === null)
+        throw new Error('Missing imported recording');
+      expect(path.endsWith(SESSION_FILE_EXTENSION)).toBe(true);
+      const persisted = await recordedRows(
+        path,
+        getProjectHash(config.getProjectRoot()),
+      );
+      expect(historyText(persisted)).toContain(
+        'history restored through perform_resume',
+      );
+      expect(state.metadata?.title).toBe('Portable title');
+      const reference = sessionPackage.references[0];
+      assertDefined(reference, 'Expected portable media');
+      expect(persisted[0]?.blocks).toContainEqual(reference);
+      expect(
+        await requireMediaStore(built.client).readVerified(reference),
+      ).toStrictEqual(mediaBytes);
+      await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+        expect(historyText(rows)).not.toContain('prior session history');
+      });
+      expect(await readHistoryText(history)).toContain(
         'history restored through perform_resume',
       );
       expect(messages).toStrictEqual([]);
     } finally {
       await disposeActiveState(state);
-      persistence.close();
       await built.dispose();
       await rm(projectTemp, { recursive: true, force: true });
       await rm(root, { recursive: true, force: true });
@@ -577,11 +589,11 @@ describe('continue package perform_resume integration', () => {
     };
     const messages: Message[] = [];
     const persistence = new CliSessionPersistence(
-      { projectRoot: config.storageRoot, chatsDir: config.projectChatsDir },
       {
-        mediaStore: requireMediaStore(built.client),
-        maxQueueBytes: config.getSessionPersistenceQueueByteLimit(),
+        projectRoot: config.getProjectRoot(),
+        chatsDir: config.projectChatsDir,
       },
+      { mediaStore: requireMediaStore(built.client) },
     );
 
     try {
@@ -612,7 +624,12 @@ describe('continue package perform_resume integration', () => {
 
       expect(chatEntries).toStrictEqual([]);
       expect(config.getSessionId()).toBe(originalSessionId);
-      expect(historyText(history.getAll())).toContain(
+      await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+        expect(historyText(rows)).not.toContain(
+          'history restored through perform_resume',
+        );
+      });
+      expect(await readHistoryText(history)).toContain(
         'original active history',
       );
       expect(
@@ -630,9 +647,81 @@ describe('continue package perform_resume integration', () => {
       expect(messages.some((message) => message.type === 'error')).toBe(true);
     } finally {
       await disposeActiveState(state);
-      persistence.close();
       await built.dispose();
       await rm(projectTemp, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a retired JSONL package through the slash front door without changing history or media', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'continue-package-retired-'));
+
+    const source = await createPackage(root, [new Uint8Array([8, 6, 7])]);
+
+    const manifestPath = join(source.directory, 'manifest.json');
+    const manifest: unknown = JSON.parse(await readFile(manifestPath, 'utf8'));
+    if (typeof manifest !== 'object' || manifest === null)
+      throw new Error('Missing package manifest');
+    await writeFile(
+      manifestPath,
+      JSON.stringify({ ...manifest, recording: 'session.jsonl' }),
+    );
+    const history = new HistoryService();
+    history.add({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'keep current history' }],
+    });
+    const id = randomUUID();
+    const built = await createConfig(join(root, 'workspace'), id, history);
+    const config = built.config;
+    const store = requireMediaStore(built.client);
+    const persistence = new CliSessionPersistence(
+      {
+        projectRoot: config.getProjectRoot(),
+        chatsDir: config.projectChatsDir,
+      },
+      { mediaStore: store },
+    );
+    const state: ActiveRecordingState = {
+      recording: null,
+      integration: null,
+      lock: null,
+      metadata: null,
+    };
+    const messages: Message[] = [];
+    try {
+      await processSlashCommand(
+        await createHandlerDeps(
+          config,
+          built.client,
+          createRecordingCallbacks(state, false),
+          messages,
+          persistence,
+          built.settingsOwner,
+        ),
+        `/continue import ${source.directory}`,
+      );
+      expect(
+        messages.map((message) =>
+          'content' in message ? message.content : undefined,
+        ),
+      ).toStrictEqual([
+        `Session file ${join(source.directory, 'session.jsonl')} was recorded in the retired JSONL journal format (versions 1 and 2) and cannot be resumed. Start a new session.`,
+      ]);
+      expect(config.getSessionId()).toBe(id);
+      expect(state.recording).toBeNull();
+      expect(await readHistoryText(history)).toBe('keep current history');
+      expect(await store.getStoredByteLength()).toBe(0);
+      expect(
+        await SessionDiscovery.listSessions(
+          config.projectChatsDir,
+          getProjectHash(config.getProjectRoot()),
+        ),
+      ).toStrictEqual([]);
+    } finally {
+      await disposeActiveState(state);
+      await built.dispose();
+      await rm(config.projectTempDir, { recursive: true, force: true });
       await rm(root, { recursive: true, force: true });
     }
   });
@@ -660,21 +749,17 @@ describe('continue package perform_resume integration', () => {
         first.session.listBrowserTargetsDetailed.bind(first.session),
         { listSessions: false, deleteSession: undefined },
         null,
-      ).then(({ history }) => history);
+      );
       const sessionId = first.session.getSessionId();
       await first.client.addHistory({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'legacy early resume' }],
       });
       await first.session.flushRecording();
-      const oldJournal = first.sessionPersistence
-        .forRecording(sessionId)
-        .getSessionFilePath();
+      const oldJournal = first.session.getRecording().path;
       await runExitCleanup();
       __resetCleanupStateForTesting();
-      expect(() => first.sessionPersistence.forRecording(sessionId)).toThrow(
-        'Agent session persistence is closed',
-      );
+      expect(first.session.getRecording().enabled).toBe(false);
       expect(
         (await readdir(first.config.projectChatsDir)).filter((file) =>
           file.endsWith('.lock'),
@@ -693,14 +778,16 @@ describe('continue package perform_resume integration', () => {
         resumed.session.listBrowserTargetsDetailed.bind(resumed.session),
         { listSessions: false, deleteSession: undefined },
         null,
-      ).then(({ history }) => history);
-      expect(historyText(resumedHistory ?? [])).toContain(
-        'legacy early resume',
-      );
-      expect(resumed.session.getSessionId()).toBe(sessionId);
+      ).then(({ resumedBoot }) => resumedBoot);
       expect(
-        resumed.sessionPersistence.forRecording(sessionId).getSessionFilePath(),
-      ).not.toBe(oldJournal);
+        historyText(
+          resumedHistory === null
+            ? []
+            : await Array.fromAsync(resumedHistory.streamRows()),
+        ),
+      ).toContain('legacy early resume');
+      expect(resumed.session.getSessionId()).toBe(sessionId);
+      expect(resumed.session.getRecording().path).toBe(oldJournal);
     } finally {
       await runExitCleanup();
       __resetCleanupStateForTesting();

@@ -30,7 +30,24 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
  * @plan PLAN-20260211-HIGHDENSITY.P14
  * @requirement REQ-CS-001.6
  */
-export async function buildCompressionContext(
+export interface CompressionAttemptContext
+  extends Omit<CompressionContext, 'history' | 'estimateTokens'> {
+  readonly history: AsyncGenerator<IContent, void, unknown>;
+  readonly estimateTokens: (
+    contents: Iterable<IContent> | AsyncIterable<IContent>,
+  ) => Promise<number>;
+}
+
+type ContextArguments = Parameters<typeof buildCompressionMetadata>;
+
+export async function buildCompressionAttemptContext(
+  ...args: ContextArguments
+): Promise<CompressionAttemptContext> {
+  const metadata = await buildCompressionMetadata(...args);
+  return { ...metadata, history: args[3].streamCuratedHistory() };
+}
+
+export async function buildCompressionMetadata(
   promptId: string,
   runtimeContext: CompressionHandlerRuntime,
   config: Config | undefined,
@@ -44,8 +61,10 @@ export async function buildCompressionContext(
   options?: {
     targetTokenCount?: number;
     modelParameters?: AdmittedModelParameters;
+    /** The owner whose journal receives the published summary rows. */
+    historyOrigin?: object;
   },
-): Promise<CompressionContext> {
+): Promise<Omit<CompressionAttemptContext, 'history'>> {
   const modelParameters = runtimeContext.ephemerals.compressionProfile()
     ? undefined
     : options?.modelParameters;
@@ -59,12 +78,11 @@ export async function buildCompressionContext(
   const transcriptPath = transcriptPathProvider?.();
 
   return {
-    history: historyService.getCurated(),
     ...(modelParameters ? { modelParameters } : {}),
     runtimeContext: strategyRuntime(runtimeContext),
     runtimeState: runtimeContext.state,
     estimateTokens: (contents) =>
-      historyService.estimateTokensForContents(contents as IContent[]),
+      historyService.estimateTokensForContents(contents),
     currentTokenCount: historyService.getTotalTokens(),
     ...(options?.targetTokenCount !== undefined
       ? { targetTokenCount: options.targetTokenCount }

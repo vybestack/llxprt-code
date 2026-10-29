@@ -6,11 +6,10 @@
 import type {
   IContent,
   RecordingIntegration,
-  SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
+import type { SessionNativeHistory } from '../api/control/session-history-observation.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { AgentSessionControl } from '../api/agent.js';
-import { seedOwnerRecording } from '../api/control/recordedHistoryPersistence.js';
 import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
@@ -23,7 +22,7 @@ import {
   subscribeSessionStats,
 } from '../api/agentStatsProjector.js';
 import { executeCompression } from '../api/compression-execution.js';
-import type { SessionControl } from '../api/control/sessionControl.js';
+import { SessionControl } from '../api/control/sessionControl.js';
 import { createCompressionRecordingOptions } from '../api/recordingExecution.js';
 
 export class SessionConversationBinding {
@@ -49,9 +48,78 @@ export class SessionConversationBinding {
     this.access.assertOpen();
     return this.client;
   }
-  readonly nativeHistory = {
+  createSessionControl(
+    paths: ConstructorParameters<typeof SessionControl>[0],
+    mediaStore: ConstructorParameters<typeof SessionControl>[1],
+    readRecordingQueueLimit: ConstructorParameters<typeof SessionControl>[2],
+    directories: ConstructorParameters<typeof SessionControl>[3],
+    identityOwnership: ConstructorParameters<typeof SessionControl>[4],
+    sessionId: ConstructorParameters<typeof SessionControl>[5],
+    transition: ConstructorParameters<typeof SessionControl>[7],
+    closeAdmission: ConstructorParameters<typeof SessionControl>[8],
+    prepareNewSession: ConstructorParameters<typeof SessionControl>[9],
+    readProvider: ConstructorParameters<typeof SessionControl>[10],
+    readModel: ConstructorParameters<typeof SessionControl>[11],
+    readOwnedSessionId: ConstructorParameters<typeof SessionControl>[12],
+    adoptOwnedSessionId: ConstructorParameters<typeof SessionControl>[13],
+  ): SessionControl {
+    return new SessionControl(
+      paths,
+      mediaStore,
+      readRecordingQueueLimit,
+      directories,
+      identityOwnership,
+      sessionId,
+      this.nativeHistory,
+      transition,
+      closeAdmission,
+      prepareNewSession,
+      readProvider,
+      readModel,
+      readOwnedSessionId,
+      adoptOwnedSessionId,
+    );
+  }
+  readonly subscribeContextRange: SessionNativeHistory['subscribeContextRange'] =
+    (...args) => this.nativeHistory.subscribeContextRange(...args);
+  readonly subscribeRecording: SessionNativeHistory['subscribeRecording'] = (
+    ...args
+  ) => this.nativeHistory.subscribeRecording(...args);
+  private readonly nativeHistory: SessionNativeHistory = {
+    getHistoryService: () => this.#activeClient.getHistoryService(),
+    streamHistory: (signal) => this.#activeClient.streamHistory(signal),
+    resumeChat: (history) => this.#activeClient.resumeChat(history),
+    discardDeferredHistory: () => this.#activeClient.discardDeferredHistory(),
+    setHistoryFromSource: (source, options) =>
+      this.#activeClient.setHistoryFromSource(source, options),
+    subscribeContextRange: (observers, publish) => {
+      let current: HistoryService | null = null;
+      const changed = (
+        range: ReturnType<HistoryService['getContextRange']>,
+      ): void => publish(range);
+      const bind = (): void => {
+        const history = this.#activeClient.getHistoryService();
+        if (history === current) return;
+        current?.off('contextRangeChanged', changed);
+        current = history;
+        if (history !== null) {
+          history.on('contextRangeChanged', changed);
+          publish(history.getContextRange());
+        }
+      };
+      bind();
+      const interval = setInterval(bind, 100);
+      const stop = (): void => {
+        clearInterval(interval);
+        current?.off('contextRangeChanged', changed);
+        current = null;
+        observers.delete(stop);
+      };
+      observers.add(stop);
+      return stop;
+    },
     subscribeHistoryTokens: (
-      observers: Set<() => void>,
+      observers: Set<() => void | Promise<void>>,
       publish: (count: number) => void,
     ): (() => void) => {
       let current: ReturnType<AgentClientContract['getHistoryService']> = null;
@@ -62,7 +130,7 @@ export class SessionConversationBinding {
           publish(event.totalTokens);
         }
       };
-      const interval = setInterval(() => {
+      const bind = (): void => {
         const history = this.#activeClient.hasChatInitialized()
           ? this.#activeClient.getHistoryService()
           : null;
@@ -74,7 +142,9 @@ export class SessionConversationBinding {
           lastPublished = history.getTotalTokens();
           publish(lastPublished);
         }
-      }, 100);
+      };
+      bind();
+      const interval = setInterval(bind, 100);
       const stop = (): void => {
         clearInterval(interval);
         current?.off('tokensUpdated', changed);
@@ -84,16 +154,20 @@ export class SessionConversationBinding {
       observers.add(stop);
       return stop;
     },
-    attachRecordingHistory: (recording: RecordingIntegration): void => {
+    attachRecordingHistory: async (
+      recording: RecordingIntegration,
+    ): Promise<void> => {
       const history = this.#activeClient.getHistoryService();
-      if (history !== null) recording.onHistoryServiceReplaced(history);
+      if (history !== null) await recording.subscribeToJournal(history);
     },
     connectRecordingHistory: (
-      observers: Set<() => void>,
+      observers: Set<() => void | Promise<void>>,
       readRecording: () => RecordingIntegration | null,
-    ): (() => void) => {
+    ): (() => Promise<void>) => {
       let current: ReturnType<AgentClientContract['getHistoryService']> = null;
       let recording: RecordingIntegration | null = null;
+      let pending = Promise.resolve();
+      const failures: unknown[] = [];
       const interval = setInterval(() => {
         const nextRecording = readRecording();
         const history = this.#activeClient.hasChatInitialized()
@@ -106,13 +180,23 @@ export class SessionConversationBinding {
           return;
         current = history;
         recording = nextRecording;
-        recording?.onHistoryServiceReplaced(history);
+        pending = pending
+          .then(async () => {
+            await nextRecording?.subscribeToJournal(history);
+          })
+          .then(undefined, (error: unknown) => {
+            failures.push(error);
+          });
       }, 100);
-      const stop = (): void => {
+      const stop = async (): Promise<void> => {
         clearInterval(interval);
-        current = null;
-        recording = null;
         observers.delete(stop);
+        await pending;
+        if (failures.length > 0)
+          throw new AggregateError(
+            failures,
+            'Recording history observation failed',
+          );
       };
       observers.add(stop);
       return stop;
@@ -124,7 +208,7 @@ export class SessionConversationBinding {
       return history === null
         ? null
         : {
-            messages: history.getAll(),
+            messages: this.#activeClient.streamHistory(),
             chronology: history.getChronologyTrace(),
           };
     },
@@ -133,18 +217,16 @@ export class SessionConversationBinding {
       origin: object,
       prepareRecording: () => Promise<void>,
     ): Promise<void> => {
-      if (!this.#activeClient.hasChatInitialized())
-        await this.#activeClient.startChat(
-          await this.#activeClient.getHistory(),
-        );
+      await this.restoreChatVisibility();
       await prepareRecording();
       await this.#activeClient.setHistory(history, { historyOrigin: origin });
     },
-    readInitializedHistory: (): readonly IContent[] | null =>
+    readInitializedHistory: (): AsyncIterable<IContent> | null =>
       this.#activeClient.hasChatInitialized()
         ? this.#activeClient.getChat().getHistory()
         : null,
-    getHistory: () => this.conversation.getHistory(),
+    getHistory: (_curated, signal) =>
+      this.#activeClient.getHistory(false, signal),
     setHistory: (
       history: readonly IContent[],
       options?: { readonly historyOrigin?: object },
@@ -156,7 +238,7 @@ export class SessionConversationBinding {
       this.access.assertOpen();
       return this.#activeClient.restoreHistory([...history], origin);
     },
-    resetChat: () => this.conversation.resetChat(),
+    resetChat: (preserved) => this.#activeClient.resetChat(preserved),
     hasChatInitialized: () => this.#activeClient.hasChatInitialized(),
     hasHistory: () => this.#activeClient.getHistoryService() !== null,
     historyRevision: (): number => {
@@ -167,32 +249,20 @@ export class SessionConversationBinding {
       }
       return this.historyVersion;
     },
-    subscribeRecording: (
+    subscribeRecording: async (
       integration: RecordingIntegration,
       origin: object,
-    ): boolean => {
+    ): Promise<boolean> => {
       const history = this.#activeClient.getHistoryService();
       if (history === null) return false;
-      integration.subscribeToHistory(history, origin);
+      await integration.subscribeToJournal(history, origin);
       return true;
-    },
-    seedRecording: (
-      recording: SessionRecordingService,
-      history: readonly IContent[],
-      origin: object,
-    ): void => {
-      seedOwnerRecording(
-        recording,
-        history,
-        this.#activeClient.getHistoryService(),
-        origin,
-      );
     },
   };
   readonly conversation = {
-    getHistory: async (): Promise<readonly AgentMessage[]> => {
+    streamHistory: (signal?: AbortSignal) => {
       this.access.assertOpen();
-      return this.client.getHistory();
+      return this.client.streamHistory(signal);
     },
     setHistory: async (
       history: readonly AgentMessage[],
@@ -231,8 +301,7 @@ export class SessionConversationBinding {
   async restoreChatVisibility(): Promise<void> {
     this.access.assertOpen();
     if (!this.client.hasChatInitialized()) {
-      const history = await this.client.getHistory();
-      await this.client.startChat(history.length > 0 ? history : undefined);
+      await this.client.startChat();
     }
   }
   isClientInitialized(): boolean {

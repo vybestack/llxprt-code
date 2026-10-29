@@ -1,3 +1,4 @@
+import { appendJournalUiItem } from '../ui/hooks/command-journal-output.js';
 import type { InteractiveApplicationInputs } from './interactiveApplicationInputs.js';
 /**
  * @license
@@ -18,7 +19,6 @@ import { createChatCommand } from '../ui/commands/chatCommand.js';
 import { createContinueRegistration } from '../ui/hooks/useContinueCommand.js';
 import { createSubagentCommand } from '../ui/commands/subagentCommand.js';
 import { bindSubagentCommand } from '../ui/commands/subagentCommandHost.js';
-import { resolveEmojiFilterMode } from '../ui/utils/iContentToHistoryItems.js';
 import { resumeOwnerSession } from '../ui/utils/resumeOwnerSession.js';
 import { importOwnerSession } from '../ui/utils/ownerSessionUi.js';
 import { basename } from 'node:path';
@@ -60,8 +60,6 @@ import {
 import type { AppProps } from '../ui/App.js';
 
 import { getProjectHash } from '@vybestack/llxprt-code-core';
-
-import type { Agent } from '@vybestack/llxprt-code-agents';
 
 import { type AppContainerProps } from '../ui/AppContainer.js';
 import { bindPolicyRulesReader } from '../ui/hooks/policyRulesReaderHost.js';
@@ -108,7 +106,7 @@ export class InteractiveApplication {
     };
   private readonly bindRawBrowserSession: AppContainerProps['bindRawBrowserSession'] =
     (config, swaps, logger) =>
-      bindRawBrowserSession(config, this.props.session, swaps, logger);
+      bindRawBrowserSession(config, this.props.resumeHistory, swaps, logger);
   readonly #registry: AppCommandRegistry;
   readonly #sessionCommands: ReturnType<
     InteractiveApplication['registerSessionCommands']
@@ -124,7 +122,7 @@ export class InteractiveApplication {
     ...args
   ) => this.props.addHistory(...args);
   private readonly readHistory: AppContainerProps['readHistory'] = (...args) =>
-    this.props.getHistory(...args);
+    this.props.streamHistory(...args);
   private readonly stream: AppContainerProps['stream'] = (...args) =>
     this.props.stream(...args);
   private readonly injectSteer: AppContainerProps['injectSteer'] = (...args) =>
@@ -171,39 +169,28 @@ export class InteractiveApplication {
 
   private registerSessionCommands() {
     const a = this.props;
-    const emojiFilter = this.props.emojiFilter;
     const session = a.session;
-    const resumeOwnedCommand: ResumeOwnedCommand = (action) => {
-      const mode = resolveEmojiFilterMode(emojiFilter);
-      return action.sessionPackage === undefined
+    const resumeOwnedCommand: ResumeOwnedCommand = (action) =>
+      action.sessionPackage === undefined
         ? resumeOwnerSession(
             session.resume.bind(session),
             action.sessionRef,
-            mode,
             session.listBrowserTargetsDetailed.bind(session),
           )
         : importOwnerSession(
             session.importSession.bind(session),
             action.sessionPackage.packageDirectory,
-            mode,
-            session.getHistory.bind(session),
           );
-    };
     return {
       registerWorkspaceCommands: this.registerWorkspaceCommands(),
       registerChatCommands: this.registerChatCommands(),
       registerSubagentCommand: this.registerSubagentCommand(),
       resumeOwnedCommand,
-      replaceCommandHistory: async (
-        history: Parameters<Agent['setHistory']>[0],
-      ) => {
-        await a.session.replaceHistory(history);
-      },
       bindRawCommandResume: ((config, callbacks) =>
         bindCommandRawResume(
           config,
           config?.sessionPersistence,
-          a.session,
+          a.resumeHistory,
           callbacks,
           slashCommandLogger,
           performResume,
@@ -319,7 +306,6 @@ export class InteractiveApplication {
   private registerChatCommands(): RegisterChatCommands {
     const a = this.props;
     const c = this.props.chatCommands;
-    const emojiFilter = this.props.emojiFilter;
     const s = a.session;
     const owner = bindChatOwnerOperations(
       s.listCheckpoints.bind(s),
@@ -327,13 +313,12 @@ export class InteractiveApplication {
       s.resume.bind(s),
       s.deleteCheckpoint.bind(s),
       s.renameCheckpoint.bind(s),
-      s.getHistory.bind(s),
+      () => s.getJournalLength(),
       s.clearHistory.bind(s),
       s.restoreTurns.bind(s),
       s.nameCurrentSession.bind(s),
       () => s.getRecording().path,
       () => a.getModel(),
-      () => resolveEmojiFilterMode(emojiFilter),
     );
     const persistence = () => {
       if (!c.sessionPersistence)
@@ -354,7 +339,8 @@ export class InteractiveApplication {
                 () => getProjectHash(c.getProjectRoot()),
                 () => c.projectChatsDir,
                 s.readInitializedHistory.bind(s),
-                s.replaceHistory.bind(s),
+                s.clearHistory.bind(s),
+                s.restoreTurns.bind(s),
                 () => c.getModel(),
               ),
               fuzzy,
@@ -390,14 +376,15 @@ export class InteractiveApplication {
   private bindHistory(): RegisteredHistoryReads {
     const a = this.props;
     return {
-      compressHistory: (...args) => a.compress(...args),
-      readRawHistory: () => a.session.readHistorySnapshot()?.messages ?? null,
-      isHistoryInitialized: a.session.isHistoryInitialized.bind(a.session),
-      readHistory: () => a.getHistory(),
-      replaceHistory: async (items) => {
-        await a.session.replaceHistory(items);
+      writeOutput: async (item) => {
+        await appendJournalUiItem(a.readJournal(), undefined, item);
       },
-      readDumpHistory: a.session.readHistorySnapshot.bind(a.session),
+      compressHistory: (...args) => a.compress(...args),
+      readRawHistory: () => a.session.readInitializedHistory(),
+      isHistoryInitialized: a.session.isHistoryInitialized.bind(a.session),
+      readHistory: () => a.streamHistory(),
+      replaceHistoryFromSource: a.replaceHistoryFromSource,
+      readDumpHistory: a.openDumpSnapshot,
     };
   }
   private models() {
@@ -491,6 +478,9 @@ export class InteractiveApplication {
         true,
         settings,
         addItem,
+        async (item) => {
+          await appendJournalUiItem(a.readJournal(), undefined, item);
+        },
         reload,
       );
   }
@@ -553,7 +543,7 @@ export class InteractiveApplication {
     | 'browserSession'
     | 'settings'
     | 'startupWarnings'
-    | 'resumedHistory'
+    | 'resumedBoot'
     | 'version'
     | 'terminalBackgroundColor'
     | 'recordingIntegration'
@@ -583,7 +573,7 @@ export class InteractiveApplication {
       browserSession: props.browserSession,
       settings: props.settings,
       startupWarnings: props.startupWarnings,
-      resumedHistory: props.resumedHistory,
+      resumedBoot: props.resumedBoot,
       version: props.version,
       terminalBackgroundColor: props.terminalBackgroundColor,
       recordingIntegration: props.recordingIntegration,
@@ -649,6 +639,8 @@ export class InteractiveApplication {
       readProviderMetrics: this.readProviderMetrics,
       readSessionTokenUsage: this.readSessionTokenUsage,
       historyReads: this.#history,
+      readJournal: this.props.readJournal,
+      subscribeContextRange: this.props.subscribeContextRange,
       registerCredentials,
       readAgentRecordingPath: this.readAgentRecordingPath,
       generateSubagentPrompt: this.generateSubagentPrompt,

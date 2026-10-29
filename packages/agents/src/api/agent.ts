@@ -1,3 +1,4 @@
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { BucketAuthConsentRequest } from './auth-consent-contract.js';
 export type { BucketAuthConsentRequest } from './auth-consent-contract.js';
 import type { AgentSessionAuthentication } from './control/session-authentication.js';
@@ -81,6 +82,30 @@ import type {
   ToolUpdate,
 } from './event-types.js';
 
+import type {
+  AuthBucket,
+  AuthProviderDetail,
+  AuthBucketStatus,
+  KeyInfo,
+  CheckpointInfo,
+  SessionInfo,
+  SessionRecordingState,
+  ProfileSummary,
+  ProfileDetail,
+} from './agent-control-info-types.js';
+export type {
+  AuthBucket,
+  AuthProviderDetail,
+  AuthBucketStatus,
+  KeyInfo,
+  IdeInfo,
+  IdeStatus,
+  CheckpointInfo,
+  SessionInfo,
+  SessionRecordingState,
+  ProfileSummary,
+  ProfileDetail,
+} from './agent-control-info-types.js';
 import type { SessionStats, CompressionResult } from './agentMetrics.js';
 import type { SessionMetricOperations } from '@vybestack/llxprt-code-telemetry';
 export type { SessionStats, CompressionResult } from './agentMetrics.js';
@@ -330,87 +355,6 @@ export interface McpServerDetail {
 export interface McpDetailStatus {
   readonly servers: readonly McpServerDetail[];
   readonly blockedServers: readonly McpBlockedServer[];
-}
-
-export interface AuthBucket {
-  readonly name: string;
-  readonly provider?: string;
-  readonly baseUrl?: string;
-  readonly active: boolean;
-}
-
-// @plan:PLAN-20260622-COREAPIGAP.P12 @requirement:REQ-005
-export interface AuthProviderDetail {
-  readonly provider: string;
-  readonly authenticated: boolean;
-  readonly oauthEnabled: boolean;
-  readonly expiry?: number;
-}
-
-// @plan:PLAN-20260622-COREAPIGAP.P12 @requirement:REQ-005
-export interface AuthBucketStatus {
-  readonly bucket: string;
-  readonly authenticated: boolean;
-  readonly expiry?: number;
-  readonly isSessionBucket: boolean;
-}
-
-export interface KeyInfo {
-  readonly name: string;
-  readonly provider?: string;
-}
-
-export interface IdeInfo {
-  readonly name: string;
-  readonly version?: string;
-  readonly trusted: boolean;
-}
-
-export interface IdeStatus {
-  readonly current: IdeInfo | null;
-  readonly detected: readonly IdeInfo[];
-  readonly modeEnabled: boolean;
-}
-
-export interface CheckpointInfo {
-  readonly checkpointId: string;
-  readonly name: string;
-  readonly sessionId: string;
-  readonly sequence: number;
-  readonly createdAt: string;
-}
-
-export interface SessionInfo {
-  readonly id: string;
-  readonly name: string | null;
-  readonly title?: string | null;
-  readonly createdAt: string;
-  readonly modifiedAt: string;
-  readonly parentSessionId?: string;
-  readonly parentSequence?: number;
-  readonly checkpointId?: string;
-  readonly checkpointName?: string;
-}
-
-export interface SessionRecordingState {
-  readonly enabled: boolean;
-  readonly path?: string;
-  readonly format?: string;
-}
-
-export interface ProfileSummary {
-  readonly name: string;
-  readonly provider: string;
-  readonly model: string;
-  readonly isDefault: boolean;
-  readonly isLoadBalancer?: boolean;
-}
-
-export interface ProfileDetail extends ProfileSummary {
-  readonly modelParams?: Readonly<Record<string, unknown>>;
-  readonly baseUrl?: string;
-  readonly authKeyName?: string;
-  readonly authKeyFile?: string;
 }
 
 export interface HookExecutionRequest {
@@ -667,7 +611,7 @@ export interface AgentMcpControl {
   // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
   authenticate(
     server: string,
-    onDisplayMessage?: (message: string) => void,
+    onDisplayMessage?: (message: string) => void | Promise<void>,
   ): Promise<McpServerAuthStatus>;
   // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
   details(opts?: McpDetailsOptions): Promise<McpDetailStatus>;
@@ -720,17 +664,25 @@ export interface AgentAuthControl {
 }
 
 export interface AgentSessionControl {
+  appendDisplay: HistoryService['appendDisplay'];
+  getJournalLength(): number;
+  getContextRange(): ReturnType<HistoryService['getContextRange']>;
+  subscribeContextRange(
+    publish: (range: ReturnType<HistoryService['getContextRange']>) => void,
+  ): Unsubscribe;
+  openDumpSnapshot(): Promise<Awaited<
+    ReturnType<HistoryService['openDumpSnapshot']>
+  > | null>;
+  replaceHistoryFromSource(
+    rows: AsyncIterable<IContent>,
+    signal: AbortSignal,
+  ): Promise<void>;
+  adoptResumeBoot: HistoryService['adoptResumeBoot'];
+  attachRecording(recording: RecordingIntegration): Promise<void>;
   /**
-   * Resumes a previously recorded session (by 'latest' or a session
-   * reference/prefix) and returns the reconstructed history as readonly
-   * AgentHistoryItem[] so callers can replay the restored conversation (e.g. the Zed ACP loadSession
-   * path streaming session/update notifications) without a lossy getHistory()
-   * Gemini Content[] round-trip. Callers that ignore the return value remain
-   * source-compatible. The restored history is also fed through the client
-   * restore path, and a RecordingIntegration is subscribed so post-resume turns
-   * continue appending to the resumed JSONL file.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
+   * Adopts the recorded journal and returns a stream of its restored prefix.
+   * Consume the stream before stopping or switching the session, which closes
+   * its boot cursor. Subsequent history writes append through the adopted journal.
    */
   resume(
     target: 'latest' | string,
@@ -742,36 +694,49 @@ export interface AgentSessionControl {
         reason: string,
       ) => void;
     },
-  ): Promise<readonly AgentHistoryItem[]>;
+  ): Promise<AsyncIterable<AgentHistoryItem>>;
   /** Creates a durable branch point in the active recording. */
   createCheckpoint(
     name: string,
     options?: { readonly overwrite?: boolean },
   ): Promise<CheckpointInfo>;
-  /** Durably removes the last N human-led turns and updates the live history. */
-  restoreTurns(turns: number): Promise<{
-    readonly remainingHistory: readonly AgentHistoryItem[];
+  /**
+   * Durably removes the last N human-led turns and updates the live history.
+   * `remainingHistory` is a cold stream over the journal, so no history array
+   * is built. Consume it before the next history change.
+   */
+  restoreTurns(
+    turns: number,
+    options?: {
+      readonly signal?: AbortSignal;
+      readonly publish?: () => void | Promise<void>;
+    },
+  ): Promise<{
+    readonly remainingHistory: AsyncIterable<AgentHistoryItem>;
     readonly itemsRemoved: number;
   }>;
   /** Native values only; chronology and media references are preserved. */
   readHistorySnapshot(): {
-    readonly messages: IContent[];
-    readonly chronology: ChronologyTraceEntry[];
+    readonly messages: AsyncIterable<IContent>;
+    readonly chronology: AsyncIterable<ChronologyTraceEntry>;
   } | null;
   isHistoryInitialized(): boolean;
-  readInitializedHistory(): readonly IContent[] | null;
+  readInitializedHistory(): AsyncIterable<IContent> | null;
   replaceHistory(history: readonly IContent[]): Promise<void>;
   subscribeHistoryTokens(publish: (count: number) => void): Unsubscribe;
-  attachRecordingHistory(recording: RecordingIntegration): void;
+  attachRecordingHistory(recording: RecordingIntegration): Promise<void>;
   connectRecordingHistory(
     readRecording: () => RecordingIntegration | null,
-  ): Unsubscribe;
+  ): () => Promise<void>;
   /** Reads live conversation history through the session owner. */
   getHistory(): Promise<readonly AgentHistoryItem[]>;
   /**
    * Durably clears non-initial turns and updates the live history.
    */
-  clearHistory(): Promise<void>;
+  clearHistory(options?: {
+    readonly signal?: AbortSignal;
+    readonly publish?: () => void | Promise<void>;
+  }): Promise<void>;
   startNewSession(): Promise<void>;
   getSessionId(): string;
   /** Creates and activates a self-contained child session from a checkpoint. */
@@ -1186,7 +1151,10 @@ export interface Agent extends AgentProviderFileOperations {
   /** @plan:PLAN-20260626-RUNTIMEBOUNDARY.P05 */
   readonly lsp: AgentLspControl;
 
-  getHistory(): Promise<readonly AgentMessage[]>;
+  /** Cold raw snapshot pinned on first next. Exhaust or return to release it. */
+  streamHistory(
+    signal?: AbortSignal,
+  ): AsyncGenerator<AgentMessage, void, unknown>;
   setHistory(
     history: readonly AgentMessage[],
     opts?: { readonly stripThoughts?: boolean },

@@ -198,8 +198,7 @@ describe('Factory @plan PLAN-20260211-HIGHDENSITY.P16', () => {
     expect(typeof strategy.optimize).toBe('function');
   });
 
-  /** @requirement REQ-HD-004.2 */
-  it('HighDensityStrategy from factory has compress method', () => {
+  it('HighDensityStrategy from factory has the journal compression method', () => {
     const strategy = getCompressionStrategy(
       'high-density',
       undefined,
@@ -207,7 +206,9 @@ describe('Factory @plan PLAN-20260211-HIGHDENSITY.P16', () => {
       undefined,
       undefined,
     );
-    expect(typeof strategy.compress).toBe('function');
+    expect('compressDisk' in strategy && typeof strategy.compressDisk).toBe(
+      'function',
+    );
   });
 });
 

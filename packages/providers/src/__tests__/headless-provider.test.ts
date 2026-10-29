@@ -58,7 +58,7 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from './streamCallOptions.js';
 import { MockFileSystem } from '../composition/IFileSystem.js';
 
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';

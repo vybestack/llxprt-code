@@ -20,6 +20,7 @@ import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { waitForCondition } from '../test-utils/eventLoop.js';
+import { deferred } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import {
@@ -233,22 +234,26 @@ describe('Turn - whole-stream watchdog & run-scoped isolation (issue #2607)', ()
     const gateB = new Promise<void>((resolve) => {
       releaseB = resolve;
     });
-    const gateA = new Promise<void>(() => {});
+    const gateA = deferred();
 
     mockSendMessageStream.mockImplementationOnce(
       (params: {
         config?: {
+          abortSignal?: AbortSignal;
           onStreamLiveness?: (event: {
             sourceEvent: string;
             sseObserved: boolean;
           }) => void;
         };
       }) => {
+        params.config?.abortSignal?.addEventListener('abort', gateA.resolve, {
+          once: true,
+        });
         const listener = params.config?.onStreamLiveness;
         const stream = (async function* () {
           await new Promise((resolve) => setTimeout(resolve, 5));
           listener?.({ sourceEvent: 'response.created', sseObserved: true });
-          await gateA;
+          await gateA.promise;
           yield {
             type: StreamEventType.CHUNK,
             value: mockChunk({ text: 'A' }),

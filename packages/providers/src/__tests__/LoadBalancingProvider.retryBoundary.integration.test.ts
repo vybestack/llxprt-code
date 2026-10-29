@@ -30,7 +30,7 @@ import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../GenerateChatOptions.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from './streamCallOptions.js';
 
 /** A mutable handle onto the fake delegate's behavior. */
 interface FakeBehavior {

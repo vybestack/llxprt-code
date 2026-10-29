@@ -32,6 +32,7 @@ import {
 import { createProviderPopulationTarget } from './providerManagerInstance.js';
 
 import { NodeFileSystem } from './IFileSystem.js';
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -270,7 +271,7 @@ describe('OAuth owner reads before registration', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           ),
       );
-      globalThis.fetch = requestFetch;
+      globalThis.fetch = withFetchPreconnect(requestFetch);
       await openContexts(
         `browser-a-${construction}`,
         `browser-b-${construction}`,

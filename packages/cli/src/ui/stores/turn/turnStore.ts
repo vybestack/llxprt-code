@@ -8,31 +8,17 @@ import { createStore, type Store } from '../createStore.js';
 import type { HistoryItem, HistoryItemWithoutId } from '../../types.js';
 import { StreamingState } from '../../types.js';
 import { ConversationContext } from '../../../utils/ConversationContext.js';
-import type { ThoughtSummary } from '@vybestack/llxprt-code-core';
+import type {
+  ThoughtSummary,
+  HistoryService,
+} from '@vybestack/llxprt-code-core';
 import type { QueuedSubmission } from '../../hooks/agentStream/types.js';
-import {
-  createHistoryLedger,
-  nextHistoryItemId,
-  projectHistory,
-  type HistoryItemUpdater,
-  type HistoryLedger,
-  type HistoryLimits,
-} from './historyLedger.js';
+import { appendJournalUiItem } from '../../hooks/command-journal-output.js';
 
-/**
- * Streamed and committed turn data plus cancellation state for the
- * interactive UI. History lives in a {@link HistoryLedger} behind the
- * `history` projection, so <Static> item identity is preserved: the same
- * item objects flow through commands, and the array reference changes only
- * when the committed set changes. Writers are the domain hooks (writer
- * effects preserve dispatch -> effect ordering); components read through
- * useStoreSelector with narrow selectors.
- */
 export interface TurnState {
   /** Committed transcript items rendered into Ink's <Static> region. */
-  history: HistoryItem[];
-  historyTruncatedItems: number;
   historyEpoch: number;
+  displayError: string | null;
   /** Items still pending commit (streaming, confirmations). */
   pendingHistoryItems: HistoryItemWithoutId[];
   streamingState: StreamingState;
@@ -58,33 +44,25 @@ export interface TurnState {
 
 export interface PendingAddRequest {
   readonly seq: number;
-  readonly itemData: Omit<HistoryItem, 'id'>;
+  readonly itemData: HistoryItemWithoutId;
   readonly baseTimestamp?: number;
 }
 
 export interface TurnCommands {
   /** Same signature as useHistoryManager's addItem. */
   addItem: (
-    itemData: Omit<HistoryItem, 'id'>,
+    itemData: HistoryItemWithoutId,
     baseTimestamp?: number,
     isResuming?: boolean,
   ) => number;
-  /** Same signature as useHistoryManager's updateItem. */
-  updateItem: (
-    id: number,
-    updates: Partial<Omit<HistoryItem, 'id'>> | HistoryItemUpdater,
-  ) => void;
-  /** Same signature as useHistoryManager's removeItems. */
-  removeItems: (ids: readonly number[]) => void;
-  /** Same signature as useHistoryManager's clearItems. */
   clearItems: () => void;
-  /** Same signature as useHistoryManager's loadHistory. */
-  loadHistory: (newHistory: HistoryItem[]) => void;
-  /** Applies new display limits and trims the committed history. */
-  setHistoryLimits: (limits: HistoryLimits) => void;
+  getJournalLength: () => number;
+  bindJournal: (
+    readHistory: () => Pick<HistoryService, 'appendDisplay' | 'length'> | null,
+  ) => void;
   /** Records an out-of-tree add request for a subscriber to perform. */
   requestAddItem: (
-    itemData: Omit<HistoryItem, 'id'>,
+    itemData: HistoryItemWithoutId,
     baseTimestamp?: number,
   ) => void;
   /** Claims a matching request once, including across effect replays. */
@@ -110,9 +88,8 @@ export interface TurnStore {
 
 function initialTurnState(): TurnState {
   return {
-    history: [],
-    historyTruncatedItems: 0,
     historyEpoch: 0,
+    displayError: null,
     pendingHistoryItems: [],
     streamingState: StreamingState.Idle,
     thought: null,
@@ -127,16 +104,6 @@ function initialTurnState(): TurnState {
     pendingAddRequest: null,
   };
 }
-
-type TurnHistoryCommands = Pick<
-  TurnCommands,
-  | 'addItem'
-  | 'updateItem'
-  | 'removeItems'
-  | 'clearItems'
-  | 'loadHistory'
-  | 'setHistoryLimits'
->;
 
 type TurnAddRequestCommands = Pick<
   TurnCommands,
@@ -158,81 +125,6 @@ type TurnStatusCommands = Pick<
   | 'refreshStatic'
 >;
 
-/**
- * History-ledger writers. Every mutator publishes only when the ledger state
- * reference changed, preserving <Static> item identity on no-ops, and the
- * before/after comparison keeps cancel-race ordering intact.
- */
-function createTurnHistoryCommands(
-  ledger: HistoryLedger,
-  publishHistory: (reset?: boolean) => void,
-): TurnHistoryCommands {
-  const addItem = (
-    itemData: Omit<HistoryItem, 'id'>,
-    baseTimestamp: number = Date.now(),
-    _isResuming: boolean = false,
-  ): number => {
-    const id = nextHistoryItemId(baseTimestamp);
-    const newItem = { ...itemData, id } as HistoryItem;
-    const before = ledger.getState();
-    ledger.append(newItem);
-    if (ledger.getState() !== before) {
-      publishHistory();
-    }
-    return id;
-  };
-
-  const updateItem = (
-    id: number,
-    updates: Partial<Omit<HistoryItem, 'id'>> | HistoryItemUpdater,
-  ): void => {
-    const before = ledger.getState();
-    ledger.update(id, updates);
-    if (ledger.getState() !== before) {
-      publishHistory();
-    }
-  };
-
-  const removeItems = (ids: readonly number[]): void => {
-    const before = ledger.getState();
-    ledger.remove(ids);
-    if (ledger.getState() !== before) {
-      publishHistory();
-    }
-  };
-
-  const clearItems = (): void => {
-    const before = ledger.getState();
-    ledger.clear();
-    if (ledger.getState() !== before) publishHistory(true);
-    // The conversation-id reset travels with the command so every caller
-    // (hook, keybinding, slash command) gets the same semantics.
-    ConversationContext.startNewConversation();
-  };
-
-  const loadHistory = (newHistory: HistoryItem[]): void => {
-    ledger.load(newHistory);
-    publishHistory(true);
-  };
-
-  const setHistoryLimits = (limits: HistoryLimits): void => {
-    const before = ledger.getState();
-    ledger.setLimits(limits);
-    if (ledger.getState() !== before) {
-      publishHistory();
-    }
-  };
-
-  return {
-    addItem,
-    updateItem,
-    removeItems,
-    clearItems,
-    loadHistory,
-    setHistoryLimits,
-  };
-}
-
 /** Out-of-tree add request writer; seq lets identical requests still notify. */
 function createTurnAddRequestCommands(
   store: Store<TurnState>,
@@ -240,7 +132,7 @@ function createTurnAddRequestCommands(
   let addRequestSeq = 0;
 
   const requestAddItem = (
-    itemData: Omit<HistoryItem, 'id'>,
+    itemData: HistoryItemWithoutId,
     baseTimestamp?: number,
   ): void => {
     addRequestSeq += 1;
@@ -323,31 +215,40 @@ function createTurnStatusCommands(store: Store<TurnState>): TurnStatusCommands {
   };
 }
 
+let nextDisplayId = 0;
+
 export function createTurnStore(initial?: Partial<TurnState>): TurnStore {
-  const ledger: HistoryLedger = createHistoryLedger();
-  if (initial?.history !== undefined) {
-    ledger.load(initial.history);
-  }
-  const store = createStore<TurnState>({
-    ...initialTurnState(),
-    ...initial,
-    history: projectHistory(ledger.getState()),
-    historyTruncatedItems: ledger.getState().truncatedItems,
-  });
-
-  const publishHistory = (reset = false): void => {
-    store.setState((prev) => ({
-      ...prev,
-      history: projectHistory(ledger.getState()),
-      historyTruncatedItems: ledger.getState().truncatedItems,
-      historyEpoch: prev.historyEpoch + (reset ? 1 : 0),
-    }));
-  };
-
+  const store = createStore<TurnState>({ ...initialTurnState(), ...initial });
+  let readHistory:
+    | (() => Pick<HistoryService, 'appendDisplay' | 'length'> | null)
+    | null = null;
   return {
     store,
     commands: {
-      ...createTurnHistoryCommands(ledger, publishHistory),
+      getJournalLength: () => readHistory?.()?.length() ?? 0,
+      bindJournal: (read) => {
+        readHistory = read;
+      },
+      addItem: (item) => {
+        if (readHistory === null) throw new Error('UI journal is not bound');
+        void appendJournalUiItem(readHistory(), undefined, item).catch(
+          (error: unknown) => {
+            store.setState((previous) => ({
+              ...previous,
+              displayError:
+                error instanceof Error ? error.message : String(error),
+            }));
+          },
+        );
+        return ++nextDisplayId;
+      },
+      clearItems: () => {
+        store.setState((previous) => ({
+          ...previous,
+          historyEpoch: previous.historyEpoch + 1,
+        }));
+        ConversationContext.startNewConversation();
+      },
       ...createTurnAddRequestCommands(store),
       ...createTurnStatusCommands(store),
     },

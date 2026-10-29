@@ -7,17 +7,22 @@
 import { mkdtemp, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Storage } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
-import { SessionRecordingService } from '../../packages/core/src/recording/SessionRecordingService.js';
+import { createSessionRecorder } from '../../packages/core/src/recording/sessionRecorderFactory.js';
+import { requireJournalRecorder } from '../../packages/core/src/services/history/recorderBackend.js';
+import { NativeRecordingProbe } from '../../packages/core/src/storage/native-recording-probe.test-support.js';
 import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
-import { SessionPersistenceService } from '../../packages/core/src/storage/SessionPersistenceService.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { JournalSession } from '../../packages/core/src/services/history/journalSession.js';
 import { LocalMediaStore } from '../../packages/core/src/storage/local-media-store.js';
+import { historyOwnerIdFor } from '../../packages/core/src/storage/media-admission-service.js';
+import { useTempDir } from '../../packages/core/src/journal/__tests__/support/useTempDir.js';
 import { RequestMediaResolver } from '../../packages/core/src/storage/request-media-resolver.js';
 import { ProviderFileLifecycle } from '../../packages/providers/src/providerFilePolicy.js';
 import {
   admittedMediaContentId,
+  hasHistoryMediaReservation,
   cleanupAll,
   cleanupMediaProbeResources,
   completeTurnResources,
@@ -34,6 +39,39 @@ function errorMessages(error: unknown): string[] {
 }
 
 describe('issue 3199 media memory lifecycle', () => {
+  const root = useTempDir('media-probe-owners-');
+
+  it('counts a history reservation without counting an independent archive owner', async () => {
+    const store = new LocalMediaStore({
+      rootDirectory: root(),
+      quotaBytes: 1024,
+    });
+    try {
+      const reference = await store.admit({
+        bytes: new Uint8Array([1, 2, 3]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      });
+      const historyOwner = historyOwnerIdFor(reference.contentId);
+      await store.reserve(reference, 'native-recording-archive');
+      expect(await store.hasReservations(reference.contentId)).toBe(true);
+      expect(
+        await hasHistoryMediaReservation(root(), reference.contentId),
+      ).toBe(false);
+      await store.reserve(reference, historyOwner);
+      expect(
+        await hasHistoryMediaReservation(root(), reference.contentId),
+      ).toBe(true);
+      await store.release(reference.contentId, historyOwner);
+      expect(
+        await hasHistoryMediaReservation(root(), reference.contentId),
+      ).toBe(false);
+      expect(await store.hasReservations(reference.contentId)).toBe(true);
+    } finally {
+      await store.close();
+    }
+  });
+
   it('handles a persistence rejection as soon as the operation is created', async () => {
     const outcome = await settleOperation(() =>
       Promise.reject(new Error('persistence failed')),
@@ -152,6 +190,7 @@ describe('issue 3199 media memory lifecycle', () => {
   it('cleans initialized resources and its temp directory when initialization fails', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'llxprt-media-init-'));
     const resources: MediaProbeResources = { directory };
+    const recordingProbe = new NativeRecordingProbe();
     let failure: unknown;
 
     try {
@@ -168,7 +207,7 @@ describe('issue 3199 media memory lifecycle', () => {
       });
       const resolver = new RequestMediaResolver(store);
       resources.resolver = resolver;
-      const recording = new SessionRecordingService({
+      const recording = createSessionRecorder({
         sessionId: 'initialization-probe',
         projectHash: 'initialization-probe',
         chatsDir: join(directory, 'recording'),
@@ -176,21 +215,24 @@ describe('issue 3199 media memory lifecycle', () => {
         provider: 'probe',
         model: 'probe',
         mediaStore: store,
+        journal: recordingProbe.options,
       });
       resources.recording = recording;
-      recording.recordContent({
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'queued before failure' }],
-      });
-      const persistence = new SessionPersistenceService(
+      await (
+        await requireJournalRecorder(recording).session()
+      ).append([
         {
-          projectRoot: directory,
-          chatsDir: new Storage(directory).getProjectChatsDir(),
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'queued before failure' }],
         },
-        'initialization-probe',
-        { mediaStore: store },
+      ]);
+      const persistence = new NativeRecordingProbe();
+      const persistedSession = await JournalSession.create(
+        join(directory, 'persisted.llxj'),
+        persistence.options,
       );
       resources.persistence = persistence;
+      resources.persistedSession = persistedSession;
       const providerRetention = new ProviderFileLifecycle({
         maxFiles: 1,
         maxBytes: 1024,
@@ -244,10 +286,12 @@ describe('issue 3199 media memory lifecycle', () => {
     expect(errorMessages(failure)).toEqual([
       'deterministic initialization failure',
     ]);
-    expect(history.getAll()).toEqual([]);
+    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+      expect(rows).toEqual([]);
+    });
     expect(resolver.accounting()).toMatchObject({ activeRequestCount: 0 });
     expect(recording.isActive()).toBe(false);
-    expect(recording.getPendingByteCount()).toBe(0);
+    expect(recordingProbe.getPendingByteCount()).toBe(0);
     expect(persistence.getPendingByteCount()).toBe(0);
     expect(providerRetention.snapshot().retainedFiles).toBe(0);
     await expect(

@@ -9,6 +9,7 @@ import type {
   RuntimePromptEstimateResult,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
+import { countNeutralTextStream } from '@vybestack/llxprt-code-core/utils/neutral-text-stream.js';
 import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
 import {
   PROJECTION_REVISION,
@@ -230,6 +231,10 @@ export function createGpt56RuntimeTokenizer(
 ): RuntimeTokenizer {
   return {
     fallbackPolicy: 'deny',
+    async countTokenStream(parts): Promise<number> {
+      await resolveEncoder();
+      return countNeutralTextStream(parts);
+    },
     async countTokens(content: unknown): Promise<number> {
       const promptText = normalizeRuntimeTokenizerInput(
         content,

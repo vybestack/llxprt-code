@@ -8,11 +8,10 @@ import { createTestChildOrchestrator } from './child-launch-fixture.js';
 import { ProxyTokenStore } from '@vybestack/llxprt-code-auth/proxy/proxy-token-store.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import { isMediaReferenceBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
+
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { describe, expect, it } from 'bun:test';
-import { mkdir, readdir, rm } from 'node:fs/promises';
+
 import { join } from 'node:path';
 import { withDisposalJoinFixture } from '../../api/__tests__/helpers/async-child-disposal-join-fixture.js';
 import { useOwnedCredentials } from '../../api/__tests__/helpers/owned-credential-fixture.js';
@@ -62,45 +61,6 @@ function failingTransportClose(
   };
 }
 
-async function obstructHistoryRelease(
-  options: Parameters<typeof loadAgentRuntime>[0],
-  history: Awaited<ReturnType<typeof loadAgentRuntime>>['history'],
-): Promise<string> {
-  const content = await new MediaAdmissionService(
-    options.mediaStore,
-  ).admitContent(
-    {
-      speaker: 'human',
-      blocks: [
-        {
-          type: 'media',
-          encoding: 'base64',
-          mimeType: 'image/png',
-          data: 'AQIDBA==',
-        },
-      ],
-    },
-    { turnId: 'failed-child-history', source: 'clipboard' },
-  );
-  await history.replaceAll([content]);
-  await history.waitForOwnershipSettlement();
-  const reference = content.blocks.find(isMediaReferenceBlock);
-  if (reference === undefined)
-    throw new Error('Missing admitted history media');
-  const directory = join(
-    options.mediaStore.rootDirectory,
-    'references',
-    'sha256',
-    reference.contentId.slice('sha256:'.length),
-  );
-  const records = await readdir(directory);
-  if (records.length !== 1) throw new Error('Expected one history reservation');
-  const reservation = join(directory, records[0]);
-  await rm(reservation);
-  await mkdir(reservation);
-  return reference.contentId;
-}
-
 describe('subagent cleanup error retention', () => {
   const credentials = useOwnedCredentials();
 
@@ -110,6 +70,7 @@ describe('subagent cleanup error retention', () => {
       await withDisposalJoinFixture(async (fixture) => {
         const secondary = new Error('isolated token transport close failed');
         const scopeFailure = new Error('child scope creation failed');
+        const historyFailure = new Error('child history disposal failed');
         const transport = failingTransportClose(
           credentials().authority,
           secondary,
@@ -119,7 +80,9 @@ describe('subagent cleanup error retention', () => {
           fixture.config.getWorkingDir(),
           'missing-child.responses',
         );
-        let historyContentId: string | undefined;
+        let retiredHistory:
+          | Awaited<ReturnType<typeof loadAgentRuntime>>['history']
+          | undefined;
         const toolRegistry = await fixture.parentTools();
         try {
           if (stage === 'activation')
@@ -151,11 +114,14 @@ describe('subagent cleanup error retention', () => {
                     : {}),
                 },
               });
-              if (stage === 'history')
-                historyContentId = await obstructHistoryRelease(
-                  options,
-                  bundle.history,
-                );
+              if (stage === 'history') {
+                retiredHistory = bundle.history;
+                const dispose = bundle.history.dispose.bind(bundle.history);
+                bundle.history.dispose = async () => {
+                  await dispose();
+                  throw historyFailure;
+                };
+              }
               return bundle;
             },
           });
@@ -169,6 +135,9 @@ describe('subagent cleanup error retention', () => {
           expect(failure).toBeInstanceOf(AggregateDisposeError);
           if (!(failure instanceof AggregateDisposeError)) throw failure;
           const failures = flatten(failure);
+          expect(
+            failures.filter((error) => error === historyFailure),
+          ).toHaveLength(stage === 'history' ? 1 : 0);
           expect(failures).toHaveLength(stage === 'history' ? 3 : 2);
           expect(failures[failures.length - 1]).toBe(secondary);
           const primary = failures[0];
@@ -182,16 +151,14 @@ describe('subagent cleanup error retention', () => {
                       : scopeFailure.message,
                 },
           );
-          expect(failures.slice(1, -1)).toMatchObject(
-            stage === 'history'
-              ? [
-                  {
-                    name: 'MediaStoreError',
-                    contentId: historyContentId,
-                    cause: { code: 'EISDIR' },
-                  },
-                ]
-              : [],
+          expect(failures.slice(1, -1)).toStrictEqual(
+            stage === 'history' ? [historyFailure] : [],
+          );
+          await expect(
+            retiredHistory?.openDumpSnapshot() ??
+              Promise.reject(new Error('not acquired')),
+          ).rejects.toThrow(
+            stage === 'history' ? /disposed|closed|retired/i : /not acquired/,
           );
           expect(fixture.settingsOwner.readSelectedModel()).toBe(
             'parent-model',

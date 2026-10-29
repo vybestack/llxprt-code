@@ -1,353 +1,107 @@
-/**
- * @license
- * Copyright 2025 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, it, expect } from 'bun:test';
-import { renderHook } from '../../__tests__/render.js';
 import { act } from 'react';
+import { renderHook } from '../../__tests__/render.js';
 import { useHistory } from './useHistoryManager.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
-import { ToolCallStatus, type HistoryItem } from '../types.js';
+import {
+  readJournalItems,
+  withJournalTurn,
+} from '../stores/turn/journal-turn-test-helpers.js';
 
-describe('useHistoryManager', () => {
-  it('does not reset owner limits when an options-less consumer mounts', () => {
-    const store = createTurnStore();
-    const owner = renderHook(() =>
-      useHistory(store, { maxItems: -1, maxBytes: -1 }),
-    );
-    const reader = renderHook(() => useHistory(store));
-    act(() => {
-      for (let index = 0; index < 401; index++)
-        store.commands.addItem({ type: 'info', text: String(index) });
-    });
-    expect(store.store.getState().history).toHaveLength(401);
-    reader.unmount();
-    owner.unmount();
+describe('journal-backed history commands', () => {
+  it('starts without resident transcript state', () => {
+    const turn = createTurnStore();
+    const hook = renderHook(() => useHistory(turn));
+    expect(Object.keys(hook.result.current).sort()).toStrictEqual([
+      'addItem',
+      'clearItems',
+    ]);
+    expect(turn.commands.getJournalLength()).toBe(0);
+    hook.unmount();
   });
 
-  it('retains history beyond both default display budgets with unlimited options', () => {
-    const turnStore = createTurnStore();
-    const { result, unmount } = renderHook(() =>
-      useHistory(turnStore, { maxItems: -1, maxBytes: -1 }),
-    );
-    const text = 'x'.repeat(11000);
-    act(() => {
-      for (let index = 0; index < 401; index++) {
-        result.current.addItem(
-          { type: 'user', text: `${index}:${text}` },
-          index,
+  it('publishes added notices through the journal instead of hook state', async () => {
+    await withJournalTurn(async (turn, agent) => {
+      const hook = renderHook(() => useHistory(turn));
+      let first = 0;
+      let second = 0;
+      act(() => {
+        first = hook.result.current.addItem({ type: 'info', text: 'First' }, 1);
+        second = hook.result.current.addItem(
+          { type: 'warning', text: 'Second' },
+          1,
         );
+      });
+      const items = await readJournalItems(agent);
+      expect(items.map((item) => [item.type, item.text])).toStrictEqual([
+        ['info', 'First'],
+        ['warning', 'Second'],
+      ]);
+      expect(second).toBeGreaterThan(first);
+      expect(items.every((item) => item.rowIdentity?.kind === 'journal')).toBe(
+        true,
+      );
+      hook.unmount();
+    });
+  });
+
+  it('keeps complete text beyond the former count and byte limits on disk', async () => {
+    await withJournalTurn(async (turn, agent, client) => {
+      const owner = renderHook(() => useHistory(turn));
+      const reader = renderHook(() => useHistory(turn));
+      const text = 'x'.repeat(11000);
+      for (let index = 0; index < 401; index++) {
+        act(() => {
+          owner.result.current.addItem({
+            type: 'info',
+            text: `${index}:${text}`,
+          });
+        });
+        const history = client.getHistoryService();
+        if (history === null) throw new Error('Missing journal history');
+        await history.waitForCommit();
       }
-    });
-    expect(result.current.history).toHaveLength(401);
-    expect(
-      result.current.history.every(
-        (item) => item.type === 'user' && item.text.endsWith(text),
-      ),
-    ).toBe(true);
-    unmount();
-  });
-
-  it('should initialize with an empty history', () => {
-    const turnStore = createTurnStore();
-    const { result } = renderHook(() => useHistory(turnStore));
-    expect(result.current.history).toStrictEqual([]);
-  });
-
-  it('should add an item to history with a unique ID', () => {
-    const turnStore = createTurnStore();
-    const { result } = renderHook(() => useHistory(turnStore));
-    const timestamp = Date.now();
-    const itemData: Omit<HistoryItem, 'id'> = {
-      type: 'user', // Replaced HistoryItemType.User
-      text: 'Hello',
-    };
-
-    act(() => {
-      result.current.addItem(itemData, timestamp);
-    });
-
-    expect(result.current.history).toHaveLength(1);
-    expect(result.current.history[0]).toStrictEqual(
-      expect.objectContaining({
-        ...itemData,
-        id: expect.any(Number),
-      }),
-    );
-    // Basic check that ID incorporates timestamp
-    expect(result.current.history[0].id).toBeGreaterThanOrEqual(timestamp);
-  });
-
-  it('should generate unique IDs for items added with the same base timestamp', () => {
-    const turnStore = createTurnStore();
-    const { result } = renderHook(() => useHistory(turnStore));
-    const timestamp = Date.now();
-    const itemData1: Omit<HistoryItem, 'id'> = {
-      type: 'user', // Replaced HistoryItemType.User
-      text: 'First',
-    };
-    const itemData2: Omit<HistoryItem, 'id'> = {
-      type: 'gemini', // Replaced HistoryItemType.Gemini
-      text: 'Second',
-    };
-
-    let id1!: number;
-    let id2!: number;
-
-    act(() => {
-      id1 = result.current.addItem(itemData1, timestamp);
-      id2 = result.current.addItem(itemData2, timestamp);
-    });
-
-    expect(result.current.history).toHaveLength(2);
-    expect(id1).not.toStrictEqual(id2);
-    expect(result.current.history[0].id).toStrictEqual(id1);
-    expect(result.current.history[1].id).toStrictEqual(id2);
-    // IDs should be sequential based on the counter
-    expect(id2).toBeGreaterThan(id1);
-  });
-
-  it('should update an existing history item', () => {
-    const turnStore = createTurnStore();
-    const { result } = renderHook(() => useHistory(turnStore));
-    const timestamp = Date.now();
-    const initialItem: Omit<HistoryItem, 'id'> = {
-      type: 'gemini', // Replaced HistoryItemType.Gemini
-      text: 'Initial content',
-    };
-    let itemId!: number;
-
-    act(() => {
-      itemId = result.current.addItem(initialItem, timestamp);
-    });
-
-    const updatedText = 'Updated content';
-    act(() => {
-      result.current.updateItem(itemId, { text: updatedText });
-    });
-
-    expect(result.current.history).toHaveLength(1);
-    expect(result.current.history[0]).toStrictEqual({
-      ...initialItem,
-      id: itemId,
-      text: updatedText,
-      // HistoryItem is a discriminated union; the spread `type` widens to the
-      // full union so the literal must be asserted back to HistoryItem.
-    } as unknown as HistoryItem);
-  });
-
-  it('should not change history if updateHistoryItem is called with a nonexistent ID', () => {
-    const turnStore = createTurnStore();
-    const { result } = renderHook(() => useHistory(turnStore));
-    const timestamp = Date.now();
-    const itemData: Omit<HistoryItem, 'id'> = {
-      type: 'user', // Replaced HistoryItemType.User
-      text: 'Hello',
-    };
-
-    act(() => {
-      result.current.addItem(itemData, timestamp);
-    });
-
-    const originalHistory = [...result.current.history]; // Clone before update attempt
-
-    act(() => {
-      result.current.updateItem(99999, { text: 'Should not apply' }); // Nonexistent ID
-    });
-
-    expect(result.current.history).toStrictEqual(originalHistory);
-  });
-
-  it('should clear the history', () => {
-    const turnStore = createTurnStore();
-    const { result } = renderHook(() => useHistory(turnStore));
-    const timestamp = Date.now();
-    const itemData1: Omit<HistoryItem, 'id'> = {
-      type: 'user', // Replaced HistoryItemType.User
-      text: 'First',
-    };
-    const itemData2: Omit<HistoryItem, 'id'> = {
-      type: 'gemini', // Replaced HistoryItemType.Gemini
-      text: 'Second',
-    };
-
-    act(() => {
-      result.current.addItem(itemData1, timestamp);
-      result.current.addItem(itemData2, timestamp);
-    });
-
-    expect(result.current.history).toHaveLength(2);
-
-    act(() => {
-      result.current.clearItems();
-    });
-
-    expect(result.current.history).toStrictEqual([]);
-  });
-
-  it('should not add consecutive duplicate user messages', () => {
-    const turnStore = createTurnStore();
-    const { result } = renderHook(() => useHistory(turnStore));
-    const timestamp = Date.now();
-    const itemData1: Omit<HistoryItem, 'id'> = {
-      type: 'user', // Replaced HistoryItemType.User
-      text: 'Duplicate message',
-    };
-    const itemData2: Omit<HistoryItem, 'id'> = {
-      type: 'user', // Replaced HistoryItemType.User
-      text: 'Duplicate message',
-    };
-    const itemData3: Omit<HistoryItem, 'id'> = {
-      type: 'gemini', // Replaced HistoryItemType.Gemini
-      text: 'Gemini response',
-    };
-    const itemData4: Omit<HistoryItem, 'id'> = {
-      type: 'user', // Replaced HistoryItemType.User
-      text: 'Another user message',
-    };
-
-    act(() => {
-      result.current.addItem(itemData1, timestamp);
-      result.current.addItem(itemData2, timestamp + 1); // Same text, different timestamp
-      result.current.addItem(itemData3, timestamp + 2);
-      result.current.addItem(itemData4, timestamp + 3);
-    });
-
-    expect(result.current.history).toHaveLength(3);
-    expect(result.current.history[0].text).toBe('Duplicate message');
-    expect(result.current.history[1].text).toBe('Gemini response');
-    expect(result.current.history[2].text).toBe('Another user message');
-  });
-
-  it('should add duplicate user messages if they are not consecutive', () => {
-    const turnStore = createTurnStore();
-    const { result } = renderHook(() => useHistory(turnStore));
-    const timestamp = Date.now();
-    const itemData1: Omit<HistoryItem, 'id'> = {
-      type: 'user', // Replaced HistoryItemType.User
-      text: 'Message 1',
-    };
-    const itemData2: Omit<HistoryItem, 'id'> = {
-      type: 'gemini', // Replaced HistoryItemType.Gemini
-      text: 'Gemini response',
-    };
-    const itemData3: Omit<HistoryItem, 'id'> = {
-      type: 'user', // Replaced HistoryItemType.User
-      text: 'Message 1', // Duplicate text, but not consecutive
-    };
-
-    act(() => {
-      result.current.addItem(itemData1, timestamp);
-      result.current.addItem(itemData2, timestamp + 1);
-      result.current.addItem(itemData3, timestamp + 2);
-    });
-
-    expect(result.current.history).toHaveLength(3);
-    expect(result.current.history[0].text).toBe('Message 1');
-    expect(result.current.history[1].text).toBe('Gemini response');
-    expect(result.current.history[2].text).toBe('Message 1');
-  });
-
-  it('should trim history when maxItems is reached', () => {
-    const turnStore = createTurnStore();
-    const { result } = renderHook(() =>
-      useHistory(turnStore, { maxItems: 2, maxBytes: -1 }),
-    );
-    const timestamp = Date.now();
-    act(() => {
-      result.current.addItem({ type: 'info', text: 'first' }, timestamp);
-      result.current.addItem({ type: 'info', text: 'second' }, timestamp + 1);
-      result.current.addItem({ type: 'info', text: 'third' }, timestamp + 2);
-    });
-
-    expect(result.current.history).toHaveLength(2);
-    expect(result.current.history[0].text).toBe('second');
-    expect(result.current.history[1].text).toBe('third');
-  });
-
-  it('should trim history based on maxBytes budget', () => {
-    const turnStore = createTurnStore();
-    const { result } = renderHook(() =>
-      useHistory(turnStore, { maxItems: 10, maxBytes: 200 }),
-    );
-    const timestamp = Date.now();
-
-    act(() => {
-      result.current.addItem(
-        { type: 'info', text: 'x'.repeat(500) },
-        timestamp,
+      const items = await readJournalItems(agent, 401);
+      expect(items).toHaveLength(401);
+      expect(items.every((item) => item.text?.endsWith(text) === true)).toBe(
+        true,
       );
+      expect(items[0].text?.startsWith('0:')).toBe(true);
+      expect(items.at(-1)?.text?.startsWith('400:')).toBe(true);
+      reader.unmount();
+      owner.unmount();
     });
+  }, 180000);
 
-    expect(result.current.history).toHaveLength(1);
-
-    act(() => {
-      result.current.addItem(
-        { type: 'info', text: 'y'.repeat(150) },
-        timestamp + 1,
-      );
-    });
-
-    expect(result.current.history).toHaveLength(1);
-    expect(result.current.history[0].text).toBe('y'.repeat(150));
-  });
-
-  it('bounds an oversized newest item for display with a UTF-8-safe preview', () => {
-    const turnStore = createTurnStore();
-    const { result } = renderHook(() =>
-      useHistory(turnStore, { maxItems: 10, maxBytes: 400 }),
-    );
-
-    act(() => {
-      result.current.addItem({ type: 'info', text: '\u{1F642}'.repeat(500) });
-    });
-
-    const text = result.current.history[0].text as string;
-    const serialized = JSON.stringify(result.current.history[0]);
-    expect({
-      withinBudget: Buffer.byteLength(serialized, 'utf8') <= 400,
-      // The bound is display-only, and says so, so the user knows where the
-      // complete text lives (issue #2852).
-      explainsBound: text.includes('full text is in the session transcript'),
-      // UTF-8 safe: no replacement characters from a split code point.
-      noSplitCodePoints: !text.includes('\uFFFD'),
-    }).toStrictEqual({
-      withinBudget: true,
-      explainsBound: true,
-      noSplitCodePoints: true,
+  it('retains repeated model turns without a second UI duplicate filter', async () => {
+    await withJournalTurn(async (_turn, agent) => {
+      await agent.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'Repeat' }] },
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'Answer' }] },
+        { speaker: 'human', blocks: [{ type: 'text', text: 'Repeat' }] },
+      ]);
+      expect(
+        (await readJournalItems(agent)).map((item) => item.text),
+      ).toStrictEqual(['Repeat', 'Answer', 'Repeat']);
     });
   });
 
-  it('hard-bounds oversized raw tool output retained by UI history', () => {
-    const turnStore = createTurnStore();
-    const { result } = renderHook(() =>
-      useHistory(turnStore, { maxItems: 10, maxBytes: 500 }),
-    );
+  it('invalidates the journal viewport on every clear', () => {
+    const turn = createTurnStore();
+    const hook = renderHook(() => useHistory(turn));
+    act(() => hook.result.current.clearItems());
+    expect(turn.store.getState().historyEpoch).toBe(1);
+    act(() => hook.result.current.clearItems());
+    expect(turn.store.getState().historyEpoch).toBe(2);
+    hook.unmount();
+  });
 
-    act(() => {
-      const toolGroup: Omit<
-        Extract<HistoryItem, { type: 'tool_group' }>,
-        'id'
-      > = {
-        type: 'tool_group',
-        tools: [
-          {
-            callId: 'large-tool',
-            name: 'shell',
-            description: 'large output',
-            resultDisplay: 'z'.repeat(20_000),
-            status: ToolCallStatus.Success,
-            confirmationDetails: undefined,
-          },
-        ],
-      };
-      result.current.addItem(toolGroup);
-    });
-
-    expect(
-      Buffer.byteLength(JSON.stringify(result.current.history), 'utf8'),
-    ).toBeLessThanOrEqual(500);
+  it('fails immediately when an add has no journal binding', () => {
+    const hook = renderHook(() => useHistory(createTurnStore()));
+    expect(() =>
+      hook.result.current.addItem({ type: 'info', text: 'lost' }),
+    ).toThrow('UI journal is not bound');
+    hook.unmount();
   });
 });

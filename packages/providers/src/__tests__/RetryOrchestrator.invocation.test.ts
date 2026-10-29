@@ -23,6 +23,10 @@ import type { IModel } from '../IModel.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
+import {
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 
 async function consumeStream(
   stream: AsyncIterableIterator<IContent>,
@@ -95,12 +99,12 @@ function wireProvider(provider: SafetyBaseProvider): SettingsService {
   return settings;
 }
 
-describe('RetryOrchestrator invocation safety', () => {
-  const prompt: IContent = {
-    speaker: 'human',
-    blocks: [{ type: 'text', text: 'hi' }],
-  } as IContent;
+const prompt: IContent = {
+  speaker: 'human',
+  blocks: [{ type: 'text', text: 'hi' }],
+} as IContent;
 
+describe('RetryOrchestrator invocation safety', () => {
   it('does not crash a wrapped BaseProvider when the legacy signal signature is used', async () => {
     const baseProvider = new SafetyBaseProvider();
     wireProvider(baseProvider);
@@ -111,7 +115,7 @@ describe('RetryOrchestrator invocation safety', () => {
     // Legacy signature: (contents, tools, signal)
     await consumeStream(
       orchestrator.generateChatCompletion(
-        [prompt],
+        replayableContents([prompt]),
         undefined,
         abortController.signal,
       ),
@@ -120,7 +124,9 @@ describe('RetryOrchestrator invocation safety', () => {
     const normalized = baseProvider.lastNormalized;
     expect(normalized).toBeDefined();
     expect(typeof normalized!.invocation.getModelBehavior).toBe('function');
+    expect(normalized!.invocation.signal).not.toBe(abortController.signal);
     expect(normalized!.invocation.signal).toBeInstanceOf(AbortSignal);
+    expect(normalized!.invocation.signal?.aborted).toBe(true);
   });
 
   it('does not crash a wrapped BaseProvider when only options + signal are provided', async () => {
@@ -131,7 +137,7 @@ describe('RetryOrchestrator invocation safety', () => {
     const abortController = new AbortController();
 
     const options: GenerateChatOptions = {
-      contents: [prompt],
+      contents: replayableContents([prompt]),
     };
 
     await consumeStream(
@@ -148,7 +154,9 @@ describe('RetryOrchestrator invocation safety', () => {
     expect(normalized!.invocation.signal).not.toBe(abortController.signal);
     expect(normalized!.invocation.signal?.aborted).toBe(true);
   });
+});
 
+describe('RetryOrchestrator existing invocation', () => {
   it('adds an explicit signal to an existing invocation object', async () => {
     const baseProvider = new SafetyBaseProvider();
     wireProvider(baseProvider);
@@ -162,7 +170,7 @@ describe('RetryOrchestrator invocation safety', () => {
     await consumeStream(
       orchestrator.generateChatCompletion(
         {
-          contents: [prompt],
+          contents: replayableContents([prompt]),
           invocation: existingInvocation,
         },
         undefined,
@@ -176,13 +184,17 @@ describe('RetryOrchestrator invocation safety', () => {
     expect(normalized!.invocation.signal).not.toBe(abortController.signal);
     expect(normalized!.invocation.signal?.aborted).toBe(true);
   });
+});
 
+describe('RetryOrchestrator positional signal', () => {
   it('preserves abort propagation through the legacy signal signature', async () => {
     let providerCalls = 0;
 
     const provider: IProvider = {
       name: 'abort-legacy-provider',
-      async *generateChatCompletion(_options: GenerateChatOptions) {
+      async *generateChatCompletion(
+        _options: GenerateChatOptions | AsyncIterable<IContent>,
+      ) {
         providerCalls++;
         void _options;
         yield* [];
@@ -207,7 +219,7 @@ describe('RetryOrchestrator invocation safety', () => {
     await expect(
       consumeStream(
         orchestrator.generateChatCompletion(
-          [prompt],
+          replayableContents([prompt]),
           undefined,
           abortController.signal,
         ),
@@ -222,8 +234,14 @@ describe('RetryOrchestrator invocation safety', () => {
 
     const provider: IProvider = {
       name: 'signal-receiver-provider',
-      async *generateChatCompletion(options: GenerateChatOptions) {
+      async *generateChatCompletion(
+        options: GenerateChatOptions | AsyncIterable<IContent>,
+      ) {
+        if (isAsyncIterableContents(options)) {
+          throw new Error('Expected request options at the retry boundary');
+        }
         receivedSignal = getRequestSignal(options);
+        expect(receivedSignal?.aborted).toBe(false);
         yield {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'ok' }],
@@ -243,7 +261,7 @@ describe('RetryOrchestrator invocation safety', () => {
 
     await consumeStream(
       orchestrator.generateChatCompletion(
-        [prompt],
+        replayableContents([prompt]),
         undefined,
         abortController.signal,
       ),

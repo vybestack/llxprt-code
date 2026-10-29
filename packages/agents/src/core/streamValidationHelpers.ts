@@ -1,3 +1,4 @@
+import { settleStreamUsage } from './streamUsageSettlement.js';
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type {
   IContent,
@@ -77,9 +78,11 @@ export function validateStreamCompletion(
   userInput: IContent | IContent[],
   outcome: ResponseOutcome,
   finishReason: string | undefined,
-  responseText: string,
+  responseText: string | number,
   rawStopReason?: string,
 ): void {
+  const responseTextLength =
+    typeof responseText === 'number' ? responseText : responseText.length;
   const inputArray = Array.isArray(userInput) ? userInput : [userInput];
   const isToolContinuationInput = inputArray.some((content) =>
     content.blocks.some((b) => b.type === 'tool_response'),
@@ -87,7 +90,7 @@ export function validateStreamCompletion(
 
   const hasMissingFinishAndNoText =
     isMissingFinishReason(finishReason) && !outcome.hasVisibleText;
-  const isEmptyResponse = responseText === '';
+  const isEmptyResponse = responseTextLength === 0;
   const noRelevantContent =
     !outcome.hasToolCalls && !isToolContinuationInput && !outcome.hasThinking;
   const isInvalidResponse =
@@ -103,7 +106,7 @@ export function validateStreamCompletion(
           hasTextResponse: outcome.hasVisibleText,
           hasThinkingResponse: outcome.hasThinking,
           finishReason,
-          responseTextLength: responseText.length,
+          responseTextLength,
           isToolContinuationInput,
         },
       );
@@ -119,7 +122,7 @@ export function validateStreamCompletion(
         hasTextResponse: outcome.hasVisibleText,
         hasThinkingResponse: outcome.hasThinking,
         finishReason,
-        responseTextLength: responseText.length,
+        responseTextLength,
         isToolContinuationInput,
       },
     );
@@ -142,7 +145,7 @@ export function validateStreamCompletion(
         hasThinkingResponse: outcome.hasThinking,
         finishReason,
         rawStopReason,
-        responseTextLength: responseText.length,
+        responseTextLength,
         isToolContinuationInput,
       },
     );
@@ -171,6 +174,7 @@ export async function recordHistoryWithUsage(
   },
   afterPublication?: () => void | Promise<void>,
   origin?: object,
+  sealResponse?: () => Promise<void>,
 ): Promise<void> {
   const includeThoughts = reasoningInclusion.includeInContext();
 
@@ -193,39 +197,27 @@ export async function recordHistoryWithUsage(
       }
     : null;
 
+  const settle = (): Promise<void> =>
+    settleStreamUsage(
+      historyService,
+      logger,
+      streamingUsage?.promptTokens ?? null,
+      compressionHandler.lastPromptTokenCount,
+      afterPublication,
+    );
   await conversationManager.recordHistory(
     userInput,
     modelOutput,
     acc.afcHistory,
     streamingUsage,
-    userInputFlags,
-    async () => {
-      await historyService.waitForTokenUpdates();
-      const promptTokens = streamingUsage?.promptTokens ?? null;
-      const fallbackTokens = compressionHandler.lastPromptTokenCount;
-      let tokensToSync: number | null = null;
-      if (promptTokens !== null && promptTokens > 0) {
-        tokensToSync = promptTokens;
-      } else if (fallbackTokens !== null && fallbackTokens > 0) {
-        tokensToSync = fallbackTokens;
-      }
-      if (tokensToSync !== null) {
-        logger.debug(
-          () =>
-            `[StreamProcessor] Syncing prompt token count to HistoryService: ${tokensToSync}`,
-        );
-        historyService.syncTotalTokens(tokensToSync);
-        await historyService.waitForTokenUpdates();
-      } else {
-        logger.debug(
-          () =>
-            `[StreamProcessor] No token count to sync (lastPromptTokenCount: ${fallbackTokens})`,
-        );
-      }
-      await afterPublication?.();
-    },
+    { ...userInputFlags, responseAlreadyRecorded: sealResponse !== undefined },
+    sealResponse === undefined ? settle : undefined,
     origin,
   );
+  if (sealResponse !== undefined) {
+    await sealResponse();
+    await settle();
+  }
 }
 
 /**

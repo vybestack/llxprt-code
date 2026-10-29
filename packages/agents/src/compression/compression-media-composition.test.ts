@@ -1,3 +1,5 @@
+import { curatedCandidate } from './curatedCandidate.js';
+import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 /**
@@ -63,9 +65,9 @@ describe('compression media composition', () => {
         getDefaultModel: () => 'test-model',
         getModels: async () => [],
         async *generateChatCompletion(
-          options: RuntimeGenerateChatOptions | IContent[],
+          options: RuntimeGenerateChatOptions | AsyncIterable<IContent>,
         ): AsyncIterableIterator<IContent> {
-          if (Array.isArray(options))
+          if (!('contents' in options))
             throw new Error('Expected compression options');
           if (
             this.requestMediaResolver !== resolver ||
@@ -106,13 +108,22 @@ describe('compression media composition', () => {
           ),
         }),
       });
+      const rows = await curatedCandidate(
+        (async function* () {
+          yield* context.history;
+        })(),
+      );
+      const candidate = new HistoryDensityRows();
       try {
         const result = await new Strategy(
           resolver,
           1024,
           bindings,
           lifecycle,
-        ).compress({ ...context, compressionVerification: true });
+        ).compressDisk(
+          { ...context, history: rows, compressionVerification: true },
+          candidate,
+        );
         expect({ kind: result.kind, completedRequests }).toStrictEqual({
           kind: 'applied',
           completedRequests: 2,
@@ -122,6 +133,8 @@ describe('compression media composition', () => {
           selectedConfig.getTargetDir(),
         ]);
       } finally {
+        candidate.close();
+        rows.close();
         await selectedConfig.dispose();
       }
     });

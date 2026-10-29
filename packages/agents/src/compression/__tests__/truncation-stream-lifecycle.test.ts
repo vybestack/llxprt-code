@@ -1,0 +1,177 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import {
+  rowIndex,
+  withSuffixFixture,
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { describe, expect, it } from 'bun:test';
+import { withCoreSuffixFixture } from '../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
+import {
+  exactTokenizer,
+  withRollbackFixture,
+} from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
+import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
+import { runDiskTruncation } from '../diskTruncation.js';
+import {
+  checkpointScratch,
+  checkpointSourceFault,
+  checkpointState,
+  expectedCheckpointState,
+} from './checkpoint-source-fault-helpers.js';
+import {
+  TruncationStreamHistory,
+  collectRows,
+  truncationHandler,
+  truncationRow,
+} from './truncation-stream-helpers.js';
+
+class FaultHistory extends TruncationStreamHistory {
+  constructor(
+    options?: ConstructorParameters<typeof TruncationStreamHistory>[0],
+  ) {
+    super(options);
+    this.setTokenizerFactory({
+      ...exactTokenizer(),
+      getTokenizer: () => ({
+        countTokens: async () => 0,
+        fallbackPolicy: 'deny',
+      }),
+    });
+  }
+
+  readonly failure = new Error('injected curated producer failure');
+  private readonly source = checkpointSourceFault(this, () => this.failure, 21);
+
+  get closedSnapshot(): boolean {
+    return this.source.closed > 0;
+  }
+}
+
+async function longCandidate(size: number): Promise<number> {
+  const mutation = new RowOwnership();
+  return withSuffixFixture(
+    size,
+    async (history, reader) => {
+      truncationHandler(history);
+      history.syncTotalTokens(size);
+      await history.waitForTokenUpdates();
+      const targetTokenCount = size - 10;
+      const result = await runDiskTruncation(
+        'long',
+        buildRuntimeContext(history),
+        undefined,
+        history,
+        async () => {
+          throw new Error('No LLM');
+        },
+        undefined,
+        undefined,
+        new DebugLogger('test:long'),
+        { targetTokenCount },
+      );
+      expect(result.outcome).toBe('applied');
+      let count = 0;
+      for await (const row of history.getComprehensive()) {
+        expect(rowIndex(row)).toBe(count + 10);
+        count++;
+      }
+      expect(count).toBe(size - 10);
+      expect(
+        reader.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
+      ).toBe(true);
+      expect(
+        mutation.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
+      ).toBe(true);
+      expect(reader.snapshot().liveRows + mutation.snapshot().liveRows).toBe(0);
+      return count;
+    },
+    2048,
+    truncationRow,
+    mutation,
+    (options) => new TruncationStreamHistory(options),
+  );
+}
+
+async function producerFailure(size: number): Promise<number> {
+  let created: FaultHistory | undefined;
+  let recording: SessionRecordingPort | undefined;
+  return withCoreSuffixFixture(
+    size,
+    async (history, reader) => {
+      const handler = truncationHandler(history);
+      history.syncTotalTokens(size);
+      await history.waitForTokenUpdates();
+      const expected = await expectedCheckpointState(
+        size,
+        truncationRow,
+        size,
+        size,
+      );
+      expect(await checkpointState(history, recording)).toStrictEqual(expected);
+      expect(checkpointScratch()).toStrictEqual([]);
+      const operation = handler.performCompression('source-fault');
+      await expect(operation).rejects.toThrow(
+        'injected curated producer failure',
+      );
+      await expect(operation).rejects.toBe(created?.failure);
+      expect(created?.closedSnapshot).toBe(true);
+      expect(checkpointScratch()).toStrictEqual([]);
+      expect(await checkpointState(history, recording)).toStrictEqual(expected);
+      expect((await collectRows(history)).map(rowIndex)).toStrictEqual(
+        Array.from({ length: size }, (_, index) => index),
+      );
+      expect(reader.snapshot().liveRows).toBe(0);
+      return (await collectRows(history)).length;
+    },
+    64,
+    truncationRow,
+    undefined,
+    (options) => {
+      recording = options.recording;
+      created = new FaultHistory(options);
+      return created;
+    },
+  );
+}
+
+describe('pinned strategy cursor lifecycle', () => {
+  it.each([65])(
+    'publishes a %i-row mostly retained candidate with bounded registered owners',
+    async (size) => {
+      expect(await longCandidate(size)).toBe(size - 10);
+    },
+    120_000,
+  );
+  it.each([65])(
+    'closes and preserves %i rows after producer failure',
+    async (size) => {
+      expect(await producerFailure(size)).toBe(size);
+    },
+    120_000,
+  );
+
+  it('keeps queued caller membership outside the pinned compression and flushes it afterwards', async () => {
+    await withRollbackFixture(async (history, recorder) => {
+      const handler = truncationHandler(history);
+      await history.addBatch(
+        Array.from({ length: 512 }, (_, index) => truncationRow(index, 64)),
+      );
+      await history.waitForTokenUpdates();
+      await recorder.flush();
+      let append = true;
+      history.setTokenizerFactory(
+        exactTokenizer(() => {
+          if (!append) return;
+          append = false;
+          history.add(truncationRow(512, 64));
+        }),
+      );
+      await handler.performCompression('membership');
+      expect((await collectRows(history)).map(rowIndex)).toStrictEqual(
+        Array.from({ length: 30 }, (_, index) => 483 + index),
+      );
+    });
+  });
+});

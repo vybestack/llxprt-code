@@ -19,6 +19,7 @@ import {
   ModelPromptEstimatorRegistry,
 } from '../tokenizers/ModelPromptEstimatorRegistry.js';
 import { OpenAITokenizer } from '../tokenizers/OpenAITokenizer.js';
+import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
 import {
   CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS,
   createClaudeRuntimeTokenizer,
@@ -32,6 +33,8 @@ import {
   OFFICIAL_PROMPT_ESTIMATOR_REGISTRATIONS,
   createOfficialRuntimeTokenizer,
 } from '../tokenizers/official/index.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { prepareNeutralTokenCounter } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 
 class RuntimeTokenizerAdapter implements RuntimeTokenizer {
   constructor(
@@ -111,8 +114,9 @@ export function createRuntimeTokenizerFactory(
     ...CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS,
   ]);
 
-  return {
+  const registryFactory: RuntimeTokenizerFactory = {
     async prepareTokenizer(providerName, model): Promise<void> {
+      prepareNeutralTokenCounter();
       const resolvedModel = model ?? providerName;
       if (isSanctionedOpenAIO200kModel(resolvedModel)) {
         await prepareGpt56RuntimeTokenizer(
@@ -173,4 +177,7 @@ export function createRuntimeTokenizerFactory(
       return undefined;
     },
   };
+  // Sends project a sealed disk owner rather than a context-sized string, so
+  // the production factory itself must estimate disk sources for every family.
+  return withGpt56DiskSources(registryFactory, getScratchRoot());
 }

@@ -26,20 +26,21 @@
  * Property-based tests use fast-check (≥30% of total tests).
  */
 
-import { describe, expect, beforeEach, afterEach, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as os from 'node:os';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import * as path from 'node:path';
+import { type IContent } from '../services/history/IContent.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { journalSeams } from './__tests__/support/recordedJournals.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import {
-  listSessions,
   deleteSession,
   deleteSessionById,
+  listSessions,
 } from './sessionManagement.js';
 import { type SessionRecordingServiceConfig } from './types.js';
-import { type IContent } from '../services/history/IContent.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -91,8 +92,11 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = new SessionRecordingService(config);
-  svc.recordContent(makeContent('hello'));
+  const svc = JournalRecordingService.create({
+    ...config,
+    journal: journalSeams(),
+  });
+  await (await svc.session()).append([makeContent('hello')]);
   await svc.flush();
   const filePath = svc.getFilePath()!;
   await svc.dispose();
@@ -458,10 +462,12 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
 
     it('lists live checkpoint blockers instead of deleting their source', async () => {
       const sessionId = 'checkpoint-source-session';
-      const recording = new SessionRecordingService(
+      const recording = JournalRecordingService.create(
         makeConfig(chatsDir, { sessionId }),
       );
-      recording.recordContent(makeContent('checkpointed history'));
+      await (
+        await recording.session()
+      ).append([makeContent('checkpointed history')]);
       await recording.flush();
       const first = await recording.createCheckpoint('before-refactor');
       const second = await recording.createCheckpoint('before-release');
@@ -619,16 +625,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
     it('fails closed when the session file is corrupt', async () => {
       const sessionId = 'corrupt-blocker-session';
       const { filePath } = await createTestSession(chatsDir, { sessionId });
-      const lines = (await fs.readFile(filePath, 'utf-8')).trim().split('\n');
-      const header = JSON.parse(lines[0]) as {
-        payload: { provider: unknown };
-      };
-      header.payload.provider = 42;
-      await fs.writeFile(
-        filePath,
-        `${JSON.stringify(header)}\n${lines.slice(1).join('\n')}\n`,
-        'utf-8',
-      );
+      await fs.writeFile(filePath, Buffer.alloc(64));
 
       const result = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
 

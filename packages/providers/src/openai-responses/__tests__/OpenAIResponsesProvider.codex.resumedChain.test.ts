@@ -1,4 +1,7 @@
-import { captureResponsesTestRequest } from '../responses-request.test-helpers.js';
+import {
+  captureResponsesTestRequest,
+  executeResponsesTestRequest,
+} from '../responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -35,7 +38,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { replaySession } from '@vybestack/llxprt-code-core';
+import { resumeSession } from '@vybestack/llxprt-code-core';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   SocketHarness,
@@ -44,7 +48,6 @@ import {
   userTextsOf,
 } from './openAIResponsesWebSocketTransport.test-helpers.js';
 import { createCodexResponsesWebSocketTransport } from '../openAIResponsesWebSocketTransport.js';
-import { executeOpenAIResponsesRequest } from '../openAIResponsesExecutor.js';
 import {
   CODEX_BASE_URL,
   buildDeps,
@@ -87,16 +90,6 @@ function assistantTextsOf(input: unknown): string[] {
   return texts;
 }
 
-function recordLine(seq: number, type: string, payload: unknown): string {
-  return JSON.stringify({
-    v: 1,
-    seq,
-    ts: '2026-08-21T00:00:00.000Z',
-    type,
-    payload,
-  });
-}
-
 function sentRequestOf(serialized: string): Record<string, unknown> {
   const parsed: unknown = JSON.parse(serialized);
   if (typeof parsed !== 'object' || parsed === null) {
@@ -123,49 +116,52 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
    * replayed marker survive and this test sends the dead parent.
    */
   it('sends no previous_response_id for a history replayed from a session recording', async () => {
-    const filePath = path.join(tempDir, 'session.jsonl');
-    await fs.writeFile(
-      filePath,
-      [
-        recordLine(1, 'session_start', {
-          sessionId: 'resumed-session-0001',
-          projectHash: PROJECT_HASH,
-          workspaceDirs: [tempDir],
-          provider: 'openai-responses',
-          model: 'gpt-5.6-sol',
-          startTime: '2026-08-21T00:00:00.000Z',
-        }),
-        recordLine(2, 'content', {
-          content: {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'q1' }],
+    const recording = JournalRecordingService.create({
+      sessionId: 'resumed-session-0001',
+      projectHash: PROJECT_HASH,
+      chatsDir: tempDir,
+      workspaceDirs: [tempDir],
+      provider: 'openai-responses',
+      model: 'gpt-5.6-sol',
+    });
+    try {
+      await (
+        await recording.session()
+      ).append([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'a1' }],
+          metadata: {
+            id: 'resp_from_previous_process',
+            responsesStored: true,
+            providerBaseURL: CODEX_BASE_URL,
           },
-        }),
-        recordLine(3, 'content', {
-          content: {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'a1' }],
-            metadata: {
-              id: 'resp_from_previous_process',
-              responsesStored: true,
-              providerBaseURL: CODEX_BASE_URL,
-            },
-          },
-        }),
-        recordLine(4, 'content', {
-          content: {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'q2' }],
-          },
-        }),
-      ].join('\n') + '\n',
-      'utf-8',
-    );
-
-    const replayed = await replaySession(filePath, PROJECT_HASH);
-    expect(replayed.ok).toBe(true);
-    if (!replayed.ok) return;
-    expect(replayed.history).toHaveLength(3);
+        },
+        { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
+      ]);
+      await recording.flush();
+    } finally {
+      await recording.dispose();
+    }
+    const resumed = await resumeSession({
+      continueRef: 'resumed-session-0001',
+      projectHash: PROJECT_HASH,
+      chatsDir: tempDir,
+      currentProvider: 'openai-responses',
+      currentModel: 'gpt-5.6-sol',
+      workspaceDirs: [tempDir],
+    });
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) throw new Error(resumed.error);
+    const restored: IContent[] = [];
+    try {
+      for await (const row of resumed.boot.streamRows()) restored.push(row);
+    } finally {
+      await resumed.boot.close();
+      await resumed.recording.dispose();
+    }
+    expect(restored).toHaveLength(3);
 
     const harness = new SocketHarness([completingScript('ok')]);
     const transport = createCodexResponsesWebSocketTransport({
@@ -173,9 +169,9 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
     });
     try {
       await drainHarness(
-        executeOpenAIResponsesRequest(
+        executeResponsesTestRequest(
           captureResponsesTestRequest(
-            buildOptions(replayed.history),
+            buildOptions(restored),
             buildDeps({ getWebSocketTransport: () => transport }),
           ),
           buildDeps({ getWebSocketTransport: () => transport }),
@@ -216,7 +212,7 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
     });
     try {
       await drainHarness(
-        executeOpenAIResponsesRequest(
+        executeResponsesTestRequest(
           captureResponsesTestRequest(
             buildOptions(contents),
             buildDeps({ getWebSocketTransport: () => transport }),
@@ -257,7 +253,7 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
     });
     try {
       const resumedMessages = await drainHarness(
-        executeOpenAIResponsesRequest(
+        executeResponsesTestRequest(
           captureResponsesTestRequest(
             buildOptions(resumedContents),
             buildDeps({ getWebSocketTransport: () => transport }),
@@ -299,7 +295,7 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
       ];
 
       await drainHarness(
-        executeOpenAIResponsesRequest(
+        executeResponsesTestRequest(
           captureResponsesTestRequest(
             buildOptions(turn2Contents),
             buildDeps({ getWebSocketTransport: () => transport }),

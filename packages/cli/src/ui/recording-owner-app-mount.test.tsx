@@ -1,3 +1,5 @@
+import { appendJournalUiItem } from './hooks/command-journal-output.js';
+import { readJournalItems } from './stores/turn/read-journal-items.js';
 import { InteractiveApplication } from '../session/interactiveApplication.js';
 import { runtimeAppFixture } from '../__tests__/runtime-context-fixture.js';
 import { useFakeResponsesReplay } from '../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
@@ -5,7 +7,7 @@ import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/o
 import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
 import { openBridgeRoot } from '../__tests__/runtime-owner-bridge-route-b-root-fixture.js';
 import { createSessionModelCommand } from '../runtime/session-model-command.js';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { coreEvents } from '@vybestack/llxprt-code-core';
@@ -107,6 +109,13 @@ describe('interactive Agent owner AppWrapper', () => {
       credentials().authority,
       closers,
     );
+    await agent.setHistory([
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Resumed capability history' }],
+      },
+    ]);
+    await agent.session.setRecording({ enabled: true });
     const publishedTokens: number[] = [];
     const stopTokens = agent.session.subscribeHistoryTokens((count) =>
       publishedTokens.push(count),
@@ -148,7 +157,16 @@ describe('interactive Agent owner AppWrapper', () => {
                         registerCredentials={() =>
                           createUnconfiguredCredentialRegistry()
                         }
-                        historyReads={createUnconfiguredHistoryReaders()}
+                        historyReads={{
+                          ...createUnconfiguredHistoryReaders(),
+                          writeOutput: async (item) => {
+                            await appendJournalUiItem(
+                              agent.session,
+                              agent.session,
+                              item,
+                            );
+                          },
+                        }}
                         {...buildAppContainerPortsForTest(
                           config,
                           agent,
@@ -167,17 +185,6 @@ describe('interactive Agent owner AppWrapper', () => {
                         version="test-capabilities"
                         recordingOwner="agent"
                         suppressStartupWelcome
-                        resumedHistory={[
-                          {
-                            speaker: 'human',
-                            blocks: [
-                              {
-                                type: 'text',
-                                text: 'Resumed capability history',
-                              },
-                            ],
-                          },
-                        ]}
                         appState={initialAppState}
                         appDispatch={() => {}}
                       />
@@ -245,7 +252,23 @@ describe('interactive Agent owner AppWrapper', () => {
             settingsOwner,
           ),
           addHistory: agent.addHistory.bind(agent),
-          getHistory: agent.getHistory.bind(agent),
+          readJournal: () => ({
+            appendDisplay: agent.session.appendDisplay.bind(agent.session),
+            length: () => agent.session.getJournalLength(),
+          }),
+          subscribeContextRange: agent.session.subscribeContextRange.bind(
+            agent.session,
+          ),
+          openDumpSnapshot: agent.session.openDumpSnapshot.bind(agent.session),
+          replaceHistoryFromSource: agent.session.replaceHistoryFromSource.bind(
+            agent.session,
+          ),
+          resumeHistory: {
+            adoptResumeBoot: agent.session.adoptResumeBoot.bind(agent.session),
+            attachRecording: (integration) =>
+              agent.session.attachRecording(integration),
+          },
+          streamHistory: agent.streamHistory.bind(agent),
           stream: agent.stream.bind(agent),
           injectSteer: agent.injectSteer.bind(agent),
           getProviderContextLimit: agent.getProviderContextLimit.bind(agent),
@@ -307,7 +330,7 @@ describe('interactive Agent owner AppWrapper', () => {
     const recordingPath = agent.session.getRecording().path;
     if (!recordingPath) throw new Error('Missing app recording path');
     await waitFor(async () =>
-      expect(await readFile(recordingPath, 'utf8')).toContain(
+      expect(JSON.stringify(await readJournalItems(agent))).toContain(
         'captured App bootstrap feedback',
       ),
     );

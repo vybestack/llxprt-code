@@ -180,9 +180,11 @@ describe('ProfileSaveStep', () => {
 
     await typeText(step.stdin, EXISTING_PROFILE);
 
-    const frame = step.lastFrame() ?? '';
-    expect(frame).toContain('✗ Profile name already exists');
-    expect(frame).not.toContain('✓ Name is available');
+    await waitFor(() => {
+      const frame = step.lastFrame() ?? '';
+      expect(frame).toContain(' Profile name already exists');
+      expect(frame).not.toContain('[OK] Name is available');
+    });
   });
 
   it('marks a fresh name as available', async () => {

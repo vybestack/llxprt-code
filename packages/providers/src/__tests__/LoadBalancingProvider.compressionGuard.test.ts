@@ -1,5 +1,6 @@
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
-const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -18,16 +19,22 @@ import {
   LoadBalancingProvider,
   type ResolvedSubProfile,
 } from '../LoadBalancingProvider.js';
-import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
+import {
+  collectContents,
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 
 interface GuardInfo {
   estimatedTokens: number;
   contextLimit: number;
 }
+
+import { trackedRequestRows } from './requestRowsTestSupport.js';
 
 function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -105,8 +112,8 @@ async function consumeIterator(
   const results: IContent[] = [];
   for await (const chunk of provider.generateChatCompletion({
     invocation: makeLoadBalancerInvocation(),
-    contents,
-  } as GenerateChatOptions)) {
+    contents: replayableContents(contents),
+  })) {
     results.push(chunk);
   }
   return results;
@@ -129,7 +136,7 @@ describe('LoadBalancingProvider - compression guard facts (issue #3499)', () => 
       config,
       undefined,
       undefined,
-      fixtureOwnersBorrowedSettings(config, settingsService),
+      borrowedSettings(config, settingsService),
     );
   });
 
@@ -143,11 +150,13 @@ describe('LoadBalancingProvider - compression guard facts (issue #3499)', () => 
       createMockProvider({
         name: 'openai',
         async *generateChatCompletion(
-          optionsOrContent: GenerateChatOptions | IContent[],
+          optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
         ): AsyncGenerator<IContent> {
-          const contents = Array.isArray(optionsOrContent)
-            ? optionsOrContent
-            : optionsOrContent.contents;
+          const contents = await collectContents(
+            isAsyncIterableContents(optionsOrStream)
+              ? optionsOrStream
+              : optionsOrStream.contents,
+          );
           sentToOpenAi.push(structuredClone(contents));
           yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
         },
@@ -173,12 +182,10 @@ describe('LoadBalancingProvider - compression guard facts (issue #3499)', () => 
 
     const requestText = 'this is a very long message that exceeds the limit';
     let capturedGuard: GuardInfo | undefined;
-    const compressionCallback = vi.fn(
-      async (_contents: IContent[], guard?: GuardInfo): Promise<IContent[]> => {
-        capturedGuard = guard;
-        return [createTextContent('ok')];
-      },
-    );
+    const compressionCallback = vi.fn(async (guard?: GuardInfo) => {
+      capturedGuard = guard;
+      return trackedRequestRows([createTextContent('ok')]);
+    });
     provider.setCompressionCallback(compressionCallback);
 
     const result = await consumeIterator(provider, [
@@ -228,9 +235,9 @@ describe('LoadBalancingProvider - compression guard facts (issue #3499)', () => 
       providerManager,
     );
 
-    const compressionCallback = vi.fn(async (_contents: IContent[]) => [
-      createTextContent('ok'),
-    ]);
+    const compressionCallback = vi.fn(async () =>
+      trackedRequestRows([createTextContent('ok')]),
+    );
     provider.setCompressionCallback(compressionCallback);
 
     const result = await consumeIterator(provider, [

@@ -47,12 +47,13 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { convertToolsToOpenAIVercel } from './schemaConverter.js';
 import { type IModel } from '../IModel.js';
 import { type IProvider } from '../IProvider.js';
-import { convertToVercelMessages } from './messageConversion.js';
-import { getToolIdStrategy } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { isAbortSignal } from '../utils/abortSignal.js';
+import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
+import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
+import { openTransportRowsMedia, transportMessages } from './transportRows.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
-import { filterThinkingForContext } from '../reasoning/reasoningUtils.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 
 import {
@@ -65,7 +66,6 @@ import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacemen
 import {
   finishMediaRequest,
   type MediaRequestOutcome,
-  resolveRequestMedia,
   captureRequestMediaInput,
 } from '../utils/request-media-resolution.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
@@ -112,6 +112,23 @@ function resolveAbortSignal(
   return isAbortSignal(signal) ? signal : undefined;
 }
 
+/**
+ * Issue #854 P05b4: the wire body is owned by a request-scoped lease and the
+ * media request's finish releases it, so the message arrays are spliced once
+ * the transport call settles (any outcome) instead of outliving it.
+ */
+function registerVercelRequestBodyLease(
+  mediaRequest: ResolvedMediaRequest,
+  materializedMessages: ModelMessage[],
+): void {
+  const requestBodyLease = acquireRequestScopedBody('openai-vercel', {
+    messages: materializedMessages,
+  });
+  mediaRequest.registerCleanup(() => {
+    void requestBodyLease.release();
+  });
+}
+
 export class OpenAIVercelProvider extends BaseProvider implements IProvider {
   private getLogger(): DebugLogger {
     return new DebugLogger('llxprt:provider:openaivercel');
@@ -149,51 +166,31 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     return false;
   }
 
-  private convertToModelMessages(
-    contents: IContent[],
-    options?: { includeReasoningInContext?: boolean; resolvedModel?: string },
-  ): ModelMessage[] {
-    const settings = readInvocationPolicyRecord(
-      this.captureOwnerPolicy()[this.name],
-    );
-    const modelName =
-      options?.resolvedModel ?? (this.getModel() || this.getDefaultModel());
-    const toolFormat = resolveToolFormat(
-      modelName,
-      this.name,
-      settings.toolFormat,
-      this.getLogger(),
-    );
-
-    const toolIdMapper =
-      toolFormat === 'kimi' || toolFormat === 'mistral'
-        ? getToolIdStrategy(toolFormat).createMapper(contents)
-        : undefined;
-
-    return convertToVercelMessages(contents, toolIdMapper, options);
+  /** The transport reads `requestRows` itself (issue #854 WP10). */
+  protected override ownsRequestRowsTransport(): boolean {
+    return true;
   }
 
   private async resolveMediaPreparation(
     options: NormalizedGenerateChatOptions,
   ): Promise<VercelMediaPreparation> {
     requireAssembledSystemInstruction(options.systemInstruction);
-    const mediaRequest = await resolveRequestMedia(
-      captureRequestMediaInput(
-        options.metadata['logicalRequestId'],
-        options.invocation.runtimeId,
-        this.requestMediaBudgetBytes,
-        this.requestMediaResolver,
-      ),
-      options.contents,
-      options.invocation.signal,
+    const media = captureRequestMediaInput(
+      options.metadata['logicalRequestId'],
+      options.invocation.runtimeId,
+      this.requestMediaBudgetBytes,
+      this.requestMediaResolver,
     );
+    const requestRows = options.requestRows ?? {
+      ...inMemoryRequestSelection(options.contents),
+      callerOwned: true,
+    };
+    const effectiveOptions = { ...options, contents: [], requestRows };
+    const mediaRequest = await openTransportRowsMedia(effectiveOptions, media);
     try {
       return {
         mediaRequest,
-        effectiveOptions: {
-          ...options,
-          contents: mediaRequest.withContents((contents) => contents),
-        },
+        effectiveOptions,
       };
     } catch (error) {
       return finishMediaRequest(mediaRequest, { status: 'failed', error });
@@ -213,19 +210,28 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     };
   }
 
-  private convertRequestContents(
+  private streamedMessages(
     options: NormalizedGenerateChatOptions,
-    modelId: string,
+    mediaRequest: ResolvedMediaRequest,
     reasoning: ReturnType<typeof resolveReasoningSettings>,
-  ): ModelMessage[] {
-    const stripPolicy = reasoning.enabled ? reasoning.stripFromContext : 'all';
-    return this.convertToModelMessages(
-      filterThinkingForContext(options.contents, stripPolicy),
-      {
-        includeReasoningInContext: reasoning.includeInContext,
-        resolvedModel: modelId,
-      },
+    logger: DebugLogger,
+  ): (() => AsyncIterable<ModelMessage>) | undefined {
+    if (!readsRequestRowsAtTransport(options)) return undefined;
+    const media = captureRequestMediaInput(
+      options.metadata['logicalRequestId'],
+      options.invocation.runtimeId,
+      this.requestMediaBudgetBytes,
+      this.requestMediaResolver,
     );
+    const format = resolveToolFormat(
+      options.resolved.model,
+      this.name,
+      readInvocationPolicyRecord(this.captureOwnerPolicy()[this.name])
+        .toolFormat,
+      logger,
+    );
+    return () =>
+      transportMessages(options, media, mediaRequest, reasoning, format);
   }
 
   /**
@@ -240,6 +246,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
     const { mediaRequest, effectiveOptions } =
       await this.resolveMediaPreparation(options);
+    registerVercelRequestBodyLease(mediaRequest, materializedMessages);
     let outcome: MediaRequestOutcome = { status: 'succeeded' };
     try {
       const { tools, metadata } = effectiveOptions;
@@ -249,9 +256,8 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       const rs = resolveReasoningSettings(effectiveOptions);
       const streamingEnabled = resolveStreamingEnabled(effectiveOptions);
       const systemPrompt = resolveSystemPrompt(effectiveOptions);
-      materializedMessages.push(
-        ...this.convertRequestContents(effectiveOptions, modelId, rs),
-      );
+      // The SDK validates nonempty messages before fetch replaces this sentinel.
+      materializedMessages.push({ role: 'user', content: '' });
 
       const formattedTools = convertToolsToOpenAIVercel(tools);
       logChatPayload(logger, materializedMessages, formattedTools ?? undefined);
@@ -270,6 +276,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         streamingEnabled,
         captureBuffer,
         logger,
+        this.streamedMessages(effectiveOptions, mediaRequest, rs, logger),
       );
 
       logSendRequest(
@@ -311,7 +318,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     } catch (error) {
       outcome = { status: 'failed', error };
     } finally {
-      materializedMessages.splice(0);
       await finishMediaRequest(mediaRequest, outcome);
     }
   }

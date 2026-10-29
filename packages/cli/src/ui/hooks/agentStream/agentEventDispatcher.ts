@@ -14,11 +14,9 @@
  */
 
 import type {
-  ServerContentEvent as ContentEvent,
   ServerErrorEvent as ErrorEvent,
   ServerChatCompressedEvent,
   ThoughtSummary,
-  ThinkingBlock,
   ModelInfo,
   CanonicalFinishReason,
 } from '@vybestack/llxprt-code-core';
@@ -30,50 +28,22 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 import type React from 'react';
 import type { HistoryItemWithoutId } from '../../types.js';
-import type { StreamProcessingStatus } from './types.js';
-import { applyThoughtToState } from './thoughtState.js';
 import { firstNonEmptyString } from '../../../utils/coalesce.js';
 import {
   buildRefusalNoticeMessage,
   buildFinishReasonMessage,
 } from './streamUtils.js';
-import type { ObservationCallbacks } from '../../../observation/jspWiring.js';
-import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 
 export interface AgentEventDeps {
-  observeAssistantMessageCommitted: ObservationCallbacks['observeAssistantMessageCommitted'];
   setLastPromptTokenCount: (count: number) => void;
   addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
-  sanitizeContent: (text: string) => {
-    text: string;
-    blocked: boolean;
-    feedback?: string;
-  };
   flushPendingHistoryItem: (timestamp: number) => void;
-  /**
-   * The per-turn pending response buffer. The dispatcher ends the committed
-   * segment ledger when an assistant message is flushed (finalized) so a later
-   * turn's retry cannot retract an earlier completed message's prefixes
-   * (issue #3048 review finding).
-   */
-  pendingResponse: PendingResponseBuffer;
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
-  thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
-  turnCancelledRef: React.MutableRefObject<boolean>;
   loopDetectedRef: React.MutableRefObject<boolean>;
   lastModelInfoRef: React.MutableRefObject<string | null>;
   lastModelIdentityRef: React.MutableRefObject<string | null>;
-  setPendingHistoryItem: React.Dispatch<
-    React.SetStateAction<HistoryItemWithoutId | null>
-  >;
   setLastAgentActivityTime: React.Dispatch<React.SetStateAction<number>>;
   setThought: React.Dispatch<React.SetStateAction<ThoughtSummary | null>>;
-  getContentPrefixIdentity: () => string | null;
-  handleContentEvent: (
-    eventValue: ContentEvent['value'],
-    currentBuffer: string,
-    timestamp: number,
-  ) => string;
   handleUserCancelledEvent: (timestamp: number) => void;
   handleErrorEvent: (
     eventValue: ErrorEvent['value'],
@@ -100,53 +70,12 @@ export interface AgentEventDeps {
   handleStreamAttemptDiscarded: () => void;
 }
 
-type DispatchResult = {
-  agentMessageBuffer: string;
-  processingResult?: StreamProcessingStatus;
-};
-
-/**
- * Events that should reset the accumulated content buffer after dispatch.
- */
-const BUFFER_RESET_AGENT_EVENTS = new Set<AgentEvent['type']>([
-  'done',
-  'error',
-  'idle-timeout',
-  'loop-detected',
-  'context-warning',
-  'hook-blocked',
-]);
-
-function shouldResetBuffer(eventType: AgentEvent['type']): boolean {
-  return BUFFER_RESET_AGENT_EVENTS.has(eventType);
-}
-
-function resetBufferAfterTerminal(
-  eventType: AgentEvent['type'],
-  result: DispatchResult,
-): DispatchResult {
-  if (!shouldResetBuffer(eventType)) {
-    return result;
-  }
-  return { ...result, agentMessageBuffer: '' };
-}
-
 function flushPendingAiContent(
   deps: AgentEventDeps,
   userMessageTimestamp: number,
 ): void {
-  const pending = deps.pendingHistoryItemRef.current;
-  if (pending?.type === 'gemini' || pending?.type === 'gemini_content') {
-    const sanitized = deps.sanitizeContent(pending.text);
-    if (!sanitized.blocked) {
-      deps.observeAssistantMessageCommitted(sanitized.text, Date.now());
-    }
+  if (deps.pendingHistoryItemRef.current !== null)
     deps.flushPendingHistoryItem(userMessageTimestamp);
-    deps.setPendingHistoryItem(null);
-    // The assistant message is now permanent history: end the committed
-    // segment ledger so a later turn's retry cannot retract its prefixes.
-    deps.pendingResponse.endCommittedSegments();
-  }
 }
 
 function flushPendingAiContentForContextClear(
@@ -154,7 +83,6 @@ function flushPendingAiContentForContextClear(
   userMessageTimestamp: number,
 ): void {
   flushPendingAiContent(deps, userMessageTimestamp);
-  deps.thinkingBlocksRef.current = [];
   deps.setThought(null);
 }
 
@@ -162,9 +90,8 @@ function dispatchStopInfo(
   info: AgentStopInfo,
   prefix: string,
   deps: AgentEventDeps,
-  agentMessageBuffer: string,
   userMessageTimestamp: number,
-): DispatchResult {
+): void {
   if (info.contextCleared === true)
     flushPendingAiContentForContextClear(deps, userMessageTimestamp);
 
@@ -186,9 +113,9 @@ function dispatchStopInfo(
       },
       userMessageTimestamp,
     );
-    return { agentMessageBuffer: '' };
+    return;
   }
-  return { agentMessageBuffer };
+  return;
 }
 
 function computeModelIdentity(info: ModelInfo): string {
@@ -255,22 +182,22 @@ function dispatchDoneEvent(
   event: Extract<AgentEvent, { type: 'done' }>,
   deps: AgentEventDeps,
   userMessageTimestamp: number,
-): DispatchResult {
+): void {
   switch (event.reason) {
     case 'stop':
     case 'refusal': {
       flushPendingAiContent(deps, userMessageTimestamp);
       const message = computeFinishNotice(event.finished);
       deps.handleFinishedNotice(message ?? null, userMessageTimestamp);
-      return { agentMessageBuffer: '' };
+      return;
     }
     case 'aborted': {
       deps.handleUserCancelledEvent(userMessageTimestamp);
-      return { agentMessageBuffer: '' };
+      return;
     }
     case 'max-turns': {
       deps.handleMaxSessionTurnsEvent();
-      return { agentMessageBuffer: '' };
+      return;
     }
     case 'hook-stopped': {
       if (event.stop) {
@@ -278,23 +205,22 @@ function dispatchDoneEvent(
           event.stop,
           'Execution stopped by hook: ',
           deps,
-          '',
           userMessageTimestamp,
         );
       }
-      return { agentMessageBuffer: '' };
+      return;
     }
     case 'loop-detected': {
       deps.loopDetectedRef.current = true;
-      return { agentMessageBuffer: '' };
+      return;
     }
     case 'context-overflow':
     case 'error':
       // No additional item — the preceding context-warning/error event
       // already rendered the user-visible message.
-      return { agentMessageBuffer: '' };
+      return;
     default:
-      return { agentMessageBuffer: '' };
+      return;
   }
 }
 
@@ -304,69 +230,36 @@ function dispatchDoneEvent(
 export function dispatchAgentEvent(
   event: AgentEvent,
   deps: AgentEventDeps,
-  agentMessageBuffer: string,
   userMessageTimestamp: number,
-): DispatchResult {
+): void {
   switch (event.type) {
     case 'text':
-      return dispatchTextEvent(
-        event,
-        deps,
-        agentMessageBuffer,
-        userMessageTimestamp,
-      );
+      return dispatchTextEvent(deps);
     case 'thinking':
-      return dispatchThinkingEvent(event, deps, agentMessageBuffer);
+      return dispatchThinkingEvent(deps);
     case 'usage':
-      return dispatchUsageEvent(event, deps, agentMessageBuffer);
+      return dispatchUsageEvent(event, deps);
     case 'model-info':
     case 'compression':
     case 'context-warning':
     case 'citation':
-      return dispatchInformationalEvent(
-        event,
-        deps,
-        agentMessageBuffer,
-        userMessageTimestamp,
-      );
+      return dispatchInformationalEvent(event, deps, userMessageTimestamp);
     case 'loop-detected':
       deps.loopDetectedRef.current = true;
-      return resetBufferAfterTerminal(event.type, { agentMessageBuffer });
+      return;
     case 'idle-timeout':
-      return dispatchIdleTimeoutEvent(
-        event,
-        deps,
-        agentMessageBuffer,
-        userMessageTimestamp,
-      );
+      return dispatchIdleTimeoutEvent(event, deps, userMessageTimestamp);
     case 'hook-blocked':
-      return dispatchHookBlockedEvent(
-        event,
-        deps,
-        agentMessageBuffer,
-        userMessageTimestamp,
-      );
+      return dispatchHookBlockedEvent(event, deps, userMessageTimestamp);
     case 'error':
-      return dispatchErrorEvent(
-        event,
-        deps,
-        agentMessageBuffer,
-        userMessageTimestamp,
-      );
+      return dispatchErrorEvent(event, deps, userMessageTimestamp);
     case 'done':
-      return resetBufferAfterTerminal(
-        event.type,
-        dispatchDoneEvent(event, deps, userMessageTimestamp),
-      );
+      return dispatchDoneEvent(event, deps, userMessageTimestamp);
     case 'retry':
       deps.handleStreamAttemptDiscarded();
-      return { agentMessageBuffer: '' };
+      return;
     case 'attempt-boundary':
-      return dispatchAttemptBoundary(
-        deps,
-        agentMessageBuffer,
-        userMessageTimestamp,
-      );
+      return dispatchAttemptBoundary(deps, userMessageTimestamp);
     case 'tool-call':
     case 'tool-result':
     case 'tool-confirmation':
@@ -375,9 +268,9 @@ export function dispatchAgentEvent(
     case 'notice':
       // No state change — display flows through displayCallbacks or is
       // handled by the loop internally.
-      return { agentMessageBuffer };
+      return;
     default:
-      return { agentMessageBuffer };
+      return;
   }
 }
 
@@ -392,15 +285,14 @@ export function dispatchAgentEvent(
  */
 function dispatchAttemptBoundary(
   deps: AgentEventDeps,
-  agentMessageBuffer: string,
   userMessageTimestamp: number,
-): DispatchResult {
+): void {
   const pending = deps.pendingHistoryItemRef.current;
   if (pending?.type !== 'gemini' && pending?.type !== 'gemini_content') {
-    return { agentMessageBuffer };
+    return;
   }
   flushPendingAiContent(deps, userMessageTimestamp);
-  return { agentMessageBuffer: '' };
+  return;
 }
 
 function dispatchInformationalEvent(
@@ -409,110 +301,78 @@ function dispatchInformationalEvent(
     { type: 'model-info' | 'compression' | 'context-warning' | 'citation' }
   >,
   deps: AgentEventDeps,
-  agentMessageBuffer: string,
   userMessageTimestamp: number,
-): DispatchResult {
+): void {
   if (event.type === 'model-info') {
     handleModelInfoEvent(deps, event.info, userMessageTimestamp);
-    return { agentMessageBuffer };
+    return;
   }
   if (event.type === 'compression') {
     deps.handleChatCompressionEvent(event.info, userMessageTimestamp);
-    return resetBufferAfterTerminal(event.type, { agentMessageBuffer });
+    return;
   }
   if (event.type === 'context-warning') {
     deps.handleContextWindowWillOverflowEvent(
       event.estimatedRequestTokenCount,
       event.remainingTokenCount,
     );
-    return resetBufferAfterTerminal(event.type, { agentMessageBuffer });
+    return;
   }
   deps.handleCitationEvent(event.citation, userMessageTimestamp);
-  return { agentMessageBuffer };
+  return;
 }
 
 function dispatchHookBlockedEvent(
   event: Extract<AgentEvent, { type: 'hook-blocked' }>,
   deps: AgentEventDeps,
-  agentMessageBuffer: string,
   userMessageTimestamp: number,
-): DispatchResult {
-  return resetBufferAfterTerminal(
-    event.type,
-    dispatchStopInfo(
-      event.info,
-      'Execution blocked by hook: ',
-      deps,
-      agentMessageBuffer,
-      userMessageTimestamp,
-    ),
+): void {
+  dispatchStopInfo(
+    event.info,
+    'Execution blocked by hook: ',
+    deps,
+    userMessageTimestamp,
   );
 }
 
-function dispatchTextEvent(
-  event: Extract<AgentEvent, { type: 'text' }>,
-  deps: AgentEventDeps,
-  agentMessageBuffer: string,
-  userMessageTimestamp: number,
-): DispatchResult {
+function dispatchTextEvent(deps: AgentEventDeps): void {
   deps.setLastAgentActivityTime(Date.now());
-  return {
-    agentMessageBuffer: deps.handleContentEvent(
-      event.text,
-      agentMessageBuffer,
-      userMessageTimestamp,
-    ),
-  };
+  return;
 }
 
-function dispatchThinkingEvent(
-  event: Extract<AgentEvent, { type: 'thinking' }>,
-  deps: AgentEventDeps,
-  agentMessageBuffer: string,
-): DispatchResult {
-  applyThoughtToState(
-    event.thought,
-    deps.sanitizeContent,
-    deps.getContentPrefixIdentity,
-    deps.thinkingBlocksRef,
-    deps.setLastAgentActivityTime,
-    deps.setThought,
-    deps.setPendingHistoryItem,
-  );
-  return { agentMessageBuffer };
+function dispatchThinkingEvent(deps: AgentEventDeps): void {
+  deps.setLastAgentActivityTime(Date.now());
+  return;
 }
 
 function dispatchUsageEvent(
   event: Extract<AgentEvent, { type: 'usage' }>,
   deps: AgentEventDeps,
-  agentMessageBuffer: string,
-): DispatchResult {
+): void {
   if (event.usage.promptTokenCount !== undefined) {
     deps.setLastPromptTokenCount(event.usage.promptTokenCount);
   }
-  return { agentMessageBuffer };
+  return;
 }
 
 function dispatchIdleTimeoutEvent(
   event: Extract<AgentEvent, { type: 'idle-timeout' }>,
   deps: AgentEventDeps,
-  agentMessageBuffer: string,
   userMessageTimestamp: number,
-): DispatchResult {
+): void {
   const errorValue: ErrorEvent['value'] = { error: event.error };
   deps.handleErrorEvent(errorValue, userMessageTimestamp, {
     clearQueue: false,
   });
-  return resetBufferAfterTerminal(event.type, { agentMessageBuffer });
+  return;
 }
 
 function dispatchErrorEvent(
   event: Extract<AgentEvent, { type: 'error' }>,
   deps: AgentEventDeps,
-  agentMessageBuffer: string,
   userMessageTimestamp: number,
-): DispatchResult {
+): void {
   const errorValue: ErrorEvent['value'] = { error: event.error };
   deps.handleErrorEvent(errorValue, userMessageTimestamp);
-  return resetBufferAfterTerminal(event.type, { agentMessageBuffer });
+  return;
 }

@@ -1,5 +1,7 @@
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
-import { mkdtemp, rm, readdir, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, readdir } from 'node:fs/promises';
+import { nativeRecordingContents } from './__tests__/native-recording-contents.js';
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -71,13 +73,19 @@ describe('Zed ACP provider ownership', () => {
       expect(second.updates.length).toBeGreaterThan(1);
       const firstJournals = await readdir(first.route.config.projectChatsDir);
       const secondJournals = await readdir(second.route.config.projectChatsDir);
-      expect(firstJournals.some((name) => name.endsWith('.jsonl'))).toBe(true);
-      expect(secondJournals.some((name) => name.endsWith('.jsonl'))).toBe(true);
+      expect(
+        firstJournals.some((name) => name.endsWith(SESSION_FILE_EXTENSION)),
+      ).toBe(true);
+      expect(
+        secondJournals.some((name) => name.endsWith(SESSION_FILE_EXTENSION)),
+      ).toBe(true);
       const firstRecording = await Promise.all(
         firstJournals
-          .filter((name) => name.endsWith('.jsonl'))
+          .filter((name) => name.endsWith(SESSION_FILE_EXTENSION))
           .map((name) =>
-            readFile(join(first.route.config.projectChatsDir, name), 'utf8'),
+            nativeRecordingContents(
+              join(first.route.config.projectChatsDir, name),
+            ),
           ),
       );
       expect(firstRecording.join('\n')).toContain(sessionA.sessionId);
@@ -104,9 +112,11 @@ describe('Zed ACP provider ownership', () => {
       });
       const secondRecording = await Promise.all(
         secondJournals
-          .filter((name) => name.endsWith('.jsonl'))
+          .filter((name) => name.endsWith(SESSION_FILE_EXTENSION))
           .map((name) =>
-            readFile(join(second.route.config.projectChatsDir, name), 'utf8'),
+            nativeRecordingContents(
+              join(second.route.config.projectChatsDir, name),
+            ),
           ),
       );
       expect(secondRecording.join('\n')).toContain(sessionB.sessionId);

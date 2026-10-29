@@ -6,6 +6,8 @@
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 import { render } from 'ink-testing-library';
+import { createRef } from 'react';
+import type { DOMElement } from 'ink';
 import { describe, it, expect, vi } from 'bun:test';
 import { Text } from '../../../test-utils/real-ink.js';
 
@@ -215,11 +217,13 @@ function openStoreDialog(store: DialogStore, kind: DialogKind): void {
 interface RenderLayoutOptions {
   settings?: ReturnType<typeof createSettingsStub>;
   store?: DialogStore;
+  rootRef?: { current: DOMElement | null };
 }
 
 async function renderDefaultAppLayout({
   settings = createSettingsStub(),
   store = createDialogStore(),
+  rootRef = { current: null },
 }: RenderLayoutOptions = {}): Promise<ReturnType<typeof render>> {
   const config = createConfigStub() as never;
 
@@ -229,6 +233,7 @@ async function renderDefaultAppLayout({
   );
   const inner = (
     <DefaultAppLayout
+      subscribeContextRange={() => () => {}}
       readIdeMode={() => false}
       readIdeDiffingEnabled={() => false}
       subscribeIdeDiffing={() => () => {}}
@@ -249,7 +254,7 @@ async function renderDefaultAppLayout({
       version={'0.0.0-test'}
       nightly={false}
       mainControlsRef={{ current: null }}
-      rootUiRef={{ current: null }}
+      rootUiRef={rootRef}
       pendingHistoryItemRef={{ current: null }}
       contextFileNames={[]}
       updateInfo={null}
@@ -315,19 +320,32 @@ describe('DefaultAppLayout', () => {
   });
 
   it('renders standard and alternate buffer layout branches according to settings', async () => {
-    const alternateBuffer = await renderDefaultAppLayout();
-    const alternateBufferFrame = alternateBuffer.lastFrame();
+    const alternateRoot = createRef<DOMElement>();
+    const alternateBuffer = await renderDefaultAppLayout({
+      rootRef: alternateRoot,
+    });
+    if (alternateRoot.current === null)
+      throw new Error('Alternate layout did not mount');
+    const alternateSize = alternateRoot.current.yogaNode?.getComputedLayout();
+    if (alternateSize === undefined)
+      throw new Error('Alternate layout has no geometry');
     alternateBuffer.unmount();
 
+    const standardRoot = createRef<DOMElement>();
     const standardBuffer = await renderDefaultAppLayout({
       settings: createSettingsStub({ useAlternateBuffer: false }),
+      rootRef: standardRoot,
     });
-    const standardBufferFrame = standardBuffer.lastFrame();
+    if (standardRoot.current === null)
+      throw new Error('Standard layout did not mount');
+    const standardSize = standardRoot.current.yogaNode?.getComputedLayout();
+    if (standardSize === undefined)
+      throw new Error('Standard layout has no geometry');
     standardBuffer.unmount();
 
-    expect(alternateBufferFrame).toContain(ALTERNATE_BUFFER_SENTINEL);
-    expect(alternateBufferFrame).not.toContain(STANDARD_BUFFER_SENTINEL);
-    expect(standardBufferFrame).toContain(STANDARD_BUFFER_SENTINEL);
-    expect(standardBufferFrame).not.toContain(ALTERNATE_BUFFER_SENTINEL);
+    expect(alternateSize.width).toBe(120);
+    expect(alternateSize.height).toBe(40);
+    expect(standardSize.width).toBeLessThan(120);
+    expect(standardSize.height).toBeLessThan(40);
   });
 });

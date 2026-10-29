@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
+import { arrivalHistoryFixture } from './__tests__/support/arrival-history-fixture.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -16,6 +17,7 @@ import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.
 // Minimal mock of dependencies needed by StreamProcessor
 function createMockRuntimeContext() {
   return {
+    state: { model: 'test' },
     ephemerals: {
       reasoning: {
         includeInContext: () => false,
@@ -37,14 +39,7 @@ function createMockConversationManager() {
   };
 }
 
-function createMockHistoryService() {
-  return {
-    add: vi.fn(),
-    getAll: () => [],
-    generateTurnKey: () => `turn-${crypto.randomUUID()}`,
-    waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
-  };
-}
+const createMockHistoryService = arrivalHistoryFixture();
 
 function makeChunk(text: string): ModelStreamChunk {
   return toModelStreamChunk({
@@ -61,9 +56,9 @@ function makeFinishChunk(text: string): ModelStreamChunk {
   } as IContent);
 }
 
-describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', () => {
-  let processor: StreamProcessor;
+let processor: StreamProcessor;
 
+describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', () => {
   beforeEach(() => {
     // StreamProcessor only needs a few fields from its constructor deps.
     // We provide minimal stubs to avoid constructing the entire runtime.
@@ -89,7 +84,6 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
       '_finalizeStreamProcessing'
     ] = vi.fn().mockResolvedValue(undefined);
   });
-
   it('yields each chunk before the source stream ends', async () => {
     // Track the order of events: source yields vs consumer receives
     const timeline: string[] = [];
@@ -142,7 +136,6 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
 
     expect(firstConsumerIdx).toBeLessThan(secondSourceIdx);
   });
-
   it('yields chunks immediately even when the source stream stalls', async () => {
     const {
       result1,
@@ -203,7 +196,6 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
         yieldsChunksImmediatelyEvenWhenTheSourceStreamStallsObservation2,
       };
     };
-
   it('yields an empty-block chunk after hook restrictions filter every tool call', async () => {
     const neutralChunk = toModelStreamChunk({
       speaker: 'ai',
@@ -245,7 +237,6 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
     expect(yielded).toHaveLength(1);
     expect(yielded[0].content.blocks).toHaveLength(0);
   });
-
   it('yields the correct number of chunks matching the source', async () => {
     async function* threeChunks(): AsyncGenerator<ModelStreamChunk> {
       yield makeChunk('a');

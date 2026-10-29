@@ -404,7 +404,8 @@ export interface AgentRuntimeProviderAdapter {
  * Telemetry adapter interface supplied to runtime context.
  */
 export interface AgentRuntimeTelemetryAdapter {
-  logApiRequest(event: ApiRequestEvent): void;
+  /** The caller awaits the result, so an implementation may acknowledge asynchronously. */
+  logApiRequest(event: ApiRequestEvent): void | Promise<void>;
   logApiResponse(event: ApiResponseEvent): void;
   logApiError(event: ApiErrorEvent): void;
 }

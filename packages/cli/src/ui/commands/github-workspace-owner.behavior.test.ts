@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -32,12 +33,15 @@ describe('registered GitHub workspace owner', () => {
       );
     }
     const network = spyOn(globalThis, 'fetch').mockImplementation(
-      async (input) => {
-        const url = String(input);
-        if (url.endsWith('/releases/latest'))
-          return Response.json({ tag_name: 'fixture-release' });
-        return new Response('name: fixture\non: workflow_dispatch\n');
-      },
+      Object.assign(
+        async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.endsWith('/releases/latest'))
+            return Response.json({ tag_name: 'fixture-release' });
+          return new Response('name: fixture\non: workflow_dispatch\n');
+        },
+        { preconnect: () => {} },
+      ),
     );
     const previousDirectory = process.cwd();
     process.chdir(siblingRoot);
@@ -79,7 +83,9 @@ describe('registered GitHub workspace owner', () => {
       expect((await readdir(join(root, '.github', 'commands'))).length).toBe(4);
       expect(existsSync(join(siblingRoot, '.github'))).toBe(false);
       await owner.dispose();
-      expect(await sibling.getHistory()).toStrictEqual([]);
+      expect(await collectResumeRows(sibling.streamHistory())).toStrictEqual(
+        [],
+      );
     } finally {
       process.chdir(previousDirectory);
       network.mockRestore();

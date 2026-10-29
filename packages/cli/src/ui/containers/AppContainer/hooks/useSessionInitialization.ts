@@ -5,14 +5,13 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { IContent } from '@vybestack/llxprt-code-core';
-import type { HistoryItem } from '../../../types.js';
-import { iContentToHistoryItems } from '../../../utils/iContentToHistoryItems.js';
+import type { IContent, EmojiFilterMode } from '@vybestack/llxprt-code-core';
+import type { HistoryItemWithoutId } from '../../../types.js';
 
 /**
  * @hook useSessionInitialization
  * @description One-time session initialization with state machine
- * @inputs uiRuntime, addItem, loadHistory, resumedHistory
+ * @inputs uiRuntime, addItem, prependHistory, resumedBoot
  * @outputs SessionInitState
  * @sideEffects Session start hook, history seeding
  * @cleanup AbortController.abort() on change/unmount
@@ -38,12 +37,11 @@ export interface UseSessionInitializationParams {
     additionalContext?: string;
   }>;
   appendHookContext: (text: string) => Promise<void>;
-  readEmojiFilterMode: () => Parameters<typeof iContentToHistoryItems>[1];
+  readEmojiFilterMode: () => EmojiFilterMode;
   readLlxprtMdFileCount: () => number;
   readCoreMemoryFileCount: () => number;
-  addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp: number) => number;
-  loadHistory: (newHistory: HistoryItem[]) => void;
-  resumedHistory?: IContent[];
+  addItem: (item: HistoryItemWithoutId, baseTimestamp: number) => number;
+  resumedBoot?: { streamRows(): AsyncIterable<IContent> };
 }
 
 export interface UseSessionInitializationResult {
@@ -70,13 +68,11 @@ async function runSessionStartHook(
   }
 
   if (sessionStartOutput.systemMessage) {
-    addItem(
-      {
-        type: 'info',
-        text: sessionStartOutput.systemMessage,
-      },
-      Date.now(),
-    );
+    const item = {
+      type: 'info',
+      text: sessionStartOutput.systemMessage,
+    } satisfies HistoryItemWithoutId;
+    addItem(item, Date.now());
   }
 
   const additionalContext = sessionStartOutput.additionalContext;
@@ -92,42 +88,24 @@ async function runSessionStartHook(
 export function useSessionInitialization({
   triggerSessionStart,
   appendHookContext,
-  readEmojiFilterMode,
   readLlxprtMdFileCount,
   readCoreMemoryFileCount,
   addItem,
-  loadHistory,
-  resumedHistory,
 }: UseSessionInitializationParams): UseSessionInitializationResult {
   const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
   const [coreMemoryFileCount, setCoreMemoryFileCount] = useState<number>(0);
+  const [initializationError, setInitializationError] = useState<unknown>(null);
 
   // Guard refs for idempotency in StrictMode
   const hasTriggeredSessionStart = useRef(false);
-  const hasSeededResumedHistory = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  // Effect: Seed resumed history into history manager.
-  // The guard ref prevents redundant loadHistory calls across StrictMode
-  // double-mount while keeping resumedHistory as a static mount-time prop.
+  const mounted = useRef(false);
   useEffect(() => {
-    if (
-      hasSeededResumedHistory.current ||
-      !resumedHistory ||
-      resumedHistory.length === 0
-    ) {
-      return undefined;
-    }
-    hasSeededResumedHistory.current = true;
-    const uiItems = iContentToHistoryItems(
-      resumedHistory,
-      readEmojiFilterMode(),
-    );
-    if (uiItems.length > 0) {
-      loadHistory(uiItems);
-    }
-    return undefined;
-  }, [loadHistory, resumedHistory, readEmojiFilterMode]);
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // Effect: Trigger SessionStart hook on initialization
   useEffect(() => {
@@ -144,8 +122,8 @@ export function useSessionInitialization({
       appendHookContext,
       addItem,
       signal,
-    ).catch(() => {
-      // Hook failures should not block session initialization.
+    ).catch((error: unknown) => {
+      if (mounted.current) setInitializationError(() => error);
     });
 
     return () => {
@@ -161,6 +139,7 @@ export function useSessionInitialization({
     setCoreMemoryFileCount(readCoreMemoryFileCount());
   }, [readLlxprtMdFileCount, readCoreMemoryFileCount]);
 
+  if (initializationError !== null) throw initializationError;
   return {
     llxprtMdFileCount,
     setLlxprtMdFileCount,

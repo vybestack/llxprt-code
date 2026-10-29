@@ -15,7 +15,11 @@ import { hasHeaderName } from './AnthropicProviderInternals.js';
 import type Anthropic from '@anthropic-ai/sdk';
 import { enforcesPreservedThinkingPrefixCheck } from './AnthropicModelData.js';
 import type { DumpMode } from '../utils/dumpContext.js';
-import { withBoundedJsonHttpBody } from '../utils/boundedJsonBody.js';
+import {
+  withBoundedJsonHttpBody,
+  type BoundedJsonHttpBody,
+} from '../utils/boundedJsonBody.js';
+import type { NativeAnthropicBody } from './native-anthropic-request.js';
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContext,
@@ -25,6 +29,7 @@ import {
   bestEffortDump,
   dumpSDKErrorRequestResponse,
   type RequestDumpMetadata,
+  type StreamedDumpBody,
 } from '../utils/dumpSDKContext.js';
 import {
   type AnthropicRateLimitInfo,
@@ -133,6 +138,37 @@ export function buildAnthropicCustomHeaders(params: {
   return customHeaders;
 }
 
+export type AnthropicApiCall = () => Promise<{
+  data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
+  response: Response | undefined;
+}>;
+
+/** Posts one attempt of the Messages body with an exact Content-Length. */
+function postMessages(
+  client: Anthropic,
+  body: Pick<BoundedJsonHttpBody, 'stream' | 'byteLength'>,
+  streaming: boolean,
+  customHeaders: Record<string, string>,
+  signal: AbortSignal | undefined,
+) {
+  const headers = {
+    ...customHeaders,
+    'content-type': 'application/json',
+    'content-length': String(body.byteLength),
+  };
+  return client
+    .post<Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>>(
+      '/v1/messages',
+      {
+        body: body.stream,
+        headers,
+        stream: streaming,
+        ...(signal === undefined ? {} : { signal }),
+      },
+    )
+    .withResponse();
+}
+
 /**
  * Create API call closure with response headers
  */
@@ -141,29 +177,48 @@ export function createAnthropicApiCall(
   requestBody: Record<string, unknown>,
   customHeaders: Record<string, string>,
   signal?: AbortSignal,
-): () => Promise<{
-  data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
-  response: Response | undefined;
-}> {
+): AnthropicApiCall {
   return async () =>
-    withBoundedJsonHttpBody(requestBody, async (body) => {
-      const headers = {
-        ...customHeaders,
-        'content-type': 'application/json',
-        'content-length': String(body.byteLength),
-      };
-      return client
-        .post<Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>>(
-          '/v1/messages',
-          {
-            body: body.stream,
-            headers,
-            stream: requestBody['stream'] === true,
-            ...(signal === undefined ? {} : { signal }),
-          },
-        )
-        .withResponse();
-    });
+    withBoundedJsonHttpBody(requestBody, (body) =>
+      postMessages(
+        client,
+        body,
+        requestBody['stream'] === true,
+        customHeaders,
+        signal,
+      ),
+    );
+}
+
+/**
+ * Create the API call closure for a native body. Every call opens a fresh
+ * stream and declares its planned size as the Content-Length; the request
+ * owner disposes it.
+ */
+export function createSpooledAnthropicApiCall(
+  client: Anthropic,
+  spool: NativeAnthropicBody,
+  streaming: boolean,
+  customHeaders: Record<string, string>,
+  signal?: AbortSignal,
+): AnthropicApiCall {
+  return async () => {
+    const handle = spool.openStream();
+    try {
+      return await postMessages(
+        client,
+        {
+          stream: handle.stream,
+          byteLength: spool.byteLength,
+        },
+        streaming,
+        customHeaders,
+        signal,
+      );
+    } finally {
+      await handle.dispose();
+    }
+  };
 }
 
 /**
@@ -176,7 +231,8 @@ export interface ApiExecutionParams {
   }>;
   dumpMode: DumpMode | undefined;
   baseURL: string;
-  requestBody: Record<string, unknown>;
+  /** What the request dump records: the lazy body converted from the pinned rows. */
+  requestBody: Record<string, unknown> | StreamedDumpBody;
   streamingEnabled: boolean;
   headers?: Record<string, string>;
   rateLimitLogger: { debug: (fn: () => string) => void };

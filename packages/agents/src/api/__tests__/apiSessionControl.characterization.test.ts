@@ -11,8 +11,6 @@ const fixturePaths = installTestWorkspacePaths({
 });
 
 import { describe, it, expect, vi } from 'bun:test';
-import { AgentSessionPersistence } from '../control/recordedHistoryPersistence.js';
-import { Storage } from '@vybestack/llxprt-code-settings';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
 import { SessionControl } from '../control/sessionControl.js';
@@ -40,7 +38,9 @@ function makeMockClient(history: IContent[]): AgentClientContract {
     isInitialized: vi.fn(() => true),
     hasChatInitialized: vi.fn(() => true),
     getChat: vi.fn(() => ({}) as never),
-    getHistory: vi.fn(async () => [...stored]),
+    getHistory: vi.fn(async function* () {
+      yield* stored;
+    }),
     getHistoryService: vi.fn(() => null),
     storeHistoryServiceForReuse: vi.fn(),
     storeHistoryForLaterUse: vi.fn(),
@@ -98,7 +98,7 @@ function createSessionControl(
       if (closed) throw new Error('Characterization session is closed');
     },
   });
-  return new SessionControl(
+  return conversation.createSessionControl(
     makeRecordingPaths(),
     new LocalMediaStore({
       rootDirectory: '/tmp/test-session-control/media',
@@ -108,13 +108,20 @@ function createSessionControl(
     () => fixturePaths().directories(),
     'config',
     () => ownedSessionId,
-    conversation.nativeHistory,
     (operation) => operation(),
     () => {
       closed = true;
     },
     async () => {
-      throw new Error('Characterization fixture does not prepare new sessions');
+      await client.resetChat();
+      return {
+        publish: () => {},
+        retire: async () => {},
+        discard: async () => {},
+        attachRecording: async () => {
+          throw new Error('Characterization fixture cannot attach recording');
+        },
+      };
     },
     () => 'test-provider',
     () => 'test-model',
@@ -122,17 +129,20 @@ function createSessionControl(
     (nextId) => {
       ownedSessionId = nextId;
     },
-    new AgentSessionPersistence(
-      {
-        projectRoot: new Storage('/tmp/test-session-control').getProjectRoot(),
-        chatsDir: new Storage('/tmp/test-session-control').getProjectChatsDir(),
-      },
-      {},
-    ),
   );
 }
 
 describe('SessionControl (characterization)', () => {
+  registerSessionCharacterizationGroup0();
+
+  registerSessionCharacterizationGroup1();
+
+  registerSessionCharacterizationGroup2();
+
+  registerSessionCharacterizationGroup3();
+});
+
+function registerSessionCharacterizationGroup0(): void {
   describe('constructor and interface', () => {
     it('creates a SessionControl instance', () => {
       const client = makeMockClient([]);
@@ -148,7 +158,9 @@ describe('SessionControl (characterization)', () => {
       expect(sc2).toBeDefined();
     });
   });
+}
 
+function registerSessionCharacterizationGroup1(): void {
   describe('client interaction', () => {
     it('client.getHistory returns the expected content', async () => {
       const history: IContent[] = [
@@ -156,7 +168,7 @@ describe('SessionControl (characterization)', () => {
         textContent('Hi there', 'ai'),
       ];
       const client = makeMockClient(history);
-      const result = await client.getHistory();
+      const result = await Array.fromAsync(client.getHistory());
       expect(result).toHaveLength(2);
       expect(result[0].blocks[0]).toMatchObject({
         type: 'text',
@@ -178,7 +190,7 @@ describe('SessionControl (characterization)', () => {
         textContent('Turn 2', 'human'),
       ];
       const client = makeMockClient(history);
-      const got = await client.getHistory();
+      const got = await Array.fromAsync(client.getHistory());
       expect(got).toHaveLength(3);
 
       const restoreClient = makeMockClient([]);
@@ -186,7 +198,9 @@ describe('SessionControl (characterization)', () => {
       expect(restoreClient.restoreHistory).toHaveBeenCalledWith(got);
     });
   });
+}
 
+function registerSessionCharacterizationGroup2(): void {
   describe('dispose', () => {
     it('completes without error on fresh instance', async () => {
       const client = makeMockClient([]);
@@ -194,7 +208,9 @@ describe('SessionControl (characterization)', () => {
       await expect(sc.dispose()).resolves.toBeUndefined();
     });
   });
+}
 
+function registerSessionCharacterizationGroup3(): void {
   describe('property-based: history content shapes', () => {
     it('getHistory preserves arbitrary content lengths', async () => {
       const { getHistoryPreservesArbitraryContentLengthsProperty } =
@@ -213,11 +229,11 @@ describe('SessionControl (characterization)', () => {
               textContent(t, i % 2 === 0 ? 'human' : 'ai'),
             );
             const client = makeMockClient(history);
-            const got = await client.getHistory();
+            const got = await Array.fromAsync(client.getHistory());
             return got.length === texts.length;
           },
         );
       return { getHistoryPreservesArbitraryContentLengthsProperty };
     };
   });
-});
+}

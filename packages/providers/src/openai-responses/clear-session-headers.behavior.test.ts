@@ -108,7 +108,7 @@ describe('Codex headers after starting a new session', () => {
         FakeProvider.prototype,
         'generateChatCompletion',
       ).mockImplementation(async function* (this: FakeProvider, options) {
-        if (Array.isArray(options) || options.invocation === undefined)
+        if (Symbol.asyncIterator in options || options.invocation === undefined)
           throw new Error('Expected admitted invocation');
         const request = captureResponsesRequest(
           buildNormalizedOptions({ invocation: options.invocation }),

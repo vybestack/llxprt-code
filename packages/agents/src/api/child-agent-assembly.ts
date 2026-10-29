@@ -1,3 +1,6 @@
+import type { ChildSessionJournal } from '@vybestack/llxprt-code-core/recording/childJournal.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { openChildSessionJournal } from '../core/subagentChildJournal.js';
 import { acquireSessionClient } from '../session/session-client-binding.js';
 /**
  * @license
@@ -74,7 +77,7 @@ import {
   populatePostActivationSettings,
   populatePreActivationSettings,
 } from '../core/subagentSettingsPopulation.js';
-import type { SessionClientOwner } from '../session/session-client-owner.js';
+
 import { admitLoadBalancerModelParameters } from './admit-load-balancer-model-parameters.js';
 import {
   acquireProviderFiles,
@@ -94,6 +97,8 @@ export interface ChildAgentLaunch {
   readonly run: RunConfig;
   readonly request: SubagentLaunchRequest;
   readonly state: AgentRuntimeState;
+  readonly childSessionId: string;
+  readonly parentSessionId: string;
   readonly runtimeId: string;
   readonly disabledTools: ReadonlySet<string>;
   readonly signal: AbortSignal;
@@ -145,8 +150,10 @@ interface ChildAuth {
   readonly oauth: OAuthManager;
 }
 
-interface ActivatedChildClient {
-  readonly activated: SessionClientOwner;
+interface ChildClientOperations {
+  readonly refreshAuth: (method?: string) => Promise<void>;
+  readonly createHookExecution: SessionHookOwner['execution'];
+  readonly dispose: () => Promise<void>;
 }
 
 interface ChildProviderStage {
@@ -157,6 +164,7 @@ export class ChildAgentAssembly {
   private readonly providers = new AcquisitionRelease();
   private readonly acquired: Array<() => void | Promise<void>> = [];
   private closing: Promise<void> | undefined;
+  private childJournal: ChildSessionJournal | undefined;
 
   constructor(
     private readonly data: ChildAgentLaunch,
@@ -169,6 +177,16 @@ export class ChildAgentAssembly {
   async assemble(): Promise<SubagentLaunchResult> {
     const fakeResponses = process.env.LLXPRT_FAKE_RESPONSES;
     try {
+      this.childJournal = await openChildSessionJournal({
+        config: this.acquisition.foregroundConfig,
+        workspaceDirs: this.operations.workspacePaths.directories(),
+        childSessionId: this.data.childSessionId,
+        parentSessionId: this.data.parentSessionId,
+        provider: this.data.state.provider,
+        model: this.data.model.model,
+      });
+      const journal = this.childJournal;
+      this.acquired.push(() => journal.dispose());
       const workspace = this.acquireWorkspace();
       const providers = this.acquireProviders(workspace);
       return await providers.assemble(fakeResponses);
@@ -193,7 +211,7 @@ export class ChildAgentAssembly {
       );
     }
     const config = new Config({
-      sessionId: this.data.runtimeId,
+      sessionId: this.data.childSessionId,
       targetDir: this.acquisition.foregroundConfig.getTargetDir(),
       debugMode: false,
       cwd: this.acquisition.foregroundConfig.getWorkingDir(),
@@ -269,14 +287,14 @@ export class ChildAgentAssembly {
     fakeResponses: string | undefined,
   ): Promise<SubagentLaunchResult> {
     const client = await this.prepareClient(workspace, provider, auth);
-    const activated = await this.activate(
+    await this.activate(
       workspace,
       provider,
       auth,
-      client,
+      client.refreshAuth,
       fakeResponses,
     );
-    const loaded = await this.load(workspace, provider, activated);
+    const loaded = await this.load(workspace, provider);
     this.assertAdmission(
       'Subagent launch aborted after runtime assembly completed.',
     );
@@ -284,17 +302,17 @@ export class ChildAgentAssembly {
       workspace,
       provider,
       auth,
-      client,
+      client.createHookExecution,
       loaded,
     );
-    return this.publishScope(workspace, client, loaded, scope);
+    return this.publishScope(workspace, client.dispose, loaded, scope);
   }
 
   private async prepareClient(
     workspace: ChildWorkspace,
     provider: ChildProvider,
     auth: ChildAuth,
-  ): Promise<SessionClientOwner> {
+  ): Promise<ChildClientOperations> {
     const { config, settings, settingsOwner, media } = workspace;
     const { manager, content, tokenizer, files } = provider;
     const { oauth } = auth;
@@ -334,16 +352,22 @@ export class ChildAgentAssembly {
       this.operations.messageBus,
       this.operations.trust,
     );
-    return client;
+    return {
+      refreshAuth: client.clients.refreshAuth.bind(client.clients),
+      createHookExecution: client.hookOperations.execution.bind(
+        client.hookOperations,
+      ),
+      dispose: client.dispose.bind(client),
+    };
   }
 
   private async activate(
     workspace: ChildWorkspace,
     provider: ChildProvider,
     auth: ChildAuth,
-    client: SessionClientOwner,
+    refreshAuth: ChildClientOperations['refreshAuth'],
     fakeResponses: string | undefined,
-  ): Promise<ActivatedChildClient> {
+  ): Promise<void> {
     const { config, settings, settingsOwner } = workspace;
     const { manager, tokenizer } = provider;
     const { oauth } = auth;
@@ -381,7 +405,7 @@ export class ChildAgentAssembly {
       oauth,
       settingsOwner,
       () => 'agent',
-      (method) => client.clients.refreshAuth(method),
+      refreshAuth,
       this.operations.profileReads,
       this.data.activationProfile,
       this.data.subagent.profile,
@@ -394,13 +418,11 @@ export class ChildAgentAssembly {
       this.data.subagent.profile,
       this.data.disabledTools,
     );
-    return { activated: client };
   }
 
   private async load(
     workspace: ChildWorkspace,
     provider: ChildProvider,
-    _activated: ActivatedChildClient,
   ): Promise<ToolSelectedRuntimeLoaderResult> {
     const { config: workspaceConfig, settingsOwner, media } = workspace;
     const { manager, tokenizer, content } = provider;
@@ -440,8 +462,18 @@ export class ChildAgentAssembly {
       this.data.state.provider,
       this.data.state.model,
     );
-    const loaded = await this.factories.runtimeLoader(options);
-    this.acquired.push(() => disposeHistoryLike(loaded.history));
+    const journal = this.childJournal;
+    if (journal === undefined)
+      throw new Error('Child journal was not acquired');
+    const history = new HistoryService({ recording: journal.recording });
+    this.acquired.push(() => disposeHistoryLike(history));
+    await history.waitForCommit();
+    const loaded = await this.factories.runtimeLoader({
+      ...options,
+      overrides: { ...options.overrides, historyService: history },
+    });
+    if (loaded.history !== history)
+      this.acquired.push(() => disposeHistoryLike(loaded.history));
     loaded.history.setTokenizerFactory({
       getTokenizer: (provider, model) =>
         tokenizer.getTokenizer(provider, model),
@@ -457,7 +489,7 @@ export class ChildAgentAssembly {
     workspace: ChildWorkspace,
     provider: ChildProvider,
     auth: ChildAuth,
-    client: SessionClientOwner,
+    createHookExecution: SessionHookOwner['execution'],
     loaded: ToolSelectedRuntimeLoaderResult,
   ): Promise<ChildAgentScope> {
     const { settings } = workspace;
@@ -514,7 +546,7 @@ export class ChildAgentAssembly {
               );
         },
         providerFiles: files,
-        hooks: client.hookOperations.execution({
+        hooks: createHookExecution({
           sessionId: () => loaded.runtimeContext.state.sessionId,
           transcriptPath: () => undefined,
           signal: this.data.signal,
@@ -528,7 +560,7 @@ export class ChildAgentAssembly {
 
   private close(
     workspace: ChildWorkspace,
-    client: SessionClientOwner,
+    disposeClient: () => Promise<void>,
     loaded: ToolSelectedRuntimeLoaderResult,
     scope: ChildAgentScope,
   ): Promise<void> {
@@ -540,14 +572,15 @@ export class ChildAgentAssembly {
         disposeIsolatedMediaRuntime(
           () => this.providers.close(),
           () => media.dispose(),
-          () => client.dispose(),
+          disposeClient,
         ),
+      () => this.childJournal?.dispose(),
     ]);
     return this.closing;
   }
   private publishScope(
     workspace: ChildWorkspace,
-    client: SessionClientOwner,
+    disposeClient: () => Promise<void>,
     loaded: ToolSelectedRuntimeLoaderResult,
     scope: ChildAgentScope,
   ): SubagentLaunchResult {
@@ -565,7 +598,7 @@ export class ChildAgentAssembly {
         provider: loaded.runtimeContext.state.provider,
         model: loaded.runtimeContext.state.model,
       }),
-      dispose: () => this.close(workspace, client, loaded, scope),
+      dispose: () => this.close(workspace, disposeClient, loaded, scope),
     };
   }
 

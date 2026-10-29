@@ -5,6 +5,7 @@
  */
 
 import type { Mock } from 'bun:test';
+import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import React, { act } from 'react';
 import { renderHook, waitFor } from '../../__tests__/render.js';
@@ -27,7 +28,6 @@ import type {
   ToolRegistry,
   AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
-import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { SlashCommandProcessorResult } from '../types.js';
@@ -304,7 +304,6 @@ describe('useAgentStream subagent isolation', () => {
         client,
         createStreamRuntimeForTest(mockConfig, mockOverrides),
         {
-          history: [],
           addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
           settings: mockSettings,
           onDebugMessage: mockOnDebugMessage,
@@ -433,7 +432,6 @@ describe('useAgentStream subagent isolation', () => {
         client,
         createStreamRuntimeForTest(mockConfig, mockOverrides),
         {
-          history: [],
           addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
           settings: mockSettings,
           onDebugMessage: mockOnDebugMessage,
@@ -509,7 +507,6 @@ describe('useAgentStream subagent isolation', () => {
         client,
         createStreamRuntimeForTest(mockConfig, mockOverrides),
         {
-          history: [],
           addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
           settings: mockSettings,
           onDebugMessage: mockOnDebugMessage,
@@ -537,7 +534,7 @@ describe('useAgentStream subagent isolation', () => {
   });
 
   const observeClientInitiatedToolCompletion = async (): Promise<{
-    readonly addItem: ReturnType<typeof vi.fn>;
+    readonly items: ReturnType<typeof useAgentStream>['pendingHistoryItems'];
     readonly sendMessageStream: ReturnType<typeof vi.fn>;
     readonly markToolsAsDisplayCleared: ReturnType<typeof vi.fn>;
   }> => {
@@ -553,10 +550,11 @@ describe('useAgentStream subagent isolation', () => {
         ) => Promise<void>)
       | null = null;
 
+    let displayedCalls: TrackedToolCall[] = [];
     mockUseReactToolScheduler.mockImplementation((onComplete) => {
       capturedOnComplete = onComplete as typeof capturedOnComplete;
       return [
-        [],
+        displayedCalls,
         mockScheduleToolCalls,
         mockMarkToolsAsDisplayCleared,
         vi.fn(),
@@ -567,12 +565,11 @@ describe('useAgentStream subagent isolation', () => {
       ] as const;
     });
 
-    renderHook(() =>
+    const hook = renderHook(() =>
       useAgentStream(
         client,
         createStreamRuntimeForTest(mockConfig, mockOverrides),
         {
-          history: [],
           addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
           settings: mockSettings,
           onDebugMessage: mockOnDebugMessage,
@@ -633,14 +630,11 @@ describe('useAgentStream subagent isolation', () => {
       }
     });
 
-    await waitFor(() => {
-      if (mockAddItem.mock.calls.length === 0) {
-        throw new Error('Expected the completed tool to be rendered');
-      }
-    });
+    displayedCalls = [clientInitiatedTool];
+    hook.rerender();
 
     return {
-      addItem: mockAddItem,
+      items: hook.result.current.pendingHistoryItems,
       sendMessageStream: mockSendMessageStream,
       markToolsAsDisplayCleared: mockMarkToolsAsDisplayCleared,
     };
@@ -648,7 +642,18 @@ describe('useAgentStream subagent isolation', () => {
 
   it('renders a completed client-initiated tool to display without resubmitting to the model or marking it display-cleared', async () => {
     const completion = await observeClientInitiatedToolCompletion();
-    expect(completion.addItem).toHaveBeenCalled();
+    expect(completion.items).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_group',
+        tools: [
+          expect.objectContaining({
+            callId: 'client-callId',
+            name: 'List Directory',
+            status: 'Success',
+          }),
+        ],
+      }),
+    );
     expect(completion.sendMessageStream).not.toHaveBeenCalled();
     expect(completion.markToolsAsDisplayCleared).not.toHaveBeenCalled();
   });

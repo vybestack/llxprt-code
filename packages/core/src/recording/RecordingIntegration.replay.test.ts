@@ -22,8 +22,8 @@
  *
  * Testing strategy:
  * - Real HistoryService instance
- * - Real SessionRecordingService writing JSONL files in temp directories
- * - Real ReplayEngine for round-trip validation
+ * - Real journal recorders writing native files in temp directories
+ * - Fresh native journal reads for round-trip validation
  * - No spy/mock verification patterns
  *
  * These tests are expected to fail against the Phase 12 stub implementation.
@@ -33,41 +33,30 @@ import {
   assertDefined,
   assertNotNull,
 } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import * as os from 'node:os';
 import type { EventEmitter } from 'node:events';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
-import { replaySession } from './ReplayEngine.js';
-import {
-  type SessionRecordingServiceConfig,
-  type ReplayResult,
-} from './types.js';
+import { readJournalSnapshot } from './__tests__/support/journalSnapshot.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import type { SessionRecordingServiceConfig } from './types.js';
+
+function textOf(content: IContent): string {
+  return content.blocks
+    .map((block) => (block.type === 'text' ? block.text : ''))
+    .join('');
+}
+
+const extraHistories: HistoryService[] = [];
 
 const PROJECT_HASH = 'project-hash-recording-integration';
-
-type ReplayOkResult = Extract<ReplayResult, { ok: true }>;
-
-function assertReplayOk(
-  result: ReplayResult,
-): asserts result is ReplayOkResult {
-  expect(result.ok).toBe(true);
-}
-
-interface JsonlEvent {
-  v: number;
-  seq: number;
-  ts: string;
-  type: string;
-  payload: unknown;
-}
 
 function makeConfig(
   chatsDir: string,
@@ -97,28 +86,10 @@ function historyEmitter(historyService: HistoryService): EventEmitter {
   return historyService;
 }
 
-async function readRecordedEvents(
-  recordingService: SessionRecordingService,
-): Promise<JsonlEvent[]> {
-  const filePath = recordingService.getFilePath();
-  if (!filePath) {
-    return [];
-  }
-
-  const raw = await fs.readFile(filePath, 'utf-8');
-  if (raw.trim() === '') {
-    return [];
-  }
-
-  return raw
-    .trim()
-    .split('\n')
-    .map((line) => JSON.parse(line) as JsonlEvent);
-}
 interface FreshHarness {
   tempDir: string;
   chatsDir: string;
-  recordingService: SessionRecordingService;
+  recordingService: JournalRecordingService;
   integration: RecordingIntegration;
   historyService: HistoryService;
   emitter: EventEmitter;
@@ -133,13 +104,13 @@ async function withFreshHarness(
   const chatsDir = path.join(tempDir, 'chats');
   await fs.mkdir(chatsDir, { recursive: true });
 
-  const recordingService = new SessionRecordingService(
+  const recordingService = JournalRecordingService.create(
     makeConfig(chatsDir, {
       sessionId: `recording-int-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
     }),
   );
   const integration = new RecordingIntegration(recordingService);
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({});
   const emitter = historyEmitter(historyService);
 
   try {
@@ -153,720 +124,568 @@ async function withFreshHarness(
     });
   } finally {
     await integration.dispose();
+    await historyService.dispose();
     await recordingService.dispose();
     await fs.rm(tempDir, { recursive: true, force: true });
   }
 }
 
+let tempDir: string;
+
+let chatsDir: string;
+
+let recordingService: JournalRecordingService;
+
+let integration: RecordingIntegration;
+
+let historyService: HistoryService;
+
+let emitter: EventEmitter;
+
 describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
-  let tempDir: string;
-  let chatsDir: string;
-  let recordingService: SessionRecordingService;
-  let integration: RecordingIntegration;
-  let historyService: HistoryService;
-  let emitter: EventEmitter;
+  beforeEach(beforeEachRecordingReplay);
 
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'recording-int-test-'));
-    chatsDir = path.join(tempDir, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
-
-    recordingService = new SessionRecordingService(makeConfig(chatsDir));
-    integration = new RecordingIntegration(recordingService);
-    historyService = new HistoryService();
-    emitter = historyEmitter(historyService);
-  });
-
-  afterEach(async () => {
-    await integration.dispose();
-    await recordingService.dispose();
-    await fs.rm(tempDir, { recursive: true, force: true });
-  });
+  afterEach(afterEachRecordingReplay);
 
   describe('Round-trip replay verification @requirement:REQ-INT-001,REQ-INT-002,REQ-INT-003,REQ-INT-007 @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
-    it('replay returns expected content history length', async () => {
-      integration.subscribeToHistory(historyService);
-      emitter.emit('contentAdded', textContent('user-1'));
-      emitter.emit('contentAdded', textContent('ai-1', 'ai'));
-      await integration.flushAtTurnBoundary();
+    it('replay returns expected content history length', r01);
 
-      const filePath = recordingService.getFilePath();
-      expect(filePath).toBeTruthy();
+    it('preserves legacy inline media while replaying with a media store', r02);
 
-      const replay = await replaySession(filePath!, PROJECT_HASH);
-      assertReplayOk(replay);
-      expect(replay.history).toHaveLength(2);
-    });
+    it(
+      'verifies reference media during replay without retaining a replay reservation',
+      r03,
+    );
 
-    it('preserves legacy inline media while replaying with a media store', async () => {
-      const mediaStore = new LocalMediaStore({
-        rootDirectory: path.join(tempDir, 'media'),
-        quotaBytes: 1024,
-      });
-      const legacyContent: IContent = {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            encoding: 'base64',
-            mimeType: 'image/png; charset=utf-8',
-            data: 'AQIDBA==',
-          },
-        ],
-      };
-      integration.subscribeToHistory(historyService);
-      emitter.emit('contentAdded', legacyContent);
-      await integration.flushAtTurnBoundary();
+    it(
+      'replay applies compression semantics (summary + post-compression)',
+      r04,
+    );
 
-      const filePath = recordingService.getFilePath();
-      assertNotNull(filePath, 'Expected recording path');
-      const replay = await replaySession(filePath, PROJECT_HASH, {
-        mediaStore,
-      });
-      assertReplayOk(replay);
-      const content = replay.history.find((_entry, index) => index === 0);
-      const block = content?.blocks.find((_entry, index) => index === 0);
-      assertDefined(block, 'Expected replayed media block');
-      if (block.type !== 'media') throw new Error('Expected replayed media');
+    it(
+      'replay metadata reflects latest provider switch and directories change',
+      r06,
+    );
+  });
 
-      expect(block.encoding).toBe('base64');
-      expect(block).toStrictEqual({
+  describe('Edge cases @requirement:REQ-INT-004,REQ-INT-007 @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
+    it('empty session without content leaves no file on disk', r09);
+
+    it('large content is preserved in replay', r10);
+
+    it('rapid content additions do not lose events', r11);
+
+    it('multiple flush boundaries continue appending to the same file', r12);
+  });
+
+  describe('Property-based behaviors @requirement:REQ-INT-001,REQ-INT-002,REQ-INT-003,REQ-INT-004,REQ-INT-005,REQ-INT-006,REQ-INT-007 @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
+    it('property: arbitrary content list replays to same length', r13);
+
+    it('property: arbitrary content list preserves emitted order', r14);
+
+    it('property: provider/model delegate updates replay metadata', r15);
+
+    it('property: directories delegate updates replay metadata', r16);
+
+    it(
+      'property: compression boundary leaves one summary plus post items',
+      r18,
+    );
+
+    it('property: replacing history routes events to latest history only', r21);
+
+    it('property: dispose drops all post-dispose events', r22);
+
+    it(
+      'property: file path remains stable across multiple flush segments',
+      r23,
+    );
+
+    it('property: large random text survives replay unchanged', r24);
+  });
+});
+
+async function r01(): Promise<void> {
+  await integration.subscribeToJournal(historyService);
+  historyService.add(textContent('user-1'));
+  historyService.add(textContent('ai-1', 'ai'));
+  await integration.flushAtTurnBoundary();
+
+  const filePath = recordingService.getFilePath();
+  expect(filePath).toBeTruthy();
+
+  const replay = await readJournalSnapshot(filePath!, PROJECT_HASH);
+  expect(replay.history).toHaveLength(2);
+}
+
+async function r02(): Promise<void> {
+  const mediaStore = new LocalMediaStore({
+    rootDirectory: path.join(tempDir, 'media'),
+    quotaBytes: 1024,
+  });
+  const legacyContent: IContent = {
+    speaker: 'human',
+    blocks: [
+      {
         type: 'media',
         encoding: 'base64',
         mimeType: 'image/png; charset=utf-8',
         data: 'AQIDBA==',
-      });
-    });
+      },
+    ],
+  };
+  await integration.subscribeToJournal(historyService);
+  historyService.add(legacyContent);
+  await integration.flushAtTurnBoundary();
 
-    it('verifies reference media during replay without retaining a replay reservation', async () => {
-      const mediaStore = new LocalMediaStore({
-        rootDirectory: path.join(tempDir, 'reference-media'),
-        quotaBytes: 1024,
-      });
-      const expectedBytes = new Uint8Array([1, 2, 3, 4]);
-      const reference = await mediaStore.admit({
-        bytes: expectedBytes,
-        mimeType: 'image/png',
-        semanticMetadata: {},
-      });
-      integration.subscribeToHistory(historyService);
-      emitter.emit('contentAdded', {
-        speaker: 'human',
-        blocks: [reference],
-      } satisfies IContent);
-      await integration.flushAtTurnBoundary();
+  const filePath = recordingService.getFilePath();
+  assertNotNull(filePath, 'Expected recording path');
+  const replay = await readJournalSnapshot(filePath, PROJECT_HASH);
+  const content = replay.history.find((_entry, index) => index === 0);
+  const block = content?.blocks.find((_entry, index) => index === 0);
+  assertDefined(block, 'Expected replayed media block');
+  if (block.type !== 'media') throw new Error('Expected replayed media');
 
-      const filePath = recordingService.getFilePath();
-      assertNotNull(filePath, 'Expected recording path');
-      const replay = await replaySession(filePath, PROJECT_HASH, {
-        mediaStore,
-      });
-
-      assertReplayOk(replay);
-      const replayedContent = replay.history.find(
-        (_entry, index) => index === 0,
-      );
-      const replayedBlock = replayedContent?.blocks.find(
-        (_entry, index) => index === 0,
-      );
-      if (
-        replayedBlock === undefined ||
-        replayedBlock.type !== 'media' ||
-        replayedBlock.encoding !== 'reference'
-      ) {
-        throw new Error('Expected replayed media reference');
-      }
-      const replayedBytes = await mediaStore.readVerified(replayedBlock);
-
-      expect(replayedBlock.contentId).toBe(reference.contentId);
-      expect(replayedBytes).toStrictEqual(expectedBytes);
-      expect(await mediaStore.hasReservations(reference.contentId)).toBe(false);
-    });
-
-    it('replay applies compression semantics (summary + post-compression)', async () => {
-      integration.subscribeToHistory(historyService);
-      emitter.emit('contentAdded', textContent('old-1'));
-      emitter.emit('contentAdded', textContent('old-2'));
-      emitter.emit('compressionStarted');
-      emitter.emit('contentAdded', textContent('re-added-should-not-record'));
-      emitter.emit('compressionEnded', textContent('summary', 'ai'), 2);
-      emitter.emit('contentAdded', textContent('new-1'));
-      await integration.flushAtTurnBoundary();
-
-      const replay = await replaySession(
-        recordingService.getFilePath()!,
-        PROJECT_HASH,
-      );
-      assertReplayOk(replay);
-      expect(replay.history).toHaveLength(2);
-      expect(
-        (replay.history[0].blocks[0] as { type: 'text'; text: string }).text,
-      ).toBe('summary');
-      expect(
-        (replay.history[1].blocks[0] as { type: 'text'; text: string }).text,
-      ).toBe('new-1');
-    });
-
-    it('replay stores session_event in sessionEvents and not history', async () => {
-      integration.subscribeToHistory(historyService);
-      integration.recordSessionEvent('info', 'Session resumed');
-      emitter.emit('contentAdded', textContent('normal-content'));
-      await integration.flushAtTurnBoundary();
-
-      const replay = await replaySession(
-        recordingService.getFilePath()!,
-        PROJECT_HASH,
-      );
-      assertReplayOk(replay);
-      expect(replay.history).toHaveLength(1);
-      expect(replay.sessionEvents).toHaveLength(1);
-    });
-
-    it('replay metadata reflects latest provider switch and directories change', async () => {
-      integration.subscribeToHistory(historyService);
-      integration.recordProviderSwitch('openai', 'gpt-5');
-      integration.recordDirectoriesChanged(['/x', '/y']);
-      emitter.emit('contentAdded', textContent('materialize'));
-      await integration.flushAtTurnBoundary();
-
-      const replay = await replaySession(
-        recordingService.getFilePath()!,
-        PROJECT_HASH,
-      );
-      assertReplayOk(replay);
-      expect(replay.metadata.provider).toBe('openai');
-      expect(replay.metadata.model).toBe('gpt-5');
-      expect(replay.metadata.workspaceDirs).toStrictEqual(['/x', '/y']);
-    });
-
-    it('replay eventCount equals number of lines in JSONL', async () => {
-      integration.subscribeToHistory(historyService);
-      emitter.emit('contentAdded', textContent('one'));
-      emitter.emit('contentAdded', textContent('two'));
-      await integration.flushAtTurnBoundary();
-
-      const events = await readRecordedEvents(recordingService);
-      const replay = await replaySession(
-        recordingService.getFilePath()!,
-        PROJECT_HASH,
-      );
-      assertReplayOk(replay);
-      expect(replay.eventCount).toBe(events.length);
-    });
-
-    it('replay lastSeq equals final line seq', async () => {
-      integration.subscribeToHistory(historyService);
-      emitter.emit('contentAdded', textContent('a'));
-      emitter.emit('contentAdded', textContent('b'));
-      await integration.flushAtTurnBoundary();
-
-      const events = await readRecordedEvents(recordingService);
-      const replay = await replaySession(
-        recordingService.getFilePath()!,
-        PROJECT_HASH,
-      );
-      assertReplayOk(replay);
-      // At least one content event was recorded, so the last event's seq is
-      // the expected final seq.
-      expect(replay.lastSeq).toBe(events[events.length - 1].seq);
-    });
+  await mediaStore.close();
+  expect(block.encoding).toBe('base64');
+  expect(block).toStrictEqual({
+    type: 'media',
+    encoding: 'base64',
+    mimeType: 'image/png; charset=utf-8',
+    data: 'AQIDBA==',
   });
+}
 
-  describe('Edge cases @requirement:REQ-INT-004,REQ-INT-007 @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
-    it('empty session without content leaves no file on disk', async () => {
-      await integration.flushAtTurnBoundary();
-      await integration.dispose();
-      expect(recordingService.getFilePath()).toBeNull();
-    });
-
-    it('large content is preserved in replay', async () => {
-      integration.subscribeToHistory(historyService);
-      const bigText = 'x'.repeat(80_000);
-      emitter.emit('contentAdded', textContent(bigText));
-      await integration.flushAtTurnBoundary();
-
-      const replay = await replaySession(
-        recordingService.getFilePath()!,
-        PROJECT_HASH,
-      );
-      assertReplayOk(replay);
-      const replayText = (
-        replay.history[0].blocks[0] as { type: 'text'; text: string }
-      ).text;
-      expect(replayText.length).toBe(80_000);
-    });
-
-    it('rapid content additions do not lose events', async () => {
-      integration.subscribeToHistory(historyService);
-      for (let i = 0; i < 50; i++) {
-        emitter.emit('contentAdded', textContent(`rapid-${i}`));
-      }
-      await integration.flushAtTurnBoundary();
-
-      const replay = await replaySession(
-        recordingService.getFilePath()!,
-        PROJECT_HASH,
-      );
-      assertReplayOk(replay);
-      expect(replay.history).toHaveLength(50);
-    });
-
-    it('multiple flush boundaries continue appending to the same file', async () => {
-      integration.subscribeToHistory(historyService);
-
-      emitter.emit('contentAdded', textContent('batch-1'));
-      await integration.flushAtTurnBoundary();
-      const firstPath = recordingService.getFilePath();
-
-      emitter.emit('contentAdded', textContent('batch-2'));
-      await integration.flushAtTurnBoundary();
-      const secondPath = recordingService.getFilePath();
-
-      expect(firstPath).toBeTruthy();
-      expect(secondPath).toBe(firstPath);
-    });
+async function r03(): Promise<void> {
+  const mediaStore = new LocalMediaStore({
+    rootDirectory: path.join(tempDir, 'reference-media'),
+    quotaBytes: 1024,
   });
-
-  describe('Property-based behaviors @requirement:REQ-INT-001,REQ-INT-002,REQ-INT-003,REQ-INT-004,REQ-INT-005,REQ-INT-006,REQ-INT-007 @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
-    it('property: arbitrary content list replays to same length', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.array(fc.string({ minLength: 1, maxLength: 20 }), {
-            minLength: 1,
-            maxLength: 12,
-          }),
-          async (messages) => {
-            await withFreshHarness(async (harness) => {
-              harness.integration.subscribeToHistory(harness.historyService);
-              for (const message of messages) {
-                harness.emitter.emit('contentAdded', textContent(message));
-              }
-              await harness.integration.flushAtTurnBoundary();
-              const replay = await replaySession(
-                harness.recordingService.getFilePath()!,
-                PROJECT_HASH,
-              );
-              assertReplayOk(replay);
-              expect(replay.history).toHaveLength(messages.length);
-            });
-          },
-        ),
-        { numRuns: 8 },
-      );
-    });
-
-    it('property: arbitrary content list preserves emitted order', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.array(fc.string({ minLength: 1, maxLength: 16 }), {
-            minLength: 1,
-            maxLength: 10,
-          }),
-          async (messages) => {
-            await withFreshHarness(async (harness) => {
-              harness.integration.subscribeToHistory(harness.historyService);
-              for (const message of messages) {
-                harness.emitter.emit('contentAdded', textContent(message));
-              }
-              await harness.integration.flushAtTurnBoundary();
-              const replay = await replaySession(
-                harness.recordingService.getFilePath()!,
-                PROJECT_HASH,
-              );
-              assertReplayOk(replay);
-              const replayed = replay.history.map(
-                (content) =>
-                  (content.blocks[0] as { type: 'text'; text: string }).text,
-              );
-              expect(replayed).toStrictEqual(messages);
-            });
-          },
-        ),
-        { numRuns: 8 },
-      );
-    });
-
-    it('property: provider/model delegate updates replay metadata', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.stringMatching(/^[a-z][a-z0-9_-]{2,12}$/),
-          fc.stringMatching(/^[a-z][a-z0-9._-]{2,18}$/),
-          async (provider, model) => {
-            await withFreshHarness(async (harness) => {
-              harness.integration.subscribeToHistory(harness.historyService);
-              harness.integration.recordProviderSwitch(provider, model);
-              harness.emitter.emit('contentAdded', textContent('materialize'));
-              await harness.integration.flushAtTurnBoundary();
-
-              const replay = await replaySession(
-                harness.recordingService.getFilePath()!,
-                PROJECT_HASH,
-              );
-              assertReplayOk(replay);
-              expect(replay.metadata.provider).toBe(provider);
-              expect(replay.metadata.model).toBe(model);
-            });
-          },
-        ),
-        { numRuns: 8 },
-      );
-    });
-
-    it('property: directories delegate updates replay metadata', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.array(fc.stringMatching(/^\/[a-z]{1,6}$/), {
-            minLength: 1,
-            maxLength: 5,
-          }),
-          async (directories) => {
-            await withFreshHarness(async (harness) => {
-              harness.integration.subscribeToHistory(harness.historyService);
-              harness.integration.recordDirectoriesChanged(directories);
-              harness.emitter.emit('contentAdded', textContent('materialize'));
-              await harness.integration.flushAtTurnBoundary();
-
-              const replay = await replaySession(
-                harness.recordingService.getFilePath()!,
-                PROJECT_HASH,
-              );
-              assertReplayOk(replay);
-              expect(replay.metadata.workspaceDirs).toStrictEqual(directories);
-            });
-          },
-        ),
-        { numRuns: 8 },
-      );
-    });
-
-    it('property: session_event delegate preserves count', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.array(fc.string({ minLength: 1, maxLength: 30 }), {
-            minLength: 1,
-            maxLength: 6,
-          }),
-          async (messages) => {
-            await withFreshHarness(async (harness) => {
-              harness.integration.subscribeToHistory(harness.historyService);
-              for (const message of messages) {
-                harness.integration.recordSessionEvent('info', message);
-              }
-              harness.emitter.emit('contentAdded', textContent('materialize'));
-              await harness.integration.flushAtTurnBoundary();
-
-              const replay = await replaySession(
-                harness.recordingService.getFilePath()!,
-                PROJECT_HASH,
-              );
-              assertReplayOk(replay);
-              expect(replay.sessionEvents).toHaveLength(messages.length);
-            });
-          },
-        ),
-        { numRuns: 8 },
-      );
-    });
-
-    it('property: compression boundary leaves one summary plus post items', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.array(fc.string({ minLength: 1, maxLength: 12 }), {
-            minLength: 1,
-            maxLength: 8,
-          }),
-          fc.array(fc.string({ minLength: 1, maxLength: 12 }), {
-            minLength: 0,
-            maxLength: 8,
-          }),
-          async (preMessages, postMessages) => {
-            await withFreshHarness(async (harness) => {
-              harness.integration.subscribeToHistory(harness.historyService);
-
-              for (const message of preMessages) {
-                harness.emitter.emit('contentAdded', textContent(message));
-              }
-
-              harness.emitter.emit('compressionStarted');
-              for (const message of preMessages) {
-                harness.emitter.emit(
-                  'contentAdded',
-                  textContent(`readd-${message}`),
-                );
-              }
-              harness.emitter.emit(
-                'compressionEnded',
-                textContent('summary', 'ai'),
-                preMessages.length,
-              );
-
-              for (const message of postMessages) {
-                harness.emitter.emit('contentAdded', textContent(message));
-              }
-
-              await harness.integration.flushAtTurnBoundary();
-              const replay = await replaySession(
-                harness.recordingService.getFilePath()!,
-                PROJECT_HASH,
-              );
-              assertReplayOk(replay);
-              expect(replay.history).toHaveLength(1 + postMessages.length);
-            });
-          },
-        ),
-        { numRuns: 8 },
-      );
-    });
-
-    it('property: replay eventCount equals parsed JSONL line count', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.array(fc.string({ minLength: 1, maxLength: 16 }), {
-            minLength: 1,
-            maxLength: 10,
-          }),
-          async (messages) => {
-            await withFreshHarness(async (harness) => {
-              harness.integration.subscribeToHistory(harness.historyService);
-              for (const message of messages) {
-                harness.emitter.emit('contentAdded', textContent(message));
-              }
-              await harness.integration.flushAtTurnBoundary();
-
-              const events = await readRecordedEvents(harness.recordingService);
-              const replay = await replaySession(
-                harness.recordingService.getFilePath()!,
-                PROJECT_HASH,
-              );
-              assertReplayOk(replay);
-              expect(replay.eventCount).toBe(events.length);
-            });
-          },
-        ),
-        { numRuns: 8 },
-      );
-    });
-
-    it('property: replay lastSeq equals max seq in file', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.array(fc.string({ minLength: 1, maxLength: 16 }), {
-            minLength: 1,
-            maxLength: 10,
-          }),
-          async (messages) => {
-            await withFreshHarness(async (harness) => {
-              harness.integration.subscribeToHistory(harness.historyService);
-              for (const message of messages) {
-                harness.emitter.emit('contentAdded', textContent(message));
-              }
-              await harness.integration.flushAtTurnBoundary();
-
-              const events = await readRecordedEvents(harness.recordingService);
-              const maxSeq = Math.max(...events.map((event) => event.seq));
-              const replay = await replaySession(
-                harness.recordingService.getFilePath()!,
-                PROJECT_HASH,
-              );
-              assertReplayOk(replay);
-              expect(replay.lastSeq).toBe(maxSeq);
-            });
-          },
-        ),
-        { numRuns: 8 },
-      );
-    });
-
-    it('property: replacing history routes events to latest history only', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.array(fc.string({ minLength: 1, maxLength: 12 }), {
-            minLength: 1,
-            maxLength: 8,
-          }),
-          async (messages) => {
-            await withFreshHarness(async (harness) => {
-              const secondHistory = new HistoryService();
-              const secondEmitter = historyEmitter(secondHistory);
-
-              harness.integration.subscribeToHistory(harness.historyService);
-              harness.integration.onHistoryServiceReplaced(secondHistory);
-
-              for (const message of messages) {
-                harness.emitter.emit(
-                  'contentAdded',
-                  textContent(`old-${message}`),
-                );
-                secondEmitter.emit(
-                  'contentAdded',
-                  textContent(`new-${message}`),
-                );
-              }
-
-              await harness.integration.flushAtTurnBoundary();
-              const replay = await replaySession(
-                harness.recordingService.getFilePath()!,
-                PROJECT_HASH,
-              );
-              assertReplayOk(replay);
-              const texts = replay.history.map(
-                (content) =>
-                  (content.blocks[0] as { type: 'text'; text: string }).text,
-              );
-              expect(texts.every((text) => text.startsWith('new-'))).toBe(true);
-            });
-          },
-        ),
-        { numRuns: 8 },
-      );
-    });
-
-    it('property: dispose drops all post-dispose events', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.array(fc.string({ minLength: 1, maxLength: 12 }), {
-            minLength: 1,
-            maxLength: 8,
-          }),
-          fc.array(fc.string({ minLength: 1, maxLength: 12 }), {
-            minLength: 1,
-            maxLength: 8,
-          }),
-          async (beforeDispose, afterDispose) => {
-            await withFreshHarness(async (harness) => {
-              harness.integration.subscribeToHistory(harness.historyService);
-              for (const message of beforeDispose) {
-                harness.emitter.emit('contentAdded', textContent(message));
-              }
-              await harness.integration.flushAtTurnBoundary();
-
-              await harness.integration.dispose();
-              for (const message of afterDispose) {
-                harness.emitter.emit('contentAdded', textContent(message));
-              }
-
-              const replay = await replaySession(
-                harness.recordingService.getFilePath()!,
-                PROJECT_HASH,
-              );
-              assertReplayOk(replay);
-              expect(replay.history).toHaveLength(beforeDispose.length);
-            });
-          },
-        ),
-        { numRuns: 8 },
-      );
-    });
-
-    it('property: file path remains stable across multiple flush segments', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.array(fc.string({ minLength: 1, maxLength: 10 }), {
-            minLength: 1,
-            maxLength: 6,
-          }),
-          fc.array(fc.string({ minLength: 1, maxLength: 10 }), {
-            minLength: 1,
-            maxLength: 6,
-          }),
-          async (firstBatch, secondBatch) => {
-            await withFreshHarness(async (harness) => {
-              harness.integration.subscribeToHistory(harness.historyService);
-
-              for (const message of firstBatch) {
-                harness.emitter.emit(
-                  'contentAdded',
-                  textContent(`first-${message}`),
-                );
-              }
-              await harness.integration.flushAtTurnBoundary();
-              const firstPath = harness.recordingService.getFilePath();
-
-              for (const message of secondBatch) {
-                harness.emitter.emit(
-                  'contentAdded',
-                  textContent(`second-${message}`),
-                );
-              }
-              await harness.integration.flushAtTurnBoundary();
-              const secondPath = harness.recordingService.getFilePath();
-
-              expect(firstPath).toBeTruthy();
-              expect(secondPath).toBe(firstPath);
-            });
-          },
-        ),
-        { numRuns: 8 },
-      );
-    });
-
-    it('property: large random text survives replay unchanged', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 1000, maxLength: 5000 }),
-          async (text) => {
-            await withFreshHarness(async (harness) => {
-              harness.integration.subscribeToHistory(harness.historyService);
-              harness.emitter.emit('contentAdded', textContent(text));
-              await harness.integration.flushAtTurnBoundary();
-
-              const replay = await replaySession(
-                harness.recordingService.getFilePath()!,
-                PROJECT_HASH,
-              );
-              assertReplayOk(replay);
-              const replayed = (
-                replay.history[0].blocks[0] as { type: 'text'; text: string }
-              ).text;
-              expect(replayed).toBe(text);
-            });
-          },
-        ),
-        { numRuns: 6 },
-      );
-    });
-
-    it('property: compressed itemsCompressed value is preserved', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.integer({ min: 1, max: 500 }),
-          fc.string({ minLength: 1, maxLength: 24 }),
-          async (itemsCompressed, summaryText) => {
-            await withFreshHarness(async (harness) => {
-              harness.integration.subscribeToHistory(harness.historyService);
-
-              harness.emitter.emit(
-                'contentAdded',
-                textContent('baseline-materialize'),
-              );
-              harness.emitter.emit('compressionStarted');
-              harness.emitter.emit(
-                'compressionEnded',
-                textContent(summaryText, 'ai'),
-                itemsCompressed,
-              );
-              harness.emitter.emit(
-                'contentAdded',
-                textContent('post-compression-item'),
-              );
-
-              await harness.integration.flushAtTurnBoundary();
-
-              const events = await readRecordedEvents(harness.recordingService);
-              const compressedEvent = events.find(
-                (event) => event.type === 'compressed',
-              );
-              expect(compressedEvent).toBeDefined();
-              const payload = compressedEvent?.payload as {
-                summary: IContent;
-                itemsCompressed: number;
-              };
-              expect(payload.itemsCompressed).toBe(itemsCompressed);
-            });
-          },
-        ),
-        { numRuns: 8 },
-      );
-    });
+  const expectedBytes = new Uint8Array([1, 2, 3, 4]);
+  const reference = await mediaStore.admit({
+    bytes: expectedBytes,
+    mimeType: 'image/png',
+    semanticMetadata: {},
   });
-});
+  await integration.subscribeToJournal(historyService);
+  historyService.add({
+    speaker: 'human',
+    blocks: [reference],
+  } satisfies IContent);
+  await integration.flushAtTurnBoundary();
+
+  const filePath = recordingService.getFilePath();
+  assertNotNull(filePath, 'Expected recording path');
+  const replay = await readJournalSnapshot(filePath, PROJECT_HASH);
+
+  const replayedContent = replay.history.find((_entry, index) => index === 0);
+  const replayedBlock = replayedContent?.blocks.find(
+    (_entry, index) => index === 0,
+  );
+  if (
+    replayedBlock === undefined ||
+    replayedBlock.type !== 'media' ||
+    replayedBlock.encoding !== 'reference'
+  ) {
+    throw new Error('Expected replayed media reference');
+  }
+  const replayedBytes = await mediaStore.readVerified(replayedBlock);
+
+  expect(replayedBlock.contentId).toBe(reference.contentId);
+  expect(replayedBytes).toStrictEqual(expectedBytes);
+  expect(await mediaStore.hasReservations(reference.contentId)).toBe(false);
+  await mediaStore.close();
+}
+
+async function r04(): Promise<void> {
+  await integration.subscribeToJournal(historyService);
+  historyService.add(textContent('old-1'));
+  historyService.add(textContent('old-2'));
+  historyService.startCompression();
+  emitter.emit('contentAdded', textContent('re-added-should-not-record'));
+  await historyService.replaceAll([textContent('summary', 'ai')]);
+  historyService.endCompression(textContent('summary', 'ai'), 2);
+  historyService.add(textContent('new-1'));
+  await integration.flushAtTurnBoundary();
+
+  const replay = await readJournalSnapshot(
+    recordingService.getFilePath()!,
+    PROJECT_HASH,
+  );
+  expect(replay.history).toHaveLength(2);
+  expect(textOf(replay.history[0])).toBe('summary');
+  expect(textOf(replay.history[1])).toBe('new-1');
+}
+
+async function r06(): Promise<void> {
+  await integration.subscribeToJournal(historyService);
+  integration.recordProviderSwitch('openai', 'gpt-5');
+  integration.recordDirectoriesChanged(['/x', '/y']);
+  historyService.add(textContent('materialize'));
+  await integration.flushAtTurnBoundary();
+
+  const replay = await readJournalSnapshot(
+    recordingService.getFilePath()!,
+    PROJECT_HASH,
+  );
+  expect(replay.metadata.provider).toBe('openai');
+  expect(replay.metadata.model).toBe('gpt-5');
+  expect(replay.metadata.workspaceDirs).toStrictEqual(['/x', '/y']);
+}
+
+async function r09(): Promise<void> {
+  await integration.flushAtTurnBoundary();
+  await integration.dispose();
+  expect(recordingService.getFilePath()).toBeNull();
+}
+
+async function r10(): Promise<void> {
+  await integration.subscribeToJournal(historyService);
+  const bigText = 'x'.repeat(80_000);
+  historyService.add(textContent(bigText));
+  await integration.flushAtTurnBoundary();
+
+  const replay = await readJournalSnapshot(
+    recordingService.getFilePath()!,
+    PROJECT_HASH,
+  );
+  const replayText = textOf(replay.history[0]);
+  expect(replayText.length).toBe(80_000);
+}
+
+async function r11(): Promise<void> {
+  await integration.subscribeToJournal(historyService);
+  for (let i = 0; i < 50; i++) {
+    historyService.add(textContent(`rapid-${i}`));
+  }
+  await integration.flushAtTurnBoundary();
+
+  const replay = await readJournalSnapshot(
+    recordingService.getFilePath()!,
+    PROJECT_HASH,
+  );
+  expect(replay.history).toHaveLength(50);
+}
+
+async function r12(): Promise<void> {
+  await integration.subscribeToJournal(historyService);
+
+  historyService.add(textContent('batch-1'));
+  await integration.flushAtTurnBoundary();
+  const firstPath = recordingService.getFilePath();
+
+  historyService.add(textContent('batch-2'));
+  await integration.flushAtTurnBoundary();
+  const secondPath = recordingService.getFilePath();
+
+  expect(firstPath).toBeTruthy();
+  expect(secondPath).toBe(firstPath);
+}
+
+async function r13(): Promise<void> {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(fc.string({ minLength: 1, maxLength: 20 }), {
+        minLength: 1,
+        maxLength: 12,
+      }),
+      async (messages) => {
+        await withFreshHarness(async (harness) => {
+          await harness.integration.subscribeToJournal(harness.historyService);
+          for (const message of messages) {
+            harness.historyService.add(textContent(message));
+          }
+          await harness.integration.flushAtTurnBoundary();
+          const replay = await readJournalSnapshot(
+            harness.recordingService.getFilePath()!,
+            PROJECT_HASH,
+          );
+          expect(replay.history).toHaveLength(messages.length);
+        });
+      },
+    ),
+    { numRuns: 8 },
+  );
+}
+
+async function r14(): Promise<void> {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(fc.string({ minLength: 1, maxLength: 16 }), {
+        minLength: 1,
+        maxLength: 10,
+      }),
+      async (messages) => {
+        await withFreshHarness(async (harness) => {
+          await harness.integration.subscribeToJournal(harness.historyService);
+          for (const message of messages) {
+            harness.historyService.add(textContent(message));
+          }
+          await harness.integration.flushAtTurnBoundary();
+          const replay = await readJournalSnapshot(
+            harness.recordingService.getFilePath()!,
+            PROJECT_HASH,
+          );
+          const replayed = replay.history.map((content) => textOf(content));
+          expect(replayed).toStrictEqual(messages);
+        });
+      },
+    ),
+    { numRuns: 8 },
+  );
+}
+
+async function r15(): Promise<void> {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.stringMatching(/^[a-z][a-z0-9_-]{2,12}$/),
+      fc.stringMatching(/^[a-z][a-z0-9._-]{2,18}$/),
+      async (provider, model) => {
+        await withFreshHarness(async (harness) => {
+          await harness.integration.subscribeToJournal(harness.historyService);
+          harness.integration.recordProviderSwitch(provider, model);
+          harness.historyService.add(textContent('materialize'));
+          await harness.integration.flushAtTurnBoundary();
+
+          const replay = await readJournalSnapshot(
+            harness.recordingService.getFilePath()!,
+            PROJECT_HASH,
+          );
+          expect(replay.metadata.provider).toBe(provider);
+          expect(replay.metadata.model).toBe(model);
+        });
+      },
+    ),
+    { numRuns: 8 },
+  );
+}
+
+async function r16(): Promise<void> {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(fc.stringMatching(/^\/[a-z]{1,6}$/), {
+        minLength: 1,
+        maxLength: 5,
+      }),
+      async (directories) => {
+        await withFreshHarness(async (harness) => {
+          await harness.integration.subscribeToJournal(harness.historyService);
+          harness.integration.recordDirectoriesChanged(directories);
+          harness.historyService.add(textContent('materialize'));
+          await harness.integration.flushAtTurnBoundary();
+
+          const replay = await readJournalSnapshot(
+            harness.recordingService.getFilePath()!,
+            PROJECT_HASH,
+          );
+          expect(replay.metadata.workspaceDirs).toStrictEqual(directories);
+        });
+      },
+    ),
+    { numRuns: 8 },
+  );
+}
+
+async function r18(): Promise<void> {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(fc.string({ minLength: 1, maxLength: 12 }), {
+        minLength: 1,
+        maxLength: 8,
+      }),
+      fc.array(fc.string({ minLength: 1, maxLength: 12 }), {
+        minLength: 0,
+        maxLength: 8,
+      }),
+      async (preMessages, postMessages) => {
+        await withFreshHarness(async (harness) => {
+          await harness.integration.subscribeToJournal(harness.historyService);
+
+          for (const message of preMessages) {
+            harness.historyService.add(textContent(message));
+          }
+
+          harness.historyService.startCompression();
+          for (const message of preMessages) {
+            harness.historyService.emit(
+              'contentAdded',
+              textContent(`readd-${message}`),
+            );
+          }
+          await harness.historyService.replaceAll([
+            textContent('summary', 'ai'),
+          ]);
+          harness.historyService.endCompression(
+            textContent('summary', 'ai'),
+            preMessages.length,
+          );
+
+          for (const message of postMessages) {
+            harness.historyService.add(textContent(message));
+          }
+
+          await harness.integration.flushAtTurnBoundary();
+          const replay = await readJournalSnapshot(
+            harness.recordingService.getFilePath()!,
+            PROJECT_HASH,
+          );
+          expect(replay.history.map(textOf)).toStrictEqual([
+            'summary',
+            ...postMessages,
+          ]);
+        });
+      },
+    ),
+    { numRuns: 8 },
+  );
+}
+
+async function r21(): Promise<void> {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(fc.string({ minLength: 1, maxLength: 12 }), {
+        minLength: 1,
+        maxLength: 8,
+      }),
+      async (messages) => {
+        await withFreshHarness(async (harness) => {
+          const secondHistory = new HistoryService({});
+          extraHistories.push(secondHistory);
+
+          await harness.integration.subscribeToJournal(harness.historyService);
+          await harness.integration.subscribeToJournal(secondHistory);
+
+          for (const message of messages) {
+            harness.historyService.add(textContent(`old-${message}`));
+            secondHistory.add(textContent(`new-${message}`));
+          }
+
+          await harness.integration.flushAtTurnBoundary();
+          const replay = await readJournalSnapshot(
+            harness.recordingService.getFilePath()!,
+            PROJECT_HASH,
+          );
+          const texts = replay.history.map((content) => textOf(content));
+          expect(texts).toStrictEqual(
+            messages.map((message) => `new-${message}`),
+          );
+        });
+      },
+    ),
+    { numRuns: 8 },
+  );
+}
+
+async function r22(): Promise<void> {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(fc.string({ minLength: 1, maxLength: 12 }), {
+        minLength: 1,
+        maxLength: 8,
+      }),
+      fc.array(fc.string({ minLength: 1, maxLength: 12 }), {
+        minLength: 1,
+        maxLength: 8,
+      }),
+      async (beforeDispose, afterDispose) => {
+        await withFreshHarness(async (harness) => {
+          await harness.integration.subscribeToJournal(harness.historyService);
+          for (const message of beforeDispose) {
+            harness.historyService.add(textContent(message));
+          }
+          await harness.integration.flushAtTurnBoundary();
+
+          await harness.integration.dispose();
+          for (const message of afterDispose) {
+            harness.historyService.add(textContent(message));
+          }
+
+          const replay = await readJournalSnapshot(
+            harness.recordingService.getFilePath()!,
+            PROJECT_HASH,
+          );
+          expect(replay.history).toHaveLength(beforeDispose.length);
+        });
+      },
+    ),
+    { numRuns: 8 },
+  );
+}
+
+async function r23(): Promise<void> {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(fc.string({ minLength: 1, maxLength: 10 }), {
+        minLength: 1,
+        maxLength: 6,
+      }),
+      fc.array(fc.string({ minLength: 1, maxLength: 10 }), {
+        minLength: 1,
+        maxLength: 6,
+      }),
+      async (firstBatch, secondBatch) => {
+        await withFreshHarness(async (harness) => {
+          await harness.integration.subscribeToJournal(harness.historyService);
+
+          for (const message of firstBatch) {
+            harness.historyService.add(textContent(`first-${message}`));
+          }
+          await harness.integration.flushAtTurnBoundary();
+          const firstPath = harness.recordingService.getFilePath();
+
+          for (const message of secondBatch) {
+            harness.historyService.add(textContent(`second-${message}`));
+          }
+          await harness.integration.flushAtTurnBoundary();
+          const secondPath = harness.recordingService.getFilePath();
+
+          expect(firstPath).toBeTruthy();
+          expect(secondPath).toBe(firstPath);
+        });
+      },
+    ),
+    { numRuns: 8 },
+  );
+}
+
+async function r24(): Promise<void> {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.string({ minLength: 1000, maxLength: 5000 }),
+      async (text) => {
+        await withFreshHarness(async (harness) => {
+          await harness.integration.subscribeToJournal(harness.historyService);
+          harness.historyService.add(textContent(text));
+          await harness.integration.flushAtTurnBoundary();
+
+          const replay = await readJournalSnapshot(
+            harness.recordingService.getFilePath()!,
+            PROJECT_HASH,
+          );
+          const replayed = textOf(replay.history[0]);
+          expect(replayed).toBe(text);
+        });
+      },
+    ),
+    { numRuns: 6 },
+  );
+}
+
+async function beforeEachRecordingReplay(): Promise<void> {
+  tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'recording-int-test-'));
+  chatsDir = path.join(tempDir, 'chats');
+  await fs.mkdir(chatsDir, { recursive: true });
+
+  recordingService = JournalRecordingService.create(makeConfig(chatsDir));
+  integration = new RecordingIntegration(recordingService);
+  historyService = new HistoryService({});
+  emitter = historyEmitter(historyService);
+}
+
+async function afterEachRecordingReplay(): Promise<void> {
+  await integration.dispose();
+  await historyService.dispose();
+  for (const item of extraHistories.splice(0)) await item.dispose();
+  await recordingService.dispose();
+  await fs.rm(tempDir, { recursive: true, force: true });
+}

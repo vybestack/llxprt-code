@@ -16,7 +16,7 @@
  * disposal tests MUST observe the real throw / real effect).
  *
  * Observation per row (public Agent API and real effects only):
- * - agentClient: `agent.getHistory()` resolves while the agent is open and
+ * - agentClient: `agent.session.getHistory()` resolves while the agent is open and
  *   rejects as disposed once the session client owner is torn down.
  * - scheduler + confirmationCoordinator: the test's own
  *   `createRecordingSchedulerFactory().factory` is injected through the public
@@ -73,9 +73,9 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
       // PRE-dispose sanity read: the session client is live and answers.
-      await expect(agent.getHistory()).resolves.toStrictEqual([]);
+      await expect(agent.session.getHistory()).resolves.toStrictEqual([]);
       await agent.dispose();
-      await expect(agent.getHistory()).rejects.toThrow(/disposed/);
+      await expect(agent.session.getHistory()).rejects.toThrow(/disposed/);
     } finally {
       await cleanup();
     }
@@ -177,14 +177,14 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
       // PRE-dispose sanity read: the session client is live and answers.
-      await expect(agent.getHistory()).resolves.toStrictEqual([]);
+      await expect(agent.session.getHistory()).resolves.toStrictEqual([]);
       // First dispose performs the teardown; dispose.md lines 11-12 guard with
       // a disposed flag so a second dispose() is a no-op that resolves cleanly.
       await agent.dispose();
       // The second call must not throw — the idempotent guard short-circuits.
       await agent.dispose();
       // The session client stays torn down after the idempotent second dispose.
-      await expect(agent.getHistory()).rejects.toThrow(/disposed/);
+      await expect(agent.session.getHistory()).rejects.toThrow(/disposed/);
     } finally {
       await cleanup();
     }

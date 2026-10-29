@@ -33,7 +33,7 @@ import type { Mock } from 'bun:test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { mockChunk } from './__tests__/turn-test-helpers.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
-import { SubAgentScope } from './subagent.js';
+import type { ChildAgentScope } from './subagentOrchestrator.js';
 const realEnvironmentContextModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
 };
@@ -114,7 +114,7 @@ const CONDITION_WAIT_TURNS = 200_000;
 describe('subagent.ts', () => {
   const retainCleanup = installSubagentCleanup();
 
-  let mockSendMessageStream: Mock;
+  let mockSendMessageStream: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     // Guards against a previous test leaking fake-timer state across test
@@ -255,7 +255,7 @@ describe('subagent.ts', () => {
       // Resolved if the stream promise is still pending at cleanup time, to
       // unblock a run orphaned by an earlier assertion failure.
       let streamResolved = false;
-      let scope: SubAgentScope | undefined;
+      let scope: ChildAgentScope | undefined;
       let runPromise: Promise<void> | undefined;
       try {
         const { overrides: timeoutOverrides } = createRuntimeOverrides(
@@ -352,7 +352,11 @@ describe('subagent.ts', () => {
         let capturedSignal: AbortSignal | undefined;
 
         mockSendMessageStream.mockImplementation(
-          async ({ config: messageConfig }) => {
+          async ({
+            config: messageConfig,
+          }: {
+            config: { abortSignal: AbortSignal };
+          }) => {
             capturedSignal = messageConfig.abortSignal;
             return (async function* () {
               yield {
@@ -434,7 +438,9 @@ describe('subagent.ts', () => {
       const config = createSubagentConfig(settings, retainCleanup);
       await acquireSubagentSettings(config, settings, retainCleanup);
       const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
-      mockSendMessageStream.mockRejectedValue(new Error('API Failure'));
+      mockSendMessageStream.mockImplementation(() =>
+        Promise.reject(new Error('API Failure')),
+      );
 
       const { overrides: errorOverrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
@@ -487,7 +493,11 @@ describe('subagent.ts', () => {
         let capturedSignal: AbortSignal | undefined;
 
         mockSendMessageStream.mockImplementation(
-          async ({ config: messageConfig }) => {
+          async ({
+            config: messageConfig,
+          }: {
+            config: { abortSignal: AbortSignal };
+          }) => {
             capturedSignal = messageConfig.abortSignal;
             const stall = async function* () {
               await new Promise<void>((resolve) => {
@@ -602,8 +612,7 @@ describe('subagent.ts', () => {
     });
     const { overrides } = createRuntimeOverrides(
       mcpRuntime.workspaceFilesystem.paths,
-      { settings },
-      { runtimeBundle },
+      { settings, runtimeBundle },
     );
 
     const scope = await createSubagentScope(
@@ -677,11 +686,10 @@ describe('subagent.ts', () => {
       await acquireSubagentSettings(config, settings, retainCleanup);
       const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
 
-      const runtimeBundle = createStatelessRuntimeBundle();
+      const runtimeBundle = createStatelessRuntimeBundle({ settings });
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings },
-        { runtimeBundle },
+        { settings, runtimeBundle },
       );
 
       const scope = await createSubagentScope(
@@ -719,11 +727,10 @@ describe('subagent.ts', () => {
         'removeEventListener',
       );
 
-      const runtimeBundle = createStatelessRuntimeBundle();
+      const runtimeBundle = createStatelessRuntimeBundle({ settings });
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings },
-        { runtimeBundle },
+        { settings, runtimeBundle },
       );
 
       const scope = await createSubagentScope(
@@ -756,11 +763,10 @@ describe('subagent.ts', () => {
       await acquireSubagentSettings(config, settings, retainCleanup);
       const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
 
-      const runtimeBundle = createStatelessRuntimeBundle();
+      const runtimeBundle = createStatelessRuntimeBundle({ settings });
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings },
-        { runtimeBundle },
+        { settings, runtimeBundle },
       );
 
       const scope = await createSubagentScope(
@@ -789,11 +795,10 @@ describe('subagent.ts', () => {
       await acquireSubagentSettings(config, settings, retainCleanup);
       const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
 
-      const runtimeBundle = createStatelessRuntimeBundle();
+      const runtimeBundle = createStatelessRuntimeBundle({ settings });
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings },
-        { runtimeBundle },
+        { settings, runtimeBundle },
       );
 
       const scope = await createSubagentScope(
@@ -839,7 +844,11 @@ describe('subagent.ts', () => {
 
       let capturedSignal: AbortSignal | undefined;
       mockSendMessageStream.mockImplementation(
-        async ({ config: messageConfig }) => {
+        async ({
+          config: messageConfig,
+        }: {
+          config: { abortSignal: AbortSignal };
+        }) => {
           capturedSignal = messageConfig.abortSignal;
           return (async function* () {
             yield {
@@ -852,15 +861,14 @@ describe('subagent.ts', () => {
       );
 
       const runConfig: RunConfig = { max_time_minutes: 5, max_turns: 100 };
-      let scope: SubAgentScope | undefined;
+      let scope: ChildAgentScope | undefined;
       let runPromise: Promise<void> | undefined;
       let runRejection: Promise<unknown> | undefined;
       try {
-        const runtimeBundle = createStatelessRuntimeBundle();
+        const runtimeBundle = createStatelessRuntimeBundle({ settings });
         const { overrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
-          { settings },
-          { runtimeBundle },
+          { settings, runtimeBundle },
         );
 
         scope = await createSubagentScope(

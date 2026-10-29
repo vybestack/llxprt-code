@@ -4,8 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '../IProvider.js';
+import type {
+  IContent,
+  TextBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  AnthropicDocumentBlock,
+  AnthropicImageBlock,
+  AnthropicMessageBlock,
+} from './AnthropicMessageNormalizer.js';
+import type { MetadataBearingOptions } from '../IProvider.js';
+import { anthropicMediaReference } from './anthropic-measured-media.js';
 import { RETRY_REQUEST_CONTEXT_KEY } from '../transportAttemptBudget.js';
 import {
   checkImageDimensionBudget,
@@ -40,24 +49,52 @@ export function sanitizeAnthropicContentImages(
 
   let replacedCount = 0;
   const sanitized = contents.map((content) => {
-    const newBlocks = content.blocks.map((block) => {
-      if (block.type !== 'media' || block.encoding !== 'base64') {
-        return block;
-      }
-      const violation = checkImageDimensionBudget(block.data, budget);
-      if (violation === undefined) {
-        return block;
-      }
-      replacedCount++;
-      return {
-        type: 'text' as const,
-        text: DROPPED_IMAGE_PLACEHOLDER,
-      };
-    });
-    return { ...content, blocks: newBlocks };
+    const row = sanitizeRowImages(content, budget);
+    replacedCount += row.replacedCount;
+    return row.row;
   });
 
   return { contents: sanitized, replacedCount };
+}
+
+/**
+ * The one-row form of {@link sanitizeAnthropicContentImages}: a copy of `row`
+ * whose oversized base64 images are replaced by the dropped-image placeholder.
+ * With no budget the row itself comes back.
+ */
+export function sanitizeRowImages(
+  row: IContent,
+  budget: ImageDimensionBudget | undefined,
+): { row: IContent; replacedCount: number } {
+  if (budget === undefined) {
+    return { row, replacedCount: 0 };
+  }
+  let replacedCount = 0;
+  const blocks = row.blocks.map((block) => {
+    if (block.type !== 'media' || block.encoding === 'url') return block;
+    const dimensions =
+      block.encoding === 'reference' ? block.dimensions : undefined;
+    const exceedsDimension =
+      dimensions !== undefined &&
+      budget.maxDimension !== undefined &&
+      Math.max(dimensions.width, dimensions.height) > budget.maxDimension;
+    const exceedsPixels =
+      dimensions !== undefined &&
+      budget.maxPixels !== undefined &&
+      BigInt(dimensions.width) * BigInt(dimensions.height) >
+        BigInt(budget.maxPixels);
+    const oversized =
+      block.encoding === 'reference'
+        ? exceedsDimension || exceedsPixels
+        : checkImageDimensionBudget(block.data, budget) !== undefined;
+    if (!oversized) return block;
+    replacedCount++;
+    return {
+      type: 'text',
+      text: DROPPED_IMAGE_PLACEHOLDER,
+    } satisfies TextBlock;
+  });
+  return { row: { ...row, blocks }, replacedCount };
 }
 
 /**
@@ -268,14 +305,18 @@ export function resolveRecoveryImageBudget(
  * across outer RetryOrchestrator attempts for the same logical request.
  */
 export interface ImageRecoveryRequestState {
-  sanitizedBody?: Record<string, unknown>;
+  /**
+   * The budget the recovery retry applied, kept so a later outer attempt
+   * builds its request under it again. A number or two; never a body.
+   */
+  recoveryBudget?: ImageDimensionBudget;
   recoveryUsed: boolean;
 }
 
 const IMAGE_RECOVERY_KEY = 'anthropicImageRecovery';
 
 function getRetryContext(
-  options: GenerateChatOptions,
+  options: MetadataBearingOptions,
 ): Record<string, unknown> | undefined {
   const metadata = options.metadata;
   if (metadata === undefined) return undefined;
@@ -288,7 +329,7 @@ function getRetryContext(
  * there is no orchestrator context (direct provider call).
  */
 export function getImageRecoveryState(
-  options: GenerateChatOptions,
+  options: MetadataBearingOptions,
 ): ImageRecoveryRequestState | undefined {
   const ctx = getRetryContext(options);
   if (ctx === undefined) return undefined;
@@ -302,7 +343,7 @@ export function getImageRecoveryState(
  * a fresh ephemeral state is returned (not shared across calls).
  */
 export function ensureImageRecoveryState(
-  options: GenerateChatOptions,
+  options: MetadataBearingOptions,
 ): ImageRecoveryRequestState {
   const ctx = getRetryContext(options);
   if (ctx === undefined) {
@@ -322,124 +363,70 @@ function isImageRecoveryState(
 }
 
 /**
- * Read a `base64` image/document `data` string off a content block of the
- * already-built Anthropic request body (Anthropic message format), when the
- * block is an image or document with a base64 source. Returns the data string
- * to check, or `undefined` when the block carries no checkable base64 bytes.
+ * Whether an image or document block carries base64 bytes that break the
+ * budget. A block with a URL source, or with bytes whose header states no
+ * dimension, is never counted as oversized.
  */
-function readBase64BlockData(
-  block: Record<string, unknown>,
-): string | undefined {
-  if (block['type'] !== 'image' && block['type'] !== 'document') {
-    return undefined;
-  }
-  const source = block['source'];
-  if (!isRecord(source) || source['type'] !== 'base64') {
-    return undefined;
-  }
-  const data = source['data'];
-  return typeof data === 'string' ? data : undefined;
-}
-
-/**
- * Sanitize oversized base64 image/document blocks in an already-built Anthropic
- * request body. Returns a new request body with oversized blocks replaced by
- * text placeholders. The input is never mutated at any nesting level.
- *
- * Traverses both top-level image blocks and image blocks nested inside
- * `tool_result.content` arrays (the actual Anthropic shape for read_file-
- * generated media), preserving the wrapper, `tool_use_id`, `is_error`,
- * sibling text, valid images, ordering, and unrelated fields.
- *
- * Used by the one-shot reactive retry path when Anthropic returns a 400
- * image-dimension error. The limit comes from the active budget.
- */
-export function sanitizeAnthropicRequestBodyImages(
-  requestBody: Record<string, unknown>,
-  budget: ImageDimensionBudget | undefined,
-): { body: Record<string, unknown>; replacedCount: number } {
-  if (budget === undefined) {
-    return { body: requestBody, replacedCount: 0 };
-  }
-
-  const messages = requestBody['messages'];
-  if (!Array.isArray(messages)) {
-    return { body: requestBody, replacedCount: 0 };
-  }
-
-  const counter = { count: 0 };
-
-  const newMessages = messages.map((msg): unknown => {
-    if (!isRecord(msg)) return msg;
-    const content = msg['content'];
-    if (!Array.isArray(content)) return msg;
-
-    const newContent = content.map((block): unknown =>
-      sanitizeContentBlock(block, budget, counter),
-    );
-
-    return { ...msg, content: newContent };
-  });
-
-  // Only rebuild the body when at least one block was sanitized. When
-  // replacedCount stays 0, the same reference is returned so the caller's
-  // identity check works and no pointless clone is made.
-  if (counter.count === 0) {
-    return { body: requestBody, replacedCount: 0 };
-  }
-
-  return {
-    body: { ...requestBody, messages: newMessages },
-    replacedCount: counter.count,
-  };
-}
-
-/**
- * Sanitize a single content block, handling both top-level image blocks and
- * image blocks nested inside a `tool_result` wrapper's `content` array.
- *
- * Recursively shallow-copies wrapper objects so the original is never mutated
- * while sibling text, valid images, `tool_use_id`, `is_error`, and ordering
- * are all preserved.
- */
-function sanitizeContentBlock(
-  block: unknown,
+function exceedsBudget(
+  block: AnthropicImageBlock | AnthropicDocumentBlock,
   budget: ImageDimensionBudget,
-  counter: { count: number },
-): unknown {
-  if (!isRecord(block)) return block;
+): boolean {
+  if (block.source.type !== 'base64') return false;
+  const reference = anthropicMediaReference(block);
+  return reference === undefined
+    ? checkImageDimensionBudget(block.source.data, budget) !== undefined
+    : exceedsAnthropicImageDimensions(reference.dimensions, budget);
+}
 
-  // Top-level image/document block.
-  const data = readBase64BlockData(block);
-  if (data !== undefined) {
-    const violation = checkImageDimensionBudget(data, budget);
-    if (violation !== undefined) {
-      counter.count++;
-      return { type: 'text', text: DROPPED_IMAGE_PLACEHOLDER };
-    }
-    return block;
+export function exceedsAnthropicImageDimensions(
+  dimensions: { readonly width: number; readonly height: number } | undefined,
+  budget: ImageDimensionBudget,
+): boolean {
+  if (dimensions === undefined) return false;
+  return (
+    (budget.maxDimension !== undefined &&
+      Math.max(dimensions.width, dimensions.height) > budget.maxDimension) ||
+    (budget.maxPixels !== undefined &&
+      BigInt(dimensions.width) * BigInt(dimensions.height) >
+        BigInt(budget.maxPixels))
+  );
+}
+
+export function droppedImageBlock(): { type: 'text'; text: string } {
+  return { type: 'text', text: DROPPED_IMAGE_PLACEHOLDER };
+}
+
+/**
+ * Sanitize one finished Anthropic content block against `budget`: an
+ * oversized base64 image/document block becomes the dropped-image text
+ * block, and the same holds for such blocks inside a `tool_result`'s content
+ * array, where the wrapper keeps `tool_use_id`, `is_error`, sibling text,
+ * valid images, ordering and every other field. The input is never mutated;
+ * a block with nothing to replace comes back as the same object.
+ *
+ * Used by the one-shot reactive retry when Anthropic returns a 400
+ * image-dimension error: the retry's message table is built again and each of
+ * its blocks passes through here, so no sanitized copy of the body exists.
+ */
+export function sanitizeWireBlockImages(
+  block: AnthropicMessageBlock,
+  budget: ImageDimensionBudget,
+): { block: AnthropicMessageBlock; replacedCount: number } {
+  if (block.type === 'image' || block.type === 'document') {
+    return exceedsBudget(block, budget)
+      ? { block: droppedImageBlock(), replacedCount: 1 }
+      : { block, replacedCount: 0 };
   }
-
-  // Nested: tool_result.content may be a string or an array of blocks.
-  if (block['type'] === 'tool_result') {
-    const innerContent = block['content'];
-    if (!Array.isArray(innerContent)) return block;
-
-    const countBefore = counter.count;
-    const newInner = innerContent.map((nestedBlock): unknown => {
-      if (!isRecord(nestedBlock)) return nestedBlock;
-      const nestedData = readBase64BlockData(nestedBlock);
-      if (nestedData === undefined) return nestedBlock;
-      const violation = checkImageDimensionBudget(nestedData, budget);
-      if (violation === undefined) return nestedBlock;
-      counter.count++;
-      return { type: 'text', text: DROPPED_IMAGE_PLACEHOLDER };
-    });
-
-    if (counter.count === countBefore) return block;
-    // Preserve tool_use_id, is_error, and all other fields.
-    return { ...block, content: newInner };
+  if (block.type !== 'tool_result' || !Array.isArray(block.content)) {
+    return { block, replacedCount: 0 };
   }
-
-  return block;
+  let replacedCount = 0;
+  const content = block.content.map((nested) => {
+    if (nested.type === 'text' || !exceedsBudget(nested, budget)) return nested;
+    replacedCount++;
+    return droppedImageBlock();
+  });
+  return replacedCount === 0
+    ? { block, replacedCount }
+    : { block: { ...block, content }, replacedCount };
 }

@@ -108,7 +108,7 @@ describe('initCommand', () => {
 
     // Act: Run the command's action
     const result = await createInitCommand(
-      noConfigContext.services.config?.getTargetDir(),
+      undefined,
       noConfigContext.ui.addItem,
     ).action!(noConfigContext, '');
 

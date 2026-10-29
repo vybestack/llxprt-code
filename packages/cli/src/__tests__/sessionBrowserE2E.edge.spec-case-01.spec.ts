@@ -65,13 +65,14 @@ describe('Edge cases #1', () => {
     });
 
     const result = await performResume('latest', context);
+    const newRecording = context.recordingCallbacks.getCurrentRecording();
+    if (newRecording !== null) state.recordingsToDispose.push(newRecording);
+    const newLock = context.recordingCallbacks.getCurrentLockHandle();
+    state.lockHandles.push(...resumeLockHandlesForCleanup(newLock));
 
     expect(result.ok).toBe(true);
     assertTruthy(result.ok);
     // Should skip empty and pick the one with content
     expect(result.metadata.sessionId).toBe(contentSessionId);
-
-    const newLock = context.recordingCallbacks.getCurrentLockHandle();
-    state.lockHandles.push(...resumeLockHandlesForCleanup(newLock));
   });
 });

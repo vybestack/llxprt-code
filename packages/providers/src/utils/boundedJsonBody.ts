@@ -45,6 +45,16 @@ interface SerializationPlan {
 
 const encoder = new TextEncoder();
 
+/** The one failure text for a JSON request envelope over its byte limit. */
+export function envelopeTooLargeError(
+  maxEnvelopeBytes: number,
+  envelopeBytes: number,
+): RangeError {
+  return new RangeError(
+    `JSON request envelope exceeds ${maxEnvelopeBytes} bytes (${envelopeBytes} bytes)`,
+  );
+}
+
 function validateLimit(name: string, value: number): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${name} must be a non-negative safe integer`);
@@ -151,9 +161,16 @@ class PlanBuilder {
   private byteLength = 0;
 
   build(value: unknown): SerializationPlan {
-    if (!this.appendValue(value, '', false)) {
+    const plan = this.tryBuild(value, '');
+    if (plan === undefined) {
       throw new TypeError('JSON request body is not serializable');
     }
+    return plan;
+  }
+
+  /** The plan, or `undefined` when `JSON.stringify(value)` is `undefined`. */
+  tryBuild(value: unknown, key: string): SerializationPlan | undefined {
+    if (!this.appendValue(value, key, false)) return undefined;
     return { segments: this.segments, byteLength: this.byteLength };
   }
 
@@ -279,6 +296,12 @@ function segmentUnits(
     : escapedStringUnits(segment.value, maxPlainUnitCodeUnits);
 }
 
+/**
+ * Chunks start small and double up to the limit so a tiny value never pins a
+ * full-size backing buffer for as long as a consumer holds its view.
+ */
+const INITIAL_CHUNK_CAPACITY_BYTES = 1024;
+
 class ChunkAccumulator {
   private chunk: Uint8Array | undefined;
   private readonly scalarScratch = new Uint8Array(4);
@@ -293,22 +316,16 @@ class ChunkAccumulator {
     let index = 0;
     while (index < value.length) {
       const chunk = this.currentChunk();
-      const available = this.maxChunkBytes - this.used;
-      let end = Math.min(value.length, index + available);
-      if (
-        end < value.length &&
-        end > index &&
-        isHighSurrogate(value.charCodeAt(end - 1)) &&
-        isLowSurrogate(value.charCodeAt(end))
-      ) {
-        end -= 1;
-      }
+      const available = chunk.byteLength - this.used;
+      const end = fittingUtf8End(value, index, available);
       const source = value.slice(index, end);
       this.recordEncodingInput(source.length);
       const encoded = encoder.encodeInto(source, chunk.subarray(this.used));
       if (encoded.read > 0) {
         index += encoded.read;
         this.used += encoded.written;
+      } else if (this.used > 0 && chunk.byteLength < this.maxChunkBytes) {
+        this.grow(chunk);
       } else if (this.used > 0) {
         yield this.takeChunk();
       } else {
@@ -339,7 +356,7 @@ class ChunkAccumulator {
     while (offset < bytes.byteLength) {
       const chunk = this.currentChunk();
       const count = Math.min(
-        this.maxChunkBytes - this.used,
+        chunk.byteLength - this.used,
         bytes.byteLength - offset,
       );
       chunk.set(bytes.subarray(offset, offset + count), this.used);
@@ -350,8 +367,25 @@ class ChunkAccumulator {
   }
 
   private currentChunk(): Uint8Array {
-    this.chunk ??= new Uint8Array(this.maxChunkBytes);
-    return this.chunk;
+    const chunk = this.chunk;
+    if (chunk === undefined) {
+      this.chunk = new Uint8Array(
+        Math.min(this.maxChunkBytes, INITIAL_CHUNK_CAPACITY_BYTES),
+      );
+      return this.chunk;
+    }
+    if (this.used === chunk.byteLength && chunk.byteLength < this.maxChunkBytes)
+      return this.grow(chunk);
+    return chunk;
+  }
+
+  private grow(chunk: Uint8Array): Uint8Array {
+    const grown = new Uint8Array(
+      Math.min(this.maxChunkBytes, chunk.byteLength * 2),
+    );
+    grown.set(chunk.subarray(0, this.used));
+    this.chunk = grown;
+    return grown;
   }
 
   private takeChunk(): Uint8Array {
@@ -365,6 +399,27 @@ class ChunkAccumulator {
     this.used = 0;
     return result;
   }
+}
+
+function fittingUtf8End(
+  value: string,
+  start: number,
+  capacity: number,
+): number {
+  let end = start;
+  let bytes = 0;
+  while (end < value.length) {
+    const next = nextScalarEnd(value, end);
+    const unit = value.charCodeAt(end);
+    let width = 3;
+    if (next - end === 2) width = 4;
+    else if (unit <= 0x7f) width = 1;
+    else if (unit <= 0x7ff) width = 2;
+    if (bytes + width > capacity) break;
+    bytes += width;
+    end = next;
+  }
+  return end;
 }
 
 function isHighSurrogate(codeUnit: number): boolean {
@@ -402,6 +457,33 @@ function* chunksFor(
   if (finalChunk !== undefined) yield finalChunk;
 }
 
+export interface JsonValueChunkOptions {
+  /** The member key `toJSON` receives, as `JSON.stringify` passes it. */
+  readonly key?: string;
+  readonly maxChunkBytes?: number;
+}
+
+/**
+ * The UTF-8 bytes of `JSON.stringify(value)` as chunks, produced one at a
+ * time without a whole-value buffer. Returns `undefined` when `JSON.stringify`
+ * would, so the caller can skip an object member exactly as it would.
+ * Each chunk is a fresh array the caller may keep.
+ */
+export function jsonValueChunks(
+  value: unknown,
+  options: JsonValueChunkOptions = {},
+): Generator<Uint8Array, void, unknown> | undefined {
+  const maxChunkBytes =
+    options.maxChunkBytes ?? DEFAULT_STREAMING_JSON_CHUNK_BYTES;
+  validateLimit('maxChunkBytes', maxChunkBytes);
+  if (maxChunkBytes === 0) {
+    throw new RangeError('JSON streaming chunk limit is zero');
+  }
+  const plan = new PlanBuilder().tryBuild(value, options.key ?? '');
+  if (plan === undefined) return undefined;
+  return chunksFor(plan.segments, maxChunkBytes, () => undefined);
+}
+
 export interface BoundedJsonStream {
   readonly stream: ReadableStream<Uint8Array>;
   dispose(reason?: unknown): Promise<void>;
@@ -437,6 +519,7 @@ function createPublicStream(
           controller.error(error);
         }
       },
+
       cancel: dispose,
     },
     { highWaterMark: 0 },
@@ -460,9 +543,7 @@ export class BoundedJsonBody {
     validateLimit('maxEnvelopeBytes', limits.maxEnvelopeBytes);
     const plan = new PlanBuilder().build(value);
     if (plan.byteLength > limits.maxEnvelopeBytes) {
-      throw new RangeError(
-        `JSON request envelope exceeds ${limits.maxEnvelopeBytes} bytes (${plan.byteLength} bytes)`,
-      );
+      throw envelopeTooLargeError(limits.maxEnvelopeBytes, plan.byteLength);
     }
     if (plan.byteLength > 0 && limits.maxChunkBytes === 0) {
       throw new RangeError('JSON streaming chunk limit is zero');

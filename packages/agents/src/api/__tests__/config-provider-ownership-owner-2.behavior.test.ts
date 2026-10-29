@@ -332,9 +332,13 @@ describe('explicit session authentication lifecycle', () => {
   it('initializes a replacement without conversation history', async () => {
     await withSession(async () => {
       await builtCallerOwner.clients.refreshAuth();
-      await sessionClient().startChat(await sessionClient().getHistory());
+      await sessionClient().startChat(
+        await Array.fromAsync(sessionClient().getHistory()),
+      );
       expect(sessionClient().isInitialized()).toBe(true);
-      expect(await sessionClient().getHistory()).toStrictEqual([]);
+      expect(await Array.fromAsync(sessionClient().getHistory())).toStrictEqual(
+        [],
+      );
     });
   });
 
@@ -355,13 +359,17 @@ describe('explicit session authentication lifecycle', () => {
     const stored: IContent[][] = [];
     const client = createTestAgentClient({
       storeHistoryForLaterUse: async (contents) => {
-        stored.push(structuredClone([...contents]));
+        stored.push(structuredClone(await Array.fromAsync(contents)));
       },
     });
     await transferHistoryToNewClient(
       new DebugLogger('test'),
       client,
-      thoughts,
+      {
+        async *[Symbol.asyncIterator]() {
+          yield* thoughts;
+        },
+      },
       null,
       { model: 'vertex-model', vertexai: true },
       false,
@@ -390,13 +398,17 @@ describe('explicit session authentication lifecycle', () => {
     const stored: IContent[][] = [];
     const client = createTestAgentClient({
       storeHistoryForLaterUse: async (contents) => {
-        stored.push(structuredClone([...contents]));
+        stored.push(structuredClone(await Array.fromAsync(contents)));
       },
     });
     await transferHistoryToNewClient(
       new DebugLogger('test'),
       client,
-      thoughts,
+      {
+        async *[Symbol.asyncIterator]() {
+          yield* thoughts;
+        },
+      },
       null,
       { model: 'genai-model', vertexai: false },
       true,
@@ -427,7 +439,9 @@ describe('explicit session authentication lifecycle', () => {
         oauth.composeRetryOperations(provider),
       );
       await builtCallerOwner.clients.refreshAuth();
-      await sessionClient().startChat(await sessionClient().getHistory());
+      await sessionClient().startChat(
+        await Array.fromAsync(sessionClient().getHistory()),
+      );
       expect(sessionClient().isInitialized()).toBe(true);
       expect(logins).toBe(0);
     });
@@ -443,12 +457,16 @@ describe('explicit session authentication lifecycle', () => {
         oauth.composeRetryOperations(provider),
       );
       await builtCallerOwner.clients.refreshAuth();
-      await sessionClient().startChat(await sessionClient().getHistory());
+      await sessionClient().startChat(
+        await Array.fromAsync(sessionClient().getHistory()),
+      );
       expect(
-        (await sessionClient().getHistory()).map(({ speaker, blocks }) => ({
-          speaker,
-          blocks,
-        })),
+        (await Array.fromAsync(sessionClient().getHistory())).map(
+          ({ speaker, blocks }) => ({
+            speaker,
+            blocks,
+          }),
+        ),
       ).toStrictEqual(history);
       expect(await oauth.getTokenStore().listProviders()).toStrictEqual([]);
     });

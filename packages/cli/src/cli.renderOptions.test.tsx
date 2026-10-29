@@ -1,3 +1,4 @@
+import { CliSessionPersistence } from './cliSessionPersistence.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -13,13 +14,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { Config } from '@vybestack/llxprt-code-core';
+import { Config, LocalMediaStore } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
 import { __setRenderForTesting } from './session/interactiveUI.js';
 
 import { LoadedSettings } from './config/settings.js';
-import { CliSessionPersistence } from './cliSessionPersistence.js';
 
 const createFakeAgent = async (_config: Config): Promise<Agent> =>
   makeRenderAgent(crypto.randomUUID());
@@ -139,7 +139,7 @@ describe('startInteractiveUI ink render options', () => {
       undefined,
       undefined,
       'raw',
-      rawPersistence(),
+      rawPersistence(tempDir),
       startupSettings(),
     );
 
@@ -182,7 +182,7 @@ describe('startInteractiveUI ink render options', () => {
       undefined,
       undefined,
       'raw',
-      rawPersistence(),
+      rawPersistence(tempDir),
       startupSettings(),
     );
 
@@ -207,9 +207,14 @@ function startupSettings(): SessionSettingsOwner {
   return owner;
 }
 
-function rawPersistence(): CliSessionPersistence {
+function rawPersistence(root: string): CliSessionPersistence {
   return new CliSessionPersistence(
-    { projectRoot: '/root', chatsDir: '/root/chats' },
-    {},
+    { projectRoot: root, chatsDir: path.join(root, 'chats') },
+    {
+      mediaStore: new LocalMediaStore({
+        rootDirectory: path.join(root, 'media'),
+        quotaBytes: 1024,
+      }),
+    },
   );
 }

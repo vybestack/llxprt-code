@@ -3,6 +3,10 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { readJournalCheckpoints } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+import { seedSessionRows } from '../../../__tests__/journal-recording.js';
+
+import { displayBoot } from '../../../__tests__/resumeRows.js';
 
 import {
   rawBrowserCatalog,
@@ -39,9 +43,9 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
+  createLockedSessionRecorder,
   SessionLockManager,
-  replaySession,
   type IContent,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
@@ -81,17 +85,8 @@ function makeContent(
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
-function requireReplaySuccess(
-  result: Awaited<ReturnType<typeof replaySession>>,
-): asserts result is Extract<
-  Awaited<ReturnType<typeof replaySession>>,
-  { ok: true }
-> {
-  if (!result.ok) throw new Error(result.error);
-}
-
 /**
- * Create a real session file using SessionRecordingService.
+ * Create a real session file using createSessionRecorder.
  */
 async function createTestSession(
   chatsDir: string,
@@ -113,11 +108,11 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = new SessionRecordingService(config);
+  const svc = createSessionRecorder(config);
 
   const contents = opts.contents ?? [makeContent('hello')];
   for (const content of contents) {
-    svc.recordContent(content);
+    await seedSessionRows(svc, [content]);
   }
   await svc.flush();
 
@@ -163,8 +158,9 @@ function makeHookProps(
       overrides.onSelect ??
       (async (): Promise<PerformResumeResult> => ({
         ok: true,
-        history: [],
+        history: displayBoot([]).streamRows(),
         metadata: {
+          kind: 'main',
           sessionId: 'resumed',
           projectHash: PROJECT_HASH,
           startTime: new Date().toISOString(),
@@ -191,28 +187,31 @@ function isCheckpointRow(
   );
 }
 
+let tempDir: string;
+let chatsDir: string;
+let lockHandles: Array<{ release: () => Promise<void> }>;
+
+async function setUpSessionBrowserFixture(): Promise<void> {
+  tempDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'use-session-browser-test-'),
+  );
+  chatsDir = path.join(tempDir, 'chats');
+  await fs.mkdir(chatsDir, { recursive: true });
+  lockHandles = [];
+}
+
+async function tearDownSessionBrowserFixture(): Promise<void> {
+  await Promise.all(lockHandles.map((handle) => handle.release()));
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
 // ---------------------------------------------------------------------------
 // Test Suite
 // ---------------------------------------------------------------------------
 
 describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
-  let tempDir: string;
-  let chatsDir: string;
-  let lockHandles: Array<{ release: () => Promise<void> }>;
-
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'use-session-browser-test-'),
-    );
-    chatsDir = path.join(tempDir, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
-    lockHandles = [];
-  });
-
-  afterEach(async () => {
-    await Promise.all(lockHandles.map((handle) => handle.release()));
-    await fs.rm(tempDir, { recursive: true, force: true });
-  });
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
 
   describe('Loading & Listing @requirement:REQ-SB-009', () => {
     /**
@@ -280,7 +279,8 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
     it('empty sessions are excluded', async () => {
       // Create a session with no user content
       const emptyConfig = makeConfig(chatsDir, { sessionId: 'empty-session' });
-      const emptySvc = new SessionRecordingService(emptyConfig);
+      const emptySvc = createSessionRecorder(emptyConfig);
+      await seedSessionRows(emptySvc, []);
       emptySvc.recordSessionEvent('info', 'session started');
       await emptySvc.flush();
       await emptySvc.dispose();
@@ -299,13 +299,20 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       expect(sessionIds).not.toContain('empty-session');
       expect(sessionIds).toContain('has-content');
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 2)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Loading & Listing @requirement:REQ-SB-009', () => {
     it('lists session and checkpoint rows and tombstones only the checkpoint', async () => {
       const sessionId = 'checkpoint-source-session';
-      const recording = await SessionRecordingService.createLocked(
+      const recording = await createLockedSessionRecorder(
         makeConfig(chatsDir, { sessionId }),
       );
-      recording.recordContent(makeContent('branch content'));
+      await seedSessionRows(recording, [makeContent('branch content')]);
       const checkpoint = await recording.createCheckpoint('branch-point');
 
       try {
@@ -351,19 +358,26 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
           expect(result.current.sessions).toHaveLength(1);
         });
         expect(result.current.sessions[0].target.kind).toBe('session');
-        const replay = await replaySession(
+        const checkpoints = await readJournalCheckpoints(
           recording.getFilePath()!,
-          PROJECT_HASH,
         );
-        requireReplaySuccess(replay);
-        const deleted = replay.checkpoints?.find(
-          (candidate) => candidate.checkpointId === checkpoint.checkpointId,
-        );
-        expect(deleted?.deleted).toBe(true);
+        expect(
+          checkpoints.find(
+            (candidate) => candidate.checkpointId === checkpoint.checkpointId,
+          ),
+        ).toBeUndefined();
       } finally {
         await recording.dispose();
       }
     });
+  });
+});
+
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 3)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Loading & Listing @requirement:REQ-SB-009', () => {
     /**
      * Test 5: Skipped count populated (REQ-SB-008)
      * GIVEN: Some sessions are unreadable or filtered
@@ -430,7 +444,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       );
       expect(lockedSession?.isLocked).toBe(true);
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 4)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Loading & Listing @requirement:REQ-SB-009', () => {
     /**
      * Test 6a: Stale locks cleaned during load (REQ-LK-004)
      * GIVEN: A stale lock file exists (from crashed process)
@@ -524,6 +545,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       // incorrectly set by delayed loads from the old page
       expect(result.current.page).toBe(1);
     });
+  });
+});
+
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 5)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Loading & Listing @requirement:REQ-SB-009', () => {
     /**
      * Test 7b: Preview resolves to none (REQ-PV-005)
      * GIVEN: A session contains content but no human message
@@ -549,7 +578,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       });
       expect(result.current.error).toBeNull();
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 6)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Loading & Listing @requirement:REQ-SB-009', () => {
     /**
      * Test 7c: Corrupt recordings are skipped without disturbing browsing
      * (REQ-SB-008)

@@ -1,6 +1,7 @@
 import {
   captureResponsesTestRequest,
   type ResponsesTestDeps,
+  executeResponsesTestRequest,
 } from './responses-request.test-helpers.js';
 /**
  * @license
@@ -28,7 +29,6 @@ import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -171,7 +171,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
       invocationSignal: controller.signal,
     });
     await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps()),
         buildDeps(),
       ),
@@ -198,7 +198,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
       metadataAbortSignal: controller.signal,
     });
     await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps()),
         buildDeps(),
       ),
@@ -227,7 +227,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
       metadataAbortSignal: metadataController.signal,
     });
     await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps()),
         buildDeps(),
       ),
@@ -258,7 +258,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
       invocationSignal: controller.signal,
       ephemerals: { retrywait: 10_000, retries: 5 },
     });
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     );
@@ -298,7 +298,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
       invocationSignal: controller.signal,
       ephemerals: { retrywait: 1_000, retries: 5 },
     });
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     );

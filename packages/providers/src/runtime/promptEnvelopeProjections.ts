@@ -10,6 +10,9 @@ import type {
   UnsupportedMediaEntry,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import type { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
+import type { NativeChatEstimateProjection } from '../openai/native-chat-estimate.js';
+import type { NativeAnthropicEstimateProjection } from '../anthropic/native-anthropic-estimate.js';
 import {
   parseImageDimensionsFromBase64,
   type ImageDimensions,
@@ -60,6 +63,7 @@ const PROMPT_KEYS = Object.freeze({
 export interface ProjectionOptions {
   readonly unsupportedMedia?: readonly UnsupportedMediaEntry[];
   readonly transportToken?: object;
+  readonly legacyTokenCounter?: (text: string) => number;
 }
 
 export interface OpenAIResponsesProjectionContext {
@@ -74,10 +78,27 @@ type ProjectionIdentity = Pick<
   'protocol' | 'method' | 'projectionRevision'
 >;
 
+function anthropicIdentity(): ProjectionIdentity {
+  return Object.freeze({
+    protocol: 'anthropic-messages',
+    method: 'messages/v1',
+    projectionRevision: PROJECTION_REVISION,
+  });
+}
+
+function chatIdentity(): ProjectionIdentity {
+  return Object.freeze({
+    protocol: 'openai-chat',
+    method: 'chat/completions/v1',
+    projectionRevision: PROJECTION_REVISION,
+  });
+}
+
 function buildEstimationProjection(
   requestBody: unknown,
   promptKeys: readonly string[],
   protocol: PromptEnvelopeProjection['protocol'],
+  countTokens: (text: string) => number = countPromptTokens,
 ): PromptEnvelopeEstimationProjection {
   const imageEntries: ProjectionImageEntry[] = [];
   const canonicalEntries = canonicalPromptEntries(
@@ -100,7 +121,7 @@ function buildEstimationProjection(
   return Object.freeze({
     finalizedProjection,
     legacyEstimate: () => {
-      legacyTokens ??= countPromptTokens(promptText);
+      legacyTokens ??= countTokens(promptText);
       return Promise.resolve(legacyTokens);
     },
   });
@@ -116,6 +137,7 @@ function buildProjection(
     requestBody,
     promptKeys,
     identity.protocol,
+    options?.legacyTokenCounter,
   );
   const unsupportedMedia = freezeUnsupportedMedia(options?.unsupportedMedia);
   // PromptEnvelopeProjection declares every member readonly. Freezing enforces
@@ -209,7 +231,7 @@ function serializePromptSegments(
     ),
   );
 }
-function canonicalizePromptValue(
+export function canonicalizePromptValue(
   value: unknown,
   key: string,
   imageEntries: ProjectionImageEntry[],
@@ -306,7 +328,7 @@ function replaceAllBase64DataUris(
   );
 }
 
-function countPromptTokens(promptText: string): number {
+export function countPromptTokens(promptText: string): number {
   return promptText.trim() === '' ? 0 : estimateTokens(promptText);
 }
 
@@ -317,13 +339,60 @@ export function projectAnthropicPromptEnvelope(
   return buildProjection(
     requestBody,
     PROMPT_KEYS['anthropic-messages'],
-    {
-      protocol: 'anthropic-messages',
-      method: 'messages/v1',
-      projectionRevision: PROJECTION_REVISION,
-    },
+    anthropicIdentity(),
     options,
   );
+}
+
+type SourceProjectionOptions = ProjectionOptions & {
+  readonly releaseIfUnsent: () => Promise<void>;
+  readonly model: string;
+};
+
+const sourceEstimatorOnly = (): Promise<number> =>
+  Promise.reject(
+    new Error('A source projection requires the pinned source estimator'),
+  );
+
+/**
+ * Projection of a request whose prompt keys are sealed estimator-form files.
+ * The estimator reads the files in bounded chunks, so no body or message array
+ * exists at estimate time. The projection's owner disposes the files;
+ * `releaseIfUnsent` is the media request's release.
+ */
+function projectFromSource(
+  identity: ProjectionIdentity,
+  source:
+    | Gpt56SourceProjection
+    | NativeChatEstimateProjection
+    | NativeAnthropicEstimateProjection,
+  options: SourceProjectionOptions,
+): PromptEnvelopeProjection {
+  return Object.freeze({
+    model: extractModelOrThrow({ model: options.model }, identity),
+    protocol: identity.protocol,
+    method: identity.method,
+    projectionRevision: identity.projectionRevision,
+    unsupportedMedia: freezeUnsupportedMedia(options.unsupportedMedia),
+    transportToken: options.transportToken ?? EMPTY_TRANSPORT_TOKEN,
+    finalizedProjection: source,
+    legacyEstimate: sourceEstimatorOnly,
+    releaseIfUnsent: options.releaseIfUnsent,
+  });
+}
+
+export function projectAnthropicPromptEnvelopeFromSource(
+  source: Gpt56SourceProjection | NativeAnthropicEstimateProjection,
+  options: SourceProjectionOptions,
+): PromptEnvelopeProjection {
+  return projectFromSource(anthropicIdentity(), source, options);
+}
+
+export function projectOpenAIChatPromptEnvelopeFromSource(
+  source: Gpt56SourceProjection | NativeChatEstimateProjection,
+  options: SourceProjectionOptions,
+): PromptEnvelopeProjection {
+  return projectFromSource(chatIdentity(), source, options);
 }
 
 export function projectOpenAIChatPromptEnvelope(
@@ -333,11 +402,7 @@ export function projectOpenAIChatPromptEnvelope(
   return buildProjection(
     requestBody,
     PROMPT_KEYS['openai-chat'],
-    {
-      protocol: 'openai-chat',
-      method: 'chat/completions/v1',
-      projectionRevision: PROJECTION_REVISION,
-    },
+    chatIdentity(),
     options,
   );
 }

@@ -27,17 +27,17 @@ export const fixturePaths = installTestWorkspacePaths({
  * Shared helpers for client test files. Extracted from the original
  * monolithic client.test.ts so no file-level max-lines disable is needed.
  *
- * IMPORTANT: vi.mock() registrations are file-scoped. Each test file that
- * exercises AgentClient must declare its own vi.mock() calls and the mock fns
- * they reference at the top of the file, before the module under test is
- * imported. The setup function below receives those mock fns as arguments so
- * it can wire them into the shared Config and content-generator mocks.
+ * Bun vi.mock() registrations can affect other files in a shared test process.
+ * Tests that need real Config or Turn modules should inject their Config fixture
+ * and Turn factory instead of mocking those modules. The legacy setup still
+ * supports client tests that register their own module mocks.
  */
 
-import { vi, type Mock } from 'bun:test';
+import { afterAll, vi, type Mock } from 'bun:test';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { buildMockContentGenerator } from './chatSession-density-helpers.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ChatSession } from '../chatSession.js';
 import type { MessageStreamDeps } from '../MessageStreamOrchestrator.js';
 import { AgentClient } from '../client.js';
@@ -49,9 +49,28 @@ import { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complex
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+const fixtureHistories = new Set<HistoryService>();
+afterAll(async () => {
+  for (const history of fixtureHistories) await history.dispose();
+  fixtureHistories.clear();
+});
+export function createClientHistoryFixture(): Pick<
+  ChatSession,
+  'getHistoryService' | 'clearHistoryForDisposal'
+> {
+  const history = new HistoryService();
+  return {
+    getHistoryService: () => history,
+    clearHistoryForDisposal: async (): Promise<void> => {
+      await history.dispose();
+    },
+  };
+}
 
 /**
  * Array.fromAsync ponyfill, which will be available in es 2024.
@@ -139,13 +158,13 @@ function resetAndApplyServiceMocks(): void {
   setSimulate429(false);
 }
 
-/** Build and register the mock Config implementation. */
-function setupConfigMock(mockFns: ClientMockFns): ContentGeneratorConfig {
-  const MockedConfig = Config as unknown as Mock<(...args: never[]) => unknown>;
+function buildClientContentGeneratorConfig(
+  mockFns: ClientMockFns,
+): ContentGeneratorConfig {
   const contentGenerator = buildMockContentGenerator();
   contentGenerator.generateContent = mockFns.mockGenerateContentFn;
   contentGenerator.embedContent = mockFns.mockEmbedContentFn;
-  const contentGeneratorConfig: ContentGeneratorConfig = {
+  return {
     model: 'test-model',
     apiKey: 'test-key',
     vertexai: false,
@@ -153,11 +172,28 @@ function setupConfigMock(mockFns: ClientMockFns): ContentGeneratorConfig {
       createContentGenerator: () => contentGenerator,
     },
   };
+}
+
+/** Build the Config fixture, optionally injecting it without a module mock. */
+function setupConfigMock(
+  mockFns: ClientMockFns,
+  useInjectedConfig: boolean,
+): { contentGeneratorConfig: ContentGeneratorConfig; config: Config } {
+  const contentGeneratorConfig = buildClientContentGeneratorConfig(mockFns);
   // The automocked Config constructor loses its instance-building
   // implementation when vi.resetAllMocks() runs (Bun 1.4 resets mock
   // implementations), so build the instance from the mocked prototype directly.
   const mockConfigObject = Object.assign(
-    Object.create(HostConfig.prototype) as Config,
+    useInjectedConfig
+      ? new HostConfig({
+          sessionId: 'test-session-id',
+          cwd: process.cwd(),
+          targetDir: process.cwd(),
+          debugMode: false,
+          model: 'test-model',
+          telemetry: { enabled: false },
+        })
+      : Object.create(HostConfig.prototype),
     {
       getContentGeneratorConfig: vi
         .fn()
@@ -206,8 +242,14 @@ function setupConfigMock(mockFns: ClientMockFns): ContentGeneratorConfig {
       getModelRouterService: vi.fn().mockReturnValue(undefined),
     },
   );
-  MockedConfig.mockImplementation(() => mockConfigObject as unknown as Config);
-  return contentGeneratorConfig;
+  const config = mockConfigObject as unknown as Config;
+  if (!useInjectedConfig) {
+    const MockedConfig = Config as unknown as Mock<
+      (...args: never[]) => unknown
+    >;
+    MockedConfig.mockImplementation(() => config);
+  }
+  return { contentGeneratorConfig, config };
 }
 
 /** Instantiate the AgentClient and wire its chat mock. */
@@ -261,18 +303,27 @@ async function createAndInitClient(
   client.bindToolSelection(modelTools());
   await client.initialize(contentGeneratorConfig);
 
-  client.getHistory = vi.fn().mockReturnValue([]);
+  // Tests steer the history seen by the client by resolving this stub.
+  const stubbedHistory = vi
+    .fn<() => Promise<readonly IContent[]>>()
+    .mockResolvedValue([]);
+  client.getHistory = stubbedHistory as unknown as typeof client.getHistory;
+  vi.spyOn(client, 'streamHistory').mockImplementation(async function* () {
+    yield* await stubbedHistory();
+  });
 
+  const historyService = new HistoryService();
+  fixtureHistories.add(historyService);
   const mockChat = {
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
-    getHistoryService: vi.fn().mockReturnValue({
-      clear: vi.fn(),
-      findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-      getCurated: vi.fn().mockReturnValue([]),
-      getTotalTokens: vi.fn().mockReturnValue(0),
+    getHistoryService: vi.fn().mockReturnValue(historyService),
+    clearHistory: vi.fn(async () => {
+      await historyService.clear();
     }),
-    clearHistory: vi.fn(),
+    clearHistoryForDisposal: async (): Promise<void> => {
+      await historyService.dispose();
+    },
     sendMessageStream: vi.fn(),
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),
     getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
@@ -287,17 +338,45 @@ async function createAndInitClient(
   return client;
 }
 
+export interface SetupAgentClientOptions {
+  /** Inject the fixture Config instead of registering a Config module mock. */
+  useInjectedConfig?: boolean;
+  config?: Config;
+  mediaStore?: LocalMediaStore;
+}
+
+function isSetupOptions(
+  value: Config | SetupAgentClientOptions | undefined,
+): value is SetupAgentClientOptions | undefined {
+  return (
+    value === undefined ||
+    'useInjectedConfig' in value ||
+    'mediaStore' in value ||
+    'config' in value
+  );
+}
+
 /**
  * Performs the shared beforeEach setup for agent client tests.
  * Returns the constructed client and mock config.
  */
 export async function setupAgentClient(
   mockFns: ClientMockFns,
-  config?: Config,
-  mediaStore?: LocalMediaStore,
+  configOrOptions?: Config | SetupAgentClientOptions,
+  mediaStoreArg?: LocalMediaStore,
 ): Promise<ClientTestContext> {
-  resetAndApplyServiceMocks();
-  const contentGeneratorConfig = setupConfigMock(mockFns);
+  const options: SetupAgentClientOptions = isSetupOptions(configOrOptions)
+    ? (configOrOptions ?? {})
+    : { config: configOrOptions };
+  const mediaStore = options.mediaStore ?? mediaStoreArg;
+  const useInjectedConfig = options.useInjectedConfig === true;
+  if (!useInjectedConfig) {
+    resetAndApplyServiceMocks();
+  }
+  const { contentGeneratorConfig, config } = setupConfigMock(
+    mockFns,
+    useInjectedConfig,
+  );
   const instructionData = { userMemory: '', coreMemory: '', jitMemory: '' };
   const instructions: InstructionReadOperations = {
     snapshot: () => ({
@@ -314,7 +393,7 @@ export async function setupAgentClient(
   const client = await createAndInitClient(
     contentGeneratorConfig,
     mockFns.createTurn,
-    config,
+    options.config ?? (useInjectedConfig ? config : undefined),
     mediaStore,
     instructions,
     mockFns.model,

@@ -29,6 +29,7 @@ import type {
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { vi } from 'bun:test';
 import { join } from 'node:path';
+import { collectHistoryFixture } from './support/collect-history-test-fixture.js';
 import { ChatSession } from '../chatSession.js';
 import { chatSessionPorts } from '../chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
@@ -58,16 +59,17 @@ function createMediaHistoryProvider(
     getDefaultModel: () => 'media-history-model',
     getModels: () => Promise.resolve([]),
     async *generateChatCompletion(
-      request: GenerateChatOptions | IContent[],
+      request: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncIterableIterator<IContent> {
-      if (Array.isArray(request)) throw new Error('Expected request options');
+      if (Symbol.asyncIterator in request)
+        throw new Error('Expected request options');
       if (
         this.requestMediaResolver === undefined ||
         this.requestMediaBudgetBytes === undefined
       )
         throw new Error('Expected selected media dependencies');
       const resolved = await this.requestMediaResolver.resolve({
-        contents: request.contents,
+        contents: await collectHistoryFixture(request.contents),
         requestId: 'media-history-request',
         turnId: 'media-history-turn',
         aggregateBudgetBytes: this.requestMediaBudgetBytes,

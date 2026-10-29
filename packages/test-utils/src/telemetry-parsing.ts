@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createHash } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DiagnosticsSink } from './diagnostics.js';
-import type { ParsedLog } from './types.js';
+import type { ParsedLog, TelemetryAttributes } from './types.js';
 
 /**
  * Split the raw telemetry log content into individual JSON object strings.
@@ -118,6 +119,92 @@ export function extractApiRequests(
     (logData) =>
       logData.attributes !== undefined &&
       logData.attributes['event.name'] === 'llxprt_code.api_request',
+  );
+}
+
+const API_REQUEST_CHUNK_EVENT = 'llxprt_code.api_request_chunk';
+const API_REQUEST_COMPLETE_EVENT = 'llxprt_code.api_request_complete';
+
+function eventAttributes(
+  parsedLogs: readonly ParsedLog[],
+  eventName: string,
+): TelemetryAttributes[] {
+  const matches: TelemetryAttributes[] = [];
+  for (const logData of parsedLogs) {
+    const attributes = logData.attributes;
+    if (attributes?.['event.name'] === eventName) matches.push(attributes);
+  }
+  return matches;
+}
+
+function requireField<T>(value: T | undefined, field: string, id: string): T {
+  if (value === undefined) {
+    throw new Error(`Request artifact ${id} is missing ${field}`);
+  }
+  return value;
+}
+
+function decodeArtifact(
+  complete: TelemetryAttributes,
+  chunks: readonly TelemetryAttributes[],
+): string {
+  const id = requireField(complete.artifact_id, 'artifact_id', 'unknown');
+  const expectedCount = requireField(complete.chunk_count, 'chunk_count', id);
+  const ordered = [...chunks].sort(
+    (left, right) => (left.chunk_index ?? 0) - (right.chunk_index ?? 0),
+  );
+  if (ordered.length !== expectedCount) {
+    throw new Error(
+      `Request artifact ${id} has ${ordered.length} chunks, expected ${expectedCount}`,
+    );
+  }
+  let offset = 0;
+  const buffers = ordered.map((chunk, index) => {
+    if (chunk.chunk_index !== index || chunk.chunk_byte_offset !== offset) {
+      throw new Error(`Request artifact ${id} has a gap before chunk ${index}`);
+    }
+    const bytes = Buffer.from(
+      requireField(chunk.chunk_data, 'chunk_data', id),
+      'base64',
+    );
+    offset += bytes.length;
+    return bytes;
+  });
+  const content = Buffer.concat(buffers);
+  if (content.length !== complete.content_bytes) {
+    throw new Error(
+      `Request artifact ${id} has ${content.length} bytes, expected ${complete.content_bytes}`,
+    );
+  }
+  const digest = createHash('sha256').update(content).digest('hex');
+  if (digest !== complete.content_sha256) {
+    throw new Error(`Request artifact ${id} failed its sha256 check`);
+  }
+  return content.toString('utf-8');
+}
+
+/**
+ * Reassemble the request bodies exported as chunked artifacts. Each completed
+ * artifact is verified against its recorded chunk count, byte length and
+ * sha256; any mismatch throws so a truncated export cannot pass as evidence.
+ * Results are in completion order.
+ */
+export function extractApiRequestArtifactTexts(
+  parsedLogs: readonly ParsedLog[],
+): string[] {
+  const chunks = eventAttributes(parsedLogs, API_REQUEST_CHUNK_EVENT);
+  return eventAttributes(parsedLogs, API_REQUEST_COMPLETE_EVENT).map(
+    (complete) => {
+      if (complete.content_complete !== true) {
+        throw new Error(
+          `Request artifact ${complete.artifact_id ?? 'unknown'} is not complete`,
+        );
+      }
+      return decodeArtifact(
+        complete,
+        chunks.filter((chunk) => chunk.artifact_id === complete.artifact_id),
+      );
+    },
   );
 }
 

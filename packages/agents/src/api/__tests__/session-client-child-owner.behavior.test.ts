@@ -449,9 +449,9 @@ describe('Isolated child session client ownership', () => {
           blocks: [{ type: 'text', text: 'parent continues' }],
         });
         expect(
-          (await currentClient(parentOwner).getHistory()).filter(
-            (item) => item.speaker === 'human',
-          ),
+          (
+            await Array.fromAsync(currentClient(parentOwner).getHistory())
+          ).filter((item) => item.speaker === 'human'),
         ).toHaveLength(1);
       },
       credentials().authority,
@@ -479,9 +479,9 @@ describe('Isolated child session client ownership', () => {
           blocks: [{ type: 'text', text: 'parent continues' }],
         });
         expect(
-          (await currentClient(parentOwner).getHistory()).filter(
-            (item) => item.speaker === 'human',
-          ),
+          (
+            await Array.fromAsync(currentClient(parentOwner).getHistory())
+          ).filter((item) => item.speaker === 'human'),
         ).toHaveLength(1);
       },
       credentials().authority,

@@ -9,10 +9,9 @@ import { describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  SessionRecordingService,
-  replaySession,
-} from '@vybestack/llxprt-code-core';
+import { createLockedSessionRecorder } from '@vybestack/llxprt-code-core';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+import { readJournalCheckpoints } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
@@ -47,7 +46,8 @@ function registeredChat(
           () => undefined,
         ),
         () => agent.session.readInitializedHistory(),
-        rawOperations(agent).replaceChatHistory,
+        rawOperations(agent).clearHistory,
+        rawOperations(agent).restoreTurns,
         () => null,
       ),
       mode,
@@ -107,7 +107,7 @@ describe('interactive /chat command registry', () => {
   it('keeps the raw recording handler by default', async () => {
     const root = await mkdtemp(join(tmpdir(), 'chat-raw-route-'));
     const projectHash = 'chat-raw-route';
-    const recording = await SessionRecordingService.createLocked({
+    const recording = await createLockedSessionRecorder({
       sessionId: crypto.randomUUID(),
       projectHash,
       chatsDir: join(root, 'chats'),
@@ -117,10 +117,12 @@ describe('interactive /chat command registry', () => {
       model: 'fake-model',
     });
     try {
-      recording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'raw hello' }],
-      });
+      await recordRowsForTest(recording, [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'raw hello' }],
+        },
+      ]);
       await recording.flush();
       const { agent } = await openAgent();
       await agent.session.setRecording({ enabled: true });
@@ -128,6 +130,7 @@ describe('interactive /chat command registry', () => {
         getCurrentRecording: () => recording,
         getCurrentIntegration: () => null,
         getCurrentLockHandle: () => null,
+        getCurrentMetadata: () => null,
         setRecording: () => undefined,
       });
       const command = loaderFor(registered)
@@ -142,12 +145,10 @@ describe('interactive /chat command registry', () => {
           'raw-checkpoint',
         ),
       ).toMatchObject({ messageType: 'info' });
-      const replay = await replaySession(
+      const checkpoints = await readJournalCheckpoints(
         recording.getFilePath() ?? '',
-        projectHash,
       );
-      if (!replay.ok) throw new Error(replay.error);
-      expect(replay.checkpoints).toContainEqual(
+      expect(checkpoints).toContainEqual(
         expect.objectContaining({ name: 'raw-checkpoint' }),
       );
       expect(await agent.session.listCheckpoints()).toHaveLength(0);

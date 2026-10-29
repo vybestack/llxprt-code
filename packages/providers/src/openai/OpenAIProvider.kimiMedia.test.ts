@@ -6,7 +6,8 @@
 
 import { bindProviderFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderFiles.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, spyOn, vi } from 'bun:test';
+import * as fs from 'node:fs';
 import type OpenAI from 'openai';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -19,6 +20,10 @@ import { declaredMediaTransportCapabilities } from '../providerMediaTransportCap
 import { resolveRequestMedia } from '../utils/request-media-resolution.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
+import { rowsSelection } from '../__tests__/support/wireBodyCapture.js';
+import type { ChatRowInput } from './OpenAIRequestPreparation.js';
+import type { RowsMediaInput } from '../openai-responses/responses-row-media.js';
+import { prepareKimiProviderFiles } from './kimi-provider-file-preparation.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -66,14 +71,50 @@ function createContents(): IContent[] {
   ];
 }
 
+/**
+ * The media pre-pass runs after request normalization, when the call carries
+ * its rows as `requestRows` rather than as the caller's cold stream.
+ */
+function createNormalizedOptions(
+  init: Parameters<typeof createProviderCallOptions>[0] & {
+    contents: IContent[];
+  },
+): NormalizedGenerateChatOptions {
+  return {
+    ...createProviderCallOptions(init),
+    contents: [],
+    requestRows: rowsSelection(init.contents),
+    contentCount: init.contents.length,
+  } as NormalizedGenerateChatOptions;
+}
+
+async function* asyncRows(rows: readonly IContent[]): AsyncGenerator<IContent> {
+  for (const row of rows) yield structuredClone(row);
+}
+
+/** The rows as the chat body is written from them: through the media stage. */
+async function stagedRows(
+  input: ChatRowInput | undefined,
+  rows: readonly IContent[],
+): Promise<IContent[]> {
+  if (input?.mediaStage === undefined)
+    throw new Error('expected a media stage');
+  const staged: IContent[] = [];
+  for await (const row of input.mediaStage(asyncRows(rows))) staged.push(row);
+  return staged;
+}
+
 type KimiMediaProcessor = {
   maybeProcessKimiMedia(
     options: NormalizedGenerateChatOptions,
     client: OpenAI,
     logger: DebugLogger,
     mediaRequest: ResolvedMediaRequest,
-  ): Promise<NormalizedGenerateChatOptions>;
+    media: RowsMediaInput,
+  ): Promise<ChatRowInput | undefined>;
 };
+
+const MEDIA_INPUT: RowsMediaInput = { requestId: 'provider-request' };
 
 describe('OpenAIProvider Kimi media preprocessing', () => {
   it('leaves video unchanged while the experimental setting is disabled', async () => {
@@ -84,17 +125,13 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
       files: { create: filesCreate },
     } as unknown as OpenAI;
     const provider = createProvider();
-    const options = createProviderCallOptions({
+    const options = createNormalizedOptions({
       providerName: provider.name,
       contents: createContents(),
       configOverrides: { getTargetDir: () => '/workspace/kimi-media' },
     });
 
-    const mediaRequest = await resolveRequestMedia(
-      { requestId: 'provider-request' },
-      options.contents,
-      undefined,
-    );
+    const mediaRequest = await resolveRequestMedia(MEDIA_INPUT, [], undefined);
     const result = await (
       provider as unknown as KimiMediaProcessor
     ).maybeProcessKimiMedia(
@@ -102,21 +139,15 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
       client,
       new DebugLogger('test:kimi-media'),
       mediaRequest,
+      MEDIA_INPUT,
     );
     await mediaRequest.release();
 
     expect(filesCreate).not.toHaveBeenCalled();
-    expect(result).toBe(options);
-    expect(result.contents[0].blocks[1]).toStrictEqual({
-      type: 'media',
-      mimeType: 'video/mp4',
-      data: 'VklERU8=',
-      encoding: 'base64',
-      filename: 'clip.mp4',
-    });
+    expect(result).toBeUndefined();
   });
 
-  it('uploads enabled video and creates a Moonshot file reference', async () => {
+  it('uploads enabled video and creates a Moonshot file reference without scratch files', async () => {
     const filesCreate = vi.fn().mockResolvedValue({
       id: 'video-file',
       bytes: 5,
@@ -139,7 +170,7 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
     const settings = new SettingsService();
     settings.set('kimi.experimental-video', true);
     settings.set('provider-files', 'workspace');
-    const options = createProviderCallOptions({
+    const options = createNormalizedOptions({
       providerName: provider.name,
       contents: createContents(),
       settings,
@@ -162,24 +193,40 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
       configOverrides: { getTargetDir: () => '/workspace/kimi-media' },
     });
 
-    const mediaRequest = await resolveRequestMedia(
-      { requestId: 'provider-request' },
-      options.contents,
-      undefined,
-    );
-    const result = await (
-      provider as unknown as KimiMediaProcessor
-    ).maybeProcessKimiMedia(
-      options,
-      client,
-      new DebugLogger('test:kimi-media'),
-      mediaRequest,
-    );
-    await mediaRequest.release();
+    const mediaRequest = await resolveRequestMedia(MEDIA_INPUT, [], undefined);
+    const denied = (): never => {
+      throw new Error('Kimi upload attempted scratch file creation');
+    };
+    const guards = [
+      spyOn(fs, 'mkdtempSync').mockImplementation(denied),
+      spyOn(fs, 'openSync').mockImplementation(denied),
+      spyOn(fs.promises, 'mkdtemp').mockImplementation(denied),
+      spyOn(fs.promises, 'open').mockImplementation(denied),
+    ];
+    let rows: IContent[];
+    try {
+      const result = await prepareKimiProviderFiles(
+        options,
+        client,
+        new DebugLogger('test:kimi-media'),
+        mediaRequest,
+        provider.name,
+        declaredMediaTransportCapabilities('kimi'),
+        undefined,
+        lifecycle,
+        '/workspace/kimi-media',
+        MEDIA_INPUT,
+      );
+      rows = await stagedRows(result, createContents());
+      expect(await stagedRows(result, createContents())).toStrictEqual(rows);
+    } finally {
+      await mediaRequest.release();
+      for (const guard of guards) guard.mockRestore();
+    }
 
     expect(filesCreate).toHaveBeenCalledTimes(1);
     expect(filesCreate.mock.calls[0][0].purpose).toBe('video');
-    expect(result.contents[0].blocks[1]).toStrictEqual({
+    expect(rows[0].blocks[1]).toStrictEqual({
       type: 'media',
       mimeType: 'video/mp4',
       data: 'ms://video-file',

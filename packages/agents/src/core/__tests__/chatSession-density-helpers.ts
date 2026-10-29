@@ -1,3 +1,4 @@
+import type { CompressionHandler } from '../../compression/CompressionHandler.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { afterEach as closePolicyFixtures } from 'bun:test';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -38,7 +39,10 @@ const requestFetch: NetworkFetch = () =>
 let callIdCounter = 0;
 
 const policyRoots: SessionSettingsOwner[] = [];
+const historyRoots = new Set<HistoryService>();
 closePolicyFixtures(async () => {
+  for (const history of historyRoots) await history.dispose();
+  historyRoots.clear();
   for (const owner of policyRoots.splice(0)) await owner.dispose();
 });
 
@@ -150,6 +154,7 @@ export function buildRuntimeContext(
 
   const settingsService = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(settingsService);
+  historyRoots.add(historyService);
   policyRoots.push(settingsOwner);
   return createAgentRuntimeContext({
     readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
@@ -204,6 +209,7 @@ export function buildMockContentGenerator(): ContentGenerator {
 // ---------------------------------------------------------------------------
 
 export interface ChatSessionInternals {
+  readonly compressionHandler: Pick<CompressionHandler, 'performCompression'>;
   ensureDensityOptimized(): Promise<void>;
   densityDirty: boolean;
   historyService: HistoryService;
@@ -218,7 +224,7 @@ export interface ChatSessionInternals {
     promptId: string,
     provider?: unknown,
   ): Promise<void>;
-  shouldCompress(pendingTokens?: number): boolean;
+  shouldCompress(pendingTokens?: number): Promise<boolean>;
 }
 
 export function getInternals(chat: ChatSession): ChatSessionInternals {

@@ -1,0 +1,155 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
+import {
+  assertRemovalRows,
+  recordRemovalOwners,
+  removalReferences,
+  removalRow,
+  withRemovalFixture,
+} from './history-removals-test-helpers.js';
+import type { ChronologyMarker, IContent } from './IContent.js';
+
+function registerRemovalScale(size: number): void {
+  describe('settled media removals', () => {
+    it(`settles shared and removed media through pop and matching removal over ${size} mixed rows`, async () => {
+      await withRemovalFixture(async ({ history, owners }, store) => {
+        const [shared, removed] = await removalReferences(store);
+        const input = Array.from({ length: size }, (_, index) =>
+          removalRow(index, index === size - 1 ? removed : shared),
+        );
+        await history.detachedValues.append(
+          (async function* () {
+            for (let index = 0; index < size; index++)
+              yield removalRow(index, index === size - 1 ? removed : shared);
+          })(),
+        );
+        await history.settleMediaOwnership();
+        const tail = await history.pop();
+        expect(tail).toStrictEqual(input[size - 1]);
+        expect(tail).not.toBe(input[size - 1]);
+        await history.waitForOwnershipSettlement();
+        const sharedAfterPop = await store.hasReservations(shared.contentId);
+        expect(await store.hasReservations(removed.contentId)).toBe(false);
+        expect(await history.removeLastIfMatches(input[size - 2])).toBe(true);
+        await history.waitForOwnershipSettlement();
+        await assertRemovalRows(history.streamRawHistory(), input.slice(0, -2));
+        expect([
+          sharedAfterPop,
+          await store.hasReservations(shared.contentId),
+        ]).toStrictEqual([true, true]);
+        recordRemovalOwners('settled-removals', size, owners);
+        expect(
+          owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
+        ).toBe(true);
+        await history.clear();
+        await history.waitForOwnershipSettlement();
+        expect(history.length()).toBe(0);
+        expect(await store.hasReservations(shared.contentId)).toBe(false);
+        expect(owners.snapshot().liveRows).toBe(0);
+      });
+    }, 180000);
+  });
+}
+
+describe('disk history removals and real media ownership', () => {
+  for (const size of [512, 8192]) registerRemovalScale(size);
+
+  it('returns detached values for pending caller rows, keeps caller markers and queued append order', async () => {
+    await withRemovalFixture(
+      async (
+        { history, pauseWriter, waitForPausedWrite, releaseWriter },
+        store,
+      ) => {
+        const [reference] = await removalReferences(store);
+        const first = removalRow(0, reference);
+        const marker: ChronologyMarker = {
+          seq: 2,
+          userTurn: 1,
+          step: 1,
+          recordedAt: 1700000000001,
+        };
+        const tail: IContent = {
+          ...removalRow(1, reference),
+          metadata: { chronology: marker },
+        };
+        pauseWriter();
+        history.add(first);
+        history.add(tail);
+        await waitForPausedWrite;
+        releaseWriter();
+        await history.waitForTokenUpdates();
+        const popping = history.pop();
+        const queued = batchRow(2);
+        history.add(queued);
+        expect(await popping).toMatchObject(tail);
+        expect(tail.metadata?.chronology).toBe(marker);
+        await assertRemovalRows(history.streamRawHistory(), [first, queued]);
+        expect(await store.hasReservations(reference.contentId)).toBe(true);
+        expect(await history.removeLastIfMatches(batchRow(99))).toBe(false);
+      },
+    );
+  });
+});
+
+describe('pending clear and large-row identity', () => {
+  it('clears synchronously with pending writer rows, releases references and retains chronology counters', async () => {
+    await withRemovalFixture(
+      async (
+        { history, pauseWriter, waitForPausedWrite, releaseWriter },
+        store,
+      ) => {
+        const [reference] = await removalReferences(store);
+        const input = [removalRow(0, reference), removalRow(1, reference)];
+        pauseWriter();
+        history.addAll(input);
+        await waitForPausedWrite;
+        releaseWriter();
+        await history.waitForTokenUpdates();
+        await history.settleMediaOwnership();
+        await history.clear();
+        expect(history.length()).toBe(0);
+        expect(history.getTotalTokens()).toBe(0);
+        expect(history.getContextRange().removedInterior).toContainEqual({
+          start: 1,
+          end: 2,
+          reason: 'cleared',
+        });
+        await history.waitForOwnershipSettlement();
+        expect(await store.hasReservations(reference.contentId)).toBe(false);
+        const next: IContent = {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'next' }],
+        };
+        history.add(next);
+        expect(await history.getLastUserContent()).toStrictEqual(next);
+        expect(next).toHaveProperty('metadata.chronology.seq', 3);
+        releaseWriter();
+        await history.waitForCommit();
+        expect(await history.getLastUserContent()).toStrictEqual(next);
+      },
+    );
+  });
+
+  it('returns a valid nine-MiB pending row and a settled row by detached value', async () => {
+    await withRemovalFixture(
+      async ({ history, pauseWriter, waitForPausedWrite, releaseWriter }) => {
+        const large = batchRow(0, 9 * 1024 * 1024);
+        pauseWriter();
+        history.add(large);
+        await waitForPausedWrite;
+        releaseWriter();
+        await history.waitForTokenUpdates();
+        expect(await history.pop()).toMatchObject(large);
+        releaseWriter();
+        await history.waitForCommit();
+        history.add(large);
+        await history.waitForTokenUpdates();
+        await history.waitForCommit();
+        const removed = await history.pop();
+        expect(removed).not.toBe(large);
+        expect(removed).toMatchObject(large);
+      },
+    );
+  }, 180000);
+});

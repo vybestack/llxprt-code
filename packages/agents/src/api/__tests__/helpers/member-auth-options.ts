@@ -12,6 +12,7 @@ import type {
 } from '@vybestack/llxprt-code-providers';
 import { resolveMemberAuthentication } from '../../../../../providers/src/loadBalancing/memberAuthentication.js';
 import { buildRoundRobinResolvedOptions } from '../../../../../providers/src/loadBalancing/resolvedOptionsBuilder.js';
+import { replayableContents } from '../../../../../providers/src/utils/collectContents.js';
 
 export async function memberOptions(
   member: ResolvedSubProfile,
@@ -21,7 +22,7 @@ export async function memberOptions(
   return buildRoundRobinResolvedOptions(
     await resolveMemberAuthentication(member, logger, storage),
     {
-      contents: [],
+      contents: replayableContents([]),
       invocation: createRuntimeInvocationContext({
         fetch: () =>
           Promise.reject(new Error('This test must not make network requests')),

@@ -220,7 +220,7 @@ describe('production filesystem roots', () => {
         FakeProvider.prototype,
         'generateChatCompletion',
       ).mockImplementation(async function* (this: FakeProvider, input) {
-        if (Array.isArray(input))
+        if (!('contents' in input))
           throw new Error('Expected structured chat options');
         instructions.push(input.systemInstruction ?? '');
         yield* generate.call(this, input);

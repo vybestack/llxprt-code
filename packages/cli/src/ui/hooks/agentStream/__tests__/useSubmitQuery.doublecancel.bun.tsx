@@ -33,12 +33,11 @@ import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import type { QueuedSubmission } from '../types.js';
 import {
   RecordingIntegration,
-  SessionRecordingService,
+  createSessionRecorder,
 } from '@vybestack/llxprt-code-core';
 import type { StreamRuntime } from '../../../cliUiRuntime.js';
 import { KeypressProvider } from '../../../contexts/KeypressContext.js';
 import { createFakeAgentFromMockClient } from '../../__tests__/useAgentStream-test-helpers.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 // ─── Module mocks ───────────────────────────────────────────────────────────
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { createDeferred } from './createDeferred.js';
@@ -174,7 +173,7 @@ async function createUseSubmitQueryDeps(
       undefined,
     ),
     addItem: overrides.addItem ?? vi.fn().mockReturnValue(1),
-    removeItems: vi.fn(),
+
     settings: createLoadedSettings(),
     onDebugMessage: vi.fn(),
     onCancelSubmit: vi.fn(),
@@ -182,9 +181,9 @@ async function createUseSubmitQueryDeps(
 
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: deps.flushPendingHistoryItem,
-    pendingResponse: new PendingResponseBuffer(undefined),
+
     pendingHistoryItemRef: deps.pendingHistoryItemRef,
-    thinkingBlocksRef: { current: [] },
+
     turnCancelledRef: overrides.turnCancelledRef ?? { current: false },
     setTurnCancelled: vi.fn(),
     queuedSubmissionsRef,
@@ -283,7 +282,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       runStreamRef: { current: vi.fn(() => turnDeferred.promise) },
     });
     const recordingIntegration = new RecordingIntegration(
-      new SessionRecordingService({
+      createSessionRecorder({
         sessionId: 'stale-turn-test',
         projectHash: 'test-project',
         workspaceDirs: ['/tmp'],

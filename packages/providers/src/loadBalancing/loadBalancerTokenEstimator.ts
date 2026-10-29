@@ -65,13 +65,49 @@ function createTokenizerAdapter(
   };
 }
 
-export async function estimateRequestTokens(
+/**
+ * A repeatable ordered row source. `open()` yields a fresh pass over the same
+ * rows, so a tokenizer pass and a generic fallback pass never share a reader.
+ * `array` is present only for the legacy array route, which keeps its
+ * serialized-JSON and character fallbacks.
+ */
+export interface EstimationRowSource {
+  readonly count: number;
+  open(): AsyncIterable<IContent>;
+  readonly array?: readonly IContent[];
+}
+
+function arrayRowSource(contents: readonly IContent[]): EstimationRowSource {
+  return {
+    count: contents.length,
+    open: async function* open() {
+      yield* contents;
+    },
+    array: contents,
+  };
+}
+
+export function estimateRequestTokens(
   contents: IContent[],
   providerName: string,
   modelName: string,
   deps: LoadBalancerEstimatorDeps,
 ): Promise<EstimationResult> {
-  if (contents.length === 0) {
+  return estimateRowSourceTokens(
+    arrayRowSource(contents),
+    providerName,
+    modelName,
+    deps,
+  );
+}
+
+export async function estimateRowSourceTokens(
+  rows: EstimationRowSource,
+  providerName: string,
+  modelName: string,
+  deps: LoadBalancerEstimatorDeps,
+): Promise<EstimationResult> {
+  if (rows.count === 0) {
     return { tokens: 0, source: 'empty contents' };
   }
 
@@ -89,13 +125,12 @@ export async function estimateRequestTokens(
 
   if (tokenizer) {
     try {
-      const result = await estimateWithTokenizer(
-        contents,
+      return await estimateWithTokenizer(
+        rows,
         modelName,
         tokenizer,
         providerName,
       );
-      return addReferenceMetadataTokens(contents, result);
     } catch (error) {
       if (tokenizer.fallbackPolicy === 'deny') {
         throw error;
@@ -114,11 +149,11 @@ export async function estimateRequestTokens(
     );
   }
 
-  const result = await estimateWithGeneric(contents, providerName);
-  return addReferenceMetadataTokens(contents, {
+  const result = await estimateWithGeneric(rows, providerName);
+  return {
     ...result,
     source: `${result.source} (tokenizer unavailable: ${tokenizerFailureModel})`,
-  });
+  };
 }
 
 function referenceMetadataCharacterEquivalent(block: unknown): number {
@@ -147,49 +182,57 @@ function referenceMetadataCharacterEquivalent(block: unknown): number {
   );
 }
 
-function addReferenceMetadataTokens(
-  contents: readonly IContent[],
-  result: EstimationResult,
-): EstimationResult {
-  let encodedCharacterEquivalent = 0;
-  for (const content of contents) {
-    if (!Array.isArray(content.blocks)) continue;
-    for (const block of content.blocks) {
-      encodedCharacterEquivalent += referenceMetadataCharacterEquivalent(block);
-    }
+function referenceMetadataTokens(encodedCharacterEquivalent: number): number {
+  return Math.ceil(encodedCharacterEquivalent / CHARS_PER_TOKEN_FALLBACK);
+}
+
+/** Pass-through that folds each row's reference-metadata cost as it streams. */
+async function* withReferenceMetadataFold(
+  rows: AsyncIterable<IContent>,
+  fold: { characters: number },
+): AsyncGenerator<IContent> {
+  for await (const content of rows) {
+    foldReferenceMetadata(content, fold);
+    yield content;
   }
-  if (encodedCharacterEquivalent === 0) {
-    return result;
+}
+
+function foldReferenceMetadata(
+  content: IContent,
+  fold: { characters: number },
+): void {
+  if (!Array.isArray(content.blocks)) return;
+  for (const block of content.blocks) {
+    fold.characters += referenceMetadataCharacterEquivalent(block);
   }
-  return {
-    ...result,
-    tokens:
-      result.tokens +
-      Math.ceil(encodedCharacterEquivalent / CHARS_PER_TOKEN_FALLBACK),
-  };
 }
 
 async function estimateWithTokenizer(
-  contents: IContent[],
+  rows: EstimationRowSource,
   modelName: string,
   tokenizer: ITokenizer,
   providerName: string,
 ): Promise<EstimationResult> {
   const tokenizerProvider = createTokenizerAdapter(tokenizer, providerName);
+  const reference = { characters: 0 };
   const tokens = await estimateTokensForContents(
-    contents,
+    withReferenceMetadataFold(rows.open(), reference),
     modelName,
     tokenizerProvider,
     logger,
   );
   return {
-    tokens: applyNonEmptyTokenFloor(contents, tokens),
+    tokens:
+      applyNonEmptyTokenFloor(rows.count, tokens) +
+      (reference.characters === 0
+        ? 0
+        : referenceMetadataTokens(reference.characters)),
     source: `${modelName} (tokenizer)`,
   };
 }
 
-function applyNonEmptyTokenFloor(contents: IContent[], tokens: number): number {
-  if (contents.length === 0) {
+function applyNonEmptyTokenFloor(count: number, tokens: number): number {
+  if (count === 0) {
     return 0;
   }
   return Number.isFinite(tokens) && tokens > 0 ? tokens : 1;
@@ -364,7 +407,7 @@ function estimateFallbackBlockCharacters(
   }
 }
 
-function estimateRawContentTokens(contents: IContent[]): number {
+function estimateRawContentTokens(contents: readonly IContent[]): number {
   const characterCount = contents.reduce(
     (total, content) =>
       total +
@@ -379,49 +422,71 @@ function estimateRawContentTokens(contents: IContent[]): number {
 }
 
 async function estimateWithGeneric(
-  contents: IContent[],
+  rows: EstimationRowSource,
   providerName?: string,
 ): Promise<EstimationResult> {
+  const reference = { characters: 0 };
+  const addReference = (result: EstimationResult): EstimationResult =>
+    reference.characters === 0
+      ? result
+      : {
+          ...result,
+          tokens: result.tokens + referenceMetadataTokens(reference.characters),
+        };
+  const contents = rows.array;
   try {
     const tokens = await estimateTokensForContents(
-      contents,
+      withReferenceMetadataFold(rows.open(), reference),
       undefined,
       new GenericTokenizerProvider(providerName),
       logger,
     );
-    return {
-      tokens: applyNonEmptyTokenFloor(contents, tokens),
+    return addReference({
+      tokens: applyNonEmptyTokenFloor(rows.count, tokens),
       source: 'generic (tiktoken/char fallback)',
-    };
+    });
   } catch (error) {
+    // Row-stream failures (reader errors, abort) are not estimation
+    // degradations and must surface. Only the legacy array route has the
+    // serialized-JSON and character fallbacks.
+    if (contents === undefined) throw error;
     logger.debug(
       () =>
         `Generic token estimation failed, using JSON fallback: ${String(error)}`,
     );
-    try {
-      const serializedContents = JSON.stringify(
-        contents,
-        (_key, value: unknown) => sanitizeMediaForJsonFallback(value),
-      );
-      return {
-        tokens: applyNonEmptyTokenFloor(
-          contents,
-          estimateTextTokens(serializedContents),
-        ),
-        source: 'generic (json fallback)',
-      };
-    } catch (fallbackError) {
-      logger.debug(
-        () =>
-          `JSON token estimation failed, using conservative character fallback: ${String(fallbackError)}`,
-      );
-      return {
-        tokens: applyNonEmptyTokenFloor(
-          contents,
-          estimateRawContentTokens(contents),
-        ),
-        source: 'generic (char fallback)',
-      };
-    }
+    // The failed pass may have folded only a prefix of the rows.
+    reference.characters = 0;
+    for (const content of contents) foldReferenceMetadata(content, reference);
+    return addReference(estimateFromArrayFallbacks(contents));
+  }
+}
+
+function estimateFromArrayFallbacks(
+  contents: readonly IContent[],
+): EstimationResult {
+  try {
+    const serializedContents = JSON.stringify(
+      contents,
+      (_key, value: unknown) => sanitizeMediaForJsonFallback(value),
+    );
+    return {
+      tokens: applyNonEmptyTokenFloor(
+        contents.length,
+        estimateTextTokens(serializedContents),
+      ),
+      source: 'generic (json fallback)',
+    };
+  } catch (fallbackError) {
+    logger.debug(
+      () =>
+        `JSON token estimation failed, using conservative character fallback: ${String(fallbackError)}`,
+    );
+    return {
+      tokens: applyNonEmptyTokenFloor(
+        contents.length,
+        estimateRawContentTokens(contents),
+      ),
+      source: 'generic (char fallback)',
+    };
   }
 }

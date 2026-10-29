@@ -1,0 +1,284 @@
+{
+  "name": "insert-by-repair",
+  "description": "validateAndFix inserts synthetic tool responses",
+  "steps": [
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "go"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "373c8b06c7131ecda86e4d3d64f4f1d44d47255059b463abd3c1efc65f51b21b",
+          "tags": ["fe7ed59e4d1d1330"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "373c8b06c7131ecda86e4d3d64f4f1d44d47255059b463abd3c1efc65f51b21b",
+          "tags": ["fe7ed59e4d1d1330"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "ai",
+          "call": {
+            "id": "c1",
+            "name": "read_file"
+          }
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 2,
+          "digest": "7a8ec08c56de10e58be0a9e2efddbc32f757291cca4a15a5cebc73f7ff52bc8a",
+          "tags": ["fe7ed59e4d1d1330", "18ee2337f3c76ff1"]
+        },
+        "resumed": {
+          "length": 2,
+          "digest": "7a8ec08c56de10e58be0a9e2efddbc32f757291cca4a15a5cebc73f7ff52bc8a",
+          "tags": ["fe7ed59e4d1d1330", "18ee2337f3c76ff1"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "validateAndFix"
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "79f7ef92e1a41dfe5145de91847e0cab9689dddf164baef7537e68090465c5d5",
+          "tags": ["fe7ed59e4d1d1330", "18ee2337f3c76ff1", "76f5dc565786d11e"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "79f7ef92e1a41dfe5145de91847e0cab9689dddf164baef7537e68090465c5d5",
+          "tags": ["fe7ed59e4d1d1330", "18ee2337f3c76ff1", "76f5dc565786d11e"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "next"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 4,
+          "digest": "25f0e9a385c9160e1dadb7d71976cfe2b1851fe43a05f54331df6db067b991ab",
+          "tags": [
+            "fe7ed59e4d1d1330",
+            "18ee2337f3c76ff1",
+            "76f5dc565786d11e",
+            "d9afa05a4906756a"
+          ]
+        },
+        "resumed": {
+          "length": 4,
+          "digest": "25f0e9a385c9160e1dadb7d71976cfe2b1851fe43a05f54331df6db067b991ab",
+          "tags": [
+            "fe7ed59e4d1d1330",
+            "18ee2337f3c76ff1",
+            "76f5dc565786d11e",
+            "d9afa05a4906756a"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "ai",
+          "call": {
+            "id": "c2",
+            "name": "read_file"
+          }
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 5,
+          "digest": "724ce094a5e83aec42963c70a6a9834d6470d04904c74baf23ec34c2910fd164",
+          "tags": [
+            "fe7ed59e4d1d1330",
+            "18ee2337f3c76ff1",
+            "76f5dc565786d11e",
+            "d9afa05a4906756a",
+            "651dd1bd80987a1c"
+          ]
+        },
+        "resumed": {
+          "length": 5,
+          "digest": "724ce094a5e83aec42963c70a6a9834d6470d04904c74baf23ec34c2910fd164",
+          "tags": [
+            "fe7ed59e4d1d1330",
+            "18ee2337f3c76ff1",
+            "76f5dc565786d11e",
+            "d9afa05a4906756a",
+            "651dd1bd80987a1c"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "ai",
+          "call": {
+            "id": "c3",
+            "name": "read_file"
+          }
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 6,
+          "digest": "7a7b02a3a8f453f8de43885685817865577b9b54c5ef6cb07bfba9b012123c71",
+          "tags": [
+            "fe7ed59e4d1d1330",
+            "18ee2337f3c76ff1",
+            "76f5dc565786d11e",
+            "d9afa05a4906756a",
+            "651dd1bd80987a1c",
+            "ea500039536f8316"
+          ]
+        },
+        "resumed": {
+          "length": 6,
+          "digest": "7a7b02a3a8f453f8de43885685817865577b9b54c5ef6cb07bfba9b012123c71",
+          "tags": [
+            "fe7ed59e4d1d1330",
+            "18ee2337f3c76ff1",
+            "76f5dc565786d11e",
+            "d9afa05a4906756a",
+            "651dd1bd80987a1c",
+            "ea500039536f8316"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "validateAndFix"
+      },
+      "observed": {
+        "live": {
+          "length": 8,
+          "digest": "bca1bc61ae07e4c66080bed611f2b99200a034bc87b38b45e103eb427c12924a",
+          "tags": [
+            "fe7ed59e4d1d1330",
+            "18ee2337f3c76ff1",
+            "76f5dc565786d11e",
+            "d9afa05a4906756a",
+            "651dd1bd80987a1c",
+            "d486039ed870ea36",
+            "ea500039536f8316",
+            "6196b5641a7afb41"
+          ]
+        },
+        "resumed": {
+          "length": 8,
+          "digest": "bca1bc61ae07e4c66080bed611f2b99200a034bc87b38b45e103eb427c12924a",
+          "tags": [
+            "fe7ed59e4d1d1330",
+            "18ee2337f3c76ff1",
+            "76f5dc565786d11e",
+            "d9afa05a4906756a",
+            "651dd1bd80987a1c",
+            "d486039ed870ea36",
+            "ea500039536f8316",
+            "6196b5641a7afb41"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 7,
+          "digest": "6d31a9bdaab657d73729890a8ffc6107db13813d38db924fe33c342bccaa6337",
+          "tags": [
+            "fe7ed59e4d1d1330",
+            "18ee2337f3c76ff1",
+            "76f5dc565786d11e",
+            "d9afa05a4906756a",
+            "651dd1bd80987a1c",
+            "d486039ed870ea36",
+            "ea500039536f8316"
+          ]
+        },
+        "resumed": {
+          "length": 7,
+          "digest": "6d31a9bdaab657d73729890a8ffc6107db13813d38db924fe33c342bccaa6337",
+          "tags": [
+            "fe7ed59e4d1d1330",
+            "18ee2337f3c76ff1",
+            "76f5dc565786d11e",
+            "d9afa05a4906756a",
+            "651dd1bd80987a1c",
+            "d486039ed870ea36",
+            "ea500039536f8316"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "tool",
+          "text": "result-c3",
+          "response": {
+            "callId": "c3",
+            "name": "read_file"
+          }
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 8,
+          "digest": "28f441051b597bc987fec62e3b7a33a1bd02c983a3b1b0595b9a80984af8d533",
+          "tags": [
+            "fe7ed59e4d1d1330",
+            "18ee2337f3c76ff1",
+            "76f5dc565786d11e",
+            "d9afa05a4906756a",
+            "651dd1bd80987a1c",
+            "d486039ed870ea36",
+            "ea500039536f8316",
+            "e247eceb3a735e7a"
+          ]
+        },
+        "resumed": {
+          "length": 8,
+          "digest": "28f441051b597bc987fec62e3b7a33a1bd02c983a3b1b0595b9a80984af8d533",
+          "tags": [
+            "fe7ed59e4d1d1330",
+            "18ee2337f3c76ff1",
+            "76f5dc565786d11e",
+            "d9afa05a4906756a",
+            "651dd1bd80987a1c",
+            "d486039ed870ea36",
+            "ea500039536f8316",
+            "e247eceb3a735e7a"
+          ]
+        }
+      }
+    }
+  ]
+}

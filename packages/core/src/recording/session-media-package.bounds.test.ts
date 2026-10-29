@@ -5,6 +5,7 @@
  */
 
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
@@ -23,12 +24,21 @@ import type {
   MediaStoredObject,
 } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import {
+  createPackageRecorder,
+  packageRecordingName,
+  writePackageRecording,
+} from './__tests__/support/packageRecording.js';
+
+import { readPackageRows } from './__tests__/support/packageRecording.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { readJournalCheckpoints } from './journalSessionListing.js';
+import { MAX_PERSISTED_STATE_BYTES } from './session-media-package-validation.js';
 import {
   exportSessionMediaPackage,
+  importSessionMediaPackage,
   validateSessionMediaPackage,
 } from './session-media-package.js';
-import { MAX_PERSISTED_STATE_BYTES } from './session-media-package-validation.js';
 
 const PROJECT_HASH = 'package-bounds-project';
 
@@ -97,23 +107,10 @@ async function writePackage(
     Buffer.from([1, 2, 3]),
   );
   const sessionId = 'bounded-package-session';
-  const recording = [
-    {
-      v: 2,
-      seq: 1,
-      type: 'session_start',
-      payload: { sessionId, projectHash: PROJECT_HASH, workspaceDirs: [] },
-    },
-    {
-      v: 2,
-      seq: 2,
-      type: 'content',
-      payload: { content: history(recordingReference)[0] },
-    },
-  ];
-  await writeFile(
-    join(packageDirectory, 'session.jsonl'),
-    `${recording.map((line) => JSON.stringify(line)).join('\n')}\n`,
+  await writePackageRecording(
+    packageDirectory,
+    [history(recordingReference)],
+    PROJECT_HASH,
   );
   const persistedStates =
     persistedHistory.length === 0
@@ -135,13 +132,34 @@ async function writePackage(
     join(packageDirectory, 'manifest.json'),
     JSON.stringify({
       version: 2,
-      recording: 'session.jsonl',
+      recording: packageRecordingName(),
       persistedStates,
       references: [manifestReference],
       objects: [object],
     }),
   );
   return packageDirectory;
+}
+
+type SidecarKind = 'count' | 'bytes';
+
+async function writeLegacySidecars(
+  chats: string,
+  kind: SidecarKind,
+): Promise<void> {
+  for (let index = 0; index < (kind === 'count' ? 257 : 6); index += 1) {
+    const file = await open(
+      join(chats, `persisted-session-${index}.json`),
+      'wx',
+    );
+    try {
+      if (kind === 'count') await file.writeFile('{');
+      else
+        await file.truncate(MAX_PERSISTED_STATE_BYTES + (index === 0 ? 1 : 0));
+    } finally {
+      await file.close();
+    }
+  }
 }
 
 describe('session media package bounded validation', () => {
@@ -289,116 +307,59 @@ describe('session media package bounded validation', () => {
     expect(validated.packageDirectory).toBe(packageDirectory);
   });
 
-  it('bounds export persisted states by count before reading their contents', async () => {
-    const chatsDirectory = join(tempDirectory, 'state-count-chats');
-    const store = new LocalMediaStore({
-      rootDirectory: join(tempDirectory, 'state-count-media'),
-      quotaBytes: 1024,
-    });
-    const recording = new SessionRecordingService({
-      sessionId: 'state-count-session',
-      projectHash: PROJECT_HASH,
-      chatsDir: chatsDirectory,
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-      mediaStore: store,
-    });
-    try {
-      recording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'bounded state source' }],
+  const sidecarCases: readonly SidecarKind[] = ['count', 'bytes'];
+  for (const kind of sidecarCases) {
+    it(`exports native checkpoint state without reading legacy sidecars exceeding ${kind} bounds`, async () => {
+      const chats = join(tempDirectory, 'native-chats');
+      const media = new LocalMediaStore({
+        rootDirectory: join(tempDirectory, 'native-media'),
+        quotaBytes: 1024,
       });
-      await recording.flush();
-      const recordingPath = recording.getFilePath();
-      assertNotNull(recordingPath, 'Expected recording path');
-      for (let index = 0; index < 257; index += 1) {
-        await writeFile(
-          join(chatsDirectory, `persisted-session-${index}.json`),
-          '{',
-        );
-      }
-
-      await expect(
-        exportSessionMediaPackage(
-          recordingPath,
-          PROJECT_HASH,
-          store,
-          join(tempDirectory, 'state-count-package'),
-        ),
-      ).rejects.toThrow(/persisted state count exceeds limit/i);
-    } finally {
-      await recording.dispose();
-    }
-  });
-
-  it('bounds each export persisted state and aggregate bytes before materialization', async () => {
-    const chatsDirectory = join(tempDirectory, 'state-bytes-chats');
-    const store = new LocalMediaStore({
-      rootDirectory: join(tempDirectory, 'state-bytes-media'),
-      quotaBytes: 1024,
-    });
-    const recording = new SessionRecordingService({
-      sessionId: 'state-bytes-session',
-      projectHash: PROJECT_HASH,
-      chatsDir: chatsDirectory,
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-      mediaStore: store,
-    });
-    try {
-      recording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'bounded state bytes' }],
+      const recorder = createPackageRecorder({
+        chatsDir: chats,
+        projectHash: PROJECT_HASH,
       });
-      await recording.flush();
-      const recordingPath = recording.getFilePath();
-      assertNotNull(recordingPath, 'Expected recording path');
-      const oversizedPath = join(
-        chatsDirectory,
-        'persisted-session-oversized.json',
-      );
-      const oversized = await open(oversizedPath, 'wx');
+      if (!(recorder instanceof JournalRecordingService))
+        throw new Error('Expected native recorder');
+      const rows: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'bounded native state' }],
+        },
+      ];
+      let path: string;
       try {
-        await oversized.truncate(MAX_PERSISTED_STATE_BYTES + 1);
+        await recordRowsForTest(recorder, rows);
+        await recorder.createCheckpoint('Saved');
+        const recorded = recorder.getFilePath();
+        assertNotNull(recorded, 'Expected native path');
+        path = recorded;
       } finally {
-        await oversized.close();
+        await recorder.dispose();
       }
-      await expect(
-        exportSessionMediaPackage(
-          recordingPath,
-          PROJECT_HASH,
-          store,
-          join(tempDirectory, 'state-oversized-package'),
+      await writeLegacySidecars(chats, kind);
+      const directory = join(tempDirectory, 'native-package');
+      await exportSessionMediaPackage(path, PROJECT_HASH, media, directory);
+      const validated = await validateSessionMediaPackage(directory);
+      expect(validated.manifest.persistedStates).toStrictEqual([]);
+      const imported = await importSessionMediaPackage(
+        validated,
+        join(tempDirectory, 'import-chats'),
+        PROJECT_HASH,
+        media,
+      );
+      expect(
+        (await readPackageRows(imported.recordingPath, PROJECT_HASH)).map(
+          (row) => row.blocks,
         ),
-      ).rejects.toThrow(/persisted session state exceeds finite byte limit/i);
-      await rm(oversizedPath);
-      for (let index = 0; index < 5; index += 1) {
-        const aggregatePath = join(
-          chatsDirectory,
-          `persisted-session-aggregate-${index}.json`,
-        );
-        const aggregate = await open(aggregatePath, 'wx');
-        try {
-          await aggregate.truncate(MAX_PERSISTED_STATE_BYTES);
-        } finally {
-          await aggregate.close();
-        }
-      }
-
-      await expect(
-        exportSessionMediaPackage(
-          recordingPath,
-          PROJECT_HASH,
-          store,
-          join(tempDirectory, 'state-aggregate-package'),
+      ).toStrictEqual(rows.map((row) => row.blocks));
+      expect(
+        (await readJournalCheckpoints(imported.recordingPath)).map(
+          (point) => point.name,
         ),
-      ).rejects.toThrow(/persisted session states exceeds finite aggregate/i);
-    } finally {
-      await recording.dispose();
-    }
-  });
+      ).toStrictEqual(['Saved']);
+    });
+  }
 
   it('releases temporary export owners after successful publication', async () => {
     const store = new LocalMediaStore({
@@ -410,7 +371,7 @@ describe('session media package bounded validation', () => {
       mimeType: 'application/octet-stream',
       semanticMetadata: {},
     });
-    const recording = new SessionRecordingService({
+    const recording = createPackageRecorder({
       sessionId: 'owner-release-session',
       projectHash: PROJECT_HASH,
       chatsDir: join(tempDirectory, 'chats'),
@@ -420,7 +381,7 @@ describe('session media package bounded validation', () => {
       mediaStore: store,
     });
     try {
-      recording.recordContent(history(reference)[0]);
+      await recordRowsForTest(recording, [history(reference)[0]]);
       await recording.flush();
       const recordingPath = recording.getFilePath();
       assertNotNull(recordingPath, 'Expected recording path');

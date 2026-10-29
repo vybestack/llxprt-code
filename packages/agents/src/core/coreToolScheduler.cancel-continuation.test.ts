@@ -106,7 +106,7 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
       return calls.some((c) => c.status === 'executing');
     });
 
-    scheduler.cancelAll();
+    await scheduler.cancelAll();
     abortController.abort();
 
     await schedulePromise;
@@ -225,7 +225,7 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
       return calls.filter((c) => c.status === 'executing').length === 2;
     });
 
-    scheduler.cancelAll();
+    await scheduler.cancelAll();
 
     const callsAfterCancel = onToolCallsUpdate.mock.calls.at(
       -1,

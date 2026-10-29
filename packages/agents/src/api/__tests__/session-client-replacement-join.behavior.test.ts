@@ -57,7 +57,7 @@ describe('Session owner cleanup joining', () => {
           new Error('Runtime assembly fault'),
           () => engine.release.close(),
           engine.media,
-          owner,
+          () => owner.dispose(),
           () => engine.mcp.dispose(),
         ),
       ).rejects.toThrow('Runtime assembly fault');
@@ -141,7 +141,7 @@ describe('Session owner cleanup joining', () => {
           new Error('Activation failed'),
           () => engine.release.close(),
           engine.media,
-          owner,
+          () => owner.dispose(),
           () => engine.mcp.dispose(),
         ),
       ).rejects.toThrow(/cleanup/i);

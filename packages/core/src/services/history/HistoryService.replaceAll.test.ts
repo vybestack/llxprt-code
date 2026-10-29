@@ -1,3 +1,4 @@
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -16,8 +17,12 @@
 
 import { describe, expect, it } from 'bun:test';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
-import { createUserMessage } from './IContent.js';
+import { createUserMessage, type IContent } from './IContent.js';
 import { HistoryService } from './HistoryService.js';
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
+import { JournalOwners } from './journalOwners.js';
+import { historyOriginId } from './historyOriginId.js';
+import { decodeStoredRow } from './journalRowCodec.js';
 
 function createBlockedTokenizerFactory(): {
   factory: RuntimeTokenizerFactory;
@@ -31,6 +36,9 @@ function createBlockedTokenizerFactory(): {
 
   return {
     factory: {
+      estimatePrompt: async () => {
+        throw new Error('Blocked tokenizer fixture does not estimate prompts');
+      },
       getTokenizer: () => ({
         countTokens: async (content: unknown) => {
           if (blocking) {
@@ -59,8 +67,10 @@ async function expectConsistentTokenCount(
   service: HistoryService,
 ): Promise<void> {
   await service.waitForTokenUpdates();
-  const expected = await service.estimateTokensForContents(service.getAll());
-  expect(service.getTotalTokens()).toBe(expected);
+  await collectRowsForAssertions(service.streamRawHistory(), async (all) => {
+    const expected = await service.estimateTokensForContents(all);
+    expect(service.getTotalTokens()).toBe(expected);
+  });
 }
 
 function createQueuedFailureListener(service: HistoryService): () => never {
@@ -89,6 +99,43 @@ function errorMessages(errors: readonly unknown[]): readonly string[] {
   );
 }
 
+async function expectQueuedValues(
+  service: HistoryService,
+  replacement: IContent,
+  appended: IContent,
+): Promise<void> {
+  await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+    expect(all).toStrictEqual([
+      {
+        ...replacement,
+        metadata: {
+          chronology: {
+            seq: 1,
+            userTurn: 1,
+            step: 1,
+            recordedAt: expect.any(Number),
+          },
+        },
+      },
+      appended,
+    ]);
+    expect(all[0].metadata?.chronology).toMatchObject({
+      seq: 1,
+      userTurn: 1,
+      step: 1,
+    });
+    expect(all[1].metadata?.chronology).toMatchObject({
+      seq: 2,
+      userTurn: 2,
+      step: 1,
+    });
+    expect(all[0].metadata?.chronology?.recordedAt).toStrictEqual(
+      expect.any(Number),
+    );
+    expect(all[0]).not.toBe(replacement);
+  });
+}
+
 describe('HistoryService replaceAll serialization', () => {
   it('applies an add after an in-flight replacement without losing its tokens', async () => {
     const service = new HistoryService();
@@ -104,7 +151,9 @@ describe('HistoryService replaceAll serialization', () => {
     blocked.release();
     await replacing;
 
-    expect(service.getAll()).toStrictEqual([replacement, appended]);
+    await service.waitForCommit();
+    await expectQueuedValues(service, replacement, appended);
+    expect(replacement.metadata).toBeUndefined();
     await expectConsistentTokenCount(service);
   });
 
@@ -116,15 +165,18 @@ describe('HistoryService replaceAll serialization', () => {
 
     const replacing = service.replaceAll([createUserMessage('replacement')]);
     await estimationStarted;
-    service.clear();
+    const clearing = service.clear();
     blocked.release();
     await replacing;
+    await clearing;
 
-    expect(service.getAll()).toStrictEqual([]);
+    await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+      expect(all).toStrictEqual([]);
+    });
     await expectConsistentTokenCount(service);
   });
 
-  it('rolls back an add when a content listener rejects it', () => {
+  it('rolls back an add when a content listener rejects it', async () => {
     const service = new HistoryService();
     service.on('contentAdded', () => {
       throw new Error('listener failed');
@@ -133,10 +185,12 @@ describe('HistoryService replaceAll serialization', () => {
     expect(() => service.add(createUserMessage('rejected'))).toThrow(
       'listener failed',
     );
-    expect(service.getAll()).toStrictEqual([]);
+    await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+      expect(all).toStrictEqual([]);
+    });
   });
 
-  it('reports every initial and queued listener failure', () => {
+  it('reports every initial and queued listener failure', async () => {
     const service = new HistoryService();
     service.on('contentAdded', createQueuedFailureListener(service));
 
@@ -155,31 +209,70 @@ describe('HistoryService replaceAll serialization', () => {
       'queued failure 1',
       'queued failure 2',
     ]);
-    expect(service.getAll()).toStrictEqual([]);
+    await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+      expect(all).toStrictEqual([]);
+    });
   });
 
   it('keeps the committed content, its identity and its origin when afterPublication rejects a replaceAll', async () => {
-    const service = new HistoryService();
-    const origin = { name: 'session' };
-    const summary = createUserMessage('committed-summary');
-    const candidate = createUserMessage('rejected-summary');
-    await service.replaceAll([summary], undefined, { origin });
-    const committedTokens = service.getTotalTokens();
+    await withNativeDetachedFixture(async ({ history: service, session }) => {
+      const origin = { name: 'session' };
+      const summary = createUserMessage('committed-summary');
+      const candidate = createUserMessage('rejected-summary');
+      await service.replaceAll([summary], undefined, { origin });
+      const committedTokens = service.getTotalTokens();
+      const committed = await session.store.snapshot();
+      try {
+        const identity = await committed.entryAt(0);
+        const content = decodeStoredRow(await committed.readRow(identity));
+        expect(content).toMatchObject(summary);
+        expect(committed.rows).toBe(1);
 
-    await expect(
-      service.replaceAll([candidate], undefined, {
-        origin,
-        afterPublication: () => {
-          throw new Error('reject summary replacement');
-        },
-      }),
-    ).rejects.toThrow('reject summary replacement');
+        await expect(
+          service.replaceAll([candidate], undefined, {
+            origin,
+            afterPublication: async () => {
+              await collectRowsForAssertions(
+                service.streamRawHistory(),
+                (all) => {
+                  expect(all).toHaveLength(1);
+                  expect(all[0]).toMatchObject(candidate);
+                },
+              );
+              throw new Error('reject summary replacement');
+            },
+          }),
+        ).rejects.toThrow('reject summary replacement');
 
-    expect(service.getAll()).toStrictEqual([summary]);
-    expect(service.getAll()[0]).toBe(summary);
-    expect(service.getContentOrigin(summary)).toBe(origin);
-    expect(service.getContentOrigin(candidate)).toBeUndefined();
-    expect(service.getTotalTokens()).toBe(committedTokens);
-    await expectConsistentTokenCount(service);
+        await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+          expect(all).toStrictEqual([content]);
+          expect(
+            all.some(
+              (row) =>
+                row.blocks[0]?.type === 'text' &&
+                row.blocks[0].text === 'rejected-summary',
+            ),
+          ).toBe(false);
+        });
+        const restored = await session.store.snapshot();
+        try {
+          expect(restored.rows).toBe(1);
+          const entry = await restored.entryAt(0);
+          expect(entry).toStrictEqual(identity);
+          expect(decodeStoredRow(await restored.readRow(entry))).toStrictEqual(
+            content,
+          );
+          expect(
+            await new JournalOwners(session.store).originOf(entry.owner),
+          ).toBe(historyOriginId(origin));
+        } finally {
+          await restored.close();
+        }
+        expect(service.getTotalTokens()).toBe(committedTokens);
+        await expectConsistentTokenCount(service);
+      } finally {
+        await committed.close();
+      }
+    });
   });
 });

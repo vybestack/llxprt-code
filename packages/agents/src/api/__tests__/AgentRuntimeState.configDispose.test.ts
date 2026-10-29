@@ -1,3 +1,4 @@
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,12 +15,14 @@ async function owner() {
 }
 
 describe('Config workspace disposal', () => {
+  useRecordingPrompts();
   useFakeResponsesReplay('plain-text.jsonl');
 
   it('does not dispose independently owned clients with identical session labels', async () => {
     const first = await owner();
     const sibling = await owner();
     try {
+      expect(first.agent).not.toBe(sibling.agent);
       await first.config.dispose();
       await first.agent.setHistory([
         {
@@ -29,10 +32,10 @@ describe('Config workspace disposal', () => {
           ],
         },
       ]);
-      expect(await first.agent.getHistory()).toHaveLength(1);
-      expect(JSON.stringify(await sibling.agent.getHistory())).not.toContain(
-        'caller survives workspace shutdown',
-      );
+      expect(await first.agent.session.getHistory()).toHaveLength(1);
+      expect(
+        JSON.stringify(await sibling.agent.session.getHistory()),
+      ).not.toContain('caller survives workspace shutdown');
       await first.agent.dispose();
       expect(() => first.agent.getCurrentSequenceModel()).toThrow('disposed');
       await sibling.agent.setHistory([
@@ -41,7 +44,7 @@ describe('Config workspace disposal', () => {
           blocks: [{ type: 'text', text: 'sibling still works' }],
         },
       ]);
-      expect(await sibling.agent.getHistory()).toHaveLength(1);
+      expect(await sibling.agent.session.getHistory()).toHaveLength(1);
     } finally {
       await first.close();
       await sibling.close();

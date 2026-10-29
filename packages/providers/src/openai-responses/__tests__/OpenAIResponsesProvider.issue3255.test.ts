@@ -12,11 +12,12 @@ import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
 import { loadProviderAliasEntries } from '../../composition/providerAliases.js';
 import { computeModelDefaults } from '../../model-defaults.js';
-import { buildRequestContext } from '../openAIResponsesExecutor.js';
+import { buildDiskTextResponsesContext } from '../responses-disk-text-projection.js';
 import type { OpenAIResponsesRequest } from '../OpenAIResponsesTypes.js';
 
 const PROVIDER_NAME = 'openai-responses';
@@ -69,13 +70,14 @@ function createOptions(fixture: RequestFixture): NormalizedGenerateChatOptions {
     baseURL: fixture.baseURL ?? BASE_URL,
     authToken: 'test-token',
   };
+  const rows: IContent[] = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'test request' }] },
+  ];
   const generated = createProviderCallOptions({
     providerName: PROVIDER_NAME,
     settings,
     resolved,
-    contents: [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'test request' }] },
-    ],
+    contents: rows,
   });
   const invocation = createInvocation(
     generated.invocation,
@@ -85,6 +87,7 @@ function createOptions(fixture: RequestFixture): NormalizedGenerateChatOptions {
 
   return {
     ...generated,
+    contents: rows,
     invocation,
     metadata: generated.metadata ?? {},
     resolved,
@@ -136,12 +139,12 @@ async function build(fixture: RequestFixture): Promise<BuiltFixture> {
     'llxprt:providers:openai-responses:issue3255-test',
   );
   const baseURL = fixture.baseURL ?? BASE_URL;
-  const context = await buildRequestContext(
-    captureResponsesTestRequest(options, createDeps(logger, baseURL)),
-    [...options.contents],
-    { ...options.invocation.ephemerals },
-    createDeps(logger, baseURL),
+  const deps = createDeps(logger, baseURL);
+  const context = await buildDiskTextResponsesContext(
+    captureResponsesTestRequest(options, deps),
+    deps,
   );
+  await context.mediaRequest.release();
   return { request: context.request, logger };
 }
 

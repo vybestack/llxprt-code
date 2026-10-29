@@ -7,6 +7,7 @@ import { describe, expect, it } from 'bun:test';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Config, coreEvents } from '@vybestack/llxprt-code-core';
+import { useOperationalOutput } from '../../__tests__/operational-output-fixture.js';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import {
@@ -24,6 +25,7 @@ import { useBootstrapRuntime } from '../containers/AppContainer/hooks/useBootstr
 
 describe('bootstrap captured operation ownership', () => {
   const makeOwner = useCommandOwners();
+  useOperationalOutput();
   it('records feedback through the captured owner with a different session in legacy inputs', async () => {
     const owner = await makeOwner('bootstrap-owner');
     const peer = await makeOwner('bootstrap-peer');
@@ -92,12 +94,19 @@ describe('bootstrap captured operation ownership', () => {
         },
       });
     }
+    const readRecordingPath = () => owner.session.getRecording().path;
     const hook = renderHook(
       () => {
         const stores = useAppStores(containerRuntime);
         const bootstrap = useBootstrapRuntime(
           {
             version: 'test',
+            settings,
+            readJournal: () => ({
+              appendDisplay: owner.session.appendDisplay.bind(owner.session),
+              length: () => owner.session.getJournalLength(),
+            }),
+            readRecordingPath,
             readIdeMode: owner.ide.getIdeMode.bind(owner.ide),
             subscribeHistoryTokens: owner.session.subscribeHistoryTokens.bind(
               owner.session,
@@ -189,11 +198,23 @@ describe('bootstrap captured operation ownership', () => {
         severity: 'warning',
         message: 'dialog recording operation',
       });
-      await waitFor(async () =>
-        expect(await readFile(ownerPath, 'utf8')).toContain(
-          'dialog recording operation',
-        ),
+      await waitFor(() =>
+        expect(
+          hook.result.current.settingsStore.store
+            .getState()
+            .rawConsoleMessages.map((message) => message.content)
+            .join('\n'),
+        ).toContain('[SessionRecording] warning: dialog recording operation'),
       );
+      expect(await readFile(ownerPath, 'utf8')).toContain(
+        'dialog recording operation',
+      );
+      let modelRows = 0;
+      for await (const row of owner.session.readInitializedHistory() ?? []) {
+        modelRows++;
+        expect(JSON.stringify(row)).not.toContain('dialog recording operation');
+      }
+      expect(modelRows).toBe(1);
       expect(await readFile(peerPath, 'utf8')).not.toContain(
         'dialog recording operation',
       );

@@ -37,7 +37,8 @@
  * switch for T4d.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
+import { afterEach, describe, it, expect } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as fc from 'fast-check';
@@ -138,6 +139,19 @@ function buildProfileSwitchAgent(
 }
 
 describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @requirement:REQ-005', () => {
+  const properties = new Set<Promise<void>>();
+  afterEach(async () => {
+    try {
+      await Promise.all(properties);
+    } finally {
+      properties.clear();
+    }
+  }, 60000);
+  function trackProperty(property: Promise<void>): Promise<void> {
+    properties.add(property);
+    return property;
+  }
+
   it('T4 setProvider mid-session → getProvider reflects it and the follow-up turn uses the new provider over the switched fixture @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004', async () => {
     const { agent, cleanup } = await buildSwitchAgent();
     try {
@@ -263,7 +277,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
       // guarantee): the first turn's messages are still in the history, so a
       // fresh service would fail this. Guard the content is real first so the
       // compare cannot pass vacuously.
-      const afterSwitch = await agent.getHistory();
+      const afterSwitch = await agent.session.getHistory();
       expect(afterSwitch.length).toBeGreaterThanOrEqual(2);
       expect(JSON.stringify(afterSwitch).includes('turn one')).toBe(true);
 
@@ -272,7 +286,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
       expect(countType(second, 'done')).toBe(1);
 
       // history includes messages from BOTH turns (continuity preserved)
-      const history = await agent.getHistory();
+      const history = await collectAgentHistory(agent);
       expect(history.length).toBeGreaterThanOrEqual(2);
       expect(JSON.stringify(history).includes('turn one')).toBe(true);
     } finally {
@@ -320,14 +334,14 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
 
       // The HistoryService is reused across the LB failover (switch ≡
       // failover): the first turn's messages are still in the history.
-      const afterApply = await agent.getHistory();
+      const afterApply = await agent.session.getHistory();
       expect(afterApply.length).toBeGreaterThanOrEqual(2);
       expect(JSON.stringify(afterApply).includes('turn one')).toBe(true);
 
       // context preserved: the follow-up turn sees the prior messages
       const second = await drain(agent.stream('turn two'));
       expect(countType(second, 'done')).toBe(1);
-      const history = await agent.getHistory();
+      const history = await collectAgentHistory(agent);
       expect(history.length).toBeGreaterThanOrEqual(2);
       expect(JSON.stringify(history).includes('turn one')).toBe(true);
     } finally {
@@ -376,7 +390,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
 
       // PRESENT BEFORE: the seeded signature survives the
       // setHistory → getHistory round-trip WITHOUT stripping (the default).
-      const beforeRoundTrip = await agent.getHistory();
+      const beforeRoundTrip = await collectAgentHistory(agent);
       const beforeSerialized = JSON.stringify(beforeRoundTrip);
       expect(beforeSerialized.includes('sig-from-prior-provider')).toBe(true);
 
@@ -390,7 +404,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
       await agent.setHistory(beforeHistory, { stripThoughts: true });
 
       // ABSENT AFTER: the signature value is GONE from the normalized history.
-      const normalized = await agent.getHistory();
+      const normalized = await collectAgentHistory(agent);
       expect(normalized.length).toBeGreaterThanOrEqual(1);
       const afterSerialized = JSON.stringify(normalized);
       expect(afterSerialized.includes(signatureFromPriorProvider)).toBe(false);
@@ -463,7 +477,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
 
       // The conversation context must actually exist before the switch —
       // otherwise the preservation assertion below would be vacuously true.
-      const before = await agent.getHistory();
+      const before = await collectAgentHistory(agent);
       expect(before.length).toBeGreaterThanOrEqual(2);
       expect(JSON.stringify(before).includes('turn one')).toBe(true);
 
@@ -481,7 +495,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
 
       // Prior history is retained across the rebind: the follow-up history
       // includes messages from BOTH turns (length grew, prior text present).
-      const history = await agent.getHistory();
+      const history = await collectAgentHistory(agent);
       expect(history.length).toBeGreaterThanOrEqual(2);
       const historySerialized = JSON.stringify(history);
       expect(historySerialized.includes('turn one')).toBe(true);
@@ -498,8 +512,10 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
       observations,
     } =
       await observeT4dpPropertyGeneratedMessageHistoriesRoundTripAndPreserveTheSameHistoryService();
-    await fc.assert(
-      t4dpPropertyGeneratedMessageHistoriesRoundTripAndPreserveTheSameHistoryServiceProperty,
+    await trackProperty(
+      fc.assert(
+        t4dpPropertyGeneratedMessageHistoriesRoundTripAndPreserveTheSameHistoryServiceProperty,
+      ),
     );
     expect(
       observations.filter(
@@ -541,7 +557,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
               await agent.setProvider(SWITCH_TARGET, 'gpt-4o');
 
               // history length is at least the seeded count (continuity)
-              const history = await agent.getHistory();
+              const history = await collectAgentHistory(agent);
 
               // every seeded text is present in the returned history (checked
               // via direct text-block extraction from the neutral IContent
@@ -582,40 +598,42 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
   // ─── Property-based: model-param map round-trip for T5 ──────────────────
 
   it('T5p property: generated model-param maps round-trip through setModelParam/getModelParams @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.dictionary(
-          fc.oneof(
-            // Deliberately include prototype-hazard keys so the property
-            // regression-guards the no-pollution behavior: model params are
-            // stored in a null-prototype object, so these round-trip safely.
-            fc.constantFrom(
-              '__proto__',
-              'constructor',
-              'prototype',
-              'toString',
-              'hasOwnProperty',
+    await trackProperty(
+      fc.assert(
+        fc.asyncProperty(
+          fc.dictionary(
+            fc.oneof(
+              // Deliberately include prototype-hazard keys so the property
+              // regression-guards the no-pollution behavior: model params are
+              // stored in a null-prototype object, so these round-trip safely.
+              fc.constantFrom(
+                '__proto__',
+                'constructor',
+                'prototype',
+                'toString',
+                'hasOwnProperty',
+              ),
+              fc
+                .string({ minLength: 1, maxLength: 20 })
+                .filter((s) => !s.includes(' ')),
             ),
-            fc
-              .string({ minLength: 1, maxLength: 20 })
-              .filter((s) => !s.includes(' ')),
+            fc.oneof(fc.boolean(), fc.integer(), fc.float(), fc.string()),
           ),
-          fc.oneof(fc.boolean(), fc.integer(), fc.float(), fc.string()),
+          async (paramMap) => {
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            try {
+              for (const key of Object.keys(paramMap)) {
+                agent.setModelParam(key, paramMap[key]);
+              }
+              const got = agent.getModelParams();
+              for (const key of Object.keys(paramMap)) {
+                expect(got[key]).toStrictEqual(paramMap[key]);
+              }
+            } finally {
+              await cleanup();
+            }
+          },
         ),
-        async (paramMap) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          try {
-            for (const key of Object.keys(paramMap)) {
-              agent.setModelParam(key, paramMap[key]);
-            }
-            const got = agent.getModelParams();
-            for (const key of Object.keys(paramMap)) {
-              expect(got[key]).toStrictEqual(paramMap[key]);
-            }
-          } finally {
-            await cleanup();
-          }
-        },
       ),
     );
   });

@@ -33,6 +33,11 @@ const modelTools = installModelToolFixture();
  * unchanged and are the regression fence for that boundary.
  */
 
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { ChatSession } from './chatSession.js';
+import type { StreamEvent } from './chatSession.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   EmptyStreamError,
@@ -52,18 +57,17 @@ import {
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   RetryOrchestrator,
   type IProvider as ConcreteProvider,
 } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
-import type { StreamEvent } from './chatSession.js';
-import { ChatSession } from './chatSession.js';
+
 import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
@@ -157,17 +161,21 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
   function registerProvider(
     generateChatCompletion: (
       options: GenerateChatOptions,
-    ) => AsyncGenerator<unknown>,
+    ) => AsyncGenerator<IContent>,
   ): IProvider {
     const provider: IProvider = {
       name: 'stub',
       isDefault: true,
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'stub-model',
-      generateChatCompletion:
-        generateChatCompletion as IProvider['generateChatCompletion'],
-      getAuthToken: vi.fn(async () => 'stub-auth-token'),
-    } as unknown as IProvider;
+      generateChatCompletion(
+        options: GenerateChatOptions | AsyncIterable<IContent>,
+      ): AsyncIterableIterator<IContent> {
+        if (!('contents' in options))
+          throw new Error('Expected request options');
+        return generateChatCompletion(options);
+      },
+    };
     manager.registerProvider(provider);
     return provider;
   }
@@ -224,7 +232,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       let attempt = 0;
       const generateChatCompletionMock = vi.fn(async function* (
         _options: GenerateChatOptions,
-      ) {
+      ): AsyncGenerator<IContent, void, unknown> {
         attempt++;
         if (attempt === 1) {
           // First attempt: stream begins (first chunk lands inside the
@@ -296,7 +304,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       let attempt = 0;
       const generateChatCompletionMock = vi.fn(async function* (
         _options: GenerateChatOptions,
-      ) {
+      ): AsyncGenerator<IContent, void, unknown> {
         attempt++;
         if (attempt === 1) {
           yield {
@@ -371,7 +379,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       let attempt = 0;
       const generateChatCompletionMock = vi.fn(async function* (
         _options: GenerateChatOptions,
-      ) {
+      ): AsyncGenerator<IContent, void, unknown> {
         attempt++;
         if (attempt === 1) {
           yield {
@@ -432,7 +440,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -460,7 +468,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -494,7 +502,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -528,7 +536,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -553,8 +561,12 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-abort-signal',
     );
 
-    // The error propagates; the aborted signal must suppress the retry.
-    await expect(collectEvents(stream)).rejects.toThrow('terminated');
+    // The aborted signal must suppress the retry. The source route reports the
+    // user's cancellation itself (AbortError) instead of the provider's
+    // 'terminated' text; the retry suppression is what this test pins.
+    await expect(collectEvents(stream)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
@@ -567,7 +579,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -595,57 +607,52 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
   });
 
   it('records only the successful attempt in history after a discard-and-restart', async () => {
-    const { attempt, events, ai, aiText } =
-      await observeRecordsOnlyTheSuccessfulAttemptInHistoryAfterADiscardAndRestart();
-    expect(attempt).toBe(2);
-    expect(events.some((event) => event.type === 'retry')).toBe(true);
-    expect(ai).toHaveLength(1);
-    expect(aiText).toBe('recovered response');
-    expect(aiText).not.toContain('partial');
-  });
-
-  const observeRecordsOnlyTheSuccessfulAttemptInHistoryAfterADiscardAndRestart =
-    async () => {
-      const history = new HistoryService();
-      let attempt = 0;
-      const generateChatCompletionMock = vi.fn(async function* (
-        _options: GenerateChatOptions,
-      ) {
-        attempt++;
-        if (attempt === 1) {
-          yield {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'partial' }],
-          };
-          throw createConnectionError();
-        }
+    const history = new HistoryService();
+    let attempt = 0;
+    const generateChatCompletionMock = vi.fn(async function* (
+      _options: GenerateChatOptions,
+    ): AsyncGenerator<IContent, void, unknown> {
+      attempt++;
+      if (attempt === 1) {
         yield {
           speaker: 'ai',
-          blocks: [{ type: 'text', text: 'recovered response' }],
+          blocks: [{ type: 'text', text: 'partial' }],
         };
-      });
-      registerProvider(generateChatCompletionMock);
+        throw createConnectionError();
+      }
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'recovered response' }],
+      };
+    });
+    registerProvider(generateChatCompletionMock);
 
-      const chat = buildChatSession(history);
+    const chat = buildChatSession(history);
 
-      const stream = await chat.sendMessageStream(
-        { message: 'history-safety trigger' },
-        'prompt-issue-2150-history-safety',
-      );
+    const stream = await chat.sendMessageStream(
+      { message: 'history-safety trigger' },
+      'prompt-issue-2150-history-safety',
+    );
 
-      const events = await collectEvents(stream);
+    const events = await collectEvents(stream);
 
-      await chat.waitForIdle();
+    await chat.waitForIdle();
 
-      const ai = history.getAll().filter((content) => content.speaker === 'ai');
+    await withRows(history.streamRawHistory(), (rows) => {
+      const ai = rows.filter((content) => content.speaker === 'ai');
 
       const aiText = ai[0].blocks
         .filter((block) => block.type === 'text')
         .map((block) => (block as { text: string }).text)
         .join('');
 
-      return { attempt, events, ai, aiText };
-    };
+      expect(attempt).toBe(2);
+      expect(events.some((event) => event.type === 'retry')).toBe(true);
+      expect(ai).toHaveLength(1);
+      expect(aiText).toBe('recovered response');
+      expect(aiText).not.toContain('partial');
+    });
+  });
 
   it('does not retry InvalidStreamError after a chunk was already emitted', async () => {
     const { stream, observation } =
@@ -659,7 +666,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       const observation = { attempt: 0 };
       const generateChatCompletionMock = vi.fn(async function* (
         _options: GenerateChatOptions,
-      ) {
+      ): AsyncGenerator<IContent, void, unknown> {
         observation.attempt++;
         if (observation.attempt === 1) {
           yield {
@@ -700,7 +707,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       const observation = { attempt: 0 };
       const generateChatCompletionMock = vi.fn(async function* (
         _options: GenerateChatOptions,
-      ) {
+      ): AsyncGenerator<IContent, void, unknown> {
         observation.attempt++;
         if (observation.attempt === 1) {
           yield {

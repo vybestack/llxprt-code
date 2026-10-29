@@ -549,17 +549,20 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       };
       vi.spyOn(FileSearchFactory, 'create').mockReturnValue(mockFileSearch);
 
-      const timeoutConfig = {
-        ...mockConfig,
-        getFileFilteringOptions: vi.fn(() => ({
+      const timeoutConfig = Object.assign(mockConfig, {
+        getFileFilteringOptions: () => ({
           respectGitIgnore: true,
           respectLlxprtIgnore: true,
           searchTimeout: 1,
-        })),
-        getSubagentManager: () => ({
-          listSubagents: () => subagentPromise,
         }),
-      } as unknown as Config;
+      });
+      definitions = {
+        ...definitions,
+        subagentDefinitions: {
+          ...definitions.subagentDefinitions,
+          listSubagents: () => subagentPromise,
+        },
+      };
 
       const { result } = renderHook(() =>
         useTestHarnessForAtCompletion(

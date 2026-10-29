@@ -15,6 +15,10 @@
  */
 
 import { Tiktoken } from '@dqbd/tiktoken';
+import {
+  createLongTextCounter,
+  type LongTextCounter,
+} from '@vybestack/llxprt-code-core/utils/neutral-long-piece.js';
 import { tokenizationFailedError } from './errors.js';
 
 /**
@@ -37,8 +41,11 @@ export interface TiktokenModelConfig {
 
 export class TiktokenRuntime {
   private encoder: Tiktoken | undefined;
+  private readonly countLong: LongTextCounter;
 
-  constructor(private readonly config: TiktokenModelConfig) {}
+  constructor(private readonly config: TiktokenModelConfig) {
+    this.countLong = createLongTextCounter(config.bpeRanks, config.patStr);
+  }
 
   private getEncoder(): Tiktoken {
     this.encoder ??= new Tiktoken(
@@ -91,9 +98,40 @@ export class TiktokenRuntime {
     }
   }
 
+  /** Count without allocating token IDs or scanning long BPE pieces quadratically. */
+  count(text: string, allowSpecial: boolean): number {
+    try {
+      const encoder = this.getEncoder();
+      const ordinary = (value: string): number =>
+        this.countLong(value, (piece) => encoder.encode_ordinary(piece).length);
+      if (!allowSpecial) return ordinary(text);
+      const specials = Object.keys(this.config.specialTokens);
+      if (specials.length === 0) return ordinary(text);
+      const pattern = new RegExp(
+        specials
+          .map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('|'),
+        'g',
+      );
+      let count = 0;
+      let start = 0;
+      for (const match of text.matchAll(pattern)) {
+        count += ordinary(text.slice(start, match.index)) + 1;
+        start = match.index + match[0].length;
+      }
+      return count + ordinary(text.slice(start));
+    } catch (e) {
+      throw tokenizationFailedError(
+        this.config.model,
+        e instanceof Error ? e.message : String(e),
+        e,
+      );
+    }
+  }
+
   /** Count tokens in ordinary text. */
   countOrdinary(text: string): number {
-    return this.encodeOrdinary(text).length;
+    return this.count(text, false);
   }
 
   /** Release WASM resources. */

@@ -5,7 +5,6 @@
  */
 
 import assert from 'node:assert/strict';
-import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
@@ -163,14 +162,14 @@ async function authBehavior(unavailableHost: boolean): Promise<void> {
   await assert.rejects(
     openBrowser('https://example.invalid/authorize?secret=must-not-leak'),
   );
-  const events = new EventEmitter();
+  let display = (_message: string): void => {};
   const controller = new AbortController();
   const deadline = setTimeout(
     () => controller.abort(new Error('auth fixture deadline')),
     5000,
   );
   const displayed = new Promise<string>((resolve) => {
-    events.once('oauth-display-message', resolve);
+    display = resolve;
   });
   const operation = MCPOAuthProvider.authenticate(
     { tokenStorage: createStorage(), openBrowser },
@@ -181,7 +180,7 @@ async function authBehavior(unavailableHost: boolean): Promise<void> {
       tokenUrl: 'https://example.invalid/token',
     },
     undefined,
-    events,
+    display,
     controller.signal,
   );
   const outcome = operation.then(

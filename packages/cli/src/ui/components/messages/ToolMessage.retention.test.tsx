@@ -1,3 +1,4 @@
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,7 +9,7 @@
  * Render behavior for capped tool results (issue #3428 section D): the capped
  * hint line, transcript-backed expansion when height constraints lift
  * (ctrl-s), and the capped preview returning after a scroll-forward purge.
- * Bodies come from the real SessionRecordingService on disk; assertions are
+ * Bodies come from the real journal recorder on disk; assertions are
  * on rendered frames only.
  */
 
@@ -17,10 +18,14 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
+  type SessionRecordingPort,
   type IContent,
 } from '@vybestack/llxprt-code-core';
-import { act } from 'react';
+import {
+  createScrollbackPagerStore,
+  type ScrollbackPagerStore,
+} from '../../stores/turn/scrollbackPager.js';
 import {
   createMockSettings,
   renderWithProviders,
@@ -93,11 +98,12 @@ function renderCappedToolMessage(cappedText: string, originalLength: number) {
 
 describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
   let tempDir: string;
-  let service: SessionRecordingService;
+  let service: SessionRecordingPort;
+  let pager: ScrollbackPagerStore | undefined;
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), '3428-render-'));
-    service = new SessionRecordingService({
+    service = createSessionRecorder({
       sessionId: 'test-session-3428-render',
       projectHash: 'testhash',
       chatsDir: tempDir,
@@ -108,6 +114,8 @@ describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
   });
 
   afterEach(async () => {
+    await pager?.close();
+    pager = undefined;
     await service.dispose();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
@@ -165,6 +173,7 @@ describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
         >
           <TurnProvider store={turnStore}>
             <ToolResultExpansionProvider
+              pager={pager}
               getTranscriptFilePath={() => transcriptPath}
             >
               <ToolMessage
@@ -183,9 +192,18 @@ describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
   }
 
   it('loads the full body from the transcript when constraints lift (ctrl-s)', async () => {
-    service.recordContent(toolResponseContent('call-capped', FULL_BODY));
+    await recordRowsForTest(service, [
+      toolResponseContent('call-capped', FULL_BODY),
+    ]);
     await service.flush();
     const transcriptPath = service.getFilePath() as string;
+    pager = createScrollbackPagerStore({
+      filePath: transcriptPath,
+      pageRows: 8,
+      viewport: { visibleKeys: [], viewportLines: 8, rowHeightLines: () => 1 },
+      settings: { marginViewports: 0, byteFloorBytes: 256, purgeDebounceMs: 0 },
+    });
+    await pager.resumeFromJournal();
     const capped = boundResultDisplayForRetention(FULL_BODY);
 
     const turnStore = createTurnStore();
@@ -207,9 +225,18 @@ describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
   });
 
   it('returns to the capped preview after a scroll-forward append purges the expansion', async () => {
-    service.recordContent(toolResponseContent('call-capped', FULL_BODY));
+    await recordRowsForTest(service, [
+      toolResponseContent('call-capped', FULL_BODY),
+    ]);
     await service.flush();
     const transcriptPath = service.getFilePath() as string;
+    pager = createScrollbackPagerStore({
+      filePath: transcriptPath,
+      pageRows: 8,
+      viewport: { visibleKeys: [], viewportLines: 8, rowHeightLines: () => 1 },
+      settings: { marginViewports: 0, byteFloorBytes: 256, purgeDebounceMs: 0 },
+    });
+    await pager.resumeFromJournal();
     const capped = boundResultDisplayForRetention(FULL_BODY);
 
     const turnStore = createTurnStore();
@@ -226,12 +253,14 @@ describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
 
     // Scroll-forward: a new ledger append purges; the capped preview (with its
     // marker and hint) renders again even though constraints stay lifted.
-    act(() => {
-      turnStore.commands.addItem(
-        { type: 'user', text: 'next turn' },
-        Date.now(),
-      );
-    });
+    await recordRowsForTest(service, [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'next turn' }] },
+    ]);
+    await service.flush();
+    await pager.pageForward();
+    await waitFor(() =>
+      expect(lastFrame() ?? '').not.toContain('MIDDLESENTINEL'),
+    );
 
     const frame = lastFrame() ?? '';
     expect(frame).not.toContain('MIDDLESENTINEL');

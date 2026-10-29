@@ -1,5 +1,6 @@
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
-const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -10,42 +11,46 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
 } from '../LoadBalancingProvider.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '../GenerateChatOptions.js';
+import type { GenerateChatOptions } from '../IProvider.js';
+import { replayableContents } from '../utils/collectContents.js';
 
-describe('LoadBalancingProvider - Failover Strategy', () => {
-  let settingsService: SettingsService;
-  let config: Config;
+const requestContents = replayableContents([
+  { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+  { speaker: 'human', blocks: [{ type: 'text', text: 'test prompt' }] },
+]);
+function makeProviderManager(): ProviderManager {
+  const settingsService = new SettingsService();
+  const config = createRuntimeConfigStub(settingsService);
+  return new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    settingsService,
+    config,
+    undefined,
+    undefined,
+    borrowedSettings(config, settingsService),
+  );
+}
+
+describe('LoadBalancingProvider - Failover Strategy [part 1]', () => {
   let providerManager: ProviderManager;
-
   beforeEach(() => {
-    settingsService = new SettingsService();
-    config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      settingsService,
-      config,
-      undefined,
-      undefined,
-      fixtureOwnersBorrowedSettings(config, settingsService),
-    );
+    providerManager = makeProviderManager();
   });
-
   describe('Ephemeral Settings Extraction', () => {
     it('should extract failover_retry_count from lbProfileEphemeralSettings', async () => {
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield { type: 'text' as const, content: 'success' };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -79,8 +84,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -90,12 +95,20 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(results).toHaveLength(1);
     });
+  });
+});
 
+describe('LoadBalancingProvider - Failover Strategy [part 2]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
+  describe('Ephemeral Settings Extraction', () => {
     it('should default failover_retry_count to 1', async () => {
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield { type: 'text' as const, content: 'success' };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -126,8 +139,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -137,12 +150,20 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(results).toHaveLength(1);
     });
+  });
+});
 
+describe('LoadBalancingProvider - Failover Strategy [part 3]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
+  describe('Ephemeral Settings Extraction', () => {
     it('should extract failover_retry_delay_ms from lbProfileEphemeralSettings', async () => {
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield { type: 'text' as const, content: 'success' };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -176,8 +197,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -187,12 +208,20 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(results).toHaveLength(1);
     });
+  });
+});
 
+describe('LoadBalancingProvider - Failover Strategy [part 4]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
+  describe('Ephemeral Settings Extraction', () => {
     it('should default failover_retry_delay_ms to 0', async () => {
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield { type: 'text' as const, content: 'success' };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -223,8 +252,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -234,6 +263,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(results).toHaveLength(1);
     });
+  });
+});
+
+describe('LoadBalancingProvider - Failover Strategy [part 5]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
   });
   describe('Edge Cases', () => {
     it('should throw error when failover profile has only 1 sub-profile', () => {
@@ -255,12 +291,20 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         new LoadBalancingProvider(lbConfig, providerManager);
       }).toThrow(/at least 2|minimum.*2/i);
     });
+  });
+});
 
+describe('LoadBalancingProvider - Failover Strategy [part 6]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
+  describe('Edge Cases', () => {
     it('should cap retry_count at 100 even if higher value provided', async () => {
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield { type: 'text' as const, content: 'success' };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -294,8 +338,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -305,7 +349,15 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(results).toHaveLength(1);
     });
+  });
+});
 
+describe('LoadBalancingProvider - Failover Strategy [part 7]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
+  describe('Edge Cases', () => {
     it('should handle provider not found mid-failover sequence', async () => {
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'test-provider-not-found',
@@ -330,8 +382,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+        contents: requestContents,
       };
 
       await expect(

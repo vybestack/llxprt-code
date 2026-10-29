@@ -71,7 +71,7 @@ export async function disposeHistoryLike(history: unknown): Promise<void> {
   }
   const disposable = (history as { dispose?: () => void }).dispose;
   if (typeof disposable === 'function') {
-    disposable.call(history);
+    await Promise.resolve(disposable.call(history));
     return;
   }
   const clearable = history as {

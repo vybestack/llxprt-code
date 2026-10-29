@@ -6,6 +6,7 @@
  * Issue #3732: the session browser lists the readable sessions and names the
  * recordings it skipped, with their reason, on the CLI debug log.
  */
+import { seedSessionRows } from '../../../__tests__/journal-recording.js';
 
 import { rawBrowserCatalog } from '../../../__tests__/browser-catalog-fixture.js';
 
@@ -13,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core';
+import { createSessionRecorder } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { renderHook, waitFor } from '../../../__tests__/render.js';
 import { useSessionBrowser } from '../useSessionBrowser.js';
@@ -38,7 +39,7 @@ describe('useSessionBrowser with an unreadable recording present (issue #3732)',
   });
 
   it('lists the healthy session and logs the skipped file with its reason', async () => {
-    const recording = new SessionRecordingService({
+    const recording = createSessionRecorder({
       sessionId: 'browser-healthy-session',
       projectHash: PROJECT_HASH,
       chatsDir,
@@ -46,10 +47,12 @@ describe('useSessionBrowser with an unreadable recording present (issue #3732)',
       provider: 'test-provider',
       model: 'test-model',
     });
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'healthy content' }],
-    });
+    await seedSessionRows(recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'healthy content' }],
+      },
+    ]);
     await recording.flush();
     await recording.dispose();
     const brokenPath = path.join(
@@ -85,7 +88,7 @@ describe('useSessionBrowser with an unreadable recording present (issue #3732)',
       listed: ['browser-healthy-session'],
       skippedCount: 1,
       warnings: [
-        `Session browser: skipped 1 unreadable session recording(s): ${brokenPath}: Empty file or unreadable first line`,
+        `Session browser: skipped 1 unreadable session recording(s): ${brokenPath}: Session file ${brokenPath} was recorded in the retired JSONL journal format (versions 1 and 2) and cannot be resumed. Start a new session.`,
       ],
     });
     unmount();

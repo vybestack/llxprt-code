@@ -83,6 +83,7 @@ export function hasJsonUnsafeCharacters(text: string): boolean {
  * @returns The sanitized text
  */
 export function ensureJsonSafe(text: string): string {
+  if (!hasJsonUnsafeCharacters(text)) return text;
   // First, handle replacement characters
   let safe = sanitizeUnicodeReplacements(text);
 

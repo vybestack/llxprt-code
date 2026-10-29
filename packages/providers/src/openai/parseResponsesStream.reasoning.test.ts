@@ -120,8 +120,8 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
   it('should keep streaming reasoning deltas spaced correctly', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"First"}\n\n',
-      'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":"chunk"}\n\n',
-      'data: {"type":"response.reasoning_text.delta","sequence_number":3,"delta":"next"}\n\n',
+      'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":" chunk"}\n\n',
+      'data: {"type":"response.reasoning_text.delta","sequence_number":3,"delta":" next"}\n\n',
       'data: {"type":"response.reasoning_text.done","sequence_number":4}\n\n',
     ];
 
@@ -200,8 +200,8 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
   it('streams reasoning deltas as same-stream incremental thinking updates', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"Let"}\n\n',
-      'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":"me"}\n\n',
-      'data: {"type":"response.reasoning_text.delta","sequence_number":3,"delta":"think"}\n\n',
+      'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":" me"}\n\n',
+      'data: {"type":"response.reasoning_text.delta","sequence_number":3,"delta":" think"}\n\n',
       'data: {"type":"response.reasoning_text.done","sequence_number":4}\n\n',
     ];
 
@@ -303,8 +303,8 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
   it('should preserve spacing between summary deltas', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_summary_text.delta","sequence_number":1,"delta":"Planning"}\n\n',
-      'data: {"type":"response.reasoning_summary_text.delta","sequence_number":2,"delta":"repo"}\n\n',
-      'data: {"type":"response.reasoning_summary_text.delta","sequence_number":3,"delta":"inspection"}\n\n',
+      'data: {"type":"response.reasoning_summary_text.delta","sequence_number":2,"delta":" repo"}\n\n',
+      'data: {"type":"response.reasoning_summary_text.delta","sequence_number":3,"delta":" inspection"}\n\n',
       'data: {"type":"response.reasoning_summary_text.done","sequence_number":4}\n\n',
     ];
 
@@ -329,7 +329,7 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
   it('yields ThinkingBlock updates on delta events before done', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"First"}\n\n',
-      'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":"second"}\n\n',
+      'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":" second"}\n\n',
       'data: {"type":"response.reasoning_text.done","sequence_number":3}\n\n',
     ];
 
@@ -353,7 +353,7 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
   it('should not duplicate reasoning when output_item.done follows deltas', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"First"}\n\n',
-      'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":"second"}\n\n',
+      'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":" second"}\n\n',
       'data: {"type":"response.output_item.done","item":{"type":"reasoning","id":"reasoning_1","summary":[{"type":"summary_text","text":"First second"}]}}\n\n',
     ];
 
@@ -380,7 +380,7 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
   it('should not duplicate hidden reasoning when output_item.done follows hidden deltas', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"First"}\n\n',
-      'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":"second"}\n\n',
+      'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":" second"}\n\n',
       'data: {"type":"response.output_item.done","item":{"type":"reasoning","id":"reasoning_1","summary":[{"type":"summary_text","text":"First second"}]}}\n\n',
     ];
 

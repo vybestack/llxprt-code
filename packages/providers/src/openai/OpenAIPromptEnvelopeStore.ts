@@ -4,31 +4,38 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import type { prepareRequest } from './OpenAIRequestPreparation.js';
-import type { buildResponsesRequestContextForProjection } from '../openai-responses/openAIResponsesExecutor.js';
+import type { PreparedOpenAIChatProjection } from './OpenAIPromptProjectionPreparation.js';
+import type { RequestContext } from './OpenAIRequestPreparation.js';
+import type { ChatPromptEstimate } from './native-chat-estimate.js';
+import type { PreparedResponsesRequestContext } from '../openai-responses/openAIResponsesExecutor.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import type {
-  PromptEnvelopeProjection,
-  UnsupportedMediaEntry,
-} from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import type { MediaBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  projectOpenAIChatPromptEnvelope,
-  projectOpenAIResponsesPromptEnvelope,
-} from '../runtime/promptEnvelopeProjections.js';
+import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type { ProviderToolset } from '../IProvider.js';
+import { diskTextProjection } from '../openai-responses/responses-disk-text-projection.js';
+import { finishMediaRequest } from '../utils/request-media-resolution.js';
+import { projectOpenAIChatPromptEnvelopeFromSource } from '../runtime/promptEnvelopeProjections.js';
+
+/**
+ * Source route: a send normalized with its prompt inputs blanked gets these
+ * back, because the prepared request already carries them but the response
+ * path still reads the tool declarations and instruction.
+ */
+export interface OpenAISourceInputs {
+  readonly systemInstruction: string | undefined;
+  readonly tools: ProviderToolset | undefined;
+}
 
 export type PreparedOpenAIPromptEnvelope =
   | {
       readonly protocol: 'openai-chat';
-      readonly requestContext: Awaited<ReturnType<typeof prepareRequest>>;
+      readonly requestContext: RequestContext;
       readonly mediaRequest: ResolvedMediaRequest;
+      readonly sourceInputs?: OpenAISourceInputs;
     }
   | {
       readonly protocol: 'openai-responses';
-      readonly requestContext: Awaited<
-        ReturnType<typeof buildResponsesRequestContextForProjection>
-      >;
+      readonly requestContext: PreparedResponsesRequestContext;
+      readonly sourceInputs?: OpenAISourceInputs;
     };
 
 export class OpenAIPromptEnvelopeStore {
@@ -41,52 +48,67 @@ export class OpenAIPromptEnvelopeStore {
     return token === undefined ? undefined : this.prepared.get(token);
   }
 
-  storeProjection(
-    prepared: PreparedOpenAIPromptEnvelope,
-    unsupportedMedia: readonly UnsupportedMediaEntry[] = [],
-  ): PromptEnvelopeProjection {
+  /**
+   * The chat projection of the prepared request reads its pinned row selection.
+   * Unsupported media diagnostics are collected while planning that selection.
+   */
+  async storeChatProjection(
+    prepared: Extract<
+      PreparedOpenAIPromptEnvelope,
+      { readonly protocol: 'openai-chat' }
+    >,
+    estimate: ChatPromptEstimate,
+  ): Promise<PromptEnvelopeProjection> {
     const transportToken = Object.freeze({});
     this.prepared.set(transportToken, prepared);
-    if (prepared.protocol === 'openai-responses') {
-      return {
-        ...projectOpenAIResponsesPromptEnvelope(
-          prepared.requestContext.request,
-          {
-            unsupportedMedia,
-            transportToken,
-          },
-          prepared.requestContext.projectionContext,
-        ),
-        releaseIfUnsent: prepared.requestContext.mediaRequest.release,
-      };
-    }
-    return {
-      ...projectOpenAIChatPromptEnvelope(prepared.requestContext.requestBody, {
-        unsupportedMedia,
+    const { mediaRequest, requestContext } = prepared;
+    try {
+      return projectOpenAIChatPromptEnvelopeFromSource(estimate.projection, {
+        model: requestContext.model,
+        unsupportedMedia: estimate.unsupportedMedia,
         transportToken,
-      }),
-      releaseIfUnsent: prepared.mediaRequest.release,
-    };
+        releaseIfUnsent: mediaRequest.release,
+      });
+    } catch (error) {
+      this.prepared.delete(transportToken);
+      return finishMediaRequest(mediaRequest, { status: 'failed', error });
+    }
+  }
+
+  /**
+   * Source route, Responses: the disk text projection of the one prepared
+   * context. Unsupported media comes from the prompt's own ledger, so no row
+   * array is read here.
+   */
+  async storeDiskTextProjection(
+    prepared: Extract<
+      PreparedOpenAIPromptEnvelope,
+      { readonly protocol: 'openai-responses' }
+    >,
+  ): Promise<PromptEnvelopeProjection> {
+    const transportToken = Object.freeze({});
+    this.prepared.set(transportToken, prepared);
+    const { mediaRequest } = prepared.requestContext;
+    try {
+      return diskTextProjection(
+        prepared.requestContext,
+        transportToken,
+        mediaRequest.release,
+      );
+    } catch (error) {
+      this.prepared.delete(transportToken);
+      return finishMediaRequest(mediaRequest, { status: 'failed', error });
+    }
   }
 }
 
 interface PrepareOpenAIProjectionInput {
-  readonly normalized: NormalizedGenerateChatOptions;
   readonly useResponses: boolean;
   readonly store: OpenAIPromptEnvelopeStore;
-  readonly prepareResponses: () => Promise<
-    Awaited<ReturnType<typeof buildResponsesRequestContextForProjection>>
-  >;
-  readonly prepareChat: () => Promise<{
-    options: NormalizedGenerateChatOptions;
-    requestContext: Awaited<ReturnType<typeof prepareRequest>>;
-    mediaRequest: ResolvedMediaRequest;
-  }>;
-  readonly responsesPdfEnabled: boolean;
-  readonly collectUnsupported: (
-    options: NormalizedGenerateChatOptions,
-    supports: (block: MediaBlock, category: string) => boolean,
-  ) => readonly UnsupportedMediaEntry[];
+  readonly prepareResponses: () => Promise<PreparedResponsesRequestContext>;
+  readonly prepareChat: () => Promise<PreparedOpenAIChatProjection>;
+  /** Present on the source route: inputs the blanked send must get back. */
+  readonly sourceInputs?: OpenAISourceInputs;
 }
 
 export async function prepareOpenAIPromptProjection(
@@ -94,27 +116,25 @@ export async function prepareOpenAIPromptProjection(
 ): Promise<PromptEnvelopeProjection> {
   if (input.useResponses) {
     const requestContext = await input.prepareResponses();
-    return input.store.storeProjection(
-      { protocol: 'openai-responses', requestContext },
-      input.collectUnsupported(
-        input.normalized,
-        (_block, category) =>
-          category === 'image' ||
-          (category === 'pdf' && input.responsesPdfEnabled),
-      ),
-    );
+    return input.store.storeDiskTextProjection({
+      protocol: 'openai-responses',
+      requestContext,
+      ...(input.sourceInputs === undefined
+        ? {}
+        : { sourceInputs: input.sourceInputs }),
+    });
   }
 
   const prepared = await input.prepareChat();
-  return input.store.storeProjection(
+  return input.store.storeChatProjection(
     {
       protocol: 'openai-chat',
       requestContext: prepared.requestContext,
       mediaRequest: prepared.mediaRequest,
+      ...(input.sourceInputs === undefined
+        ? {}
+        : { sourceInputs: input.sourceInputs }),
     },
-    input.collectUnsupported(
-      prepared.options,
-      (_block, category) => category === 'image',
-    ),
+    prepared.estimate,
   );
 }

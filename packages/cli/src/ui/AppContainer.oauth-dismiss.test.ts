@@ -1,3 +1,4 @@
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -113,14 +114,16 @@ function harness(): {
   });
   vi.spyOn(ClipboardService, 'copyToClipboard').mockResolvedValue();
   vi.spyOn(globalThis, 'fetch').mockImplementation(
-    async () =>
-      new Response(
-        JSON.stringify({
-          access_token: 'synthetic-lazy-token',
-          expires_in: 3600,
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      ),
+    withFetchPreconnect(
+      async () =>
+        new Response(
+          JSON.stringify({
+            access_token: 'synthetic-lazy-token',
+            expires_in: 3600,
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+    ),
   );
   const storeUI = createDialogStore();
   const dialogs = createDialogOpeners(storeUI);
@@ -265,11 +268,13 @@ describe('prompt-triggered lazy authentication dialog', () => {
         nextReady.resolve();
       });
       vi.spyOn(globalThis, 'fetch').mockImplementation(
-        async () =>
-          new Response(
-            JSON.stringify({ access_token: 'retry-token', expires_in: 3600 }),
-            { headers: { 'Content-Type': 'application/json' } },
-          ),
+        withFetchPreconnect(
+          async () =>
+            new Response(
+              JSON.stringify({ access_token: 'retry-token', expires_in: 3600 }),
+              { headers: { 'Content-Type': 'application/json' } },
+            ),
+        ),
       );
       second = request(h.manager);
       await nextReady.promise;

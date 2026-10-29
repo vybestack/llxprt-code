@@ -391,12 +391,12 @@ describe('provider switch transaction ownership', () => {
       }).toStrictEqual(siblingState);
       await continueTurn(currentClient(a), 'Continue on the restored owner');
       await continueTurn(currentClient(b), 'Continue on the committed sibling');
-      expect(JSON.stringify(await currentClient(a).getHistory())).toContain(
-        'restored owner',
-      );
-      expect(JSON.stringify(await currentClient(b).getHistory())).toContain(
-        'committed sibling',
-      );
+      expect(
+        JSON.stringify(await Array.fromAsync(currentClient(a).getHistory())),
+      ).toContain('restored owner');
+      expect(
+        JSON.stringify(await Array.fromAsync(currentClient(b).getHistory())),
+      ).toContain('committed sibling');
     } finally {
       hold.release();
       await runCleanupSteps([() => a.close(), () => b.close()]);

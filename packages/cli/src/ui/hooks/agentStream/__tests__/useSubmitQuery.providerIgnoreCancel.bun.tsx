@@ -62,7 +62,6 @@ import { useQueuedSubmissions } from '../useQueuedSubmissions.js';
 import type { QueuedSubmission } from '../types.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import { KeypressProvider } from '../../../contexts/KeypressContext.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { createDeferred } from './createDeferred.js';
 import {
@@ -436,14 +435,6 @@ function renderHarness(options: {
   };
 
   const operations = agentStreamOperations(env.agent);
-  const policyOps = streamPolicyOperations(
-    createStreamRuntimeForTest({}, createMockOverrides()),
-  );
-  const submissionOps = submissionOperations(
-    env.agent,
-    options.recordingIntegration,
-    undefined,
-  );
   const hook = renderHook(
     ({ streamingState }: { streamingState: StreamingState }) => {
       const queue = useQueuedSubmissions();
@@ -465,53 +456,14 @@ function renderHarness(options: {
       const runStreamRef = useRef(eventStream.runStream);
       runStreamRef.current = eventStream.runStream;
 
-      const submitDeps: UseSubmitQueryDeps = {
-        ...policyOps,
-        ...submissionOps,
-        addItem: handles.addItem,
-        removeItems: vi.fn(),
-        settings: createLoadedSettings(),
-        onDebugMessage: vi.fn(),
-        onCancelSubmit: vi.fn(),
-        onAuthError: vi.fn(),
-
-        sanitizeContent: (text: string) => ({ text, blocked: false }),
-        flushPendingHistoryItem: handles.flushPendingHistoryItem,
-        pendingResponse: new PendingResponseBuffer(undefined),
-        pendingHistoryItemRef: handles.pendingHistoryItemRef,
-        thinkingBlocksRef: { current: [] },
+      const submitDeps = createSubmitDeps(
+        options,
+        queue,
         turnCancelledRef,
-        setTurnCancelled: (v: boolean) => void (turnCancelledRef.current = v),
         drainSuppressedRef,
-        queuedSubmissionsRef: queue.queuedSubmissionsRef,
-        enqueueSubmission: queue.enqueueSubmission,
-        enqueueSubmissionFirst: queue.enqueueSubmissionFirst,
-        requeueSubmission: queue.requeueSubmission,
-        dequeueSubmission: queue.dequeueSubmission,
-        clearSubmissions: queue.clearSubmissions,
-        tryReserveDrain: queue.tryReserveDrain,
-        releaseDrain: queue.releaseDrain,
-        setPendingHistoryItem: handles.setPendingHistoryItem,
-        setIsResponding: handles.setIsResponding,
-        setInitError: vi.fn(),
-        setThought: vi.fn(),
-        setLastAgentActivityTime: handles.setLastAgentActivityTime,
-        scheduleToolCalls: vi.fn(),
-        abortActiveStream: vi.fn(),
-        handleShellCommand: vi.fn().mockReturnValue(false),
-        handleSlashCommand: vi.fn().mockResolvedValue(false),
-        logger: null,
-        shellModeActive: false,
-        loopDetectedRef: { current: false },
-        lastProfileNameRef: { current: undefined },
-        lastModelInfoRef: { current: null },
-        lastModelIdentityRef: { current: null },
-        abortControllerRef: handles.abortControllerRef,
         runStreamRef,
-        submitQueryRef: { current: null },
-        isResponding: false,
         streamingState,
-      };
+      );
 
       const submission = useSubmitQuery(submitDeps);
       const cancellation = useCancellation(
@@ -590,15 +542,6 @@ async function flushAtTurnBoundary(
   if (state.mode === 'turnA') await gate;
 }
 
-function capturePromptAContent(
-  text: string,
-  buffer: string,
-  latch: { readonly resolve: () => void },
-): string {
-  if (text === PROMPT_A_CONTENT) latch.resolve();
-  return buffer + text;
-}
-
 async function settleTurn(turnPromise: Promise<void> | null): Promise<void> {
   if (turnPromise === null) return;
   await act(async () => {
@@ -621,161 +564,268 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
   const credentials = useOwnedCredentials();
 
   it('ends turn A via the abort race, then drains B and C exactly once, in order', async () => {
-    const env = await createEngineEnv(credentials().authority);
-    try {
-      // Reported repro context: a real active task list on disk, seeded into
-      // the SAME store the real engine's TodoContinuationService reads
-      // (isolated test storage roots — no user data dir is touched).
-      const todoStore = new LocalTodoStore(
-        env.sessionId,
-        { dataDirResolver: () => Storage.getGlobalDataDir() },
-        DEFAULT_AGENT_ID,
-      );
-      const seededTodo: Todo = {
-        id: 'todo-3236-1',
-        content: 'Diagnose the #3236 cancel deadlock',
-        status: 'in_progress',
-      };
-      await todoStore.writeTodos([seededTodo]);
-
-      const handles = createTestHandles();
-
-      // Real CLI dep boundary: A's turn-boundary recording flush is deferred
-      // so the post-done/pre-release ownership window is deterministic. The
-      // latch proves A's runStream settled while the provider read is parked.
-      const flushGateA = createDeferred<void>();
-      const flushState: FlushGateState = {
-        entered: false,
-        mode: 'turnA',
-      };
-      const recordingIntegration = {
-        flushAtTurnBoundary: async (): Promise<void> =>
-          flushAtTurnBoundary(flushState, flushGateA.promise),
-      } as unknown as RecordingIntegration;
-
-      const { result, rerender, unmount } = renderHarness({
-        env,
-        handles,
-        recordingIntegration,
-      });
-
-      // 1. Prompt A starts through the real submit path and real engine; its
-      //    stream emits one content event, then the provider read parks.
-      const turnAPromiseRef: { current: Promise<void> | null } = {
-        current: null,
-      };
-      act(() => {
-        turnAPromiseRef.current = result.current.submitQuery('A');
-      });
-      // Promise-based latch instead of a polling waitFor: resolves the
-      // first time the real chain routes A's content event, so the wait is
-      // driven by the event itself (no timer drift; a broken chain fails
-      // fast at the test runner's per-test deadline instead).
-      const contentEventALatch = createDeferred<void>();
-      handleContentEventMock.mockImplementation(
-        (text: string, buffer: string) =>
-          capturePromptAContent(text, buffer, contentEventALatch),
-      );
-      await contentEventALatch.promise;
-      // ESC must land AFTER the second read parks: the transport's abort
-      // listener (and thus the "provider observed abort" observation under
-      // test) is registered by the parked read itself. Cancelling before the
-      // park exercises the already-aborted fast path instead of the #3236
-      // read-ignores-abort path.
-      await env.transport.parkedReadA.promise;
-      expect(handleContentEventMock).toHaveBeenCalledWith(
-        PROMPT_A_CONTENT,
-        '',
-        expect.any(Number),
-      );
-      expect(env.startedPrompts()).toStrictEqual(['A']);
-      rerender({ streamingState: StreamingState.Responding });
-
-      // 2. Escape through the real useCancellation path.
-      const turnASignal = handles.abortControllerRef.current?.signal;
-      await act(async () => {
-        result.current.cancelOngoingRequest();
-      });
-      expect(result.current.turnCancelledRef.current).toBe(true);
-      expect(result.current.drainSuppressedRef.current).toBe(true);
-      expect(turnASignal?.aborted).toBe(true);
-
-      // 3. THE #3236 invariant: the real chain terminates on abort even
-      //    though the provider read stays parked and the provider observed
-      //    (and ignored) the abort. iterateAgentStream drops the aborted
-      //    turn's final done event (break-on-abort), so the CLI-observable
-      //    proof is A's lifecycle reaching its real turn-boundary flush.
-      await waitFor(() => expect(flushState.entered).toBe(true), {
-        timeout: 5000,
-      });
-      expect(env.transport.abortObservedByProvider()).toBe(true);
-      expect(env.transport.providerReadSettled()).toBe(false);
-      // A's CLI lifecycle is still inside its deferred turn-boundary flush,
-      // so ownership is retained: the queue must not drain.
-      expect(env.startedPrompts()).toStrictEqual(['A']);
-
-      // 4. Fresh prompt B while A still owns the turn: #3169 resume branch
-      //    front-enqueues it and releases suppression; nothing starts.
-      rerender({ streamingState: StreamingState.Idle });
-      await act(async () => {
-        await result.current.submitQuery('B');
-      });
-      expect(result.current.drainSuppressedRef.current).toBe(false);
-      expect(queueTexts(result.current.queue)).toStrictEqual(['B']);
-
-      // 5. Fresh prompt C appends behind B; still nothing starts.
-      await act(async () => {
-        await result.current.submitQuery('C');
-      });
-      expect(queueTexts(result.current.queue)).toStrictEqual(['B', 'C']);
-      expect(env.startedPrompts()).toStrictEqual(['A']);
-
-      // 6. A's CLI lifecycle completes (flush released) → B drains exactly
-      //    once. The queue may then drain C immediately after B, so mid-state
-      //    snapshots are not asserted here; order, exactly-once, and
-      //    serialization are proven from the final state below.
-      env.transport.mode = 'clean';
-      flushState.mode = 'immediate';
-      await act(async () => {
-        flushGateA.resolve();
-      });
-      await waitFor(() => expect(env.startedPrompts()).toContain('B'), {
-        timeout: 5000,
-      });
-      expect(handles.abortControllerRef.current?.signal).not.toBe(turnASignal);
-      expect(result.current.turnCancelledRef.current).toBe(false);
-
-      // 7-8. C drains automatically after B, in order, exactly once. Final
-      //      state: Idle, empty queue, never concurrent, and the provider
-      //      read never settled — the CLI recovered without it.
-      await waitFor(() => expect(env.startedPrompts()).toContain('C'), {
-        timeout: 5000,
-      });
-      await waitFor(
-        () => expect(stopDoneCount(env.routedEvents)).toBeGreaterThanOrEqual(2),
-        { timeout: 5000 },
-      );
-      await waitFor(
-        () => expect(queueTexts(result.current.queue)).toStrictEqual([]),
-        { timeout: 5000 },
-      );
-      // "Final state is Idle": the real lifecycle's last responding
-      // transition must have settled back to false after the C drain.
-      const respondingTransitions = handles.setIsRespondingCalls;
-      expect(respondingTransitions[respondingTransitions.length - 1]).toBe(
-        false,
-      );
-      expect(env.startedPrompts()).toStrictEqual(['A', 'B', 'C']);
-      expect(env.maxConcurrent()).toBe(1);
-      expect(env.transport.cleanRequests).toBeGreaterThanOrEqual(2);
-      expect(env.transport.providerReadSettled()).toBe(false);
-
-      await settleTurn(turnAPromiseRef.current);
-      await act(async () => {
-        unmount();
-      });
-    } finally {
-      await env.dispose();
-    }
+    const env = await verifyProviderIgnoreCancel(credentials().authority);
+    expect(env.startedPrompts()).toStrictEqual(['A', 'B', 'C']);
+    expect(env.maxConcurrent()).toBe(1);
   });
 });
+
+function createSubmitDeps(
+  options: Parameters<typeof renderHarness>[0],
+  queue: ReturnType<typeof useQueuedSubmissions>,
+  turnCancelledRef: React.MutableRefObject<boolean>,
+  drainSuppressedRef: React.MutableRefObject<boolean>,
+  runStreamRef: UseSubmitQueryDeps['runStreamRef'],
+  streamingState: StreamingState,
+): UseSubmitQueryDeps {
+  const { env, handles } = options;
+  return {
+    ...streamPolicyOperations(
+      createStreamRuntimeForTest({}, createMockOverrides()),
+    ),
+    ...submissionOperations(env.agent, options.recordingIntegration, undefined),
+    addItem: handles.addItem,
+
+    settings: createLoadedSettings(),
+    onDebugMessage: vi.fn(),
+    onCancelSubmit: vi.fn(),
+    onAuthError: vi.fn(),
+    sanitizeContent: (text: string) => ({ text, blocked: false }),
+    flushPendingHistoryItem: handles.flushPendingHistoryItem,
+
+    pendingHistoryItemRef: handles.pendingHistoryItemRef,
+
+    turnCancelledRef,
+    setTurnCancelled: (v: boolean) => void (turnCancelledRef.current = v),
+    drainSuppressedRef,
+    queuedSubmissionsRef: queue.queuedSubmissionsRef,
+    enqueueSubmission: queue.enqueueSubmission,
+    enqueueSubmissionFirst: queue.enqueueSubmissionFirst,
+    requeueSubmission: queue.requeueSubmission,
+    dequeueSubmission: queue.dequeueSubmission,
+    clearSubmissions: queue.clearSubmissions,
+    tryReserveDrain: queue.tryReserveDrain,
+    releaseDrain: queue.releaseDrain,
+    setPendingHistoryItem: handles.setPendingHistoryItem,
+    setIsResponding: handles.setIsResponding,
+    setInitError: vi.fn(),
+    setThought: vi.fn(),
+    setLastAgentActivityTime: handles.setLastAgentActivityTime,
+    scheduleToolCalls: vi.fn(),
+    abortActiveStream: vi.fn(),
+    handleShellCommand: vi.fn().mockReturnValue(false),
+    handleSlashCommand: vi.fn().mockResolvedValue(false),
+    logger: null,
+    shellModeActive: false,
+    loopDetectedRef: { current: false },
+    lastProfileNameRef: { current: undefined },
+    lastModelInfoRef: { current: null },
+    lastModelIdentityRef: { current: null },
+    abortControllerRef: handles.abortControllerRef,
+    runStreamRef,
+    submitQueryRef: { current: null },
+    isResponding: false,
+    streamingState,
+  };
+}
+
+type CancelFixture = Awaited<ReturnType<typeof arrangeCancelFixture>>;
+
+async function arrangeCancelFixture(env: EngineEnv) {
+  // Reported repro context: a real active task list on disk, seeded into
+  // the SAME store the real engine's TodoContinuationService reads
+  // (isolated test storage roots — no user data dir is touched).
+  const todoStore = new LocalTodoStore(
+    env.sessionId,
+    { dataDirResolver: () => Storage.getGlobalDataDir() },
+    DEFAULT_AGENT_ID,
+  );
+  const seededTodo: Todo = {
+    id: 'todo-3236-1',
+    content: 'Diagnose the #3236 cancel deadlock',
+    status: 'in_progress',
+  };
+  await todoStore.writeTodos([seededTodo]);
+
+  const handles = createTestHandles();
+
+  // Real CLI dep boundary: A's turn-boundary recording flush is deferred
+  // so the post-done/pre-release ownership window is deterministic. The
+  // latch proves A's runStream settled while the provider read is parked.
+  const flushGateA = createDeferred<void>();
+  const flushState: FlushGateState = {
+    entered: false,
+    mode: 'turnA',
+  };
+  const recordingIntegration = {
+    flushAtTurnBoundary: async (): Promise<void> =>
+      flushAtTurnBoundary(flushState, flushGateA.promise),
+  } as unknown as RecordingIntegration;
+
+  const { result, rerender, unmount } = renderHarness({
+    env,
+    handles,
+    recordingIntegration,
+  });
+
+  return { handles, flushGateA, flushState, result, rerender, unmount };
+}
+
+async function startParkedTurn(
+  env: EngineEnv,
+  fixture: CancelFixture,
+): Promise<{ current: Promise<void> | null }> {
+  const { result, rerender } = fixture;
+  // 1. Prompt A starts through the real submit path and real engine; its
+  //    stream emits one content event, then the provider read parks.
+  const turnAPromiseRef: { current: Promise<void> | null } = {
+    current: null,
+  };
+  act(() => {
+    turnAPromiseRef.current = result.current.submitQuery('A');
+  });
+  // Promise-based latch instead of a polling waitFor: resolves the
+  // first time the real chain routes A's content event, so the wait is
+  // driven by the event itself (no timer drift; a broken chain fails
+  // fast at the test runner's per-test deadline instead).
+  await waitFor(
+    () =>
+      expect(env.routedEvents).toContainEqual({
+        type: 'text',
+        text: PROMPT_A_CONTENT,
+      }),
+    { timeout: 5000 },
+  );
+  // ESC must land AFTER the second read parks: the transport's abort
+  // listener (and thus the "provider observed abort" observation under
+  // test) is registered by the parked read itself. Cancelling before the
+  // park exercises the already-aborted fast path instead of the #3236
+  // read-ignores-abort path.
+  await env.transport.parkedReadA.promise;
+  expect(
+    env.routedEvents.filter((event) => event.type === 'text'),
+  ).toContainEqual({
+    type: 'text',
+    text: PROMPT_A_CONTENT,
+  });
+  expect(env.startedPrompts()).toStrictEqual(['A']);
+  rerender({ streamingState: StreamingState.Responding });
+
+  return turnAPromiseRef;
+}
+
+async function cancelParkedTurn(
+  env: EngineEnv,
+  fixture: CancelFixture,
+): Promise<AbortSignal | undefined> {
+  const { result, handles, flushState } = fixture;
+  // 2. Escape through the real useCancellation path.
+  const turnASignal = handles.abortControllerRef.current?.signal;
+  await act(async () => {
+    result.current.cancelOngoingRequest();
+  });
+  expect(result.current.turnCancelledRef.current).toBe(true);
+  expect(result.current.drainSuppressedRef.current).toBe(true);
+  expect(turnASignal?.aborted).toBe(true);
+
+  // 3. THE #3236 invariant: the real chain terminates on abort even
+  //    though the provider read stays parked and the provider observed
+  //    (and ignored) the abort. iterateAgentStream drops the aborted
+  //    turn's final done event (break-on-abort), so the CLI-observable
+  //    proof is A's lifecycle reaching its real turn-boundary flush.
+  await waitFor(() => expect(flushState.entered).toBe(true), {
+    timeout: 5000,
+  });
+  expect(env.transport.abortObservedByProvider()).toBe(true);
+  expect(env.transport.providerReadSettled()).toBe(false);
+  // A's CLI lifecycle is still inside its deferred turn-boundary flush,
+  // so ownership is retained: the queue must not drain.
+  expect(env.startedPrompts()).toStrictEqual(['A']);
+
+  return turnASignal;
+}
+
+async function enqueueFollowingTurns(
+  env: EngineEnv,
+  fixture: CancelFixture,
+): Promise<void> {
+  const { result, rerender } = fixture;
+  // 4. Fresh prompt B while A still owns the turn: #3169 resume branch
+  //    front-enqueues it and releases suppression; nothing starts.
+  rerender({ streamingState: StreamingState.Idle });
+  await act(async () => {
+    await result.current.submitQuery('B');
+  });
+  expect(result.current.drainSuppressedRef.current).toBe(false);
+  expect(queueTexts(result.current.queue)).toStrictEqual(['B']);
+
+  // 5. Fresh prompt C appends behind B; still nothing starts.
+  await act(async () => {
+    await result.current.submitQuery('C');
+  });
+  expect(queueTexts(result.current.queue)).toStrictEqual(['B', 'C']);
+  expect(env.startedPrompts()).toStrictEqual(['A']);
+}
+
+async function drainFollowingTurns(
+  env: EngineEnv,
+  fixture: CancelFixture,
+  turnASignal: AbortSignal | undefined,
+): Promise<void> {
+  const { flushGateA, flushState, handles, result } = fixture;
+  // 6. A's CLI lifecycle completes (flush released) → B drains exactly
+  //    once. The queue may then drain C immediately after B, so mid-state
+  //    snapshots are not asserted here; order, exactly-once, and
+  //    serialization are proven from the final state below.
+  env.transport.mode = 'clean';
+  flushState.mode = 'immediate';
+  await act(async () => {
+    flushGateA.resolve();
+  });
+  await waitFor(() => expect(env.startedPrompts()).toContain('B'), {
+    timeout: 5000,
+  });
+  expect(handles.abortControllerRef.current?.signal).not.toBe(turnASignal);
+  expect(result.current.turnCancelledRef.current).toBe(false);
+
+  // 7-8. C drains automatically after B, in order, exactly once. Final
+  //      state: Idle, empty queue, never concurrent, and the provider
+  //      read never settled — the CLI recovered without it.
+  await waitFor(() => expect(env.startedPrompts()).toContain('C'), {
+    timeout: 5000,
+  });
+  await waitFor(
+    () => expect(stopDoneCount(env.routedEvents)).toBeGreaterThanOrEqual(2),
+    { timeout: 5000 },
+  );
+  await waitFor(
+    () => expect(queueTexts(result.current.queue)).toStrictEqual([]),
+    { timeout: 5000 },
+  );
+  // "Final state is Idle": the real lifecycle's last responding
+  // transition must have settled back to false after the C drain.
+  const respondingTransitions = handles.setIsRespondingCalls;
+  expect(respondingTransitions[respondingTransitions.length - 1]).toBe(false);
+  expect(env.transport.cleanRequests).toBeGreaterThanOrEqual(2);
+  expect(env.transport.providerReadSettled()).toBe(false);
+}
+
+async function verifyProviderIgnoreCancel(
+  authority: CredentialAuthority,
+): Promise<EngineEnv> {
+  const env = await createEngineEnv(authority);
+  try {
+    const fixture = await arrangeCancelFixture(env);
+    const turnAPromiseRef = await startParkedTurn(env, fixture);
+    const signal = await cancelParkedTurn(env, fixture);
+    await enqueueFollowingTurns(env, fixture);
+    await drainFollowingTurns(env, fixture, signal);
+    await settleTurn(turnAPromiseRef.current);
+    await act(async () => {
+      fixture.unmount();
+    });
+    return env;
+  } finally {
+    await env.dispose();
+  }
+}

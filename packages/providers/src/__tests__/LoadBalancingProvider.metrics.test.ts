@@ -96,7 +96,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       // Make 3 requests
       for (let i = 0; i < 3; i++) {
         const gen = lb.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: `test${i}` }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: `test${i}` }] },
+          ],
         });
         for await (const _chunk of gen) {
           // consume
@@ -121,7 +123,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       providerManager.registerProvider(mockProvider);
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
       for await (const _chunk of gen) {
         // consume
@@ -162,7 +166,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       providerManager.registerProvider(mockProvider2);
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
       for await (const _chunk of gen) {
         // consume
@@ -210,7 +216,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       providerManager.registerProvider(mockProvider2);
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
       for await (const _chunk of gen) {
         // consume
@@ -244,7 +252,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       // Make 2 requests
       for (let i = 0; i < 2; i++) {
         const gen = lb.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: `test${i}` }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: `test${i}` }] },
+          ],
         });
         for await (const _chunk of gen) {
           // consume
@@ -277,7 +287,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       providerManager.registerProvider(mockProvider);
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
       for await (const _chunk of gen) {
         // consume
@@ -311,7 +323,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       // Make 2 requests
       for (let i = 0; i < 2; i++) {
         const gen = lb.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: `test${i}` }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: `test${i}` }] },
+          ],
         });
         for await (const _chunk of gen) {
           // consume
@@ -344,7 +358,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       providerManager.registerProvider(mockProvider);
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
       for await (const _chunk of gen) {
         // consume
@@ -373,7 +389,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       providerManager.registerProvider(mockProvider);
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
       for await (const _chunk of gen) {
         // consume
@@ -402,7 +420,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       providerManager.registerProvider(mockProvider);
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
       for await (const _chunk of gen) {
         // consume
@@ -427,7 +447,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       providerManager.registerProvider(mockProvider);
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
       for await (const _chunk of gen) {
         // consume
@@ -488,7 +510,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
 
       // First request: backend1 fails, failover to backend2
       const gen1 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test1' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test1' }] },
+        ],
       });
       for await (const _chunk of gen1) {
         // consume
@@ -498,7 +522,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
 
       // Second request: backend1 now succeeds
       const gen2 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test2' }] },
+        ],
       });
       for await (const _chunk of gen2) {
         // consume

@@ -628,7 +628,7 @@ describe('session-owned model notifications', () => {
         ),
       ).toStrictEqual([model]);
       expect(
-        (await agentB.getHistory()).some(
+        (await agentB.session.getHistory()).some(
           (message) => message.speaker === 'human',
         ),
       ).toBe(true);

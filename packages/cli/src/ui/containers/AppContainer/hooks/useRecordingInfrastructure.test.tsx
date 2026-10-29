@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   RecordingIntegration,
-  SessionRecordingService,
+  createSessionRecorder,
 } from '@vybestack/llxprt-code-core';
 import { renderHook } from '../../../../__tests__/render.js';
 import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
@@ -32,11 +32,11 @@ describe('interactive recording resources', () => {
       provider: 'fake',
       model: 'fake-model',
     };
-    const first = new SessionRecordingService({
+    const first = createSessionRecorder({
       ...options,
       sessionId: 'raw-first',
     });
-    const second = new SessionRecordingService({
+    const second = createSessionRecorder({
       ...options,
       sessionId: 'raw-second',
     });
@@ -59,6 +59,7 @@ describe('interactive recording resources', () => {
         model: options.model,
         workspaceDirs: [],
         startTime: new Date().toISOString(),
+        kind: 'main',
       });
       expect(result.current.recordingSwapCallbacks?.getCurrentRecording()).toBe(
         second,

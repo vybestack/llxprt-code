@@ -269,9 +269,11 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
     expect(execution.isCurrent(actual)).toBe(true);
     expect(execution.resolve(client)).toStrictEqual({ execution: actual });
     expect(bus.released).toStrictEqual([]);
-    expect((await client.getHistory()).length).toBe(0);
+    expect((await Array.fromAsync(client.getHistory())).length).toBe(0);
     await runMode(actual);
-    expect((await client.getHistory()).length).toBeGreaterThan(0);
+    expect((await Array.fromAsync(client.getHistory())).length).toBeGreaterThan(
+      0,
+    );
     expect(bus.released).toStrictEqual([0]);
   });
 
@@ -290,11 +292,14 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
     expect(bus.released).toStrictEqual([0]);
     await paused.return(undefined);
     expect(bus.released).toStrictEqual([0]);
-    const before = (await firstClient.getHistory()).length;
+    const before = (await Array.fromAsync(firstClient.getHistory())).length;
     await runMode(second);
-    const historyDelta = (await firstClient.getHistory()).length - before;
+    const historyDelta =
+      (await Array.fromAsync(firstClient.getHistory())).length - before;
     expect(historyDelta).toBe(0);
-    expect((await selectedClient.getHistory()).length).toBeGreaterThan(0);
+    expect(
+      (await Array.fromAsync(selectedClient.getHistory())).length,
+    ).toBeGreaterThan(0);
   });
 
   it('releases every actual prior generation subscription exactly once, including deferred prior retirement @requirement:REQ-007', async () => {
@@ -424,8 +429,10 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
     const actual = rebuild();
     expect(execution.resolve(client)).toStrictEqual({ execution: actual });
     await runMode(actual);
-    expect((await client.getHistory()).length).toBeGreaterThan(0);
-    expect((await peer.getHistory()).length).toBe(0);
+    expect((await Array.fromAsync(client.getHistory())).length).toBeGreaterThan(
+      0,
+    );
+    expect((await Array.fromAsync(peer.getHistory())).length).toBe(0);
     expect(execution.isCurrent(actual)).toBe(true);
   });
 
@@ -438,10 +445,12 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
     expect(execution.resolve(selectedClient)).toStrictEqual({
       execution: current,
     });
-    expect((await first.getHistory()).length).toBe(0);
+    expect((await Array.fromAsync(first.getHistory())).length).toBe(0);
     await runMode(current);
-    expect((await first.getHistory()).length).toBe(0);
-    expect((await selectedClient.getHistory()).length).toBeGreaterThan(0);
+    expect((await Array.fromAsync(first.getHistory())).length).toBe(0);
+    expect(
+      (await Array.fromAsync(selectedClient.getHistory())).length,
+    ).toBeGreaterThan(0);
   });
 
   async function runMode(actual: SessionExecution): Promise<void> {

@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { registerJournalPagerFixture } from '../stores/turn/journal-turn-test-helpers.js';
+const journalPager = registerJournalPagerFixture();
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'bun:test';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -128,6 +130,8 @@ async function withLayout(
     initial: Delta;
   }) => Promise<void>,
 ): Promise<void> {
+  const stdinDescriptors: Partial<Record<string, PropertyDescriptor>> =
+    Object.getOwnPropertyDescriptors(process.stdin);
   const columnsDescriptor = Object.getOwnPropertyDescriptor(
     process.stdout,
     'columns',
@@ -162,8 +166,10 @@ async function withLayout(
     availableTerminalHeight: 37,
     isInputActive: false,
   });
+  const pager = await journalPager([
+    { speaker: 'ai', blocks: [{ type: 'text', text: `**${OLD_HISTORY}**` }] },
+  ]);
   const turn = createTurnStore({
-    history: [{ id: 1, type: 'gemini_content', text: `**${OLD_HISTORY}**` }],
     pendingHistoryItems:
       paragraphs === 0
         ? []
@@ -199,6 +205,15 @@ async function withLayout(
       <TerminalProvider store={terminal}>
         <TurnProvider store={turn}>
           <DefaultAppLayout
+            scrollbackPager={{
+              store: pager,
+              viewport: {
+                visibleKeys: [],
+                viewportLines: 8,
+                rowHeightLines: () => 1,
+              },
+            }}
+            subscribeContextRange={() => () => {}}
             readIdeMode={() => false}
             readIdeDiffingEnabled={() => false}
             subscribeIdeDiffing={() => () => {}}
@@ -227,6 +242,12 @@ async function withLayout(
     ),
     {
       stdout: process.stdout,
+      stdin: Object.assign(process.stdin, {
+        isTTY: true,
+        ref: () => process.stdin,
+        unref: () => process.stdin,
+        setRawMode: () => process.stdin,
+      }),
       patchConsole: false,
       exitOnCtrlC: false,
       isScreenReaderEnabled: false,
@@ -235,7 +256,8 @@ async function withLayout(
   );
 
   function takeDelta(label: string): Delta {
-    if (!rootUiRef.current) throw new Error('production layout did not mount');
+    if (!rootUiRef.current)
+      throw new Error('production layout did not mount: ' + writes.join(''));
     const raw = writes.join('');
     writes = [];
     const delta = {
@@ -297,7 +319,7 @@ async function withLayout(
       },
       append: async (): Promise<Delta> => {
         await act(async () => {
-          turn.commands.addItem({
+          await pager.appendItem({
             type: 'gemini_content',
             text: 'NEW3434_CURRENT_WIDTH prose continues after resize with many words to wrap.',
           });
@@ -321,6 +343,12 @@ async function withLayout(
       view.unmount();
     });
     capture.mockRestore();
+    for (const key of ['isTTY', 'setRawMode', 'ref', 'unref']) {
+      const descriptor = stdinDescriptors[key];
+      if (descriptor !== undefined)
+        Object.defineProperty(process.stdin, key, descriptor);
+      else Reflect.deleteProperty(process.stdin, key);
+    }
     if (columnsDescriptor)
       Object.defineProperty(process.stdout, 'columns', columnsDescriptor);
     else Reflect.deleteProperty(process.stdout, 'columns');

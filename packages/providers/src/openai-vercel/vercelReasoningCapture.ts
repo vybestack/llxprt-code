@@ -15,6 +15,8 @@
  */
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import { forwardPreconnect } from '../utils/fetchPreconnect.js';
 import { resolveReasoningField } from '../utils/reasoningField.js';
 import {
   assertProviderStreamByteLimit,
@@ -195,42 +197,45 @@ export function createReasoningCaptureFetch(
     input: RequestInfo | URL,
     init?: RequestInit,
   ) => Promise<Response>,
-): typeof fetch {
-  return async (input: RequestInfo | URL, init?: RequestInit) => {
-    const response = await requestFetch(input, init);
+): NetworkFetch & ReturnType<typeof forwardPreconnect> {
+  return Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await requestFetch(input, init);
 
-    captureBuffer.headers = response.headers;
+      captureBuffer.headers = response.headers;
 
-    const contentType = response.headers.get('content-type') ?? '';
-    if (!contentType.includes('text/event-stream') || !response.body) {
-      return response;
-    }
+      const contentType = response.headers.get('content-type') ?? '';
+      if (!contentType.includes('text/event-stream') || !response.body) {
+        return response;
+      }
 
-    const [parserStream, sdkStream] = response.body.tee();
-    // The parser runs detached from the SDK stream and can now reject (the
-    // byte limits throw). Nothing guarantees the consumer reaches its `await`:
-    // the SDK stream can throw first, the signal can abort, or the generator
-    // can simply not be iterated to completion. An unobserved rejection is a
-    // process-level crash, so the outcome is captured here and re-surfaced by
-    // whoever awaits, rather than left to escape.
-    captureBuffer.parsePromise = parseReasoningFromSseStream(
-      parserStream.getReader(),
-      captureBuffer,
-      logger,
-      init?.signal ?? undefined,
-    ).catch((error: unknown) => {
-      captureBuffer.parseError =
-        error instanceof Error ? error : new Error(String(error));
-      logger.debug(
-        () =>
-          `[vercel:reasoning] detached parser failed: ${captureBuffer.parseError?.message}`,
-      );
-    });
+      const [parserStream, sdkStream] = response.body.tee();
+      // The parser runs detached from the SDK stream and can now reject (the
+      // byte limits throw). Nothing guarantees the consumer reaches its `await`:
+      // the SDK stream can throw first, the signal can abort, or the generator
+      // can simply not be iterated to completion. An unobserved rejection is a
+      // process-level crash, so the outcome is captured here and re-surfaced by
+      // whoever awaits, rather than left to escape.
+      captureBuffer.parsePromise = parseReasoningFromSseStream(
+        parserStream.getReader(),
+        captureBuffer,
+        logger,
+        init?.signal ?? undefined,
+      ).catch((error: unknown) => {
+        captureBuffer.parseError =
+          error instanceof Error ? error : new Error(String(error));
+        logger.debug(
+          () =>
+            `[vercel:reasoning] detached parser failed: ${captureBuffer.parseError?.message}`,
+        );
+      });
 
-    return new Response(sdkStream, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    });
-  };
+      return new Response(sdkStream, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+    },
+    forwardPreconnect(() => requestFetch),
+  );
 }

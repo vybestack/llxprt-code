@@ -166,7 +166,7 @@ const createTestContext = ({
       setDebugMessage: vi.fn(),
       pendingItem: null,
       setPendingItem: () => {},
-      loadHistory: vi.fn(),
+
       toggleCorgiMode: vi.fn(),
       toggleDebugProfiler: vi.fn(),
       toggleVimEnabled: vi.fn().mockResolvedValue(true),

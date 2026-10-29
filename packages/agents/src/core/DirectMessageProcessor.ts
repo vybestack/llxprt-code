@@ -52,6 +52,7 @@ import {
 import {
   applyRequestModifications,
   extractSystemInstructionText,
+  turnSystemInstruction,
 } from './streamRequestHelpers.js';
 
 interface ToolSelectionHookResult {
@@ -81,6 +82,7 @@ import {
 } from './hookWireAdapter.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import {
   logApiError,
   logApiRequest,
@@ -225,14 +227,7 @@ export class DirectMessageProcessor {
     }
 
     params.config?.abortSignal?.throwIfAborted();
-    const contents =
-      params.historyPrefix === undefined
-        ? userIContents
-        : this.historyService.getCuratedForProvider(
-            userIContents,
-            params.historyPrefix,
-          );
-    logApiRequest(this.telemetryPorts(), contents, model, prompt_id);
+    await logApiRequest(this.telemetryPorts(), userIContents, model, prompt_id);
 
     const startTime = Date.now();
 
@@ -240,7 +235,7 @@ export class DirectMessageProcessor {
       const response = await this._executeWithRetry(
         provider,
         params,
-        contents,
+        userIContents,
         prompt_id,
         params.hookOwner ?? execution?.hookOwner,
       );
@@ -545,7 +540,10 @@ export class DirectMessageProcessor {
       this.providerFileLifecycle,
       this.config?.getTargetDir(),
     ).generateChatCompletion({
-      contents: contentsForApi,
+      // Retry boundaries can reopen the provider-facing history.
+      contents:
+        params.historyPrefix?.(contentsForApi, timeoutSignal) ??
+        callerOwnedRawProviderSource(contentsForApi),
       tools: effectiveToolsFromConfig,
       invocation:
         params.invocation === undefined
@@ -575,8 +573,7 @@ export class DirectMessageProcessor {
         __logicalRequestId: promptId,
       },
       systemInstruction: extractSystemInstructionText(
-        params.config?.systemInstruction ??
-          this.generationConfig.systemInstruction,
+        turnSystemInstruction(params, this.generationConfig),
       ),
       systemPromptAssembler: this.generationConfig.systemPromptAssembler,
     });

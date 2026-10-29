@@ -94,10 +94,13 @@ describe('loggers', () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
-  function exportedRecords(): Array<{
-    body?: unknown;
-    attributes: Record<string, unknown>;
-  }> {
+  async function exportedRecords(): Promise<
+    Array<{
+      body?: unknown;
+      attributes: Record<string, unknown>;
+    }>
+  > {
+    await telemetry.flush();
     if (!existsSync(outfile)) return [];
     return readFileSync(outfile, 'utf8')
       .split('\n')
@@ -179,7 +182,7 @@ describe('loggers', () => {
 
       logHookCall(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'Hook call: BeforeTool. Success: true. Duration: 12ms.',
         attributes: {
           'session.id': 'test-session-id',
@@ -204,7 +207,7 @@ describe('loggers', () => {
 
       logMalformedJsonResponse(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'Malformed JSON response from test-model.',
         attributes: {
           'session.id': 'test-session-id',
@@ -237,7 +240,7 @@ describe('loggers', () => {
 
       logFileOperation(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'File operation: read. Lines: 10.',
         attributes: {
           'session.id': 'test-session-id',
@@ -288,7 +291,7 @@ describe('loggers', () => {
 
       logToolOutputTruncated(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'Tool output truncated for test-tool.',
         attributes: {
           'session.id': 'test-session-id',
@@ -324,7 +327,7 @@ describe('loggers', () => {
 
       logModelRouting(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'Model routing decision. Model: gemini-pro, Source: default',
         attributes: {
           'session.id': 'test-session-id',
@@ -333,7 +336,7 @@ describe('loggers', () => {
         },
       });
 
-      expect(exportedRecords()).toContainEqual(
+      expect(await exportedRecords()).toContainEqual(
         expect.objectContaining({
           attributes: expect.objectContaining({
             model: 'gemini-pro',
@@ -360,7 +363,7 @@ describe('loggers', () => {
 
       logModelRouting(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toHaveLength(0);
+      expect(await exportedRecords()).toHaveLength(0);
       await telemetry.flush();
       expect(statSync(outfile).size - bytesBeforeEvent).toBe(0);
     });
@@ -386,7 +389,7 @@ describe('loggers', () => {
 
       logExtensionInstallEvent(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'Installed extension vscode',
         attributes: {
           'session.id': 'test-session-id',
@@ -416,7 +419,7 @@ describe('loggers', () => {
 
       logExtensionUninstall(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'Uninstalled extension vscode',
         attributes: {
           'session.id': 'test-session-id',
@@ -444,7 +447,7 @@ describe('loggers', () => {
 
       logExtensionEnable(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'Enabled extension vscode',
         attributes: {
           'session.id': 'test-session-id',
@@ -472,7 +475,7 @@ describe('loggers', () => {
 
       logExtensionDisable(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'Disabled extension vscode',
         attributes: {
           'session.id': 'test-session-id',

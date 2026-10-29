@@ -3,6 +3,9 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { seedSessionRows } from '../../../__tests__/journal-recording.js';
+
+import { displayBoot } from '../../../__tests__/resumeRows.js';
 
 import {
   rawBrowserCatalog,
@@ -39,7 +42,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
   type ContinueTarget,
   type IContent,
   type SessionRecordingServiceConfig,
@@ -82,7 +85,7 @@ function makeContent(
 }
 
 /**
- * Create a real session file using SessionRecordingService.
+ * Create a real session file using createSessionRecorder.
  */
 async function createTestSession(
   chatsDir: string,
@@ -104,11 +107,11 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = new SessionRecordingService(config);
+  const svc = createSessionRecorder(config);
 
   const contents = opts.contents ?? [makeContent('hello')];
   for (const content of contents) {
-    svc.recordContent(content);
+    await seedSessionRows(svc, [content]);
   }
   await svc.flush();
 
@@ -139,8 +142,9 @@ function makeKey(
 function makeResumeSuccess(): PerformResumeResult {
   return {
     ok: true,
-    history: [],
+    history: displayBoot([]).streamRows(),
     metadata: {
+      kind: 'main',
       sessionId: 'resumed',
       projectHash: PROJECT_HASH,
       startTime: new Date().toISOString(),
@@ -181,28 +185,117 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+let tempDir: string;
+let chatsDir: string;
+let lockHandles: Array<{ release: () => Promise<void> }>;
+
+async function setUpSessionBrowserFixture(): Promise<void> {
+  tempDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'use-session-browser-test-'),
+  );
+  chatsDir = path.join(tempDir, 'chats');
+  await fs.mkdir(chatsDir, { recursive: true });
+  lockHandles = [];
+}
+
+async function tearDownSessionBrowserFixture(): Promise<void> {
+  await Promise.all(lockHandles.map((handle) => handle.release()));
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
+const observeEnterResume = async (): Promise<{
+  readonly isLoading: boolean;
+  readonly resumedTarget: ContinueTarget | null;
+}> => {
+  const sessionId = 'resume-session';
+  await createTestSession(chatsDir, { sessionId });
+
+  let resumedTarget: ContinueTarget | null = null;
+  const getResumedTarget = (): ContinueTarget | null => resumedTarget;
+  const props = makeHookProps(chatsDir, {
+    onSelect: async (target) => {
+      resumedTarget = target;
+      const selectedSessionId =
+        target.kind === 'session'
+          ? target.session.sessionId
+          : target.source.sessionId;
+      return {
+        ok: true as const,
+        history: displayBoot([]).streamRows(),
+        metadata: {
+          kind: 'main',
+          sessionId: selectedSessionId,
+          projectHash: PROJECT_HASH,
+          startTime: new Date().toISOString(),
+          provider: 'anthropic',
+          model: 'claude-4',
+          workspaceDirs: ['/test/workspace'],
+        },
+        warnings: [],
+      };
+    },
+  });
+  const { result } = renderHook(() => useSessionBrowser(props));
+
+  await waitFor(() => {
+    if (result.current.isLoading) {
+      throw new Error('Expected the session browser to finish loading');
+    }
+  });
+
+  result.current.handleKeypress('\r', makeKey('return'));
+
+  await waitFor(() => {
+    if (getResumedTarget() === null) {
+      throw new Error('Expected Enter to select the session');
+    }
+  });
+
+  return {
+    isLoading: result.current.isLoading,
+    resumedTarget: getResumedTarget(),
+  };
+};
+
+async function openConversationConfirmation(): Promise<{
+  result: { current: UseSessionBrowserResult };
+  counts: { select: number; close: number };
+}> {
+  await createTestSession(chatsDir, { sessionId: 'confirm-session' });
+  await createTestSession(chatsDir, { sessionId: 'second-session' });
+
+  const counts = { select: 0, close: 0 };
+  const props = makeHookProps(chatsDir, {
+    hasActiveConversation: true,
+    onSelect: async () => {
+      counts.select++;
+      return makeResumeSuccess();
+    },
+    onClose: () => {
+      counts.close++;
+    },
+  });
+  const { result } = renderHook(() => useSessionBrowser(props));
+
+  await waitFor(() => {
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  result.current.handleKeypress('\r', makeKey('return'));
+  await waitFor(() => {
+    expect(result.current.conversationConfirmActive).toBe(true);
+  });
+
+  return { result, counts };
+}
+
 // ---------------------------------------------------------------------------
 // Test Suite
 // ---------------------------------------------------------------------------
 
 describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
-  let tempDir: string;
-  let chatsDir: string;
-  let lockHandles: Array<{ release: () => Promise<void> }>;
-
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'use-session-browser-test-'),
-    );
-    chatsDir = path.join(tempDir, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
-    lockHandles = [];
-  });
-
-  afterEach(async () => {
-    await Promise.all(lockHandles.map((handle) => handle.release()));
-    await fs.rm(tempDir, { recursive: true, force: true });
-  });
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
 
   describe('Resume Flow @requirement:REQ-RS-001', () => {
     /**
@@ -211,58 +304,6 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
      * WHEN: User presses Enter
      * THEN: onSelect is called with selected session
      */
-    const observeEnterResume = async (): Promise<{
-      readonly isLoading: boolean;
-      readonly resumedTarget: ContinueTarget | null;
-    }> => {
-      const sessionId = 'resume-session';
-      await createTestSession(chatsDir, { sessionId });
-
-      let resumedTarget: ContinueTarget | null = null;
-      const getResumedTarget = (): ContinueTarget | null => resumedTarget;
-      const props = makeHookProps(chatsDir, {
-        onSelect: async (target) => {
-          resumedTarget = target;
-          const selectedSessionId =
-            target.kind === 'session'
-              ? target.session.sessionId
-              : target.source.sessionId;
-          return {
-            ok: true as const,
-            history: [],
-            metadata: {
-              sessionId: selectedSessionId,
-              projectHash: PROJECT_HASH,
-              startTime: new Date().toISOString(),
-              provider: 'anthropic',
-              model: 'claude-4',
-              workspaceDirs: ['/test/workspace'],
-            },
-            warnings: [],
-          };
-        },
-      });
-      const { result } = renderHook(() => useSessionBrowser(props));
-
-      await waitFor(() => {
-        if (result.current.isLoading) {
-          throw new Error('Expected the session browser to finish loading');
-        }
-      });
-
-      result.current.handleKeypress('\r', makeKey('return'));
-
-      await waitFor(() => {
-        if (getResumedTarget() === null) {
-          throw new Error('Expected Enter to select the session');
-        }
-      });
-
-      return {
-        isLoading: result.current.isLoading,
-        resumedTarget: getResumedTarget(),
-      };
-    };
 
     it('Enter initiates resume', async () => {
       const resume = await observeEnterResume();
@@ -285,7 +326,12 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       const props = makeHookProps(chatsDir, {
         onSelect: async () => {
           resumeCalled = true;
-          return { ok: true, history: [], metadata: {} as never, warnings: [] };
+          return {
+            ok: true,
+            history: displayBoot([]).streamRows(),
+            metadata: {} as never,
+            warnings: [],
+          };
         },
       });
       const { result } = renderHook(() => useSessionBrowser(props));
@@ -301,7 +347,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
 
       expect(resumeCalled).toBe(false);
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 2)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Resume Flow @requirement:REQ-RS-001', () => {
     /**
      * Test 57: isResuming true during resume (REQ-RS-003)
      * GIVEN: Resume in progress
@@ -318,8 +371,9 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
             resolveResume = () =>
               resolve({
                 ok: true as const,
-                history: [],
+                history: displayBoot([]).streamRows(),
                 metadata: {
+                  kind: 'main',
                   sessionId: 'test',
                   projectHash: PROJECT_HASH,
                   startTime: new Date().toISOString(),
@@ -372,7 +426,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         expect(result.current.isResuming).toBe(false);
       });
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 3)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Resume Flow @requirement:REQ-RS-001', () => {
     /**
      * Test 59: Enter disabled during resume (REQ-RS-004)
      * GIVEN: isResuming is true
@@ -391,7 +452,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
             resolveResume = () =>
               resolve({
                 ok: true,
-                history: [],
+                history: displayBoot([]).streamRows(),
                 metadata: {} as never,
                 warnings: [],
               });
@@ -417,7 +478,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       // Complete
       (resolveResume as (() => void) | null)?.();
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 4)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Resume Flow @requirement:REQ-RS-001', () => {
     /**
      * Test 60: All keys blocked during resume (REQ-RS-005)
      * GIVEN: isResuming is true
@@ -434,8 +502,9 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
             resolveResume = () =>
               resolve({
                 ok: true as const,
-                history: [],
+                history: displayBoot([]).streamRows(),
                 metadata: {
+                  kind: 'main',
                   sessionId: 'test',
                   projectHash: PROJECT_HASH,
                   startTime: new Date().toISOString(),
@@ -482,7 +551,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       // Complete
       (resolveResume as (() => void) | null)?.();
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 5)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Resume Flow @requirement:REQ-RS-001', () => {
     /**
      * Test 61: Successful resume calls onClose
      * GIVEN: onSelect returns ok:true
@@ -566,7 +642,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
 
       expect(closeCalled).toBe(false);
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 6)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Resume Flow @requirement:REQ-RS-001', () => {
     /**
      * Test 64: Error cleared on next action
      * GIVEN: error is set
@@ -596,6 +679,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       expect(result.current.error).toBeNull();
     });
   });
+});
+
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 7)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
 
   describe('Conversation Confirmation @requirement:REQ-RS-006', () => {
     /**
@@ -663,37 +751,6 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
      * two real sessions, invocation counters for the resume/close callbacks,
      * and a browser already sitting on an open confirmation.
      */
-    async function openConversationConfirmation(): Promise<{
-      result: { current: UseSessionBrowserResult };
-      counts: { select: number; close: number };
-    }> {
-      await createTestSession(chatsDir, { sessionId: 'confirm-session' });
-      await createTestSession(chatsDir, { sessionId: 'second-session' });
-
-      const counts = { select: 0, close: 0 };
-      const props = makeHookProps(chatsDir, {
-        hasActiveConversation: true,
-        onSelect: async () => {
-          counts.select++;
-          return makeResumeSuccess();
-        },
-        onClose: () => {
-          counts.close++;
-        },
-      });
-      const { result } = renderHook(() => useSessionBrowser(props));
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      result.current.handleKeypress('\r', makeKey('return'));
-      await waitFor(() => {
-        expect(result.current.conversationConfirmActive).toBe(true);
-      });
-
-      return { result, counts };
-    }
 
     /**
      * Test 67a: Enter with an active conversation opens the confirmation
@@ -746,7 +803,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       expect(counts).toStrictEqual({ select: 0, close: 0 });
       expect(result.current.error).toBeNull();
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 8)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Conversation Confirmation @requirement:REQ-RS-006', () => {
     /**
      * Test 67d: The browser stays navigable after cancelling (REQ-RS-013)
      * GIVEN: The conversation confirmation was cancelled with n

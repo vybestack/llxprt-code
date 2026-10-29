@@ -444,15 +444,15 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `8192`
   - **Requires restart:** Yes
 
-- **`ui.historyMaxItems`** (number):
-  - **Description:** Maximum number of history items to keep.
-  - **Default:** `100`
-  - **Requires restart:** No
+- **`ui.scrollbackMarginViewports`** (number):
+  - **Description:** Scrollback pager residency margin, in viewports beyond the visible window, kept before off-screen rows are evicted. Read once at startup.
+  - **Default:** `2`
+  - **Requires restart:** Yes
 
-- **`ui.historyMaxBytes`** (number):
-  - **Description:** Maximum size of history in bytes.
-  - **Default:** `1048576`
-  - **Requires restart:** No
+- **`ui.scrollbackByteFloorKiB`** (number):
+  - **Description:** Scrollback pager residency byte floor in KiB: off-screen eviction stops once resident rows shrink to this size. Read once at startup.
+  - **Default:** `256`
+  - **Requires restart:** Yes
 
 - **`ui.memoryImportFormat`** (string):
   - **Description:** Format for importing memory files (tree or flat).

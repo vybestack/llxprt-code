@@ -20,9 +20,7 @@ import {
   type MessageSenderType,
   type ToolCallRequestInfo,
   parseAndFormatApiError,
-  type ThinkingBlock,
   type ThoughtSummary,
-  type ServerContentEvent,
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
@@ -34,10 +32,7 @@ import {
   ToolCallStatus,
   type SlashCommandProcessorResult,
 } from '../../types.js';
-import {
-  type RemoveHistoryItems,
-  type UseHistoryManagerReturn,
-} from '../useHistoryManager.js';
+import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import {
   showCitations,
   getCurrentProfileName,
@@ -47,11 +42,7 @@ import {
   getActiveProviderNameForApiError,
   getErrorFallbackModel,
 } from '../../../utils/apiErrorFormatting.js';
-import {
-  processContentEvent,
-  type ContentEventDeps,
-} from './contentEventProcessor.js';
-import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
+
 import {
   prepareQueryForAgent as prepareQueryImpl,
   type PrepareQueryDeps,
@@ -59,11 +50,6 @@ import {
 import { getTokenLimitForConfiguredContext } from './contextLimit.js';
 import type { UiSubagentManager } from '../../cliUiRuntime.js';
 interface StreamEventHandlersResult {
-  handleContentEvent: (
-    eventValue: ServerContentEvent['value'],
-    currentAgentMessageBuffer: string,
-    userMessageTimestamp: number,
-  ) => string;
   handleUserCancelledEvent: (userMessageTimestamp: number) => void;
   handleErrorEvent: (
     eventValue: ErrorEvent['value'],
@@ -127,7 +113,6 @@ interface StreamEventHandlerDeps {
   readResource: Agent['mcp']['readResource'];
   settings: LoadedSettings;
   addItem: UseHistoryManagerReturn['addItem'];
-  removeItems?: RemoveHistoryItems;
   onDebugMessage: (message: string) => void;
   onCancelSubmit: (shouldRestorePrompt?: boolean) => void;
   sanitizeContent: (text: string) => {
@@ -136,9 +121,7 @@ interface StreamEventHandlerDeps {
     feedback?: string;
   };
   flushPendingHistoryItem: (timestamp: number) => void;
-  pendingResponse: PendingResponseBuffer;
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
-  thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
   turnCancelledRef: React.MutableRefObject<boolean>;
   clearSubmissions: () => void;
   setPendingHistoryItem: React.Dispatch<
@@ -174,7 +157,6 @@ interface StreamEventHandlerDeps {
 export function useStreamEventHandlers(
   deps: StreamEventHandlerDeps,
 ): StreamEventHandlersResult {
-  const handleContentEvent = useContentEventHandler(deps);
   const handleStreamAttemptDiscarded = useStreamAttemptDiscardedHandler(deps);
   const handleLoopDetectedEvent = useCallback(
     () =>
@@ -189,7 +171,6 @@ export function useStreamEventHandlers(
   );
   const handlers = useStreamHandlers(
     deps,
-    handleContentEvent,
     handleStreamAttemptDiscarded,
     handleLoopDetectedEvent,
   );
@@ -203,88 +184,21 @@ export function useStreamEventHandlers(
   };
 }
 
-function useContentEventHandler(deps: StreamEventHandlerDeps) {
-  const contentEventDeps = useContentEventDeps(deps, deps.pendingResponse);
-  return useCallback(
-    (
-      eventValue: ServerContentEvent['value'],
-      currentAgentMessageBuffer: string,
-      userMessageTimestamp: number,
-    ): string =>
-      processContentEvent(
-        eventValue,
-        currentAgentMessageBuffer,
-        userMessageTimestamp,
-        contentEventDeps,
-      ),
-    [contentEventDeps],
-  );
-}
-
-/**
- * REQ-3048-008/009: resets the uncommitted render state of the abandoned
- * attempt and retracts stable segments it already committed.
- */
 function useStreamAttemptDiscardedHandler(deps: StreamEventHandlerDeps) {
-  const {
-    pendingHistoryItemRef,
-    setPendingHistoryItem,
-    pendingResponse,
-    thinkingBlocksRef,
-    setThought,
-    removeItems,
-  } = deps;
   return useCallback(() => {
-    const pending = pendingHistoryItemRef.current;
-    if (
-      pending &&
-      (pending.type === 'gemini' || pending.type === 'gemini_content')
-    ) {
-      setPendingHistoryItem(null);
+    if (deps.pendingHistoryItemRef.current?.type !== 'tool_group') {
+      deps.setPendingHistoryItem(null);
     }
-    pendingResponse.reset();
-    // Resolve the retraction capability before draining the ledger so a
-    // missing removeItems wiring fails fast without losing committed segment
-    // IDs. reset() does not touch the ledger, so an early throw preserves the
-    // ids for a later, correctly-wired retraction.
-    const retract = requireHistoryRetraction(removeItems);
-    const retracted = pendingResponse.drainCommittedSegments();
-    if (retracted.length > 0) {
-      retract(retracted);
-    }
-    thinkingBlocksRef.current = [];
-    setThought(null);
-  }, [
-    pendingHistoryItemRef,
-    setPendingHistoryItem,
-    pendingResponse,
-    removeItems,
-    thinkingBlocksRef,
-    setThought,
-  ]);
-}
-
-function requireHistoryRetraction(
-  removeItems: RemoveHistoryItems | undefined,
-): RemoveHistoryItems {
-  if (!removeItems) {
-    throw new Error('History retraction is required after streamed content');
-  }
-  return removeItems;
+    deps.setThought(null);
+  }, [deps]);
 }
 
 function useStreamHandlers(
   deps: StreamEventHandlerDeps,
-  handleContentEvent: (
-    eventValue: ServerContentEvent['value'],
-    currentAgentMessageBuffer: string,
-    userMessageTimestamp: number,
-  ) => string,
   handleStreamAttemptDiscarded: () => void,
   handleLoopDetectedEvent: () => void,
 ): HandlerMap {
   return {
-    handleContentEvent,
     handleStreamAttemptDiscarded,
     handleUserCancelledEvent: useUserCancelledHandler(deps),
     handleErrorEvent: useErrorEventHandler(deps),
@@ -306,7 +220,6 @@ function useUserCancelledHandler(deps: StreamEventHandlerDeps) {
     setPendingHistoryItem,
     setThought,
     turnCancelledRef,
-    pendingResponse,
   } = deps;
 
   return useCallback(
@@ -328,7 +241,6 @@ function useUserCancelledHandler(deps: StreamEventHandlerDeps) {
         } else {
           flushPendingHistoryItem(userMessageTimestamp);
         }
-        pendingResponse.endCommittedSegments();
         setPendingHistoryItem(null);
       }
       addItem(
@@ -342,7 +254,6 @@ function useUserCancelledHandler(deps: StreamEventHandlerDeps) {
       addItem,
       flushPendingHistoryItem,
       pendingHistoryItemRef,
-      pendingResponse,
       setIsResponding,
       setPendingHistoryItem,
       setThought,
@@ -362,7 +273,6 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
     clearSubmissions,
     setPendingHistoryItem,
     setThought,
-    pendingResponse,
   } = deps;
 
   return useCallback(
@@ -375,7 +285,6 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
       setThought(null);
       if (pendingHistoryItemRef.current) {
         flushPendingHistoryItem(userMessageTimestamp);
-        pendingResponse.endCommittedSegments();
         setPendingHistoryItem(null);
       }
       const apiErrorInfo = buildApiErrorInfo(
@@ -403,7 +312,6 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
       readSelectedProvider,
       getModel,
       flushPendingHistoryItem,
-      pendingResponse,
       pendingHistoryItemRef,
       clearSubmissions,
       setPendingHistoryItem,
@@ -419,7 +327,6 @@ function useCitationEventHandler(deps: StreamEventHandlerDeps) {
     flushPendingHistoryItem,
     pendingHistoryItemRef,
     setPendingHistoryItem,
-    pendingResponse,
     settings,
   } = deps;
 
@@ -428,7 +335,6 @@ function useCitationEventHandler(deps: StreamEventHandlerDeps) {
       if (!showCitations(settings, readCitations)) return;
       if (pendingHistoryItemRef.current) {
         flushPendingHistoryItem(userMessageTimestamp);
-        pendingResponse.endCommittedSegments();
         setPendingHistoryItem(null);
       }
       addItem({ type: MessageType.INFO, text }, userMessageTimestamp);
@@ -438,7 +344,6 @@ function useCitationEventHandler(deps: StreamEventHandlerDeps) {
       readCitations,
       flushPendingHistoryItem,
       pendingHistoryItemRef,
-      pendingResponse,
       setPendingHistoryItem,
       settings,
     ],
@@ -465,13 +370,8 @@ function useFinishedNoticeHandler(deps: StreamEventHandlerDeps) {
 }
 
 function useChatCompressionHandler(deps: StreamEventHandlerDeps) {
-  const {
-    addItem,
-    getModel,
-    pendingHistoryItemRef,
-    pendingResponse,
-    setPendingHistoryItem,
-  } = deps;
+  const { addItem, getModel, pendingHistoryItemRef, setPendingHistoryItem } =
+    deps;
   return useCallback(
     (
       eventValue: ServerChatCompressedEvent['value'],
@@ -479,7 +379,6 @@ function useChatCompressionHandler(deps: StreamEventHandlerDeps) {
     ) => {
       if (pendingHistoryItemRef.current) {
         addItem(pendingHistoryItemRef.current, userMessageTimestamp);
-        pendingResponse.endCommittedSegments();
         setPendingHistoryItem(null);
       }
       return addItem(
@@ -494,13 +393,7 @@ function useChatCompressionHandler(deps: StreamEventHandlerDeps) {
         Date.now(),
       );
     },
-    [
-      addItem,
-      getModel,
-      pendingHistoryItemRef,
-      pendingResponse,
-      setPendingHistoryItem,
-    ],
+    [addItem, getModel, pendingHistoryItemRef, setPendingHistoryItem],
   );
 }
 
@@ -573,36 +466,6 @@ function usePrepareQueryForAgent(deps: StreamEventHandlerDeps) {
   );
 }
 
-function useContentEventDeps(
-  deps: StreamEventHandlerDeps,
-  pendingResponse: PendingResponseBuffer,
-): ContentEventDeps {
-  return useMemo(
-    () => ({
-      addItem: deps.addItem,
-      pendingResponse,
-      sanitizeContent: deps.sanitizeContent,
-      flushPendingHistoryItem: deps.flushPendingHistoryItem,
-      pendingHistoryItemRef: deps.pendingHistoryItemRef,
-      thinkingBlocksRef: deps.thinkingBlocksRef,
-      turnCancelledRef: deps.turnCancelledRef,
-      setPendingHistoryItem: deps.setPendingHistoryItem,
-      getContentPrefixIdentity: deps.getContentPrefixIdentity,
-    }),
-    [
-      deps.getContentPrefixIdentity,
-      deps.addItem,
-      pendingResponse,
-      deps.sanitizeContent,
-      deps.flushPendingHistoryItem,
-      deps.pendingHistoryItemRef,
-      deps.thinkingBlocksRef,
-      deps.turnCancelledRef,
-      deps.setPendingHistoryItem,
-    ],
-  );
-}
-
 function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
   return useMemo(
     () => ({
@@ -639,26 +502,21 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
 }
 
 function useDisplayUserMessage(deps: StreamEventHandlerDeps) {
-  const { addItem, readProfileName, lastProfileNameRef } = deps;
+  const { readProfileName, lastProfileNameRef } = deps;
   return useCallback(
-    (trimmedQuery: string, userMessageTimestamp: number) => {
-      addItem(
-        { type: MessageType.USER, text: trimmedQuery },
-        userMessageTimestamp,
-      );
+    (_trimmedQuery: string, _userMessageTimestamp: number) => {
       // Inline profile_change notifications are now owned exclusively by the
       // ModelInfo event path (agentEventDispatcher.handleModelInfoEvent).
       // We still track lastProfileNameRef for backward-compatible diagnostics.
       const liveProfileName = getCurrentProfileName(readProfileName);
       lastProfileNameRef.current = liveProfileName ?? undefined;
     },
-    [addItem, readProfileName, lastProfileNameRef],
+    [readProfileName, lastProfileNameRef],
   );
 }
 
 type HandlerMap = Pick<
   StreamEventHandlersResult,
-  | 'handleContentEvent'
   | 'handleStreamAttemptDiscarded'
   | 'handleUserCancelledEvent'
   | 'handleErrorEvent'

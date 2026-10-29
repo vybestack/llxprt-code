@@ -1,4 +1,3 @@
-import { mapHistoryToSessionUpdates } from './zed-session-replay.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -59,7 +58,7 @@ export async function resumeAgentHistory(
   sessionId: string,
   chatsDir: string,
   listFiles: ChatSessionFileLister = nodeChatSessionFileLister,
-): Promise<readonly IContent[]> {
+): Promise<AsyncIterable<IContent>> {
   try {
     return await resume(sessionId);
   } catch (error) {
@@ -84,8 +83,8 @@ export async function resumeAgentHistory(
  * Re-attach decision probe (#1604): true when a recorded session file for
  * `sessionId` already exists on disk under the ZedAgent config's chats dir.
  *
- * A freshly created but UNPROMPTED session has no recording — SessionRecordingService
- * only materializes the JSONL file on the FIRST content event — so this returns
+ * A freshly created but unprompted session has no recording. The journal recorder
+ * materializes the file when first needed, so this returns
  * false for it, signalling loadSession to RE-ATTACH the live in-memory session
  * (replaying its in-memory history) instead of destroying it and failing a disk
  * resume that would find no file. Once the session has been prompted (a file
@@ -120,32 +119,23 @@ export async function hasRecordedSessionFile(
   }
 }
 
-/**
- * Reads a live agent's in-memory conversation as neutral IContent[] for the
- * re-attach replay (#1604). `agent.getHistory()` already returns neutral
- * AgentMessage/IContent values, so preserving them directly keeps every block
- * intact and maps identically to a disk resume. A fresh unprompted session has
- * empty history, yielding an empty array (zero replay updates).
- */
-export async function readAgentHistoryAsIContent(
-  readHistory: Agent['getHistory'],
-): Promise<readonly IContent[]> {
-  return [...(await readHistory())];
+/** Raw live membership is pinned on first next and released when replay closes. */
+export async function* readAgentHistoryAsIContent(
+  readHistory: Agent['streamHistory'],
+  signal?: AbortSignal,
+): AsyncGenerator<IContent, void, unknown> {
+  yield* readHistory(signal);
 }
 
-/**
- * {@link readAgentHistoryAsIContent} with replay-failure normalization: a
- * getHistory()/conversion rejection is wrapped exactly like a delivery failure
- * ({@link wrapReplayFailure} -> internalError, phase:'replay') so a re-attach
- * load always rejects with a well-formed RequestError — consistent with the
- * disk-resume path's error semantics.
- */
-export async function readAgentHistoryForReplay(
-  readHistory: Agent['getHistory'],
+/** Source failures during traversal use the same replay classification as delivery failures. */
+export async function* readAgentHistoryForReplay(
+  readHistory: Agent['streamHistory'],
+
   sessionId: string,
-): Promise<readonly IContent[]> {
+  signal?: AbortSignal,
+): AsyncGenerator<IContent, void, unknown> {
   try {
-    return await readAgentHistoryAsIContent(readHistory);
+    yield* readAgentHistoryAsIContent(readHistory, signal);
   } catch (error) {
     throw wrapReplayFailure(sessionId, error);
   }
@@ -178,18 +168,4 @@ export function toLoadRequestError(
     rawDetail ||
     (error instanceof Error ? error.constructor.name : 'unknown error');
   return acp.RequestError.internalError({ sessionId, reason: detail }, detail);
-}
-
-export async function streamZedHistory(
-  sessionId: string,
-  items: readonly IContent[],
-  send: (update: acp.SessionUpdate) => Promise<void>,
-): Promise<void> {
-  for (const update of mapHistoryToSessionUpdates(items)) {
-    try {
-      await send(update);
-    } catch (error) {
-      throw wrapReplayFailure(sessionId, error);
-    }
-  }
 }

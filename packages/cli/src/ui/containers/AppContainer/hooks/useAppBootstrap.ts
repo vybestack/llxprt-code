@@ -6,6 +6,11 @@
 
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useScrollbackBootstrap,
+  type ScrollbackPagerBinding,
+} from './useScrollbackBootstrap.js';
+import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 import { useResponsive } from '../../../hooks/useResponsive.js';
 import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
 import type { SettingsProfileStore } from '../../../stores/settings/settingsStore.js';
@@ -14,15 +19,17 @@ import { useBracketedPaste } from '../../../hooks/useBracketedPaste.js';
 import { useConsoleMessages } from '../../../hooks/useConsoleMessages.js';
 import { useCoreEventHandlers } from '../../../hooks/useCoreEventHandlers.js';
 import {
-  DEFAULT_HISTORY_MAX_BYTES,
-  DEFAULT_HISTORY_MAX_ITEMS,
-} from '../../../../constants/historyLimits.js';
-import {
-  useRetractableHistory,
+  useHistory,
   type UseHistoryManagerReturn,
 } from '../../../hooks/useHistoryManager.js';
 import { useMemoryMonitor } from '../../../hooks/useMemoryMonitor.js';
-import type { IContent, IdeInfo } from '@vybestack/llxprt-code-core';
+import type { LoadedSettings } from '../../../../config/settings.js';
+import type {
+  HistoryService,
+  ResumeBootHandle,
+  IContent,
+  IdeInfo,
+} from '@vybestack/llxprt-code-core';
 import { useSessionStats } from '../../../contexts/SessionContext.js';
 import { useFocus } from '../../../hooks/useFocus.js';
 import type { UpdateObject } from '../../../utils/updateCheck.js';
@@ -46,7 +53,7 @@ export interface AppBootstrapProps {
   appendHistory: (content: IContent) => Promise<void>;
   recordRecordingEvent: (event: SessionRecordingEvent) => Promise<void>;
   recordFeedback: (
-    severity: 'warning' | 'error',
+    severity: 'warning' | 'error' | 'info',
     message: string,
   ) => void | Promise<void>;
   setTokenTrackingMetrics: Parameters<
@@ -67,7 +74,10 @@ export interface AppBootstrapProps {
   historyMaxItems?: number;
   historyMaxBytes?: number;
   hasSeenIdeIntegrationNudge?: boolean;
-  resumedHistory?: IContent[];
+  resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
+  readJournal: () => Pick<HistoryService, 'appendDisplay' | 'length'> | null;
+  settings: LoadedSettings;
+  readRecordingPath: () => string | undefined;
   version: string;
   /** P12: optional memory telemetry controller (perf+memory enabled only). */
   memoryController?: MemoryTelemetryController;
@@ -93,6 +103,8 @@ export interface AppBootstrapResult {
   shouldShowIdePrompt: boolean | null | undefined;
   updateInfo: UpdateObject | null;
   nightly: boolean;
+  stopTokenMetricsTracking: () => void;
+  scrollbackPager: ScrollbackPagerBinding | null;
   recordRecordingEvent: AppBootstrapProps['recordRecordingEvent'];
 }
 
@@ -122,7 +134,7 @@ function useInitializationBindings(
 
 /** Initializes history, session, and IO primitives */
 function useBootstrapHistory(props: AppBootstrapProps) {
-  const { resumedHistory, historyMaxItems, historyMaxBytes } = props;
+  const { resumedBoot } = props;
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
   useBracketedPaste();
@@ -143,23 +155,8 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   });
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
   const nightly = props.version.includes('nightly');
-  const historyLimits = useMemo(
-    () => ({
-      maxItems:
-        typeof historyMaxItems === 'number'
-          ? historyMaxItems
-          : DEFAULT_HISTORY_MAX_ITEMS,
-      maxBytes:
-        typeof historyMaxBytes === 'number'
-          ? historyMaxBytes
-          : DEFAULT_HISTORY_MAX_BYTES,
-    }),
-    [historyMaxItems, historyMaxBytes],
-  );
-  const { addItem, loadHistory } = useRetractableHistory(
-    props.turnStore,
-    historyLimits,
-  );
+  props.turnStore.commands.bindJournal(props.readJournal);
+  const { addItem } = useHistory(props.turnStore);
   const {
     llxprtMdFileCount,
     setLlxprtMdFileCount,
@@ -174,8 +171,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
       props.readCoreMemoryFileCount,
     ),
     addItem,
-    loadHistory,
-    resumedHistory,
+    resumedBoot,
   });
   // Store mirrors: the context summary renders from the settings store.
   useEffect(() => {
@@ -237,7 +233,7 @@ function useBootstrapEvents(
     recordFeedback: props.recordFeedback,
   });
   const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
-  const { tokenMetrics } = useTokenMetricsTracking({
+  const { tokenMetrics, stopTracking } = useTokenMetricsTracking({
     setTokenTrackingMetrics: props.setTokenTrackingMetrics,
     subscribeHistoryTokens: props.subscribeHistoryTokens,
     subscribeRecordingHistory: props.subscribeRecordingHistory,
@@ -251,6 +247,7 @@ function useBootstrapEvents(
     sessionStats.historyTokenCount,
   );
   return {
+    stopTracking,
     setIdePromptAnswered,
     currentIDE,
     shouldShowIdePrompt,
@@ -263,10 +260,32 @@ function useBootstrapEvents(
 export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
   const h = useBootstrapHistory(props);
   const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo);
+  const epoch = useStoreSelector(
+    props.turnStore.store,
+    (state) => state.historyEpoch,
+  );
+  const { readRecordingPath } = props;
+  const recordingSwapCallbacks = useMemo(
+    () => ({
+      getCurrentRecording: () => {
+        const path = readRecordingPath();
+        return path ? { getFilePath: () => path } : null;
+      },
+    }),
+    [readRecordingPath],
+  );
+  const { pager } = useScrollbackBootstrap({
+    settings: props.settings,
+    epoch,
+    emojiFilterMode: props.readEmojiFilterMode(),
+    recordingSwapCallbacks,
+  });
   useEffect(() => {
     props.settingsStore.commands.setRawConsoleMessages(e.consoleMessages);
   }, [props.settingsStore, e.consoleMessages]);
   return {
+    stopTokenMetricsTracking: e.stopTracking,
+    scrollbackPager: pager,
     recordRecordingEvent: props.recordRecordingEvent,
     nightly: h.nightly,
     setLlxprtMdFileCount: h.setLlxprtMdFileCount,

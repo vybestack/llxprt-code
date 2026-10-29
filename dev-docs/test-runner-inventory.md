@@ -152,6 +152,31 @@ Two Bun behaviours the runner works around:
 Each child writes its own Bun JUnit report and the runner merges them, so CI
 keeps per-test names rather than a file-level summary.
 
+#### Source tests and Node subprocess prerequisites
+
+Bun tests must resolve test-utils to current TypeScript source. Core uses the
+package's `bun` exports, including when an Agents test imports a helper inside
+Core. Do not add `dist` aliases for test-utils to a workspace tsconfig: Bun
+applies the importing file's `paths`
+before package export conditions, so such aliases can load stale JavaScript
+even when the test's own workspace resolves the same import to TypeScript.
+
+Two Agents tests deliberately launch Node against package `import` exports:
+
+- `src/api/__tests__/recorded-history-persistence-node-export.test.ts`
+- `src/api/__tests__/shell-owner-exit.behavior.test.ts`
+
+These require current full workspace JavaScript build output, including
+transitive dependencies. A declaration-only build is insufficient. CI supplies
+this prerequisite in `.github/workflows/ci.yml`, in the
+`Build project (agents API-surface guard prerequisite)` step for the `agents`
+and `scripts` shards. Local invocations require the same artifacts before
+running either test. `scripts/test.ts` runs workspace pretest hooks, but neither
+it nor a direct `bun test` invocation builds those artifacts. Missing exports
+from old `dist` output in these Node children must be diagnosed separately
+from Bun source resolution; adding a Bun export condition would stop testing
+the intended Node behavior.
+
 The `bunfig.toml` preloads `test-setup-storage-isolation.ts`,
 which isolates Storage roots and sets `LLXPRT_TEST_DISABLE_OS_KEYRING=1` so
 suites use the encrypted-file fallback instead of the developer's real OS

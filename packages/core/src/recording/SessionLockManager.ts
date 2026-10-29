@@ -53,6 +53,8 @@
 
 import * as path from 'node:path';
 
+import { SESSION_FILE_EXTENSION } from './sessionFileExtension.js';
+
 /** Maximum session-ID length (mirrors the safe grammar). */
 const SAFE_ID_MAX_LENGTH = 256;
 
@@ -162,13 +164,17 @@ export class SessionLockManager {
   static getLockPathFromFilePath(sessionFilePath: string): string {
     const dir = path.dirname(sessionFilePath);
     const basename = path.basename(sessionFilePath);
-    const match = basename.match(/^session-(.+)\.jsonl$/);
-    if (!match) {
+    const extension = SESSION_FILE_EXTENSION;
+    const match =
+      basename.startsWith('session-') && basename.endsWith(extension)
+        ? basename.slice('session-'.length, -extension.length)
+        : '';
+    if (match === '') {
       throw new Error(
         'Cannot extract session ID from path: ' + sessionFilePath,
       );
     }
-    return SessionLockManager.getLockPath(dir, match[1]);
+    return SessionLockManager.getLockPath(dir, match);
   }
 
   // -----------------------------------------------------------------------

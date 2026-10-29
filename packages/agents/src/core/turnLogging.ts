@@ -72,14 +72,14 @@ export function getRequestTextFromContents(contents: IContent[]): string {
  * @plan:PLAN-20260707-AGENTNEUTRAL.P13
  * @requirement:REQ-008
  */
-export function logApiRequest(
+export async function logApiRequest(
   ports: TurnTelemetryPorts,
   contents: IContent[],
   model: string,
   promptId: string,
-): void {
+): Promise<void> {
   const requestText = getRequestTextFromContents(contents);
-  ports.telemetry.logApiRequest({
+  await ports.telemetry.logApiRequest({
     model,
     promptId,
     requestText,

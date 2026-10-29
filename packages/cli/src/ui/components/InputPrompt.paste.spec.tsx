@@ -110,7 +110,7 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 import type { Config } from '@vybestack/llxprt-code-core';
 import { assertDefined } from '../../__tests__/assertions.js';
 import { testRegex } from '../../__tests__/regex.js';
-import { pasteConfig, pasteCompletion } from './InputPrompt.paste.fixture.js';
+import { pasteConfig, pasteCompletion } from './InputPrompt.paste.fixtures.js';
 
 function PasteInputPrompt(
   props: Omit<

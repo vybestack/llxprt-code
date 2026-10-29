@@ -19,6 +19,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import {
   estimatePromptEnvelope,
   type PromptEnvelopeEstimate,
@@ -130,18 +131,18 @@ async function estimateResponsesPrompt(
   contents: readonly IContent[],
   stateful: boolean,
 ): Promise<PromptEnvelopeEstimate> {
-  const projection = await provider.projectPromptEnvelope(
-    createProviderCallOptions({
+  const projection = await provider.projectPromptEnvelope({
+    ...createProviderCallOptions({
       providerName: provider.name,
       resolved: {
         model: 'gpt-4o',
         baseURL: 'https://api.openai.com/v1',
         telemetry: { providerName: provider.name },
       },
-      contents: [...contents],
       ...(stateful ? { ephemerals: { 'responses-stateful': true } } : {}),
     }),
-  );
+    contents: callerOwnedRawProviderSource(contents),
+  });
   return estimatePromptEnvelope(
     provider.name,
     projection,

@@ -28,6 +28,8 @@ import { join } from 'node:path';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 
+import type { RestoreCommandOperations } from '../commands/restoreCommand.js';
+import type { HistoryItemWithoutId } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
 /**
@@ -48,13 +50,12 @@ export function useHistoryRegistration(
   diagnostics: DiagnosticsCommandReads,
   runtime: HistoryRegistrationRuntime | null,
   settings: LoadedSettings,
-  loadHistory: UseHistoryManagerReturn['loadHistory'],
   addItem: UseHistoryManagerReturn['addItem'],
   compress: Agent['compress'] | null,
   readRawHistory: Parameters<typeof useHistoryCommandOwners>[3],
   hasChatInitialized: () => boolean,
   readHistory: Parameters<typeof bindCopyCommandHistoryRead>[1],
-  setHistory: Agent['setHistory'],
+  replaceHistoryFromSource: RestoreCommandOperations['replaceHistoryFromSource'],
   readSetting: GetSessionSettingOperation,
   writeSetting: SetSessionSettingOperation,
   readDumpHistory: DumpcontextOwnerBindings['readHistory'],
@@ -68,7 +69,6 @@ export function useHistoryRegistration(
         readHistory: readDumpHistory,
         readProvider: readDumpProvider,
         readOutputSettings: () => runtime?.getEphemeralSettings() ?? {},
-        readRuntimeConfig: () => runtime,
       }),
     [readSetting, writeSetting, readDumpHistory, readDumpProvider, runtime],
   );
@@ -88,24 +88,23 @@ export function useHistoryRegistration(
       () =>
         bindRestoreCommand(
           runtime,
-          setHistory,
+          replaceHistoryFromSource,
           runtime?.getCheckpointingEnabled() === true
             ? runtime.checkpoints
             : undefined,
           () => settings.merged.enableFuzzyFiltering ?? true,
-          loadHistory,
-          addItem,
         ),
-      [setHistory, runtime, settings, loadHistory, addItem],
+      [replaceHistoryFromSource, runtime, settings],
     ),
   );
 }
 
 export interface RegisteredHistoryReads {
+  writeOutput: (item: HistoryItemWithoutId) => Promise<void>;
   compressHistory: Agent['compress'] | null;
   readRawHistory: Parameters<typeof useHistoryCommandOwners>[3];
   isHistoryInitialized: () => boolean;
   readHistory: Parameters<typeof bindCopyCommandHistoryRead>[1];
-  replaceHistory: Agent['setHistory'];
+  replaceHistoryFromSource: RestoreCommandOperations['replaceHistoryFromSource'];
   readDumpHistory: DumpcontextOwnerBindings['readHistory'];
 }

@@ -17,6 +17,10 @@
  * of the logger default stub.
  */
 
+import {
+  withFetchPreconnect,
+  type FetchCall,
+} from '../../../test-utils/src/fetch-test-helpers.js';
 import { waitFor } from '../../../test-utils/src/wait-for.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { createServer, type Server } from 'http';
@@ -64,7 +68,7 @@ function createTestIdToken(accountId: string): string {
  * fetch. The captured server port is the only per-test variable.
  */
 function createRedirectingFetch(serverPort: number): typeof fetch {
-  return (input) => {
+  return withFetchPreconnect((input) => {
     const url = input.toString();
     if (url.includes('auth.openai.com/oauth/token')) {
       return originalFetch(`http://localhost:${serverPort}/oauth/token`, {
@@ -72,7 +76,11 @@ function createRedirectingFetch(serverPort: number): typeof fetch {
       });
     }
     return originalFetch(input);
-  };
+  });
+}
+
+function createMockRedirectingFetch(serverPort: number): typeof fetch {
+  return withFetchPreconnect(vi.fn(createRedirectingFetch(serverPort)));
 }
 
 function hasBuildAuthorizationUrlDebugEntry(
@@ -86,28 +94,51 @@ function hasBuildAuthorizationUrlDebugEntry(
 }
 
 function createHungDeviceCodeFetch(): typeof fetch {
-  return vi.fn(
-    (_input, init) =>
-      new Promise<Response>((_resolve, reject) => {
-        const fallback = setTimeout(
-          () => reject(new Error('mock fetch fallback timeout')),
-          2_000,
-        );
-        init?.signal?.addEventListener('abort', () => {
-          clearTimeout(fallback);
-          reject(init.signal?.reason ?? new Error('aborted'));
-        });
-      }),
+  return withFetchPreconnect(
+    vi.fn(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          const fallback = setTimeout(
+            () => reject(new Error('mock fetch fallback timeout')),
+            2_000,
+          );
+          init?.signal?.addEventListener('abort', () => {
+            clearTimeout(fallback);
+            reject(init.signal?.reason ?? new Error('aborted'));
+          });
+        }),
+    ),
   );
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
-describe('CodexDeviceFlow DI behavioral tests', () => {
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-    vi.restoreAllMocks();
+let testServer: Server;
+
+let serverPort: number;
+function setupCodexDeviceFlowDIBehavioralTestsAfterEach(): void {
+  globalThis.fetch = originalFetch;
+  vi.restoreAllMocks();
+}
+
+async function setupCodexDeviceFlowDIBehavioralTestsWithTestHTTPServerForTokenExchangeBeforeEach(): Promise<void> {
+  testServer = createServer();
+  await new Promise<void>((resolve) => {
+    testServer.listen(0, () => {
+      serverPort = (testServer.address() as AddressInfo).port;
+      resolve();
+    });
   });
+}
+
+async function setupCodexDeviceFlowDIBehavioralTestsWithTestHTTPServerForTokenExchangeAfterEach(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    testServer.close(() => resolve());
+  });
+}
+
+describe('CodexDeviceFlow DI behavioral tests / construction and authorization URLs', () => {
+  afterEach(setupCodexDeviceFlowDIBehavioralTestsAfterEach);
 
   it('constructs with injected IDebugLogger without error', () => {
     const logger = createCollectingLogger();
@@ -195,10 +226,14 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
       ),
     ).rejects.toThrow('PKCE code verifier not found for state');
   });
+});
+
+describe('CodexDeviceFlow DI behavioral tests / PKCE state and device-code deadlines', () => {
+  afterEach(setupCodexDeviceFlowDIBehavioralTestsAfterEach);
 
   it('aborts a live-hung device-code network request at the configured deadline', async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = createHungDeviceCodeFetch();
+    globalThis.fetch = withFetchPreconnect(createHungDeviceCodeFetch());
 
     try {
       const flow = new CodexDeviceFlow(globalThis.fetch, {
@@ -216,8 +251,8 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
 
   it('does not start a network request when the parent signal is already aborted', async () => {
     const originalFetch = globalThis.fetch;
-    const fetchMock = vi.fn<typeof fetch>();
-    globalThis.fetch = fetchMock;
+    const fetchMock = vi.fn<FetchCall>();
+    globalThis.fetch = withFetchPreconnect(fetchMock);
     const controller = new AbortController();
     controller.abort(new Error('overall auth timed out'));
 
@@ -246,11 +281,13 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
         bodyCancelled = true;
       },
     });
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(body, {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+    globalThis.fetch = withFetchPreconnect(
+      vi.fn().mockResolvedValue(
+        new Response(body, {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
     );
 
     try {
@@ -268,6 +305,10 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
       await body.cancel().catch(() => undefined);
     }
   });
+});
+
+describe('CodexDeviceFlow DI behavioral tests / stalled body and parent cancellation', () => {
+  afterEach(setupCodexDeviceFlowDIBehavioralTestsAfterEach);
 
   it('keeps the parent abort active during body consumption and never completes late', async () => {
     const originalFetch = globalThis.fetch;
@@ -281,11 +322,13 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
         bodyCancelled = true;
       },
     });
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(body, {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+    globalThis.fetch = withFetchPreconnect(
+      vi.fn().mockResolvedValue(
+        new Response(body, {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
     );
     const controller = new AbortController();
 
@@ -313,6 +356,10 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
       await body.cancel().catch(() => undefined);
     }
   });
+});
+
+describe('CodexDeviceFlow DI behavioral tests / cancellation completion and invalid tokens', () => {
+  afterEach(setupCodexDeviceFlowDIBehavioralTestsAfterEach);
 
   it('rejects the deadline even when reader.cancel() never settles (issue #2819)', async () => {
     const originalFetch = globalThis.fetch;
@@ -326,11 +373,13 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
         return new Promise<void>(() => {});
       },
     });
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(body, {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+    globalThis.fetch = withFetchPreconnect(
+      vi.fn().mockResolvedValue(
+        new Response(body, {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
     );
 
     try {
@@ -357,11 +406,13 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
 
   it('discards the PKCE verifier after an invalid token response', async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response('{"access_token":42}', {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+    globalThis.fetch = withFetchPreconnect(
+      vi.fn().mockResolvedValue(
+        new Response('{"access_token":42}', {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
     );
 
     try {
@@ -382,11 +433,15 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
       globalThis.fetch = originalFetch;
     }
   });
+});
+
+describe('CodexDeviceFlow DI behavioral tests / malformed and empty responses', () => {
+  afterEach(setupCodexDeviceFlowDIBehavioralTestsAfterEach);
 
   it('reports malformed successful device-code responses meaningfully', async () => {
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValue(new Response('not-json', { status: 200 }));
+    globalThis.fetch = withFetchPreconnect(
+      vi.fn().mockResolvedValue(new Response('not-json', { status: 200 })),
+    );
     const flow = new CodexDeviceFlow(globalThis.fetch, {
       logger: createCollectingLogger(),
     });
@@ -397,9 +452,9 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
   });
 
   it('reports empty successful refresh responses meaningfully', async () => {
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValue(new Response('', { status: 200 }));
+    globalThis.fetch = withFetchPreconnect(
+      vi.fn().mockResolvedValue(new Response('', { status: 200 })),
+    );
     const flow = new CodexDeviceFlow(globalThis.fetch, {
       logger: createCollectingLogger(),
     });
@@ -408,26 +463,17 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
       'Token refresh failed: invalid JSON response (status 200)',
     );
   });
+});
 
+describe('CodexDeviceFlow DI behavioral tests / HTTP token exchange', () => {
+  afterEach(setupCodexDeviceFlowDIBehavioralTestsAfterEach);
   describe('with test HTTP server for token exchange', () => {
-    let testServer: Server;
-    let serverPort: number;
-
-    beforeEach(async () => {
-      testServer = createServer();
-      await new Promise<void>((resolve) => {
-        testServer.listen(0, () => {
-          serverPort = (testServer.address() as AddressInfo).port;
-          resolve();
-        });
-      });
-    });
-
-    afterEach(async () => {
-      await new Promise<void>((resolve) => {
-        testServer.close(() => resolve());
-      });
-    });
+    beforeEach(
+      setupCodexDeviceFlowDIBehavioralTestsWithTestHTTPServerForTokenExchangeBeforeEach,
+    );
+    afterEach(
+      setupCodexDeviceFlowDIBehavioralTestsWithTestHTTPServerForTokenExchangeAfterEach,
+    );
 
     it('exchangeCodeForToken returns CodexOAuthToken with account_id', async () => {
       const logger = createCollectingLogger();
@@ -453,7 +499,7 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
       const state = 'exchange-test-state';
       flow.buildAuthorizationUrl(redirectUri, state);
 
-      global.fetch = vi.fn(createRedirectingFetch(serverPort));
+      global.fetch = createMockRedirectingFetch(serverPort);
 
       try {
         const token = await flow.exchangeCodeForToken(
@@ -493,7 +539,7 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
         res.end(JSON.stringify(mockRefreshResponse));
       });
 
-      global.fetch = vi.fn(createRedirectingFetch(serverPort));
+      global.fetch = createMockRedirectingFetch(serverPort);
 
       try {
         const token = await flow.refreshToken('old-refresh-token');
@@ -506,6 +552,10 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
       }
     });
   });
+});
+
+describe('CodexDeviceFlow DI behavioral tests / logger entries', () => {
+  afterEach(setupCodexDeviceFlowDIBehavioralTestsAfterEach);
 
   it('logger receives debug messages during buildAuthorizationUrl', () => {
     const logger = createCollectingLogger();

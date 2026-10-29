@@ -26,6 +26,8 @@ type AppOwnerProps = Pick<
   | 'bindRawBrowserSession'
   | 'isAgentClientPresent'
   | 'readHistory'
+  | 'readJournal'
+  | 'subscribeContextRange'
   | 'stream'
   | 'injectSteer'
   | 'getProviderContextLimit'
@@ -70,7 +72,14 @@ export function appContainerBoundAgentProps(agent: Agent): AppOwnerProps {
     isAgentClientPresent: () => true,
     bindRawBrowserSession: (config, swaps, logger) =>
       bindRawBrowserSession(config, agent.session, swaps, logger),
-    readHistory: agent.getHistory.bind(agent),
+    readHistory: agent.streamHistory.bind(agent),
+    readJournal: () => ({
+      appendDisplay: agent.session.appendDisplay.bind(agent.session),
+      length: () => agent.session.getJournalLength(),
+    }),
+    subscribeContextRange: agent.session.subscribeContextRange.bind(
+      agent.session,
+    ),
     stream: agent.stream.bind(agent),
     injectSteer: agent.injectSteer.bind(agent),
     getProviderContextLimit: agent.getProviderContextLimit.bind(agent),
@@ -131,7 +140,9 @@ export function appContainerTestAgentProps(
     isAgentClientPresent: () => true,
     bindRawBrowserSession: (config, swaps, logger) =>
       bindRawBrowserSession(config, owner.session, swaps, logger),
-    readHistory: async () => [],
+    async *readHistory() {},
+    readJournal: () => null,
+    subscribeContextRange: () => () => {},
     stream: unavailableOperation,
     injectSteer: () => {},
     getProviderContextLimit: () => undefined,

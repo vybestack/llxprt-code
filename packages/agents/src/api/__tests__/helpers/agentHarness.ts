@@ -1,3 +1,5 @@
+import { observeAgentConstruction } from './agent-client-observation.js';
+import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -80,12 +82,13 @@ export interface BuiltAgent {
 /**
  * Builds a real public Agent over a real FakeProvider by pointing the
  * LLXPRT_FAKE_RESPONSES env var at a fixture JSONL file (the production seam
- * in providerManagerInstance.ts). The returned cleanup restores the prior env
- * value and disposes the agent.
+ * in providerManagerInstance.ts). The environment is restored after acquisition;
+ * the returned cleanup disposes the agent.
  */
 export async function buildAgent(
   fixtureRelPath: string,
   configOverrides: Readonly<Partial<AgentConfig>> = {},
+  clientFactory?: AgentClientFactory,
 ): Promise<BuiltAgent> {
   const prev = process.env.LLXPRT_FAKE_RESPONSES;
   const fixturePath = resolve(FIXTURES_DIR, fixtureRelPath);
@@ -97,26 +100,21 @@ export async function buildAgent(
   };
   let agent: Agent;
   try {
-    agent = await createAgent({ ...baseConfig, ...configOverrides });
-  } catch (error) {
-    // createAgent failed before a cleanup could be returned — restore the env
-    // var so the mutation does not leak into later tests, then rethrow.
+    agent = await observeAgentConstruction(
+      () => createAgent({ ...baseConfig, ...configOverrides }),
+      clientFactory,
+    );
+  } finally {
     if (prev === undefined) {
       delete process.env.LLXPRT_FAKE_RESPONSES;
     } else {
       process.env.LLXPRT_FAKE_RESPONSES = prev;
     }
-    throw error;
   }
   const cleanup = async (): Promise<void> => {
     await agent.dispose().catch(() => {
       /* disposed via cleanup regardless of impl state */
     });
-    if (prev === undefined) {
-      delete process.env.LLXPRT_FAKE_RESPONSES;
-    } else {
-      process.env.LLXPRT_FAKE_RESPONSES = prev;
-    }
   };
   return { agent, cleanup };
 }
@@ -133,8 +131,8 @@ export { TEMP_ROOT as tempRoot };
  * written to an ephemeral temp fixture file, via the SAME LLXPRT_FAKE_RESPONSES
  * production seam buildAgent uses. Useful when a scenario needs ad-hoc provider
  * responses (e.g. property-generated tool args) without a committed fixture
- * file. The returned cleanup restores the prior env value, disposes the agent,
- * and removes the temp directory.
+ * file. The environment is restored after acquisition; the returned cleanup
+ * disposes the agent and removes the temp directory.
  *
  * @plan:PLAN-20260617-COREAPI.P17
  * @requirement:REQ-006
@@ -142,6 +140,7 @@ export { TEMP_ROOT as tempRoot };
 export async function buildAgentFromContent(
   jsonlContent: string,
   configOverrides: Readonly<Partial<AgentConfig>> = {},
+  clientFactory?: AgentClientFactory,
 ): Promise<BuiltAgent> {
   const prev = process.env.LLXPRT_FAKE_RESPONSES;
   const dir = mkdtempSync(join(tmpdir(), 'llxprt-agent-fixture-'));
@@ -155,29 +154,28 @@ export async function buildAgentFromContent(
   };
   let agent: Agent;
   try {
-    agent = await createAgent({ ...baseConfig, ...configOverrides });
+    agent = await observeAgentConstruction(
+      () => createAgent({ ...baseConfig, ...configOverrides }),
+      clientFactory,
+    );
   } catch (error) {
-    // createAgent failed before a cleanup could be returned — restore the env
-    // var and remove the temp dir so neither leaks into later tests, then
-    // rethrow.
-    if (prev === undefined) {
-      delete process.env.LLXPRT_FAKE_RESPONSES;
-    } else {
-      process.env.LLXPRT_FAKE_RESPONSES = prev;
-    }
     rmSync(dir, { recursive: true, force: true });
     throw error;
-  }
-  const cleanup = async (): Promise<void> => {
-    await agent.dispose().catch(() => {
-      /* disposed via cleanup regardless of impl state */
-    });
+  } finally {
     if (prev === undefined) {
       delete process.env.LLXPRT_FAKE_RESPONSES;
     } else {
       process.env.LLXPRT_FAKE_RESPONSES = prev;
     }
-    rmSync(dir, { recursive: true, force: true });
+  }
+  const cleanup = async (): Promise<void> => {
+    try {
+      await agent.dispose().catch(() => {
+        /* disposed via cleanup regardless of impl state */
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   };
   return { agent, cleanup };
 }
@@ -422,7 +420,9 @@ export async function loadProfileFixture(
   const { readFile } = await import('node:fs/promises');
   const abs = fixturePath(fixtureRelPath);
   const raw = await readFile(abs, 'utf8');
-  return JSON.parse(raw) as Record<string, unknown>;
+  const parsed: unknown = JSON.parse(raw);
+  if (!isRecord(parsed)) throw new Error('Profile fixture must be an object');
+  return parsed;
 }
 
 /**

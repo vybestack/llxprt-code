@@ -4,12 +4,13 @@ import { checkpointBindings } from '../../__tests__/recording-checkpoint-fixture
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { bindCommandHistoryLoader } from './commandHistoryLoaderHost.js';
+import { appendJournalUiItem } from './command-journal-output.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
 import {
-  SessionRecordingService,
+  createLockedSessionRecorder,
   getProjectHash,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -55,8 +56,9 @@ function actions(): SlashCommandProcessorActions {
   };
 }
 async function restore(owner: Agent, decoy: Agent): Promise<void> {
+  await owner.session.setRecording({ enabled: true });
   const root = owner.workspace.getWorkingDirectory();
-  const recording = await SessionRecordingService.createLocked({
+  const recording = await createLockedSessionRecorder({
     sessionId: crypto.randomUUID(),
     projectHash: getProjectHash(root),
     chatsDir: join(root, 'raw-chats'),
@@ -66,8 +68,8 @@ async function restore(owner: Agent, decoy: Agent): Promise<void> {
     model: 'fake-model',
   });
   try {
-    for (const content of await owner.session.getHistory())
-      recording.recordContent(content);
+    for await (const content of owner.streamHistory())
+      await recordRowsForTest(recording, [content]);
     await recording.flush();
     const context = createMockCommandContext({ services: { agent: decoy } });
     const registry = await CommandService.create(
@@ -93,9 +95,8 @@ async function restore(owner: Agent, decoy: Agent): Promise<void> {
                   () => undefined,
                 ),
                 () => owner.session.readInitializedHistory(),
-                async (history) => {
-                  await owner.session.replaceHistory(history);
-                },
+                () => owner.session.clearHistory(),
+                (turns) => owner.session.restoreTurns(turns),
                 () =>
                   context.services.config
                     ? context.services.config.getModel()
@@ -129,14 +130,11 @@ async function restore(owner: Agent, decoy: Agent): Promise<void> {
         resumeOwnedSession: null,
         isMcpDiscoveryPending: () => false,
         resumeRawSession: null,
-        replayResumedHistory: () => {},
+        refreshResumedHistory: () => {},
+        writeOutput: async (item) => {
+          await appendJournalUiItem(owner.session, owner.session, item);
+        },
         recordCommandError: async () => {},
-        loadCommandHistory: bindCommandHistoryLoader(
-          (history) => owner.setHistory(history),
-          () => 'allowed',
-          context.ui.clear,
-          context.ui.addItem,
-        ),
       },
       '/chat restore 1',
     );

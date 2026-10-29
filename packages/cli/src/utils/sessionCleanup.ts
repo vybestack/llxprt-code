@@ -31,6 +31,15 @@ import type { Settings } from '../config/settings.js';
 
 export type { SessionCleanupResult as CleanupResult };
 
+/** Streams the live session's rows so the janitor protects their media. */
+export type ActiveHistoryReader = (
+  signal?: AbortSignal,
+) => AsyncIterable<IContent>;
+
+async function* emptyActiveHistory(): AsyncGenerator<IContent, void, unknown> {
+  // No live session: nothing to protect.
+}
+
 /**
  * Main entry point for session cleanup during CLI startup.
  *
@@ -48,6 +57,9 @@ export type { SessionCleanupResult as CleanupResult };
  *
  * @param config - The CLI configuration (provides session ID and debug mode).
  * @param settings - User settings (provides `sessionRetention` overrides).
+ * @param signal - Aborts the janitor and the active-history stream.
+ * @param readActiveHistory - Opens the live session's row stream; supplied by
+ *   the session owner at the call site.
  * @param globalTempDirOverride - Optional override for the machine-global temp
  *   root.  Production callers omit this; it defaults to
  *   `Storage.getGlobalTempDir()`.  Tests pass a real temp directory so the
@@ -58,7 +70,8 @@ export async function cleanupExpiredSessions(
   config: Config,
   settings: Settings,
   globalTempDirOverride?: string,
-  readActiveHistory: () => Promise<readonly IContent[]> = async () => [],
+  signal?: AbortSignal,
+  readActiveHistory: ActiveHistoryReader = emptyActiveHistory,
 ): Promise<SessionCleanupResult> {
   // Configuration resolution happens before any external filesystem access so
   // invalid settings fail fast and clearly (finding D).  This throw is
@@ -69,12 +82,13 @@ export async function cleanupExpiredSessions(
   const currentSessionId = config.getSessionId();
 
   try {
-    const activeHistory = await readActiveHistory();
+    const activeHistory = readActiveHistory(signal);
     const result = await runSessionCleanup({
       globalTempDir,
       currentSessionId,
       config: resolvedConfig,
       activeHistory,
+      signal,
     });
 
     if (config.getDebugMode() && !result.disabled) {

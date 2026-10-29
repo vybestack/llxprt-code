@@ -29,17 +29,20 @@ describe('manual MCP cancellation failure ownership', () => {
     const repeated = new Error('physical MCP abort failed after cancellation');
     const reasons: unknown[] = [undefined, repeated, repeated];
     const network = spyOn(globalThis, 'fetch').mockImplementation(
-      async (_input, init) => {
-        const signal = init?.signal;
-        if (signal === undefined || signal === null)
-          throw new Error(
-            'MCP metadata requires its actual authentication signal',
-          );
-        signals.push(signal);
-        if (signals.length === reasons.length) entered.release();
-        await released.promise;
-        return new Response(null, { status: 401 });
-      },
+      Object.assign(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          const signal = init?.signal;
+          if (signal === undefined || signal === null)
+            throw new Error(
+              'MCP metadata requires its actual authentication signal',
+            );
+          signals.push(signal);
+          if (signals.length === reasons.length) entered.release();
+          await released.promise;
+          return new Response(null, { status: 401 });
+        },
+        { preconnect: globalThis.fetch.preconnect },
+      ),
     );
     const built = await buildAgent('multi-turn-text.jsonl', {
       folderTrust: false,

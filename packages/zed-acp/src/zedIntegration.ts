@@ -282,7 +282,10 @@ export class ZedAgent {
   private async buildAndResumeSession(
     sessionId: string,
     cwd: string | undefined,
-  ): Promise<{ session: Session; history: readonly IContent[] }> {
+  ): Promise<{
+    session: Session;
+    history: AsyncIterable<IContent> | Iterable<IContent>;
+  }> {
     const { session, history } = await this.buildSession(sessionId, cwd, true);
     this.unpublishedSessions.add(session);
     if (this.closing !== undefined) {
@@ -295,7 +298,10 @@ export class ZedAgent {
     sessionId: string,
     cwd: string | undefined,
     resume: boolean,
-  ): Promise<{ session: Session; history: readonly IContent[] }> {
+  ): Promise<{
+    session: Session;
+    history: AsyncIterable<IContent> | Iterable<IContent>;
+  }> {
     return acquireZedSession(
       this.config,
       this.hostInputs,

@@ -42,7 +42,7 @@ import {
   cleanThinkingContent,
   parseStreamingReasoningDelta,
 } from './OpenAIResponseParser.js';
-import { type ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
+import { type ContinuationToolCall } from './OpenAIRequestBuilder.js';
 import {
   type StreamingState,
   createStreamingState,
@@ -78,25 +78,12 @@ export interface StreamProcessorDeps {
 
 /**
  * Continuation request issued after tool-calls-without-text (issue #584):
- * the same attempt decodes the continuation stream, so its raw deltas
- * take the resolved notifier and the configured reasoning field name.
+ * the same attempt decodes the continuation stream. The caller supplies the
+ * request, which it writes from its own rows, so the processor holds no
+ * request body.
  */
 type RequestContinuationFn = (
-  toolCalls: Array<{
-    id: string;
-    type: 'function';
-    function: { name: string; arguments: string };
-  }>,
-  messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
-  client: OpenAI,
-  abortSignal: AbortSignal | undefined,
-  model: string,
-  logger: DebugLogger,
-  mergedHeaders: Record<string, string> | undefined,
-  toolFormat: ToolFormat,
-  reasoningFieldName?: string,
-  onRawTokenDelta?: () => void,
+  toolCalls: ContinuationToolCall[],
 ) => AsyncGenerator<IContent, void, unknown>;
 
 /**
@@ -391,11 +378,11 @@ async function* handleTextDelta(
  * Fragments surface only in the terminal chunk, so each fragment-bearing
  * delta fires the raw-timing signal (issue #3473 AC-4).
  */
-function processDeltaToolCalls(
+function* processDeltaToolCalls(
   choice: OpenAI.Chat.Completions.ChatCompletionChunk.Choice,
   deps: StreamProcessorDeps,
   notify: () => void,
-): void {
+): Generator<IContent> {
   let addedFragments = false;
   // Cast to allow for runtime undefined delta (external API boundary)
   const delta = choice.delta as ChunkDelta | undefined;
@@ -405,11 +392,12 @@ function processDeltaToolCalls(
       const deltaToolCallIndex = deltaToolCall.index as number | undefined;
       if (deltaToolCallIndex === undefined) continue;
 
-      deps.toolCallPipeline.addFragment(deltaToolCallIndex, {
+      const arrival = deps.toolCallPipeline.addFragment(deltaToolCallIndex, {
         id: deltaToolCall.id,
         name: deltaToolCall.function?.name,
         args: deltaToolCall.function?.arguments,
       });
+      if (arrival !== undefined) yield arrival;
       addedFragments = true;
     }
   }
@@ -421,18 +409,16 @@ function processDeltaToolCalls(
   ).message;
   const messageToolCalls = choiceMessage?.tool_calls;
   if (messageToolCalls && messageToolCalls.length > 0) {
-    messageToolCalls.forEach((toolCall, index) => {
-      if (toolCall.type !== 'function') {
-        return;
-      }
-
-      deps.toolCallPipeline.addFragment(index, {
+    for (const [index, toolCall] of messageToolCalls.entries()) {
+      if (toolCall.type !== 'function') continue;
+      const arrival = deps.toolCallPipeline.addFragment(index, {
         id: toolCall.id,
         name: toolCall.function?.name,
         args: toolCall.function?.arguments,
       });
+      if (arrival !== undefined) yield arrival;
       addedFragments = true;
-    });
+    }
   }
 
   if (addedFragments) {
@@ -543,7 +529,7 @@ async function* processStreamingChunk(
     );
   }
 
-  processDeltaToolCalls(choice, deps, notifyRawDelta);
+  yield* processDeltaToolCalls(choice, deps, notifyRawDelta);
 }
 
 /**
@@ -610,12 +596,6 @@ async function* handleToolCallsWithoutText(
   state: StreamingState,
   model: string,
   baseURL: string | undefined,
-  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
-  messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  client: OpenAI,
-  abortSignal: AbortSignal | undefined,
-  mergedHeaders: Record<string, string> | undefined,
-  detectedFormat: string,
   deps: StreamProcessorDeps,
   requestContinuation: RequestContinuationFn,
 ): AsyncGenerator<IContent, void, unknown> {
@@ -657,19 +637,7 @@ async function* handleToolCallsWithoutText(
     normalizeToOpenAIToolId,
   );
 
-  yield* requestContinuation(
-    toolCallsForHistory,
-    messagesWithSystem,
-    requestBody,
-    client,
-    abortSignal,
-    model,
-    deps.logger,
-    mergedHeaders,
-    detectedFormat as ToolFormat,
-    deps.reasoningFieldName,
-    deps.onRawTokenDelta,
-  );
+  yield* requestContinuation(toolCallsForHistory);
 }
 
 /**
@@ -753,10 +721,6 @@ export async function* processStreamingResponse(
   model: string,
   detectedFormat: string,
   abortSignal: AbortSignal | undefined,
-  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
-  messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  client: OpenAI,
-  mergedHeaders: Record<string, string> | undefined,
   baseURL: string | undefined,
   deps: StreamProcessorDeps,
   requestContinuation: RequestContinuationFn,
@@ -798,12 +762,6 @@ export async function* processStreamingResponse(
     state,
     model,
     baseURL,
-    requestBody,
-    messagesWithSystem,
-    client,
-    abortSignal,
-    mergedHeaders,
-    detectedFormat,
     deps,
     requestContinuation,
   );

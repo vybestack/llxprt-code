@@ -186,10 +186,14 @@ export function installResponsesLifecycleFixture(): (
   const resources: Array<{
     provider: OpenAIResponsesProvider;
     config: Config;
+    chat: ChatSession;
+    history: HistoryService;
   }> = [];
   afterEach(async () => {
     globalThis.fetch = originalFetch;
-    for (const { provider, config } of resources.splice(0)) {
+    for (const { provider, config, chat, history } of resources.splice(0)) {
+      await chat.waitForIdle();
+      await history.dispose();
       provider.clearState();
       await config.dispose();
     }
@@ -236,9 +240,10 @@ export function installResponsesLifecycleFixture(): (
       providerRuntime,
       promptEstimator,
     });
-    resources.push({ provider, config });
+    const chat = createLifecycleChatSession(runtime, config);
+    resources.push({ provider, config, chat, history });
     return {
-      chat: createLifecycleChatSession(runtime, config),
+      chat,
       history,
       provider,
       httpRequests: () => httpRequests,

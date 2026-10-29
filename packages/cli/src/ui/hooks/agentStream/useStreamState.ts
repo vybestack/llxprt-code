@@ -19,17 +19,14 @@ import {
   type ThoughtSummary,
   EmojiFilter,
   type EmojiFilterMode,
-  type ThinkingBlock,
   type WorkspaceCheckpointOperations,
 } from '@vybestack/llxprt-code-core';
-import { type HistoryItemWithoutId, MessageType } from '../../types.js';
-import { EMOJI_BLOCKED_ERROR_TEXT } from '../../utils/iContentToHistoryItems.js';
+import { type HistoryItemWithoutId } from '../../types.js';
 import { useStateAndRef } from '../useStateAndRef.js';
 import { useLogger } from '../useLogger.js';
 import { type QueuedSubmission } from './types.js';
 import { useQueuedSubmissions } from './useQueuedSubmissions.js';
 import type { SubmissionExecutor } from './useSubmitQuery.js';
-import { PendingResponseBuffer } from './pendingResponseBuffer.js';
 
 export interface UseStreamStateReturn {
   initError: string | null;
@@ -64,7 +61,6 @@ export interface UseStreamStateReturn {
   tryReserveDrain: () => boolean;
   releaseDrain: () => void;
   submitQueryRef: React.MutableRefObject<SubmissionExecutor | null>;
-  pendingResponse: PendingResponseBuffer;
   sanitizeContent: (text: string) => {
     text: string;
     blocked: boolean;
@@ -73,7 +69,6 @@ export interface UseStreamStateReturn {
   flushPendingHistoryItem: (timestamp: number) => void;
   logger: ReturnType<typeof useLogger>;
   gitService: WorkspaceCheckpointOperations | undefined;
-  thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
 }
 
 /**
@@ -127,88 +122,23 @@ function useSanitizeContent(emojiFilter: EmojiFilter | undefined) {
 function useFlushPendingHistoryItem(
   addItem: (item: HistoryItemWithoutId, timestamp: number) => number,
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>,
-  pendingResponse: PendingResponseBuffer,
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
-  thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>,
 ) {
   return useCallback(
     (timestamp: number) => {
       const pending = pendingHistoryItemRef.current;
-      if (!pending) {
-        return;
-      }
-
-      if (pending.type === 'gemini' || pending.type === 'gemini_content') {
-        commitAiPendingItem(
-          pending,
-          timestamp,
-          addItem,
-          pendingResponse,
-          thinkingBlocksRef,
+      if (pending === null) return;
+      if (pending.type === 'gemini' || pending.type === 'gemini_content')
+        throw new Error(
+          'Assistant output must be read from the session journal',
         );
-      } else {
-        addItem(pending, timestamp);
-      }
-
+      addItem(pending, timestamp);
       setPendingHistoryItem(null);
     },
-    [
-      addItem,
-      pendingHistoryItemRef,
-      pendingResponse,
-      setPendingHistoryItem,
-      thinkingBlocksRef,
-    ],
+    [addItem, pendingHistoryItemRef, setPendingHistoryItem],
   );
-}
-
-/**
- * Commits the in-progress assistant response. The text comes from
- * {@link PendingResponseBuffer}, which sanitised it incrementally as it
- * streamed, so no whole-text pass is needed here (issue #2852).
- */
-function commitAiPendingItem(
-  pending: HistoryItemWithoutId,
-  timestamp: number,
-  addItem: (item: HistoryItemWithoutId, timestamp: number) => number,
-  pendingResponse: PendingResponseBuffer,
-  thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>,
-): void {
-  const { text, feedback, blocked } = pendingResponse.materialize();
-  pendingResponse.reset();
-  const thinkingBlocks = thinkingBlocksRef.current;
-  thinkingBlocksRef.current = [];
-
-  if (blocked) {
-    addItem(
-      {
-        type: MessageType.ERROR,
-        text: EMOJI_BLOCKED_ERROR_TEXT,
-      },
-      timestamp,
-    );
-    if (feedback) {
-      addItem({ type: MessageType.INFO, text: feedback }, timestamp);
-    }
-    return;
-  }
-
-  addItem(
-    {
-      ...pending,
-      text,
-      ...(thinkingBlocks.length > 0
-        ? { thinkingBlocks: [...thinkingBlocks] }
-        : {}),
-    },
-    timestamp,
-  );
-
-  if (feedback) {
-    addItem({ type: MessageType.INFO, text: feedback }, timestamp);
-  }
 }
 
 function useBasicStreamState() {
@@ -244,7 +174,6 @@ function useBasicStreamState() {
     releaseDrain,
   } = useQueuedSubmissions();
   const submitQueryRef = useRef<SubmissionExecutor | null>(null);
-  const thinkingBlocksRef = useRef<ThinkingBlock[]>([]);
 
   return {
     initError,
@@ -277,7 +206,6 @@ function useBasicStreamState() {
     tryReserveDrain,
     releaseDrain,
     submitQueryRef,
-    thinkingBlocksRef,
   };
 }
 
@@ -292,22 +220,15 @@ export function useStreamState(
 
   const emojiFilter = useEmojiFilter(readEmojiFilterMode());
   const sanitizeContent = useSanitizeContent(emojiFilter);
-  const pendingResponse = useMemo(
-    () => new PendingResponseBuffer(emojiFilter),
-    [emojiFilter],
-  );
   const flushPendingHistoryItem = useFlushPendingHistoryItem(
     addItem,
     basic.pendingHistoryItemRef,
-    pendingResponse,
     basic.setPendingHistoryItem,
-    basic.thinkingBlocksRef,
   );
   const logger = useLogger(storage);
 
   return {
     ...basic,
-    pendingResponse,
     sanitizeContent,
     flushPendingHistoryItem,
     logger,

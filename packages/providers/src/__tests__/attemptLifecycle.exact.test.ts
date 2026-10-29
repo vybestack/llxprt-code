@@ -39,7 +39,10 @@ import { classifyTerminalStatus } from '../logging/streamProcessor.js';
 import { AttemptRecorder } from '../logging/attemptRecorder.js';
 import { ProviderPerformanceTracker } from '../logging/ProviderPerformanceTracker.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
-import * as telemetryEmitter from '../logging/telemetryEmitter.js';
+import { promises as fs } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import {
   createConfig,
   makeContent,
@@ -363,19 +366,43 @@ describe('Focused lifecycle review findings', () => {
 
     it('conversation response is written exactly once (no duplicate)', async () => {
       const config = createConfig(true);
-      const writeSpy = vi.fn();
-      // Spy on writeConversationLog
-      vi.spyOn(telemetryEmitter, 'writeConversationLog').mockImplementation(
-        async () => {
-          writeSpy();
-        },
+      const directory = await fs.mkdtemp(
+        join(tmpdir(), 'llxprt-exact-response-'),
       );
-      const wrapper = buildStack(new SuccessProvider(SUCCESS_CHUNKS), config);
-      await consumeStream(
-        wrapper.generateChatCompletion(makeOptions(config, makeContent())),
-      );
-      // The wrapper's writeResponseLog calls writeConversationLog exactly once
-      expect(writeSpy).toHaveBeenCalledTimes(1);
+      vi.spyOn(config, 'getConversationLogPath').mockReturnValue(directory);
+      resetConversationFileWriterForTesting();
+      try {
+        const wrapper = buildStack(new SuccessProvider(SUCCESS_CHUNKS), config);
+        await consumeStream(
+          wrapper.generateChatCompletion(makeOptions(config, makeContent())),
+        );
+        const log = await fs.readFile(
+          join(
+            directory,
+            `conversation-${new Date().toISOString().split('T')[0]}.jsonl`,
+          ),
+          'utf8',
+        );
+        const responses = log
+          .trim()
+          .split('\n')
+          .map((line): unknown => JSON.parse(line))
+          .filter(
+            (entry) =>
+              typeof entry === 'object' &&
+              entry !== null &&
+              'type' in entry &&
+              entry.type === 'response',
+          );
+        expect(responses).toHaveLength(1);
+        expect(responses[0]).toMatchObject({
+          response: 'Hello',
+          metadata: { success: true },
+        });
+      } finally {
+        resetConversationFileWriterForTesting();
+        await fs.rm(directory, { recursive: true, force: true });
+      }
     });
   });
 

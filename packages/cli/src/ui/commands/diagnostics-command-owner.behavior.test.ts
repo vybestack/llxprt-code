@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -98,6 +99,6 @@ describe('registered diagnostic session owner', () => {
       `Model: ${sibling.getRuntimeDiagnosticsSnapshot().modelName}`,
     );
     await owner.dispose();
-    expect(await sibling.getHistory()).toStrictEqual([]);
+    expect(await collectResumeRows(sibling.streamHistory())).toStrictEqual([]);
   });
 });

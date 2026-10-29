@@ -1,3 +1,4 @@
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -88,7 +89,8 @@ export interface WorkspaceFacadeControls {
 export function assembleWorkspaceFacade(
   runtime: WorkspaceFacadeMcpPort,
   config: Config,
-  session: SessionClientOwner,
+  toolSelection: ToolSelection,
+  refreshToolDefinitions: () => Promise<void>,
   auth: AgentAuthState,
   editors: StableEditorCallbacksHolder,
 ): WorkspaceFacadeControls {
@@ -116,7 +118,7 @@ export function assembleWorkspaceFacade(
     lsp: new LspControl(runtime.lspInspection),
     mcp: buildOwnedMcpControl(
       runtime.readServerSettings.bind(runtime),
-      session.toolCatalog.selection,
+      toolSelection,
       runtime.listPrompts.bind(runtime),
       runtime.listResources.bind(runtime),
       runtime.readOAuthCredentials.bind(runtime),
@@ -126,7 +128,7 @@ export function assembleWorkspaceFacade(
       runtime.reload.bind(runtime),
       (server) => auth.mcpAuth.has(server),
       (server) => auth.mcpAuth.add(server),
-      () => session.clients.refreshToolDefinitions(),
+      refreshToolDefinitions,
       runtime.subscribeStatus.bind(runtime),
       runtime.findResource.bind(runtime),
       runtime.readResource.bind(runtime),
@@ -190,15 +192,17 @@ export function assembleOwnerAuthentication(
 }
 
 function buildToolControl(
-  owners: AgentFacadeOwners,
+  createToolControl: SessionClientOwner['createToolControl'],
+  tasks: TaskLaunchOwner,
+  shell: ShellJobOwner,
   controls: AgentFacadeControls,
   providerControl: SessionProviderControl,
 ): ToolControl {
   const assertSessionAdmission = (): void =>
     providerControl.coordinator.assertNoCommit();
-  owners.tasks.bindSessionAdmission(assertSessionAdmission);
-  owners.shell.bindSessionAdmission(assertSessionAdmission);
-  return owners.session.createToolControl(
+  tasks.bindSessionAdmission(assertSessionAdmission);
+  shell.bindSessionAdmission(assertSessionAdmission);
+  return createToolControl(
     assertSessionAdmission,
     controls.childDisplay,
     controls.editors,
@@ -208,22 +212,27 @@ function buildToolControl(
 }
 
 function buildSessionControl(
-  owners: AgentFacadeOwners,
+  createSessionControl: SessionClientOwner['createSessionControl'],
+  rebuildExecution: () => void,
+  identityOwnership: 'config' | 'facade',
+  runtimeId: string,
+  tasks: TaskLaunchOwner,
+  shell: ShellJobOwner,
   providerControl: SessionProviderControl,
   tools: ToolControl,
 ): SessionControl {
-  return owners.session.createSessionControl(
-    owners.sessionIdentityOwnership,
-    () => owners.runtimeId,
+  return createSessionControl(
+    identityOwnership,
+    () => runtimeId,
     createNewSessionAdmission(
-      owners.tasks,
-      owners.shell,
+      tasks,
+      shell,
       providerControl.coordinator,
       tools,
       () => providerControl.assertProfileIdle(),
     ),
     () => providerControl.coordinator.closeAdmission(),
-    () => owners.session.clients.rebuildExecution(),
+    rebuildExecution,
     () => providerControl.getProvider(),
     () => providerControl.getModel(),
   );
@@ -242,8 +251,23 @@ function buildSessionScopedControls(
   controls: AgentFacadeControls,
   providerControl: SessionProviderControl,
 ): SessionScopedControls {
-  const tools = buildToolControl(owners, controls, providerControl);
-  const session = buildSessionControl(owners, providerControl, tools);
+  const tools = buildToolControl(
+    owners.session.createToolControl.bind(owners.session),
+    owners.tasks,
+    owners.shell,
+    controls,
+    providerControl,
+  );
+  const session = buildSessionControl(
+    owners.session.createSessionControl.bind(owners.session),
+    owners.session.clients.rebuildExecution.bind(owners.session.clients),
+    owners.sessionIdentityOwnership,
+    owners.runtimeId,
+    owners.tasks,
+    owners.shell,
+    providerControl,
+    tools,
+  );
   return {
     tools,
     session,
@@ -321,40 +345,39 @@ function buildOperations(
 }
 
 function composeAgent(
-  owners: AgentFacadeOwners,
+  runtimeId: string,
+  tasks: TaskLaunchOwner,
+  shell: ShellJobOwner,
+  conversationBinding: SessionClientOwner['clients']['conversationBinding'],
+  sessionClient: Agent['sessionClient'],
+  memory: Agent['memory'],
   controls: AgentFacadeControls,
   settings: AgentFacadeSettings,
   published: PublishedControls,
   operations: AgentOperations,
 ): AgentFacadeComposition {
   const { providerControl, scoped, profilePersistence } = published;
-  const { session } = owners;
   const metrics = settings.settingsOwner.telemetry.localMetrics;
   return {
     workspace: controls.workspace,
     ide: controls.ide,
     lsp: controls.lsp,
     mcp: controls.mcp,
-    runtimeId: owners.runtimeId,
+    runtimeId,
     authentication: controls.authentication,
     execution: providerControl.execution,
     modelParameters: providerControl.modelParameters,
     settings: providerControl.settings,
-    conversation: session.clients.conversationBinding.conversation,
-    getStats: () => session.clients.conversationBinding.readStats(metrics),
-    onStats: (cb) =>
-      session.clients.conversationBinding.observeStats(cb, metrics),
+    conversation: conversationBinding.conversation,
+    getStats: () => conversationBinding.readStats(metrics),
+    onStats: (cb) => conversationBinding.observeStats(cb, metrics),
     toolFormat: providerControl.toolFormat,
     metrics,
     providerReads: providerControl.providerReads,
     hasActiveProvider: providerControl.hasActiveProvider,
     getProviderContextLimit: providerControl.getProviderContextLimit,
     listAvailableModels: providerControl.listAvailableModels,
-    sessionClient: idleClient(
-      session.operations,
-      providerControl.coordinator,
-      () => session.clients.rebuildExecution(),
-    ),
+    sessionClient,
     captureProfile: profilePersistence.captureProfile,
     saveProfileSnapshot: profilePersistence.saveProfileSnapshot,
     deleteProfileByName: profilePersistence.deleteProfileByName,
@@ -368,8 +391,8 @@ function composeAgent(
     session: scoped.session,
     hooks: scoped.hooks,
     policy: scoped.policy,
-    tasks: createTasksControl(owners.tasks, owners.shell),
-    memory: session.clients.memoryOperations,
+    tasks: createTasksControl(tasks, shell),
+    memory,
     skills: scoped.skills,
     injectSteer: operations.injectSteer.bind(operations),
     stream: operations.stream.bind(operations),
@@ -457,7 +480,20 @@ export function publishAgentFacade(
     session.clients.createProviderFileOperations(() =>
       providerControl.coordinator.assertSettingsAdmission(),
     ),
-    composeAgent(owners, controls, settings, published, operations),
+    composeAgent(
+      owners.runtimeId,
+      owners.tasks,
+      owners.shell,
+      session.clients.conversationBinding,
+      idleClient(session.operations, providerControl.coordinator, () =>
+        session.clients.rebuildExecution(),
+      ),
+      session.clients.memoryOperations,
+      controls,
+      settings,
+      published,
+      operations,
+    ),
   );
 }
 
@@ -514,7 +550,8 @@ export function publishLeafFacade(
   const workspaceControls = assembleWorkspaceFacade(
     runtime,
     config,
-    session,
+    session.toolCatalog.selection,
+    session.clients.refreshToolDefinitions,
     authState,
     construction.editors,
   );

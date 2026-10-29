@@ -33,7 +33,10 @@ import type {
   PrepareProviderInvocation,
 } from './AgentRuntimeContext.js';
 import type { AgentRuntimeState } from './AgentRuntimeState.js';
-import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
+import {
+  createAgentRuntimeContext,
+  registerRuntimeMediaOwner,
+} from './createAgentRuntimeContext.js';
 import type { ProviderRequestCollaborators } from './providerRuntimeContext.js';
 import {
   createContentGenerator,
@@ -181,6 +184,13 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   throw error;
 }
 
+async function adoptRuntimeMedia(
+  runtimeContext: AgentRuntimeContext,
+): Promise<void> {
+  await registerRuntimeMediaOwner(runtimeContext);
+  await runtimeContext.history.settleMediaOwnership();
+}
+
 export function loadAgentRuntime(
   options: ToolSelectedRuntimeLoaderOptions,
 ): Promise<ToolSelectedRuntimeLoaderResult>;
@@ -190,11 +200,32 @@ export function loadAgentRuntime(
 export async function loadAgentRuntime(
   options: AgentRuntimeLoaderOptions,
 ): Promise<AgentRuntimeLoaderResult> {
-  const { profile, mediaStore, overrides = {}, signal } = options;
+  const { overrides = {}, signal } = options;
   throwIfAborted(signal);
 
   const history = overrides.historyService ?? new HistoryService();
+  try {
+    return await assembleAgentRuntime(options, history);
+  } catch (error) {
+    if (overrides.historyService === undefined) {
+      try {
+        await history.dispose();
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'Runtime loading and history disposal failed',
+        );
+      }
+    }
+    throw error;
+  }
+}
 
+async function assembleAgentRuntime(
+  options: AgentRuntimeLoaderOptions,
+  history: HistoryService,
+): Promise<AgentRuntimeLoaderResult> {
+  const { profile, mediaStore, overrides = {} } = options;
   const providerAdapter: AgentRuntimeProviderAdapter =
     overrides.providerAdapter ??
     createProviderAdapterFromManager(profile.providerManager);
@@ -232,7 +263,7 @@ export async function loadAgentRuntime(
     mediaResolver,
   });
 
-  await history.settleMediaOwnership();
+  await adoptRuntimeMedia(runtimeContext);
   let contentGenerator: ContentGenerator;
   if (overrides.contentGenerator) {
     contentGenerator = overrides.contentGenerator;

@@ -1,6 +1,7 @@
 import {
   captureResponsesTestRequest,
   type ResponsesTestDeps,
+  executeResponsesTestRequest,
 } from './responses-request.test-helpers.js';
 /**
  * @license
@@ -11,7 +12,6 @@ import {
 import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -219,7 +219,7 @@ describe('executeOpenAIResponsesRequest multi-parent recovery @issue:3446', () =
     });
 
     const first = await drainHarness(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(
           buildNormalizedOptions({ contents: multiParentHistory() }),
           deps,
@@ -270,7 +270,7 @@ describe('executeOpenAIResponsesRequest multi-parent recovery @issue:3446', () =
     expect(recoveryMeta?.responsesStored).toBe(true);
 
     const next = await drainHarness(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(
           buildNormalizedOptions({
             contents: [
