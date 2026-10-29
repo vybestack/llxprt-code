@@ -25,11 +25,7 @@ async function withHeldStorage(
 ): Promise<void> {
   const entered = gate();
   const released = gate();
-  const target = join(
-    fixture.config.getTargetDir(),
-    'subagents',
-    'disposal-child.json',
-  );
+  const target = join(fixture.directory, 'subagents', 'disposal-child.json');
   const original = fs.readFile;
   function heldRead(
     path: PathLike | fs.FileHandle,
@@ -78,8 +74,7 @@ function directTask(fixture: DisposalJoinFixture) {
 
 function expectNoAcceptedTask(fixture: DisposalJoinFixture): void {
   expect(fixture.agent.tasks.list()).toHaveLength(0);
-  expect(fixture.manager.canLaunchAsync().allowed).toBe(true);
-  expect(fixture.manager.getRunningTasks()).toHaveLength(0);
+  expect(fixture.agent.tasks.listRunning()).toHaveLength(0);
   expect(fixture.signal()).toBeUndefined();
 }
 
@@ -107,9 +102,6 @@ for (const asynchronous of [false, true]) {
             const result = invocation.execute(new AbortController().signal);
             await barrier.entered;
             expect(fixture.agent.tasks.list()).toHaveLength(0);
-            expect(fixture.manager.canLaunchAsync().allowed).toBe(
-              !asynchronous,
-            );
             vi.advanceTimersByTime(41);
             barrier.release();
             const outcome = await result;
@@ -152,9 +144,6 @@ for (const asynchronous of [false, true]) {
               .execute(controller.signal);
             await barrier.entered;
             expect(fixture.agent.tasks.list()).toHaveLength(0);
-            expect(fixture.manager.canLaunchAsync().allowed).toBe(
-              !asynchronous,
-            );
             const reason = new Error('Parent cancelled pending child');
             controller.abort(reason);
             expect(controller.signal.reason).toBe(reason);
@@ -205,7 +194,6 @@ describe('public Agent pending launch lifetime', () => {
           })
           .execute(new AbortController().signal);
         await barrier.entered;
-        expect(fixture.manager.canLaunchAsync().allowed).toBe(false);
         let settled = false;
         const disposal = fixture.agent.dispose().then(() => {
           settled = true;
@@ -266,12 +254,12 @@ describe('public Agent pending launch lifetime', () => {
       const tasks = fixture.agent.tasks.listRunning();
       expect(tasks).toHaveLength(1);
       const disposal = fixture.agent.dispose();
+      await fixture.siblingWork.aborted;
       expect(fixture.siblingWork.signal()?.aborted).toBe(true);
       fixture.siblingWork.releaseWork();
       await disposal;
       expect(fixture.siblingWork.isWorkSettled()).toBe(true);
       expect(fixture.agent.tasks.get(tasks[0].id)?.status).toBe('cancelled');
-      expect(fixture.manager.canLaunchAsync().allowed).toBe(true);
     });
   }, 30000);
 });

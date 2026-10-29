@@ -1,3 +1,6 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -48,7 +51,6 @@ function registerTextVerbosityCase1(): void {
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-responses-verbosity-runtime',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -83,6 +85,7 @@ function registerTextVerbosityCase1(): void {
       );
 
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         runtime,
@@ -122,7 +125,6 @@ function registerTextVerbosityCase2(): void {
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-responses-verbosity-runtime-medium',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -157,6 +159,7 @@ function registerTextVerbosityCase2(): void {
       );
 
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         runtime,
@@ -196,7 +199,6 @@ function registerTextVerbosityCase3(): void {
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-responses-verbosity-runtime-high',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -231,6 +233,7 @@ function registerTextVerbosityCase3(): void {
       );
 
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         runtime,
@@ -269,7 +272,6 @@ function registerTextVerbosityCase4(): void {
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-responses-verbosity-runtime-none',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -304,6 +306,7 @@ function registerTextVerbosityCase4(): void {
       );
 
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         runtime,
@@ -343,7 +346,6 @@ function registerTextVerbosityCase5(): void {
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-responses-verbosity-runtime-uppercase',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -378,6 +380,7 @@ function registerTextVerbosityCase5(): void {
       );
 
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         runtime,

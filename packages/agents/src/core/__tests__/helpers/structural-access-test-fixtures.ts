@@ -45,7 +45,6 @@ export function makeRuntimeContext(
     },
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
     providerRuntime: createProviderRuntimeContext({
-      settingsService,
       runtimeId: state.runtimeId,
     }),
     prepareProviderInvocation: (name, parameters, signal) =>
@@ -54,6 +53,8 @@ export function makeRuntimeContext(
         name,
         parameters,
         signal,
+        undefined,
+        globalThis.fetch,
       ),
   });
 }

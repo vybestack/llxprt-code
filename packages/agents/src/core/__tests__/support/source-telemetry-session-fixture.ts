@@ -79,11 +79,17 @@ export function createTelemetrySession(
       meter: new FileMetricExporter(telemetryPath, telemetryOptions),
     })),
   );
-  const manager = new ProviderManager({
-    config,
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
-    sessionSettings: settingsOwner,
-  });
+    config,
+    undefined,
+    undefined,
+    settingsOwner,
+  );
   manager.registerProvider(provider);
   const diagnostics = captureProviderRequestDiagnostics(
     config,

@@ -77,8 +77,10 @@ describe('Config Regression Guards', () => {
       const filePath = resolve(__dirname, '../chatSession.ts');
       const content = readFileSync(filePath, 'utf-8');
 
-      // Ensure runtime runtime adapters are the source of truth
-      expect(content).toContain('runtimeContext.providerRuntime');
+      // Ensure runtime runtime adapters are the source of truth. The session
+      // holds its projected port, so the provider runtime is read from the
+      // runtime projection rather than from Config.
+      expect(content).toContain('this.ports.runtime.providerRuntime');
       expect(content).toContain('runtimeState.provider');
     });
   });

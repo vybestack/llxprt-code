@@ -131,6 +131,7 @@ function routeArguments(
   return [
     'owners',
     runtime,
+    undefined,
     history,
     async () => ({
       provider: transport,
@@ -472,6 +473,12 @@ describe('compression modules on the journal store keep the owner of every row t
         const origin = {};
         const history = journalRoutedHistory(owned);
         const outcome = await run(
+          {
+            mediaResolver: undefined,
+            requestMediaBudgetBytes: undefined,
+            providerFileBindings: undefined,
+            providerFileLifecycle: undefined,
+          },
           ...routeArguments(history, middleoutSetup(history), origin),
         );
         expect(outcome.outcome).toBe('applied');

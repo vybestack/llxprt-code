@@ -1,39 +1,74 @@
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
+import { mkdtemp, rm, mkdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
+import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
+import { existsSync } from 'node:fs';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
-
-import { describe, expect, it } from 'bun:test';
-import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 
 describe('MCP Config lifetime deletion', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  useFakeResponsesReplay('plain-text.jsonl');
+
   it('closes owner instruction and resource admission without disposing caller Config', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    const directory = await mkdtemp(join(tmpdir(), 'mcp-config-lifetime-'));
+    const config = new Config({
+      sessionId: 'closed-owner',
+      targetDir: directory,
+      cwd: directory,
+      model: 'test',
+      debugMode: false,
+      trustedFolder: true,
+      coreTools: [],
+      skillsSupport: false,
+      telemetry: { enabled: false },
+    });
+    const mcp = await createTestMcpRuntime(
+      { oauth: createTestOAuthBinding(), config },
+      {},
+    );
     try {
-      await built.mcpRuntime.dispose();
-      expect(() => built.mcpRuntime.readInstructions()).toThrow('stopped');
-      expect(() => built.mcpRuntime.findResource('missing')).toThrow('stopped');
-      await expect(
-        built.mcpRuntime.readResource('missing', 'uri'),
-      ).rejects.toThrow('stopped');
-      expect(built.config.getTargetDir()).toBeTruthy();
-      await expect(
-        built.mcpRuntime.trust.setTrustedFolderLive(false),
-      ).rejects.toThrow('disposed');
-      expect(built.mcpRuntime.isStopped()).toBe(true);
+      await mcp.initialize();
+      await mcp.dispose();
+      expect(() => mcp.readInstructions()).toThrow('stopped');
+      expect(() => mcp.findResource('missing')).toThrow('stopped');
+      await expect(mcp.readResource('missing', 'uri')).rejects.toThrow(
+        'stopped',
+      );
+      expect(config.getTargetDir()).toBeTruthy();
+      await expect(mcp.trust.setTrustedFolderLive(false)).rejects.toThrow(
+        'disposed',
+      );
+      expect(mcp.isStopped()).toBe(true);
     } finally {
-      await built.cleanup();
+      await mcp.dispose();
+      await config.dispose();
+      await rm(directory, { recursive: true, force: true });
     }
   }, 30000);
 
@@ -65,9 +100,9 @@ describe('MCP Config lifetime deletion', () => {
         },
       },
     });
-    const owner = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
+    const owner = await createTestMcpRuntime(
+      { oauth: createTestOAuthBinding(), config },
+      {},
     );
     try {
       await owner.initialize();
@@ -132,37 +167,21 @@ describe('MCP Config lifetime deletion', () => {
             },
           },
         });
-        const owner = await McpRuntimeOwner.create(
-          createTestOAuthBinding(),
-          config,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
+        const owner = await createTestMcpRuntime(
+          { oauth: createTestOAuthBinding(), config },
           {
-            read: () => ({
-              mcpServers: config.getMcpServers() ?? {},
-              blockedMcpServers: [],
-              settingsMcpServers: {},
-            }),
-            reload: async () => ({
-              mcpServers: {},
-              blockedMcpServers: [],
-              settingsMcpServers: {},
-            }),
+            mcpSettings: {
+              read: () => ({
+                mcpServers: config.getMcpServers() ?? {},
+                blockedMcpServers: [],
+                settingsMcpServers: {},
+              }),
+              reload: async () => ({
+                mcpServers: {},
+                blockedMcpServers: [],
+                settingsMcpServers: {},
+              }),
+            },
           },
         );
         owners.push({ config, owner, directory: cwd });
@@ -208,27 +227,15 @@ describe('MCP Config lifetime deletion', () => {
   }, 30000);
 
   it('rejects late instruction-consuming requests on a disposed borrowed facade', async () => {
-    const { fromConfig } = await import('../fromConfig.js');
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    const agent = await fromConfig({
-      settingsOwner: built.settingsOwner,
-      settingsService: built.settingsService,
-      agentClient: built.agentClient,
-      providerManager: built.providerManager,
-      config: built.config,
-      mcpRuntime: built.mcpRuntime,
-    });
+    const route = await openRouteAAgent();
     try {
-      await agent.dispose();
-      await expect(agent.generate('Do not send this request')).rejects.toThrow(
-        'closed',
-      );
-      await expect(agent.generateJson([], {})).rejects.toThrow('closed');
-      expect(built.mcpRuntime.isStopped()).toBe(false);
-      expect(built.mcpRuntime.readInstructions()).toBe('');
+      await route.agent.dispose();
+      await expect(
+        route.agent.generate('Do not send this request'),
+      ).rejects.toThrow('closed');
+      await expect(route.agent.generateJson([], {})).rejects.toThrow('closed');
     } finally {
-      await agent.dispose();
-      await built.cleanup();
+      await route.close();
     }
   }, 30000);
 });

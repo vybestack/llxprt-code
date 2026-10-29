@@ -6,13 +6,13 @@
 
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
-import { GoogleAuth } from 'google-auth-library';
 import type {
   LanguageModelV4,
   LanguageModelV4CallOptions,
   LanguageModelV4StreamPart,
 } from '@ai-sdk/provider';
 import { StreamTruncatedError } from '@vybestack/llxprt-code-providers/streamProtocolErrors.js';
+import type { AuthClient } from 'google-auth-library';
 import { createPatternPreservingFetch } from './gemini-pattern-fetch.js';
 import { createStreamedGeminiFetch } from './streamed-request.js';
 import {
@@ -30,6 +30,7 @@ import type {
   GenerateContentResponse,
   Part,
 } from './geminiWireTypes.js';
+import { selectGoogleCredentialClient } from './vertexCredentialSource.js';
 
 /**
  * Builds the Gemini client on top of `@ai-sdk/google`.
@@ -61,30 +62,62 @@ function toAiSdkBaseUrl(baseUrl: string | undefined): string | undefined {
   return alreadyVersioned ? trimmed : `${trimmed}/v1beta`;
 }
 
+/**
+ * The Vertex adapter reads only the access token from the auth client, so the
+ * quota project header the library adds in `getRequestHeaders` never reaches
+ * the model request. An explicit header, in any letter case, takes precedence.
+ */
+function withQuotaProjectHeader(
+  quotaProjectId: string | null | undefined,
+  headers: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!quotaProjectId) {
+    return headers;
+  }
+  const explicit = Object.keys(headers ?? {}).some(
+    (name) => name.toLowerCase() === 'x-goog-user-project',
+  );
+  if (explicit) {
+    return headers;
+  }
+  return { 'x-goog-user-project': quotaProjectId, ...headers };
+}
+
 export async function createGeminiApiClient(
   options: GeminiApiClientOptions,
 ): Promise<GeminiApiClient> {
-  if (options.vertexai && (!options.project || !options.location))
+  if (options.vertexai && (!options.project || !options.location)) {
     throw new Error('Vertex AI requires explicit project and location');
+  }
   const baseURL = toAiSdkBaseUrl(options.httpOptions?.baseUrl);
-  const googleAuth = options.vertexai
-    ? new GoogleAuth({
-        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-        ...options.googleAuthOptions,
-      })
-    : undefined;
+  let selectedCredential: Promise<AuthClient> | undefined;
+  const credentialClient = (): Promise<AuthClient> => {
+    const { credentialEnvironment } = options;
+    if (credentialEnvironment === undefined) {
+      throw new Error('Vertex AI requires a Google credential environment');
+    }
+    selectedCredential ??= selectGoogleCredentialClient({
+      fetch: options.fetch,
+      credentials: options.credentials,
+      environment: credentialEnvironment,
+    }).catch((error: unknown) => {
+      selectedCredential = undefined;
+      throw error;
+    });
+    return selectedCredential;
+  };
   const modelFor = async (
     params: GenerateContentParameters,
     tools: LanguageModelV4CallOptions['tools'],
   ): Promise<LanguageModelV4> => {
     const transport = createPatternPreservingFetch(
       tools,
-      undefined,
       createStreamedGeminiFetch(
         options.requestContents ??
           async function* () {
             yield* normaliseContents(params.contents);
           },
+        options.fetch,
         params.model,
         typeof params['systemInstruction'] === 'string'
           ? params['systemInstruction']
@@ -93,28 +126,23 @@ export async function createGeminiApiClient(
         options.requestMetadata,
       ),
     );
-    if (googleAuth !== undefined) {
-      const authClient = await googleAuth.getClient();
-      const headers = { ...options.httpOptions?.headers };
-      if (
-        authClient.quotaProjectId &&
-        !Object.keys(headers).some(
-          (name) => name.toLowerCase() === 'x-goog-user-project',
-        )
-      )
-        headers['x-goog-user-project'] = authClient.quotaProjectId;
+    if (options.vertexai) {
+      const authClient = await credentialClient();
       return createVertex({
         apiKey: '',
         project: options.project,
         location: options.location,
         baseURL: options.httpOptions?.baseUrl,
-        headers,
+        headers: withQuotaProjectHeader(
+          authClient.quotaProjectId,
+          options.httpOptions?.headers,
+        ),
         googleAuthOptions: { authClient },
         fetch: transport,
       }).languageModel(params.model);
     }
     return createGoogleGenerativeAI({
-      ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
+      apiKey: options.apiKey ?? '',
       ...(baseURL !== undefined ? { baseURL } : {}),
       ...(options.httpOptions?.headers !== undefined
         ? { headers: options.httpOptions.headers }

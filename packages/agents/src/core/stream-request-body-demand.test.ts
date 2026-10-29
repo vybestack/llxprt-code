@@ -1,3 +1,4 @@
+import { chatSessionPorts } from './chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
@@ -223,7 +224,17 @@ function buildProcessor(
   manager.registerProvider(provider);
   const view = createAgentRuntimeContext({
     prepareProviderInvocation: (name, parameters, signal) =>
-      captureProviderInvocation(providerRuntime, name, parameters, signal),
+      captureProviderInvocation(
+        {
+          runtimeId: providerRuntime.runtimeId,
+          fetch: globalThis.fetch,
+          globalSettings: setup.settings.getAllGlobalSettings(),
+          providerSettings: setup.settings.getProviderSettings(name),
+        },
+        name,
+        parameters,
+        signal,
+      ),
     promptEstimator: setup.tokenizer,
     state: createAgentRuntimeState({
       runtimeId: config.getSessionId(),
@@ -252,8 +263,13 @@ function buildProcessor(
     providerRuntime,
   });
   const compression = new CompressionHandler(
-    view,
+    chatSessionPorts(view).compression,
+    undefined,
     history,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {},
     () => {
       throw new Error('Unexpected compression in small BODY fixture');
@@ -261,7 +277,14 @@ function buildProcessor(
     async () => {},
   );
   return new StreamProcessor(
-    view,
+    chatSessionPorts(view).stream,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     new ConversationManager(history, view),
     compression,
     () => provider,
@@ -354,7 +377,14 @@ async function independentEstimate(fixture: Fixture): Promise<number> {
   const projection = await fixture.provider.projectPromptEnvelope({
     contents,
     invocation: captureProviderInvocation(
-      fixture.providerRuntime,
+      {
+        runtimeId: fixture.providerRuntime.runtimeId,
+        fetch: globalThis.fetch,
+        globalSettings: fixture.settings.getAllGlobalSettings(),
+        providerSettings: fixture.settings.getProviderSettings(
+          fixture.provider.name,
+        ),
+      },
       fixture.provider.name,
     ),
     systemInstruction: instructions,

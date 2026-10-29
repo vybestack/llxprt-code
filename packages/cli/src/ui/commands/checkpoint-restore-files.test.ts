@@ -22,7 +22,7 @@ import {
   checkpointTool,
   failDurableWrite,
 } from '../hooks/agentStream/checkpoint-disk-test-helpers.js';
-import { restoreCommand } from './restoreCommand.js';
+import { checkpointCommand } from '../../__tests__/checkpoint-command-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { expectedCleanupDigest } from '../../utils/__tests__/support/cleanup-history-test-helpers.js';
 
@@ -114,7 +114,7 @@ async function runRestore(fault: Fault, toolEdits = true): Promise<Outcome> {
         projectCheckpointsDir: dir,
       };
       const context = createMockCommandContext({
-        services: { config: runtime, agent: { agentClient: client } },
+        services: { config: runtime },
       });
       let uiPublished = false;
       context.ui.clear = () => {
@@ -133,7 +133,7 @@ async function runRestore(fault: Fault, toolEdits = true): Promise<Outcome> {
         fixture.reference,
       );
       try {
-        const result = await restoreCommand(runtime)?.action?.(
+        const result = await checkpointCommand(client, runtime, git)?.action?.(
           context,
           'restore',
         );

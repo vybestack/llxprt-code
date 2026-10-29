@@ -1,37 +1,42 @@
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { afterEach } from 'bun:test';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
-import { ChatSession } from './chatSession.js';
-import type { TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { AfterModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
+import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { AfterModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
+import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Extracts visible (non-thinking) text from a neutral ModelOutput — the
@@ -96,15 +101,13 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
-      config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.issue1749.test' },
     });
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   });
 
   function buildChatSession(
@@ -123,6 +126,8 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
           name,
           parameters,
           signal,
+          undefined,
+          requestFetch,
         ),
       state: runtimeState,
       history: new HistoryService(),
@@ -142,11 +147,18 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
         createSessionSettingsFixture(config).settingsOwner.telemetry,
       ),
       tools: createToolRegistryViewFromRegistry(undefined),
-      providerRuntime: { ...providerRuntime, config },
+      providerRuntime: { ...providerRuntime },
     });
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
+      config,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],

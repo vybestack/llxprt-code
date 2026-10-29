@@ -1,3 +1,4 @@
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { vi } from 'bun:test';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -77,6 +78,7 @@ export function installProviderDiskFixture(candidateHistory: IContent[]): void {
 export async function seedFallbackCooldown(
   handler: CompressionHandler,
   candidateHistory: IContent[],
+  ephemerals: AgentRuntimeContext['ephemerals'],
 ): Promise<{ activateCandidateAfter(noopCalls: number): void }> {
   const control: CandidateControl = { active: false, calls: 0, noops: 0 };
   installFallbackStrategies(control, candidateHistory);
@@ -104,10 +106,7 @@ export async function seedFallbackCooldown(
     activateCandidateAfter: (noopCalls) => {
       tokens.mockRestore();
       estimation.mockRestore();
-      vi.spyOn(
-        handler['runtimeContext'].ephemerals,
-        'compressionStrategy',
-      ).mockReturnValue('one-shot');
+      vi.spyOn(ephemerals, 'compressionStrategy').mockReturnValue('one-shot');
       control.noops = noopCalls;
       control.active = true;
     },

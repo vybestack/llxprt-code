@@ -35,6 +35,7 @@ import type {
   OAuthManager,
   ISettingsService as AuthISettingsService,
 } from '@vybestack/llxprt-code-auth';
+import { ProviderKeyStorage } from '../storage/provider-key-storage.js';
 import { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
 
 const bunIt = it;
@@ -157,7 +158,11 @@ describe('Core auth-factories integration', () => {
         off: () => {},
       } as unknown as AuthISettingsService;
 
-      const resolver = createAuthPrecedenceResolver(config, settingsService);
+      const resolver = createAuthPrecedenceResolver(config, {
+        settingsService,
+        oauthManager: undefined,
+        providerKeyStorage: new ProviderKeyStorage(),
+      });
       expect(typeof resolver.resolveAuthentication).toBe('function');
 
       // Resolve auth — should return the direct API key
@@ -180,7 +185,11 @@ describe('Core auth-factories integration', () => {
         off: () => {},
       } as unknown as AuthISettingsService;
 
-      const resolver = createAuthPrecedenceResolver(config, settingsService);
+      const resolver = createAuthPrecedenceResolver(config, {
+        settingsService,
+        oauthManager: undefined,
+        providerKeyStorage: new ProviderKeyStorage(),
+      });
       const auth = await resolver.resolveAuthentication();
       expect(auth).toBe('minimal-factory-key');
     });

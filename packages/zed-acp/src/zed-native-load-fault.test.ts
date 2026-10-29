@@ -4,6 +4,7 @@ import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/j
 import {
   nativeAcpFixture,
   nativeRows,
+  nativeFailureLeaves,
   replayText,
 } from './__tests__/support/native-acp-fault-fixture.js';
 
@@ -85,25 +86,21 @@ describe('native ACP load ownership', () => {
       const error = await fixture.zed
         .loadSession({ sessionId: id, cwd: fixture.root, mcpServers: [] })
         .catch((reason: unknown) => reason);
-      expect(error).toBeInstanceOf(AggregateError);
-      if (!(error instanceof AggregateError))
+      expect(error).toMatchObject({
+        code: -32603,
+        data: { phase: 'replay', sessionId: id },
+      });
+      if (!(error instanceof Error) || !(error.cause instanceof AggregateError))
         throw new Error('Missing combined load failure');
-      expect(error.errors).toHaveLength(2);
-      expect(error.errors[0]).toMatchObject({ code: -32603, cause: primary });
-      const disposal: unknown = error.errors[1];
+      expect(error.cause.errors).toHaveLength(2);
+      expect(error.cause.errors[0]).toBe(primary);
+      const disposal: unknown = error.cause.errors[1];
       expect(disposal).toMatchObject({
         name: 'AggregateDisposeError',
         errors: [cleanup],
       });
-      if (
-        !(disposal instanceof Error) ||
-        !('errors' in disposal) ||
-        !Array.isArray(disposal.errors)
-      )
-        throw new Error('Missing Agent disposal diagnostic');
-      expect(disposal.errors).toStrictEqual([cleanup]);
-      expect(disposal.errors[0]).toBe(cleanup);
-      expect(error.cause).toBe(error.errors[0]);
+      expect(nativeFailureLeaves(error)).toStrictEqual([primary, cleanup]);
+      expect(nativeFailureLeaves(error)[1]).toBe(cleanup);
       expect(await fixture.locks()).toStrictEqual([]);
       expect(await nativeRows(faultPath)).toStrictEqual({ ...before });
       faultPath = undefined;

@@ -18,6 +18,10 @@ import type {
   ThinkingBlock,
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Mock the Vercel AI SDK to control streaming responses
@@ -177,6 +181,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
   ): import('../BaseProvider.js').GenerateChatOptions => ({
     contents,
     invocation: createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'vercel-reasoning',
       providerName: 'openaivercel',
       ephemeralsSnapshot: settingsMap,

@@ -4,24 +4,40 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import * as path from 'node:path';
+import { IDEConnectionStatus } from '@vybestack/llxprt-code-ide-integration';
 import {
-  IDEConnectionStatus,
   IDE_DEFINITIONS,
-  getIdeInstaller,
-  type IdeClient,
+  type getIdeInstaller,
+  type WorkspaceIdeConnection,
+  type IdeContext,
   type File,
   LLXPRT_CODE_COMPANION_EXTENSION_NAME,
 } from '@vybestack/llxprt-code-core';
 import {
-  type CommandContext,
   type SlashCommand,
   type SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
-import { SettingScope } from '../../config/settings.js';
-import type { IdeState } from '../cliUiRuntime.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+
+export interface IdeCommandOperations {
+  readonly readConnection: () => WorkspaceIdeConnection;
+  readonly readContext: () => IdeContext | undefined;
+  readonly connect: () => Promise<void>;
+  readonly setIdeMode: (enabled: boolean) => void;
+  readonly disconnect: () => Promise<void>;
+  readonly persistMode: (enabled: boolean) => void;
+  readonly installCompanion: (
+    announce: () => void,
+  ) => Promise<
+    | Awaited<
+        ReturnType<NonNullable<ReturnType<typeof getIdeInstaller>>['install']>
+      >
+    | undefined
+  >;
+  readonly addItem: UseHistoryManagerReturn['addItem'];
+}
 
 function formatFileList(openFiles: File[]): string {
   const basenameCounts = new Map<string, number>();
@@ -49,15 +65,17 @@ function formatFileList(openFiles: File[]): string {
   return `\n\nOpen files:\n${fileList}\n${infoMessage}`;
 }
 
-async function getIdeStatusMessageWithFiles(ideClient: IdeClient): Promise<{
+async function getIdeStatusMessageWithFiles(
+  operations: IdeCommandOperations,
+): Promise<{
   messageType: 'info' | 'error';
   content: string;
 }> {
-  const connection = ideClient.getConnectionStatus();
+  const connection = operations.readConnection();
   switch (connection.status) {
     case IDEConnectionStatus.Connected: {
-      let content = `[CONNECTED] Connected to ${ideClient.getDetectedIdeDisplayName()}`;
-      const openFiles = ideClient.getIdeContext()?.workspaceState?.openFiles;
+      let content = `[CONNECTED] Connected to ${operations.readConnection().detectedIdeDisplayName}`;
+      const openFiles = operations.readContext()?.workspaceState?.openFiles;
       if (openFiles && openFiles.length > 0) {
         content += formatFileList(openFiles);
       }
@@ -84,7 +102,7 @@ async function getIdeStatusMessageWithFiles(ideClient: IdeClient): Promise<{
   }
 }
 
-function buildStatusCommand(ideClient: IdeClient): SlashCommand {
+function buildStatusCommand(operations: IdeCommandOperations): SlashCommand {
   return {
     name: 'status',
     description: 'check status of IDE integration',
@@ -92,7 +110,7 @@ function buildStatusCommand(ideClient: IdeClient): SlashCommand {
     autoExecute: true,
     action: async (): Promise<SlashCommandActionReturn> => {
       const { messageType, content } =
-        await getIdeStatusMessageWithFiles(ideClient);
+        await getIdeStatusMessageWithFiles(operations);
       return {
         type: 'message',
         messageType,
@@ -103,66 +121,45 @@ function buildStatusCommand(ideClient: IdeClient): SlashCommand {
 }
 
 async function pollForConnection(
-  config: IdeState,
-  ideClient: IdeClient,
+  operations: IdeCommandOperations,
 ): Promise<void> {
   for (let i = 0; i < 10; i++) {
-    config.setIdeMode(true);
-    await ideClient.connect();
-    if (
-      ideClient.getConnectionStatus().status === IDEConnectionStatus.Connected
-    ) {
+    operations.setIdeMode(true);
+    await operations.connect();
+    if (operations.readConnection().status === IDEConnectionStatus.Connected) {
       break;
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 }
 
-function buildInstallCommand(
-  config: IdeState,
-  ideClient: IdeClient,
-  currentIDE: NonNullable<ReturnType<IdeClient['getCurrentIde']>>,
-): SlashCommand {
+function buildInstallCommand(operations: IdeCommandOperations): SlashCommand {
   return {
     name: 'install',
-    description: `install required IDE companion for ${ideClient.getDetectedIdeDisplayName()}`,
+    description: `install required IDE companion for ${operations.readConnection().detectedIdeDisplayName}`,
     kind: CommandKind.BUILT_IN,
     autoExecute: true,
-    action: async (context) => {
-      const installer = getIdeInstaller(currentIDE);
-      if (!installer) {
-        await writeCommandOutput(
-          () => context.services.agent?.agentClient.getHistoryService() ?? null,
-          context.services.agent?.session,
-          context.recordingOwner,
-          context.ui.addItem,
+    action: async () => {
+      const result = await operations.installCompanion(() => {
+        operations.addItem(
+          {
+            type: 'info',
+            text: 'Installing IDE companion from marketplace...',
+          },
+          Date.now(),
+        );
+      });
+      if (result === undefined) {
+        operations.addItem(
           {
             type: 'error',
-            text: `No installer is available for ${ideClient.getDetectedIdeDisplayName()}. Please install the '${LLXPRT_CODE_COMPANION_EXTENSION_NAME}' extension manually from the marketplace.`,
+            text: `No installer is available for ${operations.readConnection().detectedIdeDisplayName}. Please install the '${LLXPRT_CODE_COMPANION_EXTENSION_NAME}' extension manually from the marketplace.`,
           },
           Date.now(),
         );
         return;
       }
-
-      await writeCommandOutput(
-        () => context.services.agent?.agentClient.getHistoryService() ?? null,
-        context.services.agent?.session,
-        context.recordingOwner,
-        context.ui.addItem,
-        {
-          type: 'info',
-          text: `Installing IDE companion from marketplace...`,
-        },
-        Date.now(),
-      );
-
-      const result = await installer.install();
-      await writeCommandOutput(
-        () => context.services.agent?.agentClient.getHistoryService() ?? null,
-        context.services.agent?.session,
-        context.recordingOwner,
-        context.ui.addItem,
+      operations.addItem(
         {
           type: result.success ? 'info' : 'error',
           text: result.message,
@@ -170,75 +167,66 @@ function buildInstallCommand(
         Date.now(),
       );
       if (result.success) {
-        context.services.settings.setValue(
-          SettingScope.User,
-          'ui.ideMode',
-          true,
-        );
-        await pollForConnection(config, ideClient);
+        operations.persistMode(true);
+        await pollForConnection(operations);
 
         const { messageType, content } =
-          await getIdeStatusMessageWithFiles(ideClient);
-        await writeCommandOutput(
-          () => context.services.agent?.agentClient.getHistoryService() ?? null,
-          context.services.agent?.session,
-          context.recordingOwner,
-          context.ui.addItem,
-          {
-            type: messageType,
-            text:
-              messageType === 'error'
-                ? 'Failed to automatically enable IDE integration. To fix this, run the CLI in a new terminal window.'
-                : content,
-          },
-          Date.now(),
-        );
+          await getIdeStatusMessageWithFiles(operations);
+        if (messageType === 'error') {
+          operations.addItem(
+            {
+              type: messageType,
+              text: `Failed to automatically enable IDE integration. To fix this, run the CLI in a new terminal window.`,
+            },
+            Date.now(),
+          );
+        } else {
+          operations.addItem(
+            {
+              type: messageType,
+              text: content,
+            },
+            Date.now(),
+          );
+        }
       }
     },
   };
 }
 
-function buildEnableCommand(config: IdeState): SlashCommand {
+function buildEnableCommand(operations: IdeCommandOperations): SlashCommand {
   return {
     name: 'enable',
     description: 'enable IDE integration',
     kind: CommandKind.BUILT_IN,
     autoExecute: true,
-    action: async (context: CommandContext) => {
-      context.services.settings.setValue(SettingScope.User, 'ui.ideMode', true);
-      config.setIdeMode(true);
-      await config.setIdeClientConnected();
+    action: async () => {
+      operations.persistMode(true);
+      operations.setIdeMode(true);
+      await operations.connect();
     },
   };
 }
 
-function buildDisableCommand(config: IdeState): SlashCommand {
+function buildDisableCommand(operations: IdeCommandOperations): SlashCommand {
   return {
     name: 'disable',
     description: 'disable IDE integration',
     kind: CommandKind.BUILT_IN,
     autoExecute: true,
-    action: async (context: CommandContext) => {
-      context.services.settings.setValue(
-        SettingScope.User,
-        'ui.ideMode',
-        false,
-      );
-      config.setIdeMode(false);
-      await config.setIdeClientDisconnected();
+    action: async () => {
+      operations.persistMode(false);
+      operations.setIdeMode(false);
+      await operations.disconnect();
     },
   };
 }
 
-export const ideCommand = (config: IdeState | null): SlashCommand | null => {
-  if (!config) {
-    return null;
-  }
-  const ideClient = config.getIdeClient();
-  if (!ideClient) {
-    return null;
-  }
-  const currentIDE = ideClient.getCurrentIde();
+export function createIdeCommand(
+  operations: IdeCommandOperations | null,
+): SlashCommand | null {
+  if (operations === null) return null;
+  const currentIDE = operations.readConnection().currentIde;
   if (!currentIDE) {
     return {
       name: 'ide',
@@ -257,10 +245,10 @@ export const ideCommand = (config: IdeState | null): SlashCommand | null => {
     };
   }
 
-  const statusCommand = buildStatusCommand(ideClient);
-  const installCommand = buildInstallCommand(config, ideClient, currentIDE);
-  const enableCommand = buildEnableCommand(config);
-  const disableCommand = buildDisableCommand(config);
+  const statusCommand = buildStatusCommand(operations);
+  const installCommand = buildInstallCommand(operations);
+  const enableCommand = buildEnableCommand(operations);
+  const disableCommand = buildDisableCommand(operations);
 
   const ideSlashCommand: SlashCommand = {
     name: 'ide',
@@ -269,7 +257,7 @@ export const ideCommand = (config: IdeState | null): SlashCommand | null => {
     subCommands: [],
   };
 
-  const { status } = ideClient.getConnectionStatus();
+  const { status } = operations.readConnection();
   const isConnected = status === IDEConnectionStatus.Connected;
 
   if (isConnected) {
@@ -283,4 +271,4 @@ export const ideCommand = (config: IdeState | null): SlashCommand | null => {
   }
 
   return ideSlashCommand;
-};
+}

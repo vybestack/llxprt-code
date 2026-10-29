@@ -354,3 +354,19 @@ describe('nightly.yml: macOS and Windows E2E failures remain blocking and visibl
     }
   });
 });
+
+describe('nightly.yml: the tmux UI harness stays POSIX-only', () => {
+  it('provisions tmux only in the macOS scripts job and never opts Windows into LLXPRT_E2E_TMUX', () => {
+    const workflow = loadNightlyWorkflow();
+    const tmuxStepsFor = (jobId: string) =>
+      (workflowJob(workflow, jobId).steps ?? []).filter(
+        (step) => step.uses === './.github/actions/install-tmux',
+      );
+
+    expect(tmuxStepsFor('windows_ci')).toEqual([]);
+    expect(tmuxStepsFor('macos_ci')).toHaveLength(1);
+    expect(JSON.stringify(workflowJob(workflow, 'windows_ci'))).not.toContain(
+      'LLXPRT_E2E_TMUX',
+    );
+  });
+});

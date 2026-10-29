@@ -29,7 +29,7 @@ import type {
   CommandContext,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { getHistoryServiceFromAgent } from './historyServiceAccess.js';
+import type { IContent } from '@vybestack/llxprt-code-core';
 import { formatHistoryMemoryBreakdownStream } from './perfMemoryBreakdown.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import {
@@ -131,6 +131,7 @@ export interface PerfSnapshotCapability {
 }
 
 export interface PerfCommandOptions {
+  readonly readHistory: () => AsyncIterable<IContent> | null;
   /** Injected live snapshot capability. When null/undefined, bare /perf says unavailable. */
   readonly snapshotCapability?: PerfSnapshotCapability | null;
   /** Override the perf directory for tests. Defaults to Storage.getGlobalLogDir()/perf. */
@@ -291,23 +292,21 @@ function formatSnapshot(
  * session state rather than stored perf files, so it needs no telemetry
  * settings to be enabled.
  */
-function createMemorySubCommand(): SlashCommand {
+function createMemorySubCommand(
+  readHistory: PerfCommandOptions['readHistory'],
+): SlashCommand {
   return {
     name: 'memory',
     description: 'Show retained conversation size by block type and tool',
     kind: CommandKind.BUILT_IN,
-    action: async (context: CommandContext): Promise<MessageActionReturn> => {
-      const historyService = getHistoryServiceFromAgent(context.services.agent);
-      if (historyService === null) {
+    action: async (): Promise<MessageActionReturn> => {
+      const history = readHistory();
+      if (history === null) {
         return messageInfo(
           'History is not available. Start a conversation first.',
         );
       }
-      return messageInfo(
-        await formatHistoryMemoryBreakdownStream(
-          historyService.streamRawHistory(),
-        ),
-      );
+      return messageInfo(await formatHistoryMemoryBreakdownStream(history));
     },
   };
 }
@@ -419,9 +418,7 @@ function createDeleteSubCommand(
  * that perf telemetry is not active. `/perf report` still works on stored
  * data with unavailable self-health and the configured token-usage directory.
  */
-export function createPerfCommand(
-  options: PerfCommandOptions = {},
-): SlashCommand {
+export function createPerfCommand(options: PerfCommandOptions): SlashCommand {
   const perfDir = options.perfDir ?? getDefaultPerfDir();
   const snapshotCapability = options.snapshotCapability ?? null;
   const operations = options.operations ?? defaultOperations;
@@ -455,14 +452,7 @@ export function createPerfCommand(
       createInspectSubCommand(perfDir, operations),
       createReportSubCommand(perfDir, operations, getSelfHealth, tokenUsageDir),
       createDeleteSubCommand(perfDir, operations),
-      createMemorySubCommand(),
+      createMemorySubCommand(options.readHistory),
     ],
   };
 }
-
-/**
- * Default `/perf` command instance registered in BuiltinCommandLoader.
- * The production snapshot capability is wired by BuiltinCommandLoader via
- * `createPerfCommand({ snapshotCapability })`.
- */
-export const perfCommand: SlashCommand = createPerfCommand();

@@ -316,3 +316,43 @@ describe('CompressionHandler compression-callback escalation (issue #3499)', () 
     expect(resultText(result)).toContain('pending-marker');
   });
 });
+
+describe('empty source guard boundary', () => {
+  it('T4: keeps an empty pending boundary a no-op regardless of guard facts', async () => {
+    const history = new HistoryService();
+    const runtime = buildRuntimeContext(history, {
+      contextLimit: SESSION_CONTEXT_LIMIT,
+    });
+    const harness = buildHandlerHarness(history, runtime, {
+      realDiskFallback: true,
+    });
+    let captured: GuardAwareCallback | null = null;
+    const provider = {
+      name: 'empty-guard',
+      getModels: async () => [],
+      generateChatCompletion: vi.fn(),
+      setCompressionCallback: (callback: CompressionCallback | null): void => {
+        captured = callback;
+      },
+    };
+    await enforceProviderSourceForTest(
+      harness.handler,
+      history,
+      [],
+      'empty-guard',
+      provider,
+      undefined,
+      true,
+      async () => {
+        const result = await readSelection(
+          await expectCapturedCallback(captured)({
+            estimatedTokens: 900,
+            contextLimit: 800,
+          }),
+        );
+        expect(result).toStrictEqual([]);
+        expect(history.length()).toBe(0);
+      },
+    );
+  });
+});

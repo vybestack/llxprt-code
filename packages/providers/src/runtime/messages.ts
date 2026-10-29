@@ -13,15 +13,15 @@
 export { MissingProviderRuntimeError } from '../errors.js';
 
 const PLAN_TAG = '@plan:PLAN-20251023-STATELESS-HARDENING.P10';
-const MISSING_RUNTIME_REQUIREMENTS = [
+const MISSING_RUNTIME_REQUIREMENTS = Object.freeze([
   '@requirement:REQ-SP4-001',
   '@requirement:REQ-SP4-004',
   '@requirement:REQ-SP4-005',
-] as const;
-const NORMALIZATION_REQUIREMENTS = [
+] as const);
+const NORMALIZATION_REQUIREMENTS = Object.freeze([
   '@requirement:REQ-SP4-002',
   '@requirement:REQ-SP4-005',
-] as const;
+] as const);
 
 function formatSteps(steps: readonly string[]): string {
   return steps.map((step) => `- ${step}`).join('\n');

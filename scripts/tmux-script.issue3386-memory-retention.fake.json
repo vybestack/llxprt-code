@@ -1,4 +1,5 @@
 {
+  "inputDiagnostics": true,
   "tmux": {
     "cols": 120,
     "rows": 40,

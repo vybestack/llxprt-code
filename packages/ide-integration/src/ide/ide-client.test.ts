@@ -24,7 +24,11 @@ import * as fs from 'node:fs';
 import { getIdeProcessInfo } from './process-utils.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { detectIde, IDE_DEFINITIONS } from './detect-ide.js';
+import {
+  detectIde,
+  IDE_DEFINITIONS,
+  terminalAnnouncesSupportedIde,
+} from './detect-ide.js';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -65,8 +69,7 @@ describe('IdeClient', () => {
 
   beforeEach(async () => {
     // Reset singleton instance for test isolation
-    (IdeClient as unknown as { instance: IdeClient | undefined }).instance =
-      undefined;
+    IdeClient.resetInstance();
 
     // Mock environment variables
     process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'] = '/test/workspace';
@@ -77,6 +80,12 @@ describe('IdeClient', () => {
 
     // Mock dependencies
     vi.spyOn(process, 'cwd').mockReturnValue('/test/workspace/sub-dir');
+    // These cases connect from inside an IDE terminal.
+    (
+      terminalAnnouncesSupportedIde as Mock<
+        typeof terminalAnnouncesSupportedIde
+      >
+    ).mockReturnValue(true);
     (detectIde as Mock<typeof detectIde>).mockReturnValue(
       IDE_DEFINITIONS.vscode,
     );
@@ -144,6 +153,91 @@ describe('IdeClient', () => {
     const c = await IdeClient.getInstance();
 
     expect(c).not.toBe(a);
+  });
+
+  it('resolves the process ancestry once for every client created in the process', async () => {
+    IdeClient.resetInstance();
+    (getIdeProcessInfo as Mock<typeof getIdeProcessInfo>).mockClear();
+
+    await IdeClient.create();
+    await IdeClient.create();
+    await IdeClient.getInstance();
+
+    expect(getIdeProcessInfo).toHaveBeenCalledTimes(1);
+  });
+
+  describe('process ancestry lookup at creation', () => {
+    const missingDirectory = (): Error =>
+      Object.assign(new Error('no such directory'), { code: 'ENOENT' });
+
+    beforeEach(() => {
+      IdeClient.resetInstance();
+      (getIdeProcessInfo as Mock<typeof getIdeProcessInfo>).mockClear();
+      (
+        terminalAnnouncesSupportedIde as Mock<
+          typeof terminalAnnouncesSupportedIde
+        >
+      ).mockReturnValue(false);
+    });
+
+    it('skips the lookup outside an IDE terminal when no companion published a connection file', async () => {
+      readdirMock.mockRejectedValueOnce(missingDirectory());
+      readdirMock.mockResolvedValueOnce([
+        'unrelated.json',
+        'llxprt-ide-server',
+      ]);
+
+      const client = await IdeClient.create();
+
+      expect(getIdeProcessInfo).not.toHaveBeenCalled();
+      expect(client.getCurrentIde()).toBeUndefined();
+      await client.connect();
+      expect(client.getConnectionStatus().status).toBe(
+        IDEConnectionStatus.Disconnected,
+      );
+      expect(StreamableHTTPClientTransport).not.toHaveBeenCalled();
+    });
+
+    it('runs the lookup when a companion published a connection file', async () => {
+      readdirMock.mockResolvedValue(['llxprt-ide-server-777-4242.json']);
+
+      await IdeClient.create();
+
+      expect(getIdeProcessInfo).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs the lookup when a legacy connection file is published', async () => {
+      readdirMock.mockRejectedValueOnce(missingDirectory());
+      readdirMock.mockResolvedValueOnce(['llxprt-ide-server-777.json']);
+
+      await IdeClient.create();
+
+      expect(getIdeProcessInfo).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs the lookup when the connection directory cannot be listed', async () => {
+      readdirMock.mockRejectedValue(
+        Object.assign(new Error('denied'), { code: 'EACCES' }),
+      );
+
+      await IdeClient.create();
+
+      expect(getIdeProcessInfo).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs the lookup inside a supported IDE terminal without listing any directory', async () => {
+      (
+        terminalAnnouncesSupportedIde as Mock<
+          typeof terminalAnnouncesSupportedIde
+        >
+      ).mockReturnValue(true);
+      readdirMock.mockClear();
+
+      await IdeClient.create();
+
+      expect(getIdeProcessInfo).toHaveBeenCalledTimes(1);
+      expect(readdirMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('owner-created client context', () => {

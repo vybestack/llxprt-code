@@ -18,10 +18,10 @@ import {
   type DiffUpdateResult,
   type IdeContext,
 } from './ideContext.js';
-import { getIdeProcessInfo } from './process-utils.js';
+import { mayBeInsideIde, readPublishedConnection } from './connection-files.js';
+import { cachedProcessInfo, resetProcessInfo } from './process-info.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   EnvHttpProxyAgent,
@@ -298,12 +298,19 @@ export class IdeClient {
 
   static async create(): Promise<IdeClient> {
     const client = new IdeClient();
-    client.ideProcessInfo = await getIdeProcessInfo();
-    client.connectionConfig = await client.getConnectionConfigFromFile();
-    client.currentIde = detectIde(
-      client.ideProcessInfo,
-      client.connectionConfig?.ideInfo,
-    );
+    // The ancestry walk is a PowerShell process-table query on Windows and a
+    // `ps` chain elsewhere, paid by every launch. It can only change the
+    // outcome below when the terminal is a supported IDE's or a companion has
+    // published a connection file; otherwise the client has no IDE, exactly as
+    // the walk would conclude, and connect() reports that without needing it.
+    if (await mayBeInsideIde()) {
+      client.ideProcessInfo = await cachedProcessInfo();
+      client.connectionConfig = await client.getConnectionConfigFromFile();
+      client.currentIde = detectIde(
+        client.ideProcessInfo,
+        client.connectionConfig?.ideInfo,
+      );
+    }
     return client;
   }
 
@@ -320,6 +327,7 @@ export class IdeClient {
 
   static resetInstance(): void {
     IdeClient.instance = undefined;
+    resetProcessInfo();
   }
 
   addStatusChangeListener(listener: (state: IDEConnectionState) => void) {
@@ -768,52 +776,7 @@ export class IdeClient {
     if (!this.ideProcessInfo) {
       return {};
     }
-
-    // Try new port file location (in subdirectory with port in filename)
-    try {
-      const portDir = path.join(os.tmpdir(), 'llxprt', 'ide');
-      const files = await fs.promises.readdir(portDir);
-      const prefix = `llxprt-ide-server-${this.ideProcessInfo.pid}-`;
-      const portFile = files.find(
-        (file) => file.startsWith(prefix) && file.endsWith('.json'),
-      );
-
-      if (portFile) {
-        const portFilePath = path.join(portDir, portFile);
-        const portFileContents = await fs.promises.readFile(
-          portFilePath,
-          'utf8',
-        );
-        const configData = JSON.parse(portFileContents);
-        return {
-          port: configData?.port?.toString(),
-          workspacePath: configData?.workspacePath,
-          authToken: configData?.authToken,
-          ideInfo: configData?.ideInfo,
-        };
-      }
-    } catch {
-      // Port file in new location not found; try old location.
-    }
-
-    // For backwards compatibility, try old port file location
-    try {
-      const portFile = path.join(
-        os.tmpdir(),
-        `llxprt-ide-server-${this.ideProcessInfo.pid}.json`,
-      );
-      const portFileContents = await fs.promises.readFile(portFile, 'utf8');
-      const configData = JSON.parse(portFileContents);
-      return {
-        port: configData?.port?.toString(),
-        workspacePath: configData?.workspacePath,
-        authToken: configData?.authToken,
-        ideInfo: configData?.ideInfo,
-      };
-    } catch {
-      // No port file found.
-      return {};
-    }
+    return readPublishedConnection(this.ideProcessInfo.pid);
   }
 
   private createProxyAwareFetch() {

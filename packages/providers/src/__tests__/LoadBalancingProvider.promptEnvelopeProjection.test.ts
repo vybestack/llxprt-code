@@ -1,5 +1,11 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import {
+  createProjectingDelegate,
+  serializedEnvelopeTokens,
+} from './helpers/load-balancing-projection.js';
+import { releaseEstimateOnlyPromptEnvelope } from '../loadBalancing/promptEnvelopeProjection.js';
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -34,11 +40,9 @@ import {
   type ResolvedSubProfile,
 } from '../LoadBalancingProvider.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
-import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   collectContents,
-  isAsyncIterableContents,
   replayableContents,
 } from '../utils/collectContents.js';
 import { FailoverState } from '../loadBalancing/failoverState.js';
@@ -63,108 +67,6 @@ function createResolvedSubProfile(
     ephemeralSettings: overrides.ephemeralSettings ?? {},
     modelParams: overrides.modelParams ?? {},
   };
-}
-
-/**
- * A real delegate provider whose projectPromptEnvelope builds genuine
- * projections: it records the options it received, hands out
- * request-scoped transport tokens, and estimates the serialized envelope
- * (contents + tool schemas) like a real provider projection would.
- */
-interface ProjectingDelegate {
-  readonly provider: IProvider;
-  readonly projectedOptions: GenerateChatOptions[];
-  /** Model of each send attempt this delegate served, in attempt order. */
-  readonly sentModels: string[];
-  readonly delegateTokens: object[];
-}
-
-function createProjectingDelegate(spec: {
-  name: string;
-  estimateTokens: (options: GenerateChatOptions) => number | Promise<number>;
-  releaseIfUnsent?: () => Promise<void>;
-  resolveProjection?: (
-    options: GenerateChatOptions,
-  ) => Promise<PromptEnvelopeProjection | undefined>;
-  /** Fail (throw) the first N send attempts; projection still succeeds. */
-  failFirstSends?: number;
-  /** Report this many usage tokens on the sent chunk (TPM tracking). */
-  usageTokens?: number;
-}): ProjectingDelegate {
-  const projectedOptions: GenerateChatOptions[] = [];
-  const sentModels: string[] = [];
-  const delegateTokens: object[] = [];
-  const provider: IProvider = {
-    name: spec.name,
-    async projectPromptEnvelope(options: GenerateChatOptions) {
-      projectedOptions.push(options);
-      if (spec.resolveProjection !== undefined) {
-        return spec.resolveProjection(options);
-      }
-      const transportToken = Object.freeze({ seq: delegateTokens.length });
-      delegateTokens.push(transportToken);
-      // The wrapper's request lease closes after projection, so measure now.
-      const estimate = await spec.estimateTokens(options);
-      return {
-        model: options.resolved?.model ?? spec.name,
-        protocol: 'openai-chat',
-        method: 'chat/completions/v1',
-        projectionRevision: 7,
-        unsupportedMedia: [],
-        transportToken,
-        finalizedProjection: Object.freeze({ kind: 'test', promptText: 'x' }),
-        legacyEstimate: () => Promise.resolve(estimate),
-        ...(spec.releaseIfUnsent === undefined
-          ? {}
-          : { releaseIfUnsent: spec.releaseIfUnsent }),
-      };
-    },
-    async *generateChatCompletion(
-      optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
-    ): AsyncGenerator<IContent> {
-      if (isAsyncIterableContents(optionsOrStream)) {
-        throw new Error('legacy positional overload is not exercised here');
-      }
-      const options = optionsOrStream;
-      projectedOptions.push(options);
-      sentModels.push(options.resolved?.model ?? spec.name);
-      if (sentModels.length <= (spec.failFirstSends ?? 0)) {
-        throw new Error(`delegate ${spec.name} send failed`);
-      }
-      const okChunk: IContent = {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'ok' }],
-      };
-      if (spec.usageTokens === undefined) {
-        yield okChunk;
-        return;
-      }
-      // Gemini wire usage shape: BackendMetricsCollector.extractTokenCount
-      // reads this compat form off the last chunk; IContent itself keeps
-      // usage in neutral metadata, so the wire fields need a cast here.
-      yield {
-        ...okChunk,
-        usageMetadata: { promptTokenCount: spec.usageTokens },
-      } as unknown as IContent;
-    },
-    getModels: async () => [],
-    getDefaultModel: () => 'delegate-default',
-  };
-  return { provider, projectedOptions, sentModels, delegateTokens };
-}
-
-/** Serialize contents + tool schemas the way an envelope estimate would. */
-async function serializedEnvelopeTokens(
-  options: GenerateChatOptions,
-): Promise<number> {
-  const contents = await collectContents(options.contents);
-  const contentText = contents
-    .map((content) => JSON.stringify(content.blocks))
-    .join('\n');
-  const toolText = (options.tools ?? [])
-    .map((tool) => JSON.stringify(tool))
-    .join('\n');
-  return Math.ceil((contentText.length + toolText.length) / 4);
 }
 
 function createLoadBalancer(
@@ -209,6 +111,7 @@ async function consumeSend(
   text: string,
 ): Promise<void> {
   for await (const _chunk of lb.generateChatCompletion({
+    invocation: makeLoadBalancerInvocation(),
     contents: replayableContents([createTextContent(text)]),
   })) {
     // consume
@@ -265,7 +168,10 @@ function registerProjectionCase01(): void {
       const lb = createLoadBalancer(providerManager);
       const contents = replayableContents(originalRows);
 
-      const projection = await lb.projectPromptEnvelope({ contents });
+      const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents,
+      });
 
       expect(projection).toBeDefined();
       // Estimation fields are the delegate projection's own values.
@@ -306,6 +212,7 @@ function registerProjectionCase02(): void {
       });
 
       const firstPeek = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([]),
       });
       expect(firstPeek?.model).toBe('model-a');
@@ -316,6 +223,7 @@ function registerProjectionCase02(): void {
 
       // The peek reflects the new position only after the caller advanced it.
       const secondPeek = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([]),
       });
       expect(secondPeek?.model).toBe('model-b');
@@ -323,6 +231,7 @@ function registerProjectionCase02(): void {
       // Selection wraps back to 'a'; the peek follows the rotation.
       expect(lb.selectNextSubProfile().name).toBe('b');
       const thirdPeek = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([]),
       });
       expect(thirdPeek?.model).toBe('model-a');
@@ -369,6 +278,7 @@ function registerProjectionCase03(): void {
       // failover lands on (and sticks to) backend 'b'.
       const chunks: IContent[] = [];
       for await (const chunk of lb.generateChatCompletion({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([
           createTextContent('a request payload far larger than five tokens'),
         ]),
@@ -379,6 +289,7 @@ function registerProjectionCase03(): void {
       expect(lb.getCurrentFailoverIndex()).toBe(1);
 
       const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([]),
       });
       expect(projection?.model).toBe('model-b');
@@ -386,6 +297,7 @@ function registerProjectionCase03(): void {
       // Peeking did not move the failover index.
       expect(lb.getCurrentFailoverIndex()).toBe(1);
       const repeatPeek = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([]),
       });
       expect(repeatPeek?.model).toBe('model-b');
@@ -408,7 +320,10 @@ function registerProjectionCase04(): void {
       });
 
       await expect(
-        lb.projectPromptEnvelope({ contents: replayableContents([]) }),
+        lb.projectPromptEnvelope({
+          invocation: makeLoadBalancerInvocation(),
+          contents: replayableContents([]),
+        }),
       ).resolves.toBeUndefined();
     });
   });
@@ -430,7 +345,10 @@ function registerProjectionCase05(): void {
       const lb = createLoadBalancer(providerManager);
 
       await expect(
-        lb.projectPromptEnvelope({ contents: replayableContents([]) }),
+        lb.projectPromptEnvelope({
+          invocation: makeLoadBalancerInvocation(),
+          contents: replayableContents([]),
+        }),
       ).resolves.toBeUndefined();
     });
   });
@@ -449,7 +367,10 @@ function registerProjectionCase06(): void {
       const lb = createLoadBalancer(providerManager);
 
       await expect(
-        lb.projectPromptEnvelope({ contents: replayableContents([]) }),
+        lb.projectPromptEnvelope({
+          invocation: makeLoadBalancerInvocation(),
+          contents: replayableContents([]),
+        }),
       ).resolves.toBeUndefined();
     });
   });
@@ -466,6 +387,7 @@ function registerProjectionCase07(): void {
 
       const lb = createLoadBalancer(providerManager);
       const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([createTextContent('token freshness')]),
       });
 
@@ -488,6 +410,7 @@ function registerProjectionCase10(): void {
       const invocations: string[] = [];
 
       const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([createTextContent('request')]),
         systemInstruction: '[model=load-balancer]',
         systemPromptAssembler: {
@@ -519,11 +442,13 @@ function registerProjectionCase11(): void {
       const lb = createLoadBalancer(providerManager);
 
       const withoutTools = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([
           createTextContent('analyze this request'),
         ]),
       });
       const withTools = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([
           createTextContent('analyze this request'),
         ]),
@@ -577,6 +502,7 @@ function registerProjectionCase12(): void {
 
       const lb = createLoadBalancer(providerManager);
       const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([]),
       });
 
@@ -625,6 +551,7 @@ function registerProjectionCase13(): void {
       lb.resetFailoverIndex();
 
       const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([]),
       });
       expect(projection?.model).toBe('model-b');
@@ -671,6 +598,7 @@ function registerProjectionCase14(): void {
       expect(lb.getCurrentFailoverIndex()).toBe(0);
 
       const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([]),
       });
       expect(projection?.model).toBe('model-b');
@@ -700,6 +628,7 @@ function registerProjectionCase15(): void {
       expect(lb.getStats().currentTPM.a).toBeGreaterThan(0);
 
       const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([]),
       });
       expect(projection?.model).toBe('model-a');
@@ -751,6 +680,7 @@ function registerProjectionCase16(): void {
 
       lb.resetFailoverIndex();
       const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([]),
       });
       expect(projection?.model).toBe('model-a');
@@ -795,6 +725,7 @@ function registerProjectionCase17(): void {
       // The recovery window elapsed, so the pure eligibility read finds 'a'
       // eligible again and the peek projects it as the next target.
       const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents([]),
       });
       expect(projection?.model).toBe('model-a');
@@ -834,7 +765,10 @@ function registerProjectionCase18(): void {
           throw new Error('round-robin peek must not consult eligibility');
         },
         buildDelegateResolvedOptions: unitResolvedOptions,
-        options: { contents: replayableContents([]) },
+        options: {
+          invocation: makeLoadBalancerInvocation(),
+          contents: replayableContents([]),
+        },
       });
 
       expect(projection?.model).toBe('model-a');
@@ -867,7 +801,10 @@ function registerProjectionCase19(): void {
         roundRobinIndex: 0,
         isBackendEligible: (name) => name === 'a',
         buildDelegateResolvedOptions: unitResolvedOptions,
-        options: { contents: replayableContents([]) },
+        options: {
+          invocation: makeLoadBalancerInvocation(),
+          contents: replayableContents([]),
+        },
       });
 
       // Only 'a' passes the predicate, so the traversal from index 2 wraps
@@ -878,18 +815,78 @@ function registerProjectionCase19(): void {
   });
 }
 
+function registerProjectionReleaseCases(): void {
+  describe('estimate owner delegate release', () => {
+    it('keeps the delegate alive until the estimate owner releases it exactly once', async () => {
+      const releases: string[] = [];
+      const delegate = createProjectingDelegate({
+        name: 'openai',
+        estimateTokens: () => 10,
+        releaseIfUnsent: async () => {
+          releases.push(`released-${releases.length}`);
+        },
+      });
+      providerManager.registerProvider(delegate.provider);
+      const lb = createLoadBalancer(providerManager);
+      const first = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([]),
+      });
+      expect(releases).toStrictEqual([]);
+      expect(await first?.legacyEstimate()).toBe(10);
+      await first?.releaseIfUnsent?.();
+      await releaseEstimateOnlyPromptEnvelope(first?.transportToken);
+      expect(releases).toStrictEqual(['released-0']);
+      const second = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([]),
+      });
+      await second?.releaseIfUnsent?.();
+      await second?.releaseIfUnsent?.();
+      expect(releases).toStrictEqual(['released-0', 'released-1']);
+    });
+
+    it('propagates a failing delegate release from the estimate owner', async () => {
+      const delegate = createProjectingDelegate({
+        name: 'openai',
+        estimateTokens: () => 10,
+        releaseIfUnsent: () => Promise.reject(new Error('release exploded')),
+      });
+      providerManager.registerProvider(delegate.provider);
+      const lb = createLoadBalancer(providerManager);
+      const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([]),
+      });
+      expect(projection).toBeDefined();
+      await expect(projection?.releaseIfUnsent?.()).rejects.toThrow(
+        'release exploded',
+      );
+      await expect(
+        releaseEstimateOnlyPromptEnvelope(projection?.transportToken),
+      ).rejects.toThrow('release exploded');
+    });
+  });
+}
+
 describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () => {
   beforeEach(() => {
     const settingsService = new SettingsService();
     const config: Config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      borrowedSettings(config, settingsService),
+    );
   });
 
+  registerProjectionReleaseCases();
   registerProjectionCase01();
 
   registerProjectionCase02();

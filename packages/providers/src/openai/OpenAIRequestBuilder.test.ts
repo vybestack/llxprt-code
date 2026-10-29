@@ -31,12 +31,17 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type OpenAI from 'openai';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const createMockOptions = (
   settingsMap: Record<string, unknown> = {},
 ): NormalizedGenerateChatOptions =>
   ({
     invocation: createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-request',
       providerName: 'openai',
       ephemeralsSnapshot: settingsMap,

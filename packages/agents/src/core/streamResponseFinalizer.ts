@@ -5,12 +5,12 @@
  */
 
 import type { ResponseArrival } from '@vybestack/llxprt-code-core/services/history/history-response-arrival.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type { IContent } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
+import type { MediaAdmissionPort } from './runtimePorts.js';
 import type { ConversationManager } from './ConversationManager.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import type { PreparedUserTurn } from './mediaAdmissionSeam.js';
@@ -29,7 +29,7 @@ interface FinalizeStreamResponseOptions {
   readonly conversationManager: ConversationManager;
   readonly historyService: HistoryService;
   readonly compressionHandler: CompressionHandler;
-  readonly runtimeContext: AgentRuntimeContext;
+  readonly mediaAdmission: MediaAdmissionPort | undefined;
   readonly terminal: StreamTerminalState;
   readonly userInput: IContent | IContent[];
   readonly includeThoughts: boolean;
@@ -42,10 +42,10 @@ interface FinalizeStreamResponseOptions {
 export async function failStreamProcessing(
   error: unknown,
   admissions: readonly MediaAdmissionRelease[],
-  runtimeContext: AgentRuntimeContext,
+  mediaAdmission: MediaAdmissionPort | undefined,
 ): Promise<never> {
   try {
-    await runtimeContext.mediaAdmission?.releaseAdmissions(admissions);
+    await mediaAdmission?.releaseAdmissions(admissions);
   } catch (cleanupError: unknown) {
     throw new AggregateError(
       [error, cleanupError],
@@ -65,9 +65,7 @@ async function settlePublishedStreamAdmissions(
     failures.push(error);
   }
   try {
-    await options.runtimeContext.mediaAdmission?.releaseAdmissions(
-      options.mediaAdmissions,
-    );
+    await options.mediaAdmission?.releaseAdmissions(options.mediaAdmissions);
   } catch (error: unknown) {
     failures.push(error);
   }

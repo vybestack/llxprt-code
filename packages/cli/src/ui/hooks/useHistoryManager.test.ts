@@ -47,7 +47,7 @@ describe('journal-backed history commands', () => {
   });
 
   it('keeps complete text beyond the former count and byte limits on disk', async () => {
-    await withJournalTurn(async (turn, agent) => {
+    await withJournalTurn(async (turn, agent, client) => {
       const owner = renderHook(() => useHistory(turn));
       const reader = renderHook(() => useHistory(turn));
       const text = 'x'.repeat(11000);
@@ -58,7 +58,7 @@ describe('journal-backed history commands', () => {
             text: `${index}:${text}`,
           });
         });
-        const history = agent.agentClient.getHistoryService();
+        const history = client.getHistoryService();
         if (history === null) throw new Error('Missing journal history');
         await history.waitForCommit();
       }

@@ -4,6 +4,7 @@ import type { DiscoveredMCPPrompt } from '@vybestack/llxprt-code-mcp';
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../__tests__/mockCommandContext.js';
 
 import { installWorkspaceRuntimeFixture } from '../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
@@ -12,7 +13,7 @@ import { McpPromptLoader } from './McpPromptLoader.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { PromptArgument } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { CommandKind, type CommandContext } from '../ui/commands/types.js';
+import { CommandKind } from '../ui/commands/types.js';
 
 const mockPrompt = {
   name: 'test-prompt',
@@ -224,7 +225,7 @@ describe('McpPromptLoader', () => {
       );
       const commands = await loader.loadCommands(new AbortController().signal);
       const action = commands[0].action!;
-      const context = {} as CommandContext;
+      const context = {} as CommandOwnerFixture;
       const result = await action(context, 'test-name 123 tiger');
       expect(mockPrompt.invoke).toHaveBeenCalledWith(
         {
@@ -246,7 +247,7 @@ describe('McpPromptLoader', () => {
       );
       const commands = await loader.loadCommands(new AbortController().signal);
       const action = commands[0].action!;
-      const context = {} as CommandContext;
+      const context = {} as CommandOwnerFixture;
       const result = await action(context, 'test-name');
       expect(result).toStrictEqual({
         type: 'message',
@@ -264,7 +265,7 @@ describe('McpPromptLoader', () => {
       );
       const commands = await loader.loadCommands(new AbortController().signal);
       const action = commands[0].action!;
-      const context = {} as CommandContext;
+      const context = {} as CommandOwnerFixture;
       const result = await action(context, 'test-name 123 tiger');
       expect(result).toStrictEqual({
         type: 'message',

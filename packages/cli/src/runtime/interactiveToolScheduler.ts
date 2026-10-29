@@ -128,8 +128,13 @@ function createMainSchedulerCallbacks(
   };
 }
 
+export type OpenClientChannel = () => ReturnType<
+  Agent['tools']['openClientChannel']
+>;
+export type SubscribeChildTools = Agent['tools']['subscribeChildTools'];
+
 export function useScheduler(
-  agent: Agent,
+  openClientChannel: OpenClientChannel,
   mainSchedulerId: symbol,
   refs: SchedulerRefs,
   pendingScheduleRequests: React.MutableRefObject<PendingScheduleRequests>,
@@ -139,7 +144,7 @@ export function useScheduler(
   );
   useEffect(() => {
     const mounted = { current: true };
-    const channel = agent.tools.openClientChannel();
+    const channel = openClientChannel();
     const detach = channel.subscribe(
       createMainSchedulerCallbacks(mainSchedulerId, refs, mounted),
     );
@@ -164,19 +169,19 @@ export function useScheduler(
         logger.warn(() => `Failed to release client tools: ${String(error)}`);
       });
     };
-  }, [agent, mainSchedulerId, refs, pendingScheduleRequests]);
+  }, [openClientChannel, mainSchedulerId, refs, pendingScheduleRequests]);
   return scheduler;
 }
 
 export function useChildToolDisplay(
-  agent: Agent,
+  subscribeChildTools: SubscribeChildTools,
   refs: SchedulerRefs,
   setReady: (ready: boolean) => void,
 ): void {
   useEffect(() => {
     const mounted = { current: true };
     const isMounted = (): boolean => mounted.current;
-    const detach = agent.tools.subscribeChildTools({
+    const detach = subscribeChildTools({
       outputUpdateHandler: (id, callId, update) => {
         if (!isMounted()) return;
         refs.updateToolCallOutput(id, callId, update);
@@ -198,5 +203,5 @@ export function useChildToolDisplay(
       detach();
       setReady(false);
     };
-  }, [agent, refs, setReady]);
+  }, [subscribeChildTools, refs, setReady]);
 }

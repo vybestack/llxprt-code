@@ -61,6 +61,7 @@ async function longCandidate(size: number): Promise<number> {
       const result = await runDiskTruncation(
         'long',
         buildRuntimeContext(history),
+        undefined,
         history,
         async () => {
           throw new Error('No LLM');

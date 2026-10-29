@@ -1,3 +1,5 @@
+import type { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+export let metricSource: UiTelemetryService;
 /**
  * @license
  * Copyright 2026 Google LLC
@@ -11,7 +13,6 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 import type { ChatSession } from '../../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { AgentEventType, type PerformCompressionResult } from '../../turn.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import {
   setupAgentClient,
@@ -221,11 +222,7 @@ export function buildOverflowScenario(
   const initialBaseline =
     scenario.initialProjectedBaseline ?? PREFLIGHT_BASELINE;
   const observedCount = scenario.lastPromptTokenCount ?? initialBaseline;
-  (
-    uiTelemetryService.getLastPromptTokenCount as Mock<
-      typeof uiTelemetryService.getLastPromptTokenCount
-    >
-  ).mockReturnValue(observedCount);
+  metricSource.setLastPromptTokenCount(observedCount);
 
   let currentBaseline = initialBaseline;
 
@@ -316,6 +313,7 @@ export async function initializeClient(): Promise<void> {
     { useInjectedConfig: true },
   );
   client = ctx.client;
+  metricSource = ctx.metrics;
 
   mockTodoStoreConstructor.mockImplementation(() => ({
     readTodos: todoStoreReadMock,

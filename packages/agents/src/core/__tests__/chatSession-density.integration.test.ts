@@ -17,14 +17,16 @@ import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collec
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+
+import { chatSessionPorts } from '../chatSessionPorts.js';
 import {
-  resetCallIds,
-  makeUserMessage,
-  makeAiText,
   addPrunableReadWritePair,
-  buildRuntimeContext,
   buildMockContentGenerator,
+  buildRuntimeContext,
   getInternals,
+  makeAiText,
+  makeUserMessage,
+  resetCallIds,
 } from './chatSession-density-helpers.js';
 
 let densityFixture1_historyService: HistoryService;
@@ -52,7 +54,14 @@ const densityFixture3_observeRunsDensityBeforeThresholdCheckAvoidsCompressionWhe
     densityFixture1_historyService.add(makeAiText('File updated'));
 
     const chat = new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       densityFixture2_mockContentGenerator,
       {},
       [],
@@ -104,7 +113,14 @@ const densityFixture4_observeSkipsCompressionIfDensityFreedEnoughSpace =
     densityFixture1_historyService.add(makeAiText('Done'));
 
     const chat = new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       densityFixture2_mockContentGenerator,
       {},
       [],
@@ -307,7 +323,14 @@ async function observeDensityCase6() {
   ).length;
 
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     densityFixture2_mockContentGenerator,
     {},
     [],
@@ -350,7 +373,14 @@ async function observeDensityCase7() {
   densityFixture1_historyService.add(makeAiText('Done'));
 
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     densityFixture2_mockContentGenerator,
     {},
     [],
@@ -375,7 +405,6 @@ async function observeDensityCase7() {
   vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
     mockProvider as never,
   );
-  vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
 
   // enforceContextWindow should run density optimization before compression
   // Even if the mock doesn't reduce tokens, the code path is exercised
@@ -409,7 +438,14 @@ async function observeDensityCase8() {
     .length;
 
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     densityFixture2_mockContentGenerator,
     {},
     [],

@@ -151,6 +151,18 @@ export function trackRunnerChild(child: ChildProcess): void {
   child.once('close', () => runnerChildren.delete(child));
 }
 
+/**
+ * One line per tracked child that has not closed. A runner that finishes its
+ * work with entries here would otherwise stay alive on the child's handles
+ * without saying why.
+ */
+export function describePendingRunnerChildren(): string[] {
+  return [...runnerChildren].map(
+    (child) =>
+      `pid ${child.pid ?? 'unknown'} (${child.spawnargs.at(-1) ?? 'unknown command'})`,
+  );
+}
+
 /** Kills the POSIX test process group, including descendants. */
 export function killRunnerChild(child: ChildProcess): void {
   if (process.platform === 'win32') {

@@ -1,3 +1,4 @@
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 /// <reference lib="esnext.array" />
 /**
  * @license
@@ -135,10 +136,18 @@ describe('Finding 1: provider fallback failure propagation through real Compress
       name: 'test',
       generateChatCompletion: vi.fn(),
     } as unknown as RuntimeProvider;
-    const providerResult: CompressionProviderResult = { provider };
+    const providerResult: CompressionProviderResult = {
+      provider,
+      runtime: suite0RuntimeContext.providerRuntime,
+    };
     suite0Handler = new CompressionHandler(
-      suite0RuntimeContext,
+      chatSessionPorts(suite0RuntimeContext).compression,
+      undefined,
       suite0HistoryService,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {},
       vi.fn().mockResolvedValue(providerResult),
       vi.fn().mockResolvedValue(undefined),
@@ -465,7 +474,11 @@ async function testBody3(): Promise<void> {
   const snapshot = makeCompressionSnapshot(
     'pending rejected committed snapshot',
   );
-  const control = await seedFallbackCooldown(suite0Handler, [snapshot]);
+  const control = await seedFallbackCooldown(
+    suite0Handler,
+    [snapshot],
+    suite0RuntimeContext.ephemerals,
+  );
   expect(suite0Handler['compressionFailureCount']).toBe(3);
   control.activateCandidateAfter(2);
   suite0Handler.setLastPromptTokenCount(150_000);
@@ -490,7 +503,11 @@ async function testBody4(): Promise<void> {
   const snapshot = makeCompressionSnapshot(
     'provider rejected committed snapshot',
   );
-  const control = await seedFallbackCooldown(suite0Handler, [snapshot]);
+  const control = await seedFallbackCooldown(
+    suite0Handler,
+    [snapshot],
+    suite0RuntimeContext.ephemerals,
+  );
   expect(suite0Handler['compressionFailureCount']).toBe(3);
   control.activateCandidateAfter(1);
   vi.spyOn(suite0HistoryService.detachedValues, 'transform').mockRejectedValue(
@@ -522,7 +539,11 @@ async function testBody5(): Promise<void> {
   const snapshot = makeCompressionSnapshot(
     'pending successful committed snapshot',
   );
-  const control = await seedFallbackCooldown(suite0Handler, [snapshot]);
+  const control = await seedFallbackCooldown(
+    suite0Handler,
+    [snapshot],
+    suite0RuntimeContext.ephemerals,
+  );
   expect(suite0Handler['compressionFailureCount']).toBe(3);
   control.activateCandidateAfter(2);
   suite0Handler.setLastPromptTokenCount(150_000);
@@ -549,7 +570,11 @@ async function testBody6(): Promise<void> {
   const snapshot = makeCompressionSnapshot(
     'provider successful committed snapshot',
   );
-  const control = await seedFallbackCooldown(suite0Handler, [snapshot]);
+  const control = await seedFallbackCooldown(
+    suite0Handler,
+    [snapshot],
+    suite0RuntimeContext.ephemerals,
+  );
   expect(suite0Handler['compressionFailureCount']).toBe(3);
   control.activateCandidateAfter(1);
   const pending = makeUserMessage('pending request');

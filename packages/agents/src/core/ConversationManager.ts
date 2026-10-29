@@ -12,7 +12,7 @@
  * metadata injection, and model output consolidation.
  */
 
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   HistoryService,
   ToolPairingStreamOptions,
@@ -103,23 +103,38 @@ function mergeTurnMetadata(
 }
 
 /**
+ * What ConversationManager reads from the agent runtime: the isolated history
+ * it manages, the runtime-state model it stamps onto entries, the active
+ * provider for generating-model attribution, and the reasoning setting that
+ * decides whether thinking blocks stay in history.
+ */
+export interface ConversationRuntime {
+  readonly history: HistoryService;
+  readonly state: { readonly model: string };
+  readonly provider: { getActiveProvider(): RuntimeProvider };
+  readonly ephemerals: {
+    readonly reasoning: { includeInContext(): boolean };
+  };
+}
+
+/**
  * ConversationManager handles conversation history management for ChatSession.
  * It provides methods for recording turns, converting Content to IContent,
  * and managing conversation state.
  */
 export class ConversationManager {
   private historyService: HistoryService;
-  private runtimeContext: AgentRuntimeContext;
+  private runtimeContext: ConversationRuntime;
   private readonly baseURL: string | undefined;
 
-  rebindHistory(runtimeContext: AgentRuntimeContext): void {
+  rebindHistory(runtimeContext: ConversationRuntime): void {
     this.runtimeContext = runtimeContext;
     this.historyService = runtimeContext.history;
   }
 
   constructor(
     historyService: HistoryService,
-    runtimeContext: AgentRuntimeContext,
+    runtimeContext: ConversationRuntime,
     baseURL?: string,
   ) {
     this.historyService = historyService;
@@ -563,7 +578,8 @@ export class ConversationManager {
         ...content,
         metadata: {
           ...content.metadata,
-          turnId: this.historyService.generateTurnKey(),
+          turnId:
+            content.metadata?.turnId ?? this.historyService.generateTurnKey(),
         },
       };
     }

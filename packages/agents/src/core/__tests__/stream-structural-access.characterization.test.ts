@@ -28,6 +28,7 @@ import type {
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { CompressionHandler } from '../../compression/CompressionHandler.js';
+import { reasoningInclusionPolicy } from '../runtimePorts.js';
 // ---------------------------------------------------------------------------
 // REQ-005.3: streamValidationHelpers accumulation
 // (imports DebugLogger and CompressionHandler type — declared at top of file)
@@ -175,7 +176,7 @@ describe('REQ-005.3: recordHistoryWithUsage accumulation', () => {
       mgr,
       hs,
       compHandler,
-      ctx,
+      reasoningInclusionPolicy(ctx),
       userInput,
       acc,
     );
@@ -281,7 +282,7 @@ describe('REQ-005.3: recordHistoryWithUsage accumulation', () => {
       mgr,
       historyService,
       makeCompressionHandlerStub(null),
-      ctx,
+      reasoningInclusionPolicy(ctx),
       currentUser,
       acc,
     );
@@ -336,7 +337,7 @@ describe('REQ-005.3: recordHistoryWithUsage accumulation', () => {
       mgr,
       historyService,
       makeCompressionHandlerStub(null),
-      ctx,
+      reasoningInclusionPolicy(ctx),
       currentUser,
       {
         content: {

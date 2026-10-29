@@ -30,7 +30,7 @@ import {
   getProviderConfigKeys,
   getDirectSettingSpecs,
 } from '../settings/settingsRegistry.js';
-import { LEGACY_SETTING_KEY_MIGRATIONS } from '../settings/legacyKeyMigration.js';
+import { legacySettingCanonicalKey } from '../settings/legacyKeyMigration.js';
 
 // ---------------------------------------------------------------------------
 // Compression strategy literal values — tested without importing core
@@ -642,26 +642,22 @@ describe('getProfilePersistableKeys — profile persistence', () => {
 
   it('legacy apiKey has no spec — it must be migrated at load (#2533 C1)', () => {
     expect(getSettingSpec('apiKey')).toBeUndefined();
-    expect(LEGACY_SETTING_KEY_MIGRATIONS.get('apiKey')).toBe('auth-key');
+    expect(legacySettingCanonicalKey('apiKey')).toBe('auth-key');
   });
 
   it('legacy apiKeyfile has no spec — it must be migrated at load', () => {
     expect(getSettingSpec('apiKeyfile')).toBeUndefined();
-    expect(LEGACY_SETTING_KEY_MIGRATIONS.get('apiKeyfile')).toBe(
-      'auth-keyfile',
-    );
+    expect(legacySettingCanonicalKey('apiKeyfile')).toBe('auth-keyfile');
   });
 
   it('legacy api-key has no spec — it must be migrated at load', () => {
     expect(getSettingSpec('api-key')).toBeUndefined();
-    expect(LEGACY_SETTING_KEY_MIGRATIONS.get('api-key')).toBe('auth-key');
+    expect(legacySettingCanonicalKey('api-key')).toBe('auth-key');
   });
 
   it('legacy api-keyfile has no spec — it must be migrated at load', () => {
     expect(getSettingSpec('api-keyfile')).toBeUndefined();
-    expect(LEGACY_SETTING_KEY_MIGRATIONS.get('api-keyfile')).toBe(
-      'auth-keyfile',
-    );
+    expect(legacySettingCanonicalKey('api-keyfile')).toBe('auth-keyfile');
   });
 });
 

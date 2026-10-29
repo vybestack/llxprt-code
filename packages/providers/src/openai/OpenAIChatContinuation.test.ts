@@ -103,6 +103,7 @@ async function prepareContinuation(
     contentCount: rows.length,
     metadata: {},
     invocation: createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: 'continuation-test',
       providerName: 'openai',
       ephemeralsSnapshot: {

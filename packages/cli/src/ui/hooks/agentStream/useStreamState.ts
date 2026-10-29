@@ -22,12 +22,10 @@ import {
   type WorkspaceCheckpointOperations,
 } from '@vybestack/llxprt-code-core';
 import { type HistoryItemWithoutId } from '../../types.js';
-import { resolveEmojiFilterMode } from '../../utils/iContentToHistoryItems.js';
 import { useStateAndRef } from '../useStateAndRef.js';
 import { useLogger } from '../useLogger.js';
 import { type QueuedSubmission } from './types.js';
 import { useQueuedSubmissions } from './useQueuedSubmissions.js';
-import type { StreamRuntime } from '../../cliUiRuntime.js';
 import type { SubmissionExecutor } from './useSubmitQuery.js';
 
 export interface UseStreamStateReturn {
@@ -71,10 +69,6 @@ export interface UseStreamStateReturn {
   flushPendingHistoryItem: (timestamp: number) => void;
   logger: ReturnType<typeof useLogger>;
   gitService: WorkspaceCheckpointOperations | undefined;
-}
-
-function useEmojiFilterMode(runtime: StreamRuntime): EmojiFilterMode {
-  return resolveEmojiFilterMode(runtime.ephemeral);
 }
 
 /**
@@ -217,12 +211,14 @@ function useBasicStreamState() {
 
 export function useStreamState(
   addItem: (item: HistoryItemWithoutId, timestamp: number) => number,
-  runtime: StreamRuntime,
+  readEmojiFilterMode: () => EmojiFilterMode,
+  projectTempDir: string,
+  gitService: WorkspaceCheckpointOperations | undefined,
 ): UseStreamStateReturn {
   const basic = useBasicStreamState();
-  const storage = runtime.projectTempDir;
+  const storage = projectTempDir;
 
-  const emojiFilter = useEmojiFilter(useEmojiFilterMode(runtime));
+  const emojiFilter = useEmojiFilter(readEmojiFilterMode());
   const sanitizeContent = useSanitizeContent(emojiFilter);
   const flushPendingHistoryItem = useFlushPendingHistoryItem(
     addItem,
@@ -230,9 +226,6 @@ export function useStreamState(
     basic.setPendingHistoryItem,
   );
   const logger = useLogger(storage);
-  const gitService = runtime.checkpoint.getCheckpointingEnabled()
-    ? runtime.checkpoint.checkpoints
-    : undefined;
 
   return {
     ...basic,

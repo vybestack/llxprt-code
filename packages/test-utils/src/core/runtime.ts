@@ -90,8 +90,6 @@ export function createProviderWithRuntime<P>(
 ): ProviderWithRuntimeResult<P> {
   const settingsService = options.settingsService ?? new SettingsService();
   const runtime = createProviderRuntimeContext({
-    settingsService,
-    config: options.config,
     runtimeId: options.runtimeId ?? 'test.provider.runtime',
     metadata: {
       source: 'test-utils#createProviderWithRuntime',
@@ -145,8 +143,6 @@ export function initializeTestProviderRuntime(
     ...(options.configOverrides ?? {}),
   });
   const runtime = createProviderRuntimeContext({
-    settingsService,
-    config,
     runtimeId:
       options.runtimeId ??
       `test.provider.runtime.${Math.random().toString(36).slice(2, 10)}`,
@@ -214,7 +210,10 @@ interface ChatSessionRuntimeResult {
   provider: IProvider;
   providerManager: Pick<
     RuntimeProviderManager,
-    'getActiveProvider' | 'setActiveProvider' | 'getProviderByName'
+    | 'getActiveProvider'
+    | 'setActiveProvider'
+    | 'getProviderByName'
+    | 'getProviderKeys'
   >;
   settingsService: SettingsService;
   runtime: ProviderRuntimeContext;
@@ -244,7 +243,6 @@ export function createChatSessionRuntime(
   const vi = requireVi();
   const settingsService = options.settingsService ?? new SettingsService();
   const runtime = createProviderRuntimeContext({
-    settingsService,
     runtimeId: options.runtimeId ?? 'test.chatSession.runtime',
     metadata: {
       source: 'test-utils#createChatSessionRuntime',
@@ -303,8 +301,6 @@ export function createChatSessionRuntime(
 
   const config = Object.assign(baseConfig, options.configOverrides ?? {});
 
-  Object.assign(runtime, { config });
-
   return {
     tokenizerFactory,
     config,
@@ -327,5 +323,8 @@ function createSingleProviderSelection(
     },
     getProviderByName: (name: string) =>
       name === provider.name ? provider : undefined,
+    getProviderKeys: (): never => {
+      throw new Error('Test provider selection has no key storage');
+    },
   };
 }

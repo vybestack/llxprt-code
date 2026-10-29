@@ -9,12 +9,52 @@
  * Extracted from chatSession.ts Phase 05.
  */
 
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { AgentRuntimeTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { UsageStats } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { nextStreamEventWithIdleTimeout } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { safeJsonStringify } from './turnJsonUtils.js';
+
+/**
+ * The identity fields every API telemetry event carries. Callers project these
+ * once from runtime state instead of handing the logging helpers a whole
+ * runtime context.
+ */
+export interface TurnTelemetryIdentity {
+  readonly sessionId: string;
+  readonly runtimeId: string;
+  readonly provider: string;
+}
+
+/**
+ * Everything the turn logging helpers read: the telemetry sink, the session
+ * identity stamped on each event, and the runtime model used when the caller
+ * does not name one.
+ */
+export interface TurnTelemetryPorts {
+  readonly telemetry: AgentRuntimeTelemetryAdapter;
+  readonly identity: TurnTelemetryIdentity;
+  readonly model: string;
+}
+
+/**
+ * Project runtime state and the telemetry adapter onto the logging port.
+ */
+export function turnTelemetryPorts(
+  state: AgentRuntimeState,
+  telemetry: AgentRuntimeTelemetryAdapter,
+): TurnTelemetryPorts {
+  return {
+    telemetry,
+    identity: {
+      sessionId: state.sessionId,
+      runtimeId: state.runtimeId,
+      provider: state.provider,
+    },
+    model: state.model,
+  };
+}
 
 /**
  * Extract request text from neutral contents for logging.
@@ -33,20 +73,19 @@ export function getRequestTextFromContents(contents: IContent[]): string {
  * @requirement:REQ-008
  */
 export async function logApiRequest(
-  runtimeContext: AgentRuntimeContext,
-  runtimeState: AgentRuntimeState,
+  ports: TurnTelemetryPorts,
   contents: IContent[],
   model: string,
   promptId: string,
 ): Promise<void> {
   const requestText = getRequestTextFromContents(contents);
-  await runtimeContext.telemetry.logApiRequest({
+  await ports.telemetry.logApiRequest({
     model,
     promptId,
     requestText,
-    sessionId: runtimeState.sessionId,
-    runtimeId: runtimeState.runtimeId,
-    provider: runtimeState.provider,
+    sessionId: ports.identity.sessionId,
+    runtimeId: ports.identity.runtimeId,
+    provider: ports.identity.provider,
     timestamp: Date.now(),
   });
 }
@@ -67,21 +106,20 @@ export async function logApiRequest(
  * @requirement:REQ-010.1
  */
 export function logApiResponse(
-  runtimeContext: AgentRuntimeContext,
-  runtimeState: AgentRuntimeState,
+  ports: TurnTelemetryPorts,
   model: string,
   promptId: string,
   durationMs: number,
   usage?: UsageStats,
   responseText?: string,
 ): void {
-  runtimeContext.telemetry.logApiResponse({
+  ports.telemetry.logApiResponse({
     model,
     promptId,
     durationMs,
-    sessionId: runtimeState.sessionId,
-    runtimeId: runtimeState.runtimeId,
-    provider: runtimeState.provider,
+    sessionId: ports.identity.sessionId,
+    runtimeId: ports.identity.runtimeId,
+    provider: ports.identity.provider,
     usage:
       usage === undefined
         ? undefined
@@ -95,27 +133,26 @@ export function logApiResponse(
 }
 
 export function logModelOutputResponse(
-  runtimeContext: AgentRuntimeContext,
+  ports: TurnTelemetryPorts,
   promptId: string,
   durationMs: number,
   response: { usage?: UsageStats },
 ): void {
   logApiResponse(
-    runtimeContext,
-    runtimeContext.state,
-    runtimeContext.state.model,
+    ports,
+    ports.model,
     promptId,
     durationMs,
     response.usage,
     safeJsonStringify(response),
   );
 }
+
 /**
  * Log API error to telemetry
  */
 export function logApiError(
-  runtimeContext: AgentRuntimeContext,
-  runtimeState: AgentRuntimeState,
+  ports: TurnTelemetryPorts,
   model: string,
   promptId: string,
   durationMs: number,
@@ -124,15 +161,15 @@ export function logApiError(
   const errorMessage = error instanceof Error ? error.message : String(error);
   const errorType = error instanceof Error ? error.name : 'unknown';
 
-  runtimeContext.telemetry.logApiError({
+  ports.telemetry.logApiError({
     model,
     promptId,
     durationMs,
     error: errorMessage,
     errorType,
-    sessionId: runtimeState.sessionId,
-    runtimeId: runtimeState.runtimeId,
-    provider: runtimeState.provider,
+    sessionId: ports.identity.sessionId,
+    runtimeId: ports.identity.runtimeId,
+    provider: ports.identity.provider,
   });
 }
 

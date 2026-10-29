@@ -4,7 +4,6 @@ import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
 import type { ToolRegistryView } from './AgentRuntimeContext.js';
 import { createProviderRuntimeContext } from './providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const baseState = createAgentRuntimeState({
   runtimeId: 'stateless-runtime',
@@ -29,7 +28,6 @@ describe('AgentRuntimeContext stateless enforcement', () => {
           getToolMetadata: vi.fn(() => undefined),
         },
         providerRuntime: createProviderRuntimeContext({
-          settingsService: new SettingsService(),
           runtimeId: baseState.runtimeId,
         }),
       }),
@@ -61,7 +59,6 @@ describe('AgentRuntimeContext stateless enforcement', () => {
       telemetry,
       tools,
       providerRuntime: createProviderRuntimeContext({
-        settingsService: new SettingsService(),
         runtimeId: baseState.runtimeId,
       }),
     });

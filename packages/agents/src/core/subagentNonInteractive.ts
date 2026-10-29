@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { StreamTimeoutPolicy } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 /**
  * @fileoverview Non-interactive subagent execution path.
@@ -19,55 +18,46 @@ import type { StreamTimeoutPolicy } from '@vybestack/llxprt-code-core/utils/stre
  * @see project-plans/issue1581/README.md
  */
 
+import {
+  SubagentTerminateMode,
+  type OutputConfig,
+  type OutputObject,
+  type RunConfig,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type {
+  ContentBlock,
   IContent,
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { getToolCallBlocks } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import {
   nextStreamEventWithIdleTimeout,
   resolveStreamIdleTimeoutMs,
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import {
   StreamEventType,
-  type StreamEvent,
   type ChatSession,
+  type StreamEvent,
 } from './chatSession.js';
 import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
-import { getToolCallBlocks } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
-import type { ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import {
-  SubagentTerminateMode,
-  type OutputObject,
-  type OutputConfig,
-  type RunConfig,
-} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { ExecutionLoopContext } from './subagentExecution.js';
 import {
+  GeneratedOutputCounter,
+  checkGoalCompletion,
   checkOutputBudget,
   checkTerminationConditions,
-  GeneratedOutputCounter,
-  processNonInteractiveTextResponse,
   handleExecutionError,
-  checkGoalCompletion,
+  processNonInteractiveTextResponse,
   recordTurnOutputTokens,
 } from './subagentExecution.js';
+import { completeWithGoal, finalizeOutput } from './subagentToolProcessing.js';
 import {
-  resolveToolName,
-  finalizeOutput,
-  processFunctionCalls,
-  buildTodoCompletionPrompt,
-  completeWithGoal,
-} from './subagentToolProcessing.js';
-import {
-  canonicalizeToolName,
   SCOPE_LOCAL_EMIT_TOOL_NAME,
+  canonicalizeToolName,
 } from './toolGovernance.js';
 
 // ---------------------------------------------------------------------------
@@ -82,15 +72,27 @@ export interface NonInteractiveRunContext {
   readonly output: OutputObject;
   readonly subagentId: string;
   readonly name: string;
-  readonly runtimeContext: AgentRuntimeContext;
+  readonly sessionId: string;
   readonly logger: DebugLogger;
-  readonly config: Config;
   readonly runConfig: RunConfig;
   readonly outputConfig?: OutputConfig;
-  readonly toolExecutorContext: ToolExecutionConfig;
-  readonly messageBus?: MessageBus;
-  readonly hookOwner?: HookExecutionOwner;
   readonly modelParameters?: AdmittedModelParameters;
+  readonly streamTimeoutPolicy: StreamTimeoutPolicy;
+  readonly imagePayloadBudgetBytes: number;
+  readonly streamModel: (
+    message: ContentBlock[],
+    tools: ToolDeclaration[],
+    signal: AbortSignal,
+    promptId: string,
+    modelParameters?: AdmittedModelParameters,
+  ) => ReturnType<ChatSession['sendMessageStream']>;
+  readonly executeToolCalls: (
+    calls: ToolCallBlock[],
+    signal: AbortController,
+    promptId: string,
+    allowedToolNames?: readonly string[],
+  ) => Promise<IContent[]>;
+  readonly readTodoCompletionPrompt: () => Promise<string | null>;
 }
 
 /** Result of a single non-interactive turn iteration. */
@@ -379,7 +381,7 @@ function hasEffectiveEmitter(
 
 function resolveNonInteractiveToolName(
   rawName: string | undefined,
-  toolsView: ExecutionLoopContext['toolsView'],
+  resolveToolName: ExecutionLoopContext['resolveToolName'],
   effectiveEmitterAvailable: boolean,
 ): string | null {
   if (
@@ -390,63 +392,27 @@ function resolveNonInteractiveToolName(
   ) {
     return SCOPE_LOCAL_EMIT_TOOL_NAME;
   }
-  return resolveToolName(rawName, toolsView);
-}
-
-/**
- * Execute a single non-interactive turn: send the message, consume the
- * stream, and parse any textual tool calls.
- */
-async function sendNonInteractiveHookRequest(
-  chat: ChatSession,
-  currentMessages: IContent[],
-  toolsList: ToolDeclaration[],
-  signal: AbortSignal,
-  promptId: string,
-  modelParameters: AdmittedModelParameters | undefined,
-  hookOwner: HookExecutionOwner | undefined,
-): ReturnType<ChatSession['sendMessageStream']> {
-  return chat.sendMessageStream(
-    {
-      message: currentMessages[0]?.blocks ?? [],
-      modelParameters,
-      hookOwner,
-      config: {
-        abortSignal: signal,
-        tools: toolsList,
-      },
-    },
-    promptId,
-  );
+  return resolveToolName(rawName);
 }
 
 export async function runNonInteractiveTurn(
-  chat: ChatSession,
   currentMessages: IContent[],
   toolsList: ToolDeclaration[],
   abortController: AbortController,
   currentTurn: number,
-  sessionId: string,
-  subagentId: string,
   execCtx: ExecutionLoopContext,
-  config: Config,
-  logger: DebugLogger,
-  output: OutputObject,
-  modelParameters?: AdmittedModelParameters,
-  hookOwner?: HookExecutionOwner,
+  ctx: NonInteractiveRunContext,
 ): Promise<{
   functionCalls: ToolCallBlock[];
   textResponse: string;
   effectiveEmitterAvailable: boolean;
 }> {
-  const responseStream = await sendNonInteractiveHookRequest(
-    chat,
-    currentMessages,
+  const responseStream = await ctx.streamModel(
+    currentMessages[0]?.blocks ?? [],
     toolsList,
     abortController.signal,
-    `${sessionId}#${subagentId}#${currentTurn}`,
-    modelParameters,
-    hookOwner,
+    `${ctx.sessionId}#${ctx.subagentId}#${currentTurn}`,
+    ctx.modelParameters,
   );
   const {
     functionCalls: rawCalls,
@@ -459,10 +425,10 @@ export async function runNonInteractiveTurn(
     responseStream,
     abortController,
     currentTurn,
-    chat.getStreamTimeoutPolicy(),
-    logger,
-    subagentId,
-    output,
+    ctx.streamTimeoutPolicy,
+    ctx.logger,
+    ctx.subagentId,
+    ctx.output,
   );
   if (abortController.signal.aborted === true) {
     return {
@@ -483,10 +449,10 @@ export async function runNonInteractiveTurn(
       parseableTextResponse,
       functionCalls,
       execCtx,
-      (rawName, toolsView) =>
+      (rawName) =>
         resolveNonInteractiveToolName(
           rawName,
-          toolsView,
+          execCtx.resolveToolName,
           effectiveEmitterAvailable,
         ),
       hookRestrictedAllowedTools,
@@ -532,26 +498,10 @@ export async function dispatchNonInteractiveTurnResult(
     return null;
   }
   if (functionCalls.length > 0) {
-    const nextMessages = await processFunctionCalls(
+    const nextMessages = await ctx.executeToolCalls(
       functionCalls,
       abortController,
       promptId,
-      {
-        history: {
-          appendDisplay: (...args) =>
-            ctx.runtimeContext.history.appendDisplay(...args),
-        },
-        output: ctx.output,
-        ...(ctx.outputConfig === undefined
-          ? {}
-          : { outputConfig: ctx.outputConfig }),
-        subagentId: ctx.subagentId,
-        logger: ctx.logger,
-        toolExecutorContext: ctx.toolExecutorContext,
-        config: ctx.config,
-        messageBus: ctx.messageBus,
-        hookOwner: ctx.hookOwner,
-      },
     );
     const emittedKeysAfterToolCalls = Object.keys(ctx.output.emitted_vars);
     const completedDeclaredOutputs =
@@ -565,11 +515,7 @@ export async function dispatchNonInteractiveTurnResult(
     }
     return nextMessages;
   }
-  const todoReminder = await buildTodoCompletionPrompt(
-    ctx.runtimeContext,
-    ctx.subagentId,
-    ctx.logger,
-  );
+  const todoReminder = await ctx.readTodoCompletionPrompt();
   return checkGoalCompletion(execCtx, todoReminder, currentTurn);
 }
 
@@ -598,7 +544,6 @@ export function hasNonInteractiveMessages(
  * discriminated result so the caller loop has a single control branch.
  */
 async function runNonInteractiveLoopIteration(
-  chat: ChatSession,
   toolsList: ToolDeclaration[],
   abortController: AbortController,
   currentMessages: IContent[],
@@ -615,27 +560,19 @@ async function runNonInteractiveLoopIteration(
   if (check.shouldStop) return { action: 'stop' };
 
   const currentTurn = turnCounter.value++;
-  const sessionId = ctx.runtimeContext.state.sessionId;
-  const promptId = `${sessionId}#${ctx.subagentId}#${currentTurn}`;
+  const promptId = `${ctx.sessionId}#${ctx.subagentId}#${currentTurn}`;
   ctx.logger.debug(
     () => `Subagent ${ctx.subagentId} turn=${currentTurn} promptId=${promptId}`,
   );
 
   const { functionCalls, effectiveEmitterAvailable } =
     await runNonInteractiveTurn(
-      chat,
       currentMessages,
       toolsList,
       abortController,
       currentTurn,
-      sessionId,
-      ctx.subagentId,
       execCtx,
-      ctx.config,
-      ctx.logger,
-      ctx.output,
-      ctx.modelParameters,
-      ctx.hookOwner,
+      ctx,
     );
   if (abortController.signal.aborted === true) return { action: 'abort' };
 
@@ -676,7 +613,6 @@ async function runNonInteractiveLoopIteration(
  * iteration to {@link runNonInteractiveLoopIteration}.
  */
 export async function executeNonInteractiveRun(
-  chat: ChatSession,
   toolsList: ToolDeclaration[],
   abortController: AbortController,
   initialMessages: IContent[],
@@ -692,7 +628,6 @@ export async function executeNonInteractiveRun(
     let keepRunning = true;
     while (keepRunning) {
       const iteration = await runNonInteractiveLoopIteration(
-        chat,
         toolsList,
         abortController,
         currentMessages,

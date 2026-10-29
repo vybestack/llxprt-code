@@ -11,13 +11,11 @@
  * async-task-auto-trigger effect.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { createStreamEventAgent } from './streamEventAgent.js';
+import { useCallback, useEffect, useRef } from 'react';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   type MessageSenderType,
-  type RecordingIntegration,
   type ThoughtSummary,
   type ToolCallRequestInfo,
   type AgentRequestInput,
@@ -33,7 +31,8 @@ import { useStreamEventHandlers } from './useStreamEventHandlers.js';
 import { useProcessAgentEvent } from './use-process-agent-event.js';
 import type { AgentEventRouter } from './useAgentEventStream.js';
 import type { QueuedSubmission, SubmissionOutcome } from './types.js';
-import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
+import type { UiSubagentManager } from '../../cliUiRuntime.js';
+import { useObservationCallbacks } from '../../../observation/ObservationContext.js';
 
 import type { OperationLifecycleRegistry } from './operationLifecycle.js';
 import {
@@ -61,13 +60,39 @@ export type SubmissionExecutor = (
   fromQueue?: boolean,
 ) => Promise<SubmissionDisposition>;
 
-/**
- * Shared content-prefix identity resolver for the AgentEvent dispatcher. Reads
- * fresh runtime state at call time so a single stable reference can be reused.
- */
 export interface UseSubmitQueryDeps {
-  runtime: StreamRuntime;
-  agent: Agent;
+  readSessionId: () => string;
+  subscribeMcpUpdates: (listener: () => void) => () => void;
+  resetBuckets: () => void;
+  resetBucketSession: () => void;
+  ensureBucketsAuthenticated: () => Promise<void>;
+  atCommandConfig: Parameters<
+    typeof useStreamEventHandlers
+  >[0]['atCommandConfig'];
+  logUserPrompt: Parameters<typeof useStreamEventHandlers>[0]['logUserPrompt'];
+  getModel: Parameters<typeof useStreamEventHandlers>[0]['getModel'];
+  getProvider: Parameters<typeof useStreamEventHandlers>[0]['getProvider'];
+  readSelectedProvider: Parameters<
+    typeof useStreamEventHandlers
+  >[0]['readSelectedProvider'];
+  readCitations: Parameters<typeof useStreamEventHandlers>[0]['readCitations'];
+  readProfileName: Parameters<
+    typeof useStreamEventHandlers
+  >[0]['readProfileName'];
+  readContextLimit: Parameters<
+    typeof useStreamEventHandlers
+  >[0]['readContextLimit'];
+  getMaxSessionTurns: Parameters<
+    typeof useStreamEventHandlers
+  >[0]['getMaxSessionTurns'];
+  getProviderContextLimit: Agent['getProviderContextLimit'];
+  getContentPrefixIdentity: () => string | null;
+  getToolHandle: Agent['tools']['get'];
+  findResource: Agent['mcp']['findResource'];
+  readResource: Agent['mcp']['readResource'];
+  setLastPromptTokenCount: (count: number) => void;
+  subscribeTaskNotifications: Agent['tasks']['subscribeNotifications'];
+  flushRecording: () => Promise<void>;
   addItem: (
     item: HistoryItemWithoutId,
     timestamp?: number,
@@ -77,8 +102,6 @@ export interface UseSubmitQueryDeps {
   onDebugMessage: (message: string) => void;
   onCancelSubmit: (shouldRestorePrompt?: boolean) => void;
   onAuthError: () => void;
-  recordingIntegration?: RecordingIntegration;
-  recordingOwner?: 'agent' | 'raw';
   sanitizeContent: (text: string) => {
     text: string;
     blocked: boolean;
@@ -174,17 +197,24 @@ export interface UseSubmitQueryReturn {
   handleLoopDetectedEvent: () => void;
 }
 
-export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
-  const { startNewPrompt, getPromptCount } = useSessionStats();
-  const activeTurnRef = useRef(false);
-  const eventAgent = useMemo(
-    () => createStreamEventAgent(deps.agent),
-    [deps.agent],
-  );
-
-  const handlers = useStreamEventHandlers({
-    runtime: deps.runtime,
-    agent: eventAgent,
+function useSubmissionEventHandlers(
+  deps: UseSubmitQueryDeps,
+): ReturnType<typeof useStreamEventHandlers> {
+  return useStreamEventHandlers({
+    atCommandConfig: deps.atCommandConfig,
+    logUserPrompt: deps.logUserPrompt,
+    getModel: deps.getModel,
+    getProvider: deps.getProvider,
+    readSelectedProvider: deps.readSelectedProvider,
+    readCitations: deps.readCitations,
+    readProfileName: deps.readProfileName,
+    readContextLimit: deps.readContextLimit,
+    getMaxSessionTurns: deps.getMaxSessionTurns,
+    getProviderContextLimit: deps.getProviderContextLimit,
+    getContentPrefixIdentity: deps.getContentPrefixIdentity,
+    getToolHandle: deps.getToolHandle,
+    findResource: deps.findResource,
+    readResource: deps.readResource,
     settings: deps.settings,
     addItem: deps.addItem,
     onDebugMessage: deps.onDebugMessage,
@@ -210,13 +240,26 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     lastModelIdentityRef: deps.lastModelIdentityRef,
     subagentManager: deps.subagentManager,
   });
+}
 
-  const processAgentEvent = useProcessAgentEvent(deps, handlers, activeTurnRef);
+export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
+  const observation = useObservationCallbacks();
+  const { startNewPrompt, getPromptCount } = useSessionStats();
+  const activeTurnRef = useRef(false);
+  const handlers = useSubmissionEventHandlers(deps);
+
+  const processAgentEvent = useProcessAgentEvent(
+    deps,
+    handlers,
+    activeTurnRef,
+    observation,
+  );
 
   const scheduleNextQueuedSubmission = useScheduleNext(deps, activeTurnRef);
 
   const executeSubmission = useSubmitQueryCallback({
     ...deps,
+    observation,
     displayUserMessage: handlers.displayUserMessage,
     prepareQueryForAgent: handlers.prepareQueryForAgent,
     handleLoopDetectedEvent: handlers.handleLoopDetectedEvent,
@@ -251,8 +294,13 @@ function useSubmitQueryEffects(
   submitQuery: ReturnType<typeof useSubmitQueryCallback>,
   scheduleNextQueuedSubmission: () => void,
 ) {
-  const { submitQueryRef, streamingState, runtime, agent, enqueueSubmission } =
-    deps;
+  const {
+    submitQueryRef,
+    streamingState,
+    subscribeMcpUpdates,
+    subscribeTaskNotifications,
+    enqueueSubmission,
+  } = deps;
   const streamingStateRef = useRef(streamingState);
   const busyOpportunityRef = useRef(0);
   const deferredOpportunityRef = useRef(-1);
@@ -280,13 +328,11 @@ function useSubmitQueryEffects(
   }, [streamingState, scheduleNextQueuedSubmission]);
 
   useEffect(() => {
-    const unsubscribe = runtime.events.onMcpClientUpdate(
-      scheduleNextQueuedSubmission,
-    );
+    const unsubscribe = subscribeMcpUpdates(scheduleNextQueuedSubmission);
     return () => {
       unsubscribe();
     };
-  }, [runtime, scheduleNextQueuedSubmission]);
+  }, [subscribeMcpUpdates, scheduleNextQueuedSubmission]);
 
   useEffect(() => {
     const isAgentBusy = () => streamingStateRef.current !== StreamingState.Idle;
@@ -308,7 +354,7 @@ function useSubmitQueryEffects(
         scheduleNextQueuedSubmission();
       });
 
-    const unsubscribe = agent.tasks.subscribeNotifications(
+    const unsubscribe = subscribeTaskNotifications(
       isAgentBusy,
       triggerAgentTurn,
     );
@@ -318,7 +364,11 @@ function useSubmitQueryEffects(
       notificationRef.current = null;
       unsubscribe();
     };
-  }, [agent, scheduleNextQueuedSubmission, enqueueSubmission]);
+  }, [
+    subscribeTaskNotifications,
+    scheduleNextQueuedSubmission,
+    enqueueSubmission,
+  ]);
 }
 
 interface DrainLifecycle {
@@ -728,8 +778,7 @@ function initTurn(
   deps.loopDetectedRef.current = false;
 
   const resolvedPromptId =
-    promptId ??
-    deps.runtime.session.getSessionId() + '########' + getPromptCount();
+    promptId ?? deps.readSessionId() + '########' + getPromptCount();
 
   const trimmedStr = typeof query === 'string' ? query.trim() : '';
 

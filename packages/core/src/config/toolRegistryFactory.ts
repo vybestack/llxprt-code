@@ -1,87 +1,81 @@
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import type { GitHubReportOperations } from '@vybestack/llxprt-code-tools';
 import type {
-  TaskExecutionPolicy,
-  SubagentRunPolicy,
-} from '../session/session-settings-policies.js';
-import type { SessionHookOwner } from '../hooks/session-hook-owner.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ToolGovernance } from '@vybestack/llxprt-code-tools';
-import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
-import type { RegistryPolicy } from '@vybestack/llxprt-code-tools';
+  GitHubReportOperations,
+  RegistryPolicy,
+  ToolExecutionPolicy,
+} from '@vybestack/llxprt-code-tools';
+import type { NetworkFetch } from '../utils/fetch.js';
 /**
  * Tool registry factory — extracted from Config.createToolRegistry().
  *
  * Creates and populates a ToolRegistry with all core tools,
  * applying coreTools/excludeTools governance.
  */
-import type { WorkspaceTrustControlPort } from '../services/workspace-trust-ports.js';
 
-import type { InstructionReadOperations } from '../services/workspace-memory-owner.js';
-import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import type {
-  WorkspacePathOperations,
-  WorkspaceTextOperations,
-  WorkspaceScanOperations,
   WorkspaceIgnoreOperations,
+  WorkspacePathOperations,
+  WorkspaceScanOperations,
+  WorkspaceTextOperations,
 } from '../services/workspace-filesystem-owner.js';
 
-import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
+  ASTEditTool,
+  ASTReadFileTool,
+  ApplyPatchTool,
+  AstGrepTool,
+  CheckAsyncTasksTool,
+  CodeSearchTool,
   DeleteLineRangeTool,
+  DirectWebFetchTool,
+  EditTool,
+  ExaWebSearchTool,
+  GenerateImageTool,
+  GithubTool,
   GlobTool,
   GrepTool,
   InsertAtLineTool,
   LSTool,
+  ListSubagentsTool,
+  MemoryTool,
   ReadFileTool,
   ReadLineRangeTool,
   ReadManyFilesTool,
   RipGrepTool,
-  WriteFileTool,
-  AstGrepTool,
-  StructuralAnalysisTool,
-  ASTEditTool,
-  ASTReadFileTool,
-  EditTool,
-  ApplyPatchTool,
-  TodoWrite,
-  TodoRead,
-  TodoPause,
-  ListSubagentsTool,
-  CheckAsyncTasksTool,
-  ExaWebSearchTool,
-  GithubTool,
-  CodeSearchTool,
-  DirectWebFetchTool,
-  MemoryTool,
   ShellTool,
-  GenerateImageTool,
+  StructuralAnalysisTool,
+  TodoPause,
+  TodoRead,
+  TodoWrite,
+  ToolRegistry,
+  WriteFileTool,
 } from '@vybestack/llxprt-code-tools';
 import { resolveImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
 
-import { CoreToolHostAdapter } from '../tools-adapters/CoreToolHostAdapter.js';
-import { CoreIdeServiceAdapter } from '../tools-adapters/CoreIdeServiceAdapter.js';
-import { CoreToolKeyStorageAdapter } from '../tools-adapters/CoreToolKeyStorageAdapter.js';
-import { CoreStorageServiceAdapter } from '../tools-adapters/CoreStorageServiceAdapter.js';
-import { CoreMessageBusAdapter } from '../tools-adapters/CoreMessageBusAdapter.js';
-import { CoreShellToolHostAdapter } from '../tools-adapters/CoreShellToolHostAdapter.js';
-import { SubagentCatalog } from '../tools-adapters/subagentCatalog.js';
-import { CoreAsyncTaskServiceAdapter } from '../tools-adapters/CoreAsyncTaskServiceAdapter.js';
-import { CoreToolRegistryHostAdapter } from '../tools-adapters/CoreToolRegistryHostAdapter.js';
-import { CoreTodoServiceAdapter } from '../tools-adapters/CoreTodoServiceAdapter.js';
+import type {
+  AnyDeclarativeTool,
+  ILspService,
+} from '@vybestack/llxprt-code-tools';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { ImageOperationRunner } from '../services/image/imageCapability.js';
 import { ImageOperationError } from '../services/image/imageOperation.js';
 import type {
   ProfileDefinitionReads,
   SubagentDefinitionReads,
 } from '../services/workspace-definition-owner.js';
-import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import type {
-  ILspService,
-  AnyDeclarativeTool,
-} from '@vybestack/llxprt-code-tools';
-import type { WorkspaceTrustReadPort } from '../services/workspace-trust-reader.js';
 import type { WorkspaceIdePort } from '../services/workspace-ide-owner.js';
+import type { WorkspaceTrustReadPort } from '../services/workspace-trust-reader.js';
+import { CoreAsyncTaskServiceAdapter } from '../tools-adapters/CoreAsyncTaskServiceAdapter.js';
+import { CoreIdeServiceAdapter } from '../tools-adapters/CoreIdeServiceAdapter.js';
+import { CoreMessageBusAdapter } from '../tools-adapters/CoreMessageBusAdapter.js';
+import { CoreShellToolHostAdapter } from '../tools-adapters/CoreShellToolHostAdapter.js';
+import { CoreStorageServiceAdapter } from '../tools-adapters/CoreStorageServiceAdapter.js';
+import { CoreTodoServiceAdapter } from '../tools-adapters/CoreTodoServiceAdapter.js';
+import { CoreToolHostAdapter } from '../tools-adapters/CoreToolHostAdapter.js';
+import { ToolKeyStorage } from '../tools/tool-key-storage.js';
+import { CoreToolKeyStorageAdapter } from '../tools-adapters/CoreToolKeyStorageAdapter.js';
+import { CoreToolRegistryHostAdapter } from '../tools-adapters/CoreToolRegistryHostAdapter.js';
+import { SubagentCatalog } from '../tools-adapters/subagentCatalog.js';
 import type { Config } from './config.js';
 
 /**
@@ -113,31 +107,9 @@ export interface TaskToolRegistration {
   /** static ToolClass.Name ('task') — becomes ToolRecord.displayName; also matched by allow-list */
   readonly staticName: string;
   /** Constructor args builder, stored in ToolRecord.args */
-  buildArgs(config: unknown, taskToolArgs: TaskToolArgs): unknown[];
-  /** Create a tool instance */
-  create(config: unknown, args: TaskToolArgs): AnyDeclarativeTool;
-}
-
-/** TaskTool dependencies argument shape */
-export interface TaskToolArgs {
-  readonly hookOwner?: SessionHookOwner;
-  readonly workspaceTrust?: WorkspaceTrustControlPort;
-  createChildSettings?: () => SettingsService;
-  readonly telemetry?: RootTelemetry;
-  readTaskPolicy?: () => TaskExecutionPolicy;
-  readRunPolicy?: () => SubagentRunPolicy;
-  readGovernance?: () => ToolGovernance;
-  instructions?: InstructionReadOperations;
-  readonly toolSelection?: ToolSelection;
-  workspacePaths?: WorkspacePathOperations;
-  readMcpInstructions?: () => string | undefined;
-  profileManager: ProfileDefinitionReads | undefined;
-  subagentManager: SubagentDefinitionReads | undefined;
-  /**
-   * Required session/runtime MessageBus threaded into the SubagentOrchestrator so
-   * child execution shares the parent approval routing.
-   */
-  messageBus: MessageBus;
+  buildArgs(): unknown[];
+  /** Create a tool instance already bound to its session. */
+  create(): AnyDeclarativeTool;
 }
 
 /** Tool record for settings UI */
@@ -160,6 +132,48 @@ export interface ToolRegistryHost {
    * @requirement REQ-INV-003
    * Returns the injected TaskToolRegistration, or undefined to use core-local default.
    */
+}
+
+/** Workspace filesystem, trust and definition readers tool construction needs. */
+export interface ToolRegistryWorkspace {
+  readonly paths: WorkspacePathOperations;
+  readonly files: WorkspaceTextOperations;
+  readonly ignore: WorkspaceIgnoreOperations;
+  readonly scans: WorkspaceScanOperations;
+  readonly trust: WorkspaceTrustReadPort;
+}
+
+/** Profile and subagent definition readers tool construction needs. */
+export interface ToolRegistryDefinitions {
+  readonly profiles: ProfileDefinitionReads;
+  readonly subagents: SubagentDefinitionReads;
+}
+
+/**
+ * Everything one registry construction needs.
+ *
+ * Required keys are the ones construction cannot proceed without; the
+ * optional keys describe capabilities a host may legitimately not have (no
+ * IDE, no image backend, no GitHub broker), or defaults.
+ */
+export interface ToolRegistryCreation {
+  readonly config: Config;
+  readonly host: ToolRegistryHost;
+  readonly messageBus: MessageBus;
+  readonly readTaskSchemaPolicy: () => RegistryPolicy;
+  readonly readExecution: () => ToolExecutionPolicy;
+  readonly workspace: ToolRegistryWorkspace;
+  readonly definitions: ToolRegistryDefinitions;
+  /** Absent registration records a disabled task-tool diagnostic; never throws. */
+  readonly registration: TaskToolRegistration | undefined;
+  readonly lspDiagnostics?: ILspService;
+  readonly ide?: WorkspaceIdePort;
+  readonly summarizeOutput?: ToolOutputSummarizer;
+  readonly githubReports?: GitHubReportOperations;
+  readonly imageOperation?: ImageOperationRunner;
+  readonly telemetry?: RootTelemetry;
+  readonly discover?: boolean;
+  readonly requestFetch: NetworkFetch;
 }
 
 function getTaskToolMissingReason(
@@ -314,12 +328,10 @@ function registerTaskTool(
   excludeTools: string[] | undefined,
   allPotentialTools: ToolRecord[],
   registration: TaskToolRegistration,
-  config: unknown,
-  taskToolArgs: TaskToolArgs,
 ): void {
   const className = registration.className;
   const toolName = registration.staticName || className;
-  const args = registration.buildArgs(config, taskToolArgs);
+  const args = registration.buildArgs();
   let isEnabled = true;
   let reason: string | undefined;
 
@@ -351,7 +363,7 @@ function registerTaskTool(
   };
 
   if (isEnabled) {
-    registry.registerTool(registration.create(config, taskToolArgs));
+    registry.registerTool(registration.create());
     toolRecord.isRegistered = true;
     toolRecord.reason = undefined;
   } else if (!reason) {
@@ -379,28 +391,75 @@ function registerMemoryTool(
   });
 }
 
+/** Shell and memory tools share the file-backed workspace and execution policy. */
+interface ShellAndMemoryRegistration {
+  readonly config: Config;
+  readonly paths: WorkspacePathOperations;
+  readonly readExecution: () => ToolExecutionPolicy;
+  readonly summarizeOutput?: ToolOutputSummarizer;
+  readonly messageBusAdapter: CoreMessageBusAdapter;
+}
+
+function registerShellAndMemoryTools(
+  registerCoreTool: RegisterCoreToolFn,
+  input: ShellAndMemoryRegistration,
+): void {
+  const { config, paths, readExecution, summarizeOutput, messageBusAdapter } =
+    input;
+  registerCoreTool(
+    ShellTool,
+    new CoreShellToolHostAdapter(config, paths, readExecution, summarizeOutput),
+    messageBusAdapter,
+  );
+  registerMemoryTool(
+    registerCoreTool,
+    config,
+    readExecution,
+    messageBusAdapter,
+  );
+}
+
+/** Inputs that shape every standard (non-agent) tool registration. */
+interface StandardToolRegistration {
+  readonly config: Config;
+  readonly host: ToolRegistryHost;
+  readonly messageBus: MessageBus;
+  readonly workspace: ToolRegistryWorkspace;
+  readonly toolHostAdapter: CoreToolHostAdapter;
+  readonly readExecution: () => ToolExecutionPolicy;
+  readonly summarizeOutput?: ToolOutputSummarizer;
+  readonly lspDiagnostics?: ILspService;
+  readonly ide?: WorkspaceIdePort;
+  readonly githubReports?: GitHubReportOperations;
+  readonly imageOperation?: ImageOperationRunner;
+  readonly requestFetch: NetworkFetch;
+}
+
 function registerStandardTools(
   registerCoreTool: RegisterCoreToolFn,
-  config: Config,
-  host: ToolRegistryHost,
-  messageBus: MessageBus,
-  paths: WorkspacePathOperations,
-  toolHostAdapter: CoreToolHostAdapter,
-  readExecution: () => ToolExecutionPolicy,
-  summarizeOutput?: (
-    content: string,
-    signal: AbortSignal,
-    tokenBudget?: number,
-  ) => Promise<string>,
-  lspDiagnostics?: ILspService,
-  ide?: WorkspaceIdePort,
-  githubReports?: GitHubReportOperations,
-  imageOperation?: ImageOperationRunner,
+  input: StandardToolRegistration,
 ): void {
+  const {
+    config,
+    host,
+    messageBus,
+    workspace,
+    toolHostAdapter,
+    readExecution,
+    summarizeOutput,
+    lspDiagnostics,
+    ide,
+    githubReports,
+    imageOperation,
+    requestFetch,
+  } = input;
   const ideServiceAdapter = new CoreIdeServiceAdapter(
-    ide ?? { getClient: () => undefined },
+    ide?.openDiff.bind(ide),
+    ide?.readConnection.bind(ide),
   );
-  const toolKeyStorageAdapter = new CoreToolKeyStorageAdapter();
+  const toolKeyStorageAdapter = new CoreToolKeyStorageAdapter(
+    new ToolKeyStorage(),
+  );
   const messageBusAdapter = new CoreMessageBusAdapter(messageBus);
   const todoServiceAdapter = new CoreTodoServiceAdapter(
     () => config.globalDataRoot,
@@ -439,18 +498,14 @@ function registerStandardTools(
   registerIdeLspTool(DeleteLineRangeTool);
   registerIdeLspTool(InsertAtLineTool);
   registerIdeLspTool(ApplyPatchTool);
-  registerCoreTool(
-    ShellTool,
-    new CoreShellToolHostAdapter(config, paths, readExecution, summarizeOutput),
-    messageBusAdapter,
-  );
-  registerMemoryTool(
-    registerCoreTool,
+  registerShellAndMemoryTools(registerCoreTool, {
     config,
+    paths: workspace.paths,
     readExecution,
+    summarizeOutput,
     messageBusAdapter,
-  );
-  registerCoreTool(ExaWebSearchTool, { keyStorage: toolKeyStorageAdapter });
+  });
+
   // Registered only when the CLI layer supplied a broker transport, so a
   // host without the wiring does not advertise a tool it cannot serve.
   // @plan PLAN-20260731-GHBROKER.P15
@@ -461,15 +516,15 @@ function registerStandardTools(
   registerCoreTool(TodoWrite, todoServiceAdapter, toolHostAdapter);
   registerCoreTool(TodoRead, todoServiceAdapter);
   registerCoreTool(TodoPause, todoServiceAdapter, toolHostAdapter);
-  registerCoreTool(CodeSearchTool, {
-    keyStorage: toolKeyStorageAdapter,
-    readTokenLimit: () => readExecution()['tool-output-max-tokens'],
-  });
-  registerCoreTool(DirectWebFetchTool, toolHostAdapter);
+  registerNetworkTools(
+    registerCoreTool,
+    toolKeyStorageAdapter,
+    toolHostAdapter,
+    readExecution,
+    requestFetch,
+  );
 
   registerImageTool(registerCoreTool, readExecution, imageOperation);
-
-  void CoreIdeServiceAdapter;
 }
 
 function registerImageTool(
@@ -501,20 +556,29 @@ function registerImageTool(
   });
 }
 
+/** Inputs that shape the agent-owned tool registrations. */
+interface AgentToolRegistration {
+  readonly host: ToolRegistryHost;
+  readonly allPotentialTools: ToolRecord[];
+  readonly registry: ToolRegistry;
+  readonly effectiveCoreTools: string[] | undefined;
+  readonly definitions: ToolRegistryDefinitions;
+  /** Absent registration records a disabled task-tool diagnostic; never throws. */
+  readonly registration: TaskToolRegistration | undefined;
+}
+
 function registerAgentTools(
   registerCoreTool: RegisterCoreToolFn,
-  config: Config,
-  profileManager: ProfileDefinitionReads,
-  subagentManager: SubagentDefinitionReads,
-  host: ToolRegistryHost,
-  allPotentialTools: ToolRecord[],
-  registry: ToolRegistry,
-  effectiveCoreTools: string[] | undefined,
-  messageBus: MessageBus,
-  paths: WorkspacePathOperations,
-  registration: TaskToolRegistration | undefined,
-  readMcpInstructions: (() => string | undefined) | undefined,
+  input: AgentToolRegistration,
 ): void {
+  const {
+    host,
+    allPotentialTools,
+    registry,
+    effectiveCoreTools,
+    definitions,
+    registration,
+  } = input;
   // @plan PLAN-20260610-ISSUE1592.P03
   // @requirement REQ-INV-003
   // Resolve registration from the composition root. If absent, core records a
@@ -525,30 +589,23 @@ function registerAgentTools(
       allPotentialTools,
       effectiveCoreTools,
       host.getExcludeTools(),
-      profileManager,
-      subagentManager,
+      definitions.profiles,
+      definitions.subagents,
     );
   } else {
-    const taskToolArgs = {
-      workspacePaths: paths,
-      readMcpInstructions,
-      profileManager,
-      subagentManager,
-      messageBus,
-    };
-
     registerTaskTool(
       registry,
       effectiveCoreTools,
       host.getExcludeTools(),
       allPotentialTools,
       registration,
-      config,
-      taskToolArgs,
     );
   }
 
-  registerCoreTool(ListSubagentsTool, new SubagentCatalog(subagentManager));
+  registerCoreTool(
+    ListSubagentsTool,
+    new SubagentCatalog(definitions.subagents),
+  );
 
   const checkAsyncTasksArgs = new CoreAsyncTaskServiceAdapter();
   registerCoreTool(CheckAsyncTasksTool, checkAsyncTasksArgs);
@@ -580,42 +637,22 @@ function registerAgentTools(
  * Applies coreTools allow-list and excludeTools deny-list governance.
  * Returns the registry and the list of all potential tools (for settings UI).
  */
-type ToolOutputSummarizer = (
+export type ToolOutputSummarizer = (
   content: string,
   signal: AbortSignal,
   tokenBudget?: number,
 ) => Promise<string>;
 
 export async function createToolRegistry(
-  host: ToolRegistryHost,
-  config: Config,
-  messageBus: MessageBus,
-  readTaskSchemaPolicy: () => RegistryPolicy,
-  readExecution: () => ToolExecutionPolicy,
-  paths: WorkspacePathOperations,
-  files: WorkspaceTextOperations,
-  ignore: WorkspaceIgnoreOperations,
-  scans: WorkspaceScanOperations,
-  summarizeOutput?: ToolOutputSummarizer,
-  lspDiagnostics?: ILspService,
-  registration?: TaskToolRegistration,
-  readMcpInstructions?: () => string | undefined,
-  discover = true,
-  profileManager?: ProfileDefinitionReads,
-  subagentManager?: SubagentDefinitionReads,
-  ide?: WorkspaceIdePort,
-  trust?: WorkspaceTrustReadPort,
-  githubReports?: GitHubReportOperations,
-  imageOperation?: ImageOperationRunner,
-  telemetry?: RootTelemetry,
+  input: ToolRegistryCreation,
 ): Promise<{ registry: ToolRegistry; allPotentialTools: ToolRecord[] }> {
-  const selected = requireRegistryAssembly(
-    profileManager,
-    subagentManager,
-    trust,
-  );
+  const { config, host, messageBus, readTaskSchemaPolicy, readExecution } =
+    input;
+  const { workspace, definitions } = input;
+  const discover = input.discover ?? true;
+  const requestFetch = input.requestFetch;
   const registry = new ToolRegistry(
-    new CoreToolRegistryHostAdapter(config, selected[2]),
+    new CoreToolRegistryHostAdapter(config, workspace.trust),
     new CoreMessageBusAdapter(messageBus),
     readTaskSchemaPolicy,
   );
@@ -627,48 +664,40 @@ export async function createToolRegistry(
     allPotentialTools,
   );
 
-  registerStandardTools(
-    registerCoreTool,
+  registerStandardTools(registerCoreTool, {
     config,
     host,
     messageBus,
-    paths,
-    new CoreToolHostAdapter(
+    workspace,
+    toolHostAdapter: new CoreToolHostAdapter(
       config,
-      paths,
-      files,
-      ignore,
-      scans,
+      workspace.paths,
+      workspace.files,
+      workspace.ignore,
+      workspace.scans,
       readExecution,
-      selected[2],
-      telemetry,
+      workspace.trust,
+      input.telemetry,
     ),
     readExecution,
-    summarizeOutput,
-    lspDiagnostics,
-    ide,
-    githubReports,
-    imageOperation,
-  );
+    lspDiagnostics: input.lspDiagnostics,
+    ide: input.ide,
+    summarizeOutput: input.summarizeOutput,
+    githubReports: input.githubReports,
+    imageOperation: input.imageOperation,
+    requestFetch,
+  });
 
-  registerAgentTools(
-    registerCoreTool,
-    config,
-    selected[0],
-    selected[1],
+  registerAgentTools(registerCoreTool, {
     host,
     allPotentialTools,
     registry,
-    effectiveRegistryCoreTools(host.getCoreTools()),
-    messageBus,
-    paths,
-    registration,
-    readMcpInstructions,
-  );
+    effectiveCoreTools: effectiveRegistryCoreTools(host.getCoreTools()),
+    definitions,
+    registration: input.registration,
+  });
 
-  if (discover) await registry.discoverAllTools();
-  registry.sortTools();
-  return { registry, allPotentialTools };
+  return finishToolRegistry(registry, allPotentialTools, discover);
 }
 
 function effectiveRegistryCoreTools(
@@ -688,20 +717,31 @@ function effectiveRegistryCoreTools(
   return effectiveCoreTools;
 }
 
-function requireRegistryAssembly(
-  profiles: ProfileDefinitionReads | undefined,
-  subagents: SubagentDefinitionReads | undefined,
-  trust: WorkspaceTrustReadPort | undefined,
-): readonly [
-  ProfileDefinitionReads,
-  SubagentDefinitionReads,
-  WorkspaceTrustReadPort,
-] {
-  if (profiles === undefined || subagents === undefined)
-    throw new Error(
-      'Tool construction requires explicit workspace definition readers',
-    );
-  if (trust === undefined)
-    throw new Error('Tool construction requires explicit workspace trust');
-  return [profiles, subagents, trust];
+function registerNetworkTools(
+  registerCoreTool: RegisterCoreToolFn,
+  toolKeyStorageAdapter: CoreToolKeyStorageAdapter,
+  toolHostAdapter: CoreToolHostAdapter,
+  readExecution: () => ToolExecutionPolicy,
+  requestFetch: NetworkFetch,
+): void {
+  registerCoreTool(ExaWebSearchTool, {
+    keyStorage: toolKeyStorageAdapter,
+    fetch: requestFetch,
+  });
+  registerCoreTool(CodeSearchTool, {
+    keyStorage: toolKeyStorageAdapter,
+    fetch: requestFetch,
+    readTokenLimit: () => readExecution()['tool-output-max-tokens'],
+  });
+  registerCoreTool(DirectWebFetchTool, toolHostAdapter, requestFetch);
+}
+
+async function finishToolRegistry(
+  registry: ToolRegistry,
+  allPotentialTools: ToolRecord[],
+  discover: boolean,
+): Promise<{ registry: ToolRegistry; allPotentialTools: ToolRecord[] }> {
+  if (discover) await registry.discoverAllTools();
+  registry.sortTools();
+  return { registry, allPotentialTools };
 }

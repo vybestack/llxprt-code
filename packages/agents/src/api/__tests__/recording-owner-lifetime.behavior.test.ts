@@ -1,3 +1,4 @@
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -34,6 +35,7 @@ function recordingPath(path: string | undefined): string {
 }
 
 describe('native recording owner lifetime', () => {
+  useRecordingPrompts();
   for (const kind of ['write', 'flush'] as const) {
     it(`releases startup lock after ${kind} failure and records a later public turn`, async () => {
       await withNativeRecordingFixture(async ({ agent, chatsDir }) => {
@@ -204,74 +206,76 @@ describe('native recording owner lifetime', () => {
 
   for (const point of ['retirement listener', 'after attachment'] as const) {
     it(`releases failed subscription ownership at ${point} and records with its replacement`, async () => {
-      await withNativeRecordingFixture(async ({ agent, chatsDir }) => {
-        await agent.setHistory([
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'subscription-failure-seed' }],
-          },
-        ]);
-        const history = agent.agentClient.getHistoryService();
-        if (history === null) throw new Error('Missing history');
-        const attach = history.attachJournal.bind(history);
-        const failure = new Error('subscription rejected');
-        const events = [
-          'contentAdded',
-          'compressionStarted',
-          'compressionLockReleased',
-          'compressionEnded',
-        ];
-        const before = events.map((event) => history.listenerCount(event));
-        let acquired: string[] = [];
-        const fault =
-          point === 'after attachment'
-            ? spyOn(history, 'attachJournal').mockImplementation(
-                async (...args) => {
-                  await attach(...args);
+      await withNativeRecordingFixture(
+        async ({ agent, chatsDir, clientFor }) => {
+          await agent.setHistory([
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'subscription-failure-seed' }],
+            },
+          ]);
+          const history = clientFor(agent).getHistoryService();
+          if (history === null) throw new Error('Missing history');
+          const attach = history.attachJournal.bind(history);
+          const failure = new Error('subscription rejected');
+          const events = [
+            'contentAdded',
+            'compressionStarted',
+            'compressionLockReleased',
+            'compressionEnded',
+          ];
+          const before = events.map((event) => history.listenerCount(event));
+          let acquired: string[] = [];
+          const fault =
+            point === 'after attachment'
+              ? spyOn(history, 'attachJournal').mockImplementation(
+                  async (...args) => {
+                    await attach(...args);
+                    acquired = readdirSync(chatsDir);
+                    throw failure;
+                  },
+                )
+              : spyOn(history, 'onJournalRetired').mockImplementation(() => {
                   acquired = readdirSync(chatsDir);
                   throw failure;
-                },
-              )
-            : spyOn(history, 'onJournalRetired').mockImplementation(() => {
-                acquired = readdirSync(chatsDir);
-                throw failure;
-              });
-        try {
-          await expect(
-            agent.session.setRecording({ enabled: true }),
-          ).rejects.toThrow(failure);
-        } finally {
-          fault.mockRestore();
-        }
-        expect(acquired.some((file) => file.endsWith('.lock'))).toBe(true);
-        expect(acquired.some((file) => file.endsWith('.llxj'))).toBe(true);
-        expect(
-          events.map(
-            (event, index) => history.listenerCount(event) - before[index],
-          ),
-        ).toStrictEqual([0, 0, 0, 0]);
-        expect(agent.session.getRecording().enabled).toBe(false);
-        expect(
-          (await filesIn(chatsDir)).filter((file) => file.endsWith('.lock')),
-        ).toStrictEqual([]);
-        await agent.session.setRecording({ enabled: true });
-        const path = recordingPath(agent.session.getRecording().path);
-        await drain(
-          agent.stream('replacement-recorder-after-failed-subscription'),
-        );
-        expect(agent.session.getRecording()).toMatchObject({
-          enabled: true,
-          path,
-        });
-        await agent.session.setRecording({ enabled: false });
-        expect(rowTexts(await nativeRows(path))).toContain(
-          'replacement-recorder-after-failed-subscription',
-        );
-        expect(rowTexts(await nativeRows(path))).toContain('turn one reply');
-        expect(
-          (await filesIn(chatsDir)).filter((file) => file.endsWith('.lock')),
-        ).toStrictEqual([]);
-      });
+                });
+          try {
+            await expect(
+              agent.session.setRecording({ enabled: true }),
+            ).rejects.toThrow(failure);
+          } finally {
+            fault.mockRestore();
+          }
+          expect(acquired.some((file) => file.endsWith('.lock'))).toBe(true);
+          expect(acquired.some((file) => file.endsWith('.llxj'))).toBe(true);
+          expect(
+            events.map(
+              (event, index) => history.listenerCount(event) - before[index],
+            ),
+          ).toStrictEqual([0, 0, 0, 0]);
+          expect(agent.session.getRecording().enabled).toBe(false);
+          expect(
+            (await filesIn(chatsDir)).filter((file) => file.endsWith('.lock')),
+          ).toStrictEqual([]);
+          await agent.session.setRecording({ enabled: true });
+          const path = recordingPath(agent.session.getRecording().path);
+          await drain(
+            agent.stream('replacement-recorder-after-failed-subscription'),
+          );
+          expect(agent.session.getRecording()).toMatchObject({
+            enabled: true,
+            path,
+          });
+          await agent.session.setRecording({ enabled: false });
+          expect(rowTexts(await nativeRows(path))).toContain(
+            'replacement-recorder-after-failed-subscription',
+          );
+          expect(rowTexts(await nativeRows(path))).toContain('turn one reply');
+          expect(
+            (await filesIn(chatsDir)).filter((file) => file.endsWith('.lock')),
+          ).toStrictEqual([]);
+        },
+      );
     }, 30000);
   }
 
@@ -283,7 +287,7 @@ describe('native recording owner lifetime', () => {
         const applying = agent.profiles
           .applySnapshot({
             version: 1,
-            provider: 'claudecode',
+            provider: 'recording-refresh-oauth',
             model: 'recording-refresh-model',
             modelParams: {},
             ephemeralSettings: {},

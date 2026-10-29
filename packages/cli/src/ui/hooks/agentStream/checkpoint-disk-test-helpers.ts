@@ -125,7 +125,7 @@ export async function saveCheckpoint(
     checkpointTool,
     dir,
     checkpointGit,
-    fixture.client,
+    fixture.history.streamRawHistory.bind(fixture.history),
 
     () => {},
     ops,

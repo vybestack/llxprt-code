@@ -9,11 +9,7 @@ import {
   deferred,
 } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import {
-  buildAgent,
-  internalConfig,
-  internalSettingsOwner,
-} from '../../../api/__tests__/helpers/agentHarness.js';
+import { buildCliStyleConfig } from '../../../api/__tests__/helpers/buildCliStyleConfig.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 
@@ -172,13 +168,13 @@ export async function withOrchestratorHistory<T>(
     async (history, reader) => {
       if (!(history instanceof ControlledOrchestratorHistory))
         throw new Error('Missing controlled history');
-      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-      const config = internalConfig(agent);
-      internalSettingsOwner(agent).writeNamedParameter(
-        'context-limit',
-        100_000_000,
-      );
-      const client = agent.agentClient;
+      const {
+        agentClient: client,
+        cleanup,
+        config,
+        settingsOwner,
+      } = await buildCliStyleConfig('plain-text.jsonl');
+      settingsOwner.writeNamedParameter('context-limit', 100_000_000);
       const priorHistory = client.getHistoryService();
       client.storeHistoryServiceForReuse(history);
       try {

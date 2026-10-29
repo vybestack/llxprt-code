@@ -200,10 +200,11 @@ async function statIdentity(filePath: string): Promise<FileIdentity | null> {
 
 /**
  * Write the complete lock payload to a temp file (O_EXCL) and sync it.
- * Returns true on success, false for a retryable collision (EEXIST) or a
- * missing parent directory (ENOENT).  All other errors (ENOSPC, EACCES,
- * EROFS, EDQUOT, …) are rethrown so the caller does not mistake them for
- * "lock already exists".
+ * Returns true on success and false only when the parent directory is
+ * missing (ENOENT), so the caller can create it and retry.  Every other
+ * failure (EEXIST, ENOSPC, EACCES/EPERM, EROFS, EDQUOT, …) is rethrown: none
+ * of them says anything about whether the lock exists, so they must not be
+ * mistaken for "lock already exists".
  */
 async function writeTempLockFile(
   tempPath: string,
@@ -216,9 +217,7 @@ async function writeTempLockFile(
     await fd.sync();
     return true;
   } catch (error: unknown) {
-    const code = (error as NodeJS.ErrnoException).code;
-    // EEXIST (uuid collision) or ENOENT (parent dir missing) -> retryable.
-    if (code === 'EEXIST' || code === 'ENOENT') return false;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
     throw error; // Propagate genuine I/O failures.
   } finally {
     await fd?.close().catch(() => {});
@@ -273,8 +272,12 @@ async function tryCreateLock(
     written = await writeTempLockFile(tempPath, lockContent);
   }
   if (!written) {
-    await safeUnlink(tempPath);
-    return false;
+    // The directory exists yet the temp file's parent is still missing: a
+    // concurrent removal, not a held lock.
+    throw Object.assign(
+      new Error(`Lock directory disappeared: ${path.dirname(lockPath)}`),
+      { code: 'ENOENT' },
+    );
   }
 
   // Atomically link the temp file to the lock path.

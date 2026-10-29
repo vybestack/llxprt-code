@@ -32,9 +32,13 @@ import type {
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IModel } from '../IModel.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { collectContents } from '../utils/collectContents.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function makeContent(text: string): IContent {
   return {
@@ -49,36 +53,29 @@ function makeContent(text: string): IContent {
  */
 function buildRuntimeContext(): ProviderRuntimeContext {
   return {
-    settingsService: new SettingsService(),
-    config: {
-      getTargetDir: () => process.cwd(),
-      getTokenizerFactory: () => undefined,
-      getConversationLogPath: () => '',
-
-      getModel: () => '',
-      getEphemeralSetting: () => undefined,
-      getUserMemory: () => '',
-      getConversationLoggingEnabled: () => false,
-      getRedactionConfig: () => ({
-        redactApiKeys: false,
-        redactCredentials: false,
-        redactFilePaths: false,
-        redactUrls: false,
-        redactEmails: false,
-        redactPersonalInfo: false,
-      }),
-    } as unknown as Config,
     runtimeId: 'prompt-envelope-wrapper-chain-test',
     metadata: {},
   };
 }
 
 function buildChainOptions(contents: IContent[]): GenerateChatOptions {
+  const settingsService = new SettingsService();
   const runtime = buildRuntimeContext();
   return {
     contents,
 
-    invocation: captureProviderInvocation(runtime, 'estimating-provider'),
+    invocation: captureProviderInvocation(
+      {
+        fetch: requestFetch,
+        runtimeId: runtime.runtimeId,
+        metadata: runtime.metadata,
+        globalSettings: settingsService.getAllGlobalSettings(),
+        providerSettings: settingsService.getProviderSettings(
+          'estimating-provider',
+        ),
+      },
+      'estimating-provider',
+    ),
   };
 }
 

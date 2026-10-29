@@ -377,6 +377,7 @@ describe('native semantic purge selected-view HTTP', () => {
                     override,
                   );
                 const invocation = createRuntimeInvocationContext({
+                  fetch: globalThis.fetch,
                   runtimeId: 'purge-view',
                   providerName: 'openai',
                   ephemeralsSnapshot: {

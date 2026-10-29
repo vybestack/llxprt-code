@@ -19,11 +19,11 @@ function registerConfigTransfer(size: number): void {
         size,
         async (_old, _source, owners, _config, sessionClient) => {
           const counters = createRowCounters();
-          await sessionClient.refreshAuth(undefined, {
+          await sessionClient.clients.refreshAuth(undefined, {
             ownership: owners,
             counters: { ...counters.counters, ownership: owners },
           });
-          const client = sessionClient.getAgentClient();
+          const client = sessionClient.clients.getAgentClient();
           const stream = client.streamHistory();
           const next = await stream.next();
           if (next.done === true) throw new Error('Missing replacement row');
@@ -69,7 +69,7 @@ function registerConfigFailure(size: number): void {
             const fault = new Error(`config source ${mode}`);
             const abort = new AbortController();
             if (mode === 'fault') source.fault = fault;
-            const result = sessionClient
+            const result = sessionClient.clients
               .refreshAuth(undefined, {
                 signal: abort.signal,
                 ownership: owners,
@@ -85,7 +85,7 @@ function registerConfigFailure(size: number): void {
               }),
             ]);
             try {
-              expect(sessionClient.getAgentClient()).toBe(old);
+              expect(sessionClient.clients.getAgentClient()).toBe(old);
               expect(owners.snapshot().liveRows).toBe(1);
               expect(owners.within(reinitializeBounds)).toBe(true);
               expect(source.scanned).toBe(31);
@@ -97,7 +97,7 @@ function registerConfigFailure(size: number): void {
             expect(await result).toBe(fault);
             expect(
               await historyDigest(
-                sessionClient.getAgentClient().streamHistory(),
+                sessionClient.clients.getAgentClient().streamHistory(),
               ),
             ).toStrictEqual({
               count: size,
@@ -123,8 +123,10 @@ describe('large Config replacement source', () => {
     await withReinitializeHistory(
       1,
       async (_old, _source, owners, _config, sessionClient) => {
-        await sessionClient.refreshAuth(undefined, { ownership: owners });
-        const client = sessionClient.getAgentClient();
+        await sessionClient.clients.refreshAuth(undefined, {
+          ownership: owners,
+        });
+        const client = sessionClient.clients.getAgentClient();
         await client.startChat([]);
         expect(await historyDigest(client.streamHistory())).toStrictEqual({
           count: 1,

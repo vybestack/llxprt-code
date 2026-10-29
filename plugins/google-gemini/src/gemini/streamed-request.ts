@@ -111,6 +111,10 @@ export function geminiWireContents(content: Content, model: string): Content[] {
 /** Replace only the SDK's empty contents field, preserving envelope key order. */
 export function createStreamedGeminiFetch(
   contents: () => AsyncIterable<Content>,
+  requestFetch: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
   model: string,
   systemInstruction: string | undefined,
   onRequestBytes?: (bytes: number) => void,
@@ -193,7 +197,7 @@ export function createStreamedGeminiFetch(
       headers.delete('content-length');
       const requestInit = { ...init, headers, body, duplex: 'half' };
       try {
-        return await globalThis.fetch(input, requestInit);
+        return await requestFetch(input, requestInit);
       } finally {
         await iterator.return(undefined);
         onRequestBytes?.(bytes);
@@ -201,9 +205,9 @@ export function createStreamedGeminiFetch(
     },
     {
       preconnect: (url: string | URL) => {
-        const preconnect: unknown = Reflect.get(globalThis.fetch, 'preconnect');
+        const preconnect: unknown = Reflect.get(requestFetch, 'preconnect');
         if (typeof preconnect === 'function')
-          Reflect.apply(preconnect, globalThis.fetch, [url]);
+          Reflect.apply(preconnect, requestFetch, [url]);
       },
     },
   );

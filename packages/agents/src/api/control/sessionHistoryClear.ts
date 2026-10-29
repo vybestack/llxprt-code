@@ -9,6 +9,11 @@ import { collectMediaReferences } from '@vybestack/llxprt-code-core/storage/medi
 import { randomUUID } from 'node:crypto';
 import { nativeHistoryPrefixOwner } from '@vybestack/llxprt-code-core/services/history/native-history-prefix.js';
 
+export interface HistoryMutationOptions {
+  readonly signal?: AbortSignal;
+  readonly publish?: () => void | Promise<void>;
+}
+
 interface ClearMediaScope {
   readonly references: HistoryMediaIndex;
   readonly store: LocalMediaStore;
@@ -100,18 +105,33 @@ async function preflightClear(
 }
 
 async function rewriteClientHistory(
-  client: AgentClientContract,
+  client: Pick<
+    AgentClientContract,
+    'getHistoryService' | 'getHistory' | 'resetChat' | 'setHistoryFromSource'
+  >,
   store: LocalMediaStore,
   selectCut: (rows: HistoryDensityRows) => number,
   turns: number,
   fromEnd: boolean,
+  options?: HistoryMutationOptions,
 ): Promise<number> {
   const native = nativeHistoryPrefixOwner(client.getHistoryService());
   if (native !== undefined) {
-    return native.withPrefix(turns, fromEnd, store, async (prefix) => {
-      if (prefix.removed !== 0) await client.resetChat(prefix);
-      return prefix.removed;
-    });
+    return native.withPrefix(
+      turns,
+      fromEnd,
+      store,
+      async (prefix) => {
+        if (prefix.removed !== 0) {
+          await client.resetChat(prefix);
+          options?.signal?.throwIfAborted();
+          client.getHistoryService()?.resetCacheAnchorSeq();
+          await options?.publish?.();
+        }
+        return prefix.removed;
+      },
+      options?.signal,
+    );
   }
   const rows = new HistoryDensityRows();
   const media: ClearMediaScope = {
@@ -125,7 +145,11 @@ async function rewriteClientHistory(
     if (cut === rows.length) return 0;
     await preflightClear(rows, cut, store);
     try {
+      options?.signal?.throwIfAborted();
       await client.resetChat(prefixRows(rows, cut));
+      options?.signal?.throwIfAborted();
+      client.getHistoryService()?.resetCacheAnchorSeq();
+      await options?.publish?.();
     } catch (error: unknown) {
       try {
         await client.setHistoryFromSource(rows.streamRows());
@@ -153,20 +177,35 @@ async function rewriteClientHistory(
 }
 
 export async function clearClientHistory(
-  client: AgentClientContract,
+  client: Pick<
+    AgentClientContract,
+    'getHistoryService' | 'getHistory' | 'resetChat' | 'setHistoryFromSource'
+  >,
   store: LocalMediaStore,
+  options?: HistoryMutationOptions,
 ): Promise<void> {
-  await rewriteClientHistory(client, store, clearCut, 2, false);
+  await rewriteClientHistory(client, store, clearCut, 2, false, options);
 }
 
 /** Removes the last `turns` human-led turns; returns the number of rows removed. */
 export async function restoreClientTurns(
-  client: AgentClientContract,
+  client: Pick<
+    AgentClientContract,
+    'getHistoryService' | 'getHistory' | 'resetChat' | 'setHistoryFromSource'
+  >,
   store: LocalMediaStore,
   turns: number,
+  options?: HistoryMutationOptions,
 ): Promise<number> {
   if (!Number.isSafeInteger(turns) || turns < 0) {
     throw new Error('Turns to remove must be a non-negative integer');
   }
-  return rewriteClientHistory(client, store, restoreCut(turns), turns, true);
+  return rewriteClientHistory(
+    client,
+    store,
+    restoreCut(turns),
+    turns,
+    true,
+    options,
+  );
 }

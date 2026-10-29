@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { readFile } from 'node:fs/promises';
-import { chatCommand } from './chatCommand.js';
 import { withChatMutationFixture } from './__tests__/support/chat-mutation-test-helpers.js';
 
 const image =
@@ -12,7 +11,7 @@ for (const name of ['clear', 'restore']) {
     it('closes capture and media reservations without persisting or changing UI when aborted after a reservation', async () => {
       await withChatMutationFixture(
         4,
-        async ({ context, history, client, recording }) => {
+        async ({ chatCommand, context, history, client, recording }) => {
           await client.setHistory([
             { speaker: 'human', blocks: [{ type: 'text', text: 'question' }] },
             {

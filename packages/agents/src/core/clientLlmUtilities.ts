@@ -13,7 +13,11 @@ import { shouldIncludeSubagentDelegationForConfig } from './clientToolGovernance
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import {
+  createContentGenerator,
+  type ContentGenerator,
+  type ContentGeneratorConfig,
+} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type {
   ModelGenerationSettings,
   ModelOutput,
@@ -100,6 +104,7 @@ export async function generateJson(
         systemInstruction,
         temperature: generationConfig.temperature ?? 0,
         promptId: lastPromptId,
+        abortSignal,
       });
 
     const result = await retryWithBackoff(apiCall, { signal: abortSignal });
@@ -185,8 +190,7 @@ export async function generateContent(
       temperature: configToUse.temperature,
       topP: configToUse.topP,
       maxOutputTokens: configToUse.maxOutputTokens,
-      systemInstruction:
-        typeof systemInstruction === 'string' ? systemInstruction : undefined,
+      systemInstruction: configToUse.systemInstruction ?? systemInstruction,
     };
 
     const request = {
@@ -228,6 +232,7 @@ export async function generateEmbedding(
   baseLlmClient: BaseLLMClient,
   texts: string[],
   embeddingModel: string,
+  abortSignal?: AbortSignal,
 ): Promise<number[][]> {
   if (texts.length === 0) {
     return [];
@@ -236,6 +241,7 @@ export async function generateEmbedding(
   const result = await baseLlmClient.generateEmbedding({
     text: texts,
     model: embeddingModel,
+    abortSignal,
   });
 
   return result as number[][];
@@ -252,4 +258,15 @@ function jsonRequestPrompt(iContents: IContent[]): string {
     )
     .filter((s) => s.length > 0)
     .join('\n\n');
+}
+
+export async function initializeClientContentGenerator(
+  configuration: ContentGeneratorConfig | undefined,
+  config: Config,
+): Promise<ContentGenerator> {
+  if (configuration === undefined)
+    throw new Error(
+      'Content generator config not initialized. Initialize the session client owner first.',
+    );
+  return createContentGenerator(configuration, config, config.getSessionId());
 }

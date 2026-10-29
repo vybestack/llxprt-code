@@ -10,20 +10,16 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import {
-  fromConfig,
-  toConfigParameters,
-  type Agent,
-} from '@vybestack/llxprt-code-agents';
+import { toConfigParameters, type Agent } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { escapeShellArg } from '@vybestack/llxprt-code-core/utils/shell-utils.js';
-import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
+import { nativeHookCommand } from './helpers/native-hook-command.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { fromConfig } from '../fromConfig.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 const wireSchema = z
   .object({
@@ -72,6 +68,7 @@ const hookInputSchema = z.object({
 });
 
 describe('public Agent physical model hooks', () => {
+  const credentials = useOwnedCredentials();
   it('sends the subprocess-modified contents to the actual localhost provider request', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'hook-provider-wire-'));
     const script = join(directory, 'before-model.ts');
@@ -80,7 +77,9 @@ describe('public Agent physical model hooks', () => {
       script,
       `import { writeFileSync } from 'node:fs';
 const input = JSON.parse(await Bun.stdin.text());
-writeFileSync(${JSON.stringify(inputPath)}, JSON.stringify(input));
+const output = process.argv[2];
+if (output === undefined) throw new Error('Missing hook input path');
+writeFileSync(output, JSON.stringify(input), 'utf8');
 console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...input.llm_request.contents, { speaker: 'human', blocks: [{ type: 'text', text: input.session_id + ':physical instruction' }] }] } } }));
 `,
     );
@@ -105,7 +104,6 @@ console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...
       handlers.push(work);
     });
     let config: Config | undefined;
-    let mcp: McpRuntimeOwner | undefined;
     let agent: Agent | undefined;
     const failures: unknown[] = [];
     try {
@@ -135,25 +133,28 @@ console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...
               hooks: [
                 {
                   type: HookType.Command,
-                  command: `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(script, 'bash')}`,
+                  command: nativeHookCommand(script, [inputPath]),
                 },
               ],
             },
           ],
         },
       });
-      mcp = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
-      agent = await fromConfig({
-        ...createSessionSettingsFixture(config),
+      const settings = new SettingsService();
+      for (const [key, value] of Object.entries(config.getInitialSettings()))
+        settings.set(key, value);
+      agent = await fromConfig(
         config,
-        mcpRuntime: mcp,
-        mcpOwnership: 'caller',
-        activation: {
-          provider: 'openai',
-          model: 'wire-model',
-          cliOverrides: { key: 'local-test-key', baseUrl },
+        settings,
+        {
+          activation: {
+            provider: 'openai',
+            model: 'wire-model',
+            cliOverrides: { key: 'local-test-key', baseUrl },
+          },
         },
-      });
+        credentials().authority,
+      );
       const runtimeId = agent.getRuntimeId();
       const text: string[] = [];
       for await (const event of agent.stream('initial caller input')) {
@@ -199,10 +200,7 @@ console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...
       failures.push(error);
     } finally {
       const retired = await Promise.allSettled([agent?.dispose()]);
-      const resources = await Promise.allSettled([
-        mcp?.dispose(),
-        config?.dispose(),
-      ]);
+      const resources = await Promise.allSettled([config?.dispose()]);
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await Promise.all(handlers);

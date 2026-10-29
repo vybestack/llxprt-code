@@ -1,16 +1,13 @@
+import { capturedAgentClient } from './helpers/agent-client-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
-import { describe, expect, it, spyOn } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { useTempDir } from './helpers/journal-fixture-support.js';
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
 import { AgentClient } from '../../core/client.js';
 import type { Agent } from '../agent.js';
-import {
-  buildAgent,
-  drain,
-  internalAgentClient,
-} from './helpers/agentHarness.js';
+import { buildAgent, drain } from './helpers/agentHarness.js';
 import { collectAgentHistory } from './helpers/collect-agent-history.js';
 
 async function collectGarbage(): Promise<void> {
@@ -30,7 +27,21 @@ function row(index: number): IContent {
     blocks: [{ type: 'text', text: `prefix ${index}` }],
   };
 }
-async function withSession(
+const sessions = new Set<Promise<void>>();
+function withSession(
+  root: string,
+  size: number,
+  action: (agent: Agent) => Promise<void>,
+): Promise<void> {
+  const session = runSession(root, size, action);
+  sessions.add(session);
+  void session.then(
+    () => sessions.delete(session),
+    () => sessions.delete(session),
+  );
+  return session;
+}
+async function runSession(
   root: string,
   size: number,
   action: (agent: Agent) => Promise<void>,
@@ -54,6 +65,9 @@ async function blocks(agent: Agent): Promise<Array<IContent['blocks']>> {
 }
 
 describe('native session prefix publication lifecycle', () => {
+  afterEach(async () => {
+    await Promise.allSettled(sessions);
+  }, 60000);
   const directory = useTempDir('native-prefix-lifecycle-');
   it('denies creating APIs across roots for clear, restore and unchanged selections', async () => {
     await withSession(directory(), 65, async (agent) => {
@@ -71,7 +85,7 @@ describe('native session prefix publication lifecycle', () => {
   for (const stage of ['producer', 'client-finalization']) {
     it(`restores the pinned version after ${stage} failure and continues on the same writer`, async () => {
       await withSession(directory(), 130, async (agent) => {
-        const history = internalAgentClient(agent).getHistoryService();
+        const history = capturedAgentClient(agent).getHistoryService();
         if (history === null) throw new Error('Missing native history');
         const old = await history.openDumpSnapshot();
         const failure = new Error(`failed ${stage}`);
@@ -209,7 +223,7 @@ describe('native session prefix publication lifecycle', () => {
       }, true);
       expect(receipt).toStrictEqual({ directories: [], files: [] });
       expect(await blocks(agent)).toStrictEqual([]);
-      const history = internalAgentClient(agent).getHistoryService();
+      const history = capturedAgentClient(agent).getHistoryService();
       if (history === null) throw new Error('Missing native history');
       history.add(row(10));
       await history.waitForCommit();

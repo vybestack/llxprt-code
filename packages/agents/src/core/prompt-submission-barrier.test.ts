@@ -1,3 +1,4 @@
+import { chatSessionPorts } from './chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { TurnProcessor } from './TurnProcessor.js';
@@ -20,7 +21,12 @@ function directProcessor(
   setup: Awaited<ReturnType<typeof processorFixture>>,
 ): TurnProcessor {
   return new TurnProcessor(
-    setup.runtime,
+    chatSessionPorts(setup.runtime).turn,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     setup.compression,
     () => setup.provider,
     (_source, metadata) => ({ ...setup.runtime.providerRuntime, metadata }),

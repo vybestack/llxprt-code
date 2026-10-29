@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ISecureStore } from '@vybestack/llxprt-code-auth';
+import { OAuthUIBridge, type ISecureStore } from '@vybestack/llxprt-code-auth';
 import { KeyringTokenStore } from '@vybestack/llxprt-code-core';
 import { AuthFlowOrchestrator } from '../auth-flow-orchestrator.js';
 import { ProviderRegistry } from '../provider-registry.js';
@@ -54,12 +54,54 @@ function createDeferred(): Deferred {
   return { promise, resolve: resolvePromise };
 }
 
+interface Settleable extends Deferred {
+  readonly reject: (error: unknown) => void;
+}
+
+function createSettleable(): Settleable {
+  let resolvePromise = (): void => {
+    throw new Error('Settleable promise was not initialized');
+  };
+  let rejectPromise = (_error: unknown): void => {
+    throw new Error('Settleable promise was not initialized');
+  };
+  const promise = new Promise<void>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+  return { promise, resolve: resolvePromise, reject: rejectPromise };
+}
+
 class GatedTokenStore extends KeyringTokenStore {
   private nextSaveGate:
     | { readonly started: Deferred; readonly release: Deferred }
     | undefined;
 
   private nextRemoveFailure: Error | undefined;
+
+  private readonly lockRelease = createSettleable();
+
+  /**
+   * Settles only after the auth-lock release I/O has finished. The
+   * orchestrator rejects a cancelled caller before the shared flight's
+   * finally block releases the lock, so teardown must wait on this event.
+   */
+  get lockReleased(): Promise<void> {
+    return this.lockRelease.promise;
+  }
+
+  override async releaseAuthLock(
+    provider: string,
+    bucket?: string,
+  ): Promise<void> {
+    try {
+      await super.releaseAuthLock(provider, bucket);
+    } catch (error) {
+      this.lockRelease.reject(error);
+      throw error;
+    }
+    this.lockRelease.resolve();
+  }
 
   failNextRemove(error: Error): void {
     this.nextRemoveFailure = error;
@@ -282,6 +324,7 @@ describe('AuthFlowOrchestrator signal threading', () => {
         tokenStore,
         registry,
         createFacade(tokenStore),
+        new OAuthUIBridge(),
       ),
       registry,
     };
@@ -371,6 +414,7 @@ describe('AuthFlowOrchestrator signal threading', () => {
     gate.release.resolve();
 
     await expect(authentication).rejects.toBe(cancellation);
+    await gatedStore.lockReleased;
     expect(await gatedStore.getToken('recording', 'work')).toStrictEqual(
       priorToken,
     );
@@ -397,6 +441,7 @@ describe('AuthFlowOrchestrator signal threading', () => {
     gate.release.resolve();
 
     await expect(authentication).rejects.toBe(cancellation);
+    await gatedStore.lockReleased;
     expect(await gatedStore.getToken('recording', 'work')).toBeNull();
     expect(registry.isOAuthEnabled('recording')).toBe(false);
   });
@@ -422,6 +467,7 @@ describe('AuthFlowOrchestrator signal threading', () => {
     gate.release.resolve();
 
     await expect(authentication).rejects.toBe(cancellation);
+    await gatedStore.lockReleased;
     expect(registry.isOAuthEnabled('recording')).toBe(false);
   });
 
@@ -601,6 +647,7 @@ describe('AuthFlowOrchestrator signal threading', () => {
         return registry;
       })(),
       createFacade(gatedStore),
+      new OAuthUIBridge(),
     );
     const controller = new AbortController();
 

@@ -3,7 +3,11 @@ import { expect } from 'bun:test';
 import { readdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { getProjectHash, type IContent } from '@vybestack/llxprt-code-core';
+import {
+  getProjectHash,
+  type AgentClientContract,
+  type IContent,
+} from '@vybestack/llxprt-code-core';
 import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
 import { stateReaderOf } from '@vybestack/llxprt-code-core/journal/journalReaderState.js';
 import { sha256KeyHash } from '@vybestack/llxprt-code-core/journal/idKeys.js';
@@ -18,9 +22,12 @@ import {
   decodeSessionFact,
 } from '@vybestack/llxprt-code-core/recording/sessionMetaKeys.js';
 
-export async function activePath(agent: Agent): Promise<string> {
+export async function activePath(
+  agent: Agent,
+  client: AgentClientContract,
+): Promise<string> {
   const path = await lockedRecordingPath(agent);
-  const history = agent.agentClient.getHistoryService();
+  const history = client.getHistoryService();
   if (history === null) throw new Error('Missing live history owner');
   expect(history.journalPath()).toBe(path);
   return path;

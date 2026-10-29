@@ -40,7 +40,14 @@ import {
   type PartitionIdentity,
 } from '../../scripts/lib/bun-test-partition.js';
 import { spawn } from 'node:child_process';
-import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { writeReportFile } from '../../scripts/lib/junit-report-writer.js';
+import {
+  readdirSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import { isAbsolute, join, relative, win32 } from 'node:path';
 import {
   envPerFileTimeoutMs,
@@ -53,6 +60,10 @@ import {
   installRunnerSignalHandlers,
   trackRunnerChild,
 } from '../../scripts/lib/bespoke-runner-isolation.js';
+import {
+  collectStallDiagnostics,
+  createStallProbe,
+} from './runner-stall-inspector.js';
 
 process.env.LLXPRT_RUNNING_TESTS = 'true';
 
@@ -132,6 +143,16 @@ export function isTestFile(fileName: string): boolean {
   return TEST_FILE_PATTERN.test(fileName);
 }
 
+export function requiresFakeEngineExecutables(
+  selectedFiles: readonly string[],
+  platform: NodeJS.Platform,
+): boolean {
+  return (
+    platform === 'win32' &&
+    selectedFiles.some((file) => file.startsWith('src/utils/sandbox-'))
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Partition selection (issue #3185)
 // ---------------------------------------------------------------------------
@@ -205,13 +226,16 @@ export async function runTestFileWithTimeoutRetry<
 
 export async function runTestFile(
   file: string,
-  env: NodeJS.ProcessEnv = { ...process.env },
+  inheritedEnv: NodeJS.ProcessEnv = { ...process.env },
   onTimeout?: () => void,
+  onTimedOutAttempt?: (attempt: TestResult) => void,
 ): Promise<TestResult> {
   assertRunnerActive();
   // Resolve the budget before spawning so an invalid override fails fast
   // instead of stranding an already-started child without a timeout.
   const timeoutMs = fileTimeoutForFile(file);
+  const stallProbe = createStallProbe();
+  const env = { ...inheritedEnv, ...stallProbe.env };
   return new Promise((resolve) => {
     let settled = false;
     let output = '';
@@ -245,21 +269,42 @@ export async function runTestFile(
     // which is how a timeout on one file turns into timeouts on others.
     let killedByTimeout = false;
 
-    const timer = setTimeout(() => {
-      killedByTimeout = true;
-      killTimedOutChild({ runner: 'cli', child });
+    const reapTimedOutChild = async (): Promise<void> => {
+      // A process that already printed its summary and still did not exit holds
+      // something nothing has named; ask it before the kill destroys the
+      // evidence. A hang before the summary is an ordinary test hang.
+      if (TESTS_FINISHED_PATTERN.test(stripAnsi(output)) && child.pid) {
+        try {
+          console.error(
+            await collectStallDiagnostics(stallProbe, child.pid, file),
+          );
+        } catch (error) {
+          // Diagnostics are best effort and must never keep the kill from
+          // happening.
+          console.error(
+            `Stall diagnostics for ${file} failed: ${String(error)}`,
+          );
+        }
+      }
+      if (!settled) killTimedOutChild({ runner: 'cli', child });
       try {
         onTimeout?.();
       } catch (error) {
         console.error(`Test timeout callback failed: ${String(error)}`);
       }
+    };
+
+    const timer = setTimeout(() => {
+      killedByTimeout = true;
+      void reapTimedOutChild();
     }, timeoutMs);
 
     child.on('exit', (code) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve({
+      stallProbe.dispose();
+      const result: TestResult = {
         file,
         passed: classifyAttempt({
           runner: 'cli',
@@ -269,13 +314,18 @@ export async function runTestFile(
         exitCode: killedByTimeout ? null : code,
         timedOut: killedByTimeout,
         output,
-      });
+      };
+      // Reported here, before the retry replaces this result, so a recovered
+      // timeout still leaves its output behind.
+      if (result.timedOut) onTimedOutAttempt?.(result);
+      resolve(result);
     });
 
     child.on('error', (error: Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      stallProbe.dispose();
       resolve({
         file,
         passed: false,
@@ -297,6 +347,151 @@ export function generateJUnit(results: readonly TestResult[]): string {
     totalFiles,
     failedCount,
   });
+}
+
+/**
+ * Writes the report for the given files. The report is written beside its
+ * destination and renamed into place, so a cancellation mid-write cannot leave
+ * a truncated document.
+ */
+export function writeJUnitReport(
+  reportPath: string,
+  results: readonly TestResult[],
+): void {
+  const ordered = [...results].sort((a, b) => a.file.localeCompare(b.file));
+  const temporaryPath = `${reportPath}.${process.pid}.tmp`;
+  try {
+    writeReportFile(temporaryPath, generateJUnit(ordered));
+    renameSync(temporaryPath, reportPath);
+  } catch (error) {
+    rmSync(temporaryPath, { force: true });
+    throw error;
+  }
+}
+
+/**
+ * Minimum spacing between partial-report snapshots. A snapshot sorts and
+ * serialises every completed file, so writing one per completed file costs
+ * quadratic work across the run. A job cancelled at its time limit loses at
+ * most this much progress from the report; the runner also flushes on
+ * SIGTERM/SIGINT/SIGHUP and at the end of the run.
+ */
+export const JUNIT_SNAPSHOT_INTERVAL_MS = 30_000;
+
+export interface JUnitCheckpoint {
+  /** Retains a completed file; snapshots only when the interval has elapsed. */
+  record(result: TestResult): void;
+  /** Writes every file recorded so far, regardless of the interval. */
+  flush(): void;
+  /** True when the most recent write failed. */
+  readonly writeFailed: boolean;
+  /** Number of report writes attempted and the time they took. */
+  readonly stats: { readonly writes: number; readonly elapsedMs: number };
+}
+
+export interface JUnitCheckpointOptions {
+  readonly reportPath: string;
+  readonly intervalMs?: number;
+  readonly now?: () => number;
+  readonly write?: (reportPath: string, results: readonly TestResult[]) => void;
+  readonly logError?: (message: string) => void;
+}
+
+export function createJUnitCheckpoint(
+  options: JUnitCheckpointOptions,
+): JUnitCheckpoint {
+  const {
+    reportPath,
+    intervalMs = JUNIT_SNAPSHOT_INTERVAL_MS,
+    now = () => performance.now(),
+    write = writeJUnitReport,
+    logError = (message) => console.error(message),
+  } = options;
+  const recorded: TestResult[] = [];
+  let lastWriteAt = now();
+  let writeFailed = false;
+  let writes = 0;
+  let elapsedMs = 0;
+
+  const flush = (): void => {
+    const startedAt = now();
+    writes++;
+    try {
+      write(reportPath, recorded);
+      writeFailed = false;
+    } catch (error) {
+      // A write failure must not replace the run's verdict with an unhandled
+      // exception, but losing the required CI artifact is still a failed run.
+      writeFailed = true;
+      logError(
+        `Failed to write junit.xml: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    lastWriteAt = now();
+    elapsedMs += lastWriteAt - startedAt;
+  };
+
+  return {
+    record(result) {
+      recorded.push(result);
+      if (now() - lastWriteAt >= intervalMs) flush();
+    },
+    flush,
+    get writeFailed() {
+      return writeFailed;
+    },
+    get stats() {
+      return { writes, elapsedMs };
+    },
+  };
+}
+
+/**
+ * Bun prints this summary line only after every test in the file has run, so
+ * a child that timed out with the line present finished its tests and then
+ * failed to exit.
+ */
+const TESTS_FINISHED_PATTERN = /^Ran \d+ tests? across \d+ files?\./m;
+
+/**
+ * Names how a timed-out attempt ended: after its summary line (the tests ran,
+ * the process then failed to exit) or before it (a test or the process hung).
+ */
+function timeoutSuffix(output: string): string {
+  return TESTS_FINISHED_PATTERN.test(stripAnsi(output))
+    ? ' [timeout: tests finished, process did not exit]'
+    : ' [timeout]';
+}
+
+/** One-line progress record: verdict, position, file and wall-clock time. */
+export function formatFileProgress(
+  result: Pick<TestResult, 'file' | 'passed' | 'timedOut' | 'output'>,
+  position: number,
+  total: number,
+  durationMs: number,
+): string {
+  const verdict = result.passed ? 'PASS' : 'FAIL';
+  const suffix = result.timedOut ? timeoutSuffix(result.output) : '';
+  return `${verdict} (${position}/${total}) ${result.file} ${(
+    durationMs / 1000
+  ).toFixed(2)}s${suffix}`;
+}
+
+/**
+ * Record of an attempt that timed out and is about to be retried. The retry's
+ * result replaces this one, so without this record a recovered timeout leaves
+ * no evidence of whether its tests finished.
+ */
+export function formatTimedOutAttempt(
+  result: Pick<TestResult, 'file' | 'output'>,
+  attemptNumber: number,
+): string {
+  return [
+    `TIMED OUT (attempt ${attemptNumber}) ${result.file}${timeoutSuffix(result.output)}`,
+    failureExcerpt(stripAnsi(result.output), 6000),
+  ].join('\n');
 }
 
 export function exitCodeForRun(
@@ -336,16 +531,32 @@ async function main(): Promise<void> {
     );
   }
 
+  const reportPath = join(root, 'junit.xml');
+  const checkpoint = createJUnitCheckpoint({ reportPath });
   // Session-scoped fake system root (issue #3622): every spawned test process
   // gets HOME/TMPDIR/XDG_* inside a throwaway root while this runner keeps
   // its real environment for the sentinel guard.
   const isolation = createBespokeRunnerIsolation(process.env);
   const removeSignalHandlers = installRunnerSignalHandlers(() => {
+    // Leave the results gathered so far when the job is cancelled.
+    checkpoint.flush();
     isolation.finalize();
   });
   let exitCode = 1;
   let failFast = false;
   try {
+    // Native fixture compilation must not compete with the test worker pool
+    // or run inside a suite's hook deadline. Keep these build artifacts out
+    // of disposable state directories, whose removal Windows can lock.
+    if (requiresFakeEngineExecutables(selectedFiles, process.platform)) {
+      const { prepareFakeEngineExecutables } = await import(
+        './test-utils/fake-engine-executables.js'
+      );
+      Object.assign(
+        isolation.sessionEnv,
+        await prepareFakeEngineExecutables(join(root, 'tmp')),
+      );
+    }
     const results: TestResult[] = [];
     let nextIndex = 0;
     let completed = 0;
@@ -355,21 +566,44 @@ async function main(): Promise<void> {
         const index = nextIndex++;
         if (index >= selectedFiles.length) return;
         const file = selectedFiles[index];
+        const startedAt = performance.now();
+        // A retry only follows a timeout, so counting timed-out attempts
+        // numbers each attempt correctly.
+        let timedOutAttempts = 0;
         const result = await isolation.runFile(file, () =>
           runTestFileWithTimeoutRetry(file, () =>
-            runTestFile(file, isolation.sessionEnv, () => {
-              failFast = true;
-            }),
+            runTestFile(
+              file,
+              isolation.sessionEnv,
+              () => {
+                failFast = true;
+              },
+              (attempt) => {
+                console.error(
+                  formatTimedOutAttempt(attempt, ++timedOutAttempts),
+                );
+              },
+            ),
           ),
         );
+        const durationMs = performance.now() - startedAt;
         results.push(result);
         completed++;
-        if (!result.passed) {
-          console.error(
-            `FAIL (${completed}/${selectedFiles.length}) ${result.file}${
-              result.timedOut ? ' [timeout]' : ''
-            }`,
-          );
+        checkpoint.record(result);
+        const progress = formatFileProgress(
+          result,
+          completed,
+          selectedFiles.length,
+          durationMs,
+        );
+        if (result.passed) {
+          console.log(progress);
+        } else {
+          console.error(progress);
+          // Emit the failure detail now: a job cancelled before every worker
+          // finishes must still leave the cause of each completed failure.
+          console.error(`\n----- ${result.file} -----`);
+          console.error(failureExcerpt(stripAnsi(result.output), 6000));
         }
       }
     }
@@ -384,11 +618,6 @@ async function main(): Promise<void> {
 
     results.sort((a, b) => a.file.localeCompare(b.file));
     const failed = results.filter((result) => !result.passed);
-
-    for (const result of failed) {
-      console.error(`\n----- ${result.file} -----`);
-      console.error(failureExcerpt(stripAnsi(result.output), 6000));
-    }
 
     const cases = results.reduce(
       (total, result) => {
@@ -413,20 +642,14 @@ async function main(): Promise<void> {
         `(${cases.pass + cases.fail + cases.skip + cases.todo} total)`,
     );
 
-    // A write failure must not replace the run's verdict with an unhandled
-    // exception, but losing the required CI artifact is still a failed run.
-    let junitWriteFailed = false;
-    try {
-      writeFileSync(join(root, 'junit.xml'), generateJUnit(results));
-    } catch (error) {
-      junitWriteFailed = true;
-      console.error(
-        `Failed to write junit.xml: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-    exitCode = exitCodeForRun(failed.length, junitWriteFailed);
+    checkpoint.flush();
+    const { writes, elapsedMs } = checkpoint.stats;
+    console.log(`junit.xml: ${writes} writes, ${elapsedMs.toFixed(0)}ms total`);
+    exitCode = exitCodeForRun(failed.length, checkpoint.writeFailed);
+  } catch (error) {
+    // A worker failure ends the run early; keep what had completed.
+    checkpoint.flush();
+    throw error;
   } finally {
     try {
       if (isolation.finalize() > 0) exitCode = 1;

@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 /**
  * Behavioral tests for the consolidated inline notification path (issue #1770).
@@ -19,7 +20,6 @@
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type React from 'react';
 import type { Config } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import { renderHook } from '../../../../__tests__/render.js';
 import { useStreamEventHandlers } from '../useStreamEventHandlers.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
@@ -56,7 +56,7 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
     };
     const { result } = renderHook(() =>
       useStreamEventHandlers({
-        runtime: createStreamRuntimeForTest(mockConfig),
+        ...streamPolicyOperations(createStreamRuntimeForTest(mockConfig)),
         settings: mockSettings,
         addItem: mockAddItem,
         onDebugMessage: vi.fn(),
@@ -80,10 +80,11 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
         handleSlashCommand: vi.fn().mockResolvedValue(false),
         logger: null,
         shellModeActive: false,
-        agent: {
-          tools: { get: vi.fn(() => undefined) },
-          getActiveProfileName: () => 'work',
-        } as unknown as Agent,
+        getProviderContextLimit: () => undefined,
+        getContentPrefixIdentity: () => null,
+        getToolHandle: () => undefined,
+        findResource: () => undefined,
+        readResource: async () => ({}),
         loopDetectedRef: { current: false },
         lastProfileNameRef,
         lastModelInfoRef: { current: null },
@@ -131,7 +132,7 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
   ) {
     const { result } = renderHook(() =>
       useStreamEventHandlers({
-        runtime: createStreamRuntimeForTest(mockConfig),
+        ...streamPolicyOperations(createStreamRuntimeForTest(mockConfig)),
         settings: mockSettings,
         addItem: mockAddItem,
         onDebugMessage: vi.fn(),
@@ -155,10 +156,11 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
         handleSlashCommand: vi.fn().mockResolvedValue(false),
         logger: null,
         shellModeActive: false,
-        agent: {
-          tools: { get: vi.fn(() => undefined) },
-          getActiveProfileName: () => 'work',
-        } as unknown as Agent,
+        getProviderContextLimit: () => undefined,
+        getContentPrefixIdentity: () => null,
+        getToolHandle: () => undefined,
+        findResource: () => undefined,
+        readResource: async () => ({}),
         loopDetectedRef: { current: false },
         lastProfileNameRef,
         lastModelInfoRef: { current: null },

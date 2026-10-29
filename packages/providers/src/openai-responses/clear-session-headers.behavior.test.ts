@@ -4,23 +4,79 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  createAgent,
+  type Agent,
+  type AgentEvent,
+} from '@vybestack/llxprt-code-agents';
 import { FakeProvider } from '@vybestack/llxprt-code-providers';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import {
-  buildAgent,
-  drain,
-} from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { buildResponsesHeaders } from './openAIResponsesHttpStream.js';
 import { buildWebSocketHandshakeHeaders } from './openAIResponsesRequestDump.js';
 import { captureResponsesRequest } from './responses-request.js';
 import { buildNormalizedOptions } from './responses-request.test-helpers.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
 
+/**
+ * Two canned model replies. The agents package replays a JSONL fixture through
+ * the LLXPRT_FAKE_RESPONSES production seam, so the case drives a real Agent
+ * whose invocations carry the live session id.
+ */
+const FIXTURE_TURNS = [
+  {
+    chunks: [
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'turn one reply' }] },
+    ],
+  },
+  {
+    chunks: [
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'turn two reply' }] },
+    ],
+  },
+];
+
+async function drain(stream: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
+  const events: AgentEvent[] = [];
+  for await (const event of stream) events.push(event);
+  return events;
+}
+
 describe('Codex headers after starting a new session', () => {
+  let workingDir: string;
+  let fixturePath: string;
+  let previousFixture: string | undefined;
+  const agents: Agent[] = [];
+
+  beforeEach(async () => {
+    workingDir = await mkdtemp(join(tmpdir(), 'clear-session-headers-'));
+    fixturePath = join(workingDir, 'multi-turn-text.jsonl');
+    await writeFile(
+      fixturePath,
+      FIXTURE_TURNS.map((turn) => JSON.stringify(turn)).join('\n'),
+    );
+    previousFixture = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fixturePath;
+  });
+
+  afterEach(async () => {
+    for (const agent of agents.splice(0)) await agent.dispose();
+    if (previousFixture === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousFixture;
+    await rm(workingDir, { recursive: true, force: true });
+  });
+
   it('uses the new session in real HTTP and WebSocket headers, including after a model change', async () => {
-    const { agent, cleanup } = await buildAgent('multi-turn-text.jsonl');
-    try {
+    const agent = await createAgent({
+      provider: 'fake',
+      model: 'fake-model',
+      workingDir,
+    });
+    agents.push(agent);
+    {
       await agent.setHistory([
         {
           speaker: 'human',
@@ -105,8 +161,6 @@ describe('Codex headers after starting a new session', () => {
       } finally {
         capture.mockRestore();
       }
-    } finally {
-      await cleanup();
     }
   });
 });

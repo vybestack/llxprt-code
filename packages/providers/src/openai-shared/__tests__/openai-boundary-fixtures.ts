@@ -65,11 +65,10 @@ export function optionsFor(
   settings.setProviderSetting(providerName, 'streaming', streaming);
   const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: `boundary-${name}`,
-    config,
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: (input, init) => globalThis.fetch(input, init),
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
     providerName,

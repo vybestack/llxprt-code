@@ -5,9 +5,9 @@
  */
 import { expect, test } from 'bun:test';
 import ts from 'typescript';
-import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { productionPolicy } from '../check-runtime-state-boundary.js';
+import { compilerSourcePath } from '../compiler-source-path.js';
 import { compilerConfiguration } from '../runtime-source-discovery.js';
 import { scanRuntimeServiceProgram } from './runtime-service-shape-guard.js';
 
@@ -24,11 +24,16 @@ for (const augmentation of [
       process.cwd(),
       'packages/providers/tsconfig.noemit.json',
     );
-    const file = resolve(
+    const file = compilerSourcePath(
       'packages/providers/src/value-selector-virtual-fixture.ts',
     );
     const source = `import 'buffer'; import type { ProviderManager as Clock } from './ProviderManager.js'; import type { OAuthManager as Session } from './auth/oauth-manager.js'; export type { Clock, Session };\n${augmentation === undefined ? '' : "declare global { interface HTMLTextAreaElement { readonly resourceConstructor: typeof import('buffer').Blob } }"}\n${augmentation ?? ''}`;
     const base = ts.createCompilerHost(config.options, true);
+    // Every path here uses the compiler's own slash-normalized spelling, so
+    // membership and lookups agree on Windows as well as POSIX.
+    const isVirtual = (name: string): boolean =>
+      base.getCanonicalFileName(compilerSourcePath(name)) ===
+      base.getCanonicalFileName(file);
     const program = ts.createProgram({
       rootNames: [
         ...config.fileNames.filter(
@@ -40,9 +45,11 @@ for (const augmentation of [
       projectReferences: config.projectReferences,
       host: {
         ...base,
+        fileExists: (name) => isVirtual(name) || base.fileExists(name),
+        readFile: (name) => (isVirtual(name) ? source : base.readFile(name)),
         getSourceFile: (name, version) =>
-          name === file
-            ? ts.createSourceFile(file, source, version, true)
+          isVirtual(name)
+            ? ts.createSourceFile(name, source, version, true)
             : base.getSourceFile(name, version),
       },
     });
@@ -58,17 +65,23 @@ for (const augmentation of [
         process.cwd(),
         existsSync(build) ? build : `${pkg}/tsconfig.json`,
       );
+      const rootFile = compilerSourcePath(root.file);
+      const ownerFile = owner.fileNames.find(
+        (name) =>
+          base.getCanonicalFileName(name) ===
+          base.getCanonicalFileName(rootFile),
+      );
       const candidates = [
-        resolve(root.file),
-        ...(owner.fileNames.includes(resolve(root.file))
-          ? ts
+        rootFile,
+        ...(ownerFile === undefined
+          ? []
+          : ts
               .getOutputFileNames(
                 owner,
-                resolve(root.file),
+                ownerFile,
                 !ts.sys.useCaseSensitiveFileNames,
               )
-              .filter((name) => /\.d\.(?:ts|mts|cts)$/.test(name))
-          : []),
+              .filter((name) => /\.d\.(?:ts|mts|cts)$/.test(name))),
       ];
       return candidates
         .filter((name) => program.getSourceFile(name))
@@ -81,7 +94,7 @@ for (const augmentation of [
         services: policyServices,
         configs: [],
       },
-      [resolve('packages/providers/src/auth/ClipboardService.ts')],
+      [compilerSourcePath('packages/providers/src/auth/ClipboardService.ts')],
     );
     if (!augmentation) expect(findings).toEqual([]);
     else

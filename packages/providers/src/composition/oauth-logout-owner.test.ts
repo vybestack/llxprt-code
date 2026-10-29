@@ -1,104 +1,343 @@
-import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { MessageBus } from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { ProviderFileLifecycle, ProviderManager } from '../index.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import {
+  acquireOwnedProviderManager,
+  acquireOwnedOAuth,
+  prepareOwnedProviderCompletion,
+} from '../__tests__/helpers/acquire-provider-owners.js';
+import { releaseAdoptedFileScope } from '../__tests__/helpers/adopted-file-scope.js';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../__tests__/helpers/cleanup.js';
+import { useOwnedCredentials } from '../__tests__/helpers/owned-credential-fixture.js';
+import { OAuthManager } from '../auth/oauth-manager.js';
+import {
+  populateProviderManager,
+  NodeFileSystem,
+  configureProviderTokenizer,
+} from '../composition/index.js';
+import {
+  createTestProvider,
+  makeToken,
+} from '../auth/__tests__/behavioral/test-utils.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
-
-import { NodeFileSystem } from './IFileSystem.js';
-
-import { describe, expect, it } from 'bun:test';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderManager } from './providerManagerInstance.js';
-import {
-  createTestProvider,
-  makeToken,
-} from '../auth/__tests__/behavioral/test-utils.js';
-import {
-  createIsolatedRuntimeContext,
-  type IsolatedRuntimeContextHandle,
-  type RuntimeActivationBindings,
-} from '../runtime/runtimeContextFactory.js';
-
-const activationBindings: RuntimeActivationBindings = {
-  resetInfrastructure: () => {},
-  setRuntimeContext: () => {},
-  registerInfrastructure: () => {},
-  linkProviderManager: (config, manager) => {
-    configureProviderRuntimeFactories(config, manager);
-  },
-};
-
-function ownerContext(runtimeId: string) {
-  const settingsService = new SettingsService();
-  const { config: config } = createProviderConfigFixture({
-    sessionId: runtimeId,
-    targetDir: process.cwd(),
-    cwd: process.cwd(),
-    debugMode: false,
-    model: 'gpt-5',
-    settingsService,
-  });
-  return { runtimeId, settingsService, config };
-}
+import { createProviderPopulationTarget } from './providerManagerInstance.js';
 
 describe('logout ownership', () => {
+  const credentials = useOwnedCredentials();
+
+  const firstRetiring: Array<() => void | Promise<void>> = [];
+  let firstConfig: Config;
+  let firstSettings: SettingsService;
+  let firstSettingsOwner: SessionSettingsOwner;
+  let firstManager: ProviderManager;
+  let firstOauth: OAuthManager;
+  let firstFiles: ProviderFileLifecycle;
+  let firstBus: MessageBus;
+  afterEach(async () => {
+    await runCleanupSteps(firstRetiring.splice(0).reverse());
+  });
+  async function openFirst(
+    runtimeId: string,
+    sessionId: string,
+    model: string,
+    suppliedBus: MessageBus | undefined = undefined,
+  ): Promise<void> {
+    try {
+      const rawDirectory = await mkdtemp(
+        join(tmpdir(), 'provider-firstBus-owner-'),
+      );
+      firstRetiring.push(() =>
+        rm(rawDirectory, { recursive: true, force: true }),
+      );
+      const directory = await realpath(rawDirectory);
+      const selectedConfig = new Config({
+        sessionId,
+        targetDir: directory,
+        cwd: directory,
+        model,
+        debugMode: false,
+      });
+      firstConfig = selectedConfig;
+      firstRetiring.push(() => selectedConfig.dispose());
+      const release = new AcquisitionRelease();
+      let acquisitionComplete = false;
+      firstRetiring.push(() =>
+        acquisitionComplete ? release.close() : release.rollback(),
+      );
+      firstSettings = new SettingsService();
+      const selectedSettingsOwner = new SessionSettingsOwner(firstSettings);
+      firstSettingsOwner = selectedSettingsOwner;
+      release.acquire('settings', () => selectedSettingsOwner.dispose());
+      firstSettingsOwner.bindTelemetry(firstConfig);
+      const policy = new RuntimePolicyOwner(firstConfig);
+      release.acquire('policy', () => policy.dispose());
+      firstBus = suppliedBus ?? policy.session.messageBus;
+      firstFiles = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
+      for (const scope of new Set([runtimeId, sessionId]))
+        release.acquire('files', () =>
+          releaseAdoptedFileScope(firstFiles, scope),
+        );
+      firstManager = acquireOwnedProviderManager(
+        firstConfig,
+        firstSettings,
+        firstSettingsOwner,
+        firstFiles,
+        runtimeId,
+        credentials().authority,
+        release,
+      );
+      firstOauth = acquireOwnedOAuth(
+        undefined,
+        firstBus,
+        firstConfig,
+        firstSettings,
+        firstManager,
+        runtimeId,
+        undefined,
+        credentials().authority,
+        release,
+        undefined,
+      );
+      acquisitionComplete = true;
+    } catch (primary) {
+      await cleanupAfterFailure(primary, () =>
+        runCleanupSteps(firstRetiring.splice(0).reverse()),
+      );
+    }
+  }
+
+  async function activateFirst(
+    construction: 'composition' | 'isolated',
+  ): Promise<void> {
+    if (construction === 'composition') {
+      firstManager.setRuntimeContext(
+        createProviderRuntimeContext({
+          runtimeId: firstConfig.getSessionId(),
+          runtimeKind: 'cli-interactive',
+        }),
+        firstSettingsOwner,
+        firstSettings,
+        firstConfig,
+      );
+      populateProviderManager({
+        target: createProviderPopulationTarget(
+          firstManager,
+          firstOauth,
+          firstOauth.getTokenStore(),
+        ),
+        readSetting: (key) => firstSettings.get(key),
+        fileSystem: new NodeFileSystem(),
+        configuration: { kind: 'configured', config: firstConfig },
+        contributions: { kind: 'none' },
+        messages: { kind: 'none' },
+        allowBrowser: false,
+        activateConfiguredProvider: true,
+        fakeResponses: { kind: 'disabled' },
+      });
+    } else
+      await prepareOwnedProviderCompletion(
+        firstConfig,
+        firstSettings,
+        firstSettingsOwner,
+        firstManager,
+        firstOauth,
+        firstConfig.getSessionId(),
+        configureProviderTokenizer(firstManager),
+        undefined,
+      );
+  }
+  async function closeFirst(): Promise<void> {
+    await runCleanupSteps(firstRetiring.splice(0).reverse());
+  }
+
+  const secondRetiring: Array<() => void | Promise<void>> = [];
+  let secondConfig: Config;
+  let secondSettings: SettingsService;
+  let secondSettingsOwner: SessionSettingsOwner;
+  let secondManager: ProviderManager;
+  let secondOauth: OAuthManager;
+  let secondFiles: ProviderFileLifecycle;
+  let secondBus: MessageBus;
+  afterEach(async () => {
+    await runCleanupSteps(secondRetiring.splice(0).reverse());
+  });
+  async function openSecond(
+    runtimeId: string,
+    sessionId: string,
+    model: string,
+    suppliedBus: MessageBus | undefined = undefined,
+  ): Promise<void> {
+    try {
+      const rawDirectory = await mkdtemp(
+        join(tmpdir(), 'provider-secondBus-owner-'),
+      );
+      secondRetiring.push(() =>
+        rm(rawDirectory, { recursive: true, force: true }),
+      );
+      const directory = await realpath(rawDirectory);
+      const selectedConfig = new Config({
+        sessionId,
+        targetDir: directory,
+        cwd: directory,
+        model,
+        debugMode: false,
+      });
+      secondConfig = selectedConfig;
+      secondRetiring.push(() => selectedConfig.dispose());
+      const release = new AcquisitionRelease();
+      let acquisitionComplete = false;
+      secondRetiring.push(() =>
+        acquisitionComplete ? release.close() : release.rollback(),
+      );
+      secondSettings = new SettingsService();
+      const selectedSettingsOwner = new SessionSettingsOwner(secondSettings);
+      secondSettingsOwner = selectedSettingsOwner;
+      release.acquire('settings', () => selectedSettingsOwner.dispose());
+      secondSettingsOwner.bindTelemetry(secondConfig);
+      const policy = new RuntimePolicyOwner(secondConfig);
+      release.acquire('policy', () => policy.dispose());
+      secondBus = suppliedBus ?? policy.session.messageBus;
+      secondFiles = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
+      for (const scope of new Set([runtimeId, sessionId]))
+        release.acquire('files', () =>
+          releaseAdoptedFileScope(secondFiles, scope),
+        );
+      secondManager = acquireOwnedProviderManager(
+        secondConfig,
+        secondSettings,
+        secondSettingsOwner,
+        secondFiles,
+        runtimeId,
+        credentials().authority,
+        release,
+      );
+      secondOauth = acquireOwnedOAuth(
+        undefined,
+        secondBus,
+        secondConfig,
+        secondSettings,
+        secondManager,
+        runtimeId,
+        undefined,
+        credentials().authority,
+        release,
+        undefined,
+      );
+      acquisitionComplete = true;
+    } catch (primary) {
+      await cleanupAfterFailure(primary, () =>
+        runCleanupSteps(secondRetiring.splice(0).reverse()),
+      );
+    }
+  }
+
+  async function activateSecond(
+    construction: 'composition' | 'isolated',
+  ): Promise<void> {
+    if (construction === 'composition') {
+      secondManager.setRuntimeContext(
+        createProviderRuntimeContext({
+          runtimeId: secondConfig.getSessionId(),
+          runtimeKind: 'cli-interactive',
+        }),
+        secondSettingsOwner,
+        secondSettings,
+        secondConfig,
+      );
+      populateProviderManager({
+        target: createProviderPopulationTarget(
+          secondManager,
+          secondOauth,
+          secondOauth.getTokenStore(),
+        ),
+        readSetting: (key) => secondSettings.get(key),
+        fileSystem: new NodeFileSystem(),
+        configuration: { kind: 'configured', config: secondConfig },
+        contributions: { kind: 'none' },
+        messages: { kind: 'none' },
+        allowBrowser: false,
+        activateConfiguredProvider: true,
+        fakeResponses: { kind: 'disabled' },
+      });
+    } else
+      await prepareOwnedProviderCompletion(
+        secondConfig,
+        secondSettings,
+        secondSettingsOwner,
+        secondManager,
+        secondOauth,
+        secondConfig.getSessionId(),
+        configureProviderTokenizer(secondManager),
+        undefined,
+      );
+  }
+  async function closeSecond(): Promise<void> {
+    await runCleanupSteps(secondRetiring.splice(0).reverse());
+  }
   it.each(['composition', 'isolated'] as const)(
     '%s logout removes A credentials while B credentials remain usable',
     async (construction) => {
-      const contextA = ownerContext(`logout-owner-a-${construction}`);
-      const contextB = ownerContext(`logout-owner-b-${construction}`);
-      const handles: IsolatedRuntimeContextHandle[] = [];
-      const build = (context: ReturnType<typeof ownerContext>) => {
-        if (construction === 'composition') {
-          return createProviderManager(context, {
-            fileSystem: new NodeFileSystem(),
-            config: context.config,
-            activateConfiguredProvider: false,
-          });
-        }
-        const handle = createIsolatedRuntimeContext(
-          {
-            ...context,
-            activationBindings,
-          },
-          context.settingsService,
-        );
-        handles.push(handle);
-        return {
-          manager: handle.providerManager,
-          oauthManager: handle.oauthManager,
-        };
-      };
-      const a = build(contextA);
-      const b = build(contextB);
+      await openFirst(
+        'logout-owner-a-' + construction,
+        'logout-owner-a-' + construction,
+        'gpt-5',
+      );
+      await openSecond(
+        'logout-owner-b-' + construction,
+        'logout-owner-b-' + construction,
+        'gpt-5',
+      );
+      await activateFirst(construction);
+      await activateSecond(construction);
       try {
         for (const [owner, bucket] of [
-          [a, 'a'],
-          [b, 'b'],
+          [firstOauth, 'a'],
+          [secondOauth, 'b'],
         ] as const) {
-          owner.oauthManager.registerProvider(
+          owner.registerProvider(
             createTestProvider('anthropic', {
               initiateAuthResult: makeToken(`credential-${bucket}`),
             }),
           );
-          await owner.oauthManager.authenticate('anthropic', bucket);
-          owner.oauthManager.setSessionBucket('anthropic', bucket);
+          await owner.authenticate('anthropic', bucket);
+          owner.setSessionBucket('anthropic', bucket);
         }
-        const credentialB = await b.oauthManager.getOAuthToken('anthropic');
+        const credentialB = await secondOauth.getOAuthToken('anthropic');
 
-        await a.oauthManager.logout('anthropic');
+        await firstOauth.logout('anthropic');
 
-        expect(await a.oauthManager.getOAuthToken('anthropic', 'a')).toBeNull();
-        expect(
-          await b.oauthManager.getOAuthToken('anthropic', 'b'),
-        ).toStrictEqual(credentialB);
+        expect(await firstOauth.getOAuthToken('anthropic', 'a')).toBeNull();
+        expect(await secondOauth.getOAuthToken('anthropic', 'b')).toStrictEqual(
+          credentialB,
+        );
       } finally {
-        await b.oauthManager.logout('anthropic', 'b');
-        await Promise.all(handles.map((handle) => handle.cleanup()));
-        await contextA.config.dispose();
-        await contextB.config.dispose();
+        await runCleanupSteps([
+          () => secondOauth.logout('anthropic', 'b'),
+          closeFirst,
+          closeSecond,
+        ]);
       }
     },
   );

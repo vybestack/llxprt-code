@@ -1,8 +1,10 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 // Enable React's act() environment so hook state updates are flushed.
 (
@@ -240,8 +242,15 @@ function renderUseSubmitQuery(opts: {
   unmount: () => void;
 } {
   const hookDeps: UseSubmitQueryDeps = {
-    runtime: createStreamRuntimeForTest(),
-    agent: createMockAgentClient() as unknown as Agent,
+    ...{ runtime: createStreamRuntimeForTest() },
+    ...streamPolicyOperations(createStreamRuntimeForTest()),
+    ...submissionOperations(
+      createMockAgentClient() as unknown as Agent,
+      {
+        flushAtTurnBoundary: vi.fn(),
+      } as unknown as RecordingIntegration,
+      undefined,
+    ),
     addItem: vi.fn().mockReturnValue(1),
     settings: {} as never,
     onDebugMessage: vi.fn(),
@@ -285,9 +294,7 @@ function renderUseSubmitQuery(opts: {
     submitQueryRef: { current: null },
     isResponding: false,
     streamingState: StreamingState.Idle,
-    recordingIntegration: {
-      flushAtTurnBoundary: vi.fn(),
-    } as unknown as RecordingIntegration,
+
     operationLifecycle: opts.operationLifecycle,
   };
 

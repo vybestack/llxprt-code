@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
+
 /**
  * AgentClient local-media ownership tests across deferred and active history.
  */
@@ -33,7 +35,6 @@ import {
   setupAgentClient,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import {
   FailOnceReleaseStore,
   createSuppliedStoreClient,
@@ -221,12 +222,6 @@ void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
     ),
   };
 });
-void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
-  uiTelemetryService: {
-    setLastPromptTokenCount: vi.fn(),
-    getLastPromptTokenCount: vi.fn(),
-  },
-}));
 
 let client: AgentClient;
 let ownerManager: ProviderManager;
@@ -792,13 +787,19 @@ describe('AgentClient (client.ts)', () => {
     });
     const selectedOwner = new SessionSettingsOwner(settingsService);
     selectedOwner.bindTelemetry(config);
-    const manager = new ProviderManager({
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
-      sessionSettings: selectedOwner,
-    });
+      undefined,
+      undefined,
+      selectedOwner,
+    );
     ownerManager = manager;
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
     settingsService.set('activeProvider', 'gemini');
     const ctx = await setupAgentClient(
       { mockChatCreateFn, mockGenerateContentFn, mockEmbedContentFn },

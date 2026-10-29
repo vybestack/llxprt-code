@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import type { ConfigParameters } from '../../config/config.js';
 import { Config } from '../../config/config.js';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
-import { initializeTestConfig } from '../../__tests__/config-test-helpers.js';
+import { installLspToolCatalog } from '../../__tests__/lsp-runtime-fixture.js';
 
 import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
@@ -210,6 +210,8 @@ void vi.mock('../../utils/events.js', () => {
 });
 
 describe('LSP system integration (P35)', () => {
+  const initializeLspTools = installLspToolCatalog();
+
   const repoRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
   const targetDir = repoRoot;
 
@@ -263,7 +265,7 @@ describe('LSP system integration (P35)', () => {
       isTrustedFolder: () => true,
       getIdeTrust: () => undefined,
     });
-    await initializeTestConfig(config, undefined, lspRoot);
+    await initializeLspTools(config, lspRoot);
 
     expect(lspService).toBeUndefined();
     expect(config.getLspConfig()).toBeUndefined();
@@ -275,7 +277,7 @@ describe('LSP system integration (P35)', () => {
       isTrustedFolder: () => true,
       getIdeTrust: () => undefined,
     });
-    await initializeTestConfig(config, undefined, lspRoot);
+    await initializeLspTools(config, lspRoot);
 
     expect(config.getLspConfig()).toBeUndefined();
     expect(lspService).toBeUndefined();
@@ -287,7 +289,7 @@ describe('LSP system integration (P35)', () => {
       isTrustedFolder: () => true,
       getIdeTrust: () => undefined,
     });
-    await initializeTestConfig(config, undefined, lspRoot);
+    await initializeLspTools(config, lspRoot);
 
     expect(config.getLspConfig()).toStrictEqual({ servers: [] });
     expect(lspService).toBeDefined();
@@ -305,7 +307,7 @@ describe('LSP system integration (P35)', () => {
       isTrustedFolder: () => true,
       getIdeTrust: () => undefined,
     });
-    await initializeTestConfig(config, undefined, lspRoot);
+    await initializeLspTools(config, lspRoot);
 
     expect(config.getLspConfig()).toStrictEqual(lsp);
   });
@@ -316,7 +318,7 @@ describe('LSP system integration (P35)', () => {
       isTrustedFolder: () => true,
       getIdeTrust: () => undefined,
     });
-    await initializeTestConfig(config, undefined, lspRoot);
+    await initializeLspTools(config, lspRoot);
 
     expect((await lspRoot.inspection.read()).alive).toBe(true);
     await lspRoot.dispose();
@@ -330,7 +332,7 @@ describe('LSP system integration (P35)', () => {
       isTrustedFolder: () => true,
       getIdeTrust: () => undefined,
     });
-    await initializeTestConfig(config, undefined, lspRoot);
+    await initializeLspTools(config, lspRoot);
 
     const config1 = config.getLspConfig();
     const config2 = config.getLspConfig();
@@ -352,9 +354,9 @@ describe('LSP system integration (P35)', () => {
       isTrustedFolder: () => true,
       getIdeTrust: () => undefined,
     });
-    const runtime = await initializeTestConfig(config, undefined, lspRoot);
+    const runtime = await initializeLspTools(config, lspRoot);
 
-    const tools = runtime.toolSelection.getAllTools();
+    const tools = runtime.selection.getAllTools();
     const lspNavTools = tools.filter(
       (t) => 'serverName' in t && t.serverName === 'lsp-navigation',
     );
@@ -377,9 +379,9 @@ describe('LSP system integration (P35)', () => {
           isTrustedFolder: () => true,
           getIdeTrust: () => undefined,
         });
-        const runtime = await initializeTestConfig(config, undefined, lspRoot);
+        const runtime = await initializeLspTools(config, lspRoot);
 
-        const tools = runtime.toolSelection.getAllTools();
+        const tools = runtime.selection.getAllTools();
         const lspNavTools = tools.filter(
           (t) => 'serverName' in t && t.serverName === 'lsp-navigation',
         );
@@ -407,12 +409,12 @@ describe('LSP system integration (P35)', () => {
       isTrustedFolder: () => true,
       getIdeTrust: () => undefined,
     });
-    const runtime = await initializeTestConfig(config, undefined, lspRoot);
+    const runtime = await initializeLspTools(config, lspRoot);
 
     const lspClient = lspService;
     expect(lspClient?.isAlive()).toBe(false);
 
-    const tools = runtime.toolSelection.getAllTools();
+    const tools = runtime.selection.getAllTools();
     const lspNavTools = tools.filter(
       (t) => 'serverName' in t && t.serverName === 'lsp-navigation',
     );
@@ -430,9 +432,9 @@ describe('LSP system integration (P35)', () => {
       isTrustedFolder: () => true,
       getIdeTrust: () => undefined,
     });
-    await expect(
-      initializeTestConfig(config, undefined, lspRoot),
-    ).rejects.toThrow('Fixture initialization cleanup failed');
+    await expect(initializeLspTools(config, lspRoot)).rejects.toThrow(
+      'Fixture initialization cleanup failed',
+    );
     expect(lspService?.isAlive()).toBe(false);
     expect(config.getLspConfig()).toStrictEqual({ servers: [] });
   });
@@ -451,12 +453,12 @@ describe('LSP system integration (P35)', () => {
         isTrustedFolder: () => true,
         getIdeTrust: () => undefined,
       });
-      const runtime = await initializeTestConfig(config, undefined, lspRoot);
+      const runtime = await initializeLspTools(config, lspRoot);
 
       await lspRoot.dispose();
 
       await expect(lspRoot.inspection.read()).rejects.toThrow('stopped');
-      const tools = runtime.toolSelection.getAllTools();
+      const tools = runtime.selection.getAllTools();
       const lspNavTools = tools.filter(
         (t) => 'serverName' in t && t.serverName === 'lsp-navigation',
       );

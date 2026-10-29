@@ -25,13 +25,16 @@ describe('syntheticUsageInfo', () => {
     });
 
     it('should return null for empty API key', async () => {
-      const result = await fetchSyntheticUsage('');
+      const result = await fetchSyntheticUsage(globalThis.fetch, '');
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('should return null for invalid API key', async () => {
-      const result = await fetchSyntheticUsage(undefined as unknown as string);
+      const result = await fetchSyntheticUsage(
+        globalThis.fetch,
+        undefined as unknown as string,
+      );
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -50,7 +53,10 @@ describe('syntheticUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchSyntheticUsage('test-key-123');
+      const result = await fetchSyntheticUsage(
+        globalThis.fetch,
+        'test-key-123',
+      );
 
       expect(fetchMock).toHaveBeenCalledWith(
         'https://api.synthetic.new/v2/quotas',
@@ -92,7 +98,10 @@ describe('syntheticUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchSyntheticUsage('test-key-123');
+      const result = await fetchSyntheticUsage(
+        globalThis.fetch,
+        'test-key-123',
+      );
       expect(result).toStrictEqual(mockResponse);
     });
 
@@ -103,14 +112,20 @@ describe('syntheticUsageInfo', () => {
         statusText: 'Unauthorized',
       } as Response);
 
-      const result = await fetchSyntheticUsage('test-key-123');
+      const result = await fetchSyntheticUsage(
+        globalThis.fetch,
+        'test-key-123',
+      );
       expect(result).toBeNull();
     });
 
     it('should handle network errors', async () => {
       fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
-      const result = await fetchSyntheticUsage('test-key-123');
+      const result = await fetchSyntheticUsage(
+        globalThis.fetch,
+        'test-key-123',
+      );
       expect(result).toBeNull();
     });
 
@@ -120,7 +135,10 @@ describe('syntheticUsageInfo', () => {
         json: async () => 'not-valid-json',
       } as unknown as Response);
 
-      const result = await fetchSyntheticUsage('test-key-123');
+      const result = await fetchSyntheticUsage(
+        globalThis.fetch,
+        'test-key-123',
+      );
       expect(result).toBeNull();
     });
 
@@ -139,7 +157,10 @@ describe('syntheticUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchSyntheticUsage('test-key-123');
+      const result = await fetchSyntheticUsage(
+        globalThis.fetch,
+        'test-key-123',
+      );
       expect(result).toBeDefined();
       expect((result as Record<string, unknown>)['someNewField']).toStrictEqual(
         {
@@ -162,7 +183,7 @@ describe('syntheticUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      await fetchSyntheticUsage('test-key-123');
+      await fetchSyntheticUsage(globalThis.fetch, 'test-key-123');
 
       const secondArg = fetchMock.mock.calls[0]?.[1] as {
         signal?: unknown;

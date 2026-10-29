@@ -16,11 +16,12 @@ import {
   vi,
   type Mock,
 } from 'bun:test';
-import { permissionsCommand } from './permissionsCommand.js';
+import { registerPermissionsCommand } from '../../__tests__/host-command-test-owner.js';
+import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { CommandKind } from './types.js';
 import * as trustedFolders from '../../config/trustedFolders.js';
 import { createMockCommandContext as createBaseMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { FixtureCommandRuntime } from '../../__tests__/slash-command-runtime-fixture.js';
 
 const realTrustedFoldersModule = {
   ...(await import('../../config/trustedFolders.js')),
@@ -139,7 +140,7 @@ describe('permissionsCommand', () => {
           getFolderTrust: () => true,
           isTrustedFolder: () => false,
         } satisfies Pick<
-          CliUiRuntime,
+          FixtureCommandRuntime,
           | 'setTrustedFolderLive'
           | 'getWorkingDir'
           | 'getFolderTrust'
@@ -148,25 +149,34 @@ describe('permissionsCommand', () => {
       : null;
     return createBaseMockCommandContext({
       services: {
-        config: config as CliUiRuntime | null,
+        config: config as FixtureCommandRuntime | null,
         settings: { merged: { folderTrust: true } },
       },
     });
   };
 
   it('should have correct name and description', async () => {
-    expect(permissionsCommand.name).toBe('permissions');
-    expect(permissionsCommand.description).toBe('manage folder trust settings');
+    expect(createUnconfiguredBuiltinOwners().permissionsCommand.name).toBe(
+      'permissions',
+    );
+    expect(
+      createUnconfiguredBuiltinOwners().permissionsCommand.description,
+    ).toBe('manage folder trust settings');
   });
 
   it('should be a built-in command', async () => {
-    expect(permissionsCommand.kind).toBe(CommandKind.BUILT_IN);
+    expect(createUnconfiguredBuiltinOwners().permissionsCommand.kind).toBe(
+      CommandKind.BUILT_IN,
+    );
   });
 
   describe('dialog mode (no arguments)', () => {
     it('should return a dialog action when no args provided', async () => {
       const mockContext = createMockContext();
-      const result = await permissionsCommand.action?.(mockContext, '');
+      const result = await registerPermissionsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result).toStrictEqual({
         type: 'dialog',
@@ -176,7 +186,10 @@ describe('permissionsCommand', () => {
 
     it('should return a dialog action when only whitespace provided', async () => {
       const mockContext = createMockContext();
-      const result = await permissionsCommand.action?.(mockContext, '   ');
+      const result = await registerPermissionsCommand(mockContext).action!(
+        mockContext,
+        '   ',
+      );
 
       expect(result).toStrictEqual({
         type: 'dialog',
@@ -191,7 +204,10 @@ describe('permissionsCommand', () => {
       const targetPath = path.join(testRoot, 'projects', 'my-project');
       const args = `TRUST_FOLDER ${targetPath}`;
 
-      const result = await permissionsCommand.action?.(mockContext, args);
+      const result = await registerPermissionsCommand(mockContext).action!(
+        mockContext,
+        args,
+      );
 
       expect(mockSetValue).toHaveBeenCalledWith(
         path.normalize(targetPath),
@@ -209,7 +225,10 @@ describe('permissionsCommand', () => {
       const targetPath = path.join(testRoot, 'projects', 'my-project');
       const args = `TRUST_PARENT ${targetPath}`;
 
-      const result = await permissionsCommand.action?.(mockContext, args);
+      const result = await registerPermissionsCommand(mockContext).action!(
+        mockContext,
+        args,
+      );
 
       expect(mockSetValue).toHaveBeenCalledWith(
         path.normalize(targetPath),
@@ -227,7 +246,10 @@ describe('permissionsCommand', () => {
       const targetPath = path.join(testRoot, 'projects', 'my-project');
       const args = `DO_NOT_TRUST ${targetPath}`;
 
-      const result = await permissionsCommand.action?.(mockContext, args);
+      const result = await registerPermissionsCommand(mockContext).action!(
+        mockContext,
+        args,
+      );
 
       expect(mockSetValue).toHaveBeenCalledWith(
         path.normalize(targetPath),
@@ -244,7 +266,10 @@ describe('permissionsCommand', () => {
       const mockContext = createMockContext();
       const args = 'INVALID_TRUST /some/path';
 
-      const result = await permissionsCommand.action?.(mockContext, args);
+      const result = await registerPermissionsCommand(mockContext).action!(
+        mockContext,
+        args,
+      );
 
       expect(mockSetValue).not.toHaveBeenCalled();
       expect(result).toStrictEqual({
@@ -258,7 +283,10 @@ describe('permissionsCommand', () => {
       const mockContext = createMockContext();
       const args = 'TRUST_FOLDER';
 
-      const result = await permissionsCommand.action?.(mockContext, args);
+      const result = await registerPermissionsCommand(mockContext).action!(
+        mockContext,
+        args,
+      );
 
       expect(mockSetValue).not.toHaveBeenCalled();
       expect(result).toStrictEqual({
@@ -277,7 +305,10 @@ describe('permissionsCommand', () => {
       );
       const args = `TRUST_FOLDER ${targetPath}`;
 
-      const result = await permissionsCommand.action?.(mockContext, args);
+      const result = await registerPermissionsCommand(mockContext).action!(
+        mockContext,
+        args,
+      );
 
       expect(mockSetValue).toHaveBeenCalledWith(
         path.normalize(targetPath),
@@ -294,7 +325,10 @@ describe('permissionsCommand', () => {
       const mockContext = createMockContext();
       const args = 'TRUST_FOLDER ./relative/path';
 
-      const result = await permissionsCommand.action?.(mockContext, args);
+      const result = await registerPermissionsCommand(mockContext).action!(
+        mockContext,
+        args,
+      );
 
       expect(mockSetValue).toHaveBeenCalledWith(
         expect.any(String),
@@ -312,7 +346,10 @@ describe('permissionsCommand', () => {
       const mockContext = createMockContext();
       const args = 'TRUST_FOLDER ~/projects/x';
 
-      const result = await permissionsCommand.action?.(mockContext, args);
+      const result = await registerPermissionsCommand(mockContext).action!(
+        mockContext,
+        args,
+      );
 
       // path.resolve, not path.join: on Windows the production helper resolves
       // against the current drive, which path.join would not reproduce.
@@ -335,7 +372,10 @@ describe('permissionsCommand', () => {
         throw new Error('Failed to save');
       });
 
-      const result = await permissionsCommand.action?.(mockContext, args);
+      const result = await registerPermissionsCommand(mockContext).action!(
+        mockContext,
+        args,
+      );
 
       expect(result).toStrictEqual({
         type: 'message',
@@ -353,7 +393,10 @@ describe('permissionsCommand', () => {
       const mockContext = createMockContext({ setTrustedFolderLive });
       const args = `TRUST_FOLDER ${workspacePath}`;
 
-      const result = await permissionsCommand.action?.(mockContext, args);
+      const result = await registerPermissionsCommand(mockContext).action!(
+        mockContext,
+        args,
+      );
 
       expect(mockRules).toStrictEqual([]);
       expect(setTrustedFolderLive).toHaveBeenNthCalledWith(1, true);
@@ -391,7 +434,7 @@ describe('permissionsCommand', () => {
       });
       const mockContext = createMockContext({ setTrustedFolderLive });
 
-      const result = await permissionsCommand.action?.(
+      const result = await registerPermissionsCommand(mockContext).action!(
         mockContext,
         `TRUST_FOLDER ${workspacePath}`,
       );
@@ -421,7 +464,10 @@ describe('permissionsCommand', () => {
         path.join(testRoot, 'process', 'workspace'),
       );
 
-      await permissionsCommand.action?.(context, 'TRUST_FOLDER child');
+      await registerPermissionsCommand(context).action!(
+        context,
+        'TRUST_FOLDER child',
+      );
 
       expect(mockSetValue).toHaveBeenCalledWith(
         path.resolve(path.join(testRoot, 'config', 'workspace'), 'child'),
@@ -436,7 +482,7 @@ describe('permissionsCommand', () => {
       const mockContext = createMockContext({ setTrustedFolderLive });
       const args = `TRUST_FOLDER ${workspacePath}`;
 
-      await permissionsCommand.action?.(mockContext, args);
+      await registerPermissionsCommand(mockContext).action!(mockContext, args);
 
       expect(setTrustedFolderLive).toHaveBeenCalledWith(true);
     });
@@ -446,7 +492,7 @@ describe('permissionsCommand', () => {
       const mockContext = createMockContext({ setTrustedFolderLive });
       const args = `DO_NOT_TRUST ${workspacePath}`;
 
-      await permissionsCommand.action?.(mockContext, args);
+      await registerPermissionsCommand(mockContext).action!(mockContext, args);
 
       expect(setTrustedFolderLive).toHaveBeenCalledWith(false);
     });
@@ -461,7 +507,7 @@ describe('permissionsCommand', () => {
         const setTrustedFolderLive = vi.fn();
         const mockContext = createMockContext({ setTrustedFolderLive });
 
-        await permissionsCommand.action?.(
+        await registerPermissionsCommand(mockContext).action!(
           mockContext,
           `${trustLevel} ${workspacePath}`,
         );
@@ -476,7 +522,7 @@ describe('permissionsCommand', () => {
       // TRUST_PARENT on /home/user/projects/myapp means parent is trusted
       const args = `TRUST_PARENT ${workspacePath}`;
 
-      await permissionsCommand.action?.(mockContext, args);
+      await registerPermissionsCommand(mockContext).action!(mockContext, args);
 
       expect(setTrustedFolderLive).toHaveBeenCalledWith(true);
     });
@@ -491,7 +537,7 @@ describe('permissionsCommand', () => {
       });
       const mockContext = createMockContext();
 
-      const result = await permissionsCommand.action?.(
+      const result = await registerPermissionsCommand(mockContext).action!(
         mockContext,
         `TRUST_FOLDER ${workspacePath}`,
       );
@@ -508,7 +554,7 @@ describe('permissionsCommand', () => {
       const mockContext = createMockContext({ setTrustedFolderLive });
       const args = `TRUST_FOLDER ${path.join(testRoot, 'projects')}`;
 
-      await permissionsCommand.action?.(mockContext, args);
+      await registerPermissionsCommand(mockContext).action!(mockContext, args);
 
       expect(setTrustedFolderLive).toHaveBeenCalledWith(true);
     });
@@ -520,7 +566,7 @@ describe('permissionsCommand', () => {
       // which covers cwd /home/user/projects/myapp
       const args = `TRUST_PARENT ${path.join(testRoot, 'projects', 'myapp-sub')}`;
 
-      await permissionsCommand.action?.(mockContext, args);
+      await registerPermissionsCommand(mockContext).action!(mockContext, args);
 
       expect(setTrustedFolderLive).toHaveBeenCalledWith(true);
     });
@@ -530,7 +576,7 @@ describe('permissionsCommand', () => {
       const mockContext = createMockContext({ setTrustedFolderLive });
       const args = `TRUST_FOLDER ${path.join(testRoot, 'some', 'unrelated', 'path')}`;
 
-      await permissionsCommand.action?.(mockContext, args);
+      await registerPermissionsCommand(mockContext).action!(mockContext, args);
 
       expect(setTrustedFolderLive).toHaveBeenCalledWith(false);
     });
@@ -543,7 +589,7 @@ describe('permissionsCommand', () => {
       // startsWith would incorrectly match.
       const args = `TRUST_FOLDER ${path.join(testRoot, 'projects', 'myap')}`;
 
-      await permissionsCommand.action?.(mockContext, args);
+      await registerPermissionsCommand(mockContext).action!(mockContext, args);
 
       expect(setTrustedFolderLive).toHaveBeenCalledWith(false);
     });
@@ -553,7 +599,7 @@ describe('permissionsCommand', () => {
       const mockContext = createMockContext({ setTrustedFolderLive });
       const args = `TRUST_PARENT ${path.join(testRoot, 'opt', 'llxprt-other')}`;
 
-      await permissionsCommand.action?.(mockContext, args);
+      await registerPermissionsCommand(mockContext).action!(mockContext, args);
 
       expect(setTrustedFolderLive).toHaveBeenCalledWith(false);
     });
@@ -562,7 +608,10 @@ describe('permissionsCommand', () => {
       const mockContext = createMockContext();
       const args = `TRUST_FOLDER ${workspacePath}`;
 
-      const result = await permissionsCommand.action?.(mockContext, args);
+      const result = await registerPermissionsCommand(mockContext).action!(
+        mockContext,
+        args,
+      );
 
       expect(mockSetValue).toHaveBeenCalled();
       expect(result).toMatchObject({ messageType: 'info' });

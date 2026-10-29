@@ -1,3 +1,4 @@
+import { capturedAgentClient } from './helpers/agent-client-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -17,7 +18,7 @@ for (const size of [65]) {
         async (agent, replacement, previous, input) => {
           await agent.setModel('carried-model');
           const next = replacement();
-          expect(agent.agentClient).toBe(next);
+          expect(capturedAgentClient(agent)).toBe(next);
           expect(next).not.toBe(previous);
           expect(next.hasChatInitialized()).toBe(true);
           expect(next.admissions).toBe(1);

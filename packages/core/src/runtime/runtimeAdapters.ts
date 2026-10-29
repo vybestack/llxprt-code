@@ -33,12 +33,27 @@ import type {
 } from './AgentRuntimeContext.js';
 
 /**
+ * Thrown when a runtime has no active provider. Callers that treat "no active
+ * provider" as legitimate absence narrow on this class; every other adapter
+ * error is a wiring failure that must surface.
+ */
+export class NoActiveProviderError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NoActiveProviderError';
+  }
+}
+
+/**
  * Creates a mutable provider adapter backed by a RuntimeProviderManager instance.
  */
 export function createProviderAdapterFromManager(
   manager?: Pick<
     RuntimeProviderManager,
-    'getActiveProvider' | 'setActiveProvider' | 'getProviderByName'
+    | 'getActiveProvider'
+    | 'setActiveProvider'
+    | 'getProviderByName'
+    | 'getProviderKeys'
   >,
 ): AgentRuntimeProviderAdapter {
   if (!manager) {
@@ -58,6 +73,11 @@ export function createProviderAdapterFromManager(
           'AgentRuntimeContext provider adapter requires a RuntimeProviderManager instance.',
         );
       },
+      getProviderKeys: () => {
+        throw new Error(
+          'AgentRuntimeContext provider adapter requires a RuntimeProviderManager instance.',
+        );
+      },
     };
   }
 
@@ -65,7 +85,7 @@ export function createProviderAdapterFromManager(
     getActiveProvider: () => {
       const provider = manager.getActiveProvider();
       if (!provider) {
-        throw new Error(
+        throw new NoActiveProviderError(
           'AgentRuntimeContext provider adapter requires an active provider.',
         );
       }
@@ -75,6 +95,7 @@ export function createProviderAdapterFromManager(
       void manager.setActiveProvider(name);
     },
     getProviderByName: (name: string) => manager.getProviderByName(name),
+    getProviderKeys: () => manager.getProviderKeys(),
   };
 }
 

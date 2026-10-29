@@ -1,3 +1,6 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -57,7 +60,6 @@ function registerReasoningEffortCase1(): void {
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-responses-reasoning-runtime',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -92,6 +94,7 @@ function registerReasoningEffortCase1(): void {
       );
 
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         runtime,
@@ -130,7 +133,6 @@ function registerReasoningEffortCase2(): void {
       settings.set('reasoning.enabled', true);
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-responses-max-effort-runtime',
-        settingsService: settings,
       });
       let capturedBody: string | undefined;
       let capturedUrl: string | undefined;
@@ -164,6 +166,7 @@ function registerReasoningEffortCase2(): void {
       );
 
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         runtime,
@@ -203,7 +206,6 @@ function registerReasoningEffortCase3(): void {
       settings.set('reasoning.enabled', true);
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-responses-minimal-5x6-runtime',
-        settingsService: settings,
       });
       let capturedBody: string | undefined;
 
@@ -235,6 +237,7 @@ function registerReasoningEffortCase3(): void {
       );
 
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         runtime,
@@ -269,7 +272,6 @@ function registerReasoningEffortCase4(): void {
       settings.set('reasoning.enabled', true);
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-responses-minimal-pre5x6-runtime',
-        settingsService: settings,
       });
       let capturedBody: string | undefined;
 
@@ -301,6 +303,7 @@ function registerReasoningEffortCase4(): void {
       );
 
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         runtime,

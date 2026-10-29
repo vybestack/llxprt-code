@@ -108,6 +108,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
 describe('AnthropicProvider MediaBlock support', () => {
   let provider: AnthropicProvider;
   let runtimeContext: ProviderRuntimeContext;
+  let config: ReturnType<typeof createRuntimeConfigStub>;
   let settingsService: SettingsService;
 
   const createMockStream = (text: string) => ({
@@ -133,7 +134,7 @@ describe('AnthropicProvider MediaBlock support', () => {
       contents,
       settings: settingsService,
       runtime: runtimeContext,
-      config: runtimeContext.config,
+      config,
       ...overrides,
     });
 
@@ -160,12 +161,12 @@ describe('AnthropicProvider MediaBlock support', () => {
     provider = result.provider;
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
-    runtimeContext.config ??= createRuntimeConfigStub(settingsService);
-    runtimeContext.config.getEphemeralSettings = () => ({
+    config = createRuntimeConfigStub(settingsService);
+    config.getEphemeralSettings = () => ({
       ...settingsService.getAllGlobalSettings(),
       ...settingsService.getProviderSettings(provider.name),
     });
-    runtimeContext.config.getEphemeralSetting = (key: string) => {
+    config.getEphemeralSetting = (key: string) => {
       const providerValue = settingsService.getProviderSetting(
         provider.name,
         key,

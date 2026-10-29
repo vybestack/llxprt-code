@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { chatSessionPorts } from '../../chatSessionPorts.js';
 import type { StreamProcessor } from '../../StreamProcessor.js';
 import { sourcePending } from './streamprocessor-source-fixture.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -21,7 +22,14 @@ export function loggingChatSession(
     throw new Error('Unexpected legacy content generator invocation');
   };
   return new ChatSession(
-    runtime,
+    chatSessionPorts(runtime),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {
       generateContent: unused,
       generateContentStream: unused,

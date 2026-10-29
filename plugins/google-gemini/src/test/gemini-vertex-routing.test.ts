@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
-import { UserRefreshClient } from 'google-auth-library';
 import { withFetchPreconnect } from '../../../../packages/test-utils/src/fetch-test-helpers.js';
 import { createGeminiApiClient } from '../gemini/geminiApiClientFactory.js';
 
@@ -14,13 +13,15 @@ describe('Gemini Vertex request routing', () => {
     'uses Vertex credentials and streamed contents for streaming=%s',
     async (streaming) => {
       const requests: Array<{ url: URL; headers: Headers; body: unknown }> = [];
-      const auth = new UserRefreshClient({ quotaProjectId: 'billing-project' });
-      auth.setCredentials({
-        access_token: 'vertex-access-token',
-        expiry_date: Date.now() + 3600000,
-      });
       globalThis.fetch = withFetchPreconnect(
         async (input, init): Promise<Response> => {
+          if (new URL(String(input)).hostname === 'oauth2.googleapis.com') {
+            return Response.json({
+              access_token: 'vertex-access-token',
+              expires_in: 3600,
+              token_type: 'Bearer',
+            });
+          }
           requests.push({
             url: new URL(String(input)),
             headers: new Headers(init?.headers),
@@ -47,11 +48,19 @@ describe('Gemini Vertex request routing', () => {
         },
       );
       const client = await createGeminiApiClient({
+        fetch: globalThis.fetch,
         vertexai: true,
         project: 'configured-project',
         location: 'us-central1',
         apiKey: 'USE_VERTEX_AI',
-        googleAuthOptions: { authClient: auth },
+        credentialEnvironment: {},
+        credentials: {
+          type: 'authorized_user',
+          client_id: 'vertex-client',
+          client_secret: 'vertex-secret',
+          refresh_token: 'vertex-refresh',
+          quota_project_id: 'billing-project',
+        },
         requestContents: async function* () {
           yield { role: 'user', parts: [{ text: 'disk-backed question' }] };
         },

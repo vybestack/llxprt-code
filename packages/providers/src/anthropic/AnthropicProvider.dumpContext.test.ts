@@ -16,6 +16,10 @@ import {
   createAnthropicRawPostTestAdapter,
   type RawPostTestHandler,
 } from '../__tests__/rawPostTestAdapters.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /** The JSON a request dump records, whether it was given as a value or streamed. */
 async function readDumpedBody(body: unknown): Promise<unknown> {
@@ -85,6 +89,7 @@ describe('AnthropicProvider dumpContext integration', () => {
       },
       metadata: {},
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'dump-context',
         providerName: 'anthropic',
         ephemeralsSnapshot: {
@@ -135,6 +140,7 @@ describe('AnthropicProvider dumpContext integration', () => {
       },
       metadata: {},
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'dump-context',
         providerName: 'anthropic',
         ephemeralsSnapshot: {
@@ -197,6 +203,7 @@ describe('AnthropicProvider dumpContext integration', () => {
       },
       metadata: {},
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'dump-context',
         providerName: 'anthropic',
         ephemeralsSnapshot: {
@@ -247,6 +254,7 @@ describe('AnthropicProvider dumpContext integration', () => {
       },
       metadata: {},
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'dump-context',
         providerName: 'anthropic',
         ephemeralsSnapshot: {
@@ -349,6 +357,7 @@ describe('AnthropicProvider dumpContext integration', () => {
       },
       metadata: {},
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'dump-context',
         providerName: 'anthropic',
         ephemeralsSnapshot: {

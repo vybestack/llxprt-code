@@ -7,7 +7,6 @@ import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/wo
 
 import { describe, it, expect, spyOn } from 'bun:test';
 import fs from 'node:fs/promises';
-import type { OpenMode, ObjectEncodingOptions } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -21,7 +20,12 @@ import {
   type ToolConfirmationRequest,
 } from '@vybestack/llxprt-code-policy';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
-import { WorkspacePolicyOwner, SessionPolicyOwner } from './policy-owner.js';
+import {
+  WorkspacePolicyOwner,
+  SessionPolicyOwner,
+  RuntimePolicyOwner,
+} from './policy-owner.js';
+import { gateReadFile } from '../utils/__tests__/gated-read-file.js';
 
 function fixture(): {
   config: Config;
@@ -149,6 +153,107 @@ describe('Explicit policy owner boundaries', () => {
     workspace.dispose();
   });
 
+  it('keeps user rules and withdraws MCP Trusted rules when trust is revoked', async () => {
+    const config = new Config({
+      sessionId: 'trust-revoke',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      model: 'test',
+      trustedFolder: true,
+    });
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
+    const engine = new PolicyEngine(config.getPolicyEngineConfig());
+    const workspace = new WorkspacePolicyOwner(config, trust, engine);
+    const owner = new RuntimePolicyOwner(config, trust, workspace);
+    try {
+      engine.addRule({
+        toolName: 'trusted-server__tool',
+        decision: PolicyDecision.ALLOW,
+        priority: 2.2,
+        source: 'Settings (MCP Trusted)',
+      });
+      engine.addRule({
+        toolName: 'user-tool',
+        decision: PolicyDecision.DENY,
+        priority: 2.9,
+        source: 'User Defined',
+      });
+
+      void trust.setTrustedFolderLive(false);
+
+      expect(
+        owner.session.decisions.evaluate(
+          'trusted-server__tool',
+          {},
+          'trusted-server',
+        ),
+      ).toBe(PolicyDecision.ASK_USER);
+      expect(owner.session.decisions.evaluate('user-tool', {})).toBe(
+        PolicyDecision.DENY,
+      );
+    } finally {
+      await owner.dispose();
+      workspace.dispose();
+      await trust.dispose();
+      await config.dispose();
+    }
+  });
+
+  it('rebuilds configured MCP trust rules when trust is gained', async () => {
+    const config = new Config({
+      sessionId: 'trust-gain',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      model: 'test',
+      trustedFolder: false,
+      mcpServers: { 'trusted-server': { trust: true } },
+    });
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
+    const engine = new PolicyEngine(config.getPolicyEngineConfig());
+    const workspace = new WorkspacePolicyOwner(config, trust, engine);
+    const owner = new RuntimePolicyOwner(config, trust, workspace);
+    try {
+      engine.addRule({
+        toolName: 'user-tool',
+        decision: PolicyDecision.DENY,
+        priority: 2.9,
+        source: 'User Defined',
+      });
+
+      expect(
+        owner.session.decisions.evaluate(
+          'trusted-server__tool',
+          {},
+          'trusted-server',
+        ),
+      ).toBe(PolicyDecision.ASK_USER);
+
+      void trust.setTrustedFolderLive(true);
+
+      expect(
+        owner.session.decisions.evaluate(
+          'trusted-server__tool',
+          {},
+          'trusted-server',
+        ),
+      ).toBe(PolicyDecision.ALLOW);
+      expect(owner.session.decisions.evaluate('user-tool', {})).toBe(
+        PolicyDecision.DENY,
+      );
+    } finally {
+      await owner.dispose();
+      workspace.dispose();
+      await trust.dispose();
+      await config.dispose();
+    }
+  });
+
   it('settles a pending ask on session disposal without cancelling a sibling ask', async () => {
     const { config, workspace } = fixture();
     const first = new SessionPolicyOwner(workspace, config);
@@ -193,50 +298,13 @@ async function gatedPolicyReload(
   const storage = spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(
     policies,
   );
-  let release!: () => void;
-  let enter!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const entered = new Promise<void>((resolve) => {
-    enter = resolve;
-  });
-  const read = fs.readFile;
-  type ReadPath = Parameters<typeof fs.readFile>[0];
-  type ReadOptions = Parameters<typeof fs.readFile>[1];
-  function gatedRead(
-    path: ReadPath,
-    options?: { encoding?: null; flag?: OpenMode; signal?: AbortSignal } | null,
-  ): Promise<Buffer<ArrayBuffer>>;
-  function gatedRead(
-    path: ReadPath,
-    options:
-      | BufferEncoding
-      | { encoding: BufferEncoding; flag?: OpenMode; signal?: AbortSignal },
-  ): Promise<string>;
-  function gatedRead(
-    path: ReadPath,
-    options?:
-      | BufferEncoding
-      | (ObjectEncodingOptions & { flag?: OpenMode; signal?: AbortSignal })
-      | null,
-  ): Promise<string | Buffer<ArrayBuffer>>;
-  async function gatedRead(
-    path: ReadPath,
-    options?: ReadOptions,
-  ): Promise<string | Buffer<ArrayBuffer>> {
-    if (String(path).endsWith('new.toml')) {
-      enter();
-      await gate;
-    }
-    return read(path, options);
-  }
-  const reading = spyOn(fs, 'readFile').mockImplementation(gatedRead);
+  const { entered, release, restore } = gateReadFile((path) =>
+    String(path).endsWith('new.toml'),
+  );
   try {
     await run({ entered, release });
   } finally {
-    release();
-    reading.mockRestore();
+    restore();
     storage.mockRestore();
     await fs.rm(directory, { recursive: true, force: true });
   }

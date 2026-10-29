@@ -1,11 +1,8 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { describe, expect, it, spyOn } from 'bun:test';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
@@ -15,6 +12,16 @@ import { OneShotStrategy } from '../../compression/OneShotStrategy.js';
 import { TopDownTruncationStrategy } from '../../compression/TopDownTruncationStrategy.js';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 import { drain } from './helpers/agentHarness.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 async function recordingRows(path: string): Promise<IContent[]> {
   let result: IContent[] = [];
@@ -51,6 +58,39 @@ function useSummaryStrategy(fails = false): () => void {
   return () => spy.mockRestore();
 }
 
+/**
+ * Two independent agents built through `fromConfig` over one working
+ * directory (so one chats directory), each with its own Config, client and
+ * history. The user config directory is a temp directory so journals never
+ * land in the real one.
+ */
+async function withIndependentPair(
+  scenario: (agent: Agent, sibling: Agent) => Promise<void>,
+): Promise<void> {
+  const home = await mkdtemp(join(tmpdir(), 'recording-compression-home-'));
+  const previousHome = process.env.LLXPRT_CONFIG_HOME;
+  process.env.LLXPRT_CONFIG_HOME = home;
+  const routes: RouteAAgent[] = [];
+  try {
+    const first = await openRouteAAgent({ config: { interactive: true } });
+    routes.push(first);
+    const second = await openRouteAAgent({
+      config: { interactive: true, workingDir: first.directory },
+    });
+    routes.push(second);
+    await scenario(first.agent, second.agent);
+  } finally {
+    await runCleanupSteps([
+      ...[...routes].reverse().map((route) => () => route.close()),
+      () => {
+        if (previousHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
+        else process.env.LLXPRT_CONFIG_HOME = previousHome;
+      },
+      () => rm(home, { recursive: true, force: true }),
+    ]);
+  }
+}
+
 const seed = [
   {
     speaker: 'human' as const,
@@ -63,24 +103,26 @@ const seed = [
 ];
 
 describe('shared history compression recording origin', () => {
+  useRecordingPrompts();
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   it('records A-only and B-only compression summaries in their own journals', async () => {
     const restore = useSummaryStrategy();
     try {
-      await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-        const sibling = await borrow();
+      await withIndependentPair(async (agent, sibling) => {
         await agent.setHistory(seed);
+        await sibling.setHistory(seed);
         await agent.session.setRecording({ enabled: true });
         await new Promise((resolve) => setTimeout(resolve, 1100));
         await sibling.session.setRecording({ enabled: true });
         const aPath = recordingPath(agent.session.getRecording());
         const bPath = recordingPath(sibling.session.getRecording());
         expect((await agent.compress()).status).toBe('compressed');
-        await agent.setHistory(seed);
+        await sibling.setHistory(seed);
         expect((await sibling.compress()).status).toBe('compressed');
         await agent.session.setRecording({ enabled: false });
         await sibling.session.setRecording({ enabled: false });
-        const a = await readFile(aPath, 'utf8');
-        const b = await readFile(bPath, 'utf8');
+        const a = JSON.stringify(await recordingRows(aPath));
+        const b = JSON.stringify(await recordingRows(bPath));
         expect(a).toContain('owned-summary-1');
         expect(b).not.toContain('owned-summary-1');
         expect(b).toContain('owned-summary-2');
@@ -92,37 +134,44 @@ describe('shared history compression recording origin', () => {
   }, 30000);
 
   it('keeps unbound external compression summaries broadcast to both subscribers', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-      const sibling = await borrow();
-      await agent.setHistory(seed);
-      await agent.session.setRecording({ enabled: true });
-      await new Promise((resolve) => setTimeout(resolve, 1100));
-      await sibling.session.setRecording({ enabled: true });
-      const history = agent.agentClient.getHistoryService();
-      if (!history) throw new Error('Missing shared history');
-      const summary = {
-        speaker: 'ai' as const,
-        blocks: [{ type: 'text' as const, text: 'external-summary' }],
-        metadata: { reason: 'compression-state-snapshot' as const },
-      };
-      history.startCompression();
-      await history.detachedValues.replace([summary]);
-      history.endCompression(summary, 2);
-      const aPath = recordingPath(agent.session.getRecording());
-      const bPath = recordingPath(sibling.session.getRecording());
-      await agent.session.setRecording({ enabled: false });
-      await sibling.session.setRecording({ enabled: false });
-      expect(await readFile(aPath, 'utf8')).toContain('external-summary');
-      expect(await readFile(bPath, 'utf8')).toContain('external-summary');
-    });
+    await withRecordingLifetimeFixture(
+      async ({ agent, borrow, shareHistory, clientFor }) => {
+        const sibling = await borrow();
+        await shareHistory(agent, sibling);
+        await agent.setHistory(seed);
+        await agent.session.setRecording({ enabled: true });
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+        await sibling.session.setRecording({ enabled: true });
+        const history = clientFor(agent).getHistoryService();
+        if (!history) throw new Error('Missing shared history');
+        const summary = {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text' as const, text: 'external-summary' }],
+          metadata: { reason: 'compression-state-snapshot' as const },
+        };
+        history.startCompression();
+        await history.detachedValues.replace([summary]);
+        history.endCompression(summary, 2);
+        const aPath = recordingPath(agent.session.getRecording());
+        const bPath = recordingPath(sibling.session.getRecording());
+        await agent.session.setRecording({ enabled: false });
+        await sibling.session.setRecording({ enabled: false });
+        expect(JSON.stringify(await recordingRows(aPath))).toContain(
+          'external-summary',
+        );
+        expect(JSON.stringify(await recordingRows(bPath))).toContain(
+          'external-summary',
+        );
+      },
+    );
   }, 30000);
 
   it('preserves compression ownership across profile adoption and session resume', async () => {
     const restore = useSummaryStrategy();
     try {
-      await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-        const sibling = await borrow();
+      await withIndependentPair(async (agent, sibling) => {
         await agent.setHistory(seed);
+        await sibling.setHistory(seed);
         await agent.session.setRecording({ enabled: true });
         await agent.session.nameCurrentSession('compression-origin-A');
         await new Promise((resolve) => setTimeout(resolve, 1100));
@@ -137,7 +186,12 @@ describe('shared history compression recording origin', () => {
         });
         await agent.setHistory(seed);
         expect((await agent.compress()).status).toBe('compressed');
-        expect(await readFile(bPath, 'utf8')).not.toContain('owned-summary-1');
+        expect(JSON.stringify(await recordingRows(bPath))).not.toContain(
+          'owned-summary-1',
+        );
+        const beforeResume = await recordingRows(
+          recordingPath(agent.session.getRecording()),
+        );
         await agent.session.setRecording({ enabled: false });
         const saved = (await agent.session.listSessions()).find(
           (session) => session.name === 'compression-origin-A',
@@ -149,8 +203,11 @@ describe('shared history compression recording origin', () => {
         const aPath = recordingPath(agent.session.getRecording());
         await agent.session.setRecording({ enabled: false });
         await sibling.session.setRecording({ enabled: false });
-        const a = await readFile(aPath, 'utf8');
-        const b = await readFile(bPath, 'utf8');
+        const a = JSON.stringify([
+          ...beforeResume,
+          ...(await recordingRows(aPath)),
+        ]);
+        const b = JSON.stringify(await recordingRows(bPath));
         expect(a).toContain('owned-summary-1');
         expect(a).toContain('owned-summary-2');
         expect(b).not.toContain('owned-summary-1');
@@ -164,27 +221,27 @@ describe('shared history compression recording origin', () => {
   it('unlocks after a rejected owner compression without recording a summary', async () => {
     const restore = useSummaryStrategy(true);
     try {
-      await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-        const sibling = await borrow();
+      await withIndependentPair(async (agent, sibling) => {
         await agent.setHistory(seed);
+        await sibling.setHistory(seed);
         await agent.session.setRecording({ enabled: true });
         await new Promise((resolve) => setTimeout(resolve, 1100));
         await sibling.session.setRecording({ enabled: true });
         const aPath = recordingPath(agent.session.getRecording());
         const bPath = recordingPath(sibling.session.getRecording());
         await expect(agent.compress()).rejects.toThrow('compression rejected');
-        const history = agent.agentClient.getHistoryService();
-        if (!history) throw new Error('Missing history');
-        history.add({
+        await agent.addHistory({
           speaker: 'human',
           blocks: [{ type: 'text', text: 'external-after-error' }],
         });
         await agent.session.setRecording({ enabled: false });
         await sibling.session.setRecording({ enabled: false });
-        expect(await readFile(aPath, 'utf8')).toContain('external-after-error');
-        const b = await readFile(bPath, 'utf8');
-        expect(b).toContain('external-after-error');
-        expect(b).not.toContain('owned-summary');
+        expect(JSON.stringify(await recordingRows(aPath))).toContain(
+          'external-after-error',
+        );
+        expect(JSON.stringify(await recordingRows(bPath))).not.toContain(
+          'owned-summary',
+        );
       });
     } finally {
       restore();
@@ -221,9 +278,9 @@ describe('shared history compression recording origin', () => {
       };
     });
     try {
-      await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-        const sibling = await borrow();
+      await withIndependentPair(async (agent, sibling) => {
         await agent.setHistory(seed);
+        await sibling.setHistory(seed);
         await agent.session.setRecording({ enabled: true });
         await new Promise((resolve) => setTimeout(resolve, 1100));
         await sibling.session.setRecording({ enabled: true });
@@ -234,8 +291,10 @@ describe('shared history compression recording origin', () => {
         expect((await agent.compress()).status).toBe('compressed');
         await agent.session.setRecording({ enabled: false });
         await sibling.session.setRecording({ enabled: false });
-        expect(await readFile(aPath, 'utf8')).toContain('A-fallback-summary');
-        expect(await readFile(bPath, 'utf8')).not.toContain(
+        expect(JSON.stringify(await recordingRows(aPath))).toContain(
+          'A-fallback-summary',
+        );
+        expect(JSON.stringify(await recordingRows(bPath))).not.toContain(
           'A-fallback-summary',
         );
       });
@@ -248,50 +307,53 @@ describe('shared history compression recording origin', () => {
   it('retains the committed summary origin after a failed history replacement', async () => {
     const restore = useSummaryStrategy();
     try {
-      await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-        const sibling = await borrow();
-        await agent.setHistory(seed);
-        await agent.session.setRecording({ enabled: true });
-        await new Promise((resolve) => setTimeout(resolve, 1100));
-        await sibling.session.setRecording({ enabled: true });
-        expect((await agent.compress()).status).toBe('compressed');
-        const history = agent.agentClient.getHistoryService();
-        if (!history) throw new Error('Missing shared history');
-        const summary = (await collectRawHistory(history)).find((entry) =>
-          entry.blocks.some(
-            (block) =>
-              block.type === 'text' && block.text === 'owned-summary-1',
-          ),
-        );
-        if (!summary) throw new Error('Missing committed summary');
-        const candidate = {
-          speaker: 'ai' as const,
-          blocks: [{ type: 'text' as const, text: 'rejected-summary' }],
-        };
-        await expect(
-          history.replaceAll([candidate], undefined, {
-            origin: agent.session,
-            afterPublication: () => {
-              throw new Error('reject summary replacement');
-            },
-          }),
-        ).rejects.toThrow('reject summary replacement');
-        expect(await collectRawHistory(history)).toContainEqual(summary);
-        const aPath = recordingPath(agent.session.getRecording());
-        const bPath = recordingPath(sibling.session.getRecording());
-        await agent.session.setRecording({ enabled: false });
-        await sibling.session.setRecording({ enabled: false });
-        const aRows = await recordingRows(aPath);
-        const bRows = await recordingRows(bPath);
-        expect(aRows).toContainEqual(summary);
-        expect(bRows).not.toContainEqual(summary);
-        const a = JSON.stringify(aRows);
-        const b = JSON.stringify(bRows);
-        expect(a).toContain('owned-summary-1');
-        expect(b).not.toContain('owned-summary-1');
-        expect(a).not.toContain('rejected-summary');
-        expect(b).not.toContain('rejected-summary');
-      });
+      await withRecordingLifetimeFixture(
+        async ({ agent, borrow, shareHistory, clientFor }) => {
+          const sibling = await borrow();
+          await shareHistory(agent, sibling);
+          await agent.setHistory(seed);
+          await agent.session.setRecording({ enabled: true });
+          await new Promise((resolve) => setTimeout(resolve, 1100));
+          await sibling.session.setRecording({ enabled: true });
+          expect((await agent.compress()).status).toBe('compressed');
+          const history = clientFor(agent).getHistoryService();
+          if (!history) throw new Error('Missing shared history');
+          const summary = (await collectRawHistory(history)).find((entry) =>
+            entry.blocks.some(
+              (block) =>
+                block.type === 'text' && block.text === 'owned-summary-1',
+            ),
+          );
+          if (!summary) throw new Error('Missing committed summary');
+          const candidate = {
+            speaker: 'ai' as const,
+            blocks: [{ type: 'text' as const, text: 'rejected-summary' }],
+          };
+          await expect(
+            history.replaceAll([candidate], undefined, {
+              origin: agent.session,
+              afterPublication: () => {
+                throw new Error('reject summary replacement');
+              },
+            }),
+          ).rejects.toThrow('reject summary replacement');
+          expect(await collectRawHistory(history)).toContainEqual(summary);
+          const aPath = recordingPath(agent.session.getRecording());
+          const bPath = recordingPath(sibling.session.getRecording());
+          await agent.session.setRecording({ enabled: false });
+          await sibling.session.setRecording({ enabled: false });
+          const aRows = await recordingRows(aPath);
+          const bRows = await recordingRows(bPath);
+          expect(aRows).toContainEqual(summary);
+          expect(bRows).not.toContainEqual(summary);
+          const a = JSON.stringify(aRows);
+          const b = JSON.stringify(bRows);
+          expect(a).toContain('owned-summary-1');
+          expect(b).not.toContain('owned-summary-1');
+          expect(a).not.toContain('rejected-summary');
+          expect(b).not.toContain('rejected-summary');
+        },
+      );
     } finally {
       restore();
     }
@@ -300,8 +362,7 @@ describe('shared history compression recording origin', () => {
   it('does not seed a late sibling with an owner summary after profile adoption', async () => {
     const restore = useSummaryStrategy();
     try {
-      await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-        const sibling = await borrow();
+      await withIndependentPair(async (agent, sibling) => {
         await agent.setHistory(seed);
         await agent.session.setRecording({ enabled: true });
         expect((await agent.compress()).status).toBe('compressed');
@@ -316,7 +377,7 @@ describe('shared history compression recording origin', () => {
         await sibling.session.setRecording({ enabled: true });
         await drain(sibling.stream('B-after-profile-origin'));
         const bPath = recordingPath(sibling.session.getRecording());
-        const b = await readFile(bPath, 'utf8');
+        const b = JSON.stringify(await recordingRows(bPath));
         expect(b).toContain('B-after-profile-origin');
         expect(b).not.toContain('owned-summary-1');
       });

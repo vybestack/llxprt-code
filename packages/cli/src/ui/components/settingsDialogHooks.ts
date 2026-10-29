@@ -24,6 +24,7 @@ import {
   setPendingSettingValue,
   setPendingSettingValueAny,
 } from '../../utils/settingsUtils.js';
+import type { DynamicToolSettingsSource } from '../../utils/dynamicSettings.js';
 import type { Key } from '../hooks/useKeypress.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { cpLen, getCachedStringWidth } from '../utils/textUtils.js';
@@ -45,7 +46,6 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 interface FzfResult {
   item: string;
@@ -381,7 +381,7 @@ interface SettingsDialogRuntimeArgs {
   scrollOffset: number;
   selectedScope: SettingScope;
   settings: LoadedSettings;
-  config?: CliUiRuntime;
+  config?: DynamicToolSettingsSource;
   onRestartRequest?: () => void;
   onSelect: (settingName: string | undefined, scope: SettingScope) => void;
   setFocusSection: React.Dispatch<React.SetStateAction<'settings' | 'scope'>>;
@@ -481,7 +481,7 @@ function buildKeypressCtx(deps: {
   scrollOffset: number;
   selectedScope: SettingScope;
   settings: LoadedSettings;
-  config?: CliUiRuntime;
+  config?: DynamicToolSettingsSource;
   onRestartRequest?: () => void;
   onSelect: (settingName: string | undefined, scope: SettingScope) => void;
   saveRestart: () => void;
@@ -615,7 +615,7 @@ interface ItemsActionsCtx {
   vimEnabled: boolean;
   editingKey: string | null;
   editBuffer: string;
-  config?: CliUiRuntime;
+  config?: DynamicToolSettingsSource;
   setEditingKey: React.Dispatch<React.SetStateAction<string | null>>;
   setEditBuffer: React.Dispatch<React.SetStateAction<string>>;
   setEditCursorPos: React.Dispatch<React.SetStateAction<number>>;
@@ -636,7 +636,7 @@ export function useSettingsItemsAndActions(
   search: SearchState,
   edit: ReturnType<typeof useEditState>,
   vimEnabled: boolean,
-  config: CliUiRuntime | undefined,
+  config: DynamicToolSettingsSource | undefined,
   setSelectedScope: React.Dispatch<React.SetStateAction<SettingScope>>,
   setFocusSection: React.Dispatch<React.SetStateAction<'settings' | 'scope'>>,
 ) {

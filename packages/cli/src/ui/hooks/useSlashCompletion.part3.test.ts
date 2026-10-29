@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 
@@ -12,7 +13,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { useSlashCompletion } from './useSlashCompletion.js';
-import type { CommandContext, SlashCommand } from '../commands/types.js';
+import type { SlashCommand } from '../commands/types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 
@@ -22,7 +23,7 @@ describe('useSlashCompletion', () => {
     () => testRootDir,
   );
   let mockConfig: Config;
-  const mockCommandContext = {} as CommandContext;
+  const mockCommandContext = {} as CommandOwnerFixture;
   let testDirs: string[];
 
   async function createEmptyDir(...pathSegments: string[]): Promise<string> {
@@ -85,7 +86,7 @@ describe('useSlashCompletion', () => {
           'another-channel',
         ];
         const mockCompleter = vi.fn(
-          async (_context: CommandContext, partialArg: string) =>
+          async (_context: CommandOwnerFixture, partialArg: string) =>
             availableTags
               .filter((tag) => tag.startsWith(partialArg))
               .map((tag) => ({ value: tag })),
@@ -114,6 +115,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/chat resume my-ch'),
             testDirs,
             testRootDir,
@@ -180,6 +182,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/chat resume '),
             testDirs,
             testRootDir,
@@ -228,6 +231,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/chat resume '),
             testDirs,
             testRootDir,
@@ -256,6 +260,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@s'),
             testDirs,
             testRootDir,
@@ -290,6 +295,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@src/comp'),
             testDirs,
             testRootDir,
@@ -316,6 +322,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@.'),
             testDirs,
             testRootDir,
@@ -348,6 +355,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@d'),
             testDirs,
             testRootDir,
@@ -374,6 +382,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@'),
             testDirs,
             testRootDir,
@@ -408,6 +417,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@'),
             testDirs,
             testRootDir,
@@ -439,6 +449,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@d'),
             testDirs,
             testRootDir,
@@ -473,6 +484,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@'),
             testDirs,
             testRootDir,
@@ -506,6 +518,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@t'),
             testDirs,
             testRootDir,

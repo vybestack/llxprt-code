@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition/index.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { projectionEndpoint } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
@@ -38,9 +38,18 @@ function realRuntimeFixture(root: string, baseURL: string, model: string) {
     debugMode: false,
     telemetry: { enabled: false },
   });
-  const { tokenizerFactory: factory } = configureProviderRuntimeFactories(
-    config,
-    new ProviderManager({ settingsService: settings, config }),
+  const factory = configureProviderTokenizer(
+    new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      config,
+      undefined,
+      undefined,
+      undefined,
+    ),
   );
   const provider = new ObservedResponsesProvider('test-key', baseURL);
   const history = new ObservedHistory();

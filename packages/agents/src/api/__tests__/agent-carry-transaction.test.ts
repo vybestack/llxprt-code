@@ -1,3 +1,4 @@
+import { capturedAgentClient } from './helpers/agent-client-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { statSync } from 'node:fs';
@@ -62,7 +63,7 @@ async function verifyUnchangedDurableSource(size: number): Promise<number> {
       expect(next.admissions).toBe(1);
       expect(next.visited).toBe(size);
       expect(next.getHistoryService()).toBeNull();
-      expect(agent.agentClient).toBe(previous);
+      expect(capturedAgentClient(agent)).toBe(previous);
       expect(previous.getHistoryService() === source).toBe(true);
       expect(await historyDigest(next.streamHistory())).toStrictEqual({
         count: 0,
@@ -73,8 +74,10 @@ async function verifyUnchangedDurableSource(size: number): Promise<number> {
         expectedDigest(size),
       );
       await agent.setModel('transaction-retried-model');
-      expect(agent.agentClient).not.toBe(previous);
-      expect(agent.agentClient.getHistoryService() === source).toBe(false);
+      expect(capturedAgentClient(agent)).not.toBe(previous);
+      expect(capturedAgentClient(agent).getHistoryService() === source).toBe(
+        false,
+      );
       const restored = await historyDigest(agent.streamHistory());
       expect(restored).toStrictEqual(expectedDigest(size));
       return restored.count;

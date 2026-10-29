@@ -10,7 +10,7 @@ import {
   formatNonInteractiveError,
   reportNonInteractiveError,
 } from '../session/errorReporting.js';
-import { dispatchInteractiveOrNonInteractive } from '../session/nonInteractiveSession.js';
+import { dispatchInteractiveOrNonInteractive } from './session-dispatch-fixture.js';
 import { installSafeProcessExit } from './sessionDispatch.testSeams.js';
 import {
   createMinimalConfig,
@@ -184,7 +184,7 @@ function installStderrSpy() {
 let stderrWriteSpy: ReturnType<typeof installStderrSpy>;
 
 /** Runs dispatch with the fixed recording/stdin arguments these cases share. */
-function runDispatch(
+async function runDispatch(
   { config, runtimeSettings }: ReturnType<typeof createMinimalConfig>,
   settings: unknown,
   recordingStartupWarnings: string[] = [],
@@ -192,7 +192,7 @@ function runDispatch(
   return dispatchInteractiveOrNonInteractive({
     runtimeSettings,
     config: config as never,
-    agent: createFakeAgent() as never,
+    agent: await createFakeAgent(),
     settings: settings as never,
     workspaceRoot: '/tmp/test',
     recordingOwner: 'agent',

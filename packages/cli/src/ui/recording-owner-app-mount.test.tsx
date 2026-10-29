@@ -1,12 +1,63 @@
+import { appendJournalUiItem } from './hooks/command-journal-output.js';
+import { readJournalItems } from './stores/turn/read-journal-items.js';
+import { InteractiveApplication } from '../session/interactiveApplication.js';
+import { runtimeAppFixture } from '../__tests__/runtime-context-fixture.js';
+import { useFakeResponsesReplay } from '../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
+import { openBridgeRoot } from '../__tests__/runtime-owner-bridge-route-b-root-fixture.js';
+import { createSessionModelCommand } from '../runtime/session-model-command.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { coreEvents } from '@vybestack/llxprt-code-core';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+
+import {
+  afterAll,
+  afterEach as afterFixtureTest,
+  beforeAll,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import {
+  createMockSettings,
+  renderWithProviders,
+  waitFor,
+} from '../__tests__/render.js';
+import {
+  buildAppContainerPortsForTest,
+  buildUiPortsForTest,
+} from '../__tests__/slash-command-runtime-fixture.js';
+import { AppWrapper } from './App.js';
+import { AppContainer } from './AppContainer.js';
+import { appContainerBoundAgentProps } from './__tests__/app-bootstrap-owner-props.js';
+import {
+  createCommandRegistrationFixture,
+  createCommandRegistryFixture,
+} from '../__tests__/command-registry-fixture.js';
+import {
+  createUnconfiguredCredentialRegistry,
+  createUnconfiguredHistoryReaders,
+} from '../__tests__/unconfigured-model-command.js';
+import { initialAppState } from './reducers/appReducer.js';
+import { SessionStatsProvider } from './contexts/SessionContext.js';
+import { TodoProvider } from './contexts/TodoProvider.js';
+import { OAuthControlProvider } from './contexts/OAuthControlContext.js';
+import { ProviderAliasRefreshProvider } from './contexts/ProviderAliasRefreshContext.js';
+import { OverflowProvider } from './contexts/OverflowContext.js';
+import { ScrollProvider } from './contexts/ScrollProvider.js';
+import { AppDispatchProvider } from './contexts/AppDispatchContext.js';
+import { createRuntimeOwnerFeatures } from '../__tests__/runtime-owner-features-fixture.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { createSessionModelCommand } from '../runtime/session-model-command.js';
 
-import { afterEach as afterFixtureTest, describe, expect, it } from 'bun:test';
-import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 const makeFixtureFilesystem = installTestWorkspaceFilesystem();
 let fixtureFilesystem: ReturnType<typeof makeFixtureFilesystem> | undefined;
 function fixturePaths() {
@@ -17,74 +68,273 @@ function fixturePaths() {
   return fixtureFilesystem.paths;
 }
 
-import { withRecordingLifetimeFixture } from '../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
-import {
-  createMockSettings,
-  renderWithProviders,
-} from '../__tests__/render.js';
-import {
-  buildSlashCommandRuntime,
-  buildUiRuntimeFromSource,
-} from './cliUiRuntime.js';
-import { AppWrapper } from './App.js';
-import {
-  createRuntimeOwnerFeatures,
-  createProviderAliasRefresh,
-} from '../runtime/createRuntimeOwnerFeatures.js';
-import { createOAuthControl } from '../runtime/createOAuthControl.js';
+async function openMountedAgent(
+  authority: ReturnType<ReturnType<typeof useOwnedCredentials>>['authority'],
+  closers: Array<() => Promise<void>>,
+) {
+  const root = await openBridgeRoot({
+    authority,
+    label: `app-mount-${closers.length}`,
+  });
+  closers.push(root.close, async () => {
+    if (root.agent.session.getRecording().enabled)
+      await root.agent.session.setRecording({ enabled: false });
+    await root.agent.dispose();
+  });
+  return root;
+}
 
 describe('interactive Agent owner AppWrapper', () => {
-  afterFixtureTest(() => {
-    fixtureFilesystem = undefined;
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'recording-mount-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
   });
-  it('mounts with no raw recording integration, recording service or lock', async () => {
-    await withRecordingLifetimeFixture(
-      async ({
-        agent,
-        config,
-        settingsOwner,
-        settingsService,
-        oauthManager,
-      }) => {
-        await agent.setHistory([
-          { speaker: 'human', blocks: [{ type: 'text', text: 'owner mount' }] },
-        ]);
-        await agent.session.setRecording({ enabled: true });
-        const settings = createMockSettings({});
-        const view = renderWithProviders(
-          <AppWrapper
-            uiRuntime={buildUiRuntimeFromSource(config, agent)}
-            slashCommandRuntime={buildSlashCommandRuntime(config, agent)}
-            agent={agent}
-            runtimeOwner={{
-              create: () =>
-                createRuntimeOwnerFeatures(
-                  config,
-                  agent.providerManager,
-                  fixturePaths().directories,
-                  createSessionModelCommand(agent),
-                  settingsOwner,
-                  settingsService,
-                  agent.workspace,
-                ),
-            }}
-            providerAliasRefresh={createProviderAliasRefresh(
-              agent.providerManager,
-            )}
-            oauthControl={createOAuthControl(
-              () => oauthManager,
-              agent.providerManager,
-            )}
-            settings={settings}
-            version="test-owner"
-            recordingOwner="agent"
-          />,
-          { settings },
-        );
-        expect(view.lastFrame()).toBeDefined();
-        view.unmount();
-        expect(agent.session.getRecording().enabled).toBe(true);
-      },
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+  const credentials = useOwnedCredentials();
+  useFakeResponsesReplay('multi-turn-text.jsonl');
+  const closers: Array<() => Promise<void>> = [];
+  afterFixtureTest(async () => {
+    fixtureFilesystem = undefined;
+    await runCleanupSteps(closers.splice(0).reverse());
+  });
+  it('renders resumed history and handles slash input using named capabilities without an Agent prop', async () => {
+    const { agent, config, settingsOwner } = await openMountedAgent(
+      credentials().authority,
+      closers,
     );
+    await agent.setHistory([
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Resumed capability history' }],
+      },
+    ]);
+    await agent.session.setRecording({ enabled: true });
+    const publishedTokens: number[] = [];
+    const stopTokens = agent.session.subscribeHistoryTokens((count) =>
+      publishedTokens.push(count),
+    );
+    closers.push(async () => stopTokens());
+    const settings = createMockSettings({ ui: { theme: 'Default' } });
+    const runtime = runtimeAppFixture(
+      agent,
+      createRuntimeOwnerFeatures(
+        agent.providerReads.inspection,
+        fixturePaths().directories,
+        createSessionModelCommand(agent),
+        settingsOwner,
+        agent.workspace,
+        agent.modelParameters,
+        agent.settings,
+        agent.toolFormat,
+        agent.providerReads,
+        agent.auth.keys,
+        () => agent.providerReads.readOpenAIInfo(),
+      ),
+      agent.sessionClient.fetch,
+    );
+    const view = renderWithProviders(
+      <ScrollProvider>
+        <SessionStatsProvider metrics={agent.metrics}>
+          <TodoProvider sessionId={agent.session.getSessionId()}>
+            {runtime.renderRuntime(
+              <OAuthControlProvider control={agent.authentication}>
+                <ProviderAliasRefreshProvider
+                  refresh={() => agent.providerReads.refreshAliases()}
+                >
+                  <OverflowProvider>
+                    <AppDispatchProvider value={() => {}}>
+                      <AppContainer
+                        {...appContainerBoundAgentProps(agent)}
+                        {...createCommandRegistryFixture(null)}
+                        {...createCommandRegistrationFixture(agent)}
+                        registerCredentials={() =>
+                          createUnconfiguredCredentialRegistry()
+                        }
+                        historyReads={{
+                          ...createUnconfiguredHistoryReaders(),
+                          writeOutput: async (item) => {
+                            await appendJournalUiItem(
+                              agent.session,
+                              agent.session,
+                              item,
+                            );
+                          },
+                        }}
+                        {...buildAppContainerPortsForTest(
+                          config,
+                          agent,
+                          undefined,
+                          undefined,
+                          undefined,
+                          undefined,
+                          undefined,
+                          settingsOwner,
+                        )}
+                        readAgentRecordingPath={() =>
+                          agent.session.getRecording().path
+                        }
+                        generateSubagentPrompt={async () => ''}
+                        settings={settings}
+                        version="test-capabilities"
+                        recordingOwner="agent"
+                        suppressStartupWelcome
+                        appState={initialAppState}
+                        appDispatch={() => {}}
+                      />
+                    </AppDispatchProvider>
+                  </OverflowProvider>
+                </ProviderAliasRefreshProvider>
+              </OAuthControlProvider>,
+            )}
+          </TodoProvider>
+        </SessionStatsProvider>
+      </ScrollProvider>,
+      { settings },
+    );
+    try {
+      await waitFor(() =>
+        expect(view.frames.join()).toContain('Resumed capability history'),
+      );
+      await waitFor(() =>
+        expect(view.lastFrame()).toContain('Type your message'),
+      );
+      view.stdin.write('/help');
+      await waitFor(() => expect(view.lastFrame()).toMatch(/>\s*\/help/));
+      view.stdin.write('\r');
+      await waitFor(
+        () => expect(view.lastFrame()).toContain('Ctrl+C - Quit application'),
+        { timeout: 5000 },
+      );
+      expect(view.lastFrame()).toContain('Enter - Send message');
+      await agent.chat('live composition history '.repeat(500));
+      await waitFor(
+        () => expect(publishedTokens.at(-1) ?? 0).toBeGreaterThan(0),
+        { timeout: 5000 },
+      );
+      await waitFor(() =>
+        expect(view.lastFrame()).toContain(
+          `${((publishedTokens.at(-1) ?? 0) / 1000).toFixed(1)}k/`,
+        ),
+      );
+    } finally {
+      view.unmount();
+    }
+  }, 30000);
+  it('mounts with no raw recording integration, recording service or lock', async () => {
+    const { agent, config, settingsOwner } = await openMountedAgent(
+      credentials().authority,
+      closers,
+    );
+    await agent.setHistory([
+      { speaker: 'human', blocks: [{ type: 'text', text: 'owner mount' }] },
+    ]);
+    await agent.session.setRecording({ enabled: true });
+    coreEvents.emitFeedback('warning', 'captured App bootstrap feedback');
+    const settings = createMockSettings({ ui: { theme: 'Default' } });
+    const view = renderWithProviders(
+      <AppWrapper
+        {...new InteractiveApplication({
+          ...buildUiPortsForTest(
+            config,
+            agent,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            settingsOwner,
+          ),
+          addHistory: agent.addHistory.bind(agent),
+          readJournal: () => ({
+            appendDisplay: agent.session.appendDisplay.bind(agent.session),
+            length: () => agent.session.getJournalLength(),
+          }),
+          subscribeContextRange: agent.session.subscribeContextRange.bind(
+            agent.session,
+          ),
+          openDumpSnapshot: agent.session.openDumpSnapshot.bind(agent.session),
+          replaceHistoryFromSource: agent.session.replaceHistoryFromSource.bind(
+            agent.session,
+          ),
+          resumeHistory: {
+            adoptResumeBoot: agent.session.adoptResumeBoot.bind(agent.session),
+            attachRecording: (integration) =>
+              agent.session.attachRecording(integration),
+          },
+          streamHistory: agent.streamHistory.bind(agent),
+          stream: agent.stream.bind(agent),
+          injectSteer: agent.injectSteer.bind(agent),
+          getProviderContextLimit: agent.getProviderContextLimit.bind(agent),
+          dispose: agent.dispose.bind(agent),
+          getApprovalMode: agent.getApprovalMode.bind(agent),
+          setApprovalMode: agent.setApprovalMode.bind(agent),
+          generate: agent.generate.bind(agent),
+          getModel: agent.getModel.bind(agent),
+          getProvider: agent.getProvider.bind(agent),
+          getCurrentSequenceModel: agent.getCurrentSequenceModel.bind(agent),
+          getActiveProfileName: agent.getActiveProfileName.bind(agent),
+          addDirectoryContext: agent.addDirectoryContext.bind(agent),
+          compress: agent.compress.bind(agent),
+          setProvider: agent.setProvider.bind(agent),
+          saveProfileSnapshot: agent.saveProfileSnapshot.bind(agent),
+          deleteProfileByName: agent.deleteProfileByName.bind(agent),
+          setDefaultProfileName: agent.setDefaultProfileName.bind(agent),
+          listProviders: agent.listProviders.bind(agent),
+          session: agent.session,
+          providerReads: agent.providerReads,
+          policy: agent.policy,
+          ide: agent.ide,
+          hooks: agent.hooks,
+          auth: agent.auth,
+          sessionClient: agent.sessionClient,
+          profiles: agent.profiles,
+          workspace: agent.workspace,
+          tools: agent.tools,
+          mcp: agent.mcp,
+          tasks: agent.tasks,
+          metrics: agent.metrics,
+          ...runtimeAppFixture(
+            agent,
+            createRuntimeOwnerFeatures(
+              agent.providerReads.inspection,
+              fixturePaths().directories,
+              createSessionModelCommand(agent),
+              settingsOwner,
+              agent.workspace,
+              agent.modelParameters,
+              agent.settings,
+              agent.toolFormat,
+              agent.providerReads,
+              agent.auth.keys,
+              () => agent.providerReads.readOpenAIInfo(),
+            ),
+            agent.sessionClient.fetch,
+          ),
+          providerAliasRefresh: () => agent.providerReads.refreshAliases(),
+          oauthControl: agent.authentication,
+          settings,
+          version: 'test-owner',
+          recordingOwner: 'agent',
+        }).createAppProps()}
+      />,
+      { settings },
+    );
+    expect(view.lastFrame()).toBeDefined();
+    const recordingPath = agent.session.getRecording().path;
+    if (!recordingPath) throw new Error('Missing app recording path');
+    await waitFor(async () =>
+      expect(JSON.stringify(await readJournalItems(agent))).toContain(
+        'captured App bootstrap feedback',
+      ),
+    );
+    view.unmount();
+    expect(agent.session.getRecording().enabled).toBe(true);
   }, 30000);
 });

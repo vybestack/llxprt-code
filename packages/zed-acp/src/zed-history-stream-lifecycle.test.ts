@@ -28,7 +28,10 @@ for (const size of [512, 8192]) {
         async (history, reader, counters) => {
           const client = replayClient(history);
           try {
-            const cursor = readAgentHistoryForReplay(client, 'replay-cursor');
+            const cursor = readAgentHistoryForReplay(
+              client.streamHistory.bind(client),
+              'replay-cursor',
+            );
             await cursor.next();
             await expect(cursor.next()).rejects.toMatchObject({
               code: -32603,
@@ -60,7 +63,7 @@ for (const size of [512, 8192]) {
           const client = replayClient(history);
           const controller = new AbortController();
           const cursor = readAgentHistoryForReplay(
-            client,
+            client.streamHistory.bind(client),
             'replay-cursor',
             controller.signal,
           );

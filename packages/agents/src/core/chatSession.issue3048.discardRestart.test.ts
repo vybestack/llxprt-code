@@ -1,6 +1,9 @@
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -35,27 +38,35 @@ import { ChatSession } from './chatSession.js';
 import type { StreamEvent } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
+import {
+  InvalidStreamError,
+  StreamEventType,
+} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import {
-  StreamEventType,
-  InvalidStreamError,
-} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+
+import { chatSessionPorts } from './chatSessionPorts.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('Issue 3048: discard-and-restart after a transient transport failure that followed partial output', () => {
   let settingsService: SettingsService;
@@ -72,15 +83,13 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
-      config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.issue3048.test' },
     });
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   });
 
   function buildChatSession(history?: HistoryService): ChatSession {
@@ -92,7 +101,18 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     });
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            fetch: requestFetch,
+            runtimeId: providerRuntime.runtimeId,
+            metadata: providerRuntime.metadata,
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: history ?? new HistoryService(),
       settings: {
@@ -114,23 +134,39 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       providerRuntime: { ...providerRuntime },
     });
 
-    return new ChatSession(view, {} as unknown as ContentGenerator, {}, []);
+    return new ChatSession(
+      chatSessionPorts(view),
+      config,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {} as unknown as ContentGenerator,
+      {},
+      [],
+    );
   }
 
   function registerProvider(
     generateChatCompletion: (
       options: GenerateChatOptions,
-    ) => AsyncGenerator<unknown>,
+    ) => AsyncGenerator<IContent>,
   ): IProvider {
     const provider: IProvider = {
       name: 'stub',
       isDefault: true,
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'stub-model',
-      generateChatCompletion:
-        generateChatCompletion as IProvider['generateChatCompletion'],
-      getAuthToken: vi.fn(async () => 'stub-auth-token'),
-    } as unknown as IProvider;
+      generateChatCompletion(
+        options: GenerateChatOptions | AsyncIterable<IContent>,
+      ): AsyncIterableIterator<IContent> {
+        if (!('contents' in options))
+          throw new Error('Expected request options');
+        return generateChatCompletion(options);
+      },
+    };
     manager.registerProvider(provider);
     return provider;
   }
@@ -205,7 +241,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       let attempt = 0;
       const generateChatCompletionMock = vi.fn(async function* (
         _options: GenerateChatOptions,
-      ) {
+      ): AsyncGenerator<IContent, void, unknown> {
         attempt++;
         if (attempt === 1) {
           yield {
@@ -281,7 +317,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       if (attempt === 1) {
         yield {
@@ -369,7 +405,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       if (attempt === 1) {
         yield {
@@ -416,7 +452,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       if (attempt === 1) {
         yield {
@@ -467,7 +503,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -498,7 +534,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -537,7 +573,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       const observation = { attempt: 0 };
       const generateChatCompletionMock = vi.fn(async function* (
         _options: GenerateChatOptions,
-      ) {
+      ): AsyncGenerator<IContent, void, unknown> {
         observation.attempt++;
         if (observation.attempt === 1) {
           yield {
@@ -574,7 +610,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -604,7 +640,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -631,7 +667,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -681,7 +717,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       if (attempt === 1) {
         yield {
@@ -699,9 +735,11 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
 
     const chat = buildChatSession(history);
 
-    const completed = [
+    const tool = new MockTool({ name: 'read_file' });
+    const completed: CompletedToolCall[] = [
       {
-        status: 'success' as const,
+        status: 'success',
+        tool,
         request: {
           callId: 'toolu_eager_1',
           name: 'read_file',
@@ -727,8 +765,10 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
             },
           ],
           resultDisplay: 'package-json',
+          error: undefined,
+          errorType: undefined,
         },
-        invocation: { execute: vi.fn() },
+        invocation: tool.build({ file_path: '/test/package.json' }),
       },
     ];
     chat.recordCompletedToolCalls('stub-model', completed);

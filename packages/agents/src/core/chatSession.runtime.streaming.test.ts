@@ -1,9 +1,9 @@
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -17,34 +17,42 @@ const modelTools = installModelToolFixture();
  * Sibling to chatSession.runtime.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { ChatSession } from './chatSession.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import {
+  AfterModelHookOutput,
+  BeforeModelHookOutput,
+} from '@vybestack/llxprt-code-core/hooks/types.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import {
-  AfterModelHookOutput,
-  BeforeModelHookOutput,
-} from '@vybestack/llxprt-code-core/hooks/types.js';
+
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
 import { deferred } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
+
+import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('ChatSession runtime streaming and abort behavior', () => {
   let settingsService: SettingsService;
@@ -61,23 +69,21 @@ describe('ChatSession runtime streaming and abort behavior', () => {
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
-      config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.runtime.streaming.test' },
     });
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   });
 
   it('applies BeforeToolSelection to request-scoped streaming tools', async () => {
     const calls: GenerateChatOptions[] = [];
     const generateChatCompletionMock = vi.fn(async function* (
-      options: GenerateChatOptions | IContent[],
+      options: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncIterableIterator<IContent> {
-      if (Array.isArray(options)) throw new Error('Expected request options');
+      if (!('contents' in options)) throw new Error('Expected request options');
       calls.push(options);
       yield {
         speaker: 'ai',
@@ -118,8 +124,6 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         modelHooks.fireAfterModelSnapshotEvent(request, response, signal),
     };
     const hookProviderRuntime = createProviderRuntimeContext({
-      settingsService,
-      config,
       runtimeId: 'test.runtime.hook-selection',
       metadata: { source: 'chatSession.runtime.streaming.test' },
     });
@@ -136,7 +140,13 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       readRuntimeSettings: fixtureRuntimePolicyReader(config, settingsService),
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
-          hookProviderRuntime,
+          {
+            fetch: requestFetch,
+            runtimeId: hookProviderRuntime.runtimeId,
+            metadata: hookProviderRuntime.metadata,
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
+          },
           name,
           parameters,
           signal,
@@ -163,7 +173,14 @@ describe('ChatSession runtime streaming and abort behavior', () => {
     });
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
+      config,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],
@@ -197,9 +214,10 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       const entered = deferred();
       let capturedSignal: AbortSignal | undefined;
       const generateChatCompletionMock = vi.fn(async function* (
-        options: GenerateChatOptions | IContent[],
+        options: GenerateChatOptions | AsyncIterable<IContent>,
       ): AsyncIterableIterator<IContent> {
-        if (Array.isArray(options)) throw new Error('Expected request options');
+        if (!('contents' in options))
+          throw new Error('Expected request options');
         capturedSignal = options.invocation?.signal;
         entered.resolve();
         yield {
@@ -238,7 +256,18 @@ describe('ChatSession runtime streaming and abort behavior', () => {
           settingsService,
         ),
         prepareProviderInvocation: (name, parameters, signal) =>
-          captureProviderInvocation(providerRuntime, name, parameters, signal),
+          captureProviderInvocation(
+            {
+              fetch: requestFetch,
+              runtimeId: providerRuntime.runtimeId,
+              metadata: providerRuntime.metadata,
+              globalSettings: settingsService.getAllGlobalSettings(),
+              providerSettings: settingsService.getProviderSettings(name),
+            },
+            name,
+            parameters,
+            signal,
+          ),
         state: runtimeState,
         history: historyService,
         settings: {
@@ -261,7 +290,14 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       });
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
+        config,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         {} as unknown as ContentGenerator,
         {},
         [],
@@ -305,9 +341,10 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       const entered = deferred();
       let capturedSignal: AbortSignal | undefined;
       const generateChatCompletionMock = vi.fn(async function* (
-        options: GenerateChatOptions | IContent[],
+        options: GenerateChatOptions | AsyncIterable<IContent>,
       ): AsyncIterableIterator<IContent> {
-        if (Array.isArray(options)) throw new Error('Expected request options');
+        if (!('contents' in options))
+          throw new Error('Expected request options');
         capturedSignal = options.invocation?.signal;
         entered.resolve();
         yield {
@@ -346,7 +383,18 @@ describe('ChatSession runtime streaming and abort behavior', () => {
           settingsService,
         ),
         prepareProviderInvocation: (name, parameters, signal) =>
-          captureProviderInvocation(providerRuntime, name, parameters, signal),
+          captureProviderInvocation(
+            {
+              fetch: requestFetch,
+              runtimeId: providerRuntime.runtimeId,
+              metadata: providerRuntime.metadata,
+              globalSettings: settingsService.getAllGlobalSettings(),
+              providerSettings: settingsService.getProviderSettings(name),
+            },
+            name,
+            parameters,
+            signal,
+          ),
         state: runtimeState,
         history: historyService,
         settings: {
@@ -369,7 +417,14 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       });
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
+        config,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         {} as unknown as ContentGenerator,
         {},
         [],

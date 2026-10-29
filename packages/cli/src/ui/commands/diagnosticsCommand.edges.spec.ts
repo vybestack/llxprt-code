@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
-import { diagnosticsCommand } from './diagnosticsCommand.js';
+import { registerDiagnosticsCommand } from '../../__tests__/diagnostics-command-test-owner.js';
 import type { MessageActionReturn } from './types.js';
 import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -73,7 +73,10 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -111,7 +114,10 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -149,7 +155,10 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -187,7 +196,10 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -215,7 +227,10 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         oauthFixture: vi.fn(() => null),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -250,7 +265,10 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -310,7 +328,10 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -338,7 +359,10 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         }),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -378,7 +402,10 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         'auth-key-name': 'my-production-key',
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
       const content = (result as MessageActionReturn).content;
 
       expect(content).toContain('auth-key-name: my-production-key');
@@ -390,7 +417,10 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         'auth-key': 'sk-abcdefghijklmnop',
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
       const content = (result as MessageActionReturn).content;
 
       expect(content).toContain('auth-key:');
@@ -403,7 +433,10 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         'auth-keyfile': '/home/user/.secrets/api-key.txt',
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
       const content = (result as MessageActionReturn).content;
 
       expect(content).toContain(
@@ -417,7 +450,10 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         'auth-key-name': 'work-anthropic',
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
       const content = (result as MessageActionReturn).content;
 
       expect(content).toContain('auth-key-name: work-anthropic');

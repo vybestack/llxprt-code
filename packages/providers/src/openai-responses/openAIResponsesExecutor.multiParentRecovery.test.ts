@@ -27,6 +27,10 @@ import {
   frame,
   userTextsOf,
 } from './__tests__/openAIResponsesWebSocketTransport.test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 
@@ -35,11 +39,11 @@ function buildNormalizedOptions(
 ): NormalizedGenerateChatOptions {
   const settings = new SettingsService();
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: 'test-runtime',
   });
   const config = createRuntimeConfigStub(settings, {});
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
 

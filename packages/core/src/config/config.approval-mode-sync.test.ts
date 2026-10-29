@@ -37,7 +37,6 @@ import {
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
-  buildFetchMockBody,
   createBaseParams,
   resetAgentClientMock,
   type HoistedConfigMocks,
@@ -61,7 +60,6 @@ const hoistedConfigMocks = {
     emitModelChanged: vi.fn(),
     emitConsoleLog: vi.fn(),
   },
-  setGlobalProxy: vi.fn(),
 } as HoistedConfigMocks;
 
 const __actual = { ...(await import('fs')) };
@@ -96,8 +94,6 @@ const __actual5 = { ...(await import('../utils/events.js')) };
 void vi.mock('../utils/events.js', () =>
   buildEventsMockBody(__actual5, hoistedConfigMocks),
 );
-
-void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 const DEFAULT_WRITE_RULE_PRIORITY = 1.01;
 const AUTO_EDIT_RULE_PRIORITY = 1.015;

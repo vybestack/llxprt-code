@@ -31,7 +31,7 @@ export async function startNewSessionTransition(
   },
 ): Promise<void> {
   const ownsConfig = deps.sessionIdentityOwnership === 'config';
-  if (ownsConfig && deps.config.getSessionId() !== state.owner.getSessionId()) {
+  if (ownsConfig && deps.readOwnedSessionId() !== state.owner.getSessionId()) {
     throw new Error('Cannot replace a session owned by another facade');
   }
   const nextSessionId = crypto.randomUUID();
@@ -43,19 +43,20 @@ export async function startNewSessionTransition(
     if (state.owner.getRecording().enabled) {
       recording = await createLockedSessionRecorder({
         sessionId: nextSessionId,
-        projectHash: basename(deps.config.projectTempDir),
-        chatsDir: deps.config.projectChatsDir,
+        projectHash: basename(deps.paths.projectTempDir),
+        chatsDir: deps.paths.projectChatsDir,
         workspaceDirs: [...deps.directories()],
-        cwd: deps.config.getProjectRoot(),
+        cwd: deps.paths.projectRoot,
         provider: deps.getProvider(),
         model: deps.getModel(),
+        resolveProviderModel: () => ({
+          provider: deps.getProvider(),
+          model: deps.getModel(),
+        }),
         mediaStore: deps.mediaStore,
       });
       integration = new RecordingIntegration(recording);
-      const history = candidate.client.getHistoryService();
-      if (history === null)
-        throw new Error('New session client has no history service');
-      await integration.subscribeToJournal(history, state.owner);
+      await candidate.attachRecording(integration, state.owner);
     }
     retirementStarted = true;
     // Retire the history before detaching its recorder, otherwise detachment
@@ -67,7 +68,7 @@ export async function startNewSessionTransition(
     if (retirementFailures.length > 1)
       throw new AggregateError(retirementFailures, 'Session retirement failed');
     candidate.publish();
-    if (ownsConfig) deps.config.adoptSessionId(nextSessionId);
+    if (ownsConfig) deps.adoptOwnedSessionId(nextSessionId);
     state.publish(nextSessionId, recording, integration);
   } catch (error) {
     if (retirementStarted) {

@@ -1,3 +1,4 @@
+import { chatSessionPorts } from '../../chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -112,6 +113,21 @@ export function localProvider(
   };
 }
 
+const unused = async (): Promise<never> => {
+  throw new Error('Unexpected legacy generator');
+};
+const silentTelemetry = {
+  logApiRequest(): void {},
+  logApiResponse(): void {},
+  logApiError(): void {},
+};
+const unusedGenerator = {
+  generateContent: unused,
+  generateContentStream: unused,
+  countTokens: unused,
+  embedContent: unused,
+};
+
 export function serviceToolChat(
   history: HistoryService,
   provider: RuntimeProvider,
@@ -145,39 +161,46 @@ export function serviceToolChat(
     history,
     readRuntimeSettings: () => owner.readRuntimePolicy(),
     prepareProviderInvocation: (name, parameters, signal) =>
-      owner.prepareProviderInvocation(sessionId, name, parameters, signal),
+      owner.prepareProviderInvocation(
+        sessionId,
+        name,
+        parameters,
+        signal,
+        undefined,
+        globalThis.fetch,
+      ),
     settings: {
       contextLimit: 100000,
       telemetry: { enabled: false, target: null },
     },
     providerRuntime: createProviderRuntimeContext({
-      settingsService: settings,
-      config,
       runtimeId: sessionId,
     }),
     provider: {
+      getProviderKeys: () => {
+        throw new Error('Fixture has no credential key authority');
+      },
+
       getActiveProvider: () => provider,
       setActiveProvider(): void {
         throw new Error('Unexpected provider switch');
       },
     },
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
-    telemetry: {
-      logApiRequest(): void {},
-      logApiResponse(): void {},
-      logApiError(): void {},
-    },
+    telemetry: silentTelemetry,
   });
-  const unused = async (): Promise<never> => {
-    throw new Error('Unexpected legacy generator');
-  };
   return {
-    chat: new ChatSession(runtime, {
-      generateContent: unused,
-      generateContentStream: unused,
-      countTokens: unused,
-      embedContent: unused,
-    }),
+    chat: new ChatSession(
+      chatSessionPorts(runtime),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      unusedGenerator,
+    ),
     close: async (): Promise<void> => {
       await owner.dispose();
       await config.dispose();

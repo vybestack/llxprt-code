@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 /**
  * @plan PLAN-20260129-TODOPERSIST.P05
@@ -10,8 +11,8 @@
  */
 
 import { describe, it, expect, vi } from 'bun:test';
-import { todoCommand } from './todoCommand.js';
-import type { CommandContext } from './types.js';
+import { registerTodoCommand } from '../../__tests__/todo-command-test-owner.js';
+
 import type { Todo } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
 
@@ -19,7 +20,7 @@ import * as fc from 'fast-check';
  * Mock context factory
  * @plan PLAN-20260129-TODOPERSIST.P08
  */
-function createMockContext(initialTodos: Todo[] = []): CommandContext {
+function createMockContext(initialTodos: Todo[] = []): CommandOwnerFixture {
   const addItemMock = vi.fn();
   const updateTodosMock = vi.fn((newTodos: Todo[]) => {
     mockTodoContext.todos = newTodos;
@@ -34,9 +35,9 @@ function createMockContext(initialTodos: Todo[] = []): CommandContext {
   return {
     services: {
       config: null,
-      settings: {} as unknown as CommandContext['services']['settings'],
+      settings: {} as unknown as CommandOwnerFixture['services']['settings'],
       git: undefined,
-      logger: {} as unknown as CommandContext['services']['logger'],
+      logger: {} as unknown as CommandOwnerFixture['services']['logger'],
     },
     ui: {
       addItem: addItemMock,
@@ -56,11 +57,11 @@ function createMockContext(initialTodos: Todo[] = []): CommandContext {
       addConfirmUpdateExtensionRequest: vi.fn(),
     },
     session: {
-      stats: {} as unknown as CommandContext['session']['stats'],
+      stats: {} as unknown as CommandOwnerFixture['session']['stats'],
       sessionShellAllowlist: new Set(),
     },
     todoContext: mockTodoContext,
-  } as unknown as CommandContext;
+  } as unknown as CommandOwnerFixture;
 }
 
 describe('todoCommand', () => {
@@ -76,7 +77,7 @@ describe('todoCommand', () => {
     it('deletes saved task session at position 1', async () => {
       const ctx = createMockContext([]);
 
-      const deleteSubcommand = todoCommand.subCommands?.find(
+      const deleteSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'delete',
       );
       expect(deleteSubcommand).toBeDefined();
@@ -100,7 +101,7 @@ describe('todoCommand', () => {
     it('deletes range of saved task sessions', async () => {
       const ctx = createMockContext([]);
 
-      const deleteSubcommand = todoCommand.subCommands?.find(
+      const deleteSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'delete',
       );
 
@@ -121,7 +122,7 @@ describe('todoCommand', () => {
     it('deletes all saved task sessions with "all" keyword', async () => {
       const ctx = createMockContext([]);
 
-      const deleteSubcommand = todoCommand.subCommands?.find(
+      const deleteSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'delete',
       );
 
@@ -141,7 +142,7 @@ describe('todoCommand', () => {
     it('shows error when deleting out-of-range session', async () => {
       const ctx = createMockContext([]);
 
-      const deleteSubcommand = todoCommand.subCommands?.find(
+      const deleteSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'delete',
       );
 
@@ -165,7 +166,7 @@ describe('todoCommand', () => {
     it('shows usage help when no number is provided', async () => {
       const ctx = createMockContext([]);
 
-      const deleteSubcommand = todoCommand.subCommands?.find(
+      const deleteSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'delete',
       );
 
@@ -195,7 +196,7 @@ describe('todoCommand', () => {
         { id: '2', content: 'Task 2', status: 'in_progress' },
       ]);
 
-      const undoSubcommand = todoCommand.subCommands?.find(
+      const undoSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'undo',
       );
       expect(undoSubcommand).toBeDefined();
@@ -227,7 +228,7 @@ describe('todoCommand', () => {
         { id: '5', content: 'Task 5', status: 'completed' },
       ]);
 
-      const undoSubcommand = todoCommand.subCommands?.find(
+      const undoSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'undo',
       );
 
@@ -259,7 +260,7 @@ describe('todoCommand', () => {
         { id: '3', content: 'Task 3', status: 'completed' },
       ]);
 
-      const undoSubcommand = todoCommand.subCommands?.find(
+      const undoSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'undo',
       );
 
@@ -287,7 +288,7 @@ describe('todoCommand', () => {
         { id: '1', content: 'Task 1', status: 'completed' },
       ]);
 
-      const undoSubcommand = todoCommand.subCommands?.find(
+      const undoSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'undo',
       );
 
@@ -315,7 +316,7 @@ describe('todoCommand', () => {
         { id: '2', content: 'Task 2', status: 'in_progress' },
       ]);
 
-      const undoSubcommand = todoCommand.subCommands?.find(
+      const undoSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'undo',
       );
 
@@ -344,7 +345,7 @@ describe('todoCommand', () => {
         { id: '2', content: 'Task 2', status: 'pending' },
       ]);
 
-      const unsetSubcommand = todoCommand.subCommands?.find(
+      const unsetSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'unset',
       );
       expect(unsetSubcommand).toBeDefined();
@@ -373,7 +374,7 @@ describe('todoCommand', () => {
         { id: '2', content: 'Task 2', status: 'pending' },
       ]);
 
-      const unsetSubcommand = todoCommand.subCommands?.find(
+      const unsetSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'unset',
       );
 
@@ -399,7 +400,7 @@ describe('todoCommand', () => {
         { id: '1', content: 'Task 1', status: 'in_progress' },
       ]);
 
-      const unsetSubcommand = todoCommand.subCommands?.find(
+      const unsetSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'unset',
       );
 
@@ -429,7 +430,7 @@ describe('todoCommand', () => {
         { id: '2', content: 'Task 2', status: 'pending' },
       ]);
 
-      const setSubcommand = todoCommand.subCommands?.find(
+      const setSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'set',
       );
       expect(setSubcommand).toBeDefined();
@@ -459,7 +460,7 @@ describe('todoCommand', () => {
         { id: '3', content: 'Task 3', status: 'pending' },
       ]);
 
-      const setSubcommand = todoCommand.subCommands?.find(
+      const setSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'set',
       );
 
@@ -487,7 +488,7 @@ describe('todoCommand', () => {
         { id: '2', content: 'Task 2', status: 'pending' },
       ]);
 
-      const setSubcommand = todoCommand.subCommands?.find(
+      const setSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'set',
       );
 
@@ -514,7 +515,7 @@ describe('todoCommand', () => {
         { id: '1', content: 'Task 1', status: 'pending' },
       ]);
 
-      const setSubcommand = todoCommand.subCommands?.find(
+      const setSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'set',
       );
 
@@ -557,7 +558,7 @@ describe('todoCommand', () => {
           async ([todos, position]) => {
             const ctx = createMockContext(todos as Todo[]);
 
-            const setSubcommand = todoCommand.subCommands?.find(
+            const setSubcommand = registerTodoCommand(ctx).subCommands?.find(
               (cmd) => cmd.name === 'set',
             );
 

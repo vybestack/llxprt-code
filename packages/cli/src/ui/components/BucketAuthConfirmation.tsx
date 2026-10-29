@@ -7,12 +7,11 @@
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
-import { MessageBusType } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
-  MessageBus,
-  BucketAuthConfirmationRequest,
-} from '@vybestack/llxprt-code-core';
+  AgentAuthControl,
+  BucketAuthConsentRequest,
+} from '@vybestack/llxprt-code-agents';
 import type { RadioSelectItem } from './shared/RadioButtonSelect.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 
@@ -23,16 +22,9 @@ import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 const logger = new DebugLogger('llxprt:bucket:confirmation:ui');
 
 interface BucketAuthConfirmationProps {
-  messageBus?: MessageBus;
+  subscribeBucketConsent?: AgentAuthControl['subscribeBucketConsent'];
+  respondToBucketConsent?: AgentAuthControl['respondToBucketConsent'];
   isFocused?: boolean;
-}
-
-interface PendingRequest {
-  correlationId: string;
-  provider: string;
-  bucket: string;
-  bucketIndex: number;
-  totalBuckets: number;
 }
 
 type ConfirmOption = 'proceed' | 'cancel';
@@ -87,46 +79,44 @@ const BucketAuthHeader: React.FC<BucketAuthHeaderProps> = ({
 );
 
 function useBucketAuthConfirmation(
-  messageBus: MessageBus | undefined,
-): [PendingRequest | null, () => void] {
-  const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(
-    null,
-  );
+  subscribeBucketConsent:
+    | AgentAuthControl['subscribeBucketConsent']
+    | undefined,
+): [BucketAuthConsentRequest | null, () => void] {
+  const [pendingRequest, setPendingRequest] =
+    useState<BucketAuthConsentRequest | null>(null);
 
   useEffect(() => {
     logger.debug('BucketAuthConfirmation useEffect running', {
-      hasMessageBus: !!messageBus,
+      hasConsentObserver: !!subscribeBucketConsent,
     });
-    if (!messageBus) {
-      logger.debug('No message bus available, skipping subscription');
+    if (!subscribeBucketConsent) {
+      logger.debug('No consent observer available, skipping subscription');
       return undefined;
     }
 
     logger.debug('Subscribing to BUCKET_AUTH_CONFIRMATION_REQUEST');
-    const unsubscribe = messageBus.subscribe<BucketAuthConfirmationRequest>(
-      MessageBusType.BUCKET_AUTH_CONFIRMATION_REQUEST,
-      (request) => {
-        logger.debug('Received bucket auth confirmation request', {
-          provider: request.provider,
-          bucket: request.bucket,
-          bucketIndex: request.bucketIndex,
-          totalBuckets: request.totalBuckets,
-        });
-        setPendingRequest({
-          correlationId: request.correlationId,
-          provider: request.provider,
-          bucket: request.bucket,
-          bucketIndex: request.bucketIndex,
-          totalBuckets: request.totalBuckets,
-        });
-      },
-    );
+    const unsubscribe = subscribeBucketConsent((request) => {
+      logger.debug('Received bucket auth confirmation request', {
+        provider: request.provider,
+        bucket: request.bucket,
+        bucketIndex: request.bucketIndex,
+        totalBuckets: request.totalBuckets,
+      });
+      setPendingRequest({
+        correlationId: request.correlationId,
+        provider: request.provider,
+        bucket: request.bucket,
+        bucketIndex: request.bucketIndex,
+        totalBuckets: request.totalBuckets,
+      });
+    });
 
     return () => {
       logger.debug('Unsubscribing from BUCKET_AUTH_CONFIRMATION_REQUEST');
       unsubscribe();
     };
-  }, [messageBus]);
+  }, [subscribeBucketConsent]);
 
   const clearPendingRequest = useCallback(() => {
     setPendingRequest(null);
@@ -142,26 +132,25 @@ function useBucketAuthConfirmation(
  * @pseudocode lines 122-133
  */
 export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
-  messageBus,
+  subscribeBucketConsent,
+  respondToBucketConsent,
   isFocused = true,
 }) => {
-  const [pendingRequest, clearPendingRequest] =
-    useBucketAuthConfirmation(messageBus);
+  const [pendingRequest, clearPendingRequest] = useBucketAuthConfirmation(
+    subscribeBucketConsent,
+  );
 
   const handleConfirm = useCallback(
     (confirmed: boolean) => {
-      if (!pendingRequest || !messageBus) {
+      if (!pendingRequest || !respondToBucketConsent) {
         return;
       }
 
-      messageBus.respondToBucketAuthConfirmation(
-        pendingRequest.correlationId,
-        confirmed,
-      );
+      respondToBucketConsent(pendingRequest.correlationId, confirmed);
 
       clearPendingRequest();
     },
-    [messageBus, pendingRequest, clearPendingRequest],
+    [respondToBucketConsent, pendingRequest, clearPendingRequest],
   );
 
   useKeypress(

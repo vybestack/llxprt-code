@@ -84,6 +84,7 @@ export class McpClient {
   private pendingResourceRefresh: boolean = false;
   private connectionGeneration = 0;
   private connectionAbortController: AbortController | undefined;
+  private retirementAbortController = new AbortController();
   private discoveryAbortController: AbortController | undefined;
   private readonly refreshAbortControllers = new Set<AbortController>();
   private capabilityGeneration = 0;
@@ -133,6 +134,7 @@ export class McpClient {
     const connectionGeneration = ++this.connectionGeneration;
     const abortController = new AbortController();
     this.connectionAbortController = abortController;
+    this.retirementAbortController = abortController;
     let connectedClient: Client | undefined;
     try {
       const client = await connectToMcpServer(
@@ -429,10 +431,10 @@ export class McpClient {
       controller.abort();
     }
     this.refreshAbortControllers.clear();
-    const client = this.client;
+    const { client, serverName, retirementAbortController: retirement } = this;
     try {
       if (client) {
-        await closeClientWithTimeout(client, this.serverName);
+        await closeClientWithTimeout({ client, serverName, retirement });
         if (this.client === client) {
           this.client = undefined;
         }

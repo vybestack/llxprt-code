@@ -243,7 +243,13 @@ function registerCompressionCase3(): void {
               }),
             };
           }
-          return realCompressionStrategy(name);
+          return realCompressionStrategy(
+            name,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+          );
         },
       );
       installSummaryTransport(runtimeSetup.provider, async () => {
@@ -311,7 +317,13 @@ function registerCompressionCase4(): void {
               }),
             };
           }
-          return realCompressionStrategy(name);
+          return realCompressionStrategy(
+            name,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+          );
         },
       );
       installSummaryTransport(runtimeSetup.provider, async () => {
@@ -368,7 +380,13 @@ function registerCompressionCase5(): void {
                 .mockRejectedValue(new Error('truncation broke')),
             };
           }
-          return realCompressionStrategy(name);
+          return realCompressionStrategy(
+            name,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+          );
         },
       );
       installSummaryTransport(runtimeSetup.provider, async () => {
@@ -439,7 +457,13 @@ function registerCompressionCase6(): void {
               }),
             };
           }
-          return realCompressionStrategy(name);
+          return realCompressionStrategy(
+            name,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+          );
         },
       );
       installSummaryTransport(runtimeSetup.provider, async () => '');
@@ -491,7 +515,13 @@ function registerCompressionCase7(): void {
                 .mockRejectedValue(new Error('truncation broke')),
             };
           }
-          return realCompressionStrategy(name);
+          return realCompressionStrategy(
+            name,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+          );
         },
       );
       installSummaryTransport(runtimeSetup.provider, async () => {
@@ -547,7 +577,13 @@ function registerCompressionCase8(): void {
                 .mockRejectedValue(new Error('truncation broke')),
             };
           }
-          return realCompressionStrategy(name);
+          return realCompressionStrategy(
+            name,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+          );
         },
       );
       installSummaryTransport(runtimeSetup.provider);
@@ -715,7 +751,13 @@ function registerCompressionCase11(): void {
               }),
             };
           }
-          return realCompressionStrategy(name);
+          return realCompressionStrategy(
+            name,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+          );
         },
       );
       installSummaryTransport(runtimeSetup.provider);
@@ -791,7 +833,6 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: runtimeSetup.config,
     };
   });
   afterEach(() => {

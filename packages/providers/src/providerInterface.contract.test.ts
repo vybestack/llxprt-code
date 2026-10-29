@@ -17,6 +17,10 @@ import type { IModel } from './IModel.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createProviderWithRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const asContent = (text: string): IContent => ({
   speaker: 'human',
@@ -88,19 +92,16 @@ describe('generateChatCompletion contract', () => {
   });
 
   it('honours provided GenerateChatOptions payload', async () => {
-    const {
-      provider,
-      runtime,
-      settingsService: customSettings,
-    } = createProviderWithRuntime<OptionRecorderProvider>(
-      ({ settingsService: svc }) => {
-        svc.set('auth-key', 'options-token');
-        return new OptionRecorderProvider({ name: 'contract' });
-      },
-      {
-        runtimeId: 'contract.options',
-      },
-    );
+    const { provider, settingsService: customSettings } =
+      createProviderWithRuntime<OptionRecorderProvider>(
+        ({ settingsService: svc }) => {
+          svc.set('auth-key', 'options-token');
+          return new OptionRecorderProvider({ name: 'contract' });
+        },
+        {
+          runtimeId: 'contract.options',
+        },
+      );
     const fakeConfig = {
       getUserMemory: () => 'contract-memory',
       getModel: () => 'contract-model',
@@ -112,13 +113,16 @@ describe('generateChatCompletion contract', () => {
     const options = {
       contents: [asContent('options-call')],
       invocation: captureProviderInvocation(
-        { settingsService: customSettings, runtimeId: 'options-test' },
+        {
+          fetch: requestFetch,
+          runtimeId: 'options-test',
+          globalSettings: customSettings.getAllGlobalSettings(),
+          providerSettings: customSettings.getProviderSettings('contract'),
+        },
         'contract',
       ),
       metadata: { requestId: 'options-test' },
     } satisfies Parameters<OptionRecorderProvider['generateChatCompletion']>[0];
-
-    runtime.config ??= fakeConfig;
 
     await provider.generateChatCompletion(options).next();
 

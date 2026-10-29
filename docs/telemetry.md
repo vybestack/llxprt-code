@@ -26,7 +26,9 @@ logging (the `/logging` command), see
 
 ## What telemetry does
 
-Session assembly selects a private telemetry root before constructing consumers.
+The agents-owned preferred assembly binds its explicit SessionSettingsOwner to
+a private telemetry root before constructing consumers. Child assembly binds its
+own settings owner to the borrowed parent telemetry before starting its session.
 Config holds immutable startup values; constructing Config does not initialize
 an SDK or select a global exporter. Each root owns its logger, tracer and meter
 providers. There is no global HTTP instrumentation registration.

@@ -32,7 +32,11 @@ function applyProfile(agent: Agent, operation: string): Promise<unknown> {
   });
 }
 
+import { usePromptFixture } from './helpers/prompt-fixture.js';
+
 describe('profile admission during a session switch', () => {
+  usePromptFixture();
+
   it.each(['load', 'applySnapshot', 'apply'])(
     'rejects %s while the old recording retires',
     async (operation) => {

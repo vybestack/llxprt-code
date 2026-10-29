@@ -106,4 +106,37 @@ describe('agent.workspace control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P04', () =
       await cleanup();
     }
   });
+
+  it('dispose fulfills while a workspace operation that rejects for its caller is in flight @scenario:dispose-joins-caller-failure @given:an agent with agent.workspace.profileDefinitions.loadProfile(missing) pending @when:agent.dispose() runs @then:dispose fulfills and the caller saw the rejection once', async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+      workingDir: API_DIR,
+    });
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', record);
+    try {
+      const callerOutcomes: unknown[] = [];
+      const read = agent.workspace.profileDefinitions
+        .loadProfile('definitely-missing-profile')
+        .then(
+          () => {
+            callerOutcomes.push('read');
+          },
+          (error: unknown) => {
+            callerOutcomes.push(error);
+          },
+        );
+      await agent.dispose();
+      await read;
+      await new Promise((done) => setTimeout(done, 0));
+      expect(callerOutcomes).toHaveLength(1);
+      expect(callerOutcomes[0]).toBeInstanceOf(Error);
+      expect(unhandled).toStrictEqual([]);
+    } finally {
+      process.off('unhandledRejection', record);
+      await cleanup();
+    }
+  });
 });

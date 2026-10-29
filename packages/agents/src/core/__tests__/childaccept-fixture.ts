@@ -1,3 +1,11 @@
+import {
+  loadAgentRuntime,
+  type ToolSelectedRuntimeLoaderResult,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import { SubAgentScope } from '../subagent.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import {
@@ -20,10 +28,7 @@ import {
   createSessionSettingsFixture,
   subagentSessionPorts,
 } from '../../api/__tests__/helpers/session-settings-fixture.js';
-import {
-  SubagentOrchestrator,
-  type SubagentLaunchResult,
-} from '../subagentOrchestrator.js';
+import { type SubagentLaunchResult } from '../subagentOrchestrator.js';
 import { fixtureToolSelection } from './subagentOrchestrator-test-helpers.js';
 
 const createWorkspaceFilesystem = installTestWorkspaceFilesystem();
@@ -40,7 +45,7 @@ export async function launchAcceptanceChild(
   directory: string,
   baseUrl: string,
 ): Promise<{
-  child: SubagentLaunchResult;
+  child: AcceptanceChild;
   config: Config;
   close(): Promise<void>;
 }> {
@@ -76,7 +81,18 @@ export async function launchAcceptanceChild(
     profileManager,
   );
   await subagentManager.saveSubagent('child', 'local', 'child acceptance');
-  const orchestrator = new SubagentOrchestrator({
+  let runtime: ToolSelectedRuntimeLoaderResult | undefined;
+  let scopeHistory: HistoryService | undefined;
+  const orchestrator = createTestChildOrchestrator({
+    credentialAuthority: new CredentialAuthority(),
+    runtimeLoader: async (options) => {
+      runtime = await loadAgentRuntime(options);
+      return runtime;
+    },
+    scopeFactory: async (...args) => {
+      scopeHistory = args[1].admittedRuntime.history;
+      return SubAgentScope.create(...args);
+    },
     ...subagentSessionPorts(session),
     instructions: emptyInstructionReads,
     toolRegistry: fixtureToolSelection(),
@@ -87,12 +103,17 @@ export async function launchAcceptanceChild(
     foregroundConfig: config,
     messageBus: new MessageBus(),
   });
-  const child = await orchestrator.launch({
-    name: 'child',
-    toolConfig: { tools: [] },
-  });
+  const child = await orchestrator.launch(
+    {
+      name: 'child',
+      toolConfig: { tools: [] },
+    },
+    new AbortController().signal,
+  );
+  if (runtime === undefined || scopeHistory === undefined)
+    throw new Error('Missing assembled child runtime');
   return {
-    child,
+    child: { ...child, runtime, scopeHistory },
     config,
     close: async () => {
       await child.dispose();
@@ -128,4 +149,9 @@ export async function openChildResumeBoot(path: string): Promise<{
     streamRows: () => boot.streamRows(),
     close: () => recording.dispose(),
   };
+}
+
+export interface AcceptanceChild extends SubagentLaunchResult {
+  readonly runtime: ToolSelectedRuntimeLoaderResult;
+  readonly scopeHistory: HistoryService;
 }

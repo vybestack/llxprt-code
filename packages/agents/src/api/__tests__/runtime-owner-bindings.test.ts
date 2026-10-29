@@ -4,23 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type {
-  Config,
-  OAuthToken,
-  TokenStore,
-} from '@vybestack/llxprt-code-core';
-import { createAgent, type Agent } from '../index.js';
-import { createRuntimeActivationBindings } from '@vybestack/llxprt-code-providers/runtime.js';
+import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
 import {
-  ProviderFileLifecycle,
-  resolveProviderFilePolicy,
-} from '@vybestack/llxprt-code-providers/providerFilePolicy.js';
+  createAgent,
+  createAgentWithRetainedProviderFiles,
+  type Agent,
+  type AgentProviderFileOperations,
+} from '../index.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
+import { resolveProviderFilePolicy } from '@vybestack/llxprt-code-providers/providerFilePolicy.js';
 
 class MemoryStore implements TokenStore {
   private readonly tokens = new Map<string, OAuthToken>();
@@ -53,6 +51,43 @@ class MemoryStore implements TokenStore {
 }
 
 describe('public Agent runtime owner bindings', () => {
+  it('keeps the construction runtime id when the owned Config adopts another session id', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'runtime-owner-identity-'));
+    const oldHome = process.env.LLXPRT_CONFIG_HOME;
+    const oldFake = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_CONFIG_HOME = home;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
+    );
+    try {
+      const route = await openRouteAAgent({
+        authority: credentials().authority,
+        config: {
+          model: 'identity-model',
+          sessionId: 'construction-runtime-id',
+        },
+        intent: {
+          sessionId: 'construction-runtime-id',
+          activation: { provider: 'fake', model: 'identity-model' },
+        },
+      });
+      try {
+        route.config.adoptSessionId('adopted-config-session');
+        expect(route.config.getSessionId()).toBe('adopted-config-session');
+        expect(route.agent.getRuntimeId()).toBe('construction-runtime-id');
+      } finally {
+        await route.close();
+      }
+    } finally {
+      if (oldHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
+      else process.env.LLXPRT_CONFIG_HOME = oldHome;
+      if (oldFake === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+      else process.env.LLXPRT_FAKE_RESPONSES = oldFake;
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  const credentials = useOwnedCredentials();
   it('assigns independent provider-file owners to public Agents sharing a session label', async () => {
     const home = await mkdtemp(join(tmpdir(), 'runtime-owner-files-'));
     const oldHome = process.env.LLXPRT_CONFIG_HOME;
@@ -63,31 +98,21 @@ describe('public Agent runtime owner bindings', () => {
     );
     const agents: Agent[] = [];
     const owners: object[] = [];
-    const configs: Config[] = [];
     try {
       for (const model of ['first-model', 'second-model']) {
-        const base = createRuntimeActivationBindings();
         const agent = await createAgent({
+          credentialAuthority: credentials().authority,
           provider: 'fake',
           model,
           sessionId: 'shared-session-label',
           workingDir: process.cwd(),
           tokenStore: new MemoryStore(),
-          runtimeActivationBindings: {
-            ...base,
-            setRuntimeContext(settingsService, config, options) {
-              configs.push(config);
-              const lifecycle = options.providerFileLifecycle;
-              if (lifecycle !== undefined) owners.push(lifecycle);
-              return base.setRuntimeContext(settingsService, config, options);
-            },
-          },
         });
         agents.push(agent);
+        owners.push(agent.captureProviderFiles);
       }
       expect(owners).toHaveLength(2);
       expect(owners[0]).not.toBe(owners[1]);
-      expect(configs[0]).not.toBe(configs[1]);
       await Promise.all(
         agents.map((agent, index) =>
           agent.setProvider('fake', `switched-model-${index}`),
@@ -126,34 +151,13 @@ describe('public Agent runtime owner bindings', () => {
     );
     const agents: Agent[] = [];
     const stores = [new MemoryStore(), new MemoryStore()];
-    const events: string[][] = [[], []];
-    const factories = [
-      createAgentRuntimeFactoryBindings(),
-      createAgentRuntimeFactoryBindings(),
-    ];
-    const factoryEvents: string[][] = [[], []];
-    const makeBindings = (index: number) => {
-      const base = createRuntimeActivationBindings();
-      return {
-        ...base,
-        async registerInfrastructure(
-          ...args: Parameters<typeof base.registerInfrastructure>
-        ) {
-          expect(args[1].getTokenStore()).toBe(stores[index]);
-          events[index].push('activated');
-          await base.registerInfrastructure(...args);
-          const owner = args[2].config;
-          if (!owner) throw new Error('Activation did not supply an owner');
-          expect('providerManager' in owner).toBe(false);
-        },
-        async disposeRuntime(
-          ...args: Parameters<NonNullable<typeof base.disposeRuntime>>
-        ) {
-          events[index].push('disposed');
-          await base.disposeRuntime?.(...args);
-        },
-      };
-    };
+    const observeKeyLifetime = (): string[][] =>
+      credentials()
+        .keySnapshot()
+        .slice(0, 2)
+        .map((closes) =>
+          closes === 0 ? ['activated'] : ['activated', 'disposed'],
+        );
     try {
       const [first, second] = await Promise.all(
         [0, 1].map(async (index) => {
@@ -162,15 +166,8 @@ describe('public Agent runtime owner bindings', () => {
             model: `owner-model-${index}`,
             workingDir: process.cwd(),
             sessionId: 'same-owner-label',
+            credentialAuthority: credentials().authority,
             tokenStore: stores[index],
-            runtimeFactoryBindings: {
-              ...factories[index],
-              agentClientFactory: (...args) => {
-                factoryEvents[index].push('constructed');
-                return factories[index].agentClientFactory(...args);
-              },
-            },
-            runtimeActivationBindings: makeBindings(index),
           });
           agents.push(agent);
           return agent;
@@ -188,9 +185,6 @@ describe('public Agent runtime owner bindings', () => {
       expect(second.getRuntimeDiagnosticsSnapshot().modelName).toBe(
         'owner-model-1',
       );
-      expect(factoryEvents.every((ownerEvents) => ownerEvents.length > 0)).toBe(
-        true,
-      );
       const credential = (value: string): OAuthToken => ({
         access_token: value,
         refresh_token: `refresh-${value}`,
@@ -202,59 +196,53 @@ describe('public Agent runtime owner bindings', () => {
       await stores[1].saveToken('codex', credential('second'));
       expect((await stores[0].getToken('codex'))?.access_token).toBe('first');
       expect((await stores[1].getToken('codex'))?.access_token).toBe('second');
-      expect(events).toStrictEqual([['activated'], ['activated']]);
-      const failedOwnerEvents: string[] = [];
+      expect(observeKeyLifetime()).toStrictEqual([
+        ['activated'],
+        ['activated'],
+      ]);
       const failedFilesDeleted: string[] = [];
-      const failedBindings = createRuntimeActivationBindings();
+      const fakePath = process.env.LLXPRT_FAKE_RESPONSES;
+      process.env.LLXPRT_FAKE_RESPONSES = join(
+        home,
+        'activation rejected.jsonl',
+      );
       await expect(
-        createAgent({
-          provider: 'fake',
-          model: 'failed-owner',
-          workingDir: process.cwd(),
-          sessionId: 'same-owner-label',
-          tokenStore: new MemoryStore(),
-          runtimeFactoryBindings: createAgentRuntimeFactoryBindings(),
-          runtimeActivationBindings: {
-            ...failedBindings,
-            async registerInfrastructure(...args) {
-              await failedBindings.registerInfrastructure(...args);
-              const lifecycle = args[2].providerFileLifecycle;
-              if (!(lifecycle instanceof ProviderFileLifecycle)) {
-                throw new Error('Failed owner missing file lifecycle');
-              }
-              const retained = await lifecycle.retain({
-                cacheKey: 'failed-owner-file',
-                fileId: 'failed-owner-file',
-                bytes: 5,
-                identity: {
-                  provider: 'kimi',
-                  baseURL: 'https://api.kimi.test/v1',
-                  credentialHash: 'failed-owner-credential',
-                },
-                policy: resolveProviderFilePolicy({
-                  configuredMode: 'session',
-                  configuredRetentionMs: 60_000,
-                  configuredDeletion: 'delete',
-                  providerFileReferences: true,
-                  zeroDataRetention: 'incompatible-while-retained',
-                  zeroDataRetentionRequired: false,
-                }),
-                scopeId: 'same-owner-label',
-                deleteRemote: async (fileId) => {
-                  failedFilesDeleted.push(fileId);
-                },
-              });
-              await retained.lease.release();
-              throw new Error('activation rejected');
-            },
-            async disposeRuntime(...args) {
-              failedOwnerEvents.push('disposed');
-              await failedBindings.disposeRuntime?.(...args);
-            },
+        createAgentWithRetainedProviderFiles(
+          {
+            credentialAuthority: credentials().authority,
+            provider: 'fake',
+            model: 'failed-owner',
+            workingDir: process.cwd(),
+            sessionId: 'same-owner-label',
+            tokenStore: new MemoryStore(),
           },
-        }),
+          [
+            {
+              cacheKey: 'failed-owner-file',
+              fileId: 'failed-owner-file',
+              bytes: 5,
+              identity: {
+                provider: 'kimi',
+                baseURL: 'https://api.kimi.test/v1',
+                credentialHash: 'failed-owner-credential',
+              },
+              policy: resolveProviderFilePolicy({
+                configuredMode: 'session',
+                configuredRetentionMs: 60_000,
+                configuredDeletion: 'delete',
+                providerFileReferences: true,
+                zeroDataRetention: 'incompatible-while-retained',
+                zeroDataRetentionRequired: false,
+              }),
+              deleteRemote: async (fileId) => {
+                failedFilesDeleted.push(fileId);
+              },
+            },
+          ],
+        ),
       ).rejects.toThrow('activation rejected');
-      expect(failedOwnerEvents).toStrictEqual(['disposed']);
+      process.env.LLXPRT_FAKE_RESPONSES = fakePath;
+      expect(credentials().keySnapshot().slice(2)).toStrictEqual([1]);
       expect(failedFilesDeleted).toStrictEqual(['failed-owner-file']);
       expect(first.captureProfile().modelParams).toMatchObject({
         temperature: 0.2,
@@ -268,12 +256,21 @@ describe('public Agent runtime owner bindings', () => {
       );
       await second.dispose();
 
-      expect(events).toStrictEqual([['activated'], ['activated', 'disposed']]);
+      expect(observeKeyLifetime()).toStrictEqual([
+        ['activated'],
+        ['activated', 'disposed'],
+      ]);
       await first.dispose();
-      expect(events).toStrictEqual([
+      expect(observeKeyLifetime()).toStrictEqual([
         ['activated', 'disposed'],
         ['activated', 'disposed'],
       ]);
+      expect(await stores[0].getToken('codex')).toMatchObject({
+        access_token: 'first',
+      });
+      expect(await stores[1].getToken('codex')).toMatchObject({
+        access_token: 'second',
+      });
     } finally {
       for (const agent of agents) await agent.dispose();
       if (oldHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
@@ -292,29 +289,22 @@ describe('public Agent runtime owner bindings', () => {
       new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
     );
     const agents: Agent[] = [];
-    const owners: ProviderFileLifecycle[] = [];
+    const owners: AgentProviderFileOperations[] = [];
     const deleted: string[] = [];
     try {
       for (const fileId of ['first-file', 'second-file']) {
-        const base = createRuntimeActivationBindings();
         const agent = await createAgent({
+          credentialAuthority: credentials().authority,
           provider: 'fake',
           model: 'first-model',
           sessionId: 'shared-disposal-label',
           workingDir: process.cwd(),
           tokenStore: new MemoryStore(),
-          runtimeActivationBindings: {
-            ...base,
-            setRuntimeContext(settings, config, options) {
-              const owner = options.providerFileLifecycle;
-              if (owner instanceof ProviderFileLifecycle) owners.push(owner);
-              return base.setRuntimeContext(settings, config, options);
-            },
-          },
         });
         agents.push(agent);
+        owners.push(agent);
         const owner = owners[owners.length - 1];
-        const retained = await owner.retain({
+        const retained = await owner.retainProviderFile({
           cacheKey: fileId,
           fileId,
           bytes: 5,
@@ -331,7 +321,6 @@ describe('public Agent runtime owner bindings', () => {
             zeroDataRetention: 'incompatible-while-retained',
             zeroDataRetentionRequired: false,
           }),
-          scopeId: 'shared-disposal-label',
           deleteRemote: async (deletedId: string) => {
             deleted.push(deletedId);
           },
@@ -341,7 +330,7 @@ describe('public Agent runtime owner bindings', () => {
       await agents[0].dispose();
       expect(deleted).toStrictEqual(['first-file']);
       expect(
-        owners.map((owner) => owner.snapshot().retainedFiles),
+        owners.map((owner) => owner.captureProviderFiles().retainedFiles),
       ).toStrictEqual([0, 1]);
       await agents[1].setProvider('fake', 'switched-model');
       expect(agents[1].getModel()).toBe('switched-model');
@@ -373,6 +362,7 @@ describe('public Agent runtime owner bindings', () => {
           { provider: 'openai', model: 'gpt-4o-mini', key: 'openai-secret' },
         ].map(async ({ provider, model, key }) => {
           const agent = await createAgent({
+            credentialAuthority: credentials().authority,
             provider,
             model,
             sessionId: 'same-provider-label',

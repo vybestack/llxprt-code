@@ -4,69 +4,39 @@ import { WorkspaceLspOwner } from '@vybestack/llxprt-code-core/lsp/workspace-lsp
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 
 import { describe, it, expect, vi } from 'bun:test';
 import * as fc from 'fast-check';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import {
-  createRuntimeActivationBindings,
-  type RuntimeActivationBindings,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
+import { join } from 'node:path';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import * as fs from 'node:fs/promises';
 import {
   buildAgent,
-  internalConfig,
+  createAgent,
+  drain,
+  isDoneEvent,
+  isToolResultEvent,
+  respondToFirstConfirmation,
+  ToolConfirmationOutcome,
   ASYNC_PROPERTY_TIMEOUT_MS,
+  tempRoot,
 } from './helpers/agentHarness.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 const failingActivation = {
   provider: 'definitely-not-a-registered-provider',
   providerSwitchPolicy: 'strict',
 } satisfies NonNullable<Parameters<typeof buildAgent>[1]>['activation'];
 
-function captureOwners(): {
-  bindings: RuntimeActivationBindings;
-  activated: Config[];
-  released: Config[];
-  oauth: Array<
-    Parameters<
-      NonNullable<RuntimeActivationBindings['registerInfrastructure']>
-    >[1]
-  >;
-} {
-  const real = createRuntimeActivationBindings();
-  const activated: Config[] = [];
-  const released: Config[] = [];
-  const oauth: Array<
-    Parameters<
-      NonNullable<RuntimeActivationBindings['registerInfrastructure']>
-    >[1]
-  > = [];
-  return {
-    activated,
-    released,
-    oauth,
-    bindings: {
-      ...real,
-      registerInfrastructure: async (manager, oauthManager, options) => {
-        await real.registerInfrastructure(manager, oauthManager, options);
-        oauth.push(oauthManager);
-        if (!options.config) throw new Error('Expected explicit owner');
-        activated.push(options.config);
-      },
-      disposeRuntime: async (runtimeId, config) => {
-        if (!config) throw new Error('Expected cleanup owner');
-        await real.disposeRuntime?.(runtimeId, config);
-        released.push(config);
-      },
-    },
-  };
-}
-
 describe('createAgent self-contained assembly', () => {
+  const credentials = useOwnedCredentials();
+
   it('registers the shipped task tool without importing CLI composition', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+      credentialAuthority: credentials().authority,
+    });
     try {
       expect(agent.tools.list().map((tool) => tool.name)).toContain('task');
       expect(agent.tools.get('task')).toBeDefined();
@@ -81,6 +51,7 @@ describe('createAgent self-contained assembly', () => {
       await fc.assert(
         fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
           const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+            credentialAuthority: credentials().authority,
             sessionId,
           });
           try {
@@ -101,48 +72,70 @@ describe('createAgent self-contained assembly', () => {
 
   it('releases the failed explicit owner while a same-label sibling remains usable', async () => {
     const sessionId = 'issue3222-failure-same-label';
-    const siblingOwners = captureOwners();
     const sibling = await buildAgent('plain-text.jsonl', {
+      credentialAuthority: credentials().authority,
       sessionId,
-      runtimeActivationBindings: siblingOwners.bindings,
     });
-    const siblingConfig = internalConfig(sibling.agent);
-    const owners = captureOwners();
+    sibling.agent.setModelParam('temperature', 0.37);
+    const disposed: SessionMediaOwner[] = [];
+    const realDispose = SessionMediaOwner.prototype.dispose;
+    const observation = vi
+      .spyOn(SessionMediaOwner.prototype, 'dispose')
+      .mockImplementation(async function (
+        this: SessionMediaOwner,
+      ): Promise<void> {
+        await realDispose.call(this);
+        disposed.push(this);
+      });
     try {
-      expect(siblingOwners.oauth).toHaveLength(1);
-      expect(siblingOwners.oauth[0]).not.toBeNull();
+      expect(credentials().snapshot()).toStrictEqual([0]);
+      expect(await credentials().listProviders(0)).toStrictEqual([]);
       await expect(
         buildAgent('plain-text.jsonl', {
+          credentialAuthority: credentials().authority,
           sessionId,
           activation: failingActivation,
-          runtimeActivationBindings: owners.bindings,
         }),
       ).rejects.toThrow('createAgent activation failed');
-      expect(owners.activated).toHaveLength(1);
-      expect(owners.released).toStrictEqual(owners.activated);
-      const [failed] = owners.activated;
-      expect(failed).not.toBe(siblingConfig);
-      expect(owners.oauth[0]).not.toBe(siblingOwners.oauth[0]);
-      expect(
-        await siblingOwners.oauth[0].getTokenStore().listProviders(),
-      ).toStrictEqual([]);
+      expect(disposed).toHaveLength(1);
+      await expect(disposed[0].store.getStoredByteLength()).rejects.toThrow(
+        /closed/i,
+      );
+      expect(credentials().snapshot()).toStrictEqual([0, 1]);
+      expect(await credentials().listProviders(0)).toStrictEqual([]);
+      await credentials().saveToken(0, 'codex', {
+        access_token: 'surviving-owner-access',
+        refresh_token: 'surviving-owner-refresh',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      });
+      const auth = await sibling.agent.auth.detailedStatus('codex');
+      expect(auth.authenticated).toBe(true);
+      expect(auth.expiry).toBeGreaterThan(Date.now() / 1000);
+      expect(sibling.agent.getProvider()).toBe('fake');
+      expect(sibling.agent.getModel()).toBe('fake-model');
+      expect(sibling.agent.captureProfile().modelParams).toMatchObject({
+        temperature: 0.37,
+      });
       expect(await sibling.agent.generate('Respond locally')).toBe(
         'a plain text reply',
       );
     } finally {
       await sibling.cleanup();
+      observation.mockRestore();
     }
+    expect(credentials().snapshot()).toStrictEqual([1, 1]);
   });
 
   it('preserves activation and disposal errors while still shutting down the owned LSP client', async () => {
-    const injected = new Error('issue3222 Config.dispose cleanup failure');
-    const realDispose = Config.prototype.dispose;
-    const owners = captureOwners();
-    const disposer = vi
-      .spyOn(Config.prototype, 'dispose')
-      .mockImplementationOnce(async function (this: Config): Promise<void> {
-        await realDispose.call(this);
-        throw injected;
+    const injected = new Error('issue3222 media directory cleanup failure');
+    const media = new SessionMediaOwner(tempRoot, 1024 * 1024);
+    const realRm = fs.rm;
+    const removal = vi
+      .spyOn(fs, 'rm')
+      .mockImplementation(async (path, options) => {
+        if (path === media.store.rootDirectory) throw injected;
+        await realRm(path, options);
       });
     const lspRoot = new WorkspaceLspOwner(
       { servers: [] },
@@ -153,9 +146,10 @@ describe('createAgent self-contained assembly', () => {
       let rejection: unknown;
       try {
         await buildAgent('plain-text.jsonl', {
+          credentialAuthority: credentials().authority,
           sessionId: 'issue3222-cleanup-errors',
           activation: failingActivation,
-          runtimeActivationBindings: owners.bindings,
+          mediaOwner: media,
           lsp: true,
           lspOwner: lspRoot,
           lspOwnership: 'agent',
@@ -177,68 +171,87 @@ describe('createAgent self-contained assembly', () => {
             error.message.includes(failingActivation.provider),
         ),
       ).toBe(true);
-      expect(owners.released).toStrictEqual(owners.activated);
+      expect(credentials().snapshot()).toStrictEqual([1]);
+      await expect(media.store.getStoredByteLength()).rejects.toThrow(
+        /closed/i,
+      );
       await expect(lspRoot.inspection.read()).rejects.toThrow('stopped');
     } finally {
-      disposer.mockRestore();
+      removal.mockRestore();
+      await realRm(media.store.rootDirectory, { recursive: true, force: true });
+      await lspRoot.dispose();
     }
   });
 
-  it('disposes the failed Config exactly once without disposing a successful Config during construction', async () => {
-    const owners = captureOwners();
-    const disposed: Config[] = [];
-    const realDispose = Config.prototype.dispose;
+  it('retires failed media once while successful media remains usable', async () => {
+    const disposed: SessionMediaOwner[] = [];
+    const realDispose = SessionMediaOwner.prototype.dispose;
     const disposer = vi
-      .spyOn(Config.prototype, 'dispose')
-      .mockImplementation(async function (this: Config): Promise<void> {
+      .spyOn(SessionMediaOwner.prototype, 'dispose')
+      .mockImplementation(async function (
+        this: SessionMediaOwner,
+      ): Promise<void> {
         await realDispose.call(this);
         disposed.push(this);
       });
     try {
       await expect(
         buildAgent('plain-text.jsonl', {
+          credentialAuthority: credentials().authority,
           sessionId: 'issue3222-disposed-owner',
           activation: failingActivation,
-          runtimeActivationBindings: owners.bindings,
         }),
       ).rejects.toThrow(failingActivation.provider);
-      expect(disposed).toStrictEqual(owners.activated);
       expect(disposed).toHaveLength(1);
-      const control = await buildAgent('plain-text.jsonl');
-      const controlConfig = internalConfig(control.agent);
+      const failedConfig = disposed[0];
+      const control = await buildAgent('plain-text.jsonl', {
+        credentialAuthority: credentials().authority,
+      });
       try {
-        expect(disposed).not.toContain(controlConfig);
         expect(disposed).toHaveLength(1);
+        expect(credentials().snapshot()).toStrictEqual([1, 0]);
         expect(await control.agent.generate('Retain control owner')).toBe(
           'a plain text reply',
         );
       } finally {
         await control.cleanup();
       }
-      expect(disposed).toStrictEqual([...owners.activated, controlConfig]);
+      expect(disposed).toHaveLength(2);
+      expect(disposed[0]).toBe(failedConfig);
+      await expect(disposed[1].store.getStoredByteLength()).rejects.toThrow(
+        /closed/i,
+      );
+      expect(credentials().snapshot()).toStrictEqual([1, 1]);
     } finally {
       disposer.mockRestore();
     }
   });
 
   it('clears the initialized LSP client before rejecting a failed activation', async () => {
-    const owners = captureOwners();
     const lspRoot = new WorkspaceLspOwner(
       { servers: [] },
       process.cwd(),
       () => true,
     );
     try {
-      await expect(
+      // Await the outcome first: Bun 1.4 evaluates expect(...).rejects on a
+      // pending promise in a nested event loop that starves the LSP child's
+      // pipe I/O, so the real MCP request times out.
+      const [outcome] = await Promise.allSettled([
         buildAgent('plain-text.jsonl', {
+          credentialAuthority: credentials().authority,
           sessionId: 'issue3222-lsp-owner',
           activation: failingActivation,
-          runtimeActivationBindings: owners.bindings,
           lsp: true,
           lspOwner: lspRoot,
           lspOwnership: 'agent',
         }),
-      ).rejects.toThrow('createAgent activation failed');
+      ]);
+      expect(outcome.status).toBe('rejected');
+      expect(() => {
+        throw (outcome as PromiseRejectedResult).reason;
+      }).toThrow('createAgent activation failed');
+      expect(credentials().snapshot()).toStrictEqual([1]);
       await expect(lspRoot.inspection.read()).rejects.toThrow('stopped');
     } finally {
       await lspRoot.dispose();
@@ -247,30 +260,56 @@ describe('createAgent self-contained assembly', () => {
 });
 
 describe('created policy failure lifetime', () => {
+  const credentials = useOwnedCredentials();
+
   it('closes the exact decision bus when runtime activation fails before MCP assembly', async () => {
-    let bus: MessageBus | undefined;
-    const real = createRuntimeActivationBindings();
-    await expect(
-      buildAgent('plain-text.jsonl', {
-        runtimeActivationBindings: {
-          ...real,
-          registerInfrastructure: (_manager, _oauth, options) => {
-            bus = options.messageBus;
-            throw new Error('infrastructure activation rejected');
-          },
-        },
-      }),
-    ).rejects.toThrow('infrastructure activation rejected');
-    if (!bus) throw new Error('Missing activation decision bus');
-    const captured = bus;
-    expect(() => captured.evaluate('write_file', {})).toThrow(/disposed/);
-    const control = await buildAgent('plain-text.jsonl');
+    const closedBuses: MessageBus[] = [];
+    const cancel = MessageBus.prototype.cancelPendingConfirmations;
+    const observation = vi
+      .spyOn(MessageBus.prototype, 'cancelPendingConfirmations')
+      .mockImplementation(function (this: MessageBus): void {
+        cancel.call(this);
+        closedBuses.push(this);
+      });
+    const previous = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = join(
+      tempRoot,
+      'missing-provider-responses.jsonl',
+    );
     try {
-      expect(
-        control.agent.getMessageBus().evaluate('read_file', {}),
-      ).toBeDefined();
+      await expect(
+        createAgent({
+          credentialAuthority: credentials().authority,
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: tempRoot,
+        }),
+      ).rejects.toThrow('ENOENT');
+      expect(closedBuses).toHaveLength(1);
+      expect(credentials().snapshot()).toStrictEqual([1]);
+      expect(() => closedBuses[0].evaluate('write_file', {})).toThrow(
+        /disposed/,
+      );
     } finally {
+      observation.mockRestore();
+      if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+      else process.env.LLXPRT_FAKE_RESPONSES = previous;
+    }
+    const control = await buildAgent('tool-call-then-answer.jsonl', {
+      credentialAuthority: credentials().authority,
+    });
+    const responder = respondToFirstConfirmation(
+      control.agent,
+      ToolConfirmationOutcome.ProceedOnce,
+    );
+    try {
+      const events = await drain(control.agent.stream('run the tool'));
+      expect(events.filter(isToolResultEvent)).toHaveLength(1);
+      expect(events.filter(isDoneEvent)).toHaveLength(1);
+    } finally {
+      responder.unsubscribe();
       await control.cleanup();
     }
+    expect(credentials().snapshot()).toStrictEqual([1, 1]);
   });
 });

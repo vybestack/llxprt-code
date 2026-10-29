@@ -1,3 +1,5 @@
+import { readCurrentOwnerHistory } from '../../__tests__/session-owner-history-read.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,25 +16,35 @@
 // Enable React's act() environment so hook state updates are flushed.
 Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  spyOn,
+} from 'bun:test';
 import { act } from 'react';
 import { mkdtemp, rm } from 'node:fs/promises';
-import {
-  readRecordedFacts,
-  seedSessionRows,
-} from '../../__tests__/journal-recording.js';
+import { readRecordedFacts } from '../../__tests__/journal-recording.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   RecordingIntegration,
-  type AgentClientContract,
+  getProjectHash,
   type HydratedModel,
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 import { LiveProviderConfig } from '../../__tests__/liveProviderConfig.js';
-import { buildNewRecordingService } from '../../cliSessionBootstrap.js';
+import { setupOwnerSessionRecording } from '../../cliSessionBootstrap.js';
+import {
+  createUiSessionOwner,
+  uiFixtureResources,
+} from '../../__tests__/uiSessionOwner.js';
+import type { SessionControl } from '../../../../agents/src/api/control/sessionControl.js';
 import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
@@ -111,29 +123,51 @@ function requireRuntime(): ConfigBackedRuntime {
   return runtimeHolder.current;
 }
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => runtimeHolder.current,
-  getRuntimeApi: () => runtimeHolder.current,
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => runtimeHolder.current;
+    return {
+      useListSavedProfiles: () => requireRuntime().listSavedProfiles,
+      useLoadProfileByName: () => requireRuntime().loadProfileByName,
+      useProviderStatus: () => requireRuntime().providerStatus,
+      useGetRuntimeDiagnosticsSnapshot: () =>
+        requireRuntime().getRuntimeDiagnosticsSnapshot,
+      useDeleteProfileByName: () => undefined,
+      useGetDefaultProfileName: () => undefined,
+      useGetProfileByName: () => undefined,
+      useSaveProfileDefinition: () => undefined,
+      useSetDefaultProfileName: () => undefined,
+      useRuntimeApi: useSelectedTestRuntime,
+      getRuntimeApi: () => runtimeHolder.current,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 // Import after mocks are set up
 import { useModelDialogHandler } from '../components/modelDialogHandler.js';
 import { useLoadProfileDialog } from './useLoadProfileDialog.js';
 import { useProfileManagement } from './useProfileManagement.js';
-import { profileCommand } from '../commands/profileCommand.js';
+import { createProfileCommandForTest } from '../commands/__tests__/profile-command-test-owner.js';
 
-const PROJECT_HASH = 'provider-switch-recording';
-
-/** The session client recording bootstrap needs; these tests never use its agent client. */
-function sessionClientFor(root: string) {
-  return {
-    getAgentClient: () => ({}) as AgentClientContract,
-    workspaceDirectories: () => [root],
-  };
+class RecordingConfig extends LiveProviderConfig {
+  override readonly projectTempDir: string;
+  override readonly projectChatsDir: string;
+  constructor(
+    root: string,
+    parameters: ConstructorParameters<typeof LiveProviderConfig>[0],
+  ) {
+    super(parameters);
+    this.projectTempDir = join(root, getProjectHash(root));
+    this.projectChatsDir = join(root, 'chats');
+  }
 }
 
 function noProviderConfig(root: string): LiveProviderConfig {
-  return new LiveProviderConfig({
+  return new RecordingConfig(root, {
     cwd: root,
     targetDir: root,
     debugMode: false,
@@ -150,41 +184,78 @@ function pickerModel(provider: string, id: string): HydratedModel {
 
 describe('provider changes made in dialogs reach the session recording (issue #3732)', () => {
   let root: string;
-  let chatsDir: string;
   let config: LiveProviderConfig;
   let recording: SessionRecordingPort;
   let integration: RecordingIntegration;
+  let session: SessionControl;
+  let nativeHistory: HistoryService;
   let addedMessages: string[];
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'switch-recording-'));
-    chatsDir = join(root, 'chats');
     config = noProviderConfig(root);
     runtimeHolder.current = createConfigBackedRuntime(config);
-    recording = await buildNewRecordingService(
-      config,
-      PROJECT_HASH,
-      chatsDir,
-      sessionClientFor(root),
+    const owner = await createUiSessionOwner(config);
+    const runtime = uiFixtureResources(owner);
+    runtime.sessionClient.clients.conversationBinding.initializeConversation();
+    const acquiredHistory = readCurrentOwnerHistory(runtime.sessionClient);
+    if (acquiredHistory === null)
+      throw new Error('Actual recording owner has no history');
+    nativeHistory = acquiredHistory;
+    session = runtime.sessionClient.createSessionControl(
+      'config',
+      () => config.getSessionId(),
+      (operation) => operation(),
+      () => {},
+      () => {},
+      () => config.getProvider() ?? 'unknown',
+      () => config.getModel(),
     );
-    integration = new RecordingIntegration(recording);
+    await startOwnerRecording();
     addedMessages = [];
   });
 
   afterEach(async () => {
     runtimeHolder.current = null;
-    await integration.dispose();
-    await recording.dispose();
+    await session.dispose();
+    await config.dispose();
     await rm(root, { recursive: true, force: true });
   });
 
+  async function startOwnerRecording(): Promise<void> {
+    const attached: RecordingIntegration[] = [];
+    const subscribe = RecordingIntegration.prototype.subscribeToJournal;
+    const capture = spyOn(
+      RecordingIntegration.prototype,
+      'subscribeToJournal',
+    ).mockImplementation(function (this: RecordingIntegration, ...args) {
+      attached.push(this);
+      return subscribe.call(this, ...args);
+    });
+    try {
+      await setupOwnerSessionRecording(
+        config,
+        session,
+        session.listBrowserTargetsDetailed,
+        { listSessions: false, deleteSession: undefined },
+        null,
+      ).then(({ resumedBoot }) => resumedBoot);
+    } finally {
+      capture.mockRestore();
+    }
+    const acquired = attached.at(-1);
+    if (acquired === undefined)
+      throw new Error('Owner did not attach its actual recording integration');
+    integration = acquired;
+    recording = acquired.getRecordingService();
+  }
+
   async function recordedFile(): Promise<{ provider: string; model: string }> {
-    await seedSessionRows(recording, [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'first message' }],
-      },
-    ]);
+    nativeHistory.add({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'first message' }],
+    });
+    await session.flushRecording();
     const path = recording.getFilePath();
     if (path === null) throw new Error('Missing recording');
     const facts = await readRecordedFacts(path);
@@ -211,7 +282,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
         },
         store,
         null,
-        { recordingIntegration: integration },
+        (provider, model) => integration.recordProviderSwitch(provider, model),
       ),
     );
 
@@ -240,7 +311,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
         },
         store,
         'codex',
-        { recordingIntegration: integration },
+        (provider, model) => integration.recordProviderSwitch(provider, model),
       ),
     );
 
@@ -349,7 +420,8 @@ describe('provider changes made in dialogs reach the session recording (issue #3
           },
           store,
           null,
-          { recordingIntegration: integration },
+          (provider, model) =>
+            integration.recordProviderSwitch(provider, model),
         ),
       );
 
@@ -384,7 +456,8 @@ describe('provider changes made in dialogs reach the session recording (issue #3
           },
           store,
           'codex',
-          { recordingIntegration: integration },
+          (provider, model) =>
+            integration.recordProviderSwitch(provider, model),
         ),
       );
 
@@ -500,18 +573,17 @@ describe('provider changes made in dialogs reach the session recording (issue #3
     });
 
     it('returns the /profile load result as loaded with the recording failure in its text', async () => {
-      const loadCommand = profileCommand.subCommands?.find(
-        (command) => command.name === 'load',
-      );
-      if (loadCommand?.action === undefined) {
-        throw new Error('/profile load is not defined');
-      }
       const context = createMockCommandContext({
         recordingIntegration: integration,
         services: {
           agent: {
             getProvider: () => config.getProvider() ?? '',
             getModel: () => config.getModel(),
+            saveProfileSnapshot: async () => {
+              throw new Error(
+                'Profile snapshot writes are unavailable in this load fixture',
+              );
+            },
             profiles: {
               load: async (name: string) => {
                 await requireRuntime().loadProfileByName(name);
@@ -523,10 +595,21 @@ describe('provider changes made in dialogs reach the session recording (issue #3
                 };
               },
             },
+            mcp: { refresh: async () => {} },
             sessionClient: { publishTools: async () => {} },
           },
         },
       });
+      const profileCommand = createProfileCommandForTest(
+        context,
+        (provider, model) => integration.recordProviderSwitch(provider, model),
+      );
+      const loadCommand = profileCommand.subCommands?.find(
+        (command) => command.name === 'load',
+      );
+      if (loadCommand?.action === undefined) {
+        throw new Error('/profile load is not defined');
+      }
 
       const result = await loadCommand.action(context, 'lunahigh');
 

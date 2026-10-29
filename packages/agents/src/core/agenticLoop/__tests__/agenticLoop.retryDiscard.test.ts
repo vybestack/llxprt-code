@@ -1,3 +1,5 @@
+import { bindTurnModel } from '../../../session/bind-turn-model.js';
+import { TurnToolExecutionOwner } from '../../../session/turn-tool-execution-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
@@ -60,28 +62,31 @@ describe('AgenticLoop discards abandoned tool-call requests on Retry (issue 3048
       });
     const scripted = createScriptedAgentClient(scripts);
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        RootTelemetry.prepare({
-          enabled: false,
-          sessionId: 'isolated-caller-fixture',
-          maxBytes: 1024,
-          maxFiles: 1,
-        }),
-      ),
-      agentClient: scripted.client,
       config,
-      messageBus,
+      ...bindTurnModel(scripted.client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-caller-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
+        ),
+      ),
     });
     return { loop, ...scripted };
   }

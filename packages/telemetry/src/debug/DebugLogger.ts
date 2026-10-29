@@ -108,11 +108,14 @@ export class DebugLogger {
     ConfigurationManager.resetForTesting();
   }
 
-  constructor(namespace: string) {
+  constructor(
+    namespace: string,
+    configuration: ConfigurationManager = ConfigurationManager.getInstance(),
+  ) {
     // Lines 17-24: Initialize logger
     this._namespace = namespace; // Line 18
     this.debugInstance = createDebug(namespace); // Line 19
-    this._configManager = ConfigurationManager.getInstance(); // Line 20
+    this._configManager = configuration;
     this._fileOutput = FileOutput.getInstance(); // Line 21
     this._enabled = this.checkEnabled(); // Line 22
     this._enabledVersion = this._configManager.getConfigVersion();

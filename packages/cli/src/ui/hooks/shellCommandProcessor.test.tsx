@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { shellExecutionReads } from './__tests__/shell-execution-reads.js';
 import {
   automock,
   advanceTimersByTimeAsync,
@@ -55,13 +56,14 @@ void vi.mock('fs', () => {
   };
   return { ...mocked, default: mocked };
 });
-// Mock os to always return 'linux' for consistent testing across platforms
+// Mock os to always return 'linux' for consistent testing across platforms.
+// tmpdir stays real: Agent fixtures create their directories with the real
+// mkdtemp, which fails on a host that has no '/tmp'.
 const actual = { ...(await import('os')) };
 void vi.mock('os', () => {
   const mockedOs = {
     ...actual,
     platform: vi.fn(() => 'linux'),
-    tmpdir: vi.fn(() => '/tmp'),
     homedir: vi.fn(() => '/home/testuser'),
   };
   return {
@@ -174,8 +176,8 @@ describe('useShellCommandProcessor', () => {
     );
   });
 
-  const renderProcessorHook = () => {
-    const agent = createFakeAgentFromMockClient(
+  const renderProcessorHook = async () => {
+    const agent = await createFakeAgentFromMockClient(
       mockAgentClient as unknown as Record<string, unknown>,
     );
     return renderHook(() =>
@@ -184,8 +186,8 @@ describe('useShellCommandProcessor', () => {
         setPendingHistoryItemMock,
         onExecMock,
         onDebugMessageMock,
-        mockConfig,
-        agent,
+        ...shellExecutionReads(mockConfig),
+        (entry) => agent.addHistory(entry),
         setShellInputFocusedMock,
         80,
         24,
@@ -209,7 +211,7 @@ describe('useShellCommandProcessor', () => {
   });
 
   it('should initiate command execution and set pending state', async () => {
-    const { result } = renderProcessorHook();
+    const { result } = await renderProcessorHook();
 
     act(() => {
       result.current.handleShellCommand('ls -l', new AbortController().signal);
@@ -249,8 +251,8 @@ describe('useShellCommandProcessor', () => {
     expect(setShellInputFocusedMock).toHaveBeenCalledWith(true);
   });
 
-  it('should return false and not focus shell input for empty queries', () => {
-    const { result } = renderProcessorHook();
+  it('should return false and not focus shell input for empty queries', async () => {
+    const { result } = await renderProcessorHook();
 
     const handled = result.current.handleShellCommand(
       '   ',
@@ -264,7 +266,7 @@ describe('useShellCommandProcessor', () => {
   });
 
   it('should handle successful execution and update history correctly', async () => {
-    const { result } = renderProcessorHook();
+    const { result } = await renderProcessorHook();
 
     act(() => {
       result.current.handleShellCommand(
@@ -295,7 +297,7 @@ describe('useShellCommandProcessor', () => {
   });
 
   it('should reset shell input focus to false after successful completion', async () => {
-    const { result } = renderProcessorHook();
+    const { result } = await renderProcessorHook();
 
     act(() => {
       result.current.handleShellCommand(
@@ -315,7 +317,7 @@ describe('useShellCommandProcessor', () => {
   });
 
   it('should handle command failure and display error status', async () => {
-    const { result } = renderProcessorHook();
+    const { result } = await renderProcessorHook();
 
     act(() => {
       result.current.handleShellCommand(
@@ -354,7 +356,7 @@ describe('useShellCommandProcessor', () => {
       readonly firstDisplay: unknown;
       readonly finalState: HistoryItemWithoutId | null;
     }> => {
-      const { result } = renderProcessorHook();
+      const { result } = await renderProcessorHook();
       await act(async () => {
         result.current.handleShellCommand(
           'stream',
@@ -424,7 +426,7 @@ describe('useShellCommandProcessor', () => {
         terminalHeight: 24,
         outputRetentionMaxBytes: 1024,
       });
-      const { result } = renderProcessorHook();
+      const { result } = await renderProcessorHook();
       await act(async () => {
         result.current.handleShellCommand(
           'stream',
@@ -477,7 +479,7 @@ describe('useShellCommandProcessor', () => {
         terminalHeight: 24,
         outputRetentionMaxBytes: 4 * 1024 * 1024,
       });
-      const { result } = renderProcessorHook();
+      const { result } = await renderProcessorHook();
       await act(async () => {
         result.current.handleShellCommand(
           'stream',
@@ -524,7 +526,7 @@ describe('useShellCommandProcessor', () => {
     });
 
     it('should show binary progress messages correctly', async () => {
-      const { result } = renderProcessorHook();
+      const { result } = await renderProcessorHook();
       await act(async () => {
         result.current.handleShellCommand(
           'cat img',
@@ -576,16 +578,17 @@ describe('useShellCommandProcessor', () => {
       );
     });
     it('should update pending output without pendingHistoryItemRef fallback', async () => {
+      const agent = await createFakeAgentFromMockClient(
+        mockAgentClient as unknown as Record<string, unknown>,
+      );
       const { result } = renderHook(() =>
         useShellCommandProcessor(
           addItemToHistoryMock,
           setPendingHistoryItemMock,
           onExecMock,
           onDebugMessageMock,
-          mockConfig,
-          createFakeAgentFromMockClient(
-            mockAgentClient as unknown as Record<string, unknown>,
-          ),
+          ...shellExecutionReads(mockConfig),
+          (entry) => agent.addHistory(entry),
           setShellInputFocusedMock,
           80,
           24,
@@ -623,7 +626,7 @@ describe('useShellCommandProcessor', () => {
 
   it('should wrap the command on non-Windows systems to capture working directory', async () => {
     // Default mock platform is 'linux', which should trigger command wrapping
-    const { result } = renderProcessorHook();
+    const { result } = await renderProcessorHook();
 
     act(() => {
       result.current.handleShellCommand('dir', new AbortController().signal);
@@ -644,7 +647,7 @@ describe('useShellCommandProcessor', () => {
   });
 
   it('should handle command abort and display cancelled status', async () => {
-    const { result } = renderProcessorHook();
+    const { result } = await renderProcessorHook();
     const abortController = new AbortController();
 
     act(() => {
@@ -670,7 +673,7 @@ describe('useShellCommandProcessor', () => {
   });
 
   it('should handle binary output result correctly', async () => {
-    const { result } = renderProcessorHook();
+    const { result } = await renderProcessorHook();
     const binaryBuffer = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
     mockIsBinary.mockReturnValue(true);
 
@@ -698,7 +701,7 @@ describe('useShellCommandProcessor', () => {
   });
 
   it('should handle promise rejection and show an error', async () => {
-    const { result } = renderProcessorHook();
+    const { result } = await renderProcessorHook();
     const testError = new Error('Unexpected failure');
     mockShellExecutionService.mockImplementation(() => ({
       pid: 12345,
@@ -731,7 +734,7 @@ describe('useShellCommandProcessor', () => {
     // Mock that the temp file was created before the error was thrown
     mockShellPathExists.mockReturnValue(true);
 
-    const { result } = renderProcessorHook();
+    const { result } = await renderProcessorHook();
 
     act(() => {
       result.current.handleShellCommand(
@@ -765,7 +768,7 @@ describe('useShellCommandProcessor', () => {
         '/test/dir/new',
       ); // A different directory
 
-      const { result } = renderProcessorHook();
+      const { result } = await renderProcessorHook();
       act(() => {
         result.current.handleShellCommand(
           'cd new',
@@ -795,7 +798,7 @@ describe('useShellCommandProcessor', () => {
         '/test/dir',
       ); // The same directory
 
-      const { result } = renderProcessorHook();
+      const { result } = await renderProcessorHook();
       act(() => {
         result.current.handleShellCommand('ls', new AbortController().signal);
       });
@@ -817,7 +820,7 @@ describe('useShellCommandProcessor', () => {
       mockIsActivePty.mockReturnValue(true);
       mockGetLastActivePtyId.mockReturnValue(12345);
 
-      const { result } = renderProcessorHook();
+      const { result } = await renderProcessorHook();
 
       act(() => {
         result.current.handleShellCommand(
@@ -840,7 +843,7 @@ describe('useShellCommandProcessor', () => {
       mockIsActivePty.mockReturnValue(false);
       mockGetLastActivePtyId.mockReturnValue(null);
 
-      const { result } = renderProcessorHook();
+      const { result } = await renderProcessorHook();
 
       act(() => {
         result.current.handleShellCommand(
@@ -863,7 +866,7 @@ describe('useShellCommandProcessor', () => {
       mockGetLastActivePtyId.mockReturnValue(12345);
       mockIsActivePty.mockReturnValue(false);
 
-      const { result } = renderProcessorHook();
+      const { result } = await renderProcessorHook();
 
       act(() => {
         result.current.handleShellCommand(
@@ -890,7 +893,7 @@ describe('useShellCommandProcessor', () => {
         throw testError;
       });
 
-      const { result } = renderProcessorHook();
+      const { result } = await renderProcessorHook();
 
       act(() => {
         result.current.handleShellCommand(

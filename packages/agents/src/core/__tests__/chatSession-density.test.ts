@@ -22,16 +22,18 @@ import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collec
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+
+import { chatSessionPorts } from '../chatSessionPorts.js';
 import {
-  resetCallIds,
-  makeUserMessage,
+  addPrunableReadWritePair,
+  buildMockContentGenerator,
+  buildRuntimeContext,
+  getInternals,
   makeAiText,
   makeAiToolCall,
   makeToolResponse,
-  addPrunableReadWritePair,
-  buildRuntimeContext,
-  buildMockContentGenerator,
-  getInternals,
+  makeUserMessage,
+  resetCallIds,
 } from './chatSession-density-helpers.js';
 
 let densityFixture1_historyService: HistoryService;
@@ -171,7 +173,14 @@ async function observeDensityCase3() {
   ).length;
 
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     densityFixture2_mockContentGenerator,
     {},
     [],
@@ -203,7 +212,14 @@ async function observeDensityCase4() {
   ];
 
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     densityFixture2_mockContentGenerator,
     {},
     [],
@@ -234,7 +250,14 @@ async function observeDensityCase5() {
   const historyBefore = 4;
 
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     densityFixture2_mockContentGenerator,
     {},
     [],
@@ -268,7 +291,14 @@ async function observeDensityCase6() {
   densityFixture1_historyService.add(makeAiText('Bug fixed'));
 
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     densityFixture2_mockContentGenerator,
     {},
     [],
@@ -305,7 +335,14 @@ async function observeDensityCase7() {
   densityFixture1_historyService.add(makeAiText('Updated'));
 
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     densityFixture2_mockContentGenerator,
     {},
     [],
@@ -351,7 +388,14 @@ async function observeDensityCase8() {
   }));
 
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     densityFixture2_mockContentGenerator,
     {},
     [],
@@ -382,7 +426,14 @@ async function observeDensityCase9() {
   densityFixture1_historyService.add(makeAiText('Hi'));
 
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     densityFixture2_mockContentGenerator,
     {},
     [],
@@ -414,7 +465,14 @@ async function observeDensityCase10() {
   densityFixture1_historyService.add(makeAiText('Hi'));
 
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     densityFixture2_mockContentGenerator,
     {},
     [],
@@ -438,7 +496,14 @@ async function observeDensityCase11() {
   densityFixture1_historyService.add(makeAiText('Hi'));
 
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     densityFixture2_mockContentGenerator,
     {},
     [],
@@ -473,7 +538,14 @@ async function observeDensityCase12() {
   }
 
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     densityFixture2_mockContentGenerator,
     {},
     [],
@@ -500,7 +572,6 @@ async function observeDensityCase12() {
   vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
     mockProvider as never,
   );
-  vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
 
   // performCompression calls clear() + add() loop — should NOT set dirty
   await chat.performCompression('test-prompt-id');
@@ -519,7 +590,14 @@ async function observeDensityCase13() {
   densityFixture1_historyService.add(makeAiText('Response'));
 
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     densityFixture2_mockContentGenerator,
     {},
     [],

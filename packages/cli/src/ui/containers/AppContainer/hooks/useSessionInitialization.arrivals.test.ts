@@ -1,15 +1,15 @@
+import { encodeJournalUiItem } from '../../../stores/turn/journal-ui-item.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, it, expect, spyOn } from 'bun:test';
 import { act } from 'react';
 import { withRecordingLifetimeFixture } from '../../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { renderHook, waitFor } from '../../../../__tests__/render.js';
-import { buildUiRuntimeFromSource } from '../../../cliUiRuntime.js';
 import { readJournalItems } from '../../../stores/turn/journal-turn-test-helpers.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
 
 describe('journal resume arrivals', () => {
   it('keeps restored rows ahead of hook output and the next prompt and response', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config }) => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.setHistory([
         {
           speaker: 'human',
@@ -30,11 +30,26 @@ describe('journal resume arrivals', () => {
       );
       const view = renderHook(() =>
         useSessionInitialization({
-          uiRuntime: buildUiRuntimeFromSource(config, agent),
-          agent,
-          recordingOwner: 'agent',
-          addItem: () => {
-            throw new Error('UI ledger forbidden');
+          triggerSessionStart: agent.hooks.triggerSessionStart.bind(
+            agent.hooks,
+          ),
+          appendHookContext: async (text) => {
+            await agent.addHistory({
+              speaker: 'human',
+              blocks: [{ type: 'text', text }],
+            });
+          },
+          readEmojiFilterMode: () => 'auto',
+          readLlxprtMdFileCount: agent.memory.getFileCount.bind(agent.memory),
+          readCoreMemoryFileCount: agent.memory.getCoreFileCount.bind(
+            agent.memory,
+          ),
+          addItem: (item) => {
+            void agent.session.appendDisplay(
+              { type: 'ui-item' },
+              encodeJournalUiItem(item),
+            );
+            return 0;
           },
         }),
       );
@@ -48,13 +63,14 @@ describe('journal resume arrivals', () => {
             'hook message',
           ),
         );
-        await agent.agentClient.getHistoryService()?.addBatch([
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'first prompt' }],
-          },
-          { speaker: 'ai', blocks: [{ type: 'text', text: 'first reply' }] },
-        ]);
+        await agent.addHistory({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'first prompt' }],
+        });
+        await agent.addHistory({
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'first reply' }],
+        });
         expect(
           (await readJournalItems(agent)).map((item) => item.text),
         ).toStrictEqual([

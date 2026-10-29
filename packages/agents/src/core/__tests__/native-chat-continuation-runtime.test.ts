@@ -214,6 +214,8 @@ describe('public native plain Chat automatic continuation HTTP', () => {
             name,
             parameters,
             signal,
+            undefined,
+            globalThis.fetch,
           ),
         state: {
           runtimeId: 'native-chat-session',
@@ -226,7 +228,13 @@ describe('public native plain Chat automatic continuation HTTP', () => {
         history,
         settings: { contextLimit: 1_000_000 },
         providerRuntime: fixture.runtime,
-        provider: { getActiveProvider: () => provider, setActiveProvider() {} },
+        provider: {
+          getProviderKeys: () => {
+            throw new Error('Fixture has no credential key authority');
+          },
+          getActiveProvider: () => provider,
+          setActiveProvider() {},
+        },
         tools: { listToolNames: () => [], getToolMetadata: () => undefined },
         telemetry: {
           logApiRequest() {},
@@ -264,6 +272,7 @@ describe('public native plain Chat automatic continuation HTTP', () => {
             metadata: {},
             systemInstruction: 'system',
             invocation: createRuntimeInvocationContext({
+              fetch: globalThis.fetch,
               runtimeId: 'reference',
               providerName: 'openai',
               ephemeralsSnapshot: {

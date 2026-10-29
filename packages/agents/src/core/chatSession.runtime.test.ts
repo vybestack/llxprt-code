@@ -1,5 +1,15 @@
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import {
+  BeforeModelHookOutput,
+  AfterModelHookOutput,
+} from '@vybestack/llxprt-code-core/hooks/types.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { invocationData } from './chatSession-runtime-helpers.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
  * @license
@@ -11,15 +21,7 @@ import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookE
 import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
 const modelTools = installModelToolFixture();
-import {
-  afterAll,
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  type Mock,
-} from 'bun:test';
+import { afterAll, describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { ChatSessionConfig } from './chatSession.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { ChatSession } from './chatSession.js';
@@ -30,25 +32,20 @@ import type {
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import {
-  AfterModelHookOutput,
-  BeforeModelHookOutput,
-} from '@vybestack/llxprt-code-core/hooks/types.js';
+
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
 
@@ -68,15 +65,11 @@ function extractText(output: {
 const realRetryModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/retry.js')),
 };
+const retryWithBackoff = vi.fn((fn: () => unknown) => fn());
 void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
-  retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
+  ...realRetryModule,
+  retryWithBackoff,
 }));
-
-const retryWithBackoff = (await import(
-  '@vybestack/llxprt-code-core/utils/retry.js'
-).then((m) => m.retryWithBackoff)) as unknown as Mock<
-  (...args: never[]) => unknown
->;
 
 async function assertProviderRows(
   contents: AsyncIterable<IContent>,
@@ -137,8 +130,8 @@ function buildView(history: HistoryService) {
   });
   return createAgentRuntimeContext({
     prepareProviderInvocation: (name, parameters, signal) =>
-      settingsOwner.prepareProviderInvocation(
-        state.runtimeId,
+      captureProviderInvocation(
+        invocationData(providerRuntime, name, settingsService),
         name,
         parameters,
         signal,
@@ -231,8 +224,15 @@ async function verifyRuntime1(): Promise<GenerateChatOptions> {
   const view = buildView(historyService);
 
   const chat = new ChatSession(
-    view,
-    {} as unknown as ContentGenerator,
+    chatSessionPorts(view),
+    config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    unusedContentGenerator,
     generationConfig,
     [],
   );
@@ -330,7 +330,19 @@ async function verifyRuntime2(): Promise<IContent> {
   const hookOwner = createHookOwner(false);
   const view = buildView(historyService);
 
-  const chat = new ChatSession(view, {} as unknown as ContentGenerator, {}, []);
+  const chat = new ChatSession(
+    chatSessionPorts(view),
+    config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    unusedContentGenerator,
+    {},
+    [],
+  );
 
   const response = await chat.sendMessage(
     { message: 'Use tools', config: { tools }, hookOwner },
@@ -399,8 +411,15 @@ async function verifyRuntime3(): Promise<
   const view = buildView(new HistoryService());
 
   const chat = new ChatSession(
-    view,
-    {} as unknown as ContentGenerator,
+    chatSessionPorts(view),
+    config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    unusedContentGenerator,
     { tools },
     [],
   );
@@ -432,15 +451,13 @@ describe('ChatSession runtime context', () => {
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
-      config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.runtime.test' },
     });
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   });
 
   it('passes runtime context and tools to provider generateChatCompletion', async () => {
@@ -459,3 +476,13 @@ describe('ChatSession runtime context', () => {
     );
   });
 });
+
+const unusedGenerator = async (): Promise<never> => {
+  throw new Error('Unexpected legacy generator');
+};
+const unusedContentGenerator: ContentGenerator = {
+  generateContent: unusedGenerator,
+  generateContentStream: unusedGenerator,
+  countTokens: unusedGenerator,
+  embedContent: unusedGenerator,
+};

@@ -9,108 +9,113 @@
 
 import { describe, it, expect } from 'bun:test';
 import type { SlashCommand } from '../commands/types.js';
-import { aboutCommand } from '../commands/aboutCommand.js';
-import { clearCommand } from '../commands/clearCommand.js';
-import { compressCommand } from '../commands/compressCommand.js';
-import { copyCommand } from '../commands/copyCommand.js';
-import { docsCommand } from '../commands/docsCommand.js';
 import { editorCommand } from '../commands/editorCommand.js';
-import { helpCommand } from '../commands/helpCommand.js';
-import { initCommand } from '../commands/initCommand.js';
-import { modelCommand } from '../commands/modelCommand.js';
-import { quitCommand } from '../commands/quitCommand.js';
+import { createModelCommand } from '../commands/modelCommand.js';
 import { settingsCommand } from '../commands/settingsCommand.js';
 import { themeCommand } from '../commands/themeCommand.js';
-import { policiesCommand } from '../commands/policiesCommand.js';
-import { authCommand } from '../commands/authCommand.js';
-import { setupGithubCommand } from '../commands/setupGithubCommand.js';
-import { bugCommand } from '../commands/bugCommand.js';
-import { chatCommand } from '../commands/chatCommand.js';
+import { createPoliciesCommand } from '../commands/policiesCommand.js';
+import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
+
+const modelCommand = createModelCommand(
+  async () => {
+    throw new Error('No model owner in metadata fixture');
+  },
+  async () => {
+    throw new Error('No recording owner in metadata fixture');
+  },
+);
 
 /** Helper to find a subcommand by name. */
 function findSub(cmd: SlashCommand, name: string): SlashCommand | undefined {
   return cmd.subCommands?.find((s) => s.name === name);
 }
 
+const { docsCommand, helpCommand, quitCommand } =
+  createUnconfiguredBuiltinOwners();
+
 describe('autoExecute classifications — top-level commands', () => {
   it.each<[string, SlashCommand]>([
-    ['about', aboutCommand],
-    ['clear', clearCommand],
-    ['compress', compressCommand],
-    ['copy', copyCommand],
+    ['about', createUnconfiguredBuiltinOwners().aboutCommand],
+    ['clear', createUnconfiguredBuiltinOwners().clearCommand],
+    ['compress', createUnconfiguredBuiltinOwners().compressCommand],
+    ['copy', createUnconfiguredBuiltinOwners().copyCommand],
     ['docs', docsCommand],
     ['editor', editorCommand],
     ['help', helpCommand],
-    ['init', initCommand],
+    ['init', createUnconfiguredBuiltinOwners().initCommand],
     ['model', modelCommand],
     ['quit', quitCommand],
     ['settings', settingsCommand],
     ['theme', themeCommand],
-    ['policies', policiesCommand],
+    ['policies', createPoliciesCommand({ getPolicyInfo: () => null })],
   ])('/%s should have autoExecute: true', (_name, command) => {
     expect(command).toBeDefined();
     expect(command.autoExecute).toBe(true);
   });
 
   it('/auth should have autoExecute: true', () => {
-    expect(authCommand.autoExecute).toBe(true);
+    expect(createUnconfiguredBuiltinOwners().authCommand.autoExecute).toBe(
+      true,
+    );
   });
 
   it('/setup-github should have autoExecute: true', () => {
-    expect(setupGithubCommand.autoExecute).toBe(true);
+    expect(
+      createUnconfiguredBuiltinOwners().setupGithubCommand.autoExecute,
+    ).toBe(true);
   });
 
   it('/bug should NOT have autoExecute: true', () => {
-    expect(bugCommand.autoExecute).not.toBe(true);
+    expect(createUnconfiguredBuiltinOwners().bugCommand.autoExecute).not.toBe(
+      true,
+    );
   });
 
   it('/chat should NOT have autoExecute: true', () => {
-    expect(chatCommand.autoExecute).not.toBe(true);
+    expect(createUnconfiguredBuiltinOwners().chatCommand.autoExecute).not.toBe(
+      true,
+    );
   });
 });
 
 describe('autoExecute classifications — subcommands', () => {
   it('/stats session, model, tools should have autoExecute: true', async () => {
-    const { statsCommand } = await import('../commands/statsCommand.js');
+    const { statsCommand } = createUnconfiguredBuiltinOwners();
     expect(findSub(statsCommand, 'session')?.autoExecute).toBe(true);
     expect(findSub(statsCommand, 'model')?.autoExecute).toBe(true);
     expect(findSub(statsCommand, 'tools')?.autoExecute).toBe(true);
   });
 
   it('/memory show, list, refresh should have autoExecute: true', async () => {
-    const { memoryCommand } = await import('../commands/memoryCommand.js');
+    const { memoryCommand } = createUnconfiguredBuiltinOwners();
     expect(findSub(memoryCommand, 'show')?.autoExecute).toBe(true);
     expect(findSub(memoryCommand, 'list')?.autoExecute).toBe(true);
     expect(findSub(memoryCommand, 'refresh')?.autoExecute).toBe(true);
   });
 
   it('/memory add should NOT have autoExecute: true', async () => {
-    const { memoryCommand } = await import('../commands/memoryCommand.js');
+    const { memoryCommand } = createUnconfiguredBuiltinOwners();
     expect(findSub(memoryCommand, 'add')?.autoExecute).not.toBe(true);
   });
 
-  it('/mcp list and refresh should have autoExecute: true', async () => {
-    const { mcpCommand } = await import('../commands/mcpCommand.js');
+  it('/mcp list and refresh should have autoExecute: true', () => {
+    const { mcpCommand } = createUnconfiguredBuiltinOwners();
     expect(findSub(mcpCommand, 'list')?.autoExecute).toBe(true);
     expect(findSub(mcpCommand, 'refresh')?.autoExecute).toBe(true);
   });
 
-  it('/mcp auth should have autoExecute: true', async () => {
-    const { mcpCommand } = await import('../commands/mcpCommand.js');
+  it('/mcp auth should have autoExecute: true', () => {
+    const { mcpCommand } = createUnconfiguredBuiltinOwners();
     expect(findSub(mcpCommand, 'auth')?.autoExecute).toBe(true);
   });
 
   it('/extensions list should have autoExecute: true', async () => {
-    const { extensionsCommand } = await import(
-      '../commands/extensionsCommand.js'
-    );
+    const { extensionsCommand } = createUnconfiguredBuiltinOwners();
     expect(findSub(extensionsCommand, 'list')?.autoExecute).toBe(true);
   });
 
   it('/extensions update should NOT have autoExecute: true', async () => {
-    const { extensionsCommand } = await import(
-      '../commands/extensionsCommand.js'
-    );
+    const { extensionsCommand } = createUnconfiguredBuiltinOwners();
     expect(findSub(extensionsCommand, 'update')?.autoExecute).not.toBe(true);
   });
 });

@@ -7,7 +7,7 @@ import {
   createLoadedSettings,
   createMockOverrides,
 } from './submitQueryTestFixtures.js';
-import { createFakeAgentFromMockClient } from '../../__tests__/useAgentStream-test-helpers.js';
+import { streamPolicyOperations } from './stream-policy-operations.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
 import type { ThoughtSummary } from '@vybestack/llxprt-code-core';
 import { describe, it, expect } from 'bun:test';
@@ -98,8 +98,16 @@ function retryControls(pending: HistoryItemWithoutId | null) {
     },
   };
   const deps: Parameters<typeof useStreamEventHandlers>[0] = {
-    runtime: createStreamRuntimeForTest({}, createMockOverrides()),
-    agent: createFakeAgentFromMockClient({}),
+    ...streamPolicyOperations(
+      createStreamRuntimeForTest({}, createMockOverrides()),
+    ),
+    getProviderContextLimit: () => 8192,
+    getContentPrefixIdentity: () => null,
+    getToolHandle: () => undefined,
+    findResource: () => undefined,
+    readResource: async () => {
+      throw new Error('Unexpected resource read');
+    },
     settings: createLoadedSettings(),
     addItem: () => 1,
     onDebugMessage: () => {},

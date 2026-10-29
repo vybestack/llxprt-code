@@ -110,17 +110,17 @@ function countingSource(seedText: string, retain = false): CountingSource {
 interface ProviderHarness {
   readonly settings: SettingsService;
   readonly runtime: ReturnType<typeof createProviderRuntimeContext>;
+  readonly config: ReturnType<typeof createRuntimeConfigStub>;
 }
 
 function makeHarness(runtimeId: string): ProviderHarness {
   const settings = new SettingsService();
   settings.setProviderSetting('openai-responses', 'model', 'gpt-5.2');
+  const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId,
-    config: createRuntimeConfigStub(settings),
   });
-  return { settings, runtime };
+  return { settings, runtime, config };
 }
 
 function sseSuccess(): Response {
@@ -183,6 +183,7 @@ function requestScratchEntries(): string[] {
 
 function invocationFor(harness: ProviderHarness) {
   return createRuntimeInvocationContext({
+    fetch: (input, init) => globalThis.fetch(input, init),
     runtimeId: harness.runtime.runtimeId,
     runtimeMetadata: harness.runtime.metadata,
     providerName: 'openai-responses',
@@ -250,7 +251,7 @@ describe('P05b4 request rows stream from native journal pins @plan:PLAN-20260917
     const baseOptions = streamCallOptions({
       providerName: 'openai-responses',
       settings: harness.settings,
-      config: harness.runtime.config,
+      config: harness.config,
       runtime: harness.runtime,
       invocation: invocationFor(harness),
       contents: source.stream,
@@ -320,7 +321,7 @@ describe('P05b4 aborted transport and released rows @plan:PLAN-20260917-ISSUE854
     const baseOptions = streamCallOptions({
       providerName: 'openai-responses',
       settings: harness.settings,
-      config: harness.runtime.config,
+      config: harness.config,
       runtime: harness.runtime,
       invocation: invocationFor(harness),
       contents: source.stream,

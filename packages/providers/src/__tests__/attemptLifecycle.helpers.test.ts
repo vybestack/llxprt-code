@@ -1,6 +1,8 @@
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -18,23 +20,8 @@ import type {
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { replayableContents } from '../utils/collectContents.js';
-
-/** Minimal RuntimeSettingsState for the runtime-context resolver in buildStack. */
-function stubRuntimeSettingsState(): RuntimeSettingsState {
-  return {
-    get: () => undefined,
-    set: () => {},
-    getProviderSettings: () => ({}),
-    setProviderSetting: () => {},
-    getAllGlobalSettings: () => ({}),
-    clear: () => {},
-    getSettings: () => Promise.resolve({}),
-    updateSettings: () => Promise.resolve(),
-  };
-}
 
 export function createConfig(loggingEnabled = false): Config {
   return new Config({
@@ -102,26 +89,33 @@ export function buildStack(
   transport: IProvider,
   config: Config,
   retryConfig?: { maxAttempts?: number; initialDelayMs?: number },
-): LoggingProviderWrapper {
+  selectedOwner?: SessionSettingsOwner,
+): LoggingProviderWrapper & {
+  metrics: UiTelemetryService;
+  settingsOwner: SessionSettingsOwner;
+} {
   const retry = new RetryOrchestrator(transport, {
     maxAttempts: retryConfig?.maxAttempts ?? 3,
     initialDelayMs: retryConfig?.initialDelayMs ?? 1,
     maxDelayMs: 10,
   });
-  const wrapperSettings1 = fixtureOwners.adopt(
-    config,
-    new SettingsService(),
-  ).settingsOwner;
+  const wrapperSettings1 =
+    selectedOwner ??
+    fixtureOwnersBorrowedSettings(config, new SettingsService());
   const wrapper = new LoggingProviderWrapper(retry, config, undefined, () =>
     captureProviderRequestDiagnostics(config, wrapperSettings1),
   );
-  wrapper.setRuntimeContextResolver(() => ({
+  wrapper.setInvocationDataReader(() => ({
     runtimeId: 'test-exact',
-    settingsService: stubRuntimeSettingsState(),
-    config,
+    globalSettings: {},
+    providerSettings: {},
     metadata: {},
+    fetch: globalThis.fetch,
   }));
-  return wrapper;
+  return Object.assign(wrapper, {
+    metrics: wrapperSettings1.telemetry.localMetrics,
+    settingsOwner: wrapperSettings1,
+  });
 }
 
 export class SuccessProvider implements IProvider {

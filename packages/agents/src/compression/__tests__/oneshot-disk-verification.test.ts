@@ -17,7 +17,12 @@ async function verification(size: number, fail: boolean): Promise<number> {
     size,
     async (history) => {
       const { runtime, transport } = oneshotSetup(history);
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const snapshot = await history.openDumpSnapshot();
       const source = new HistoryDensityRows();
       const candidate = new HistoryDensityRows();
@@ -31,6 +36,7 @@ async function verification(size: number, fail: boolean): Promise<number> {
         const metadata = await buildCompressionMetadata(
           'verify',
           runtime,
+          undefined,
           history,
           async () => ({
             provider: transport,

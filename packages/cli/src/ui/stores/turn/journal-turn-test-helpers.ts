@@ -3,7 +3,11 @@ import { afterEach } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { JournalSession, type IContent } from '@vybestack/llxprt-code-core';
+import {
+  JournalSession,
+  type IContent,
+  type AgentClientContract,
+} from '@vybestack/llxprt-code-core';
 import {
   createScrollbackPagerStore,
   type ScrollbackPagerStore,
@@ -17,13 +21,20 @@ import { JournalDisplayWriter } from '@vybestack/llxprt-code-core/journal/displa
 import { encodeJournalUiItem } from './journal-ui-item.js';
 
 export async function withJournalTurn(
-  action: (turn: TurnStore, agent: Agent) => Promise<void>,
+  action: (
+    turn: TurnStore,
+    agent: Agent,
+    client: AgentClientContract,
+  ) => Promise<void>,
 ): Promise<void> {
-  await withRecordingLifetimeFixture(async ({ agent }) => {
+  await withRecordingLifetimeFixture(async ({ agent, clientFor }) => {
     await agent.session.setRecording({ enabled: true });
     const turn = createTurnStore();
-    turn.commands.bindJournal(() => agent.agentClient.getHistoryService());
-    await action(turn, agent);
+    turn.commands.bindJournal(() => ({
+      appendDisplay: agent.session.appendDisplay.bind(agent.session),
+      length: () => agent.session.getJournalLength(),
+    }));
+    await action(turn, agent, clientFor(agent));
   });
 }
 

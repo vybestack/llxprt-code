@@ -25,7 +25,7 @@ import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { processSlashCommand } from '../../../hooks/slashCommandHandlers.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
-import { subagentCommand } from '../../../commands/subagentCommand.js';
+import { registerSubagentCommand } from '../../../../__tests__/subagent-command-test-owner.js';
 import { LoggingDialog } from '../../../components/LoggingDialog.js';
 import { useEditorSettings } from '../../../hooks/useEditorSettings.js';
 import { themeCommand } from '../../../commands/themeCommand.js';
@@ -33,10 +33,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { createSettingsProfileStore } from '../../../stores/settings/settingsStore.js';
 import { createTurnStore } from '../../../stores/turn/turnStore.js';
 
-import {
-  useCommandContext,
-  useManagers,
-} from '../../../hooks/slashCommandProcessorSupport.js';
+import { useCommandContext } from '../../../hooks/slashCommandProcessorSupport.js';
 import { useSlashCommandActions } from './useSlashCommandActions.js';
 import { createDialogStore } from '../../../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../../../stores/dialog/dialogOpeners.js';
@@ -120,6 +117,14 @@ describe('useSlashCommandActions', () => {
               slashCommandLogger: new DebugLogger('test'),
               beginSlashCommandAction: () => new AbortController(),
               endSlashCommandAction: () => {},
+              resumeOwnedSession: null,
+              isMcpDiscoveryPending: () => false,
+              resumeRawSession: null,
+              refreshResumedHistory: () => {},
+              recordCommandError: async () => {},
+              writeOutput: async (item) => {
+                turn.commands.addItem(item, Date.now());
+              },
             },
             '/theme',
           );
@@ -143,7 +148,6 @@ describe('useSlashCommandActions', () => {
     const callbacks = { ...baseCallbacks(), dialogs };
     const context = createMockCommandContext();
     const turn = createTurnStore();
-    const settings = createMockSettings({});
     const refreshStatic = () => {};
     const toggleVimEnabled = async () => false;
     const setCount = () => {};
@@ -155,16 +159,8 @@ describe('useSlashCommandActions', () => {
     >[0]['extensionsUpdateState'] = new Map();
     const { result, rerender, unmount } = renderHook(
       ({ processing }) => {
-        const managers = useManagers(null);
         const actions = useSlashCommandActions(callbacks);
         return useCommandContext({
-          runtimeApi: context.runtimeApi,
-          refreshProviderAliases: context.refreshProviderAliases,
-          oauthControl: context.oauthControl,
-          ...managers,
-          config: null,
-          agent: null,
-          settings,
           addItem: turn.commands.addItem,
           clearItems: turn.commands.clearItems,
 
@@ -180,8 +176,6 @@ describe('useSlashCommandActions', () => {
           reloadCommands,
           extensionsUpdateState,
           todoContext: undefined,
-          recordingIntegration: undefined,
-          recordingSwapCallbacks: undefined,
           stats: {
             stats: context.session.stats,
             updateHistoryTokenCount: setCount,
@@ -196,6 +190,10 @@ describe('useSlashCommandActions', () => {
     rerender({ processing: true });
     expect(result.current).not.toBe(initial);
     expect(result.current.session.isProcessing).toBe(true);
+    expect(Reflect.has(result.current, 'services')).toBe(false);
+    expect(Reflect.has(result.current, 'runtimeApi')).toBe(false);
+    expect(Reflect.has(result.current, 'oauthControl')).toBe(false);
+    expect(Reflect.has(result.current, 'refreshProviderAliases')).toBe(false);
     unmount();
   });
 
@@ -516,12 +514,18 @@ describe('domain dialog routes', () => {
         const context = createMockCommandContext();
         await processSlashCommand(
           {
-            commands: [subagentCommand],
+            commands: [
+              registerSubagentCommand(
+                createMockCommandContext({
+                  services: { subagentManager: subagents },
+                }),
+              ),
+            ],
             config: null,
-            commandContext: {
+            commandContext: createMockCommandContext({
               ...context,
               services: { ...context.services, subagentManager: subagents },
-            },
+            }),
             actions: result.current,
             addItem: turn.commands.addItem,
             addMessage: () => {},
@@ -534,6 +538,14 @@ describe('domain dialog routes', () => {
             slashCommandLogger: new DebugLogger('test'),
             beginSlashCommandAction: () => new AbortController(),
             endSlashCommandAction: () => {},
+            resumeOwnedSession: null,
+            isMcpDiscoveryPending: () => false,
+            resumeRawSession: null,
+            refreshResumedHistory: () => {},
+            recordCommandError: async () => {},
+            writeOutput: async (item) => {
+              turn.commands.addItem(item, Date.now());
+            },
           },
           '/subagent show researcher',
         );

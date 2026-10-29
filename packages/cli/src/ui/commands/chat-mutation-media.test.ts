@@ -6,7 +6,6 @@ import type {
   AgentClientContract,
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core';
-import { chatCommand } from './chatCommand.js';
 import {
   recordedChatRows,
   withChatMutationFixture,
@@ -67,7 +66,7 @@ for (const name of ['clear', 'restore']) {
     it('restores original bytes, chronology, tokens and media ownership after a failure following the durable cut', async () => {
       await withChatMutationFixture(
         4,
-        async ({ context, history, client, recording }) => {
+        async ({ chatCommand, context, history, client, recording }) => {
           await client.setHistory(source);
           await history.waitForCommit();
           const before = await digest(client.getChat().getHistory());

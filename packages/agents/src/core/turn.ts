@@ -31,6 +31,7 @@ import {
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import {
   UnauthorizedError,
+  getErrorMessage,
   toFriendlyError,
 } from '@vybestack/llxprt-code-core/utils/errors.js';
 import type { ChatSession } from './chatSession.js';
@@ -521,7 +522,12 @@ export class Turn {
     if (error instanceof UnauthorizedError) {
       throw error;
     }
-    const baseUrl = this.chat.getResolvedBaseUrl();
+    let baseUrl: string | undefined;
+    try {
+      baseUrl = this.chat.getResolvedBaseUrl();
+    } catch (probeError) {
+      throw new AggregateError([error, probeError], getErrorMessage(error));
+    }
     const baseMessage = baseUrl
       ? `Error when talking to ${this.providerName} (endpoint: ${baseUrl})`
       : `Error when talking to ${this.providerName} API`;

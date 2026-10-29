@@ -60,6 +60,7 @@ function options(
     metadata: {},
     systemInstruction: 'system',
     invocation: createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: 'last-thinking-reads',
       providerName: 'openai',
       ephemeralsSnapshot: {

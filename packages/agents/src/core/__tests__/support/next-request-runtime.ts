@@ -12,7 +12,9 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { AgentImpl } from '../../../api/agentImpl.js';
+import type { Agent } from '../../../api/agent.js';
+import { SessionClientOwner } from '../../../session/session-client-owner.js';
+import { spyOn } from 'bun:test';
 import { createAgent } from '../../../api/createAgent.js';
 import { recordCompletedToolHistory } from '../../agenticLoop/loopHelpers.js';
 import { callerRecording } from './next-request-recorders.js';
@@ -37,7 +39,11 @@ const pauseCall = {
 async function fixtureAgent(
   directory: string,
   variant: Variant,
-): Promise<AgentImpl> {
+): Promise<{
+  agent: Agent;
+  client: AgentClientContract;
+  provider: RuntimeProvider;
+}> {
   const fixture = join(directory, 'responses.jsonl');
   let blocks: ContentBlock[] = [
     { type: 'text', text: 'completed initial turn' },
@@ -67,6 +73,16 @@ async function fixtureAgent(
   );
   process.env.LLXPRT_FAKE_RESPONSES = fixture;
 
+  let owner: SessionClientOwner | undefined;
+  let provider: RuntimeProvider | undefined;
+  const create = SessionClientOwner.create;
+  const capture = spyOn(SessionClientOwner, 'create').mockImplementation(
+    async (...args) => {
+      owner = await create(...args);
+      provider = args[1].manager.getActiveProvider();
+      return owner;
+    },
+  );
   const agent = await createAgent({
     provider: 'fake',
     model: 'fake-model',
@@ -81,9 +97,12 @@ async function fixtureAgent(
     lsp: false,
     harness: { forceConfirmations: false },
     tools: ['todo_pause', 'read_file'],
-  });
-  if (!(agent instanceof AgentImpl)) throw new Error('Expected live AgentImpl');
-  return agent;
+  }).finally(() => capture.mockRestore());
+  if (owner === undefined || provider === undefined) {
+    await agent.dispose();
+    throw new Error('Missing acquired fixture runtime');
+  }
+  return { agent, client: owner.clients.getAgentClient(), provider };
 }
 function providerBoundary(provider: RuntimeProvider, ending: Ending) {
   if (provider.name !== 'fake')
@@ -152,19 +171,17 @@ async function admitTwoGroups(client: AgentClientContract): Promise<void> {
         },
       },
     ],
-    client,
+    (content) => client.addHistory(content),
   );
 }
 async function admitContext(
-  agent: AgentImpl,
+  agent: Agent,
+  client: AgentClientContract,
   directory: string,
   variant: Variant,
 ): Promise<void> {
-  const client = agent.agentClient;
   if (variant === 'directory') await agent.addDirectoryContext();
   if (variant === 'ide') {
-    if (client.bindIdeContext === undefined)
-      throw new Error('Missing IDE binding');
     client.bindIdeContext(
       () => ({
         workspaceState: {
@@ -189,8 +206,7 @@ export async function nextRequestRuntime(
   variant: Variant,
   ending: Ending,
 ) {
-  const agent = await fixtureAgent(directory, variant);
-  const client = agent.agentClient;
+  const { agent, client, provider } = await fixtureAgent(directory, variant);
   const history = client.getHistoryService();
   if (history === null) throw new Error('Missing initialized history');
   const primary = await callerRecording(directory, 'primary');
@@ -206,8 +222,6 @@ export async function nextRequestRuntime(
     await integration.subscribeToJournal(history, agent.session);
   const sessions = [await primary.recording.session()];
   const files = [recordingFile(primary.recording)];
-  const provider = agent.providerManager.getActiveProvider();
-  if (provider === undefined) throw new Error('Missing provider');
   const boundary = providerBoundary(provider, ending);
   const facts = () => ({
     entries: boundary.entries(),
@@ -232,7 +246,7 @@ export async function nextRequestRuntime(
     disk,
     send,
     ...boundary,
-    admit: () => admitContext(agent, directory, variant),
+    admit: () => admitContext(agent, client, directory, variant),
     async close(): Promise<void> {
       primary.release();
       boundary.response.resolve();

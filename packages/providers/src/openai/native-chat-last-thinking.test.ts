@@ -171,6 +171,7 @@ function options(
     metadata: {},
     systemInstruction: 'system 雪',
     invocation: createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: 'last-thinking',
       providerName: 'openai',
       ephemeralsSnapshot: {

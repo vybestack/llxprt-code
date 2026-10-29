@@ -16,6 +16,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -32,20 +33,25 @@ import {
 
 const PER_FILE_TIMEOUT_ENV_VAR = 'LLXPRT_TEST_FILE_TIMEOUT_MS';
 import {
+  createJUnitCheckpoint,
   discoverTestFiles,
   escapeXml,
   exitCodeForRun,
   failureExcerpt,
+  formatFileProgress,
+  formatTimedOutAttempt,
   isTestFile,
   fileTimeoutForFile,
   parseCaseCounts,
   parsePartitionIdentity,
+  requiresFakeEngineExecutables,
   runTestFile,
   runTestFileWithTimeoutRetry,
   selectPartition,
   stripAnsi,
   timeoutForFile,
   toPathArgument,
+  writeJUnitReport,
 } from '../run-bun-tests.js';
 import type { PartitionIdentity } from '../run-bun-tests.js';
 
@@ -67,6 +73,251 @@ describe('isTestFile', () => {
     expect(isTestFile('types.d.ts')).toBe(false);
     expect(isTestFile('test-helpers.ts')).toBe(false);
     expect(isTestFile('README.md')).toBe(false);
+  });
+});
+
+describe('Windows sandbox fixture selection', () => {
+  const sandboxFiles = [
+    'src/utils/sandbox-launch-lifecycle.test.ts',
+    'src/utils/sandbox-node-modules-lifecycle.test.ts',
+    'src/utils/sandbox-venv.test.ts',
+    'src/utils/sandbox-dependency-volume-recovery.bun.test.ts',
+  ];
+
+  it.each(sandboxFiles)('prepares fixtures for %s on Windows', (file) => {
+    expect(requiresFakeEngineExecutables([file], 'win32')).toBe(true);
+  });
+
+  it('does not prepare fixtures for non-Windows sandbox runs', () => {
+    expect(requiresFakeEngineExecutables(sandboxFiles, 'darwin')).toBe(false);
+    expect(requiresFakeEngineExecutables(sandboxFiles, 'linux')).toBe(false);
+  });
+
+  it('does not prepare fixtures when the selected partition has no sandbox suites', () => {
+    const files = ['src/probe.test.ts', ...sandboxFiles];
+    const selected = selectPartition(files, { index: 1, count: files.length });
+    expect(requiresFakeEngineExecutables(selected, 'win32')).toBe(false);
+    expect(requiresFakeEngineExecutables([], 'win32')).toBe(false);
+  });
+});
+
+describe('writeJUnitReport', () => {
+  const passed = {
+    file: 'src/a.test.ts',
+    passed: true,
+    exitCode: 0,
+    timedOut: false,
+    output: ' 1 pass\n 0 fail\nRan 1 test across 1 file.',
+  };
+  const failed = {
+    file: 'src/b.test.ts',
+    passed: false,
+    exitCode: 1,
+    timedOut: false,
+    output: ' 0 pass\n 1 fail\nRan 1 test across 1 file.',
+  };
+
+  it('leaves a readable report of the completed files after every checkpoint', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'cli-junit-checkpoint-'));
+    try {
+      const reportPath = join(directory, 'junit.xml');
+      writeJUnitReport(reportPath, [passed]);
+      const afterFirst = readFileSync(reportPath, 'utf8');
+      expect(afterFirst).toContain('name="src/a"');
+      expect(afterFirst).not.toContain('name="src/b"');
+
+      writeJUnitReport(reportPath, [failed, passed]);
+      const afterSecond = readFileSync(reportPath, 'utf8');
+      expect(afterSecond).toContain('name="src/a"');
+      expect(afterSecond).toContain('name="src/b"');
+      expect(afterSecond.indexOf('name="src/a"')).toBeLessThan(
+        afterSecond.indexOf('name="src/b"'),
+      );
+      expect(readdirSync(directory)).toStrictEqual(['junit.xml']);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('removes its temporary file and rethrows when the report cannot be placed', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'cli-junit-failure-'));
+    try {
+      const reportPath = join(directory, 'missing-directory', 'junit.xml');
+      expect(() => writeJUnitReport(reportPath, [passed])).toThrow();
+      expect(readdirSync(directory)).toStrictEqual([]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('createJUnitCheckpoint', () => {
+  const resultFor = (file: string, passed = true) => ({
+    file,
+    passed,
+    exitCode: passed ? 0 : 1,
+    timedOut: false,
+    output: passed
+      ? ' 1 pass\n 0 fail\nRan 1 test across 1 file.'
+      : ' 0 pass\n 1 fail\nRan 1 test across 1 file.',
+  });
+
+  it('does not rewrite the report on every completed file', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'cli-junit-throttle-'));
+    try {
+      const reportPath = join(directory, 'junit.xml');
+      let clock = 0;
+      const checkpoint = createJUnitCheckpoint({
+        reportPath,
+        intervalMs: 1000,
+        now: () => clock,
+      });
+
+      checkpoint.record(resultFor('src/a.test.ts'));
+      clock = 999;
+      checkpoint.record(resultFor('src/b.test.ts'));
+      expect(existsSync(reportPath)).toBe(false);
+      expect(checkpoint.stats.writes).toBe(0);
+
+      clock = 1000;
+      checkpoint.record(resultFor('src/c.test.ts'));
+      const snapshot = readFileSync(reportPath, 'utf8');
+      expect(snapshot).toContain('name="src/a"');
+      expect(snapshot).toContain('name="src/b"');
+      expect(snapshot).toContain('name="src/c"');
+      expect(checkpoint.stats.writes).toBe(1);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('flush writes every recorded file, in order, even inside the interval', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'cli-junit-flush-'));
+    try {
+      const reportPath = join(directory, 'junit.xml');
+      const checkpoint = createJUnitCheckpoint({
+        reportPath,
+        intervalMs: 60_000,
+        now: () => 0,
+      });
+      checkpoint.record(resultFor('src/b.test.ts', false));
+      checkpoint.record(resultFor('src/a.test.ts'));
+      checkpoint.flush();
+
+      const report = readFileSync(reportPath, 'utf8');
+      expect(report).toContain('<testsuites tests="2" failures="1">');
+      expect(report.indexOf('name="src/a"')).toBeLessThan(
+        report.indexOf('name="src/b"'),
+      );
+      expect(checkpoint.writeFailed).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('reports a failed write and clears it once a later write succeeds', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'cli-junit-write-failure-'));
+    try {
+      const logged: string[] = [];
+      const missingDirectoryPath = join(directory, 'missing', 'junit.xml');
+      const reportPath = join(directory, 'junit.xml');
+      let target = missingDirectoryPath;
+      const checkpoint = createJUnitCheckpoint({
+        reportPath,
+        now: () => 0,
+        write: (_destination, results) => writeJUnitReport(target, results),
+        logError: (message) => logged.push(message),
+      });
+      checkpoint.record(resultFor('src/a.test.ts'));
+
+      checkpoint.flush();
+      expect(checkpoint.writeFailed).toBe(true);
+      expect(logged).toHaveLength(1);
+      expect(logged[0]).toContain('Failed to write junit.xml');
+
+      target = reportPath;
+      checkpoint.flush();
+      expect(checkpoint.writeFailed).toBe(false);
+      expect(readFileSync(reportPath, 'utf8')).toContain('name="src/a"');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('formatFileProgress', () => {
+  it('reports position, file and elapsed seconds so slow files can be attributed', () => {
+    expect(
+      formatFileProgress(
+        { file: 'src/a.test.ts', passed: true, timedOut: false, output: '' },
+        3,
+        10,
+        2345,
+      ),
+    ).toBe('PASS (3/10) src/a.test.ts 2.35s');
+  });
+
+  it('marks a timeout that never produced a summary', () => {
+    expect(
+      formatFileProgress(
+        {
+          file: 'src/b.test.ts',
+          passed: false,
+          timedOut: true,
+          output: '(pass) b > starts\n',
+        },
+        4,
+        10,
+        300_000,
+      ),
+    ).toBe('FAIL (4/10) src/b.test.ts 300.00s [timeout]');
+  });
+
+  it('distinguishes a timeout after the tests finished from a hung test', () => {
+    expect(
+      formatFileProgress(
+        {
+          file: 'src/c.test.ts',
+          passed: false,
+          timedOut: true,
+          output:
+            '(pass) c > ok\n\n 1 pass\n 0 fail\nRan 1 test across 1 file. [1.88s]\n',
+        },
+        5,
+        10,
+        300_000,
+      ),
+    ).toBe(
+      'FAIL (5/10) src/c.test.ts 300.00s [timeout: tests finished, process did not exit]',
+    );
+  });
+
+  it('marks an ordinary failure without a timeout suffix', () => {
+    expect(
+      formatFileProgress(
+        { file: 'src/d.test.ts', passed: false, timedOut: false, output: '' },
+        6,
+        10,
+        1200,
+      ),
+    ).toBe('FAIL (6/10) src/d.test.ts 1.20s');
+  });
+});
+
+describe('formatTimedOutAttempt', () => {
+  it('keeps the summary of a timed-out attempt that finished its tests', () => {
+    const output =
+      '(pass) c > ok\n\n 1 pass\n 0 fail\nRan 1 test across 1 file. [1.88s]\n';
+    expect(formatTimedOutAttempt({ file: 'src/c.test.ts', output }, 1)).toBe(
+      `TIMED OUT (attempt 1) src/c.test.ts [timeout: tests finished, process did not exit]\n${output}`,
+    );
+  });
+
+  it('labels an attempt that never reached the summary as a plain timeout', () => {
+    const output = '(pass) b > starts\n';
+    expect(formatTimedOutAttempt({ file: 'src/b.test.ts', output }, 2)).toBe(
+      `TIMED OUT (attempt 2) src/b.test.ts [timeout]\n${output}`,
+    );
   });
 });
 
@@ -957,7 +1208,11 @@ describe('real CLI test-file child retry', () => {
     const file = join(session.root, 'budget.test.ts');
     const marker = join(session.root, 'child-env.json');
     const childEnv = buildSessionEnv(
-      { ...process.env, [PER_FILE_TIMEOUT_ENV_VAR]: '0' },
+      {
+        ...process.env,
+        [PER_FILE_TIMEOUT_ENV_VAR]: '0',
+        LLXPRT_TEST_NATIVE_PRELOAD_PHASES: '1',
+      },
       session,
     );
     try {
@@ -969,10 +1224,20 @@ writeFileSync(${JSON.stringify(marker)}, JSON.stringify({ home: process.env.HOME
 it('finishes within the runner budget', async () => { await Bun.sleep(50); });`,
       );
       process.env[PER_FILE_TIMEOUT_ENV_VAR] = '4000';
+      const startedAt = performance.now();
       const result = await withChildCwd(session.root, () =>
         runTestFile(file, childEnv),
       );
-      expect(result.passed, result.output).toBe(true);
+      expect(
+        result.passed,
+        JSON.stringify({
+          ...result,
+          elapsedMs: performance.now() - startedAt,
+          runnerBudgetMs: fileTimeoutForFile(file),
+          childBudgetOverride: childEnv[PER_FILE_TIMEOUT_ENV_VAR],
+          childEnvMarkerExists: existsSync(marker),
+        }),
+      ).toBe(true);
       expect(result.timedOut).toBe(false);
       expect(JSON.parse(readFileSync(marker, 'utf8'))).toEqual({
         home: session.homeDir,
@@ -1088,6 +1353,29 @@ it('reaps a timed-out child even when timeout notification throws', async () => 
       expect(() => process.kill(pid, 0)).toThrow();
   } finally {
     log.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 15_000);
+
+it('hands a timed-out attempt to the reporter and not a passing one', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cli-timeout-report-'));
+  try {
+    const file = writeFlakyThenPassTest(dir);
+    const reported: Array<{ file: string; timedOut: boolean }> = [];
+    const first = await withShortPerFileTimeout(() =>
+      runTestFile(file, undefined, undefined, (attempt) =>
+        reported.push({ file: attempt.file, timedOut: attempt.timedOut }),
+      ),
+    );
+    expect(first.timedOut).toBe(true);
+    expect(reported).toEqual([{ file, timedOut: true }]);
+
+    const second = await runTestFile(file, undefined, undefined, (attempt) =>
+      reported.push({ file: attempt.file, timedOut: attempt.timedOut }),
+    );
+    expect(second.passed).toBe(true);
+    expect(reported).toHaveLength(1);
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }, 15_000);

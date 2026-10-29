@@ -492,25 +492,20 @@ jobs:
       # compiler reports TS2307/TS7006 and blocks the service-shape scanner.
       # Plugin installs need bun >= 1.4.2 for the same reason as the
       # runtime_plugins job (older Bun re-resolves the plugin lockfile and
-      # stalls on hosted runners). The repo pin in .bun-version satisfies
-      # that floor, so the bootstrap reads the version from it.
+      # stalls on hosted runners). The setup-bun step above installs the
+      # repo pin from .bun-version, which satisfies that floor, so the
+      # installs below use the job's own bun.
       - name: 'Install runtime plugin dependencies for the audit'
         run: |-
-          curl -fsSL https://bun.sh/install | BUN_INSTALL="$RUNNER_TEMP/bun-plugin" bash -s "bun-v$(cat .bun-version)"
-          for plugin in plugins/*/; do
-            if [ -f "${plugin}package.json" ]; then
-              (cd "$plugin" && "$RUNNER_TEMP/bun-plugin/bin/bun" install --omit=peer)
-            fi
+          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
+            (cd "$plugin" && bun install --frozen-lockfile --omit=peer)
           done
           git checkout -- bun.lock
 
       - name: 'Run runtime-boundary production audit (#2616)'
-        # TypeScript-aware audit of production sources: fails on any
-        # mutable-state, ALS, ambient-delegation, Config-locator or compiler
-        # finding. runtime-service-bundle and runtime-service-bag-parameter
-        # are a tracked residual held by the committed ratchet baseline
-        # (scripts/runtime-service-shape-baseline.json): per-owner counts may
-        # fall but never rise. Needs the declarations from build:types above.
+        # TypeScript-aware audit of production sources: every finding and
+        # compiler diagnostic fails, including runtime-service-bundle and
+        # runtime-service-bag-parameter. Needs declarations from build:types.
         run: |-
           npm run check:runtime-boundary
 
@@ -1196,16 +1191,14 @@ jobs:
         # installs need bun >= 1.4.2 for the same reason as the
         # runtime_plugins job: older Bun rejects the plugin lockfile's
         # unresolved root peers, discards the lock, and re-resolves, which
-        # stalls indefinitely on hosted runners. The repo pin in
-        # .bun-version satisfies that floor, so the bootstrap reads it.
+        # stalls indefinitely on hosted runners. The setup-bun step above
+        # installs the repo pin from .bun-version, which satisfies that
+        # floor, so the installs below use the job's own bun.
         run: |-
           bun install
           git checkout -- bun.lock
-          curl -fsSL https://bun.sh/install | BUN_INSTALL="$RUNNER_TEMP/bun-plugin" bash -s "bun-v$(cat .bun-version)"
-          for plugin in plugins/*/; do
-            if [ -f "${plugin}package.json" ]; then
-              (cd "$plugin" && "$RUNNER_TEMP/bun-plugin/bin/bun" install --omit=peer)
-            fi
+          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
+            (cd "$plugin" && bun install --frozen-lockfile --omit=peer)
           done
           git checkout -- bun.lock
       # Issue #2983: tests never read compiled output. Every workspace declares

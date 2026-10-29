@@ -3,7 +3,7 @@ import type { AgentClientContract } from '../../../../../core/src/core/clientCon
 import type { RowOwnership } from '../../../../../core/src/recording/rowOwnership.js';
 import type { DetachedFixture } from '../../../../../core/src/services/history/detached-rollback-test-helpers.js';
 import type { LocalMediaStore } from '../../../../../core/src/storage/local-media-store.js';
-import { buildAgent } from '../../../api/__tests__/helpers/agentHarness.js';
+import { buildCliStyleConfig } from '../../../api/__tests__/helpers/buildCliStyleConfig.js';
 
 export async function withRetainedClient<T>(
   fixture: Pick<DetachedFixture, 'history' | 'recorder' | 'releaseWriter'> & {
@@ -14,9 +14,11 @@ export async function withRetainedClient<T>(
     store: LocalMediaStore;
   }) => Promise<T>,
 ): Promise<T> {
-  const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+  const built = await buildCliStyleConfig('plain-text.jsonl');
+  const { cleanup, sessionClient } = built;
   try {
-    const client = await agent.sessionClient.createDetachedAgentClient();
+    await sessionClient.clients.refreshAuth();
+    const client = built.agentClient;
     try {
       const store = client.mediaStore;
       if (store === undefined)

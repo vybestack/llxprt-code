@@ -1,3 +1,4 @@
+import { chatSessionPorts } from './chatSessionPorts.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -157,7 +158,7 @@ function createFixture(): Fixture {
       }),
     ),
     tools: createToolRegistryViewFromRegistry(),
-    providerRuntime: { ...setup.runtime, config: setup.config },
+    providerRuntime: setup.runtime,
   });
   const generator = {
     generateContent: async (): Promise<never> => {
@@ -172,7 +173,19 @@ function createFixture(): Fixture {
     },
   };
   return {
-    chat: new ChatSession(runtime, generator, {}, []),
+    chat: new ChatSession(
+      chatSessionPorts(runtime),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      generator,
+      {},
+      [],
+    ),
     history,
     providerRows,
   };

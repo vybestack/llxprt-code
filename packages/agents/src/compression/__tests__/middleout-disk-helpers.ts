@@ -90,7 +90,7 @@ export class SummaryTransport {
 export function middleoutSetup(
   history: HistoryService,
   transport = new SummaryTransport(),
-  hook: ConstructorParameters<typeof CompressionHandler>[4] = async () => {},
+  hook: ConstructorParameters<typeof CompressionHandler>[9] = async () => {},
   overrides: Parameters<typeof buildRuntimeContext>[1] = {},
 ): {
   handler: CompressionHandler;
@@ -104,7 +104,12 @@ export function middleoutSetup(
   });
   const handler = new CompressionHandler(
     runtime,
+    undefined,
     history,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {},
     async () => ({
       provider: transport,
@@ -134,6 +139,7 @@ export async function middleoutOracle(
   const metadata = await buildCompressionMetadata(
     'oracle',
     runtime,
+    undefined,
     history,
     async () => ({
       provider: transport,

@@ -81,6 +81,8 @@ export function publicChat(
         name,
         parameters,
         signal,
+        undefined,
+        (input, init) => globalThis.fetch(input, init),
       ),
     state: {
       runtimeId: 'anthropic-tail',
@@ -92,8 +94,12 @@ export function publicChat(
     },
     history,
     settings: { contextLimit: 1_000_000 },
-    providerRuntime: { ...fixture.runtime, mediaResolver },
-    provider: { getActiveProvider: () => provider, setActiveProvider() {} },
+    providerRuntime: fixture.runtime,
+    provider: {
+      getActiveProvider: () => provider,
+      getProviderKeys: () => fixture.providerManager.getProviderKeys(),
+      setActiveProvider() {},
+    },
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
     telemetry: {
       logApiRequest() {},

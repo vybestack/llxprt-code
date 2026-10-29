@@ -12,37 +12,35 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import type { HistoryItemStats } from '../types.js';
 import { MessageType } from '../types.js';
 import { formatDuration } from '../utils/formatters.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import {
-  type CommandContext,
-  type SlashCommand,
-  CommandKind,
-} from './types.js';
-import { fetchAllQuotaInfo } from './statsQuota.js';
+import { type SlashCommand, CommandKind } from './types.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 import { formatSessionSection } from './formatSessionSection.js';
 import type { SessionRecordingMetadata } from '../types/SessionRecordingMetadata.js';
 
 const logger = new DebugLogger('llxprt:cli:stats');
+export interface StatsCommandOperations {
+  readonly readStartTime: () => Date | null | undefined;
+  readonly readQuota: () => Promise<string[]>;
+  readonly isOAuthAvailable: () => boolean;
+  readonly discoverBuckets: OAuthControl['discoverBuckets'];
+  readonly addItem: UseHistoryManagerReturn['addItem'];
+}
 
-async function defaultSessionView(context: CommandContext): Promise<void> {
+async function defaultSessionView(
+  context: StatsCommandOperations,
+): Promise<void> {
   const now = new Date();
   // Runtime stats may be incomplete before session initialization, so the
   // declared non-null type is narrowed at the boundary to reflect that
   // the value can legitimately be missing.
-  const rawStartTime = context.session.stats.sessionStartTime as
-    | Date
-    | null
-    | undefined;
+  const rawStartTime = context.readStartTime();
   if (rawStartTime == null) {
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    context.addItem(
       {
         type: MessageType.ERROR,
         text: 'Session start time is unavailable, cannot calculate stats.',
@@ -54,8 +52,7 @@ async function defaultSessionView(context: CommandContext): Promise<void> {
   const wallDuration = now.getTime() - rawStartTime.getTime();
 
   // Fetch quota information
-  const runtimeApi = context.runtimeApi;
-  const quotaLines = await fetchAllQuotaInfo(runtimeApi, context.oauthControl);
+  const quotaLines = await context.readQuota();
 
   const statsItem: HistoryItemStats = {
     type: MessageType.STATS,
@@ -63,13 +60,7 @@ async function defaultSessionView(context: CommandContext): Promise<void> {
     quotaLines: quotaLines.length > 0 ? quotaLines : undefined,
   };
 
-  await writeCommandOutput(
-    () => context.services.agent?.agentClient.getHistoryService() ?? null,
-    context.services.agent?.session,
-    context.recordingOwner,
-    context.ui.addItem,
-    statsItem,
-  );
+  context.addItem(statsItem);
 
   // Session recording section (stub - result currently discarded)
   // @plan PLAN-20260214-SESSIONBROWSER.P24
@@ -77,21 +68,14 @@ async function defaultSessionView(context: CommandContext): Promise<void> {
   await formatSessionSection(_sessionMetadata);
 }
 
-async function quotaSubcommandAction(context: CommandContext): Promise<void> {
-  const runtimeApi = context.runtimeApi;
-
+async function quotaSubcommandAction(
+  context: StatsCommandOperations,
+): Promise<void> {
   try {
-    const quotaLines = await fetchAllQuotaInfo(
-      runtimeApi,
-      context.oauthControl,
-    );
+    const quotaLines = await context.readQuota();
 
     if (quotaLines.length === 0) {
-      await writeCommandOutput(
-        () => context.services.agent?.agentClient.getHistoryService() ?? null,
-        context.services.agent?.session,
-        context.recordingOwner,
-        context.ui.addItem,
+      context.addItem(
         {
           type: MessageType.INFO,
           text: 'No quota information available. Supported providers: Claude Code (OAuth), Codex (OAuth), Z.ai, Synthetic, Chutes, Kimi.',
@@ -101,11 +85,7 @@ async function quotaSubcommandAction(context: CommandContext): Promise<void> {
       return;
     }
 
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    context.addItem(
       {
         type: MessageType.INFO,
         text: quotaLines.join('\n'),
@@ -115,11 +95,7 @@ async function quotaSubcommandAction(context: CommandContext): Promise<void> {
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    context.addItem(
       {
         type: MessageType.ERROR,
         text: `Failed to retrieve quota information: ${errorMessage}`,
@@ -188,17 +164,11 @@ function formatDiscoveredProviders(
 }
 
 async function bucketsSubcommandAction(
-  context: CommandContext,
+  context: StatsCommandOperations,
   _args: string,
 ): Promise<void> {
-  const oauthControl = context.oauthControl;
-
-  if (!oauthControl.isAvailable()) {
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+  if (!context.isOAuthAvailable()) {
+    context.addItem(
       {
         type: MessageType.INFO,
         text: 'OAuth is not available or configured',
@@ -209,14 +179,10 @@ async function bucketsSubcommandAction(
   }
 
   try {
-    const discovered = await oauthControl.discoverBuckets(logger);
+    const discovered = await context.discoverBuckets(logger);
 
     if (discovered.length === 0) {
-      await writeCommandOutput(
-        () => context.services.agent?.agentClient.getHistoryService() ?? null,
-        context.services.agent?.session,
-        context.recordingOwner,
-        context.ui.addItem,
+      context.addItem(
         {
           type: MessageType.INFO,
           text: 'No OAuth buckets available',
@@ -227,11 +193,7 @@ async function bucketsSubcommandAction(
     }
 
     const output = formatDiscoveredProviders(discovered);
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    context.addItem(
       {
         type: MessageType.INFO,
         text: output.join('\n'),
@@ -241,11 +203,7 @@ async function bucketsSubcommandAction(
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    context.addItem(
       {
         type: MessageType.ERROR,
         text: `Failed to retrieve bucket statistics: ${errorMessage}`,
@@ -255,108 +213,87 @@ async function bucketsSubcommandAction(
   }
 }
 
-export const statsCommand: SlashCommand = {
-  name: 'stats',
-  altNames: ['usage'],
-  description:
-    'check session stats. Usage: /stats [session|model|tools|cache|buckets|quota|lb]',
-  kind: CommandKind.BUILT_IN,
-  action: async (context: CommandContext) => {
-    await defaultSessionView(context);
-  },
-  subCommands: [
-    {
-      name: 'session',
-      description: 'Show session-specific usage statistics.',
-      kind: CommandKind.BUILT_IN,
-      autoExecute: true,
-      action: async (context: CommandContext) => {
-        await defaultSessionView(context);
+function createStatsView(
+  name: string,
+  description: string,
+  type:
+    | MessageType.MODEL_STATS
+    | MessageType.TOOL_STATS
+    | MessageType.CACHE_STATS
+    | MessageType.LB_STATS,
+  addItem: UseHistoryManagerReturn['addItem'],
+  autoExecute = false,
+): SlashCommand {
+  return {
+    name,
+    description,
+    kind: CommandKind.BUILT_IN,
+    ...(autoExecute ? { autoExecute: true } : {}),
+    action: () => {
+      addItem({ type }, Date.now());
+    },
+  };
+}
+export function createStatsCommand(
+  operations: StatsCommandOperations,
+): SlashCommand {
+  return {
+    name: 'stats',
+    altNames: ['usage'],
+    description:
+      'check session stats. Usage: /stats [session|model|tools|cache|buckets|quota|lb]',
+    kind: CommandKind.BUILT_IN,
+    action: async () => defaultSessionView(operations),
+    subCommands: [
+      {
+        name: 'session',
+        description: 'Show session-specific usage statistics.',
+        kind: CommandKind.BUILT_IN,
+        autoExecute: true,
+        action: async () => defaultSessionView(operations),
       },
-    },
-    {
-      name: 'model',
-      description: 'Show model-specific usage statistics.',
-      kind: CommandKind.BUILT_IN,
-      autoExecute: true,
-      action: async (context: CommandContext) => {
-        await writeCommandOutput(
-          () => context.services.agent?.agentClient.getHistoryService() ?? null,
-          context.services.agent?.session,
-          context.recordingOwner,
-          context.ui.addItem,
-          {
-            type: MessageType.MODEL_STATS,
-          },
-          Date.now(),
-        );
+      createStatsView(
+        'model',
+        'Show model-specific usage statistics.',
+        MessageType.MODEL_STATS,
+        operations.addItem,
+        true,
+      ),
+      createStatsView(
+        'tools',
+        'Show tool-specific usage statistics.',
+        MessageType.TOOL_STATS,
+        operations.addItem,
+        true,
+      ),
+      createStatsView(
+        'cache',
+        'Show cache usage statistics.',
+        MessageType.CACHE_STATS,
+        operations.addItem,
+      ),
+      {
+        name: 'quota',
+        description:
+          'Show quota/usage information for OAuth providers (Claude Code, Codex) and API-key providers (Z.ai, Synthetic, Chutes, Kimi).',
+        kind: CommandKind.BUILT_IN,
+        action: async () => quotaSubcommandAction(operations),
       },
-    },
-    {
-      name: 'tools',
-      description: 'Show tool-specific usage statistics.',
-      kind: CommandKind.BUILT_IN,
-      autoExecute: true,
-      action: async (context: CommandContext) => {
-        await writeCommandOutput(
-          () => context.services.agent?.agentClient.getHistoryService() ?? null,
-          context.services.agent?.session,
-          context.recordingOwner,
-          context.ui.addItem,
-          {
-            type: MessageType.TOOL_STATS,
-          },
-          Date.now(),
-        );
+      {
+        name: 'buckets',
+        description: 'Show OAuth bucket usage statistics.',
+        kind: CommandKind.BUILT_IN,
+        action: async () => bucketsSubcommandAction(operations, ''),
       },
-    },
-    {
-      name: 'cache',
-      description: 'Show cache usage statistics.',
-      kind: CommandKind.BUILT_IN,
-      action: async (context: CommandContext) => {
-        await writeCommandOutput(
-          () => context.services.agent?.agentClient.getHistoryService() ?? null,
-          context.services.agent?.session,
-          context.recordingOwner,
-          context.ui.addItem,
-          {
-            type: MessageType.CACHE_STATS,
-          },
-          Date.now(),
-        );
+      {
+        ...createStatsView(
+          'lb',
+          'Show load balancer usage statistics.',
+          MessageType.LB_STATS,
+          operations.addItem,
+        ),
+        altNames: ['loadbalancer'],
       },
-    },
-    {
-      name: 'quota',
-      description:
-        'Show quota/usage information for OAuth providers (Claude Code, Codex) and API-key providers (Z.ai, Synthetic, Chutes, Kimi).',
-      kind: CommandKind.BUILT_IN,
-      action: quotaSubcommandAction,
-    },
-    {
-      name: 'buckets',
-      description: 'Show OAuth bucket usage statistics.',
-      kind: CommandKind.BUILT_IN,
-      action: bucketsSubcommandAction,
-    },
-    {
-      name: 'lb',
-      altNames: ['loadbalancer'],
-      description: 'Show load balancer usage statistics.',
-      kind: CommandKind.BUILT_IN,
-      action: async (context: CommandContext) => {
-        await writeCommandOutput(
-          () => context.services.agent?.agentClient.getHistoryService() ?? null,
-          context.services.agent?.session,
-          context.recordingOwner,
-          context.ui.addItem,
-          {
-            type: MessageType.LB_STATS,
-          },
-          Date.now(),
-        );
-      },
-    },
-  ],
-};
+    ],
+  };
+}

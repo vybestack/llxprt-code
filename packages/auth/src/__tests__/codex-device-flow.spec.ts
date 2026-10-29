@@ -20,7 +20,7 @@ describe('CodexDeviceFlow - PKCE Verifier State Management', () => {
   let deviceFlow: CodexDeviceFlow;
 
   beforeEach(() => {
-    deviceFlow = new CodexDeviceFlow();
+    deviceFlow = new CodexDeviceFlow(globalThis.fetch);
   });
 
   describe('Map-based PKCE Verifier Storage', () => {

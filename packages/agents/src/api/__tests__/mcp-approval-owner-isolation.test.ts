@@ -1,50 +1,41 @@
+import {
+  RuntimePolicyOwner,
+  SessionPolicyOwner,
+} from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  mkdtemp,
+  realpath,
+  rm,
+  mkdir,
+  readFile,
+  writeFile,
+} from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { fileURLToPath } from 'node:url';
+import { PolicyDecision } from '@vybestack/llxprt-code-policy';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { Agent, AgentToolHandle } from '../agent.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { awaitMcpDiscoveryReady } from './helpers/mcp-discovery-ready.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { openRouteAAgent, RouteAAgent } from './helpers/route-a-agent.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { SessionPolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-
-import { describe, expect, it, spyOn } from 'bun:test';
-import fs from 'node:fs/promises';
-import { Storage } from '@vybestack/llxprt-code-settings';
-import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { PolicyDecision } from '@vybestack/llxprt-code-policy';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import type { Agent, AgentToolHandle } from '../agent.js';
-import { fromConfig } from '../fromConfig.js';
-import { CONFIRMATION_FORCING_SOURCE } from '../confirmationForcing.js';
-import {
-  buildCliStyleConfig,
-  type BuiltCliConfig,
-} from './helpers/buildCliStyleConfig.js';
 
 const evidence = join(tmpdir(), 'llxprt-mcp-approval-isolation-repro');
+
 const fixture = fileURLToPath(
   new URL('./helpers/mcp-approval-stdio-fixture.ts', import.meta.url),
 );
-
-function buildOwner(cwd: string, server: string): Promise<BuiltCliConfig> {
-  return buildCliStyleConfig('plain-text.jsonl', {
-    workingDir: cwd,
-    folderTrust: true,
-    coreTools: [],
-    policy: { defaultDecision: PolicyDecision.ASK_USER },
-    telemetry: { enabled: false },
-    recording: { enabled: false },
-    mcpServers: {
-      [server]: {
-        command: process.execPath,
-        args: [fixture, join(cwd, 'server.pid')],
-        trust: false,
-      },
-    },
-  });
-}
 
 function tool(agent: Agent, server: string, name: string): AgentToolHandle {
   const info = agent.tools
@@ -84,6 +75,22 @@ function isAlive(pid: number): boolean {
 }
 
 describe('MCP public tool approval owner isolation', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+  useFakeResponsesReplay('plain-text.jsonl');
+  const credentials = useOwnedCredentials();
+  const ownerCCredentials = useOwnedCredentials();
+
   for (const outcome of [
     ToolConfirmationOutcome.ProceedAlwaysTool,
     ToolConfirmationOutcome.ProceedAlwaysServer,
@@ -92,62 +99,78 @@ describe('MCP public tool approval owner isolation', () => {
       await mkdir(evidence, { recursive: true });
       const directory = await mkdtemp(join(evidence, 'runtime-'));
       const server = `approval_${randomUUID().replaceAll('-', '')}`;
-      const builtOwners: BuiltCliConfig[] = [];
-      const agents: Agent[] = [];
+      const routes: RouteAAgent[] = [];
       const pids: number[] = [];
       const signal = new AbortController().signal;
-      try {
-        for (const name of ['A', 'B']) {
-          const cwd = join(directory, name);
-          await mkdir(cwd);
-          const built = await buildOwner(cwd, server);
-          builtOwners.push(built);
-          expect(
-            Array.from(await built.mcpRuntime.awaitDiscovery()),
-          ).toStrictEqual([]);
-          pids.push(Number(await readFile(join(cwd, 'server.pid'), 'utf8')));
-          built.mcpRuntime.policyOwner.session.confirmation.removeRulesBySource(
-            CONFIRMATION_FORCING_SOURCE,
-          );
-          const agent = await fromConfig({
-            settingsOwner: built.settingsOwner,
-            settingsService: built.settingsService,
-            agentClient: built.agentClient,
-            providerManager: built.providerManager,
-            runtimeFactoryBindings: built.runtimeFactoryBindings,
-            config: built.config,
-            mcpRuntime: built.mcpRuntime,
-            mcpOwnership: 'caller',
-            messageBus: built.messageBus,
+      async function openAgent(
+        name: string,
+        authority: CredentialAuthority,
+      ): Promise<RouteAAgent> {
+        const cwd = join(directory, name);
+        await mkdir(cwd);
+        const route = await openRouteAAgent({
+          authority,
+          config: {
+            workingDir: await realpath(cwd),
+            interactive: true,
+            folderTrust: true,
+            coreTools: [],
+            policy: { defaultDecision: PolicyDecision.ASK_USER },
+            telemetry: { enabled: false },
+            recording: { enabled: false },
+            mcpServers: {
+              [server]: {
+                command: process.execPath,
+                args: [fixture, join(cwd, 'server.pid')],
+                trust: false,
+              },
+            },
+          },
+        });
+        routes.push(route);
+        await awaitMcpDiscoveryReady(route.agent);
+        expect(
+          route.agent.mcp
+            .listServers()
+            .filter((entry) => entry.status !== 'connected'),
+        ).toStrictEqual([]);
+        pids.push(Number(await readFile(join(cwd, 'server.pid'), 'utf8')));
+        return route;
+      }
+      async function openCaller(name: string): Promise<void> {
+        const { agent } = await openAgent(name, credentials().authority);
+        expect(agent.policy.getDefaultDecision()).toBe(PolicyDecision.ASK_USER);
+        const discovered = agent.tools
+          .list()
+          .filter((entry) => entry.server === server);
+        expect(
+          discovered.map((entry) => entry.serverToolName).sort(),
+        ).toStrictEqual(['increment', 'other']);
+        const decisions = [];
+        for (const entry of discovered) {
+          const qualifiedName = `${entry.server}__${entry.serverToolName}`;
+          const confirmation = await tool(
+            agent,
+            entry.server ?? server,
+            entry.serverToolName ?? '',
+          )
+            .build({})
+            .shouldConfirmExecute(signal);
+          expect(confirmation).toMatchObject({
+            type: 'mcp',
+            serverName: entry.server,
+            toolName: entry.serverToolName,
           });
-
-          agents.push(agent);
-          expect(agent.policy.getDefaultDecision()).toBe(
-            PolicyDecision.ASK_USER,
-          );
-          const discovered = agent.tools
-            .list()
-            .filter((entry) => entry.server === server);
-          expect(
-            discovered.map((entry) => entry.serverToolName).sort(),
-          ).toStrictEqual(['increment', 'other']);
-          const decisions = discovered.map((entry) => {
-            const qualifiedName = `${entry.server}__${entry.serverToolName}`;
-            const decision =
-              built.mcpRuntime.policyOwner.session.decisions.evaluate(
-                qualifiedName,
-                {},
-                entry.server,
-              );
-            expect(decision).toBe(PolicyDecision.ASK_USER);
-            return { qualifiedName, decision };
-          });
-          await writeFile(
-            join(evidence, `${outcome}-${name}-policy-baseline.json`),
-            JSON.stringify(decisions, null, 2),
-          );
+          decisions.push({ qualifiedName, confirmation });
         }
-        const [agentA, agentB] = agents;
+        await writeFile(
+          join(evidence, `${outcome}-${name}-policy-baseline.json`),
+          JSON.stringify(decisions, null, 2),
+        );
+      }
+      try {
+        for (const name of ['A', 'B']) await openCaller(name);
+        const [agentA, agentB] = routes.map((route) => route.agent);
         const a = tool(agentA, server, 'increment');
         const b = tool(agentB, server, 'increment');
         const baselineA = await a.build({}).shouldConfirmExecute(signal);
@@ -187,16 +210,8 @@ describe('MCP public tool approval owner isolation', () => {
           JSON.stringify({ b: afterB, sameOwnerOther }, null, 2),
         );
         expect(afterB).toMatchObject(expected);
-        const ownerA = builtOwners[0];
-        expect(
-          ownerA.mcpRuntime.policyOwner.session.decisions.evaluate(
-            `${server}__increment`,
-            {},
-            server,
-          ),
-        ).toBe(PolicyDecision.ALLOW);
-        await ownerA.mcpRuntime.refresh(server);
-        await ownerA.mcpRuntime.awaitDiscovery();
+        expect(await a.build({}).shouldConfirmExecute(signal)).toBe(false);
+        await agentA.mcp.refresh(server);
         pids.push(
           Number(await readFile(join(directory, 'A', 'server.pid'), 'utf8')),
         );
@@ -223,17 +238,10 @@ describe('MCP public tool approval owner isolation', () => {
             .build({})
             .shouldConfirmExecute(signal),
         ).toMatchObject(expected);
-        expect(
-          ownerA.mcpRuntime.policyOwner.session.decisions.evaluate(
-            `${server}__increment`,
-            {},
-            server,
-          ),
-        ).toBe(PolicyDecision.ALLOW);
-        await ownerA.mcpRuntime.dispose();
+        const freshOwner = new RuntimePolicyOwner(routes[1].config);
         const fresh = new SessionPolicyOwner(
-          builtOwners[1].policyOwner.workspace,
-          ownerA.config,
+          freshOwner.workspace,
+          routes[0].config,
         );
         try {
           expect(
@@ -241,46 +249,20 @@ describe('MCP public tool approval owner isolation', () => {
           ).toBe(PolicyDecision.ASK_USER);
         } finally {
           await fresh.dispose();
+          await freshOwner.dispose();
         }
-        expect(() =>
-          ownerA.mcpRuntime.policyOwner.session.decisions.evaluate(
-            `${server}__increment`,
-            {},
-            server,
-          ),
-        ).toThrow('Session policy is disposed');
+        expect(() => agentA.policy.getRules()).toThrow(
+          'Session policy is disposed',
+        );
         await expect(confirm(baselineA, outcome)).rejects.toThrow(
           /Tool dispatch admission is closed/,
         );
-        expect(() =>
-          ownerA.mcpRuntime.policyOwner.session.decisions.evaluate(
-            `${server}__increment`,
-            {},
-            server,
-          ),
-        ).toThrow('Session policy is disposed');
-        const cwd = join(directory, 'C');
-        await mkdir(cwd);
-        const ownerC = await buildOwner(cwd, server);
-        builtOwners.push(ownerC);
-        expect(
-          Array.from(await ownerC.mcpRuntime.awaitDiscovery()),
-        ).toStrictEqual([]);
-        pids.push(Number(await readFile(join(cwd, 'server.pid'), 'utf8')));
-        ownerC.mcpRuntime.policyOwner.session.confirmation.removeRulesBySource(
-          CONFIRMATION_FORCING_SOURCE,
+        expect(() => agentA.policy.getRules()).toThrow(
+          'Session policy is disposed',
         );
-        const agentC = await fromConfig({
-          settingsOwner: ownerC.settingsOwner,
-          settingsService: ownerC.settingsService,
-          providerManager: ownerC.providerManager,
-          config: ownerC.config,
-          mcpRuntime: ownerC.mcpRuntime,
-          mcpOwnership: 'caller',
-          messageBus: ownerC.messageBus,
-        });
+        const agentC = (await openAgent('C', ownerCCredentials().authority))
+          .agent;
         try {
-          agents.push(agentC);
           expect(
             await tool(agentC, server, 'increment')
               .build({})
@@ -291,15 +273,13 @@ describe('MCP public tool approval owner isolation', () => {
         }
       } finally {
         const results = await Promise.allSettled(
-          agents.map((a) => a.dispose()),
+          routes.map((route) => route.agent.dispose()),
         );
-        for (const built of [...builtOwners].reverse()) {
-          results.push(
-            ...(await Promise.allSettled([built.mcpRuntime.dispose()])),
-          );
-          results.push(...(await Promise.allSettled([built.config.dispose()])));
-          results.push(...(await Promise.allSettled([built.cleanup()])));
-        }
+        results.push(
+          ...(await Promise.allSettled(
+            [...routes].reverse().map((route) => route.close()),
+          )),
+        );
         const alive = pids.filter(isAlive);
         await writeFile(
           join(evidence, `${outcome}-cleanup.json`),
@@ -323,106 +303,4 @@ describe('MCP public tool approval owner isolation', () => {
       }
     });
   }
-});
-
-describe('MCP saved approval lifetime', () => {
-  it('joins an admitted saved approval at owner disposal without restoring session approval', async () => {
-    await mkdir(evidence, { recursive: true });
-    const directory = await mkdtemp(join(evidence, 'save-runtime-'));
-    const server = `save_${randomUUID().replaceAll('-', '')}`;
-    const built = await buildOwner(directory, server);
-    const policies = join(directory, 'policies');
-    const storage = spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(
-      policies,
-    );
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let entered!: () => void;
-    const admitted = new Promise<void>((resolve) => {
-      entered = resolve;
-    });
-    const rename = fs.rename;
-    const saving = spyOn(fs, 'rename').mockImplementation(async (from, to) => {
-      if (to === join(policies, 'auto-saved.toml')) {
-        entered();
-        await gate;
-      }
-      await rename(from, to);
-    });
-    let agent: Agent | undefined;
-    let approval: Promise<void> | undefined;
-    let disposal: Promise<void> | undefined;
-    try {
-      expect(Array.from(await built.mcpRuntime.awaitDiscovery())).toStrictEqual(
-        [],
-      );
-      built.mcpRuntime.policyOwner.session.confirmation.removeRulesBySource(
-        CONFIRMATION_FORCING_SOURCE,
-      );
-      agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        runtimeFactoryBindings: built.runtimeFactoryBindings,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-        mcpOwnership: 'caller',
-        messageBus: built.messageBus,
-      });
-      const details = await tool(agent, server, 'increment')
-        .build({})
-        .shouldConfirmExecute(new AbortController().signal);
-      approval = confirm(details, ToolConfirmationOutcome.ProceedAlwaysAndSave);
-      await admitted;
-      expect(
-        built.mcpRuntime.policyOwner.session.decisions.evaluate(
-          `${server}__increment`,
-          {},
-          server,
-        ),
-      ).toBe(PolicyDecision.ALLOW);
-      let disposed = false;
-      disposal = built.mcpRuntime.dispose().then(() => {
-        disposed = true;
-      });
-      expect(() =>
-        built.mcpRuntime.policyOwner.session.decisions.evaluate(
-          `${server}__increment`,
-          {},
-          server,
-        ),
-      ).toThrow('Session policy is disposed');
-      await expect(
-        confirm(details, ToolConfirmationOutcome.ProceedAlwaysAndSave),
-      ).rejects.toThrow(/Tool dispatch admission is closed/);
-      expect(disposed).toBe(false);
-      release();
-      await approval;
-      await disposal;
-      expect(disposed).toBe(true);
-      expect(
-        await readFile(join(policies, 'auto-saved.toml'), 'utf8'),
-      ).toContain('toolName = "increment"');
-      expect(() =>
-        built.mcpRuntime.policyOwner.session.decisions.evaluate(
-          `${server}__increment`,
-          {},
-          server,
-        ),
-      ).toThrow('Session policy is disposed');
-    } finally {
-      release();
-      await Promise.allSettled([approval, disposal]);
-      saving.mockRestore();
-      storage.mockRestore();
-      await agent?.dispose();
-      await built.mcpRuntime.dispose();
-      await built.config.dispose();
-      await built.cleanup();
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
 });

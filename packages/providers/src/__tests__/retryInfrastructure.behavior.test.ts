@@ -1,3 +1,4 @@
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -59,6 +60,35 @@ function isTerminalExhaustion(failure: Error): boolean {
 describe('request-scoped retry infrastructure', () => {
   afterEach(() => {
     vi.useRealTimers();
+  });
+  it('keeps two observation owners separate and renews retired decorated options', () => {
+    const options: GenerateChatOptions = {
+      contents: callerOwnedRawProviderSource([]),
+      onProviderError: () => undefined,
+    };
+    const failure = new Error('shared upstream failure');
+    const first = attachProviderErrorObservationContext(options);
+    const second = attachProviderErrorObservationContext(options);
+    expect(claimProviderErrorObservation(first.options, failure)).toBe(true);
+    expect(claimProviderErrorObservation(second.options, failure)).toBe(true);
+    first.release();
+    const renewed = attachProviderErrorObservationContext(first.options);
+    expect(claimProviderErrorObservation(renewed.options, failure)).toBe(true);
+    expect(claimProviderErrorObservation(second.options, failure)).toBe(false);
+    renewed.release();
+    second.release();
+  });
+
+  it('rejects observation claims without an explicit request owner', () => {
+    expect(() =>
+      claimProviderErrorObservation(
+        {
+          contents: callerOwnedRawProviderSource([]),
+          onProviderError: () => undefined,
+        },
+        new Error('failure'),
+      ),
+    ).toThrow('Provider error observation context was not attached');
   });
 
   it('shares a budget through nested wrappers without mutating reusable caller context', () => {
@@ -291,26 +321,28 @@ describe('request-scoped retry infrastructure', () => {
     expect(permitsBucketFailover(error)).toBe(false);
   });
 
-  it('claims the same unscoped error only once', () => {
+  it('claims the same explicitly scoped error only once', () => {
     const options: GenerateChatOptions = {
       contents: replayableContents([]),
       onProviderError: () => undefined,
     };
+    const owned = attachProviderErrorObservationContext(options);
     const error = new Error('delegate failure');
 
-    expect(claimProviderErrorObservation(options, error)).toBe(true);
-    expect(claimProviderErrorObservation(options, error)).toBe(false);
+    expect(claimProviderErrorObservation(owned.options, error)).toBe(true);
+    expect(claimProviderErrorObservation(owned.options, error)).toBe(false);
   });
 
-  it('preserves detached claims when observation context is attached', () => {
+  it('preserves claims when a nested observation owner is attached', () => {
     const options: GenerateChatOptions = {
       contents: replayableContents([]),
       onProviderError: () => undefined,
     };
+    const owned = attachProviderErrorObservationContext(options);
     const error = new Error('delegate failure');
 
-    expect(claimProviderErrorObservation(options, error)).toBe(true);
-    const attached = attachProviderErrorObservationContext(options);
+    expect(claimProviderErrorObservation(owned.options, error)).toBe(true);
+    const attached = attachProviderErrorObservationContext(owned.options);
     expect(claimProviderErrorObservation(attached.options, error)).toBe(false);
     attached.release();
   });
@@ -338,19 +370,22 @@ describe('request-scoped retry infrastructure', () => {
     secondRequest.release();
   });
 
-  it('bounds detached primitive error deduplication', () => {
+  it('bounds request-owned primitive error deduplication', () => {
     const options: GenerateChatOptions = {
       contents: replayableContents([]),
       onProviderError: () => undefined,
     };
 
+    const owned = attachProviderErrorObservationContext(options);
     for (let index = 0; index < 64; index++) {
-      expect(claimProviderErrorObservation(options, `failure-${index}`)).toBe(
-        true,
-      );
+      expect(
+        claimProviderErrorObservation(owned.options, `failure-${index}`),
+      ).toBe(true);
     }
 
-    expect(claimProviderErrorObservation(options, 'failure-0')).toBe(true);
+    expect(claimProviderErrorObservation(owned.options, 'failure-0')).toBe(
+      true,
+    );
   });
 
   it('retains the abort reason when racing an operation', async () => {

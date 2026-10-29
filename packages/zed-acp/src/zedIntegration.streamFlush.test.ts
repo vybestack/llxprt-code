@@ -6,7 +6,7 @@
 
 import { afterEach, describe, expect, it } from 'bun:test';
 
-import { Session } from './zedIntegration.js';
+import { Session } from './zed-session.js';
 import {
   buildFakeAgent,
   RecordingConnection,

@@ -3,45 +3,50 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { LoggingProviderWrapper } from '../../../providers/src/LoggingProviderWrapper.js';
-import type { IProvider } from '../../../providers/src/IProvider.js';
-import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
-import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
-import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
-import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
-import type { ConversationRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
-import { ChatSession } from './chatSession.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { ToolChoice } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { HookLLMRequest } from '@vybestack/llxprt-code-core/hooks/hookTranslator.js';
 import {
   AfterModelHookOutput,
   BeforeModelHookOutput,
   BeforeToolSelectionHookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { ToolChoice } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ConversationRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
+import { describe, expect, it } from 'bun:test';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { IProvider } from '../../../providers/src/IProvider.js';
+import { LoggingProviderWrapper } from '../../../providers/src/LoggingProviderWrapper.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
+import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
+import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const modelTools = installModelToolFixture();
 
@@ -179,13 +184,11 @@ async function send(
     selection,
   );
   const runtime = createProviderRuntimeContext({
-    settingsService,
-    config,
     runtimeId: 'empty-tools',
   });
   const manager = new TestRuntimeProviderManager(runtime);
   manager.setConfig(config);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
   const provider = observeProvider(requests);
   manager.registerProvider(
     diagnostics === undefined
@@ -204,7 +207,18 @@ async function send(
   const view = createAgentRuntimeContext({
     readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
     prepareProviderInvocation: (name, parameters, signal) =>
-      captureProviderInvocation(runtime, name, parameters, signal),
+      captureProviderInvocation(
+        {
+          fetch: requestFetch,
+          runtimeId: runtime.runtimeId,
+          metadata: runtime.metadata,
+          globalSettings: settingsService.getAllGlobalSettings(),
+          providerSettings: settingsService.getProviderSettings(name),
+        },
+        name,
+        parameters,
+        signal,
+      ),
     state: createAgentRuntimeState({
       runtimeId: 'empty-tools',
       provider: 'stub',
@@ -224,7 +238,19 @@ async function send(
     tools: createToolRegistryViewFromRegistry(modelTools()),
     providerRuntime: runtime,
   });
-  const chat = new ChatSession(view, unusedGenerator, {}, []);
+  const chat = new ChatSession(
+    chatSessionPorts(view),
+    config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    unusedGenerator,
+    {},
+    [],
+  );
   if (origin === 'producer') chat.setTools([]);
   if (origin === 'none' || origin === 'unmatched')
     chat.setTools([{ name: 'search', parametersJsonSchema: {} }]);

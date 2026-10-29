@@ -4,8 +4,12 @@ import { buildAgent } from '../../../../agents/src/api/__tests__/helpers/agentHa
 import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
-import { performMcpOAuth } from './mcpAuth.js';
-import type { CommandContext } from './types.js';
+import { createMcpAuthCommand } from './mcpAuth.js';
+import { bindMcpAuthCommandOperations } from './credentialCommandHost.js';
+import { appendJournalUiItem } from '../hooks/command-journal-output.js';
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { SlashCommandActionReturn } from './types.js';
 import type { TokenStorage } from '@vybestack/llxprt-code-mcp';
 
 const storage: TokenStorage = {
@@ -28,9 +32,7 @@ const mcpServers = {
   },
 };
 
-function contextFor(
-  agent: NonNullable<CommandContext['services']['agent']>,
-): CommandContext {
+function contextFor(agent: Agent): CommandOwnerFixture {
   const base = createMockCommandContext();
   return {
     ...base,
@@ -92,12 +94,37 @@ describe('MCP authentication journal presentation', () => {
       telemetry: { enabled: false },
       recording: { enabled: false },
     });
-    let command: ReturnType<typeof performMcpOAuth> | undefined;
-    let result: Awaited<ReturnType<typeof performMcpOAuth>> | undefined;
+    let command: Promise<SlashCommandActionReturn | void> | undefined;
+    let result: SlashCommandActionReturn | void;
     try {
       await built.agent.session.setRecording({ enabled: true });
       readPath = () => built.agent.session.getRecording().path;
-      command = performMcpOAuth(contextFor(built.agent), 'journal');
+      const agent = built.agent;
+      const context = contextFor(agent);
+      const auth = createMcpAuthCommand(
+        bindMcpAuthCommandOperations(
+          () =>
+            agent.mcp.listServers().map((server) => ({
+              name: server.name,
+              oauthEnabled: server.config.oauth?.enabled === true,
+            })),
+          async () =>
+            (await agent.mcp.details()).servers
+              .filter((server) => server.requiresAuth)
+              .map((server) => server.name),
+          async (name, display) => {
+            await agent.mcp.authenticate(name, display);
+          },
+          () => true,
+        ),
+        () => true,
+        async (item) => {
+          await appendJournalUiItem(agent.session, agent.session, item);
+        },
+        context.ui.reloadCommands,
+      );
+      if (!auth.action) throw new Error('Missing authentication action');
+      command = Promise.resolve(auth.action(context, 'journal'));
       const outcome = await Promise.race([
         browser.then(() => 'browser'),
         command.then(() => 'command'),

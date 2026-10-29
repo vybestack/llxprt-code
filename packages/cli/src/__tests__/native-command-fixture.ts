@@ -1,7 +1,10 @@
+import { captureSessionOwner } from '../../../agents/src/api/__tests__/helpers/capture-session-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import {
   DebugLogger,
+  type AgentClientContract,
+  validateSessionMediaPackage,
   type MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core';
 import { streamRecordedRows } from './journal-recording.js';
@@ -10,8 +13,11 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { chatOwnerCommand } from '../ui/commands/chatOwnerCommand.js';
-import { continueCommand } from '../ui/commands/continueCommand.js';
+import { createChatOwnerCommand } from '../ui/commands/chatOwnerCommand.js';
+import { createContinueCommand } from '../ui/commands/continueCommand.js';
+import { appendJournalUiItem } from '../ui/hooks/command-journal-output.js';
+import { resumeOwnerSession } from '../ui/utils/resumeOwnerSession.js';
+import { importOwnerSession } from '../ui/utils/ownerSessionUi.js';
 import {
   processSlashCommand,
   type SlashCommandHandlerDeps,
@@ -93,6 +99,7 @@ export async function turn(
 export interface NativeCommandFixture {
   readonly root: string;
   readonly live: Agent;
+  clientFor(agent: Agent): AgentClientContract;
   readonly errors: Message[];
   readonly items: HistoryItemWithoutId[];
   agent(sessionId: string): Promise<Agent>;
@@ -120,6 +127,32 @@ async function collectJournalNotices(
   }
 }
 
+function nativeClients(root: string) {
+  const clients = new Map<Agent, AgentClientContract>();
+  const clientFor = (selected: Agent): AgentClientContract => {
+    const client = clients.get(selected);
+    if (client === undefined) throw new Error('Unknown native fixture agent');
+    return client;
+  };
+  async function agent(sessionId: string): Promise<Agent> {
+    const { value, owner } = await captureSessionOwner(() =>
+      createAgent({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId,
+        workingDir: root,
+        interactive: true,
+        folderTrust: true,
+        coreTools: [],
+      }),
+    );
+    clients.set(value, owner.clients.getAgentClient());
+    return value;
+  }
+
+  return { agent, clientFor };
+}
+
 export async function nativeCommandFixture(): Promise<NativeCommandFixture> {
   const saved = { ...process.env };
   const root = await mkdtemp(join(tmpdir(), 'w23-cli-fault-'));
@@ -140,17 +173,7 @@ export async function nativeCommandFixture(): Promise<NativeCommandFixture> {
 
   process.env.LLXPRT_FAKE_RESPONSES = fixture;
   process.env.LLXPRT_LOG_HOME = join(root, 'logs');
-  async function agent(sessionId: string): Promise<Agent> {
-    return createAgent({
-      provider: 'fake',
-      model: 'fake-model',
-      sessionId,
-      workingDir: root,
-      interactive: true,
-      folderTrust: true,
-      coreTools: [],
-    });
-  }
+  const { agent, clientFor } = nativeClients(root);
   const live = await agent('cli-fault-current');
   let displayed: readonly HistoryItemWithoutId[] = [];
   const errors: Message[] = [];
@@ -172,6 +195,7 @@ export async function nativeCommandFixture(): Promise<NativeCommandFixture> {
   return {
     root,
     live,
+    clientFor,
     agent,
     errors,
     items,
@@ -201,7 +225,52 @@ export function commandDeps(
   context: ReturnType<typeof createMockCommandContext>,
   errors: Message[],
 ): SlashCommandHandlerDeps {
+  const agent = context.services.agent;
+  if (agent === null) throw new Error('Missing command owner');
+  const session = agent.session;
+  const writeOutput = async (item: HistoryItemWithoutId): Promise<void> => {
+    await appendJournalUiItem(
+      { appendDisplay: session.appendDisplay.bind(session) },
+      undefined,
+      item,
+    );
+  };
+  const chatOwnerCommand = chatCommandForOwner(agent);
+  const continueCommand = createContinueCommand({
+    isInteractive: () => true,
+    listContinueTargets: async () => [...(await session.listBrowserTargets())],
+    exportSession: (ref, destination) =>
+      session.exportSession(ref, destination),
+    validateSessionPackage: (directory) =>
+      validateSessionMediaPackage(directory),
+  });
   return {
+    writeOutput,
+    resumeOwnedSession: async (action) => {
+      const result =
+        action.sessionPackage === undefined
+          ? await resumeOwnerSession(
+              session.resume.bind(session),
+              action.sessionRef,
+              session.listBrowserTargetsDetailed.bind(session),
+            )
+          : await importOwnerSession(
+              session.importSession.bind(session),
+              action.sessionPackage.packageDirectory,
+            );
+      context.ui.clear();
+      return result.warnings;
+    },
+    resumeRawSession: null,
+    refreshResumedHistory: context.ui.clear,
+    recordCommandError: async (message) => {
+      await session.recordRecordingEvent({
+        type: 'session_event',
+        severity: 'error',
+        message,
+      });
+    },
+    isMcpDiscoveryPending: () => false,
     commands: [chatOwnerCommand, continueCommand],
     config: context.services.config,
     commandContext: context,
@@ -236,4 +305,30 @@ export async function finishFaultTest(
       [primaryFailure, ...failures],
       'CLI fault test and cleanup failed',
     );
+}
+
+function chatCommandForOwner(agent: Agent) {
+  const session = agent.session;
+  return createChatOwnerCommand(
+    {
+      listCheckpoints: () => session.listCheckpoints(),
+      createCheckpoint: (name, options) =>
+        session.createCheckpoint(name, options),
+      resume: (tag) => session.resume(tag),
+      deleteCheckpoint: (id) => session.deleteCheckpoint(id),
+      renameCheckpoint: (id, name, options) =>
+        session.renameCheckpoint(id, name, options),
+      getHistoryCount: () => session.getJournalLength(),
+      clearHistory: () => session.clearHistory(),
+      restoreTurns: async (turns) => {
+        const result = await session.restoreTurns(turns);
+        return { ...result, remainingHistory: agent.streamHistory() };
+      },
+      nameCurrentSession: (name, options) =>
+        session.nameCurrentSession(name, options),
+      getRecordingPath: () => session.getRecording().path,
+      getModel: () => agent.getModel(),
+    },
+    () => false,
+  );
 }

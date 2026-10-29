@@ -30,7 +30,8 @@ export function helpersAcceptTheJournalRecorder(
       lockHandle: lock,
     }),
     adoptRecordingSessionId(
-      config,
+      () => config.getSessionId(),
+      (sessionId) => config.adoptSessionId(sessionId),
       'facade',
       'prior',
       journal,

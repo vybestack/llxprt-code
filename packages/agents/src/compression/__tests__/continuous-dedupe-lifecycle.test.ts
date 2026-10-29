@@ -1,3 +1,4 @@
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
@@ -45,15 +46,24 @@ describe('native continuous file deduplication through the live journal consumer
     await withNativeFallbackFixture(async (fixture) => {
       await seed(fixture, 512);
       const chat = new ChatSession(
-        buildRuntimeContext(fixture.history, {
-          compressionStrategy: 'high-density',
-          contextLimit: 1e9,
-          'compression.density.optimizeThreshold': 0,
-          'compression.density.readWritePruning': false,
-          'compression.density.fileDedupe': true,
-          'compression.density.recencyPruning': false,
-          'compression.density.recencyRetention': 3,
-        }),
+        chatSessionPorts(
+          buildRuntimeContext(fixture.history, {
+            compressionStrategy: 'high-density',
+            contextLimit: 1e9,
+            'compression.density.optimizeThreshold': 0,
+            'compression.density.readWritePruning': false,
+            'compression.density.fileDedupe': true,
+            'compression.density.recencyPruning': false,
+            'compression.density.recencyRetention': 3,
+          }),
+        ),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         buildMockContentGenerator(),
         {},
         [],

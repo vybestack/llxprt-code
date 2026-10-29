@@ -32,6 +32,10 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // ---------------------------------------------------------------------------
 // IContent factories
@@ -172,8 +176,6 @@ export const noopLogger = {
 } as unknown as DebugLogger;
 
 export const testProviderRuntime = {
-  settingsService: new SettingsService(),
-  config: undefined,
   runtimeId: 'test-provider-runtime',
   metadata: { source: 'test' },
 };
@@ -184,7 +186,6 @@ export const testProviderRuntime = {
 
 function createStubProviderRuntime(): ProviderRuntimeContext {
   return {
-    settingsService: new SettingsService(),
     config: undefined,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
@@ -247,11 +248,23 @@ export function buildContext(
     overrides.resolveProvider ??
     (() => {
       const provider = createFakeProvider('default-provider');
+      const settingsService = new SettingsService();
       const runtime = createStubProviderRuntime();
       return {
         provider,
         runtime,
-        invocation: captureProviderInvocation(runtime, provider.name),
+        invocation: captureProviderInvocation(
+          {
+            fetch: requestFetch,
+            runtimeId: runtime.runtimeId,
+            metadata: runtime.metadata,
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(
+              provider.name,
+            ),
+          },
+          provider.name,
+        ),
       };
     });
 

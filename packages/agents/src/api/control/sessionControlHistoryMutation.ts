@@ -4,10 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { SessionNativeHistory } from './session-history-observation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { restoreClientTurns } from './sessionHistoryClear.js';
+import {
+  restoreClientTurns,
+  type HistoryMutationOptions,
+} from './sessionHistoryClear.js';
 
 /**
  * Cuts the last `turns` human-led turns through the streamed row snapshot (the
@@ -17,13 +20,19 @@ import { restoreClientTurns } from './sessionHistoryClear.js';
  */
 export async function restoreOwnerTurns(
   turns: number,
-  client: AgentClientContract,
+  client: SessionNativeHistory,
   mediaStore: LocalMediaStore,
+  options?: HistoryMutationOptions,
 ): Promise<{
   readonly remainingHistory: AsyncIterable<IContent>;
   readonly itemsRemoved: number;
 }> {
-  const itemsRemoved = await restoreClientTurns(client, mediaStore, turns);
+  const itemsRemoved = await restoreClientTurns(
+    client,
+    mediaStore,
+    turns,
+    options,
+  );
   return {
     remainingHistory: client.getHistory(),
     itemsRemoved,

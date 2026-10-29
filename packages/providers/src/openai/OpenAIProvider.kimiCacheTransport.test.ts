@@ -155,9 +155,7 @@ function registerProviderBehavior1(): void {
           settings,
           contents: mediaHistory(false),
           runtime: {
-            settingsService: settings,
             runtimeId: 'same-label',
-            providerFileLifecycle: lifecycle,
           },
           resolved: {
             model: 'kimi-k3',
@@ -405,20 +403,7 @@ function registerProviderBehavior4(): void {
         settings,
         contents,
         runtime: {
-          settingsService: settings,
           runtimeId,
-          providerFileLifecycle: lifecycle,
-          providerFileBindings: {
-            bind: async (_contentId, reference) => {
-              boundFileIds.push(reference.fileId);
-            },
-            unbind: async (_contentId, reference) => {
-              const retained = boundFileIds.filter(
-                (fileId) => fileId !== reference.fileId,
-              );
-              boundFileIds.splice(0, boundFileIds.length, ...retained);
-            },
-          },
         },
         configOverrides: { getTargetDir: () => '/workspace/projection' },
         systemInstruction: 'stable system prompt',
@@ -631,10 +616,7 @@ function registerProviderBehavior7(): void {
           contents: [{ speaker: 'human', blocks: [reference] }],
           metadata: { abortSignal: controller.signal },
           runtime: {
-            settingsService: new SettingsService(),
             runtimeId: 'runtime-cancelled-chat',
-            mediaResolver: resolver,
-            requestMediaBudgetBytes: reference.normalizedBase64Length,
           },
           ephemerals: { streaming: 'disabled' },
           resolved: {

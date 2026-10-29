@@ -8,7 +8,7 @@ import {
   savedCheckpoint,
   checkpointTool,
 } from '../hooks/agentStream/checkpoint-disk-test-helpers.js';
-import { restoreCommand } from './restoreCommand.js';
+import { checkpointCommand } from '../../__tests__/checkpoint-command-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { GitService } from '@vybestack/llxprt-code-core/services/gitService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -19,7 +19,7 @@ function restoreContext(
   checkpointsDir: string,
 ) {
   const context = createMockCommandContext({
-    services: { agent: { agentClient: client } },
+    services: {},
   });
   if (context.services.config === null)
     throw new Error('Missing fixture runtime');
@@ -48,7 +48,7 @@ async function oversized(): Promise<number> {
       const { context, runtime } = restoreContext(client, dir);
       try {
         expect(
-          await restoreCommand(runtime)?.action?.(
+          await checkpointCommand(client, runtime)?.action?.(
             context,
             basename(saved.path),
           ),
@@ -128,10 +128,11 @@ async function compatibleRestore(active: boolean): Promise<string> {
     context.services.git = git;
     const cwd = process.cwd();
     try {
-      const outcome: unknown = await restoreCommand(runtime)?.action?.(
-        context,
-        'legacy',
-      );
+      const outcome: unknown = await checkpointCommand(
+        fixture.client,
+        runtime,
+        git,
+      )?.action?.(context, 'legacy');
       expect(outcome).toStrictEqual({
         type: 'tool',
         toolName: 'run_shell_command',

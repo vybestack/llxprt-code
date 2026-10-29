@@ -1,3 +1,6 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -26,6 +29,7 @@ import { PerformCompressionResult } from '../../core/turn.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
@@ -33,7 +37,8 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
 const retainedHistories: HistoryService[] = [];
@@ -97,6 +102,8 @@ function makeChatSession(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
     state: runtimeState,
     history: historyService,
@@ -126,7 +133,19 @@ function makeChatSession(
     embedContent: vi.fn(),
   };
 
-  return new ChatSession(view, mockContentGenerator, {}, []);
+  return new ChatSession(
+    chatSessionPorts(view),
+    runtimeSetup.config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    mockContentGenerator,
+    {},
+    [],
+  );
 }
 
 let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
@@ -378,7 +397,6 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: runtimeSetup.config,
     };
   });
   afterEach(async () => {
@@ -398,7 +416,6 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: runtimeSetup.config,
     };
   });
   afterEach(async () => {

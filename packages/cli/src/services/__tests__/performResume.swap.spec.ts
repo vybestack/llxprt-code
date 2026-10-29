@@ -389,7 +389,11 @@ async function verifyRestoresExactPriorHistoryWhenAReplacementListenerThrows() {
   const context = makeResumeContext(chatsDir, {
     currentSessionId: 'current-before-listener-failure',
   });
-  context.historyService = historyService;
+  context.history = {
+    adoptResumeBoot: historyService.adoptResumeBoot.bind(historyService),
+    attachRecording: (integration) =>
+      integration.subscribeToJournal(historyService),
+  };
 
   const result = await performResume(targetId, context);
 
@@ -427,7 +431,11 @@ async function testSwapRollbackFailures(): Promise<void> {
   const context = makeResumeContext(chatsDir, {
     currentSessionId: 'current-before-independent-rollback',
   });
-  context.historyService = historyService;
+  context.history = {
+    adoptResumeBoot: historyService.adoptResumeBoot.bind(historyService),
+    attachRecording: (integration) =>
+      integration.subscribeToJournal(historyService),
+  };
   const adoptionOutcomes: Array<() => void> = [
     () => undefined,
     () => {
@@ -498,7 +506,11 @@ async function verifyCleansThePreparedRecordingWhenRollbackHistoryRestorationThr
   const context = makeResumeContext(chatsDir, {
     currentSessionId: 'current-before-rollback',
   });
-  context.historyService = historyService;
+  context.history = {
+    adoptResumeBoot: historyService.adoptResumeBoot.bind(historyService),
+    attachRecording: (integration) =>
+      integration.subscribeToJournal(historyService),
+  };
   context.recordingCallbacks.setRecording = () => {
     throw new Error('commit failed');
   };

@@ -13,6 +13,9 @@ function emptyChatStream(): AsyncGenerator<never> {
 
 export function createTestAgentChat(): AgentChatContract {
   return {
+    appendGeneration: async () => {
+      throw new Error('Fixture chat does not publish detached generation');
+    },
     sendMessage: async (_params, promptId) => ({
       status: 'empty',
       promptId,

@@ -1,3 +1,4 @@
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
@@ -9,15 +10,7 @@ import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.j
 import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
 import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import { ChatSession } from './chatSession.js';
-import {
-  TokenUsageLogger,
-  type SerializedTokenUsageRecord,
-} from './TokenUsageLogger.js';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
@@ -28,7 +21,17 @@ import {
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
+import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
+import {
+  TokenUsageLogger,
+  type SerializedTokenUsageRecord,
+} from './TokenUsageLogger.js';
 
 function makeTempLogPath(): string {
   return path.join(
@@ -90,52 +93,39 @@ function readJsonl(filePath: string): SerializedTokenUsageRecord[] {
   });
 }
 
-type ProviderManagerStub = {
-  getActiveProvider: unknown;
-};
-
-/** Type predicate: the mock provider manager shape used across this file. */
-function isProviderManagerStub(
-  manager: unknown,
-): manager is ProviderManagerStub {
-  return (
-    typeof manager === 'object' &&
-    manager !== null &&
-    'getActiveProvider' in manager
-  );
-}
-
-function providerAdapterFromStub(manager: unknown) {
-  if (!isProviderManagerStub(manager)) {
-    throw new Error('provider manager stub must expose getActiveProvider()');
-  }
-  return createProviderAdapterFromManager(manager);
-}
-
 /**
  * Builds the runtime-context view every test in this file uses: a ChatSession
  * facing the given provider stub, backed by the token-sync fixture services.
  */
 function buildTokenSyncView(
   fixture: ReturnType<typeof createTokenSyncTestFixture>,
-  mockProvider: unknown,
+  mockProvider: Pick<RuntimeProvider, 'name' | 'generateChatCompletion'>,
   sessionId: string,
 ) {
   const { mockConfig, historyService, providerRuntimeSnapshot } = fixture;
+  const runtimeId = fixture.runtimeSetup.runtime.runtimeId;
+  if (runtimeId === undefined) throw new Error('Missing token-sync runtime ID');
   const runtimeState: AgentRuntimeState = createAgentRuntimeState({
-    runtimeId: fixture.runtimeSetup.runtime.runtimeId,
+    runtimeId,
     provider: 'anthropic',
     model: 'claude-3-5-sonnet-20241022',
     sessionId,
   });
+  const provider: RuntimeProvider = {
+    ...mockProvider,
+    getModels: async () => [],
+  };
   const providerManager = {
     setActiveProvider: () => {},
-    getProviderByName: () => mockProvider,
-    getActiveProvider: vi.fn(() => mockProvider),
+    getProviderByName: () => provider,
+    getActiveProvider: vi.fn(() => provider),
+    getProviderKeys: () => {
+      throw new Error('No provider keys in token-sync fixture');
+    },
   };
   return createAgentRuntimeContext({
     ...createSessionPolicyFixture(
-      providerRuntimeSnapshot.settingsService,
+      fixture.runtimeSetup.settingsService,
       providerRuntimeSnapshot.runtimeId,
     ),
     state: runtimeState,
@@ -146,7 +136,7 @@ function buildTokenSyncView(
       preserveThreshold: 0.2,
       telemetry: { enabled: true, target: null },
     },
-    provider: providerAdapterFromStub(providerManager),
+    provider: createProviderAdapterFromManager(providerManager),
     telemetry: createTelemetryAdapter(
       mockConfig,
       RootTelemetry.prepare({
@@ -220,7 +210,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     const view = buildTokenSyncView(fixture, mockProvider, 'int-test-session');
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      chatSessionPorts(view),
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -235,7 +237,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     });
 
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'What is 2+2?' }] },
+      { message: [{ type: 'text', text: 'What is 2+2?' }] },
       promptId,
     );
     for await (const _event of stream) {
@@ -302,7 +304,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       'int-test-session-2',
     );
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      chatSessionPorts(view),
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -317,7 +331,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     });
 
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'Hello there' }] },
+      { message: [{ type: 'text', text: 'Hello there' }] },
       promptId,
     );
     for await (const _event of stream) {
@@ -371,7 +385,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     const view = buildTokenSyncView(fixture, mockProvider, 'ac12-join-session');
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      chatSessionPorts(view),
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -386,7 +412,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     });
 
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'Say hello' }] },
+      { message: [{ type: 'text', text: 'Say hello' }] },
       promptId,
     );
     for await (const _event of stream) {
@@ -475,7 +501,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       'ac12-cached-session',
     );
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      chatSessionPorts(view),
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -490,7 +528,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     });
 
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'Tell me about caching' }] },
+      { message: [{ type: 'text', text: 'Tell me about caching' }] },
       promptId,
     );
     for await (const _event of stream) {
@@ -562,7 +600,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       'timing-stream-session',
     );
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      chatSessionPorts(view),
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -577,7 +627,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     });
 
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'What is 2+2?' }] },
+      { message: [{ type: 'text', text: 'What is 2+2?' }] },
       promptId,
     );
     for await (const _event of stream) {
@@ -630,7 +680,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       'usage-only-session',
     );
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      chatSessionPorts(view),
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -645,7 +707,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     });
 
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'What is 2+2?' }] },
+      { message: [{ type: 'text', text: 'What is 2+2?' }] },
       promptId,
     );
     // A usage-only stream fails completion validation (no response text).
@@ -725,7 +787,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       'abandoned-timing-session',
     );
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      chatSessionPorts(view),
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -740,7 +814,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     });
 
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'What is 2+2?' }] },
+      { message: [{ type: 'text', text: 'What is 2+2?' }] },
       promptId,
     );
     for await (const _event of stream) {
@@ -814,7 +888,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       mockProvider,
       'empty-stream-session',
     );
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      chatSessionPorts(view),
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
     const promptId = 'empty-stream-prompt';
@@ -826,7 +912,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       tiktokenTokens: 140,
     });
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'Say hi' }] },
+      { message: [{ type: 'text', text: 'Say hi' }] },
       promptId,
     );
     for await (const _event of stream) {

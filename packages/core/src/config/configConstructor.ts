@@ -45,8 +45,6 @@ import { parseLspConfig } from './lspIntegration.js';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import type { PolicyEngineConfig } from '../policy/types.js';
-import { setGlobalProxy } from '../utils/fetch.js';
-import { coreEvents } from '../utils/events.js';
 import { DEFAULT_CONTEXT_FILENAME } from '@vybestack/llxprt-code-tools';
 
 import { OutputFormat } from '../utils/output-format.js';
@@ -574,19 +572,6 @@ function applyPolicyAndLifecycle(
 
   // @plan PLAN-20260610-ISSUE1592.P01
   // @requirement REQ-INV-001, REQ-INV-002, REQ-INV-003
-
-  const proxy = config.getProxy();
-  if (proxy) {
-    try {
-      setGlobalProxy(proxy);
-    } catch (error) {
-      coreEvents.emitFeedback(
-        'error',
-        'Invalid proxy configuration detected. Check debug drawer for more details (F12)',
-        error,
-      );
-    }
-  }
 }
 
 /**

@@ -94,19 +94,19 @@ export const REAL_MODEL_RUN_BUDGET: readonly RealModelBudgetEntry[] = [
     testName: 'should succeed with --yolo mode',
     apiRequestsPerRun: 2,
     reason:
-      'Real-model tool-approval coverage in run_shell_command.test.ts. e2e.yml excludes that file from its main invocation and its --testNamePattern does not select this case, so it is not executed in CI',
+      'Real-model tool-approval coverage in run_shell_command.full.yolo.test.ts. e2e.yml excludes run_shell_command.full.*.test.ts, so it runs only in the nightly full E2E',
   },
   {
     testName: 'should allow all with "ShellTool" and other specific tools',
     apiRequestsPerRun: 2,
     reason:
-      'Real-model allowlist coverage in run_shell_command.test.ts that e2e.yml does not select, so it is not executed in CI',
+      'Real-model allowlist coverage in run_shell_command.full.allow-all.test.ts. e2e.yml excludes run_shell_command.full.*.test.ts, so it runs only in the nightly full E2E',
   },
   {
     testName: 'should propagate environment variables',
     apiRequestsPerRun: 2,
     reason:
-      'Real-model child-environment coverage in run_shell_command.test.ts that e2e.yml does not select, so it is not executed in CI',
+      'Real-model child-environment coverage in run_shell_command.full.env.test.ts. e2e.yml excludes run_shell_command.full.*.test.ts, so it runs only in the nightly full E2E',
   },
   {
     testName: 'codex-image-real',

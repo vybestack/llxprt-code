@@ -26,7 +26,7 @@ const BINARY_PAYLOAD_PLACEHOLDER = '[binary media bytes omitted]';
  * counting them again in the incremental estimate double-counts (issue
  * #3481). Mid-conversation instructions/tools changes would be under-counted.
  */
-const STATEFUL_INCREMENTAL_PROMPT_KEYS = ['input'] as const;
+const STATEFUL_INCREMENTAL_PROMPT_KEYS = Object.freeze(['input'] as const);
 
 /**
  * One image part found while canonicalizing a finalized request.
@@ -50,11 +50,15 @@ const EMPTY_TRANSPORT_TOKEN: object = Object.freeze({});
 const EMPTY_UNSUPPORTED_MEDIA: readonly UnsupportedMediaEntry[] = Object.freeze(
   [],
 );
-const PROMPT_KEYS = {
-  'anthropic-messages': ['system', 'messages', 'tools'],
-  'openai-chat': ['messages', 'tools'],
-  'openai-responses': ['instructions', 'input', 'tools'],
-} as const;
+const PROMPT_KEYS = Object.freeze({
+  'anthropic-messages': Object.freeze(['system', 'messages', 'tools'] as const),
+  'openai-chat': Object.freeze(['messages', 'tools'] as const),
+  'openai-responses': Object.freeze([
+    'instructions',
+    'input',
+    'tools',
+  ] as const),
+} as const);
 
 export interface ProjectionOptions {
   readonly unsupportedMedia?: readonly UnsupportedMediaEntry[];

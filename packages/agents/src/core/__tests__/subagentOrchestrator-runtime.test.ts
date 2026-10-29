@@ -1,17 +1,19 @@
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
+import type { ToolSelectedRuntimeLoaderOptions } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   createSessionSettingsFixture,
   subagentSessionPorts,
 } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
+import type { SubagentOrchestrator } from '../subagentOrchestrator.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-
 import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
-import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
-import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
 import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
 const fixturePaths = installTestWorkspacePaths({
@@ -25,30 +27,43 @@ const fixturePaths = installTestWorkspacePaths({
  * Load-balancer profile tests live in subagentOrchestrator-runtime.part2.test.ts.
  */
 
-import { describe, expect, it, vi } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { SubAgentScope } from '../subagent.js';
-import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
-import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import * as runtimeModule from '@vybestack/llxprt-code-providers/runtime.js';
-import * as activationExecutor from '../../api/providerActivationExecutor.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import {
-  makeForegroundConfig,
+  loadAgentRuntime,
+  type AgentRuntimeLoaderOptions,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import {
+  ConfirmationOutcome,
+  MessageBusType,
+  type ToolConfirmationRequest,
+} from '@vybestack/llxprt-code-policy/confirmation-bus/types.js';
+import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import { describe, expect, it, vi } from 'bun:test';
+import { useOwnedCredentials } from '../../api/__tests__/helpers/owned-credential-fixture.js';
+
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
+
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { SubAgentScope, type SubAgentScopeFactory } from '../subagent.js';
+
+import {
   createRuntimeBundle,
-  launchForTest,
+  fakeChildScope,
+  fixtureToolSelection,
+  makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
 
+const parentSignal = new AbortController().signal;
+
+const launchChild = (
+  orchestrator: SubagentOrchestrator,
+  request: Parameters<SubagentOrchestrator['launch']>[0],
+) => orchestrator.launch(request, parentSignal);
+
 describe('SubagentOrchestrator - Runtime Assembly', () => {
+  const credentials = useOwnedCredentials();
   const subagentConfig: SubagentConfig = {
     name: 'planner',
     profile: 'planner-profile',
@@ -84,17 +99,19 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const runtimeBundle = createRuntimeBundle('plan');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
       getAgentId: () => 'planner-1',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig1 = makeForegroundConfig();
     const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings1),
 
       instructions: emptyInstructionReads,
@@ -109,7 +126,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    const result = await launchForTest(orchestrator, {
+    const result = await launchChild(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -123,8 +140,12 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     );
 
     expect(scopeFactory).toHaveBeenCalledTimes(1);
-    const overrides = scopeFactory.mock.calls[0][7];
-    expect<unknown>(overrides.runtimeBundle).toBe(runtimeBundle);
+    const [, scopeRuntime] = scopeFactory.mock.calls[0];
+    expect(scopeRuntime.admittedRuntime).toBe(runtimeBundle.runtimeContext);
+    expect(scopeRuntime.contentGenerator).toBe(runtimeBundle.contentGenerator);
+    expect(result.identity.runtimeId).toBe(
+      runtimeBundle.runtimeContext.state.runtimeId,
+    );
 
     expect(result.scope).toBe(scope);
     expect(result.agentId).toBe('planner-1');
@@ -140,17 +161,15 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     const runtimeBundle = createRuntimeBundle('provider-backed');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'planner-provider-backed',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig2 = config;
     const foregroundSettings2 = createSessionSettingsFixture(foregroundConfig2);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings2),
 
       instructions: emptyInstructionReads,
@@ -165,7 +184,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await launchForTest(orchestrator, {
+    await launchChild(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -187,41 +206,31 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
   it('cleans up the isolated runtime when launch fails after runtime assembly', async () => {
     const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
-    const loadProfile = vi.fn().mockResolvedValue(profile);
-    const cleanup = vi.fn().mockResolvedValue(undefined);
-    const activate = vi.fn().mockResolvedValue(undefined);
-    const mediaRoot = mkdtempSync(join(tmpdir(), 'llxprt-child-runtime-'));
-    const mediaStore = new LocalMediaStore({
-      rootDirectory: mediaRoot,
-      quotaBytes: 1024 * 1024,
-    });
-    const createIsolated = runtimeModule.createIsolatedRuntimeContext;
-    const createIsolatedRuntimeContextSpy = vi
-      .spyOn(runtimeModule, 'createIsolatedRuntimeContext')
-      .mockImplementation((options, settingsService) => {
-        const handle = createIsolated(options, settingsService);
-        return {
-          ...handle,
-          activate,
-          cleanup: async () => {
-            await handle.cleanup();
-            await cleanup();
-          },
-        };
-      });
-    const executeProviderActivationSpy = vi
-      .spyOn(activationExecutor, 'executeProviderActivation')
-      .mockResolvedValue({ authFailed: false, infoMessages: [] });
-
-    const runtimeBundle = createRuntimeBundle('post-bundle-failure');
-    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+    const childProfile: Profile = {
+      ...profile,
+      provider: 'openai',
+      model: 'gpt-4o',
+    };
+    const loadProfile = vi.fn().mockResolvedValue(childProfile);
+    let loadedOptions: AgentRuntimeLoaderOptions | undefined;
+    const runtimeLoader = async (options: ToolSelectedRuntimeLoaderOptions) => {
+      loadedOptions = options;
+      expect(options.profile.providerManager?.getActiveProvider()?.name).toBe(
+        childProfile.provider,
+      );
+      expect(options.profile.config.getModel()).toBe(childProfile.model);
+      expect(await credentials().listProviders(0)).toStrictEqual([]);
+      expect(credentials().snapshot()).toStrictEqual([0]);
+      return loadAgentRuntime(options);
+    };
     const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
+      .fn<SubAgentScopeFactory>()
       .mockRejectedValue(new Error('scope creation failed'));
 
     const foregroundConfig3 = makeForegroundConfig();
     const foregroundSettings3 = createSessionSettingsFixture(foregroundConfig3);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: credentials().authority,
       ...subagentSessionPorts(foregroundSettings3),
 
       instructions: emptyInstructionReads,
@@ -236,71 +245,72 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    try {
-      await expect(
-        orchestrator.launch({
-          name: subagentConfig.name,
-          runConfig,
-        }),
-      ).rejects.toThrow('scope creation failed');
+    await expect(
+      launchChild(orchestrator, {
+        name: subagentConfig.name,
+        runConfig,
+      }),
+    ).rejects.toThrow('scope creation failed');
 
-      expect(cleanup).toHaveBeenCalledTimes(1);
-      expect(activate).toHaveBeenCalledTimes(1);
-      expect(executeProviderActivationSpy).toHaveBeenCalledTimes(1);
-      // The orchestrator owns the isolated Config it constructed, so its
-      // teardown disposes it after the handle cleanup (children first).
-    } finally {
-      createIsolatedRuntimeContextSpy.mockRestore();
-      executeProviderActivationSpy.mockRestore();
-      await mediaStore.close();
-      rmSync(mediaRoot, { recursive: true, force: true });
-    }
+    if (loadedOptions === undefined)
+      throw new Error('Child loader not reached');
+    expect(credentials().snapshot()).toStrictEqual([1]);
+    await expect(
+      loadedOptions.mediaStore.getStoredByteLength(),
+    ).rejects.toThrow(/closed/i);
+    const retiredProfile = loadedOptions.profile;
+    expect(() => retiredProfile.readRuntimeSettings?.()).toThrow(
+      'Session settings owner is closed',
+    );
+    expect(loadedOptions.profile.config).not.toBe(foregroundConfig3);
+    expect(foregroundSettings3.settingsOwner.readSelectedModel()).toBe(
+      'gemini-1.5-flash',
+    );
   });
 
   it('builds the subagent runtime through agent-owned assembly: a Config carrying working agent factories and runtime managers threads the SAME session bus (issue #3222, #2320)', async () => {
-    // RED basis (main @ 5bedbd238): the orchestrator calls
-    // createIsolatedRuntimeContext WITHOUT a config — providers constructs one
-    // and stamps CLI-registered factories onto it, so in a process with no CLI
-    // import the subagent Config carries NO agent factories at all.
-    const isolatedHome = mkdtempSync(join(tmpdir(), 'issue3222-orchestrator-'));
-    const previousConfigHome = process.env.LLXPRT_CONFIG_HOME;
-    process.env.LLXPRT_CONFIG_HOME = isolatedHome;
-
     const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
-    const loadProfile = vi.fn().mockResolvedValue(profile);
+    const childProfile: Profile = {
+      ...profile,
+      provider: 'openai',
+      model: 'gpt-4o',
+    };
+    const loadProfile = vi.fn().mockResolvedValue(childProfile);
     const profileManager = { loadProfile } as unknown as ProfileManager;
     const orchestratorBus = new MessageBus();
 
-    let capturedOptions:
-      | Parameters<typeof runtimeModule.createIsolatedRuntimeContext>[0]
-      | undefined;
-    const createIsolated = runtimeModule.createIsolatedRuntimeContext;
-    const isolatedSpy = vi
-      .spyOn(runtimeModule, 'createIsolatedRuntimeContext')
-      .mockImplementation((options, settingsService) => {
-        capturedOptions = options;
-        const handle = createIsolated(options, settingsService);
-        return { ...handle, activate: vi.fn().mockResolvedValue(undefined) };
-      });
-    const executeProviderActivationSpy = vi
-      .spyOn(activationExecutor, 'executeProviderActivation')
-      .mockResolvedValue({ authFailed: false, infoMessages: [] });
-
-    const runtimeBundle = createRuntimeBundle('agent-owned-assembly');
-    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
-      getAgentId: () => 'planner-agent-owned',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    const requests: string[] = [];
+    const unsubscribe = orchestratorBus.subscribe<ToolConfirmationRequest>(
+      MessageBusType.TOOL_CONFIRMATION_REQUEST,
+      (request) => {
+        requests.push(request.toolCall.name ?? '');
+        orchestratorBus.respondToConfirmation(
+          request.correlationId,
+          ConfirmationOutcome.ProceedOnce,
+        );
+      },
+    );
+    let childConfig: Config | undefined;
+    let childRuntimeId: string | undefined;
+    const runtimeLoader = async (options: ToolSelectedRuntimeLoaderOptions) => {
+      childRuntimeId = options.profile.state.runtimeId;
+      childConfig = options.profile.config;
+      return loadAgentRuntime(options);
+    };
+    const scopeFactory: SubAgentScopeFactory = async (...args) => {
+      const { messageBus } = args[2];
+      expect(
+        await messageBus.requestConfirmation({ name: 'write_file' }, {}),
+      ).toBe(true);
+      return SubAgentScope.create(...args);
+    };
 
     try {
       const foregroundConfig4 = makeForegroundConfig();
       const foregroundSettings4 =
         createSessionSettingsFixture(foregroundConfig4);
-      const orchestrator = new SubagentOrchestrator({
+      const orchestrator = createTestChildOrchestrator({
+        credentialAuthority: credentials().authority,
         workspaceTrust: foregroundSettings4.workspaceTrust,
         createChildSettings: () =>
           foregroundSettings4.settingsOwner.createChildStore(),
@@ -319,35 +329,37 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
         messageBus: orchestratorBus,
       });
 
-      const result = await orchestrator.launch({
+      const result = await launchChild(orchestrator, {
         name: subagentConfig.name,
         runConfig,
       });
-      await result.dispose();
-
-      expect(capturedOptions).toBeDefined();
-      const options = capturedOptions;
-      // #2320 invariant: the SAME concrete session bus threads to child
-      // scheduling — the orchestrator passes its own bus, nothing else.
-      expect(options?.messageBus).toBe(orchestratorBus);
-      // Agent-owned assembly: the orchestrator hands providers a Config it
-      // built itself, carrying the three agent runtime factories and the
-      // runtime managers.
-      const config = options?.config;
-      expect(config).toBeInstanceOf(Config);
-      expect(config && 'agentClientFactory' in config).toBe(false);
-      expect(config).not.toHaveProperty('taskToolRegistration');
-      expect(config).not.toHaveProperty('profileManager');
-      expect(config).not.toHaveProperty('subagentManager');
-    } finally {
-      isolatedSpy.mockRestore();
-      executeProviderActivationSpy.mockRestore();
-      if (previousConfigHome === undefined) {
-        delete process.env.LLXPRT_CONFIG_HOME;
-      } else {
-        process.env.LLXPRT_CONFIG_HOME = previousConfigHome;
+      try {
+        expect(requests).toStrictEqual(['write_file']);
+        expect(childConfig).toBeInstanceOf(Config);
+        if (childConfig === undefined)
+          throw new Error('Child loader not reached');
+        expect(childConfig).not.toBe(foregroundConfig4);
+        expect('agentClientFactory' in childConfig).toBe(false);
+        expect(childConfig).not.toHaveProperty('taskToolRegistration');
+        expect(childConfig).not.toHaveProperty('profileManager');
+        expect(childConfig).not.toHaveProperty('subagentManager');
+        expect(result.identity.provider).toBe(childProfile.provider);
+        if (childRuntimeId === undefined)
+          throw new Error('Missing child runtime ID');
+        expect(result.identity.runtimeId).toBe(childRuntimeId);
+        expect(result.identity.runtimeId).not.toBe(childConfig.getSessionId());
+        expect(childConfig.getSessionId()).toMatch(/^[a-f0-9-]{36}$/);
+        expect(await credentials().listProviders(0)).toStrictEqual([]);
+      } finally {
+        await result.dispose();
       }
-      rmSync(isolatedHome, { recursive: true, force: true });
+      expect(credentials().snapshot()).toStrictEqual([1]);
+      expect(
+        await orchestratorBus.requestConfirmation({ name: 'read_file' }, {}),
+      ).toBe(true);
+      expect(requests).toStrictEqual(['write_file', 'read_file']);
+    } finally {
+      unsubscribe();
     }
   });
 
@@ -366,17 +378,15 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const runtimeBundle = createRuntimeBundle('plan');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'planner-2',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig5 = makeForegroundConfig();
     const foregroundSettings5 = createSessionSettingsFixture(foregroundConfig5);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings5),
 
       instructions: emptyInstructionReads,
@@ -391,7 +401,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await launchForTest(orchestrator, {
+    await launchChild(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -419,17 +429,15 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const runtimeBundle = createRuntimeBundle('plan-overlap');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'planner-overlap',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig6 = makeForegroundConfig();
     const foregroundSettings6 = createSessionSettingsFixture(foregroundConfig6);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings6),
 
       instructions: emptyInstructionReads,
@@ -444,7 +452,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await launchForTest(orchestrator, {
+    await launchChild(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -481,18 +489,19 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const runtimeBundle = createRuntimeBundle('qwen');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'qwencoder-1',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig7 = makeForegroundConfig();
     const foregroundSettings7 = createSessionSettingsFixture(foregroundConfig7);
-    const orchestrator = new SubagentOrchestrator({
+    const settingsService =
+      foregroundSettings7.settingsOwner.createChildStore();
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings7),
+      createChildSettings: () => settingsService,
 
       instructions: emptyInstructionReads,
       workspacePaths: fixturePaths(),
@@ -506,12 +515,11 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await launchForTest(orchestrator, {
+    await launchChild(orchestrator, {
       name: qwenSubagent.name,
     });
 
     const loaderArgs = runtimeLoader.mock.calls[0][0];
-    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
 
     expect(loaderArgs.profile.state.baseUrl).toBe(qwenBaseUrl);
     expect(settingsService.getProviderSettings('qwen')['base-url']).toBe(
@@ -548,21 +556,22 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       const loadProfile = vi.fn().mockResolvedValue(vertexProfile);
       const runtimeBundle = createRuntimeBundle('vertex');
       const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-      const scope = {
-        runtimeContext: runtimeBundle.runtimeContext,
+      const scope = fakeChildScope({
         getAgentId: () => 'vertex-helper-1',
-      } as unknown as SubAgentScopeInstance;
+      });
       const scopeFactory = vi
-        .fn<typeof SubAgentScope.create>()
+        .fn<SubAgentScopeFactory>()
         .mockResolvedValue(scope);
 
       const foregroundConfig8 = makeForegroundConfig();
       const foregroundSettings8 =
         createSessionSettingsFixture(foregroundConfig8);
-      const orchestrator = new SubagentOrchestrator({
+      const settingsService =
+        foregroundSettings8.settingsOwner.createChildStore();
+      const orchestrator = createTestChildOrchestrator({
+        credentialAuthority: new CredentialAuthority(),
         workspaceTrust: foregroundSettings8.workspaceTrust,
-        createChildSettings: () =>
-          foregroundSettings8.settingsOwner.createChildStore(),
+        createChildSettings: () => settingsService,
         readRunPolicy: () =>
           foregroundSettings8.settingsOwner.readSubagentRunPolicy(),
 
@@ -578,10 +587,8 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
         messageBus: new MessageBus(),
       });
 
-      await launchForTest(orchestrator, { name: vertexSubagent.name });
+      await launchChild(orchestrator, { name: vertexSubagent.name });
 
-      const settingsService =
-        runtimeLoader.mock.calls[0][0].profile.providerRuntime.settingsService;
       // This mocked runtime-loader boundary verifies settings population itself:
       // GCP ephemerals are scoped to SettingsService and never written globally.
       expect(settingsService.get('GOOGLE_CLOUD_PROJECT')).toBe(
@@ -630,17 +637,15 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const runtimeBundle = createRuntimeBundle('qwen');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'qwencoder-1',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig9 = makeForegroundConfig();
     const foregroundSettings9 = createSessionSettingsFixture(foregroundConfig9);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings9),
 
       instructions: emptyInstructionReads,
@@ -655,7 +660,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await launchForTest(orchestrator, {
+    await launchChild(orchestrator, {
       name: qwenSubagent.name,
     });
 
@@ -690,19 +695,20 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const runtimeBundle = createRuntimeBundle('kimi');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'kimicoder-1',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig10 = makeForegroundConfig();
     const foregroundSettings10 =
       createSessionSettingsFixture(foregroundConfig10);
-    const orchestrator = new SubagentOrchestrator({
+    const settingsService =
+      foregroundSettings10.settingsOwner.createChildStore();
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings10),
+      createChildSettings: () => settingsService,
 
       instructions: emptyInstructionReads,
       workspacePaths: fixturePaths(),
@@ -716,12 +722,9 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await launchForTest(orchestrator, {
+    await launchChild(orchestrator, {
       name: kimiSubagent.name,
     });
-
-    const loaderArgs = runtimeLoader.mock.calls[0][0];
-    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
 
     expect(settingsService.get('user-agent')).toBe('RooCode/1.0');
   });
@@ -751,19 +754,20 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const runtimeBundle = createRuntimeBundle('key-name');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'codeanalyzer-1',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig11 = makeForegroundConfig();
     const foregroundSettings11 =
       createSessionSettingsFixture(foregroundConfig11);
-    const orchestrator = new SubagentOrchestrator({
+    const settingsService =
+      foregroundSettings11.settingsOwner.createChildStore();
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings11),
+      createChildSettings: () => settingsService,
 
       instructions: emptyInstructionReads,
       workspacePaths: fixturePaths(),
@@ -777,12 +781,9 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await launchForTest(orchestrator, {
+    await launchChild(orchestrator, {
       name: keyNameSubagent.name,
     });
-
-    const loaderArgs = runtimeLoader.mock.calls[0][0];
-    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
 
     expect(settingsService.getCurrentProfileName()).toBe(
       keyNameSubagent.profile,
@@ -794,7 +795,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     );
   });
 
-  it('provides a dispose hook that clears runtime history and returns unique agent ids per launch', async () => {
+  it('provides a dispose hook that retires journal readers and returns unique agent ids per launch', async () => {
     const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
     const loadProfile = vi.fn().mockResolvedValue(profile);
 
@@ -808,22 +809,20 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     let sequence = 0;
     const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
+      .fn<SubAgentScopeFactory>()
       .mockImplementation(async () => {
         sequence += 1;
-        return {
-          runtimeContext:
-            sequence === 1
-              ? firstBundle.runtimeContext
-              : secondBundle.runtimeContext,
+        return fakeChildScope({
+          dispose: async () => {},
           getAgentId: () => `planner-${sequence}`,
-        } as unknown as SubAgentScopeInstance;
+        });
       });
 
     const foregroundConfig12 = makeForegroundConfig();
     const foregroundSettings12 =
       createSessionSettingsFixture(foregroundConfig12);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings12),
 
       instructions: emptyInstructionReads,
@@ -838,11 +837,11 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    const firstRun = await orchestrator.launch({
+    const firstRun = await launchChild(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
-    const secondRun = await orchestrator.launch({
+    const secondRun = await launchChild(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -854,8 +853,14 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     await firstRun.dispose();
     await secondRun.dispose();
 
-    expect(firstBundle.history.clear).toHaveBeenCalled();
-    expect(secondBundle.history.clear).toHaveBeenCalled();
+    await expect(collectRawHistory(firstBundle.history)).rejects.toThrow(
+      /closed|disposed/i,
+    );
+    await expect(collectRawHistory(secondBundle.history)).rejects.toThrow(
+      /closed|disposed/i,
+    );
+    expect(firstBundle.history.getTotalTokens()).toBe(0);
+    expect(secondBundle.history.getTotalTokens()).toBe(0);
   });
 
   it('prefers history.dispose over clear during teardown', async () => {
@@ -863,13 +868,15 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const loadProfile = vi.fn().mockResolvedValue(profile);
 
     const originalBundle = createRuntimeBundle('dispose');
-    const disposeSpy = vi.fn();
-    const clearSpy = vi.fn();
-    const history = {
-      ...originalBundle.history,
+    const dispose = originalBundle.history.dispose.bind(originalBundle.history);
+    const disposeSpy = vi.fn(dispose);
+    const clearSpy = vi.fn(
+      originalBundle.history.clear.bind(originalBundle.history),
+    );
+    const history = Object.assign(originalBundle.history, {
       dispose: disposeSpy,
       clear: clearSpy,
-    };
+    });
     const bundle = {
       ...originalBundle,
       history,
@@ -881,7 +888,8 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundConfig13 = makeForegroundConfig();
     const foregroundSettings13 =
       createSessionSettingsFixture(foregroundConfig13);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings13),
 
       instructions: emptyInstructionReads,
@@ -891,15 +899,17 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       profileManager: { loadProfile } as unknown as ProfileManager,
       foregroundConfig: foregroundConfig13,
       toolRegistry: fixtureToolSelection(),
-      scopeFactory: vi.fn<typeof SubAgentScope.create>().mockResolvedValue({
-        runtimeContext: bundle.runtimeContext,
-        getAgentId: () => 'planner-dispose',
-      } as unknown as SubAgentScopeInstance),
+      scopeFactory: vi.fn<SubAgentScopeFactory>().mockResolvedValue(
+        fakeChildScope({
+          dispose: async () => {},
+          getAgentId: () => 'planner-dispose',
+        }),
+      ),
       runtimeLoader,
       messageBus: new MessageBus(),
     });
 
-    const run = await orchestrator.launch({
+    const run = await launchChild(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -910,11 +920,3 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     expect(clearSpy).not.toHaveBeenCalled();
   });
 });
-
-function fixtureToolSelection(): import('@vybestack/llxprt-code-tools').ToolSelection {
-  return new ToolRegistry(
-    { getCoreTools: () => [], isTrustedFolder: () => true },
-    new CoreMessageBusAdapter(new MessageBus()),
-    assembleTaskSchemaPolicy(new SettingsService()),
-  );
-}

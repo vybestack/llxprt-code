@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import type { ExtendedLoadBalancerStats } from '@vybestack/llxprt-code-providers';
-import { diagnosticsCommand } from './diagnosticsCommand.js';
+import { registerDiagnosticsCommand } from '../../__tests__/diagnostics-command-test-owner.js';
 import type { MessageActionReturn } from './types.js';
 import {
   setupDiagnosticsTest,
@@ -85,7 +85,10 @@ describe('diagnosticsCommand load-balancer identity (issue #2193)', () => {
       }),
     });
 
-    const result = await diagnosticsCommand.action?.(mockContext, '');
+    const result = await registerDiagnosticsCommand(mockContext).action!(
+      mockContext,
+      '',
+    );
     const content = (result as MessageActionReturn).content;
 
     // Runtime profile loaded by the CLI.
@@ -112,7 +115,10 @@ describe('diagnosticsCommand load-balancer identity (issue #2193)', () => {
       }),
     });
 
-    const result = await diagnosticsCommand.action?.(mockContext, '');
+    const result = await registerDiagnosticsCommand(mockContext).action!(
+      mockContext,
+      '',
+    );
     const content = (result as MessageActionReturn).content;
 
     expect(content).toContain('- Active Sub-Profile: none');
@@ -133,7 +139,10 @@ describe('diagnosticsCommand load-balancer identity (issue #2193)', () => {
       }),
     });
 
-    const result = await diagnosticsCommand.action?.(mockContext, '');
+    const result = await registerDiagnosticsCommand(mockContext).action!(
+      mockContext,
+      '',
+    );
     const content = (result as MessageActionReturn).content;
 
     // Both "Current Profile" and "Load Balancer Profile" legitimately print
@@ -163,7 +172,10 @@ describe('diagnosticsCommand load-balancer identity (issue #2193)', () => {
       }),
     });
 
-    const result = await diagnosticsCommand.action?.(mockContext, '');
+    const result = await registerDiagnosticsCommand(mockContext).action!(
+      mockContext,
+      '',
+    );
     const content = (result as MessageActionReturn).content;
 
     // "Active Sub-Profile" must denote the sub-profile name, not the model.

@@ -99,9 +99,7 @@ export async function send(
       settings,
       contents,
       runtime: {
-        settingsService: settings,
         runtimeId,
-        providerFileLifecycle: lifecycle,
       },
       configOverrides: { getTargetDir: () => '/workspace/test' },
       systemInstruction: 'stable system prompt',

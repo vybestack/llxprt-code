@@ -34,7 +34,12 @@ describe('native provider fallback producer', () => {
       });
       const handler = new CompressionHandler(
         runtime,
+        undefined,
         history,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         {},
         () => ({
           provider,

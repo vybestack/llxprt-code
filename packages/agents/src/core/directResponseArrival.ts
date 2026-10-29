@@ -2,7 +2,7 @@
 import { throwAfterFailedTurnCleanup } from './turnMediaAdmissionLifecycle.js';
 import type { TurnReceipt } from '@vybestack/llxprt-code-core/core/turnReceipt.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { TurnProcessorRuntime } from './chatSessionPorts.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponseArrival } from '@vybestack/llxprt-code-core/services/history/history-response-arrival.js';
@@ -50,7 +50,7 @@ export class DirectResponseArrival {
   private readonly admissions: MediaAdmissionRelease[] = [];
   constructor(
     private readonly arrival: ResponseArrival,
-    private readonly runtime: AgentRuntimeContext,
+    private readonly runtime: TurnProcessorRuntime,
     private readonly history: HistoryService,
     private readonly turnId: string,
     private readonly allowedNames: string[] | undefined,
@@ -153,7 +153,7 @@ export async function consumeDirectResponse(input: {
   readonly stream:
     | AsyncIterable<IContent>
     | ((arrival: ResponseArrival) => AsyncIterable<IContent>);
-  readonly runtime: AgentRuntimeContext;
+  readonly runtime: TurnProcessorRuntime;
   readonly history: HistoryService;
   readonly promptId: string;
   readonly turnId: string;

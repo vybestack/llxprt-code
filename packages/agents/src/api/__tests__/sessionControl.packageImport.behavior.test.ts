@@ -1,3 +1,4 @@
+import { observedAgentConfig } from './helpers/agent-client-observation.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -21,7 +22,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { AgentClient } from '../../core/client.js';
-import { buildAgent, drain, internalConfig } from './helpers/agentHarness.js';
+import { buildAgent, drain } from './helpers/agentHarness.js';
 import type { Agent } from './helpers/agentHarness.js';
 
 const NEXT_PROMPT = 'next-prompt-after-import';
@@ -71,7 +72,7 @@ async function withIsolatedAgent<T>(
   const { agent, cleanup } = await buildAgent('multi-turn-text.jsonl', {
     workingDir,
   });
-  const projectTemp = internalConfig(agent).getProjectTempDir();
+  const projectTemp = observedAgentConfig(agent).getProjectTempDir();
   try {
     return await fn(agent);
   } finally {

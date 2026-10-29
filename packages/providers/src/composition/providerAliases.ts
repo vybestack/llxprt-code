@@ -345,73 +345,76 @@ function sanitizeMediaTransportCapabilities(
   aliasConfig.mediaTransportCapabilities = { ...value };
 }
 
+function parseAliasFile(filePath: string): unknown {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    return JSON.parse(stripJsonComments(raw)) as unknown;
+  } catch (error) {
+    throw new Error(`Invalid provider alias file ${filePath}`, {
+      cause: error,
+    });
+  }
+}
+
 function readAliasFile(
   filePath: string,
   source: ProviderAliasSource,
 ): ProviderAliasEntry | null {
-  try {
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const parsed = JSON.parse(stripJsonComments(raw)) as unknown;
-    if (parsed === null || typeof parsed !== 'object') {
-      debugLogger.warn(
-        `[ProviderAliases] Ignoring invalid alias file ${filePath}`,
-      );
-      return null;
-    }
-
-    const aliasConfig = parsed as ProviderAliasConfig;
-    const alias =
-      (aliasConfig.name && aliasConfig.name.trim().length > 0
-        ? aliasConfig.name
-        : path.basename(filePath, path.extname(filePath))) || '';
-
-    if (!alias) {
-      debugLogger.warn(
-        `[ProviderAliases] Alias file ${filePath} does not specify a valid alias name`,
-      );
-      return null;
-    }
-
-    if (!aliasConfig.baseProvider) {
-      debugLogger.warn(
-        `[ProviderAliases] Alias '${alias}' is missing required baseProvider`,
-      );
-      return null;
-    }
-
-    sanitizeAliasConfigFields(aliasConfig, filePath);
-    sanitizeModelDefaults(aliasConfig, filePath);
-    sanitizeMediaSupport(aliasConfig, filePath);
-    sanitizeMediaTransportCapabilities(aliasConfig, filePath);
-
-    return {
-      alias,
-      config: aliasConfig,
-      filePath,
-      source,
-    };
-  } catch (error) {
+  const parsed = parseAliasFile(filePath);
+  if (parsed === null || typeof parsed !== 'object') {
     debugLogger.warn(
-      `[ProviderAliases] Failed to load alias from ${filePath}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      `[ProviderAliases] Ignoring invalid alias file ${filePath}`,
     );
     return null;
   }
+
+  const aliasConfig = parsed as ProviderAliasConfig;
+  const alias =
+    (aliasConfig.name && aliasConfig.name.trim().length > 0
+      ? aliasConfig.name
+      : path.basename(filePath, path.extname(filePath))) || '';
+
+  if (!alias) {
+    debugLogger.warn(
+      `[ProviderAliases] Alias file ${filePath} does not specify a valid alias name`,
+    );
+    return null;
+  }
+
+  if (!aliasConfig.baseProvider) {
+    debugLogger.warn(
+      `[ProviderAliases] Alias '${alias}' is missing required baseProvider`,
+    );
+    return null;
+  }
+
+  sanitizeAliasConfigFields(aliasConfig, filePath);
+  sanitizeModelDefaults(aliasConfig, filePath);
+  sanitizeMediaSupport(aliasConfig, filePath);
+  sanitizeMediaTransportCapabilities(aliasConfig, filePath);
+
+  return {
+    alias,
+    config: aliasConfig,
+    filePath,
+    source,
+  };
 }
 
-function readAliasDirectoryFiles(dirPath: string): string[] | null {
+function readAliasDirectoryFiles(dirPath: string): string[] {
   try {
     // Filesystems return directory entries in arbitrary order; sorting keeps
     // alias registration order deterministic across platforms.
     return fs.readdirSync(dirPath).sort();
   } catch (error) {
-    debugLogger.warn(
-      `[ProviderAliases] Failed to read directory ${dirPath}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-    return null;
+    // The directory vanishing between the existence check and the read is
+    // absence, not a failure.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    throw new Error(`Cannot read provider alias directory ${dirPath}`, {
+      cause: error,
+    });
   }
 }
 
@@ -442,15 +445,12 @@ export function loadProviderAliasEntries(): ProviderAliasEntry[] {
       continue;
     }
 
-    const files = readAliasDirectoryFiles(directory.path);
-    if (files !== null) {
-      collectAliasEntriesFromFiles(
-        directory.path,
-        directory.source,
-        files,
-        aliases,
-      );
-    }
+    collectAliasEntriesFromFiles(
+      directory.path,
+      directory.source,
+      readAliasDirectoryFiles(directory.path),
+      aliases,
+    );
   }
 
   return aliases;

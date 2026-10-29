@@ -1,3 +1,4 @@
+import { chatSessionPorts } from './chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -91,8 +92,6 @@ function makeHarness(names: string[], disabled: string[] = []) {
     );
   const history = new HistoryService();
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
-    config,
     runtimeId: 'flat-client-seam',
   });
   const requests: Array<ToolDeclaration[] | undefined> = [];
@@ -118,6 +117,8 @@ function makeHarness(names: string[], disabled: string[] = []) {
         name,
         parameters,
         signal,
+        undefined,
+        globalThis.fetch,
       ),
     state: createAgentRuntimeState({
       runtimeId,
@@ -133,6 +134,10 @@ function makeHarness(names: string[], disabled: string[] = []) {
       telemetry: { enabled: false, target: null },
     },
     provider: {
+      getProviderKeys: () => {
+        throw new Error('Fixture has no credential key authority');
+      },
+
       getActiveProvider: () => provider,
       setActiveProvider: () => {},
     },
@@ -144,7 +149,19 @@ function makeHarness(names: string[], disabled: string[] = []) {
     tools: createToolRegistryViewFromRegistry(registry),
     providerRuntime: runtime,
   });
-  const chat = new ChatSession(context, generator, {}, []);
+  const chat = new ChatSession(
+    chatSessionPorts(context),
+    config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    generator,
+    {},
+    [],
+  );
   const todos = new TodoContinuationService({
     config,
     todoReminderService: new TodoReminderService(),

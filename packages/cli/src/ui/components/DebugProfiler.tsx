@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Text } from 'ink';
+import { Text, useStdin, useStdout } from 'ink';
 import { useEffect, useState } from 'react';
 import { FixedDeque } from 'mnemonist';
 import { SemanticColors } from '../colors.js';
@@ -124,11 +124,15 @@ export const profiler = {
  * expected UI renders don't trigger spurious idle-frame warnings.
  */
 function useActionTrackingEffect() {
+  // The streams Ink renders to and reads from, not the process globals: a
+  // `data` listener on the real process.stdin starts reading it and removing
+  // the listener does not stop that read, so a render in a test would leave a
+  // live read on the host's stdin after unmount.
+  const { stdin } = useStdin();
+  const { stdout } = useStdout();
+
   // Effect for listening to stdin for keypresses and stdout for resize events.
   useEffect(() => {
-    const stdin = process.stdin;
-    const stdout = process.stdout;
-
     const handler = () => {
       profiler.reportAction();
     };
@@ -161,7 +165,7 @@ function useActionTrackingEffect() {
         appEventsBase.off(eventName, handler);
       }
     };
-  }, []);
+  }, [stdin, stdout]);
 }
 
 export const DebugProfiler = () => {

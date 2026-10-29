@@ -29,8 +29,6 @@ async function observedIdeContext(
     return await withOrchestratorHistory(
       size,
       async (client, history, reader) => {
-        if (client.bindIdeContext === undefined)
-          throw new Error('Expected a client that accepts IDE context');
         client.bindIdeContext(
           () => ideContext.getIdeContext(),
           () => true,

@@ -12,7 +12,7 @@ import {
   ProfileManager,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
-import { toolsCommand } from '../ui/commands/toolsCommand.js';
+import { createToolsCommand } from '../ui/commands/toolsCommand.js';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { assertDefined } from '../__tests__/assertions.js';
@@ -85,42 +85,42 @@ describe('tools governance integration', () => {
         name: 'file-reader',
         displayName: 'File Reader',
         description: 'Reads files',
+        source: 'builtin',
+        enabled: true,
         schema: {},
       },
       {
         name: 'code-editor',
         displayName: 'Code Editor',
         description: 'Edits files',
+        source: 'builtin',
+        enabled: true,
         schema: {},
       },
-    ];
-
-    // The command reads the tool list from the agent now, not from the config's
-    // tool registry.
-    const agentStub = {
-      tools: { list: () => registeredTools },
-      getEphemeralSetting: (key: string) =>
-        settingsOwner.readNamedParameter(key),
-      getEphemeralSettings: () => settingsOwner.captureNamedParameters(),
-      setEphemeralSetting: (key: string, value: unknown) =>
-        settingsOwner.writeUserParameter(key, value),
-    };
+    ] as const;
 
     const uiAddItem = vi.fn();
-    const context = createMockCommandContext({
-      services: { agent: agentStub },
-      ui: { addItem: uiAddItem },
-    });
+    const command = createToolsCommand(
+      {
+        listTools: () => registeredTools,
+        readSetting: (key) => settingsOwner.readNamedParameter(key),
+        writeSetting: (key, value) =>
+          settingsOwner.writeUserParameter(key, value),
+        refreshToolSchema: async () => {},
+      },
+      uiAddItem,
+    );
 
-    assertDefined(toolsCommand.action);
+    assertDefined(command.action);
+    const context = createMockCommandContext();
 
-    await toolsCommand.action(context, 'list');
+    await command.action(context, 'list');
 
     const listMessage = uiAddItem.mock.calls[0][0].text;
     expect(listMessage).toContain('File Reader [enabled]');
     expect(listMessage).toContain('Code Editor [disabled]');
 
-    await toolsCommand.action(context, 'enable code-editor');
+    await command.action(context, 'enable code-editor');
     expect(settings.get('tools.disabled')).toStrictEqual([]);
     await settingsOwner.dispose();
   });

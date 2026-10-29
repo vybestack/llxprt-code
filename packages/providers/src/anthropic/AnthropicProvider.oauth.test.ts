@@ -132,12 +132,14 @@ void vi.mock('@anthropic-ai/sdk', () => ({
 
 describe('AnthropicProvider', () => {
   let settingsService: AnthropicTestSetup['settingsService'];
+  let config: AnthropicTestSetup['config'];
   let runtimeContext: AnthropicTestSetup['runtimeContext'];
 
   beforeEach(() => {
     vi.clearAllMocks();
     const setup = setupAnthropicProvider();
     settingsService = setup.settingsService;
+    config = setup.config;
     runtimeContext = setup.runtimeContext;
   });
 
@@ -191,7 +193,7 @@ describe('AnthropicProvider', () => {
         contents: messages,
         settings: settingsService,
         runtime: runtimeContext,
-        config: runtimeContext.config!,
+        config,
         tools,
       });
 
@@ -249,7 +251,7 @@ describe('AnthropicProvider', () => {
         contents: messages,
         settings: settingsService,
         runtime: runtimeContext,
-        config: runtimeContext.config!,
+        config,
         tools,
       });
 
@@ -326,7 +328,7 @@ describe('AnthropicProvider', () => {
         contents: messages,
         settings: settingsService,
         runtime: runtimeContext,
-        config: runtimeContext.config!,
+        config,
         resolved: { streaming: true },
       });
 
@@ -399,7 +401,7 @@ describe('AnthropicProvider', () => {
         contents: messages,
         settings: settingsService,
         runtime: runtimeContext,
-        config: runtimeContext.config!,
+        config,
       });
 
       const generator = oauthProvider.generateChatCompletion(callOptions);
@@ -459,7 +461,7 @@ describe('AnthropicProvider', () => {
         contents: messages,
         settings: settingsService,
         runtime: runtimeContext,
-        config: runtimeContext.config!,
+        config,
       });
 
       const generator = oauthProvider.generateChatCompletion(callOptions);
@@ -536,7 +538,7 @@ describe('AnthropicProvider', () => {
         contents: messages,
         settings: settingsService,
         runtime: runtimeContext,
-        config: runtimeContext.config!,
+        config,
       });
 
       const generator = oauthProvider.generateChatCompletion(callOptions);
@@ -587,7 +589,7 @@ describe('AnthropicProvider', () => {
         contents: messages,
         settings: settingsService,
         runtime: runtimeContext,
-        config: runtimeContext.config!,
+        config,
       });
 
       const generator =

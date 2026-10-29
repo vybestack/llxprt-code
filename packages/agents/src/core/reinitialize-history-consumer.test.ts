@@ -4,7 +4,7 @@ import {
   accountingFactory,
   deferred,
 } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
-import { bindClientTokenization } from '../session/session-client-binding.js';
+import { bindClientTokenization } from './__tests__/support/test-tokenization.js';
 import { expectedHistoryDigest } from './__tests__/support/orchestrator-history-test-helpers.js';
 import {
   historyDigest,

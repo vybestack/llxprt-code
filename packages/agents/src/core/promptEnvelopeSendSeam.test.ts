@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { prepareAtSendSeam } from './promptEnvelopeSendSeam.js';
 
 describe('prepareAtSendSeam', () => {
@@ -19,11 +19,9 @@ describe('prepareAtSendSeam', () => {
 
 async function awaitsProjectionCleanupBeforeEstimationFailure(): Promise<void> {
   const cleanupEvents: string[] = [];
-  const provider: IProvider = {
+  const provider: RuntimeProvider = {
     name: 'failing-estimate-provider',
     getModels: () => Promise.resolve([]),
-    getServerTools: () => [],
-    invokeServerTool: () => Promise.resolve(undefined),
     async *generateChatCompletion(): AsyncIterableIterator<IContent> {
       yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
     },
@@ -47,7 +45,7 @@ async function awaitsProjectionCleanupBeforeEstimationFailure(): Promise<void> {
 
   const error = await prepareAtSendSeam(
     provider,
-    { contents: [] },
+    { contents: { async *[Symbol.asyncIterator]() {} } },
     runtime.tokenizerFactory,
   ).catch((reason: unknown) => reason);
 

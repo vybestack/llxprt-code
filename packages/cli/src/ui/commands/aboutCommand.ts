@@ -10,13 +10,14 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import { getCliVersion } from '../../utils/version.js';
-import type { CommandContext, SlashCommand } from './types.js';
-import { CommandKind } from './types.js';
-import process from 'node:process';
+import { CommandKind, type SlashCommand } from './types.js';
 import { MessageType, type HistoryItemAbout } from '../types.js';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+export type AboutDetails = Pick<
+  HistoryItemAbout,
+  'modelVersion' | 'provider' | 'baseURL' | 'ideClient' | 'keyfile'
+>;
 
 function getSandboxEnv(): string {
   if (process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec') {
@@ -30,154 +31,29 @@ function getSandboxEnv(): string {
   return 'no sandbox';
 }
 
-function shouldRenderRuntimeModelLabel(
-  activeProviderName: string,
-  modelName: string | null,
-  provider: string,
-): modelName is string {
-  return (
-    activeProviderName !== '' && modelName !== null && provider !== 'Unknown'
-  );
+export function createAboutCommand(
+  readDetails: () => Promise<AboutDetails>,
+  addItem: UseHistoryManagerReturn['addItem'],
+): SlashCommand {
+  return {
+    name: 'about',
+    description: 'show version info',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: async () => {
+      const osVersion = process.platform;
+      const sandboxEnv = getSandboxEnv();
+      const details = await readDetails();
+      const cliVersion = await getCliVersion();
+      const item: Omit<HistoryItemAbout, 'id'> = {
+        type: MessageType.ABOUT,
+        cliVersion,
+        osVersion,
+        sandboxEnv,
+        ...details,
+        key: '',
+      };
+      addItem(item);
+    },
+  };
 }
-
-function getProviderDetailsFromRuntime(runtimeApi: RuntimeApi): {
-  modelVersion: string;
-  provider: string;
-  baseURL: string;
-} {
-  const snapshot = runtimeApi.getRuntimeDiagnosticsSnapshot();
-  const modelVersion = snapshot.modelName ?? 'Unknown';
-  let provider = snapshot.providerName ?? 'Unknown';
-  let baseURL = '';
-
-  const activeProviderName = runtimeApi.getActiveProviderName();
-  let resolvedModelVersion = modelVersion;
-  if (
-    shouldRenderRuntimeModelLabel(
-      activeProviderName,
-      snapshot.modelName,
-      provider,
-    )
-  ) {
-    resolvedModelVersion = `${activeProviderName}:${snapshot.modelName}`;
-  }
-
-  const details = runtimeApi.getActiveProviderDetails();
-  if (details) {
-    provider = details.name;
-    baseURL = details.baseURL;
-  }
-
-  if (baseURL === '') {
-    const runtimeBaseUrl = runtimeApi.getEphemeralSetting('base-url');
-    if (typeof runtimeBaseUrl === 'string') {
-      baseURL = runtimeBaseUrl;
-    }
-  }
-
-  return { modelVersion: resolvedModelVersion, provider, baseURL };
-}
-
-function getConfigModel(context: CommandContext): string | undefined {
-  return context.services.config?.getModel();
-}
-
-function getFallbackBaseURL(context: CommandContext): string {
-  const fallbackBaseUrl =
-    context.services.config?.getEphemeralSetting('base-url');
-  return typeof fallbackBaseUrl === 'string' ? fallbackBaseUrl : '';
-}
-
-function getFallbackProvider(context: CommandContext): string {
-  const getProvider = context.services.config?.getProvider;
-  return typeof getProvider === 'function'
-    ? (getProvider.call(context.services.config) ?? '')
-    : '';
-}
-
-function getIdeClientDisplayName(context: CommandContext): string {
-  const config = context.services.config;
-  if (config?.getIdeMode() !== true) {
-    return '';
-  }
-
-  return config.getIdeClient()?.getDetectedIdeDisplayName() ?? '';
-}
-
-async function getKeyfilePath(context: CommandContext): Promise<string> {
-  try {
-    const providerName = context.runtimeApi.providerStatus().providerName;
-    if (providerName !== null && providerName !== '') {
-      return context.services.settings.getProviderKeyfile(providerName) ?? '';
-    }
-  } catch {
-    // Ignore errors and leave defaults
-  }
-
-  return '';
-}
-
-export const aboutCommand: SlashCommand = {
-  name: 'about',
-  description: 'show version info',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (context) => {
-    const osVersion = process.platform;
-    const sandboxEnv = getSandboxEnv();
-    // Determine the currently selected model/provider using runtime diagnostics
-    let modelVersion = 'Unknown';
-    let provider = 'Unknown';
-    let baseURL = '';
-    const runtimeApi = context.runtimeApi;
-
-    try {
-      const runtimeDetails = getProviderDetailsFromRuntime(runtimeApi);
-      modelVersion = runtimeDetails.modelVersion;
-      provider = runtimeDetails.provider;
-      baseURL = runtimeDetails.baseURL;
-    } catch {
-      modelVersion = getConfigModel(context) ?? modelVersion;
-    }
-
-    if (modelVersion === 'Unknown') {
-      modelVersion = getConfigModel(context) ?? modelVersion;
-    }
-
-    if (baseURL === '') {
-      baseURL = getFallbackBaseURL(context);
-    }
-
-    if (provider === 'Unknown') {
-      provider = getFallbackProvider(context) || provider;
-    }
-
-    const cliVersion = await getCliVersion();
-    const ideClient = getIdeClientDisplayName(context);
-
-    // Determine keyfile path and key status for the active provider (if any)
-    const keyfilePath = await getKeyfilePath(context);
-    const keyStatus = '';
-
-    const aboutItem: Omit<HistoryItemAbout, 'id'> = {
-      type: MessageType.ABOUT,
-      cliVersion,
-      osVersion,
-      sandboxEnv,
-      modelVersion,
-      keyfile: keyfilePath,
-      key: keyStatus,
-      ideClient,
-      provider,
-      baseURL,
-    };
-
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
-      aboutItem,
-    );
-  },
-};

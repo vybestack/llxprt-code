@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { LogRecord } from '@opentelemetry/api-logs';
 import type { RootTelemetry } from './root-telemetry.js';
-import { uiTelemetryService, type UiEvent } from './uiTelemetry.js';
+import type { UiEvent } from './uiTelemetry.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
 /**
@@ -26,7 +26,7 @@ export function aggregateLocally(
 ): void {
   telemetry.runAfterTerminalAcknowledgement(() => {
     try {
-      uiTelemetryService.addEvent(event);
+      telemetry.metricEvents.addEvent(event);
     } catch (err) {
       try {
         debugLogger.error(

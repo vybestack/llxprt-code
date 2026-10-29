@@ -1,3 +1,4 @@
+import { checkpointBindings } from '../../__tests__/recording-checkpoint-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -23,11 +24,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assertDefined } from '../../__tests__/assertions.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { publicChat } from '../../__tests__/public-history-cursor.js';
 import { MessageType, type HistoryItemWithoutId } from '../types.js';
-import { chatCommand } from './chatCommand.js';
+import { createChatCommand } from './chatCommand.js';
+import { bindChatRecordingOperations } from './chatCommandHost.js';
+import { NativeHistoryPrefixOwner } from '@vybestack/llxprt-code-core/services/history/native-history-prefix.js';
+import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 import { createCompletionHandler } from './schema/index.js';
-import type { CommandContext, SlashCommand } from './types.js';
+import type { SlashCommand } from './types.js';
 
 const PROJECT_HASH = 'chat-command-checkpoints';
 
@@ -47,7 +51,7 @@ let recording: SessionRecordingPort;
 
 let mediaStore: LocalMediaStore;
 
-let context: CommandContext;
+let context: CommandOwnerFixture;
 
 let mutationHistory: HistoryService | undefined;
 
@@ -57,28 +61,6 @@ async function installHistory(rows: readonly IContent[]): Promise<void> {
   mutationHistory = new HistoryService();
   const history = mutationHistory;
   await history.replaceBatch(rows);
-  const chat = publicChat(history);
-  assertDefined(context.services.config);
-  Object.assign(context.services.config, {
-    getEphemeralSetting: () => 'allowed',
-  });
-  context.services.agent = createMockCommandContext({
-    services: {
-      agent: {
-        agentClient: {
-          mediaStore,
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-          getHistoryService: () => history,
-          setHistoryFromSource: async (source: AsyncIterable<IContent>) => {
-            await history.detachedValues.replace(source, undefined, {
-              publishTokens: true,
-            });
-          },
-        },
-      },
-    },
-  }).services.agent;
   displayed = [];
   context.ui.addItem = (item) => {
     displayed.push(item);
@@ -86,8 +68,80 @@ async function installHistory(rows: readonly IContent[]): Promise<void> {
   };
 }
 
+const registeredChat = (): SlashCommand =>
+  createChatCommand(
+    bindChatRecordingOperations(
+      () => recording,
+      () => PROJECT_HASH,
+      () => chatsDir,
+      ...checkpointBindings(
+        () => recording,
+        () => PROJECT_HASH,
+        () => chatsDir,
+        () => mediaStore,
+      ),
+      () => mutationHistory?.streamRawHistory() ?? null,
+      async () => {
+        const history = mutationHistory;
+        if (!history) throw new Error('Missing raw history');
+        await new NativeHistoryPrefixOwner(history).withPrefix(
+          2,
+          false,
+          mediaStore,
+          (prefix) => prefix.apply(history),
+        );
+      },
+      async (turns) => {
+        const history = mutationHistory;
+        if (!history) throw new Error('Missing raw history');
+        const itemsRemoved = await new NativeHistoryPrefixOwner(
+          history,
+        ).withPrefix(turns, true, mediaStore, async (prefix) => {
+          await prefix.apply(history);
+          return prefix.removed;
+        });
+        return { itemsRemoved };
+      },
+      () => context.services.config?.getModel() ?? null,
+    ),
+    () => true,
+  );
+
+async function displayedHistory(): Promise<HistoryItemWithoutId[]> {
+  await recording.flush();
+  const cursor = await NativeJournalCursor.open(recordingPath(recording), {
+    emojiFilterMode: 'allowed',
+  });
+  try {
+    const items: HistoryItemWithoutId[] = [];
+    for (const entry of (await cursor.pageBack(64)).entries.reverse()) {
+      if (entry.kind !== 'projected' || entry.contextState !== 'in-context')
+        continue;
+      const item = entry.item;
+      if (item.type === MessageType.USER) {
+        items.push({ type: item.type, text: item.text });
+      } else if (item.type === MessageType.AI) {
+        items.push({
+          type: item.type,
+          text: item.text,
+          ...(item.thinkingBlocks === undefined
+            ? {}
+            : { thinkingBlocks: item.thinkingBlocks }),
+        });
+      } else {
+        throw new Error('Unexpected active raw history item');
+      }
+    }
+    return items;
+  } finally {
+    await cursor.close();
+  }
+}
+
 const command = (name: string): SlashCommand => {
-  const result = chatCommand.subCommands?.find((item) => item.name === name);
+  const result = registeredChat().subCommands?.find(
+    (item) => item.name === name,
+  );
   assertDefined(result);
   return result;
 };
@@ -98,7 +152,7 @@ const completionValues = async (
 ): Promise<string[]> => {
   const schema = command(commandName).schema;
   assertDefined(schema);
-  const handler = createCompletionHandler(schema);
+  const handler = createCompletionHandler(schema, true);
   const result = await handler(
     context,
     {
@@ -138,13 +192,6 @@ async function chatCommandCase0(): Promise<void> {
   });
   assertDefined(context.services.config);
   Object.assign(context.services.config, { getProjectRoot: () => root });
-  context.services.agent = createMockCommandContext({
-    services: {
-      agent: {
-        agentClient: { mediaStore, hasChatInitialized: () => false },
-      },
-    },
-  }).services.agent;
 }
 
 async function chatCommandCase1(): Promise<void> {
@@ -226,7 +273,9 @@ function chatCommandCase4(): void {
 function chatCommandCase5(): void {
   describe('exposes all recording-native subcommands', () => {
     it('exposes all recording-native subcommands', () => {
-      expect(chatCommand.subCommands?.map((item) => item.name)).toStrictEqual([
+      expect(
+        registeredChat().subCommands?.map((item) => item.name),
+      ).toStrictEqual([
         'list',
         'save',
         'resume',
@@ -380,7 +429,7 @@ function chatCommandCase14(): void {
       const result = await command('restore').action?.(context, '1');
 
       expect(result).toBeUndefined();
-      expect(displayed).toStrictEqual([
+      expect(await displayedHistory()).toStrictEqual([
         { type: MessageType.USER, text: 'A' },
         { type: MessageType.AI, text: 'B' },
       ]);
@@ -420,7 +469,7 @@ function chatCommandCase15(): void {
       const result = await command('restore').action?.(context, '1');
 
       expect(result).toBeUndefined();
-      expect(displayed).toStrictEqual([
+      expect(await displayedHistory()).toStrictEqual([
         { type: MessageType.USER, text: 'A' },
         {
           type: MessageType.AI,

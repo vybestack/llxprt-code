@@ -121,6 +121,7 @@ function pendingDeps(
         install,
         prompt,
         setup.runtime,
+        undefined,
         history,
         async () => ({
           provider: setup.transport,

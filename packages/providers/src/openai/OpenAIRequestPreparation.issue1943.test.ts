@@ -13,6 +13,10 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
@@ -35,6 +39,7 @@ function createMockOptions(
     tools: undefined,
     metadata: {},
     invocation: createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-request',
       providerName: 'openai',
       ephemeralsSnapshot: {
@@ -65,6 +70,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     const settings = new SettingsService();
     const options = createMockOptions({
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'format-admission',
         providerName: 'openai',
         ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
@@ -92,6 +98,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     const settings = new SettingsService();
     const options = createMockOptions({
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'format-admission',
         providerName: 'openai',
         ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
@@ -118,6 +125,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     const settings = new SettingsService();
     const options = createMockOptions({
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'format-admission',
         providerName: 'openai',
         ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
@@ -145,6 +153,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     settings.setProviderSetting('openai', 'toolFormat', 'openai');
     const options = createMockOptions({
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'format-admission',
         providerName: 'openai',
         ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
@@ -172,6 +181,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     settings.setProviderSetting('openai', 'toolFormat', 'openai');
     const options = createMockOptions({
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'format-admission',
         providerName: 'openai',
         ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
@@ -199,6 +209,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     settings.setProviderSetting('openai', 'toolFormat', 'bogus-format');
     const options = createMockOptions({
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'format-admission',
         providerName: 'openai',
         ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
@@ -224,6 +235,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     const settings = new SettingsService();
     const options = createMockOptions({
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'format-admission',
         providerName: 'openai',
         ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
@@ -249,6 +261,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     const settings = new SettingsService();
     const options = createMockOptions({
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'format-admission',
         providerName: 'openai',
         ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
@@ -275,6 +288,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     const settings = new SettingsService();
     const options = createMockOptions({
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'format-admission',
         providerName: 'openai',
         ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
@@ -300,6 +314,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     const settings = new SettingsService();
     const options = createMockOptions({
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'format-admission',
         providerName: 'openai',
         ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
@@ -326,6 +341,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     settings.setProviderSetting('openai', 'toolFormat', 'auto');
     const options = createMockOptions({
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'format-admission',
         providerName: 'openai',
         ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },

@@ -7,10 +7,14 @@
 import { act } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { oauthUIBridge, type OAuthUIEvent } from '@vybestack/llxprt-code-auth';
+import {
+  OAuthUIBridge,
+  type OAuthUIEvent,
+  type OAuthUICallback,
+} from '@vybestack/llxprt-code-auth';
 import {
   InteractiveAuthHostUnavailableError,
-  interactiveAuthCoordinator,
+  InteractiveAuthCoordinator,
   type AuthCompletionOptions,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import { renderHook } from '../../../../__tests__/render.js';
@@ -30,7 +34,26 @@ class RecordingOAuthManager {
   readonly authenticationCalls: AuthenticationCall[] = [];
   attachProviderMessages(): void {}
 
-  constructor(private readonly authenticationHandler?: AuthenticationHandler) {}
+  constructor(
+    private readonly authenticationHandler: AuthenticationHandler | undefined,
+    readonly coordination: InteractiveAuthCoordinator,
+    readonly ui: OAuthUIBridge,
+  ) {}
+  attachInteractiveAuthMessages(callback: OAuthUICallback | null): void {
+    if (callback === null) this.ui.clearCallback();
+    else this.ui.setCallback(callback);
+  }
+  bindInteractiveAuthHost(
+    handler: Parameters<InteractiveAuthCoordinator['bindHost']>[0],
+  ): void {
+    this.coordination.bindHost(handler);
+  }
+  unbindInteractiveAuthHost(): void {
+    this.coordination.unbindHost();
+  }
+  cancelInteractiveAuth(): number {
+    return this.coordination.cancelActiveSessions();
+  }
 
   async authenticate(
     provider: string,
@@ -81,22 +104,33 @@ function createHookHarness(
  * @requirement REQ-2562-4
  */
 describe('useUpdateAndOAuthBridges interactive authentication integration', () => {
+  let coordinator: InteractiveAuthCoordinator;
+  let uiBridge: OAuthUIBridge;
+  function recordingManager(
+    handler?: AuthenticationHandler,
+  ): RecordingOAuthManager {
+    return new RecordingOAuthManager(handler, coordinator, uiBridge);
+  }
   beforeEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
-    oauthUIBridge.clearCallback();
-    oauthUIBridge.clearPending();
+    uiBridge = new OAuthUIBridge();
+    coordinator = new InteractiveAuthCoordinator((event) => {
+      uiBridge.emit(event);
+    });
+    await coordinator.dispose();
+    coordinator.unbindHost();
+    uiBridge.clearCallback();
+    uiBridge.clearPending();
   });
 
   afterEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
-    oauthUIBridge.clearCallback();
-    oauthUIBridge.clearPending();
+    await coordinator.dispose();
+    coordinator.unbindHost();
+    uiBridge.clearCallback();
+    uiBridge.clearPending();
   });
 
   it('maps waiting and settled events to visible authentication messages', () => {
-    const manager = new RecordingOAuthManager();
+    const manager = recordingManager();
     const { items, renderResult } = createHookHarness(manager);
     const events: readonly OAuthUIEvent[] = [
       {
@@ -120,7 +154,7 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
 
     act(() => {
       for (const event of events) {
-        oauthUIBridge.emit(event);
+        uiBridge.emit(event);
       }
     });
 
@@ -138,11 +172,11 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
   });
 
   it('binds the interactive host to the OAuth manager and unbinds on cleanup', async () => {
-    const manager = new RecordingOAuthManager();
+    const manager = recordingManager();
     const { renderResult } = createHookHarness(manager);
 
-    expect(interactiveAuthCoordinator.hasHost()).toBe(true);
-    const outcome = await interactiveAuthCoordinator.requestAuth({
+    expect(coordinator.hasHost()).toBe(true);
+    const outcome = await coordinator.requestAuth({
       provider: 'codex',
       bucket: 'work',
       requester: { runtimeKind: 'subagent' },
@@ -160,20 +194,26 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
     expect(manager.authenticationCalls[0]?.signal).toBeInstanceOf(AbortSignal);
 
     renderResult.unmount();
-    expect(interactiveAuthCoordinator.hasHost()).toBe(false);
+    expect(coordinator.hasHost()).toBe(false);
   });
 
   it('settles host authentication as failed when the OAuth manager is unresolvable', async () => {
-    const manager = new RecordingOAuthManager();
+    const manager = recordingManager();
     const { renderResult } = createHookHarness(manager, {
       attachProviderMessages: () => manager.attachProviderMessages(),
+      attachInteractiveAuthMessages: (callback) =>
+        manager.attachInteractiveAuthMessages(callback),
+      bindInteractiveAuthHost: (handler) =>
+        manager.bindInteractiveAuthHost(handler),
+      unbindInteractiveAuthHost: () => manager.unbindInteractiveAuthHost(),
+      cancelInteractiveAuth: () => manager.cancelInteractiveAuth(),
       authenticate: () => {
         throw new Error('runtime context not ready');
       },
     });
 
-    expect(interactiveAuthCoordinator.hasHost()).toBe(true);
-    const outcome = await interactiveAuthCoordinator.requestAuth(
+    expect(coordinator.hasHost()).toBe(true);
+    const outcome = await coordinator.requestAuth(
       {
         provider: 'codex',
         bucket: 'work',
@@ -192,10 +232,10 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
   });
 
   it('uses the bound interactive host manager for an unrelated subagent requester', async () => {
-    const manager = new RecordingOAuthManager();
+    const manager = recordingManager();
     const { renderResult } = createHookHarness(manager);
 
-    const outcome = await interactiveAuthCoordinator.requestAuth({
+    const outcome = await coordinator.requestAuth({
       provider: 'codex',
       bucket: 'work',
       requester: { runtimeKind: 'subagent', runtimeId: 'requesting-subagent' },
@@ -214,7 +254,7 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
 
   it('cancels active authentication before unbinding the host on cleanup', async () => {
     let sessionSignal: AbortSignal | undefined;
-    const manager = new RecordingOAuthManager(
+    const manager = recordingManager(
       (signal) =>
         new Promise<void>((_resolve, reject) => {
           sessionSignal = signal;
@@ -224,7 +264,7 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
         }),
     );
     const { renderResult } = createHookHarness(manager);
-    const waiter = interactiveAuthCoordinator.requestAuth(
+    const waiter = coordinator.requestAuth(
       {
         provider: 'codex',
         bucket: 'work',
@@ -246,8 +286,8 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
       correlationId: 'host-cleanup-correlation',
     });
     expect(sessionSignal?.aborted).toBe(true);
-    expect(interactiveAuthCoordinator.hasHost()).toBe(false);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
+    expect(coordinator.hasHost()).toBe(false);
+    expect(coordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   it('survives bridge identity churn across re-renders and still cancels on unmount', async () => {
@@ -269,8 +309,8 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
       _value,
     ): void => undefined;
 
-    const firstManager = new RecordingOAuthManager();
-    const secondManager = new RecordingOAuthManager(
+    const firstManager = recordingManager();
+    const secondManager = recordingManager(
       (signal) =>
         new Promise<void>((_resolve, reject) => {
           signal?.addEventListener('abort', () => reject(signal.reason), {
@@ -295,9 +335,9 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
     // A session started after the churn must hit the CURRENT manager and
     // keep running across further re-renders.
     renderResult.rerender({ manager: secondManager });
-    expect(interactiveAuthCoordinator.hasHost()).toBe(true);
+    expect(coordinator.hasHost()).toBe(true);
 
-    const waiter = interactiveAuthCoordinator.requestAuth(
+    const waiter = coordinator.requestAuth(
       {
         provider: 'codex',
         bucket: 'work',
@@ -319,8 +359,8 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
     renderResult.rerender({ manager: secondManager });
     await Promise.resolve();
 
-    expect(interactiveAuthCoordinator.hasHost()).toBe(true);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toHaveLength(1);
+    expect(coordinator.hasHost()).toBe(true);
+    expect(coordinator.getActiveSessions()).toHaveLength(1);
     expect(settled).toBe(false);
     expect(firstManager.authenticationCalls).toHaveLength(0);
     expect(secondManager.authenticationCalls).toHaveLength(1);
@@ -338,7 +378,7 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
       kind: 'cancelled',
       correlationId: 'rerender-churn-correlation',
     });
-    expect(interactiveAuthCoordinator.hasHost()).toBe(false);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
+    expect(coordinator.hasHost()).toBe(false);
+    expect(coordinator.getActiveSessions()).toStrictEqual([]);
   });
 });

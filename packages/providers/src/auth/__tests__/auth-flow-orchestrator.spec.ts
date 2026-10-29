@@ -24,6 +24,7 @@ import type {
   BucketFailoverOAuthManagerLike,
   AuthenticatorInterface,
 } from '../types.js';
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import { AuthFlowOrchestrator } from '../auth-flow-orchestrator.js';
 import { ProviderRegistry } from '../provider-registry.js';
 
@@ -64,7 +65,7 @@ function makeToken(accessToken: string, expiryOffset = 3600): OAuthToken {
   };
 }
 
-function createTokenStore(): TokenStore & {
+function makeTokenStore(): TokenStore & {
   acquireAuthLockParams: unknown[];
   acquireRefreshLockParams: unknown[];
   callOrder: string[];
@@ -119,6 +120,17 @@ function createFacadeRef(): BucketFailoverOAuthManagerLike {
   };
 }
 
+class RecordingAuthUI extends OAuthUIBridge {
+  completions = 0;
+
+  override completeAuth(): void {
+    this.completions += 1;
+    super.completeAuth();
+  }
+}
+
+let authUI = new RecordingAuthUI();
+
 function createOrchestrator(
   tokenStore: TokenStore,
   providerRegistry?: ProviderRegistry,
@@ -131,6 +143,7 @@ function createOrchestrator(
     tokenStore,
     registry,
     facade,
+    authUI,
     undefined,
     () => {},
     () => ({
@@ -146,20 +159,18 @@ function createOrchestrator(
 
 describe('AuthFlowOrchestrator', () => {
   beforeEach(() => {
+    authUI = new RecordingAuthUI();
     mockGetEphemeralSetting.mockImplementation((key: string) => {
       if (key === 'auth-bucket-delay') return 0;
       return undefined;
     });
   });
 
-  afterEach(() => {
-    delete (global as { __oauth_auth_complete?: boolean })
-      .__oauth_auth_complete;
-  });
+  afterEach(() => {});
 
   describe('authenticate() — auth lock parameters', () => {
     it('acquires auth lock with waitMs:60000', async () => {
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       registry.registerProvider(provider);
@@ -178,7 +189,7 @@ describe('AuthFlowOrchestrator', () => {
 
   describe('authenticate() — nested refresh lock parameters', () => {
     it('acquires nested refresh lock with waitMs:10000  when expired token has refresh_token', async () => {
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const expiredToken = makeToken('expired-token', -100); // expired
 
       // Return expired token with a refresh_token on first getToken call
@@ -211,7 +222,7 @@ describe('AuthFlowOrchestrator', () => {
 
   describe('authenticate() — lock acquisition order', () => {
     it('acquires auth lock BEFORE refresh lock', async () => {
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const expiredToken = makeToken('expired-token', -100);
       expiredToken.refresh_token = 'valid-refresh';
 
@@ -243,7 +254,7 @@ describe('AuthFlowOrchestrator', () => {
 
   describe('authenticate() — lock release on exception paths', () => {
     it('releases auth lock even when provider.initiateAuth throws', async () => {
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       (
@@ -263,7 +274,7 @@ describe('AuthFlowOrchestrator', () => {
     });
 
     it('releases nested refresh lock when refresh throws', async () => {
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const expiredToken = makeToken('expired-token', -100);
       expiredToken.refresh_token = 'valid-refresh';
 
@@ -306,9 +317,7 @@ describe('AuthFlowOrchestrator', () => {
 
   describe('authenticate() — auth completion signaling', () => {
     it('marks global auth complete after successful browser authentication', async () => {
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       const freshToken = makeToken('fresh-token');
@@ -322,17 +331,11 @@ describe('AuthFlowOrchestrator', () => {
         signalAuthCompletion: true,
       });
 
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBe(true);
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
+      expect(authUI.takeAuthOutcome().complete).toBe(true);
     });
 
     it('marks global auth complete when a valid disk token is found under the auth lock', async () => {
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const validToken = makeToken('existing-token', 3600);
       (
         tokenStore.getToken as Mock<typeof tokenStore.getToken>
@@ -347,17 +350,11 @@ describe('AuthFlowOrchestrator', () => {
       });
 
       expect(provider.initiateAuth).not.toHaveBeenCalled();
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBe(true);
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
+      expect(authUI.takeAuthOutcome().complete).toBe(true);
     });
 
     it('marks global auth complete when an expired disk token refreshes successfully', async () => {
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const expiredToken = makeToken('expired-token', -100);
       expiredToken.refresh_token = 'valid-refresh';
       (tokenStore.getToken as Mock<typeof tokenStore.getToken>)
@@ -376,17 +373,11 @@ describe('AuthFlowOrchestrator', () => {
       });
 
       expect(provider.initiateAuth).not.toHaveBeenCalled();
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBe(true);
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
+      expect(authUI.takeAuthOutcome().complete).toBe(true);
     });
 
     it('marks global auth complete when auth lock times out but a valid disk token exists', async () => {
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       (
         tokenStore.acquireAuthLock as Mock<typeof tokenStore.acquireAuthLock>
       ).mockResolvedValue(false);
@@ -403,17 +394,11 @@ describe('AuthFlowOrchestrator', () => {
       });
 
       expect(provider.initiateAuth).not.toHaveBeenCalled();
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBe(true);
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
+      expect(authUI.takeAuthOutcome().complete).toBe(true);
     });
 
     it('does not mark global auth complete when browser authentication fails', async () => {
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       (
@@ -428,15 +413,11 @@ describe('AuthFlowOrchestrator', () => {
         }),
       ).rejects.toThrow(/browser auth failed/);
 
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBe(false);
+      expect(authUI.takeAuthOutcome().complete).toBe(false);
     });
 
     it('does not mark global auth complete by default', async () => {
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       (
@@ -448,15 +429,11 @@ describe('AuthFlowOrchestrator', () => {
       await orchestrator.authenticate('anthropic', 'default');
 
       expect(provider.initiateAuth).toHaveBeenCalledOnce();
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBeUndefined();
+      expect(authUI.takeAuthOutcome().complete).toBe(false);
     });
 
     it('does not mark global auth complete when completion signaling is disabled', async () => {
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       (
@@ -470,16 +447,14 @@ describe('AuthFlowOrchestrator', () => {
       });
 
       expect(provider.initiateAuth).toHaveBeenCalledOnce();
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBeUndefined();
+      expect(authUI.takeAuthOutcome().complete).toBe(false);
     });
   });
 
   describe('authenticate() — joined auth completion signaling', () => {
     it('honors a joining caller completion request after shared authentication succeeds', async () => {
       const pendingAuth = Promise.withResolvers<OAuthToken>();
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       (
@@ -496,14 +471,12 @@ describe('AuthFlowOrchestrator', () => {
       pendingAuth.resolve(makeToken('shared-token'));
 
       await Promise.all([initiator, joiner]);
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBe(true);
+      expect(authUI.takeAuthOutcome().complete).toBe(true);
     });
 
     it('does not signal completion when a joined authentication rejects', async () => {
       const pendingAuth = Promise.withResolvers<OAuthToken>();
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       (
@@ -524,14 +497,12 @@ describe('AuthFlowOrchestrator', () => {
         'rejected',
         'rejected',
       ]);
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBe(false);
+      expect(authUI.takeAuthOutcome().complete).toBe(false);
     });
 
     it('signals completion once when both joined callers request it', async () => {
       const pendingAuth = Promise.withResolvers<OAuthToken>();
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       (
@@ -539,15 +510,6 @@ describe('AuthFlowOrchestrator', () => {
       ).mockImplementation(async () => pendingAuth.promise);
       registry.registerProvider(provider);
       const orchestrator = createOrchestrator(tokenStore, registry);
-      let signalCount = 0;
-      Object.defineProperty(global, '__oauth_auth_complete', {
-        configurable: true,
-        get: () => signalCount > 0,
-        set: (complete: boolean) => {
-          if (complete) signalCount += 1;
-        },
-      });
-
       const initiator = orchestrator.authenticate('anthropic', 'default', {
         signalAuthCompletion: true,
       });
@@ -558,13 +520,13 @@ describe('AuthFlowOrchestrator', () => {
       pendingAuth.resolve(makeToken('shared-token'));
 
       await Promise.all([initiator, joiner]);
-      expect(signalCount).toBe(1);
+      expect(authUI.completions).toBe(1);
     });
   });
 
   describe('authenticate() — successful path', () => {
     it('saves token and marks provider OAuth-enabled after successful auth', async () => {
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       const freshToken = makeToken('fresh-token');
@@ -585,7 +547,7 @@ describe('AuthFlowOrchestrator', () => {
     });
 
     it('returns early if valid disk token found after acquiring auth lock', async () => {
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const validToken = makeToken('existing-token', 3600);
 
       // Returns valid token under lock (double-check after acquiring)
@@ -607,7 +569,7 @@ describe('AuthFlowOrchestrator', () => {
 
   describe('authenticate() — lock timeout path', () => {
     it('throws when auth lock cannot be acquired and no valid disk token', async () => {
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       (
         tokenStore.acquireAuthLock as Mock<typeof tokenStore.acquireAuthLock>
       ).mockResolvedValue(false);
@@ -625,7 +587,7 @@ describe('AuthFlowOrchestrator', () => {
     });
 
     it('returns early when auth lock times out but valid disk token exists', async () => {
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       (
         tokenStore.acquireAuthLock as Mock<typeof tokenStore.acquireAuthLock>
       ).mockResolvedValue(false);
@@ -648,7 +610,7 @@ describe('AuthFlowOrchestrator', () => {
 
   describe('authenticateMultipleBuckets() — basic behavior', () => {
     it('implements AuthenticatorInterface', () => {
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const orchestrator = createOrchestrator(tokenStore);
 
       // Check the instance satisfies AuthenticatorInterface
@@ -658,7 +620,7 @@ describe('AuthFlowOrchestrator', () => {
     });
 
     it('skips already-authenticated buckets', async () => {
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const validToken = makeToken('bucket-token', 3600);
 
       // All buckets return valid tokens → nothing needs auth
@@ -684,7 +646,7 @@ describe('AuthFlowOrchestrator', () => {
     it('passes unauthenticated bucket count to onPrompt, not total bucket count', async () => {
       mockGetEphemeralSetting.mockImplementation(getPromptEnabledSetting);
 
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const validToken = makeToken('already-authed', 3600);
 
       (
@@ -739,7 +701,7 @@ describe('AuthFlowOrchestrator', () => {
       // Enable prompt mode so the onPrompt callback is invoked and calls requireRuntimeMessageBus
       mockGetEphemeralSetting.mockImplementation(getPromptEnabledSetting);
 
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       // initiateAuth never returns — we never reach it; the error is in onPrompt
@@ -763,7 +725,7 @@ describe('AuthFlowOrchestrator', () => {
 
   describe('userDismissedAuthPrompt state', () => {
     it('starts as false (not dismissed)', () => {
-      const tokenStore = createTokenStore();
+      const tokenStore = makeTokenStore();
       const orchestrator = createOrchestrator(tokenStore);
       // Access via type cast to test internal state
       const internal = orchestrator as unknown as {

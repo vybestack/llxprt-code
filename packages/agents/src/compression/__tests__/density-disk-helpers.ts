@@ -47,7 +47,12 @@ export function densityHandler(
       'compression.density.recencyPruning': config.recencyPruning,
       'compression.density.recencyRetention': config.recencyRetention,
     }),
+    undefined,
     history,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {},
     () => {
       throw new Error('density must not resolve an LLM');

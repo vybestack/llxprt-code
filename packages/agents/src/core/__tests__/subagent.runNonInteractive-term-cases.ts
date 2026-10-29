@@ -1,3 +1,6 @@
+import { createTerminationConfig } from './helpers/termination-config-fixture.js';
+import { createSubagentScope } from './helpers/create-subagent-scope.js';
+import { scopeInputs } from './subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -9,7 +12,7 @@ import { describe, it, expect, vi, type Mock } from 'bun:test';
 type StreamMock = Mock<(...args: never[]) => unknown>;
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
-import { SubAgentScope } from '../subagent.js';
+import type { ChildAgentScope } from '../subagentOrchestrator.js';
 import {
   ContextState,
   SubagentTerminateMode,
@@ -19,7 +22,6 @@ import {
 import { StreamEventType } from '../chatSession.js';
 import { mockChunk } from './turn-test-helpers.js';
 import {
-  createMockConfig,
   createMockStream,
   defaultModelConfig,
   defaultRunConfig,
@@ -51,7 +53,8 @@ export function registerTerminationTests(
 
 function registerMaxTurns(getMockSendMessageStream: () => StreamMock): void {
   it('should terminate with MAX_TURNS if the limit is reached', async () => {
-    const { config, mcpRuntime, settingsService } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } =
+      await createTerminationConfig();
     const runConfig: RunConfig = { ...defaultRunConfig, max_turns: 2 };
 
     // Model keeps looping by calling emitvalue repeatedly
@@ -83,15 +86,16 @@ function registerMaxTurns(getMockSendMessageStream: () => StreamMock): void {
       mcpRuntime.workspaceFilesystem.paths,
       { settings: settingsService },
     );
-    const scope = await SubAgentScope.create(
-      'test-agent',
-      config,
-      promptConfig,
-      defaultModelConfig,
-      runConfig,
-      undefined,
-      undefined,
-      maxTurnOverrides,
+    const scope = await createSubagentScope(
+      {
+        name: 'test-agent',
+        prompt: promptConfig,
+        model: defaultModelConfig,
+        run: runConfig,
+        toolConfig: undefined,
+        outputConfig: undefined,
+      },
+      ...scopeInputs(config, maxTurnOverrides),
     );
 
     await scope.runNonInteractive(new ContextState());
@@ -103,7 +107,8 @@ function registerMaxTurns(getMockSendMessageStream: () => StreamMock): void {
 
 function registerLlmTimeout(getMockSendMessageStream: () => StreamMock): void {
   it('should terminate with TIMEOUT if the time limit is reached during an LLM call', async () => {
-    const { config, mcpRuntime, settingsService } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } =
+      await createTerminationConfig();
     // Install fake timers after config creation so config/auth setup runs on
     // real timers; fake timers freeze Date.now/performance.now/hrtime and
     // stop Bun's per-test timeout from firing.
@@ -124,22 +129,23 @@ function registerLlmTimeout(getMockSendMessageStream: () => StreamMock): void {
     // Resolved if the stream promise is still pending at cleanup time, to
     // unblock a run orphaned by an earlier assertion failure.
     let streamResolved = false;
-    let scope: SubAgentScope | undefined;
+    let scope: ChildAgentScope | undefined;
     let runPromise: Promise<void> | undefined;
     try {
       const { overrides: timeoutOverrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
         { settings: settingsService },
       );
-      scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        timeoutOverrides,
+      scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, timeoutOverrides),
       );
 
       runPromise = scope.runNonInteractive(new ContextState());
@@ -176,7 +182,7 @@ function registerLlmTimeout(getMockSendMessageStream: () => StreamMock): void {
       }
       if (!streamResolved) {
         resolveStream!(createMockStream(['stop'])());
-        scope?.dispose();
+        await scope?.dispose();
       }
     }
   });
@@ -200,7 +206,8 @@ function registerModelFailure(
   getMockSendMessageStream: () => StreamMock,
 ): void {
   it('should terminate with ERROR if the model call throws', async () => {
-    const { config, mcpRuntime, settingsService } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } =
+      await createTerminationConfig();
     getMockSendMessageStream().mockImplementation(() =>
       Promise.reject(new Error('API Failure')),
     );
@@ -209,15 +216,16 @@ function registerModelFailure(
       mcpRuntime.workspaceFilesystem.paths,
       { settings: settingsService },
     );
-    const scope = await SubAgentScope.create(
-      'test-agent',
-      config,
-      promptConfig,
-      defaultModelConfig,
-      defaultRunConfig,
-      undefined,
-      undefined,
-      errorOverrides,
+    const scope = await createSubagentScope(
+      {
+        name: 'test-agent',
+        prompt: promptConfig,
+        model: defaultModelConfig,
+        run: defaultRunConfig,
+        toolConfig: undefined,
+        outputConfig: undefined,
+      },
+      ...scopeInputs(config, errorOverrides),
     );
 
     await expect(scope.runNonInteractive(new ContextState())).rejects.toThrow(
@@ -245,7 +253,7 @@ function registerHungModelAbort(
 const observeActivelyAbortAStalledNonInteractiveResponseStreamBeforeTheOverallRun =
   async (getMockSendMessageStream: () => StreamMock) => {
     const { config, mcpRuntime, settingsOwner, settingsService } =
-      await createMockConfig();
+      await createTerminationConfig();
     const testTimeoutMs = 30_000; // 30 second timeout for this test
     settingsOwner.writeUserParameter('stream-idle-timeout-ms', testTimeoutMs);
     // Install fake timers after config creation so config/auth setup runs
@@ -264,15 +272,16 @@ const observeActivelyAbortAStalledNonInteractiveResponseStreamBeforeTheOverallRu
       mcpRuntime.workspaceFilesystem.paths,
       { settings: settingsService },
     );
-    const scope = await SubAgentScope.create(
-      'test-agent',
-      config,
-      promptConfig,
-      defaultModelConfig,
-      runConfig,
-      undefined,
-      undefined,
-      overrides,
+    const scope = await createSubagentScope(
+      {
+        name: 'test-agent',
+        prompt: promptConfig,
+        model: defaultModelConfig,
+        run: runConfig,
+        toolConfig: undefined,
+        outputConfig: undefined,
+      },
+      ...scopeInputs(config, overrides),
     );
 
     const runPromise = scope.runNonInteractive(new ContextState());
@@ -304,14 +313,15 @@ const observeActivelyAbortAStalledNonInteractiveResponseStreamBeforeTheOverallRu
       // rejection so nothing leaks into the next test. Do not await.
       runPromise.catch(() => {});
       runRejection.catch(() => {});
-      scope.dispose();
+      await scope.dispose();
     }
   };
 
 const observeActivelyAbortAHungNonInteractiveModelCallWhenTheTimeLimit = async (
   getMockSendMessageStream: () => StreamMock,
 ) => {
-  const { config, mcpRuntime, settingsService } = await createMockConfig();
+  const { config, mcpRuntime, settingsService } =
+    await createTerminationConfig();
   const runConfig: RunConfig = {
     max_time_minutes: 0.001,
     max_turns: 100,
@@ -330,15 +340,16 @@ const observeActivelyAbortAHungNonInteractiveModelCallWhenTheTimeLimit = async (
     mcpRuntime.workspaceFilesystem.paths,
     { settings: settingsService },
   );
-  const scope = await SubAgentScope.create(
-    'test-agent',
-    config,
-    promptConfig,
-    defaultModelConfig,
-    runConfig,
-    undefined,
-    undefined,
-    overrides,
+  const scope = await createSubagentScope(
+    {
+      name: 'test-agent',
+      prompt: promptConfig,
+      model: defaultModelConfig,
+      run: runConfig,
+      toolConfig: undefined,
+      outputConfig: undefined,
+    },
+    ...scopeInputs(config, overrides),
   );
 
   const runPromise = scope.runNonInteractive(new ContextState());
@@ -367,7 +378,7 @@ const observeActivelyAbortAHungNonInteractiveModelCallWhenTheTimeLimit = async (
     // rejection so nothing leaks into the next test. Do not await.
     runPromise.catch(() => {});
     runRejection.catch(() => {});
-    scope.dispose();
+    await scope.dispose();
   }
 };
 

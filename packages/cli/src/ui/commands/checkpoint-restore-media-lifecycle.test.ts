@@ -10,7 +10,7 @@ import {
   withCheckpoint,
   checkpointTool,
 } from '../hooks/agentStream/checkpoint-disk-test-helpers.js';
-import { restoreCommand } from './restoreCommand.js';
+import { checkpointCommand } from '../../__tests__/checkpoint-command-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
@@ -43,12 +43,12 @@ async function lifecycle(active: boolean): Promise<boolean> {
     const runtime = composeFixtureRuntime(fixture.config);
     const client = fixture.client;
     const context = createMockCommandContext({
-      services: { config: runtime, agent: { agentClient: client } },
+      services: { config: runtime },
     });
     const store = requireMediaStore(client);
     try {
       expect(
-        await restoreCommand(runtime)?.action?.(context, 'restore'),
+        await checkpointCommand(client, runtime)?.action?.(context, 'restore'),
       ).toMatchObject({ type: 'tool' });
       expect(await store.hasReservations(contentId)).toBe(true);
       if (!active) await client.startChat([]);

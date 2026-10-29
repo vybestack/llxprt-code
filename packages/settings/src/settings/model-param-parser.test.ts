@@ -1,0 +1,20 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { describe, expect, it } from 'bun:test';
+import { parseModelParamValue } from './model-param-parser.js';
+
+describe('parseModelParamValue', () => {
+  it('parses finite numeric strings as numbers', () => {
+    expect(parseModelParamValue('42')).toBe(42);
+    expect(parseModelParamValue(' 3.14 ')).toBe(3.14);
+  });
+
+  it('leaves non-finite numeric strings as raw strings', () => {
+    expect(parseModelParamValue('Infinity')).toBe('Infinity');
+    expect(parseModelParamValue('-Infinity')).toBe('-Infinity');
+  });
+});

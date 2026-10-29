@@ -1,4 +1,3 @@
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -12,14 +11,19 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PromptService } from '@vybestack/llxprt-code-core/prompt-config/index.js';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import {
+  AgentProfilePreflight,
+  type Agent,
+  type AgentActivationOperation,
+} from '@vybestack/llxprt-code-agents';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core';
-import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime.js';
-import { loadCliConfig } from './config.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { parseArguments } from './cliArgParser.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 import type { Settings } from './settings.js';
+import { loadCliConfigWithPreflight } from '../__tests__/load-cli-config-fixture.js';
+import { activateConfiguredProvider } from '../cliProviderInit.js';
 
 function streamReply(text: string): string {
   const chunk = {
@@ -44,7 +48,7 @@ async function loadOwner(
 ): Promise<{
   config: Config;
   agent: Agent;
-  registration: CliRuntimeRegistrationHandle;
+  registration: AgentProfilePreflight;
 }> {
   process.argv = [
     'bun',
@@ -59,34 +63,49 @@ async function loadOwner(
     endpoint,
   ];
   const argv = await parseArguments({} as Settings);
-  let registration: CliRuntimeRegistrationHandle | undefined;
+  let registration: AgentProfilePreflight | undefined;
+  let operation: AgentActivationOperation | undefined;
+  const credentialAuthority = new CredentialAuthority();
   const settingsService = new SettingsService();
-  const settingsOwner = new SessionSettingsOwner(settingsService);
-  const config = await loadCliConfig(
-    {},
-    [],
-    new ExtensionEnablementManager(join(endpoint, 'extensions'), []),
-    'same-label-cli',
-    argv,
-    process.cwd(),
-    {
-      settingsService,
-      sessionSettingsOwner: settingsOwner,
-      onActivationBootstrapReady: (operation) =>
-        operation.takeSettingsOwner(settingsService),
-      onRuntimeRegistrationReady: (owner) => {
-        registration = owner;
+  const config = await loadCliConfigWithPreflight({
+    settings: {},
+    extensions: [],
+    extensionEnablementManager: new ExtensionEnablementManager(
+      join(endpoint, 'extensions'),
+      {
+        enabledOverride: [],
       },
+    ),
+    sessionId: 'same-label-cli',
+    argv,
+    cwd: process.cwd(),
+    settingsService,
+    authority: credentialAuthority,
+    onActivationBootstrapReady: (owner) => {
+      operation = owner;
     },
+    onPreflightReady: (owner) => {
+      registration = owner;
+    },
+  });
+  if (!registration || !operation)
+    throw new Error('CLI did not provide its owner handle');
+  const activation = await activateConfiguredProvider(
+    config,
+    registration,
+    argv,
+    operation,
   );
-  if (!registration) throw new Error('CLI did not provide its owner handle');
+  if (activation.token === undefined)
+    throw new Error('CLI did not provide a foreground receipt');
   return {
     config,
-    agent: await fromConfig({
-      settingsService,
-      settingsOwner,
-      config,
-    }),
+    agent: await AgentProfilePreflight.createForegroundAgent(
+      registration,
+      activation.token,
+      activation.intent ?? {},
+      {},
+    ),
     registration,
   };
 }
@@ -148,8 +167,10 @@ describe('same-label CLI Kimi HTTP ownership', () => {
       expect(await first).toBe('first');
       await owners[0].agent.dispose();
       await owners[0].config.dispose();
-      owners[0].registration.dispose();
-      expect(owners[1].registration.config).toBe(owners[1].config);
+      await owners[0].registration.dispose();
+      expect(owners[1].registration.captureInput().runtimeId).toBe(
+        'cli.runtime.bootstrap',
+      );
       releaseHeld();
       expect(await second).toBe('second');
       expect([...credentials].sort()).toStrictEqual([
@@ -164,7 +185,7 @@ describe('same-label CLI Kimi HTTP ownership', () => {
       for (const owner of owners) {
         await owner.agent.dispose();
         await owner.config.dispose();
-        owner.registration.dispose();
+        await owner.registration.dispose();
       }
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));

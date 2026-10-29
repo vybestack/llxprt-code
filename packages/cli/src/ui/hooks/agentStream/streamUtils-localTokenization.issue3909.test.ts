@@ -14,7 +14,6 @@ import { describe, expect, it, vi } from 'bun:test';
 import { LocalTokenizationError } from '@vybestack/llxprt-code-core';
 import { handleSubmissionError } from './streamUtils.js';
 import { MessageType } from '../../types.js';
-import { createStreamRuntimeForTest } from './__tests__/streamRuntimeTestHelper.js';
 import { formatNonInteractiveError } from '../../../session/errorReporting.js';
 
 const DETAIL =
@@ -29,7 +28,9 @@ function displayedText(error: unknown): {
   handleSubmissionError(
     error,
     addItem,
-    createStreamRuntimeForTest({ getModel: vi.fn(() => 'test-model') }),
+    () => 'fake',
+    () => 'fake',
+    () => 'test-model',
     onAuthError,
     Date.now(),
   );

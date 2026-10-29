@@ -20,6 +20,10 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { sanitizePromptCacheKey } from '../openai-responses/sanitizePromptCacheKey.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
@@ -41,6 +45,7 @@ function createMockOptions(
     settings,
     config: undefined,
     invocation: createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-request',
       providerName: 'openai',
       ephemeralsSnapshot: { ...{}, openai: modelParams },

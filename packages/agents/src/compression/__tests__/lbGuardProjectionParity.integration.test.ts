@@ -1,3 +1,6 @@
+import { makeLoadBalancerInvocation } from '../../../../providers/src/__tests__/loadBalancerTestHelpers.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 /// <reference lib="esnext.array" />
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
@@ -35,8 +38,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+
 import {
   LoadBalancerContextLimitError,
   LoadBalancingProvider,
@@ -227,11 +229,17 @@ function createLoadBalancer(options: {
   const config = createRuntimeConfigStub(settingsService);
   const settingsOwner = new SessionSettingsOwner(settingsService);
   settingsOwner.bindTelemetry(config);
-  const providerManager = new ProviderManager({
+  const providerManager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
     config,
-    sessionSettings: settingsOwner,
-  });
+    undefined,
+    undefined,
+    settingsOwner,
+  );
   ownedReleases.push(
     () => providerManager.dispose(),
     () => settingsOwner.dispose(),
@@ -380,6 +388,7 @@ async function facadeCallback1(): Promise<void> {
   const projection = await lb.projectPromptEnvelope({
     contents: toStream(contents),
     tools: TOOLSET,
+    invocation: makeLoadBalancerInvocation(),
   });
   expect(projection).toBeDefined();
   const envelopeTokens = await projection!.legacyEstimate();
@@ -400,6 +409,7 @@ async function facadeCallback1(): Promise<void> {
         lb.generateChatCompletion({
           contents: toStream(contents),
           tools: TOOLSET,
+          invocation: makeLoadBalancerInvocation(),
         }),
       );
     },
@@ -467,6 +477,7 @@ async function facadeCallback2(): Promise<void> {
         for await (const chunk of lb.generateChatCompletion({
           contents: toStream(contents),
           tools: TOOLSET,
+          invocation: makeLoadBalancerInvocation(),
         })) {
           chunks.push(chunk);
         }
@@ -529,7 +540,11 @@ async function facadeCallback3(): Promise<void> {
   const estimateCandidate = async (candidate: IContent[]): Promise<number> => {
     const prepared = await prepareAtSendSeam(
       lb as unknown as Parameters<typeof prepareAtSendSeam>[0],
-      { contents: toStream(candidate), tools: TOOLSET },
+      {
+        contents: toStream(candidate),
+        tools: TOOLSET,
+        invocation: makeLoadBalancerInvocation(),
+      },
       tokenizerFactory,
     );
     try {
@@ -560,6 +575,7 @@ async function facadeCallback3(): Promise<void> {
     lb.generateChatCompletion({
       contents: toStream(reduced),
       tools: TOOLSET,
+      invocation: makeLoadBalancerInvocation(),
     }),
   );
 

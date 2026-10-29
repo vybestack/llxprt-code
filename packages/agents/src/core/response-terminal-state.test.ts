@@ -62,7 +62,7 @@ describe('journal-backed response finalization', () => {
       for (let index = 0; index < 128; index++) {
         const block: ContentBlock = {
           type: 'text',
-          text: `${index}:` + 'x'.repeat(65536),
+          text: `${index}:` + 'sample response '.repeat(4096),
         };
         references.push(new WeakRef(block));
         yield { speaker: 'ai', blocks: [block] };

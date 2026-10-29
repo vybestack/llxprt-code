@@ -8,10 +8,8 @@ import { buildAgent } from '../../../../agents/src/api/__tests__/helpers/agentHa
 import { collectAgentHistory } from '../../../../agents/src/api/__tests__/helpers/collect-agent-history.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
-import { clearCommand } from './clearCommand.js';
-
-const clearAction = clearCommand.action;
-assertDefined(clearAction);
+import { createClearCommand } from './clearCommand.js';
+import { captureSessionOwner } from '../../../../agents/src/api/__tests__/helpers/capture-session-owner.js';
 
 describe('clearCommand native allocations', () => {
   const directory = useTempDir('clear-native-memory-');
@@ -39,13 +37,18 @@ describe('clearCommand native allocations', () => {
       });
     });
     try {
-      const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-        workingDir: directory(),
-      });
+      const {
+        value: { agent, cleanup },
+        owner,
+      } = await captureSessionOwner(() =>
+        buildAgent('plain-text.jsonl', {
+          workingDir: directory(),
+        }),
+      );
       try {
         await agent.session.setRecording({ enabled: true });
         await agent.session.startNewSession();
-        const history = agent.agentClient.getHistoryService();
+        const history = owner.clients.getAgentClient().getHistoryService();
         if (history === null) throw new Error('Missing session history');
         const output = 'sustained output\n'.repeat(4096);
         for (let row = 0; row < 64; row++) {
@@ -67,10 +70,20 @@ describe('clearCommand native allocations', () => {
         readBytes = 0;
         largestRead = 0;
         try {
-          await clearAction(
-            createMockCommandContext({ services: { agent } }),
-            '',
-          );
+          const context = createMockCommandContext({ services: { agent } });
+          const clearAction = createClearCommand(
+            {
+              endSession: async () => {},
+              startNewSession: () => agent.session.startNewSession(),
+              startSession: async () => ({}),
+            },
+            context.ui.setDebugMessage,
+            context.ui.addItem,
+            context.ui.updateHistoryTokenCount,
+            context.ui.clear,
+          ).action;
+          assertDefined(clearAction);
+          await clearAction(context, '');
         } finally {
           sourceInode = undefined;
         }

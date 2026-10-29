@@ -42,9 +42,9 @@ describe('actual native CLI prefix rollback and readers', () => {
             const offset = history.getBaseTokenOffset();
             history.setCacheAnchorSeq(7);
             const failure = new Error(`${command} ${stage}`);
-            const originalPublish = client.setHistoryFromSource.bind(client);
+            const originalPublish = client.resetChat.bind(client);
             const estimate = spyOn(history, 'estimateTokensForContents');
-            const publish = spyOn(client, 'setHistoryFromSource');
+            const publish = spyOn(client, 'resetChat');
             const notify = spyOn(context.ui, 'clear');
             const wait = spyOn(history, 'waitForCommit');
             if (stage === 'producer') estimate.mockRejectedValueOnce(failure);
@@ -90,16 +90,15 @@ describe('actual native CLI prefix rollback and readers', () => {
         const entered = barrier();
         const proceed = barrier();
         const failure = new Error('client finalized then failed');
-        const original = client.setHistoryFromSource.bind(client);
-        const fault = spyOn(
-          client,
-          'setHistoryFromSource',
-        ).mockImplementationOnce(async (...args) => {
-          await original(...args);
-          entered.open();
-          await proceed.promise;
-          throw failure;
-        });
+        const original = client.resetChat.bind(client);
+        const fault = spyOn(client, 'resetChat').mockImplementationOnce(
+          async (...args) => {
+            await original(...args);
+            entered.open();
+            await proceed.promise;
+            throw failure;
+          },
+        );
         const pending = runCommand(context, 'clear').then(
           () => undefined,
           (error: unknown) => error,

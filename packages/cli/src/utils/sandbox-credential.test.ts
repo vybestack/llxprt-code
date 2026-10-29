@@ -12,9 +12,7 @@ import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 
 const authMocks = {
   createAndStartProxy: vi.fn(),
-  getProxySocketPath: vi.fn(),
-  stopProxy: vi.fn(),
-  getProxyCapabilityToken: vi.fn(),
+  stop: vi.fn(),
 };
 const bridgeMocks = {
   setupCredentialProxyDockerMacOS: vi.fn(),
@@ -25,9 +23,6 @@ const bridgeMocks = {
 
 void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   createAndStartProxy: authMocks.createAndStartProxy,
-  getProxySocketPath: authMocks.getProxySocketPath,
-  stopProxy: authMocks.stopProxy,
-  getProxyCapabilityToken: authMocks.getProxyCapabilityToken,
 }));
 const original = { ...(await import('./sandbox-ssh.js')) };
 void vi.mock('./sandbox-ssh.js', () => ({
@@ -79,6 +74,79 @@ function argumentOrEmpty(args: readonly string[], index: number): string {
 }
 
 const realOsTmpdir: () => string = os.tmpdir;
+const realMkdtempSync = fs.mkdtempSync.bind(fs);
+
+const RUNTIME_PREFIX_NAME = 'lx-';
+
+function isCredentialRuntimePrefix(prefix: string): boolean {
+  return path.basename(prefix).startsWith(RUNTIME_PREFIX_NAME);
+}
+
+/**
+ * Replaces fs.mkdtempSync for string-prefix calls. The overloads that return
+ * a Buffer are never used by the code under test, so only the string form is
+ * implemented.
+ */
+function stubMkdtempSync(implementation: (prefix: string) => string): void {
+  vi.spyOn(fs, 'mkdtempSync').mockImplementation(
+    implementation as typeof fs.mkdtempSync,
+  );
+}
+
+interface RuntimeAllocation {
+  /** Prefix of every credential runtime allocation attempt. */
+  readonly prefixes: string[];
+  /** Directory of every credential runtime that was actually created. */
+  readonly created: string[];
+}
+
+/**
+ * Production allocates the simulated-Darwin Podman socket runtime under the
+ * literal '/tmp', which does not exist on Windows. On Windows the allocation
+ * is redirected to a short native fixture root (the same layout as
+ * sandbox-launch-release.test.ts, because Darwin socket paths are limited to
+ * 103 bytes); the directory is still created and removed for real.
+ */
+function observeCredentialRuntimeAllocation(
+  nativeRuntimeRoot: string,
+): RuntimeAllocation {
+  const allocation: RuntimeAllocation = { prefixes: [], created: [] };
+  stubMkdtempSync((prefix) => {
+    if (!isCredentialRuntimePrefix(prefix)) return realMkdtempSync(prefix);
+    allocation.prefixes.push(prefix);
+    const created = realMkdtempSync(
+      isWindows ? path.join(nativeRuntimeRoot, path.basename(prefix)) : prefix,
+    );
+    allocation.created.push(created);
+    return created;
+  });
+  return allocation;
+}
+
+/**
+ * Runs the test body, then its teardown assertions. A teardown failure never
+ * replaces a body failure: both are reported together so the original error
+ * stays visible.
+ */
+async function runWithTeardown(
+  body: () => Promise<void>,
+  teardown: () => Promise<void>,
+): Promise<void> {
+  try {
+    await body();
+  } catch (bodyError) {
+    try {
+      await teardown();
+    } catch (teardownError) {
+      throw new AggregateError(
+        [bodyError, teardownError],
+        'Test body and teardown both failed',
+      );
+    }
+    throw bodyError;
+  }
+  await teardown();
+}
 
 /**
  * Overrides os.tmpdir for the code under test. Bun exposes os.tmpdir as an
@@ -138,10 +206,15 @@ describe('#1456 credential proxy network policy', () => {
   let tmpDir = '';
   let isolatedHome: string;
   let sessionTmpdir = '';
+  let nativeRuntimeRoot = '';
+  let runtimeAllocation: RuntimeAllocation;
 
   beforeEach(() => {
     environmentSnapshot = { ...process.env };
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'credential-1456-'));
+    nativeRuntimeRoot = isWindows
+      ? fs.mkdtempSync(path.join(path.parse(os.tmpdir()).root, 'cr-'))
+      : '';
     isolatedHome = path.join(tmpDir, 'home');
     sessionTmpdir = path.join(tmpDir, 'session');
     fs.mkdirSync(isolatedHome);
@@ -155,12 +228,13 @@ describe('#1456 credential proxy network policy', () => {
     // a set-then-deleted TMPDIR leaves os.tmpdir() stale; redefine instead.
     overrideOsTmpdir(tmpDir);
     vi.spyOn(os, 'homedir').mockReturnValue(isolatedHome);
-    authMocks.createAndStartProxy.mockResolvedValue({ stop: vi.fn() });
-    authMocks.getProxySocketPath.mockReturnValue(
-      path.join(tmpDir, HOST_SOCKET_NAME),
-    );
-    authMocks.getProxyCapabilityToken.mockReturnValue(CAPABILITY_TOKEN);
-    authMocks.stopProxy.mockResolvedValue(undefined);
+    runtimeAllocation = observeCredentialRuntimeAllocation(nativeRuntimeRoot);
+    authMocks.createAndStartProxy.mockResolvedValue({
+      socketPath: path.join(tmpDir, HOST_SOCKET_NAME),
+      capabilityToken: CAPABILITY_TOKEN,
+      stop: authMocks.stop,
+    });
+    authMocks.stop.mockResolvedValue(undefined);
     bridgeMocks.setupCredentialProxyDockerMacOS.mockResolvedValue({
       cleanup: bridgeMocks.dockerCleanup,
       entrypointPrefix: 'DOCKER_CREDENTIAL_BRIDGE',
@@ -179,6 +253,9 @@ describe('#1456 credential proxy network policy', () => {
     vi.restoreAllMocks();
     if (tmpDir !== '') {
       fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+    if (nativeRuntimeRoot !== '') {
+      fs.rmSync(nativeRuntimeRoot, { recursive: true, force: true });
     }
   });
 
@@ -215,32 +292,53 @@ describe('#1456 credential proxy network policy', () => {
         return value;
       });
 
-      try {
-        await expect(result).rejects.toBeInstanceOf(FatalSandboxError);
-        await expect(result).rejects.toThrowError(CREDENTIAL_NETWORK_ERROR);
-        expect(invocation.args).toStrictEqual([]);
-        expect(invocation.prefixes).toStrictEqual([]);
-        expect(invocation.reservedPorts).toStrictEqual(new Set<number>());
-        expect(authMocks.createAndStartProxy).not.toHaveBeenCalled();
-        expect(authMocks.getProxySocketPath).not.toHaveBeenCalled();
-        expect(authMocks.getProxyCapabilityToken).not.toHaveBeenCalled();
-        expect(authMocks.stopProxy).not.toHaveBeenCalled();
-        expect(
-          bridgeMocks.setupCredentialProxyDockerMacOS,
-        ).not.toHaveBeenCalled();
-        expect(
-          bridgeMocks.setupCredentialProxyPodmanMacOS,
-        ).not.toHaveBeenCalled();
-        expect(capabilityArtifacts(isolatedHome)).toStrictEqual([]);
-      } finally {
-        unexpectedCleanup?.();
-        await authMocks.stopProxy();
-        expect(capabilityArtifacts(isolatedHome)).toStrictEqual([]);
-        expect(runtimeCapabilityArtifacts(tmpDir)).toStrictEqual([]);
-        expect(fs.existsSync(sessionTmpdir)).toBe(false);
-      }
+      await runWithTeardown(
+        async () => {
+          await expect(result).rejects.toBeInstanceOf(FatalSandboxError);
+          await expect(result).rejects.toThrowError(CREDENTIAL_NETWORK_ERROR);
+          expect(invocation.args).toStrictEqual([]);
+          expect(invocation.prefixes).toStrictEqual([]);
+          expect(invocation.reservedPorts).toStrictEqual(new Set<number>());
+          expect(authMocks.createAndStartProxy).not.toHaveBeenCalled();
+          expect(authMocks.stop).not.toHaveBeenCalled();
+          expect(
+            bridgeMocks.setupCredentialProxyDockerMacOS,
+          ).not.toHaveBeenCalled();
+          expect(
+            bridgeMocks.setupCredentialProxyPodmanMacOS,
+          ).not.toHaveBeenCalled();
+          expect(capabilityArtifacts(isolatedHome)).toStrictEqual([]);
+          // Policy is rejected before any socket runtime is allocated.
+          expect(runtimeAllocation.prefixes).toStrictEqual([]);
+        },
+        async () => {
+          unexpectedCleanup?.();
+          await authMocks.stop();
+          expect(capabilityArtifacts(isolatedHome)).toStrictEqual([]);
+          expect(runtimeCapabilityArtifacts(tmpDir)).toStrictEqual([]);
+          expect(fs.existsSync(sessionTmpdir)).toBe(false);
+        },
+      );
     },
   );
+
+  it('removes the session directory when allocating the socket runtime fails', async () => {
+    vi.spyOn(os, 'platform').mockReturnValue('darwin');
+    const allocationFailure = new Error('induced runtime allocation failure');
+    stubMkdtempSync((prefix) => {
+      if (isCredentialRuntimePrefix(prefix)) throw allocationFailure;
+      return realMkdtempSync(prefix);
+    });
+
+    const invocation = invokeCredentialSetup('podman', sessionTmpdir);
+
+    await expect(invocation.promise).rejects.toThrowError(
+      /Failed to create a private Podman macOS credential socket runtime/,
+    );
+    expect(fs.existsSync(sessionTmpdir)).toBe(false);
+    expect(authMocks.createAndStartProxy).not.toHaveBeenCalled();
+    expect(invocation.args).toStrictEqual([]);
+  });
 
   it.each([
     {
@@ -316,38 +414,46 @@ describe('#1456 credential proxy network policy', () => {
       const invocation = invokeCredentialSetup(command, sessionTmpdir);
       let cleanup: (() => void) | undefined;
 
-      try {
-        const result = await invocation.promise;
-        cleanup = result.credentialProxyBridgeCleanup;
-        const envFile = argumentOrEmpty(invocation.args, 3);
-        const platformSocket = credentialSocketForPlatform(socket, tmpDir);
-        expect(invocation.args).toStrictEqual([
-          '--env',
-          `LLXPRT_CREDENTIAL_SOCKET=${platformSocket}`,
-          '--env-file',
-          envFile,
-        ]);
-        expect(fs.existsSync(envFile)).toBe(true);
-        expect(invocation.prefixes).toStrictEqual(
-          prefix as unknown as string[],
-        );
-        expect(invocation.reservedPorts).toStrictEqual(new Set<number>());
-        expect(result.credentialProxyBridgeResult?.containerSocketPath).toBe(
-          bridgeSocket,
-        );
-        expect(
-          bridgeMocks.setupCredentialProxyDockerMacOS,
-        ).toHaveBeenCalledTimes(dockerBridgeCalls);
-        expect(
-          bridgeMocks.setupCredentialProxyPodmanMacOS,
-        ).toHaveBeenCalledTimes(podmanBridgeCalls);
-      } finally {
-        cleanup?.();
-        await authMocks.stopProxy();
-        expect(capabilityArtifacts(isolatedHome)).toStrictEqual([]);
-        expect(runtimeCapabilityArtifacts(tmpDir)).toStrictEqual([]);
-        expect(fs.existsSync(sessionTmpdir)).toBe(false);
-      }
+      await runWithTeardown(
+        async () => {
+          const result = await invocation.promise;
+          cleanup = result.credentialProxyBridgeCleanup;
+          const envFile = argumentOrEmpty(invocation.args, 3);
+          const platformSocket = credentialSocketForPlatform(socket, tmpDir);
+          expect(invocation.args).toStrictEqual([
+            '--env',
+            `LLXPRT_CREDENTIAL_SOCKET=${platformSocket}`,
+            '--env-file',
+            envFile,
+          ]);
+          expect(fs.existsSync(envFile)).toBe(true);
+          expect(invocation.prefixes).toStrictEqual(
+            prefix as unknown as string[],
+          );
+          expect(invocation.reservedPorts).toStrictEqual(new Set<number>());
+          expect(result.credentialProxyBridgeResult?.containerSocketPath).toBe(
+            bridgeSocket,
+          );
+          expect(
+            bridgeMocks.setupCredentialProxyDockerMacOS,
+          ).toHaveBeenCalledTimes(dockerBridgeCalls);
+          expect(
+            bridgeMocks.setupCredentialProxyPodmanMacOS,
+          ).toHaveBeenCalledTimes(podmanBridgeCalls);
+        },
+        async () => {
+          cleanup?.();
+          await authMocks.stop();
+          expect(capabilityArtifacts(isolatedHome)).toStrictEqual([]);
+          expect(runtimeCapabilityArtifacts(tmpDir)).toStrictEqual([]);
+          expect(
+            runtimeAllocation.created.filter((runtime) =>
+              fs.existsSync(runtime),
+            ),
+          ).toStrictEqual([]);
+          expect(fs.existsSync(sessionTmpdir)).toBe(false);
+        },
+      );
     },
   );
 });
@@ -375,8 +481,7 @@ describe('Podman credential socket runtime', () => {
       fs.mkdirSync(sessionTmpdir, { recursive: true, mode: 0o700 });
       overrideOsTmpdir(longTmpRoot);
       vi.spyOn(os, 'platform').mockReturnValue('darwin');
-      authMocks.getProxyCapabilityToken.mockReturnValue(CAPABILITY_TOKEN);
-      authMocks.stopProxy.mockResolvedValue(undefined);
+      authMocks.stop.mockResolvedValue(undefined);
       bridgeMocks.setupCredentialProxyPodmanMacOS.mockResolvedValue({
         cleanup: bridgeMocks.podmanCleanup,
         entrypointPrefix: 'PODMAN_CREDENTIAL_BRIDGE',
@@ -402,10 +507,13 @@ describe('Podman credential socket runtime', () => {
             `${process.pid}-${'n'.repeat(22)}.sock`,
           );
           fs.writeFileSync(socketPath, 'socket fixture');
-          return { stop: async (): Promise<void> => {} };
+          return {
+            socketPath,
+            capabilityToken: CAPABILITY_TOKEN,
+            stop: authMocks.stop,
+          };
         },
       );
-      authMocks.getProxySocketPath.mockImplementation(() => socketPath);
 
       const invocation = invokeCredentialSetup('podman', sessionTmpdir);
       const result = await invocation.promise;
@@ -431,10 +539,13 @@ describe('Podman credential socket runtime', () => {
             `${process.pid}-${'n'.repeat(22)}.sock`,
           );
           fs.writeFileSync(socketPath, 'socket fixture');
-          return { stop: async (): Promise<void> => {} };
+          return {
+            socketPath,
+            capabilityToken: CAPABILITY_TOKEN,
+            stop: authMocks.stop,
+          };
         },
       );
-      authMocks.getProxySocketPath.mockImplementation(() => socketPath);
       bridgeMocks.setupCredentialProxyPodmanMacOS.mockRejectedValue(
         new FatalSandboxError('induced Podman bridge failure'),
       );
@@ -458,10 +569,13 @@ describe('Podman credential socket runtime', () => {
             `${process.pid}-${'n'.repeat(22)}.sock`,
           );
           fs.writeFileSync(socketPath, 'socket fixture');
-          return { stop: async (): Promise<void> => {} };
+          return {
+            socketPath,
+            capabilityToken: CAPABILITY_TOKEN,
+            stop: authMocks.stop,
+          };
         },
       );
-      authMocks.getProxySocketPath.mockImplementation(() => socketPath);
       const result = await invokeCredentialSetup('podman', sessionTmpdir)
         .promise;
       const realRmSync = fs.rmSync.bind(fs);
@@ -617,10 +731,13 @@ describe('Podman credential socket runtime', () => {
         async (config: { socketPath: string }) => {
           socketRuntime = config.socketPath;
           fs.writeFileSync(socketPath, 'socket fixture');
-          return { stop: async (): Promise<void> => {} };
+          return {
+            socketPath,
+            capabilityToken: CAPABILITY_TOKEN,
+            stop: authMocks.stop,
+          };
         },
       );
-      authMocks.getProxySocketPath.mockReturnValue(socketPath);
 
       const invocation = invokeCredentialSetup('docker', sessionTmpdir);
       const result = await invocation.promise;

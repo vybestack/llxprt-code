@@ -6,6 +6,10 @@
 
 import { describe, expect, it } from 'bun:test';
 import { createRuntimeInvocationContext } from './RuntimeInvocationContext.js';
+import type { NetworkFetch } from '../utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('invocation model parameter data', () => {
   it('rejects owner-shaped objects instead of turning their enumerable state into request policy', () => {
@@ -17,6 +21,7 @@ describe('invocation model parameter data', () => {
     }
     expect(() =>
       createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'owner-shaped-policy',
         providerName: 'openai',
         ephemeralsSnapshot: { openai: new PolicyOwner() },
@@ -35,6 +40,7 @@ describe('invocation model parameter data', () => {
     });
     expect(() =>
       createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'accessor-policy',
         providerName: 'openai',
         ephemeralsSnapshot: { openai: policy },
@@ -49,6 +55,7 @@ describe('invocation model parameter data', () => {
     policy['self'] = policy;
     expect(() =>
       createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'cyclic-policy',
         providerName: 'openai',
         ephemeralsSnapshot: { openai: policy },
@@ -62,6 +69,7 @@ describe('invocation model parameter data', () => {
       response_format: { type: 'json_object' },
     };
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'parameter-data',
       providerName: 'openai',
       modelParamsProviderName: 'openai',
@@ -80,6 +88,7 @@ describe('invocation model parameter data', () => {
   it('rejects parameter data admitted for another provider', () => {
     expect(() =>
       createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'parameter-data',
         providerName: 'anthropic',
         modelParamsProviderName: 'openai',
@@ -90,6 +99,7 @@ describe('invocation model parameter data', () => {
   });
   it('reads nested dotted policy without inherited prototype values and flat keys take precedence', () => {
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'nested-read',
       providerName: 'openai',
       ephemeralsSnapshot: {
@@ -100,6 +110,7 @@ describe('invocation model parameter data', () => {
     expect(invocation.getEphemeral<boolean>('reasoning.enabled')).toBe(false);
     expect(invocation.getEphemeral('reasoning.toString')).toBeUndefined();
     const nested = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'nested-read',
       providerName: 'openai',
       ephemeralsSnapshot: { reasoning: { enabled: true } },
@@ -110,6 +121,7 @@ describe('invocation model parameter data', () => {
     it(`rejects ${typeof forbidden} policy capabilities before snapshotting`, () => {
       expect(() =>
         createRuntimeInvocationContext({
+          fetch: requestFetch,
           runtimeId: 'invalid-capability',
           providerName: 'openai',
           ephemeralsSnapshot: { openai: { invalid: forbidden } },

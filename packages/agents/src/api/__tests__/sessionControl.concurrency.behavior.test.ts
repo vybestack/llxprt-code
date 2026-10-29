@@ -1,3 +1,10 @@
+import {
+  buildFakeClient,
+  buildFakeConfig,
+  createSessionControl,
+  type FakeClient,
+  type FakeConfig,
+} from './support/session-control-concurrency-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -37,6 +44,7 @@ import {
 import { assertNotNull, errorMessage } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, spyOn } from 'bun:test';
 import { trackTestHistories } from './support/test-histories.js';
+const createTestHistory = trackTestHistories();
 import {
   mkdirSync,
   mkdtempSync,
@@ -54,161 +62,9 @@ import {
   verifyCheckpointFlush,
 } from './support/recorded-rows.js';
 import { SessionControl } from '../control/sessionControl.js';
-import { Storage } from '@vybestack/llxprt-code-settings';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { SessionControlDeps } from '../control/sessionControl.js';
-
-class IsolatedTestStorage extends Storage {
-  constructor(private readonly projectTempDir: string) {
-    super(projectTempDir);
-  }
-
-  override getProjectTempDir(): string {
-    return this.projectTempDir;
-  }
-}
-
-/**
- * Minimal in-memory Config projection exposing ONLY the surface SessionControl
- * touches: a fixed project root, a storage whose getProjectChatsDir() drives
- * the chats-dir derivation, a workspace context, and persistence inputs.
- * Recording ownership is observable through the real SessionControl and JSONL.
- */
-interface FakeConfig {
-  readonly getSessionId: () => string;
-  readonly adoptSessionId: (sessionId: string) => void;
-  readonly getProjectRoot: () => string;
-  readonly projectTempDir: string;
-  readonly projectChatsDir: string;
-
-  readonly getLocalMediaStore: () => LocalMediaStore;
-  readonly getSessionRecordingQueueByteLimit: () => number;
-  readonly getPersistenceChatsDir: () => string;
-}
-
-function buildFakeConfig(
-  projectRoot: string,
-  persistenceRoot = projectRoot,
-  _persistenceQueueBytes = 1024 * 1024,
-  initialSessionId = 'fake-recording-id',
-): FakeConfig {
-  const mediaStore = new LocalMediaStore({
-    rootDirectory: join(projectRoot, 'media'),
-    quotaBytes: 1024 * 1024,
-  });
-  const persistenceStorage = new IsolatedTestStorage(persistenceRoot);
-  let sessionId = initialSessionId;
-  return {
-    getSessionId: () => sessionId,
-    adoptSessionId: (next) => {
-      sessionId = next;
-    },
-    getProjectRoot: () => projectRoot,
-    projectTempDir: projectRoot,
-    projectChatsDir: join(projectRoot, 'chats'),
-
-    getLocalMediaStore: () => mediaStore,
-    getSessionRecordingQueueByteLimit: () => 1024 * 1024,
-    getPersistenceChatsDir: () =>
-      join(persistenceStorage.getProjectTempDir(), 'chats'),
-  };
-}
-
-/**
- * Honest fake client: exposes a swappable HistoryService and records history
- * replacement calls. getHistory() returns whatever seed was configured (as
- * Gemini-ish content the ContentConverters bridge accepts). This is a genuine
- * collaborator, not a call-spy assertion target.
- */
-interface FakeClient {
-  contract: AgentClientContract;
-  setHistoryService: (hs: HistoryService | null) => void;
-  replacementCount: () => number;
-}
-
-const createTestHistory = trackTestHistories();
-
-function buildFakeClient(seed: readonly IContent[] = []): FakeClient {
-  let historyService: HistoryService | null = createTestHistory();
-  historyService.addAll(seed);
-  let history = [...seed];
-  let replacementCalls = 0;
-  const contract = {
-    async *getHistory() {
-      if (historyService !== null) yield* historyService.streamRawHistory();
-      else yield* history;
-    },
-    getHistoryService: () => historyService,
-    setHistory: async (nextHistory: IContent[]) => {
-      history = [...nextHistory];
-      await historyService?.replaceAll(nextHistory);
-      replacementCalls += 1;
-    },
-    setHistoryFromSource: async (source: AsyncIterable<IContent>) => {
-      history = await Array.fromAsync(source);
-      await historyService?.replaceAll(history);
-      replacementCalls += 1;
-    },
-    resetChat: async (
-      preserveHistory?: readonly IContent[] | AsyncIterable<IContent>,
-    ) => {
-      const next =
-        preserveHistory === undefined
-          ? []
-          : await Array.fromAsync(preserveHistory);
-      await historyService?.replaceBatch(next);
-      await historyService?.waitForCommit();
-      history = [...next];
-      replacementCalls += 1;
-    },
-    discardDeferredHistory: async () => undefined,
-    restoreHistory: async (nextHistory: IContent[]) => {
-      history = [...nextHistory];
-      await historyService?.replaceAll(nextHistory);
-      replacementCalls += 1;
-    },
-  } as unknown as AgentClientContract;
-  return {
-    contract,
-    setHistoryService: (hs) => {
-      historyService = hs;
-    },
-    replacementCount: () => replacementCalls,
-  };
-}
-
-function buildDeps(
-  config: FakeConfig,
-  client: AgentClientContract,
-  sessionId: string,
-  mediaStore: LocalMediaStore,
-): SessionControlDeps {
-  return {
-    config: config as unknown as SessionControlDeps['config'],
-    readRecordingQueueLimit: () => config.getSessionRecordingQueueByteLimit(),
-    mediaStore,
-    directories: () => [config.getProjectRoot()],
-    sessionIdentityOwnership: 'config',
-    sessionId: () => sessionId,
-    resolveClient: () => client,
-    withSessionTransition: (operation) => operation(),
-    closeSessionAdmission: () => {},
-    prepareNewSessionClient: async () => {
-      await client.resetChat();
-      return {
-        client,
-        publish: () => {},
-        retire: async () => {},
-        discard: async () => {},
-      };
-    },
-    getProvider: () => 'fake',
-    getModel: () => 'fake-model',
-  };
-}
 
 /** chats dir SessionControl derives: join(projectTempDir, 'chats'). */
 function chatsDirOf(projectRoot: string): string {
@@ -259,7 +115,7 @@ function remainingLockFiles(projectRoot: string): string[] {
       n.endsWith('.lock'),
     );
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
       return [];
     }
     throw error;
@@ -285,13 +141,11 @@ describe('Agent session persistence ownership', () => {
     await withProjectRoot(async (projectRoot) => {
       const config = buildFakeConfig(projectRoot);
       const client = buildFakeClient();
-      const control = new SessionControl(
-        buildDeps(
-          config,
-          client.contract,
-          'owned-session',
-          config.getLocalMediaStore(),
-        ),
+      const control = createSessionControl(
+        config,
+        client.contract,
+        'owned-session',
+        config.getLocalMediaStore(),
       );
       try {
         await control.setRecording({ enabled: true });
@@ -319,8 +173,11 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
           throw new Error('unexpected startup read');
         },
       };
-      const control = new SessionControl(
-        buildDeps(config, contract, 'bounded-start'),
+      const control = createSessionControl(
+        config,
+        contract,
+        'bounded-start',
+        config.getLocalMediaStore(),
       );
       try {
         await control.setRecording({ enabled: true });
@@ -329,7 +186,7 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
         history.add(humanText('continuous'));
         await history.waitForCommit();
         const filePath = control.getRecording().path;
-        assertNotNull(filePath);
+        if (filePath === undefined) throw new Error('Missing recording path');
         const persisted = await recordedRows(filePath, basename(projectRoot));
         expect(persisted.map((content) => content.blocks)).toStrictEqual([
           humanText('journal seed').blocks,
@@ -362,37 +219,33 @@ describe('SessionControl concurrency: resume and stop', () => {
         mimeType: 'image/png',
         semanticMetadata: {},
       });
-      const first = new SessionControl(
-        buildDeps(
-          {
-            ...firstConfig,
-            getLocalMediaStore: () => {
-              throw new Error('first Config getter used');
-            },
+      const first = createSessionControl(
+        {
+          ...firstConfig,
+          getLocalMediaStore: () => {
+            throw new Error('first Config getter used');
           },
-          buildFakeClient([
-            { speaker: 'human', blocks: [firstRef] },
-            humanText('first discarded'),
-          ]).contract,
-          sessionId,
-          firstStore,
-        ),
+        },
+        buildFakeClient([
+          { speaker: 'human', blocks: [firstRef] },
+          humanText('first discarded'),
+        ]).contract,
+        sessionId,
+        firstStore,
       );
-      const second = new SessionControl(
-        buildDeps(
-          {
-            ...secondConfig,
-            getLocalMediaStore: () => {
-              throw new Error('second Config getter used');
-            },
+      const second = createSessionControl(
+        {
+          ...secondConfig,
+          getLocalMediaStore: () => {
+            throw new Error('second Config getter used');
           },
-          buildFakeClient([
-            { speaker: 'human', blocks: [secondRef] },
-            humanText('second discarded'),
-          ]).contract,
-          sessionId,
-          secondStore,
-        ),
+        },
+        buildFakeClient([
+          { speaker: 'human', blocks: [secondRef] },
+          humanText('second discarded'),
+        ]).contract,
+        sessionId,
+        secondStore,
       );
       try {
         await first.setRecording({ enabled: true });
@@ -449,13 +302,11 @@ describe('SessionControl concurrency: resume and stop', () => {
       );
       const liveHistory = [humanText('live turn')];
       const client = buildFakeClient(liveHistory);
-      const control = new SessionControl(
-        buildDeps(
-          config,
-          client.contract,
-          sessionId,
-          config.getLocalMediaStore(),
-        ),
+      const control = createSessionControl(
+        config,
+        client.contract,
+        sessionId,
+        config.getLocalMediaStore(),
       );
 
       // Fire resume() and setRecording({ enabled: false }) concurrently.
@@ -517,13 +368,11 @@ describe('SessionControl concurrency: dual resume', () => {
         sessionId,
       );
       const client = buildFakeClient([humanText('live turn')]);
-      const control = new SessionControl(
-        buildDeps(
-          config,
-          client.contract,
-          sessionId,
-          config.getLocalMediaStore(),
-        ),
+      const control = createSessionControl(
+        config,
+        client.contract,
+        sessionId,
+        config.getLocalMediaStore(),
       );
 
       // Two concurrent resume('latest') calls. The session lock is EXCLUSIVE, so
@@ -604,13 +453,11 @@ describe('SessionControl atomic resume', () => {
       });
       client.setHistoryService(throwingHistory);
 
-      const control = new SessionControl(
-        buildDeps(
-          config,
-          client.contract,
-          sessionId,
-          config.getLocalMediaStore(),
-        ),
+      const control = createSessionControl(
+        config,
+        client.contract,
+        sessionId,
+        config.getLocalMediaStore(),
       );
 
       // resume MUST reject with the subscribe failure (not silently half-enable).
@@ -646,13 +493,11 @@ describe('SessionControl checkpoints', () => {
         'checkpoint-boot',
       );
       const client = buildFakeClient([humanText('checkpoint prefix')]);
-      const control = new SessionControl(
-        buildDeps(
-          config,
-          client.contract,
-          'checkpoint-boot',
-          config.getLocalMediaStore(),
-        ),
+      const control = createSessionControl(
+        config,
+        client.contract,
+        'checkpoint-boot',
+        config.getLocalMediaStore(),
       );
       try {
         await control.setRecording({ enabled: true });
@@ -689,13 +534,11 @@ describe('SessionControl checkpoints', () => {
       const persistenceRoot = join(projectRoot, 'failing-persistence');
       const config = buildFakeConfig(projectRoot, persistenceRoot);
       const client = buildFakeClient([humanText('checkpoint seed')]);
-      const control = new SessionControl(
-        buildDeps(
-          config,
-          client.contract,
-          'checkpoint-persistence',
-          config.getLocalMediaStore(),
-        ),
+      const control = createSessionControl(
+        config,
+        client.contract,
+        'checkpoint-persistence',
+        config.getLocalMediaStore(),
       );
       await control.setRecording({ enabled: true });
       const persistenceChats = config.getPersistenceChatsDir();
@@ -725,8 +568,11 @@ function clearControl(
   client: FakeClient,
   sessionId: string,
 ): SessionControl {
-  return new SessionControl(
-    buildDeps(config, client.contract, sessionId, config.getLocalMediaStore()),
+  return createSessionControl(
+    config,
+    client.contract,
+    sessionId,
+    config.getLocalMediaStore(),
   );
 }
 

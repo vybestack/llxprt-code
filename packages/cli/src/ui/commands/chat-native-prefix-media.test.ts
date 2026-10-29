@@ -39,16 +39,15 @@ describe('actual CLI native prefix media reservations', () => {
           ]);
           const before = await contents(client.getHistory());
           const failure = new Error('client update failed after media removal');
-          const original = client.setHistoryFromSource.bind(client);
-          const fault = spyOn(
-            client,
-            'setHistoryFromSource',
-          ).mockImplementationOnce(async (...args) => {
-            await original(...args);
-            await store.reclaimUnreferenced(new Set(), Date.now() + 1);
-            expect(await store.readVerified(reference)).toStrictEqual(bytes);
-            throw failure;
-          });
+          const original = client.resetChat.bind(client);
+          const fault = spyOn(client, 'resetChat').mockImplementationOnce(
+            async (...args) => {
+              await original(...args);
+              await store.reclaimUnreferenced(new Set(), Date.now() + 1);
+              expect(await store.readVerified(reference)).toStrictEqual(bytes);
+              throw failure;
+            },
+          );
           try {
             const receipt = await operationFileCreates(async () => {
               await expect(runCommand(context, command, '1')).rejects.toBe(
@@ -141,15 +140,14 @@ describe('actual CLI native prefix media reservations', () => {
       const primary = new Error('client publication failed');
       const rollback = new Error('version compensation failed');
       const release = new Error('media hold release failed');
-      const originalPublish = client.setHistoryFromSource.bind(client);
+      const originalPublish = client.resetChat.bind(client);
       const originalRelease = store.release.bind(store);
-      const publish = spyOn(
-        client,
-        'setHistoryFromSource',
-      ).mockImplementationOnce(async (...args) => {
-        await originalPublish(...args);
-        throw primary;
-      });
+      const publish = spyOn(client, 'resetChat').mockImplementationOnce(
+        async (...args) => {
+          await originalPublish(...args);
+          throw primary;
+        },
+      );
       const compensate = spyOn(
         JournalHistoryStore.prototype,
         'compensate',

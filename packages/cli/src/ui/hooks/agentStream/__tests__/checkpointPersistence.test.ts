@@ -39,9 +39,9 @@ import {
  * `as unknown as Record<string, unknown>` cast boilerplate ~15 times.
  */
 function makeFakeAgent(mockClient: Record<string, unknown>) {
-  return {
-    ...createFakeAgentFromMockClient(mockClient),
-    async *streamHistory() {},
+  return async function* () {
+    const owner = await createFakeAgentFromMockClient(mockClient);
+    yield* owner.streamHistory();
   };
 }
 
@@ -183,10 +183,10 @@ describe('checkpoint effect cancellation', () => {
               '/project/cancel.ts',
             ),
           ],
-          { getCheckpointingEnabled: () => true },
+          () => true,
           checkpointGit,
 
-          fixture.client,
+          fixture.history.streamRawHistory.bind(fixture.history),
           dir,
           () => finish(),
           trackingFs().ops,
@@ -365,7 +365,7 @@ async function checkpointCase5(): Promise<void> {
     renderHook(() =>
       useCheckpointPersistence(
         tools,
-        config,
+        () => config.getCheckpointingEnabled(),
         gitService as unknown as GitService,
 
         makeFakeAgent(agentClient),
@@ -390,7 +390,7 @@ async function checkpointCase6(): Promise<void> {
     renderHook(() =>
       useCheckpointPersistence(
         [makeRestorableTool('r1', 'replace', '/project/a.ts')],
-        config,
+        () => config.getCheckpointingEnabled(),
         gitService as unknown as GitService,
 
         makeFakeAgent(makeAgentClient()),
@@ -415,7 +415,7 @@ async function checkpointCase7(): Promise<void> {
     renderHook(() =>
       useCheckpointPersistence(
         [makeNonRestorableTool()], // read_file — not restorable
-        config,
+        () => config.getCheckpointingEnabled(),
         gitService as unknown as GitService,
 
         makeFakeAgent(makeAgentClient()),
@@ -440,7 +440,7 @@ async function checkpointCase8(): Promise<void> {
     renderHook(() =>
       useCheckpointPersistence(
         [makeRestorableTool('r1', 'replace', '/project/a.ts')],
-        config,
+        () => config.getCheckpointingEnabled(),
         undefined, // no gitService
 
         makeFakeAgent(makeAgentClient()),
@@ -473,7 +473,7 @@ async function checkpointCase9(): Promise<void> {
     renderHook(() =>
       useCheckpointPersistence(
         [makeRestorableTool('r1', 'replace', '/project/a.ts')],
-        config,
+        () => config.getCheckpointingEnabled(),
         gitService as unknown as GitService,
 
         makeFakeAgent(agentClient),
@@ -503,7 +503,7 @@ async function checkpointCase10(): Promise<void> {
     renderHook(() =>
       useCheckpointPersistence(
         [makeRestorableTool('r1', 'replace', '/project/a.ts')],
-        config,
+        () => config.getCheckpointingEnabled(),
         gitService as unknown as GitService,
 
         makeFakeAgent(makeAgentClient()),
@@ -540,7 +540,7 @@ async function checkpointCase11(): Promise<void> {
     renderHook(() =>
       useCheckpointPersistence(
         tools,
-        config,
+        () => config.getCheckpointingEnabled(),
         gitService as unknown as GitService,
 
         makeFakeAgent(agentClient),
@@ -570,7 +570,7 @@ async function checkpointCase12(): Promise<void> {
     renderHook(() =>
       useCheckpointPersistence(
         [makeRestorableTool('r1', 'replace', '/project/a.ts')],
-        config,
+        () => config.getCheckpointingEnabled(),
         makeGitService() as unknown as GitService,
 
         makeFakeAgent(makeAgentClient()),
@@ -598,7 +598,7 @@ async function checkpointCase13(): Promise<void> {
   const { rerender } = renderHook(() =>
     useCheckpointPersistence(
       currentTools,
-      config,
+      () => config.getCheckpointingEnabled(),
       gitService as unknown as GitService,
 
       makeFakeAgent(agentClient),
@@ -636,7 +636,7 @@ async function checkpointCase14(): Promise<void> {
   const { rerender } = renderHook(() =>
     useCheckpointPersistence(
       currentTools,
-      config,
+      () => config.getCheckpointingEnabled(),
       gitService as unknown as GitService,
 
       makeFakeAgent(agentClient),

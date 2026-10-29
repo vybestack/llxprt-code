@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -13,6 +13,7 @@ import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 const TOKEN_USAGE = {
@@ -135,15 +136,13 @@ export const createConfigStub = (loggingEnabled = false): Config =>
     telemetry: { enabled: false, logConversations: loggingEnabled },
   });
 
-export const createRuntimeContext = (
-  settings: SettingsService,
-  config: Config,
-): ProviderRuntimeContext & {
-  sessionSettings: ReturnType<typeof fixtureOwners.adopt>['settingsOwner'];
-} => ({
+export const createRuntimeContext = (): ProviderRuntimeContext => ({
   runtimeId: 'test-runtime',
-  settingsService: settings,
-  config,
-  sessionSettings: fixtureOwners.adopt(config, settings).settingsOwner,
+
   metadata: { source: 'LoggingProviderWrapper.test-helpers' },
 });
+
+export const createSettingsOwner = (
+  settings: SettingsService,
+  config: Config,
+): SessionSettingsOwner => fixtureOwnersBorrowedSettings(config, settings);

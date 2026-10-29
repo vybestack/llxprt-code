@@ -1,3 +1,4 @@
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
@@ -87,11 +88,21 @@ describe('reasoning token accounting over the real curated journal', () => {
             try {
               const expected =
                 admittedTokens + 100000 - strippedTokens(size, policy);
-              expect(await computeEffectiveTokenCount(service, context)).toBe(
-                expected,
-              );
+              expect(
+                await computeEffectiveTokenCount(
+                  service,
+                  context.ephemerals.reasoning,
+                ),
+              ).toBe(expected);
               const chat = new ChatSession(
-                context,
+                chatSessionPorts(context),
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
                 buildMockContentGenerator(),
                 { maxOutputTokens: 100 },
               );
@@ -147,9 +158,9 @@ describe('reasoning accounting policy boundaries', () => {
         false,
         'allButLast',
       );
-      expect(await computeEffectiveTokenCount(service, context)).toBe(
-        Math.max(0, baseline - 2),
-      );
+      expect(
+        await computeEffectiveTokenCount(service, context.ephemerals.reasoning),
+      ).toBe(Math.max(0, baseline - 2));
     });
   });
 
@@ -165,9 +176,12 @@ describe('reasoning accounting policy boundaries', () => {
           true,
           'all',
         );
-        expect(await computeEffectiveTokenCount(service, context)).toBe(
-          admittedTokens + 900,
-        );
+        expect(
+          await computeEffectiveTokenCount(
+            service,
+            context.ephemerals.reasoning,
+          ),
+        ).toBe(admittedTokens + 900);
         expect(ownership.snapshot().acquisitions - acquisitions).toBe(0);
       },
       0,
@@ -186,7 +200,12 @@ describe('reasoning accounting policy boundaries', () => {
           false,
           'all',
         );
-        expect(await computeEffectiveTokenCount(service, context)).toBe(0);
+        expect(
+          await computeEffectiveTokenCount(
+            service,
+            context.ephemerals.reasoning,
+          ),
+        ).toBe(0);
       },
       0,
       (index) => {

@@ -72,7 +72,7 @@ describe('child facade real launch', () => {
     try {
       const history = fixture.child.runtime.history;
       expect(history).toBeInstanceOf(HistoryService);
-      expect(fixture.child.scope.runtimeContext.history).toBe(history);
+      expect(fixture.child.scopeHistory).toBe(history);
       history.add({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'child-only' }],

@@ -20,6 +20,7 @@ async function durableParity(size: number): Promise<number> {
     const metadata = await buildCompressionMetadata(
       'oracle',
       setup.runtime,
+      undefined,
       history,
       async () => ({
         provider: setup.transport,

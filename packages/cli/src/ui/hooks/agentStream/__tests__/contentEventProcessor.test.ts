@@ -1,3 +1,4 @@
+import { waitFor } from '../../../../__tests__/render.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, it, expect } from 'bun:test';
 import {
@@ -7,12 +8,19 @@ import {
 
 describe('journal content-prefix identity (issue #2263)', () => {
   it('keeps the selected profile label before its answer and thinking', async () => {
-    await withJournalTurn(async (turn, agent) => {
+    await withJournalTurn(async (turn, agent, client) => {
       turn.commands.addItem({
         type: 'profile_change',
         profileName: 'work:gpt-4',
       });
-      const history = agent.agentClient.getHistoryService();
+      await waitFor(async () => {
+        const rows = await readJournalItems(agent);
+        expect(rows[0]).toMatchObject({
+          type: 'profile_change',
+          profileName: 'work:gpt-4',
+        });
+      });
+      const history = client.getHistoryService();
       if (history === null) throw new Error('Missing history');
       const arrival = await history.openResponseArrival({
         id: 'answer',

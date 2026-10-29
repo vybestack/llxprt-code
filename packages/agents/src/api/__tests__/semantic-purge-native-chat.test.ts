@@ -1,12 +1,9 @@
+import { capturedAgentClient } from './helpers/agent-client-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { useTempDir } from './helpers/journal-fixture-support.js';
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
-import {
-  buildAgent,
-  drain,
-  internalAgentClient,
-} from './helpers/agentHarness.js';
+import { buildAgent, drain } from './helpers/agentHarness.js';
 import { collectAgentHistory } from './helpers/collect-agent-history.js';
 
 describe('native public chat semantic purge trigger', () => {
@@ -34,7 +31,7 @@ describe('native public chat semantic purge trigger', () => {
       ]);
       await agent.session.setRecording({ enabled: true });
       agent.setEphemeralSetting('media.semantic-purge', 'remove');
-      const history = internalAgentClient(agent).getHistoryService();
+      const history = capturedAgentClient(agent).getHistoryService();
       if (history === null) throw new Error('Missing native public history');
       const receipt = await operationFileCreates(async () => {
         await drain(agent.stream('describe without the image'));

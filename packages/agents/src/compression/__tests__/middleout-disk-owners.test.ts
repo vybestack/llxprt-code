@@ -46,7 +46,12 @@ async function charge(size: number): Promise<number> {
     size,
     async (history, sourceOwners) => {
       const { runtime, transport } = middleoutSetup(history);
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const source = new HistoryDensityRows();
       const candidate = new HistoryDensityRows(candidateOwners);
       const snapshot = await history.openDumpSnapshot();
@@ -56,6 +61,7 @@ async function charge(size: number): Promise<number> {
         const metadata = await buildCompressionMetadata(
           'owners',
           runtime,
+          undefined,
           history,
           async () => ({
             provider: transport,

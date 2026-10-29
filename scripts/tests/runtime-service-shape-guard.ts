@@ -3,7 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { dirname, resolve } from 'node:path';
+import { posix } from 'node:path';
+import { compilerSourcePath } from '../compiler-source-path.js';
 import ts from 'typescript';
 import { javascriptExpressionTypes } from './runtime-javascript-inference.js';
 import {
@@ -11,6 +12,13 @@ import {
   serviceAnalyzer,
   unalias,
 } from './runtime-service-shape-analysis.js';
+import {
+  classStoredDeclarations,
+  mergesServiceSurfaces,
+  storedServiceVerdict,
+  type ServiceAnalyses,
+  type StoredVerdict,
+} from './runtime-service-shape-holders.js';
 
 export interface RuntimeDeclarationRoot {
   readonly file: string;
@@ -45,7 +53,7 @@ function resolveRoots(
   const checker = program.getTypeChecker();
   return new Set(
     roots.map((root) => {
-      const file = program.getSourceFile(resolve(root.file));
+      const file = program.getSourceFile(compilerSourcePath(root.file));
       const module = file && checker.getSymbolAtLocation(file);
       const exported =
         module &&
@@ -90,14 +98,15 @@ function assemblyFunction(node: ts.Node): ts.FunctionDeclaration | undefined {
 function isAssemblyNode(
   node: ts.Node,
   options: RuntimeServiceShapeOptions,
+  program: ts.Program,
 ): boolean {
   const owner = assemblyFunction(node);
   return (
     !!owner?.name &&
     !!options.assembly?.some(
       (entry) =>
-        resolve(entry.file) === resolve(owner.getSourceFile().fileName) &&
-        entry.functionName === owner.name?.text,
+        program.getSourceFile(compilerSourcePath(entry.file)) ===
+          owner.getSourceFile() && entry.functionName === owner.name?.text,
     )
   );
 }
@@ -245,7 +254,30 @@ function isConfigLocator(
  * Discovery visits up to 10,000 nodes per query in bounded worklist chunks.
  * A witnessed bundle finishes a positive query early; unresolved negative
  * queries retain explicit resource-limit findings.
- * Private and protected storage does not expose capabilities. Generic domain
+ * An exposed surface is judged by reachability: private and protected storage
+ * does not expose capabilities, and consumers only reach exposed members. A
+ * class is judged by its public instance surface exactly as an interface is: an
+ * owner whose public members expose two or more services is a bundle, and an
+ * owner that keeps its collaborators private and publishes operations is not,
+ * so owning several single-service collaborators stays allowed. A class field or
+ * constructor parameter property whose declared type groups two or more runtime
+ * services is, whatever its visibility, because the bag is what the boundary
+ * forbids. An interface or
+ * type alias is judged by what it exposes, and an intersection, object-literal
+ * type, `Object.assign` result or spread of several services groups them all.
+ * Union branches stay alternatives.
+ * A flattened aggregate is a second, independent reading: an intersection whose
+ * parts each expose operations and each reach a distinct configured runtime
+ * capability is a whole-bag carrier, because one object then hands a consumer
+ * several unrelated capabilities. Service counting alone misses it whenever the
+ * parts expose capabilities behind their operations instead of handing services
+ * out, which is exactly how capability read-models are written. The aggregate
+ * reading uses services and separately configured runtime objects together. One
+ * capable part is a port and stays allowed; two parts reaching the same single
+ * capability are one capability read two ways and stay allowed; a part with no
+ * operations is data and carries no capability. Interface heritage is
+ * composition, not flattening, so it adds no finding of its own.
+ * Generic domain
  * objects expose their instantiated public members, not phantom type arguments.
  * Config locators additionally recognize separately configured runtime objects.
  * Reporting includes actual call/new arguments, resolved signature returns and
@@ -285,18 +317,49 @@ export function scanRuntimeServiceProgram(
   const checker = program.getTypeChecker();
   const services = resolveRoots(program, options.services);
   const configs = resolveRoots(program, options.configs);
+  const runtimeObjects = resolveRoots(program, options.runtimeObjects ?? []);
   const analyze = serviceAnalyzer(services, checker, program);
   const analyzeRuntimeObject = serviceAnalyzer(
-    new Set([
-      ...services,
-      ...resolveRoots(program, options.runtimeObjects ?? []),
-    ]),
+    new Set([...services, ...runtimeObjects]),
     checker,
     program,
   );
+  const analyses: ServiceAnalyses = {
+    services: analyze,
+    merged: analyzeRuntimeObject,
+  };
+  /**
+   * Judges one declared position. A stored bag and a flattened aggregate are
+   * both findings; a position the analysis could not finish is reported as a
+   * limit so an undecided scan never passes silently.
+   */
+  function declaredVerdict(type: ts.Type, node: ts.Node): StoredVerdict {
+    const merged = mergesServiceSurfaces(type, checker, analyses, node);
+    if (merged.bundle) return merged;
+    const stored = storedServiceVerdict(type, checker, analyze, node);
+    return {
+      bundle: stored.bundle,
+      incomplete: merged.incomplete || stored.incomplete,
+    };
+  }
+  /**
+   * Judges one value or exposed surface by what it exposes. The exposure
+   * reading stays the one the guard has always used, so an owner that hands out
+   * a service through a field, an accessor or a return is a finding exactly as
+   * before; the flattened aggregate rule is added on top.
+   */
+  function exposureVerdict(type: ts.Type, node: ts.Node): StoredVerdict {
+    const merged = mergesServiceSurfaces(type, checker, analyses, node);
+    if (merged.bundle) return merged;
+    const exposed = analyze(type, node);
+    return {
+      bundle: exposed.bundle,
+      incomplete: merged.incomplete || exposed.incomplete,
+    };
+  }
   const findings: RuntimeServiceShapeFinding[] = [];
   for (const file of files) {
-    const source = program.getSourceFile(resolve(file));
+    const source = program.getSourceFile(compilerSourcePath(file));
     if (!source) throw new Error(`Missing scan source: ${file}`);
     const reported = new Set<string>();
     function report(
@@ -318,11 +381,11 @@ export function scanRuntimeServiceProgram(
       });
     }
     function reportTypes(node: ts.Node, types: readonly ts.Type[]): void {
-      if (isAssemblyNode(node, options)) return;
-      const summaries = types.map((type) => analyze(type, node));
-      if (summaries.some((summary) => summary.bundle)) {
+      if (isAssemblyNode(node, options, program)) return;
+      const verdicts = types.map((type) => exposureVerdict(type, node));
+      if (verdicts.some((verdict) => verdict.bundle)) {
         report(node, 'runtime-service-bundle');
-      } else if (summaries.some((summary) => summary.incomplete)) {
+      } else if (verdicts.some((verdict) => verdict.incomplete)) {
         report(node, 'runtime-service-analysis-resource-limit');
       }
     }
@@ -341,7 +404,7 @@ export function scanRuntimeServiceProgram(
       if (!parameter || !ts.isParameter(parameter) || parameter.type) return;
       if (
         !/\.[cm]?js$/.test(parameter.getSourceFile().fileName) ||
-        isAssemblyNode(argument, options)
+        isAssemblyNode(argument, options, program)
       )
         return;
       const summary = analyze(checker.getTypeAtLocation(argument), argument);
@@ -364,6 +427,41 @@ export function scanRuntimeServiceProgram(
         );
       }
     }
+    /**
+     * A class names an owner, not a grouping. Its stored positions are what the
+     * boundary judges: a field or constructor parameter property whose declared
+     * type is a bundle stores a bag, whatever its visibility. Owning several
+     * single-service fields is not a bundle, which is the design we want; a
+     * class whose public surface hands out two services is additionally judged
+     * at its declaration by reportNamedShape.
+     */
+    function reportStoredDeclarations(node: ts.ClassDeclaration): void {
+      if (isAssemblyNode(node, options, program)) return;
+      for (const stored of classStoredDeclarations(node, checker)) {
+        if (isAssemblyNode(stored.node, options, program)) continue;
+        const verdict = declaredVerdict(stored.type, stored.node);
+        if (verdict.bundle) report(stored.node, 'runtime-service-bundle');
+        else if (verdict.incomplete)
+          report(stored.node, 'runtime-service-analysis-resource-limit');
+      }
+    }
+    /**
+     * An interface or type alias is a bundle when the shape it names exposes
+     * runtime services or flattens several capability surfaces, and a parameter
+     * is a bag when the type it declares does either.
+     */
+    function reportNamedShape(node: ts.Node, bag: boolean): void {
+      if (isAssemblyNode(node, options, program)) return;
+      const verdict = exposureVerdict(checker.getTypeAtLocation(node), node);
+      if (verdict.bundle) {
+        report(
+          node,
+          bag ? 'runtime-service-bag-parameter' : 'runtime-service-bundle',
+        );
+      } else if (verdict.incomplete) {
+        report(node, 'runtime-service-analysis-resource-limit');
+      }
+    }
     function visit(node: ts.Node): void {
       if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
         reportCall(node);
@@ -384,19 +482,16 @@ export function scanRuntimeServiceProgram(
       } else if (ts.isReturnStatement(node) && node.expression) {
         reportExpression(node.expression);
       }
-      const bundle =
-        ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node);
-      const parameter = ts.isParameter(node);
-      if ((bundle || parameter) && !isAssemblyNode(node, options)) {
-        const summary = analyze(checker.getTypeAtLocation(node), node);
-        if (summary.bundle) {
-          report(
-            node,
-            bundle ? 'runtime-service-bundle' : 'runtime-service-bag-parameter',
-          );
-        } else if (summary.incomplete) {
-          report(node, 'runtime-service-analysis-resource-limit');
-        }
+      if (ts.isClassDeclaration(node)) {
+        reportNamedShape(node, false);
+        reportStoredDeclarations(node);
+      } else if (
+        ts.isTypeAliasDeclaration(node) ||
+        ts.isInterfaceDeclaration(node)
+      ) {
+        reportNamedShape(node, false);
+      } else if (ts.isParameter(node)) {
+        reportNamedShape(node, true);
       }
       const locator = isConfigLocator(
         node,
@@ -420,6 +515,7 @@ export function scanRuntimeServiceProgram(
 export function scanRuntimeServiceShapes(
   sources: Readonly<Record<string, string>>,
   options: RuntimeServiceShapeOptions,
+  files: readonly string[] = Object.keys(sources),
 ): readonly RuntimeServiceShapeFinding[] {
   const compilerOptions: ts.CompilerOptions = {
     strict: true,
@@ -430,26 +526,30 @@ export function scanRuntimeServiceShapes(
     types: [],
     skipLibCheck: true,
   };
-  const sourceMap = new Map(
-    Object.entries(sources).map(([file, text]) => [resolve(file), text]),
-  );
   const base = ts.createCompilerHost(compilerOptions, true);
-  const libDirectory = dirname(ts.getDefaultLibFilePath(compilerOptions));
+  const key = (file: string): string =>
+    base.getCanonicalFileName(compilerSourcePath(file));
+  const sourceMap = new Map(
+    Object.entries(sources).map(([file, text]) => [key(file), text]),
+  );
+  const libDirectory = posix.dirname(
+    key(ts.getDefaultLibFilePath(compilerOptions)),
+  );
   const isLib = (file: string): boolean =>
-    dirname(resolve(file)) === libDirectory && /lib\..*\.d\.ts$/.test(file);
+    posix.dirname(key(file)) === libDirectory && /lib\..*\.d\.ts$/.test(file);
   const host: ts.CompilerHost = {
     ...base,
     fileExists: (file) =>
-      sourceMap.has(resolve(file)) || (isLib(file) && base.fileExists(file)),
+      sourceMap.has(key(file)) || (isLib(file) && base.fileExists(file)),
     readFile: (file) =>
-      sourceMap.get(resolve(file)) ??
+      sourceMap.get(key(file)) ??
       (isLib(file) ? base.readFile(file) : undefined),
     directoryExists: (directory) =>
       [...sourceMap.keys()].some((file) =>
-        file.startsWith(`${resolve(directory)}/`),
-      ) || resolve(directory) === libDirectory,
+        file.startsWith(`${key(directory)}/`),
+      ) || key(directory) === libDirectory,
     getSourceFile: (file, languageVersion) => {
-      const text = sourceMap.get(resolve(file));
+      const text = sourceMap.get(key(file));
       if (text !== undefined)
         return ts.createSourceFile(file, text, languageVersion, true);
       return isLib(file)
@@ -462,5 +562,5 @@ export function scanRuntimeServiceShapes(
     compilerOptions,
     host,
   );
-  return scanRuntimeServiceProgram(program, options, Object.keys(sources));
+  return scanRuntimeServiceProgram(program, options, files);
 }

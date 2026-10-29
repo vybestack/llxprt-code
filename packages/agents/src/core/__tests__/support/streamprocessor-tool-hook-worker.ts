@@ -5,7 +5,6 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
 import { createSessionHookOwner } from './session-hook-owner-fixture.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
@@ -50,10 +49,14 @@ async function oracle(
   const projection = await setup.provider.projectPromptEnvelope({
     contents: callerOwnedProviderSource([diskTextRow(0, false), sourcePending]),
     invocation: captureProviderInvocation(
-      createProviderRuntimeContext({
-        settingsService: setup.settings,
+      {
         runtimeId: setup.runtime.state.runtimeId,
-      }),
+        fetch: globalThis.fetch,
+        globalSettings: setup.settings.getAllGlobalSettings(),
+        providerSettings: setup.settings.getProviderSettings(
+          setup.provider.name,
+        ),
+      },
       setup.provider.name,
     ),
     systemInstruction: setup.generation.systemInstruction,

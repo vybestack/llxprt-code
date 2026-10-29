@@ -9,11 +9,8 @@ import { describe, expect, it } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { readRecordedFacts } from '../../__tests__/journal-recording.js';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
-import {
-  importOwnerSession,
-  listOwnerBrowserTargets,
-  resumeOwnerSession,
-} from './ownerSessionUi.js';
+import { importOwnerSession } from './ownerSessionUi.js';
+import { resumeOwnerSession } from './resumeOwnerSession.js';
 
 const human = (text: string) => ({
   speaker: 'human' as const,
@@ -40,7 +37,7 @@ describe('owner-backed interactive session operations', () => {
       const next = await borrow();
       await next.setHistory([human('current owner')]);
       await next.session.setRecording({ enabled: true });
-      const targets = await listOwnerBrowserTargets(next);
+      const targets = await next.session.listBrowserTargets();
       const target = targets.find(
         (entry) =>
           entry.kind === 'session' && entry.session.sessionId === sourceId,
@@ -48,7 +45,11 @@ describe('owner-backed interactive session operations', () => {
       expect(
         target?.kind === 'session' ? target.session.filePath : undefined,
       ).toBe(source);
-      await resumeOwnerSession(next, sourceId);
+      await resumeOwnerSession(
+        next.session.resume.bind(next.session),
+        sourceId,
+        next.session.listBrowserTargetsDetailed.bind(next.session),
+      );
       expect(hasUserTurn(await readJournalItems(next), 'browse source')).toBe(
         true,
       );
@@ -63,7 +64,7 @@ describe('owner-backed interactive session operations', () => {
       await agent.setHistory([human('checkpoint source')]);
       await agent.session.setRecording({ enabled: true });
       const checkpoint = await agent.session.createCheckpoint('browser-branch');
-      const targets = await listOwnerBrowserTargets(agent);
+      const targets = await agent.session.listBrowserTargets();
       const target = targets.find(
         (entry) =>
           entry.kind === 'checkpoint' &&
@@ -74,13 +75,17 @@ describe('owner-backed interactive session operations', () => {
       expect(
         target?.kind === 'checkpoint' ? target.source.filePath : undefined,
       ).toBe(sourcePath);
-      await resumeOwnerSession(agent, checkpoint.checkpointId);
+      await resumeOwnerSession(
+        agent.session.resume.bind(agent.session),
+        checkpoint.checkpointId,
+        agent.session.listBrowserTargetsDetailed.bind(agent.session),
+      );
       expect(
         hasUserTurn(await readJournalItems(agent), 'checkpoint source'),
       ).toBe(true);
       await agent.session.deleteCheckpoint(checkpoint.checkpointId);
       expect(
-        (await listOwnerBrowserTargets(agent)).some(
+        (await agent.session.listBrowserTargets()).some(
           (entry) =>
             entry.kind === 'checkpoint' &&
             entry.checkpointId === checkpoint.checkpointId,
@@ -98,13 +103,21 @@ describe('owner-backed interactive session operations', () => {
       await agent.session.setRecording({ enabled: true });
       const path = agent.session.getRecording().path;
       await expect(
-        resumeOwnerSession(agent, 'missing-session'),
+        resumeOwnerSession(
+          agent.session.resume.bind(agent.session),
+          'missing-session',
+          agent.session.listBrowserTargetsDetailed.bind(agent.session),
+        ),
       ).rejects.toThrow('Failed to resume session');
       const checkpoint =
         await agent.session.createCheckpoint('discarded-branch');
       await agent.session.deleteCheckpoint(checkpoint.checkpointId);
       await expect(
-        resumeOwnerSession(agent, checkpoint.checkpointId),
+        resumeOwnerSession(
+          agent.session.resume.bind(agent.session),
+          checkpoint.checkpointId,
+          agent.session.listBrowserTargetsDetailed.bind(agent.session),
+        ),
       ).rejects.toThrow('Failed to resume session');
       const activeId = (await agent.session.listSessions()).at(0)?.id;
       if (!activeId) throw new Error('No active session');
@@ -142,7 +155,10 @@ describe('owner-backed interactive session operations', () => {
       const next = await borrow();
       await next.setHistory([human('current owner')]);
       await next.session.setRecording({ enabled: true });
-      await importOwnerSession(next, destination);
+      await importOwnerSession(
+        next.session.importSession.bind(next.session),
+        destination,
+      );
       expect(hasUserTurn(await readJournalItems(next), 'portable turn')).toBe(
         true,
       );

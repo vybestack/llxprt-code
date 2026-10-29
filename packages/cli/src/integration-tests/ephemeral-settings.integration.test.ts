@@ -1,4 +1,3 @@
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -14,20 +13,18 @@ import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-provid
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as path from 'node:path';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { Config } from '@vybestack/llxprt-code-core';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import {
   createTempDirectory,
   cleanupTempDirectory,
-  initializeTestSessionRoot,
-  type CliTestSessionRoot,
+  initializeTestConfig,
 } from './test-utils.js';
 
 describe('Ephemeral Settings Integration Tests', () => {
   let tempDir: string;
   let config: Config;
-  let sessionRoot: CliTestSessionRoot;
+  let sessionRoot: Awaited<ReturnType<typeof initializeTestConfig>>;
   let profileManager: ProfileManager;
   let originalHome: string | undefined;
 
@@ -57,7 +54,7 @@ describe('Ephemeral Settings Integration Tests', () => {
     });
 
     // Initialize the config
-    sessionRoot = await initializeTestSessionRoot(config);
+    sessionRoot = await initializeTestConfig(config);
   });
 
   afterEach(async () => {
@@ -75,59 +72,46 @@ describe('Ephemeral Settings Integration Tests', () => {
   describe('Ephemeral Settings Persistence', () => {
     it('should store ephemeral settings in current Config instance', async () => {
       // Set various ephemeral settings
-      sessionRoot.agent.setEphemeralSetting('context-limit', 150000);
-      sessionRoot.agent.setEphemeralSetting('compression-threshold', 0.75);
-      sessionRoot.agent.setEphemeralSetting(
-        'base-url',
-        'https://api.example.com',
-      );
-      sessionRoot.agent.setEphemeralSetting('auth-key', 'test-key-123');
-      sessionRoot.agent.setEphemeralSetting('custom-headers', {
+      sessionRoot.setEphemeralSetting('context-limit', 150000);
+      sessionRoot.setEphemeralSetting('compression-threshold', 0.75);
+      sessionRoot.setEphemeralSetting('base-url', 'https://api.example.com');
+      sessionRoot.setEphemeralSetting('auth-key', 'test-key-123');
+      sessionRoot.setEphemeralSetting('custom-headers', {
         'X-Custom-Header': 'test-value',
         Authorization: 'Bearer token123',
       });
-      sessionRoot.agent.setEphemeralSetting('api-version', '2024-02-01');
+      sessionRoot.setEphemeralSetting('api-version', '2024-02-01');
 
       // Verify settings are stored in the current instance
-      expect(sessionRoot.agent.getEphemeralSetting('context-limit')).toBe(
-        150000,
+      expect(sessionRoot.getEphemeralSetting('context-limit')).toBe(150000);
+      expect(sessionRoot.getEphemeralSetting('compression-threshold')).toBe(
+        0.75,
       );
-      expect(
-        sessionRoot.agent.getEphemeralSetting('compression-threshold'),
-      ).toBe(0.75);
-      expect(sessionRoot.agent.getEphemeralSetting('base-url')).toBe(
+      expect(sessionRoot.getEphemeralSetting('base-url')).toBe(
         'https://api.example.com',
       );
-      expect(sessionRoot.agent.getEphemeralSetting('auth-key')).toBe(
-        'test-key-123',
-      );
-      expect(
-        sessionRoot.agent.getEphemeralSetting('custom-headers'),
-      ).toStrictEqual({
+      expect(sessionRoot.getEphemeralSetting('auth-key')).toBe('test-key-123');
+      expect(sessionRoot.getEphemeralSetting('custom-headers')).toStrictEqual({
         'X-Custom-Header': 'test-value',
         Authorization: 'Bearer token123',
       });
-      expect(sessionRoot.agent.getEphemeralSetting('api-version')).toBe(
-        '2024-02-01',
-      );
+      expect(sessionRoot.getEphemeralSetting('api-version')).toBe('2024-02-01');
     });
   });
 
   describe('Compression Settings Application', () => {
     it('should apply compression settings to AgentClient', async () => {
       // Set compression-related ephemeral settings
-      sessionRoot.agent.setEphemeralSetting('context-limit', 100000);
-      sessionRoot.agent.setEphemeralSetting('compression-threshold', 0.6);
+      sessionRoot.setEphemeralSetting('context-limit', 100000);
+      sessionRoot.setEphemeralSetting('compression-threshold', 0.6);
 
       // Get the AgentClient from config
       // Verify compression settings are stored in ephemeral settings
       // (actual compression happens internally in chatSession when needed)
-      expect(
-        sessionRoot.agent.getEphemeralSetting('compression-threshold'),
-      ).toBe(0.6);
-      expect(sessionRoot.agent.getEphemeralSetting('context-limit')).toBe(
-        100000,
+      expect(sessionRoot.getEphemeralSetting('compression-threshold')).toBe(
+        0.6,
       );
+      expect(sessionRoot.getEphemeralSetting('context-limit')).toBe(100000);
 
       // Compression validation now happens in chatSession when it reads the settings
     });
@@ -135,29 +119,22 @@ describe('Ephemeral Settings Integration Tests', () => {
 
   describe('Custom Headers Application', () => {
     it('should make custom headers available for API requests', async () => {
-      // Create a ProviderManager bound to this config's runtime
-      const providerManager = new ProviderManager({
-        settingsService: sessionRoot.settingsService,
-        config,
-      });
-      configureProviderRuntimeFactories(config, providerManager);
-
       // Set custom headers via ephemeral settings
       const customHeaders = {
         'X-Custom-Header': 'test-value',
         'X-API-Version': '2024-01-01',
         Authorization: 'Bearer custom-token',
       };
-      sessionRoot.agent.setEphemeralSetting('custom-headers', customHeaders);
+      sessionRoot.setEphemeralSetting('custom-headers', customHeaders);
 
       // Verify custom headers are stored
-      expect(
-        sessionRoot.agent.getEphemeralSetting('custom-headers'),
-      ).toStrictEqual(customHeaders);
+      expect(sessionRoot.getEphemeralSetting('custom-headers')).toStrictEqual(
+        customHeaders,
+      );
 
       // When providers are initialized, they should be able to access these headers
       // through config.getEphemeralSetting('custom-headers')
-      const headers = sessionRoot.agent.getEphemeralSetting(
+      const headers = sessionRoot.getEphemeralSetting(
         'custom-headers',
       ) as Record<string, string>;
       expect(headers['X-Custom-Header']).toBe('test-value');
@@ -168,15 +145,8 @@ describe('Ephemeral Settings Integration Tests', () => {
 
   describe('Streaming Settings Application', () => {
     it('should default to streaming enabled when not set', async () => {
-      // Create a ProviderManager bound to this config's runtime
-      const providerManager = new ProviderManager({
-        settingsService: sessionRoot.settingsService,
-        config,
-      });
-      configureProviderRuntimeFactories(config, providerManager);
-
       // Get ephemeral settings - streaming should not be set initially
-      const ephemeralSettings = sessionRoot.agent.getEphemeralSettings();
+      const ephemeralSettings = sessionRoot.getEphemeralSettings();
       expect(ephemeralSettings['streaming']).toBeUndefined();
 
       // Verify that providers would default to streaming enabled
@@ -189,46 +159,38 @@ describe('Ephemeral Settings Integration Tests', () => {
 
     it('should allow explicit streaming control via ephemeral settings', async () => {
       // Test streaming enabled
-      sessionRoot.agent.setEphemeralSetting('streaming', 'enabled');
-      expect(sessionRoot.agent.getEphemeralSetting('streaming')).toBe(
-        'enabled',
-      );
+      sessionRoot.setEphemeralSetting('streaming', 'enabled');
+      expect(sessionRoot.getEphemeralSetting('streaming')).toBe('enabled');
 
-      let streamingSetting = sessionRoot.agent.getEphemeralSetting('streaming');
+      let streamingSetting = sessionRoot.getEphemeralSetting('streaming');
       let streamingEnabled = streamingSetting !== 'disabled';
       expect(streamingEnabled).toBe(true);
 
       // Test streaming disabled
-      sessionRoot.agent.setEphemeralSetting('streaming', 'disabled');
-      expect(sessionRoot.agent.getEphemeralSetting('streaming')).toBe(
-        'disabled',
-      );
+      sessionRoot.setEphemeralSetting('streaming', 'disabled');
+      expect(sessionRoot.getEphemeralSetting('streaming')).toBe('disabled');
 
-      streamingSetting = sessionRoot.agent.getEphemeralSetting('streaming');
+      streamingSetting = sessionRoot.getEphemeralSetting('streaming');
       streamingEnabled = streamingSetting !== 'disabled';
       expect(streamingEnabled).toBe(false);
 
       // Case is normalised by Config itself now, rather than being left to
       // the UI layer.
-      sessionRoot.agent.setEphemeralSetting('streaming', 'ENABLED');
-      expect(sessionRoot.agent.getEphemeralSetting('streaming')).toBe(
-        'enabled',
-      );
+      sessionRoot.setEphemeralSetting('streaming', 'ENABLED');
+      expect(sessionRoot.getEphemeralSetting('streaming')).toBe('enabled');
 
-      sessionRoot.agent.setEphemeralSetting('streaming', 'DISABLED');
-      expect(sessionRoot.agent.getEphemeralSetting('streaming')).toBe(
-        'disabled',
-      );
+      sessionRoot.setEphemeralSetting('streaming', 'DISABLED');
+      expect(sessionRoot.getEphemeralSetting('streaming')).toBe('disabled');
     });
 
     it('should validate streaming mode values', () => {
       // Valid values should be accepted
       expect(() => {
-        sessionRoot.agent.setEphemeralSetting('streaming', 'enabled');
+        sessionRoot.setEphemeralSetting('streaming', 'enabled');
       }).not.toThrow();
 
       expect(() => {
-        sessionRoot.agent.setEphemeralSetting('streaming', 'disabled');
+        sessionRoot.setEphemeralSetting('streaming', 'disabled');
       }).not.toThrow();
 
       // Note: The validation happens in setCommand.ts, not in Config.setEphemeralSetting
@@ -239,14 +201,11 @@ describe('Ephemeral Settings Integration Tests', () => {
   describe('Ephemeral Settings in Profiles', () => {
     it('should save ephemeral settings to a profile and restore them', async () => {
       // Set ephemeral settings
-      sessionRoot.agent.setEphemeralSetting('context-limit', 200000);
-      sessionRoot.agent.setEphemeralSetting('compression-threshold', 0.85);
-      sessionRoot.agent.setEphemeralSetting('auth-key', 'profile-test-key');
-      sessionRoot.agent.setEphemeralSetting(
-        'base-url',
-        'https://api.profile.com',
-      );
-      sessionRoot.agent.setEphemeralSetting('custom-headers', {
+      sessionRoot.setEphemeralSetting('context-limit', 200000);
+      sessionRoot.setEphemeralSetting('compression-threshold', 0.85);
+      sessionRoot.setEphemeralSetting('auth-key', 'profile-test-key');
+      sessionRoot.setEphemeralSetting('base-url', 'https://api.profile.com');
+      sessionRoot.setEphemeralSetting('custom-headers', {
         'X-Profile-Header': 'profile-value',
       });
 
@@ -260,19 +219,15 @@ describe('Ephemeral Settings Integration Tests', () => {
           max_tokens: 4096,
         },
         ephemeralSettings: {
-          'context-limit': sessionRoot.agent.getEphemeralSetting(
+          'context-limit': sessionRoot.getEphemeralSetting(
             'context-limit',
           ) as number,
-          'compression-threshold': sessionRoot.agent.getEphemeralSetting(
+          'compression-threshold': sessionRoot.getEphemeralSetting(
             'compression-threshold',
           ) as number,
-          'auth-key': sessionRoot.agent.getEphemeralSetting(
-            'auth-key',
-          ) as string,
-          'base-url': sessionRoot.agent.getEphemeralSetting(
-            'base-url',
-          ) as string,
-          'custom-headers': sessionRoot.agent.getEphemeralSetting(
+          'auth-key': sessionRoot.getEphemeralSetting('auth-key') as string,
+          'base-url': sessionRoot.getEphemeralSetting('base-url') as string,
+          'custom-headers': sessionRoot.getEphemeralSetting(
             'custom-headers',
           ) as Record<string, string>,
         },
@@ -290,23 +245,19 @@ describe('Ephemeral Settings Integration Tests', () => {
         model: 'gemini-2.0-flash-exp',
         cwd: tempDir,
       });
-      const newSessionRoot = await initializeTestSessionRoot(newConfig);
+      const newSessionRoot = await initializeTestConfig(newConfig);
 
       // Verify ephemeral settings are not there initially
       expect(
-        newSessionRoot.agent.getEphemeralSetting('context-limit'),
+        newSessionRoot.getEphemeralSetting('context-limit'),
       ).toBeUndefined();
       expect(
-        newSessionRoot.agent.getEphemeralSetting('compression-threshold'),
+        newSessionRoot.getEphemeralSetting('compression-threshold'),
       ).toBeUndefined();
+      expect(newSessionRoot.getEphemeralSetting('auth-key')).toBeUndefined();
+      expect(newSessionRoot.getEphemeralSetting('base-url')).toBeUndefined();
       expect(
-        newSessionRoot.agent.getEphemeralSetting('auth-key'),
-      ).toBeUndefined();
-      expect(
-        newSessionRoot.agent.getEphemeralSetting('base-url'),
-      ).toBeUndefined();
-      expect(
-        newSessionRoot.agent.getEphemeralSetting('custom-headers'),
+        newSessionRoot.getEphemeralSetting('custom-headers'),
       ).toBeUndefined();
 
       // Load the profile
@@ -318,24 +269,22 @@ describe('Ephemeral Settings Integration Tests', () => {
       for (const [key, value] of Object.entries(
         loadedProfile.ephemeralSettings,
       )) {
-        newSessionRoot.agent.setEphemeralSetting(key, value);
+        newSessionRoot.setEphemeralSetting(key, value);
       }
 
       // Verify ephemeral settings are restored from profile
-      expect(newSessionRoot.agent.getEphemeralSetting('context-limit')).toBe(
-        200000,
+      expect(newSessionRoot.getEphemeralSetting('context-limit')).toBe(200000);
+      expect(newSessionRoot.getEphemeralSetting('compression-threshold')).toBe(
+        0.85,
       );
-      expect(
-        newSessionRoot.agent.getEphemeralSetting('compression-threshold'),
-      ).toBe(0.85);
-      expect(newSessionRoot.agent.getEphemeralSetting('auth-key')).toBe(
+      expect(newSessionRoot.getEphemeralSetting('auth-key')).toBe(
         'profile-test-key',
       );
-      expect(newSessionRoot.agent.getEphemeralSetting('base-url')).toBe(
+      expect(newSessionRoot.getEphemeralSetting('base-url')).toBe(
         'https://api.profile.com',
       );
       expect(
-        newSessionRoot.agent.getEphemeralSetting('custom-headers'),
+        newSessionRoot.getEphemeralSetting('custom-headers'),
       ).toStrictEqual({
         'X-Profile-Header': 'profile-value',
       });
@@ -349,23 +298,23 @@ describe('Ephemeral Settings Integration Tests', () => {
         model: 'gemini-2.0-flash-exp',
         cwd: tempDir,
       });
-      const anotherSessionRoot = await initializeTestSessionRoot(anotherConfig);
+      const anotherSessionRoot = await initializeTestConfig(anotherConfig);
 
       // Verify ephemeral settings are not there (not automatically loaded)
       expect(
-        anotherSessionRoot.agent.getEphemeralSetting('context-limit'),
+        anotherSessionRoot.getEphemeralSetting('context-limit'),
       ).toBeUndefined();
       expect(
-        anotherSessionRoot.agent.getEphemeralSetting('compression-threshold'),
+        anotherSessionRoot.getEphemeralSetting('compression-threshold'),
       ).toBeUndefined();
       expect(
-        anotherSessionRoot.agent.getEphemeralSetting('auth-key'),
+        anotherSessionRoot.getEphemeralSetting('auth-key'),
       ).toBeUndefined();
       expect(
-        anotherSessionRoot.agent.getEphemeralSetting('base-url'),
+        anotherSessionRoot.getEphemeralSetting('base-url'),
       ).toBeUndefined();
       expect(
-        anotherSessionRoot.agent.getEphemeralSetting('custom-headers'),
+        anotherSessionRoot.getEphemeralSetting('custom-headers'),
       ).toBeUndefined();
     });
 
@@ -395,51 +344,43 @@ describe('Ephemeral Settings Integration Tests', () => {
       for (const [key, value] of Object.entries(
         loadedProfile.ephemeralSettings,
       )) {
-        sessionRoot.agent.setEphemeralSetting(key, value);
+        sessionRoot.setEphemeralSetting(key, value);
       }
 
       // Verify only the specified settings are loaded
-      expect(sessionRoot.agent.getEphemeralSetting('auth-key')).toBe(
-        'partial-key',
-      );
-      expect(sessionRoot.agent.getEphemeralSetting('context-limit')).toBe(
-        50000,
-      );
+      expect(sessionRoot.getEphemeralSetting('auth-key')).toBe('partial-key');
+      expect(sessionRoot.getEphemeralSetting('context-limit')).toBe(50000);
       expect(
-        sessionRoot.agent.getEphemeralSetting('compression-threshold'),
+        sessionRoot.getEphemeralSetting('compression-threshold'),
       ).toBeUndefined();
-      expect(sessionRoot.agent.getEphemeralSetting('base-url')).toBeUndefined();
-      expect(
-        sessionRoot.agent.getEphemeralSetting('custom-headers'),
-      ).toBeUndefined();
+      expect(sessionRoot.getEphemeralSetting('base-url')).toBeUndefined();
+      expect(sessionRoot.getEphemeralSetting('custom-headers')).toBeUndefined();
     });
   });
 
   describe('Ephemeral Settings Edge Cases', () => {
     it('should handle setting and unsetting ephemeral values', () => {
       // Set a value
-      sessionRoot.agent.setEphemeralSetting('test-key', 'test-value');
-      expect(sessionRoot.agent.getEphemeralSetting('test-key')).toBe(
-        'test-value',
-      );
+      sessionRoot.setEphemeralSetting('test-key', 'test-value');
+      expect(sessionRoot.getEphemeralSetting('test-key')).toBe('test-value');
 
       // Overwrite with new value
-      sessionRoot.agent.setEphemeralSetting('test-key', 'new-value');
-      expect(sessionRoot.agent.getEphemeralSetting('test-key')).toBe(
-        'new-value',
-      );
+      sessionRoot.setEphemeralSetting('test-key', 'new-value');
+      expect(sessionRoot.getEphemeralSetting('test-key')).toBe('new-value');
 
       // Set to undefined (effectively remove)
-      sessionRoot.agent.setEphemeralSetting('test-key', undefined);
-      expect(sessionRoot.agent.getEphemeralSetting('test-key')).toBeUndefined();
+      sessionRoot.setEphemeralSetting('test-key', undefined);
+      expect(sessionRoot.getEphemeralSetting('test-key')).toBeUndefined();
     });
 
     it('should handle complex ephemeral setting values', () => {
       // Arrays
-      sessionRoot.agent.setEphemeralSetting('array-setting', ['a', 'b', 'c']);
-      expect(
-        sessionRoot.agent.getEphemeralSetting('array-setting'),
-      ).toStrictEqual(['a', 'b', 'c']);
+      sessionRoot.setEphemeralSetting('array-setting', ['a', 'b', 'c']);
+      expect(sessionRoot.getEphemeralSetting('array-setting')).toStrictEqual([
+        'a',
+        'b',
+        'c',
+      ]);
 
       // Nested objects
       const nestedObj = {
@@ -449,27 +390,27 @@ describe('Ephemeral Settings Integration Tests', () => {
           },
         },
       };
-      sessionRoot.agent.setEphemeralSetting('nested-object', nestedObj);
-      expect(
-        sessionRoot.agent.getEphemeralSetting('nested-object'),
-      ).toStrictEqual(nestedObj);
+      sessionRoot.setEphemeralSetting('nested-object', nestedObj);
+      expect(sessionRoot.getEphemeralSetting('nested-object')).toStrictEqual(
+        nestedObj,
+      );
 
       // Numbers, booleans, null
-      sessionRoot.agent.setEphemeralSetting('number', 42);
-      sessionRoot.agent.setEphemeralSetting('boolean', true);
-      sessionRoot.agent.setEphemeralSetting('null-value', null);
+      sessionRoot.setEphemeralSetting('number', 42);
+      sessionRoot.setEphemeralSetting('boolean', true);
+      sessionRoot.setEphemeralSetting('null-value', null);
 
-      expect(sessionRoot.agent.getEphemeralSetting('number')).toBe(42);
-      expect(sessionRoot.agent.getEphemeralSetting('boolean')).toBe(true);
-      expect(sessionRoot.agent.getEphemeralSetting('null-value')).toBeNull();
+      expect(sessionRoot.getEphemeralSetting('number')).toBe(42);
+      expect(sessionRoot.getEphemeralSetting('boolean')).toBe(true);
+      expect(sessionRoot.getEphemeralSetting('null-value')).toBeNull();
     });
 
     it('should return a copy of ephemeral settings to prevent external modification', () => {
-      sessionRoot.agent.setEphemeralSetting('key1', 'value1');
-      sessionRoot.agent.setEphemeralSetting('key2', 'value2');
+      sessionRoot.setEphemeralSetting('key1', 'value1');
+      sessionRoot.setEphemeralSetting('key2', 'value2');
 
-      const settings1 = sessionRoot.agent.getEphemeralSettings();
-      const settings2 = sessionRoot.agent.getEphemeralSettings();
+      const settings1 = sessionRoot.getEphemeralSettings();
+      const settings2 = sessionRoot.getEphemeralSettings();
 
       // Should return new objects each time
       expect(settings1).not.toBe(settings2);
@@ -477,7 +418,7 @@ describe('Ephemeral Settings Integration Tests', () => {
 
       // Modifying returned object should not affect internal state
       Reflect.set(settings1, 'key1', 'modified');
-      expect(sessionRoot.agent.getEphemeralSetting('key1')).toBe('value1');
+      expect(sessionRoot.getEphemeralSetting('key1')).toBe('value1');
     });
   });
 });

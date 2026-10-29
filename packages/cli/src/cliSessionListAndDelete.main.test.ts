@@ -31,6 +31,9 @@ const MAIN_TIMEOUT_MS = 30_000;
 // Captured before any mock.module call so the real bootstrap is what the
 // recording sentinel spreads over.
 const actualSessionBootstrap = await import('./cliSessionBootstrap.js');
+const actualProviderGuard = {
+  ...(await import('./unconfiguredProviderGuard.js')),
+};
 
 const reachedSteps: string[] = [];
 
@@ -66,6 +69,7 @@ function registerDownstreamSentinels(): void {
     },
   }));
   void mock.module('./unconfiguredProviderGuard.js', () => ({
+    ...actualProviderGuard,
     guardUnconfiguredProvider: async () => {
       reachedSteps.push('unconfigured-provider-guard');
     },
@@ -80,6 +84,9 @@ function registerDownstreamSentinels(): void {
     },
   }));
   void mock.module('./session/nonInteractiveSession.js', () => ({
+    runPipedOrPromptSession: async () => {
+      throw new Error('Unexpected headless launch');
+    },
     dispatchInteractiveOrNonInteractive: async () => {
       reachedSteps.push('dispatch');
     },

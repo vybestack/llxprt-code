@@ -1,4 +1,3 @@
-import { modelParamInputs } from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -12,63 +11,35 @@ import { modelParamInputs } from '../../../providers/src/runtime/__tests__/provi
  */
 
 import { beforeEach, afterEach, describe, expect, it } from 'bun:test';
-import {
-  Config,
-  type RuntimeProviderManager,
-} from '@vybestack/llxprt-code-core';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { IProvider } from '@vybestack/llxprt-code-providers';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
-import { setCommand } from '../ui/commands/setCommand.js';
+import { createSetCommand } from '../ui/commands/setCommand.js';
+import type { SlashCommand } from '../ui/commands/types.js';
+import { buildRuntimeProfileSnapshot } from '../../../agents/src/api/profileSnapshot.js';
 import {
   setActiveModelParam,
-  getActiveModelParams,
-  buildRuntimeProfileSnapshot,
   clearActiveModelParam,
-} from '@vybestack/llxprt-code-providers/runtime.js';
-import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
-import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
+} from '../../../agents/src/api/model-parameters.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import type { RouteBPreflight } from '../../../agents/src/api/__tests__/helpers/route-b-preflight.js';
 import { assertDefined } from '../__tests__/assertions.js';
 import {
-  createTempDirectory,
-  cleanupTempDirectory,
-  initializeTestSessionRoot,
-  type CliTestSessionRoot,
-} from './test-utils.js';
-
-function createStubProvider(name: string): IProvider {
-  return {
-    name,
-    async getModels() {
-      return [
-        {
-          id: `${name}-model`,
-          name: `${name}-model`,
-          provider: name,
-          supportedToolFormats: [],
-        },
-      ];
-    },
-    getDefaultModel() {
-      return `${name}-model`;
-    },
-    async *generateChatCompletion() {
-      yield {
-        speaker: 'ai' as const,
-        blocks: [{ type: 'text' as const, text: `response-from-${name}` }],
-      };
-    },
-  };
-}
+  createModelParamsStubProvider,
+  openModelParamsRoot,
+  type ModelParamsRoot,
+} from './__tests__/model-params-route.js';
 
 describe('CLI model parameter command integration', () => {
-  let tempDir: string;
+  const credentials = useOwnedCredentials();
+  let root: ModelParamsRoot;
   let config: Config;
-  let sessionRoot: CliTestSessionRoot;
+  let sessionRoot: Agent;
   let settingsService: SettingsService;
-  let registration: CliRuntimeRegistrationHandle;
-  let providerManager: RuntimeProviderManager;
+  let preflight: RouteBPreflight['preflight'];
   let context: ReturnType<typeof createMockCommandContext>;
+  let setCommand: SlashCommand;
 
   const runSetCommand = async (args: string) => {
     assertDefined(setCommand.action);
@@ -76,30 +47,17 @@ describe('CLI model parameter command integration', () => {
   };
 
   beforeEach(async () => {
-    tempDir = await createTempDirectory();
-    config = new Config({
-      sessionId: 'model-params-integration',
-      targetDir: tempDir,
-      debugMode: false,
-      cwd: tempDir,
-      model: 'alpha-model',
-    });
-    settingsService = new SettingsService();
-    const assembled = assembleCliProviderRuntime({
-      settingsService,
-      config,
-      runtimeId: 'modelparams-test',
-      metadata: { source: 'modelParams.integration.test.ts' },
-    });
-    providerManager = assembled.providerManager;
-    registration = assembled.registration;
-    sessionRoot = await initializeTestSessionRoot(
-      config,
-      providerManager,
-      settingsService,
+    root = await openModelParamsRoot(
+      credentials().authority,
+      'model-params-integration',
+      'modelparams-test',
+      [createModelParamsStubProvider('alpha')],
     );
-    providerManager.registerProvider(createStubProvider('alpha'));
-    await providerManager.setActiveProvider('alpha');
+    config = root.route.config;
+    settingsService = root.route.settings;
+    preflight = root.route.preflight;
+    sessionRoot = root.agent;
+    await preflight.setActiveProvider('alpha');
 
     context = createMockCommandContext({
       runtimeApi: {
@@ -108,16 +66,16 @@ describe('CLI model parameter command integration', () => {
             key,
             value,
             settingsService,
-            providerManager.getActiveProviderName(),
+            preflight.getActiveProviderName(),
           ),
         clearActiveModelParam: (key: string) =>
           clearActiveModelParam(
             key,
             settingsService,
-            providerManager.getActiveProviderName(),
+            preflight.getActiveProviderName(),
           ),
         setEphemeralSetting: (key: string, value: unknown) =>
-          sessionRoot.agent.setEphemeralSetting(key, value),
+          sessionRoot.setEphemeralSetting(key, value),
       },
       services: {
         config: config as unknown as typeof context.services.config,
@@ -125,18 +83,26 @@ describe('CLI model parameter command integration', () => {
           settingsService as unknown as typeof context.services.settings,
       },
     });
+    const agent = sessionRoot;
+    setCommand = createSetCommand({
+      getEphemeralSettings: () => agent.getEphemeralSettings(),
+      setEphemeralSetting: (key, value) =>
+        agent.setEphemeralSetting(key, value),
+      getActiveModelParams: () => agent.providerReads.getActiveModelParams(),
+      setActiveModelParam: (key, value) =>
+        agent.modelParameters.set(key, value),
+      clearActiveModelParam: (key) => agent.modelParameters.clear(key),
+      isFuzzyFilteringEnabled: () => true,
+    });
   });
 
   afterEach(async () => {
-    registration.dispose();
-    await cleanupTempDirectory(tempDir);
+    await root.close();
   });
 
   it('sets provider-scoped model params via /set modelparam', async () => {
     await runSetCommand('modelparam temperature 0.9');
-    expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
-    ).toStrictEqual({
+    expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({
       temperature: 0.9,
     });
     expect(settingsService.getProviderSettings('alpha').temperature).toBe(0.9);
@@ -144,16 +110,12 @@ describe('CLI model parameter command integration', () => {
 
   it('clears model params using /set unset modelparam', async () => {
     await runSetCommand('modelparam max_tokens 4096');
-    expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
-    ).toStrictEqual({
+    expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({
       max_tokens: 4096,
     });
 
     await runSetCommand('unset modelparam max_tokens');
-    expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
-    ).toStrictEqual({});
+    expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({});
     expect(
       settingsService.getProviderSettings('alpha').max_tokens,
     ).toBeUndefined();
@@ -164,12 +126,12 @@ describe('CLI model parameter command integration', () => {
     await runSetCommand('modelparam top_p 0.92');
 
     const snapshot = buildRuntimeProfileSnapshot({
-      providerName: providerManager.getActiveProviderName() ?? '',
-      modelName: sessionRoot.agent.getModel(),
+      providerName: preflight.getActiveProviderName() ?? '',
+      modelName: sessionRoot.getModel(),
       providerSettings: settingsService.getProviderSettings(
-        providerManager.getActiveProviderName() ?? '',
+        preflight.getActiveProviderName() ?? '',
       ),
-      ephemeralSettings: sessionRoot.agent.getEphemeralSettings(),
+      ephemeralSettings: sessionRoot.getEphemeralSettings(),
     });
     expect(snapshot.provider).toBe('alpha');
     expect(snapshot.modelParams).toStrictEqual({
@@ -180,18 +142,15 @@ describe('CLI model parameter command integration', () => {
 
   it('supports clearing params directly through helper', async () => {
     await runSetCommand('modelparam temperature 0.7');
-    expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
-    ).toStrictEqual({
+    expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({
       temperature: 0.7,
     });
 
     clearActiveModelParam(
       'temperature',
-      ...modelParamInputs(sessionRoot, providerManager),
+      settingsService,
+      preflight.getActiveProviderName(),
     );
-    expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
-    ).toStrictEqual({});
+    expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({});
   });
 });

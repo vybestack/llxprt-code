@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createUiSessionOwner } from '../../../__tests__/uiSessionOwner.js';
+import {
+  createUiSessionOwner,
+  uiFixtureResources,
+} from '../../../__tests__/uiSessionOwner.js';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import { AgentEventType } from '@vybestack/llxprt-code-core';
 
@@ -195,6 +198,9 @@ function createHistoryControl(mockClient: Record<string, unknown>) {
         | undefined;
       return fn ? ((await fn()) as unknown as readonly IContent[]) : [];
     },
+    async *streamHistory(): AsyncGenerator<IContent> {
+      yield* await this.getHistory();
+    },
     async setHistory() {},
     async addHistory(message: unknown) {
       const fn = mockClient.addHistory as ((m: unknown) => void) | undefined;
@@ -226,30 +232,34 @@ function createStatsControl() {
 }
 
 function createProviderReads(
-  owner: ReturnType<typeof createUiSessionOwner>,
+  owner: Awaited<ReturnType<typeof createUiSessionOwner>>,
 ): Pick<
   Agent,
   'hasActiveProvider' | 'getProviderContextLimit' | 'listAvailableModels'
 > {
   return {
-    hasActiveProvider: () => owner.providerManager.hasActiveProvider(),
+    hasActiveProvider: () =>
+      uiFixtureResources(owner).manager.hasActiveProvider(),
     getProviderContextLimit: () =>
-      owner.providerManager.getActiveProvider()?.getContextLimit?.(),
+      uiFixtureResources(owner)
+        .manager.getActiveProvider()
+        ?.getContextLimit?.(),
     listAvailableModels: (provider) =>
-      owner.providerManager.getAvailableModels(provider),
+      uiFixtureResources(owner).manager.getAvailableModels(provider),
   };
 }
 
-function createBaseAgent(
+async function createBaseAgent(
   mockClient: Record<string, unknown>,
   streamFn: ReturnType<typeof createFakeStream>,
-): Agent {
-  const owner = createUiSessionOwner();
+): Promise<Agent> {
+  const owner = await createUiSessionOwner();
   return {
     async chat() {
       return { text: '', toolCalls: [], finishReason: 'stop' };
     },
     stream: streamFn,
+    metrics: owner.settingsOwner.telemetry.localMetrics,
     injectSteer: () => {},
     getProvider: () => 'test',
     ...createProviderReads(owner),
@@ -295,11 +305,9 @@ function createBaseAgent(
     memory: {} as unknown as Agent['memory'],
     skills: {} as unknown as Agent['skills'],
     lsp: {} as unknown as Agent['lsp'],
-    agentClient: owner.agentClient,
     sessionClient: owner.sessionClient,
     workspace: owner.workspace,
     mcp: owner.mcp,
-    providerManager: owner.providerManager,
     ...createHistoryControl(mockClient),
     async compress() {
       return { status: 'skipped' };
@@ -320,7 +328,9 @@ function createBaseAgent(
   } as unknown as Agent;
 }
 
-export function createFakeAgentFromMockClient(mockClient: unknown): Agent {
+export async function createFakeAgentFromMockClient(
+  mockClient: unknown,
+): Promise<Agent> {
   return createBaseAgent(
     mockClient as Record<string, unknown>,
     createFakeStream(mockClient as Record<string, unknown>),

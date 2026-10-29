@@ -1,3 +1,4 @@
+import { capturedAgentClient } from './helpers/agent-client-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as journalOpen from '@vybestack/llxprt-code-core/journal/journalWriterOpen.js';
@@ -6,12 +7,12 @@ import { buildAgent, type Agent } from './helpers/agentHarness.js';
 
 async function replaceChat(agent: Agent, operation: string): Promise<void> {
   if (operation === 'start') {
-    await agent.agentClient.startChat();
+    await capturedAgentClient(agent).startChat();
     return;
   }
-  const config = agent.agentClient.getContentGeneratorConfig();
+  const config = capturedAgentClient(agent).getContentGeneratorConfig();
   if (config === undefined) throw new Error('Missing generator config');
-  await agent.agentClient.initialize(config);
+  await capturedAgentClient(agent).initialize(config);
 }
 
 describe('Agent client chat replacement lifetime', () => {
@@ -30,7 +31,7 @@ describe('Agent client chat replacement lifetime', () => {
       try {
         const { agent, cleanup } = await buildAgent('plain-text.jsonl');
         try {
-          await agent.agentClient.startChat();
+          await capturedAgentClient(agent).startChat();
           await replaceChat(agent, operation);
         } finally {
           await cleanup();

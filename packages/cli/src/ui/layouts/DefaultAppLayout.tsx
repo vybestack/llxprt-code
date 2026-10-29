@@ -4,12 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useRef, useState } from 'react';
-import type {
-  ContextRange,
-  MessageBus,
-  RecordingIntegration,
-} from '@vybestack/llxprt-code-core';
+import React, { useEffect, useState } from 'react';
+import type { ContextRange } from '@vybestack/llxprt-code-core';
 import { Box, type DOMElement, Text } from 'ink';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
@@ -33,7 +29,11 @@ import {
   DialogRegion,
   PanelsRegion,
 } from './DefaultAppLayoutRegions.js';
-import type { SlashCommandRuntime, UiRuntime } from '../cliUiRuntime.js';
+import type {
+  AgentAuthControl,
+  AgentHookControl,
+} from '@vybestack/llxprt-code-agents';
+import type { LayoutRuntime } from './DefaultAppLayoutHelpers.js';
 import { themeManager } from '../themes/theme-manager.js';
 import { JournalStandardTranscript } from './journal-standard-transcript.js';
 import { QuitBoundary } from './quit-boundary.js';
@@ -49,9 +49,26 @@ export interface ScrollbackPagerLayoutBinding {
 }
 
 export interface DefaultAppLayoutProps {
-  runtimeMessageBus?: MessageBus;
-  uiRuntime: UiRuntime;
-  slashCommandRuntime: SlashCommandRuntime;
+  readIdeMode: () => boolean;
+  readIdeDiffingEnabled: () => boolean | null;
+  subscribeIdeDiffing: (listener: () => void) => () => void;
+  resolveIdeDiff: (
+    filePath: string,
+    outcome: 'accepted' | 'rejected',
+  ) => Promise<void>;
+  readIdeWorkspaceTrust: () => boolean | undefined;
+  subscribeIdeWorkspaceTrust: (
+    listener: (trusted: boolean | undefined) => void,
+  ) => () => void;
+
+  subscribeBucketConsent?: AgentAuthControl['subscribeBucketConsent'];
+  respondToBucketConsent?: AgentAuthControl['respondToBucketConsent'];
+  subscribeHookPhase?: AgentHookControl['subscribeExecutionPhase'];
+  screenReaderEnabled: boolean;
+  disableLoadingPhrases: boolean;
+  debugMode: boolean;
+  layoutRuntime: LayoutRuntime;
+  subscribeContextRange: (publish: (range: ContextRange) => void) => () => void;
   settings: LoadedSettings;
   startupWarnings: string[];
   version: string;
@@ -67,7 +84,7 @@ export interface DefaultAppLayoutProps {
 function usesAlternateBuffer(props: DefaultAppLayoutProps): boolean {
   return (
     props.settings.merged.ui.useAlternateBuffer === true &&
-    !props.uiRuntime.app.getScreenReader()
+    !props.screenReaderEnabled
   );
 }
 
@@ -118,7 +135,11 @@ function QuittingRegion(props: DefaultAppLayoutProps) {
       terminalWidth={width}
       effectiveAvailableHeight={height}
       constrainHeight={constrain}
-      config={props.slashCommandRuntime}
+      config={props.layoutRuntime}
+      readIdeMode={props.readIdeMode}
+      readIdeDiffingEnabled={props.readIdeDiffingEnabled}
+      subscribeIdeDiffing={props.subscribeIdeDiffing}
+      resolveIdeDiff={props.resolveIdeDiff}
       slashCommands={slashCommands}
       showTodoPanelSetting={props.settings.merged.ui.showTodoPanel ?? true}
     />
@@ -198,28 +219,39 @@ function LayoutStructure(props: LayoutStructureProps) {
 
 const MemoizedLayoutStructure = React.memo(LayoutStructure);
 
-function TranscriptRegion(props: DefaultAppLayoutProps) {
+function TranscriptHeader(props: DefaultAppLayoutProps) {
   const terminal = useTerminalStore();
   const width = useStoreSelector(
     terminal.store,
     (state) => state.terminalWidth,
   );
-  const header =
-    process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER !== 'true' ? (
-      <AppHeader
-        config={props.slashCommandRuntime}
-        settings={props.settings}
-        version={props.version}
-        nightly={props.nightly}
-        terminalWidth={width}
-      />
-    ) : null;
+  return (
+    <AppHeader
+      config={props.layoutRuntime}
+      settings={props.settings}
+      version={props.version}
+      nightly={props.nightly}
+      terminalWidth={width}
+    />
+  );
+}
+
+function TranscriptRegion(props: DefaultAppLayoutProps) {
+  const header = React.useMemo(
+    () =>
+      process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER !== 'true' ? (
+        <TranscriptHeader {...props} />
+      ) : null,
+    [props],
+  );
   return <JournalTranscript {...props} header={header} />;
 }
 
 function JournalTranscript(
   props: DefaultAppLayoutProps & { header: React.ReactNode },
 ) {
+  const turn = useTurnStore();
+  const staticKey = useStoreSelector(turn.store, (state) => state.staticKey);
   if (!props.scrollbackPager)
     return (
       <Box flexDirection="column">
@@ -229,100 +261,59 @@ function JournalTranscript(
     );
   if (usesAlternateBuffer(props))
     return (
-      <MemoizedPagerTranscript
-        pager={props.scrollbackPager}
-        uiRuntime={props.uiRuntime}
-        slashCommandRuntime={props.slashCommandRuntime}
-        header={props.header}
-      />
+      <Box
+        flexDirection="column"
+        flexGrow={1}
+        flexShrink={1}
+        overflow="hidden"
+        justifyContent="flex-end"
+      >
+        <MemoizedPagerTranscript
+          pager={props.scrollbackPager}
+          {...props}
+          header={props.header}
+        />
+      </Box>
     );
   return (
     <JournalStandardTranscript
+      key={staticKey}
       store={props.scrollbackPager.store}
       viewport={props.scrollbackPager.viewport}
-      config={props.slashCommandRuntime}
+      rendering={{ config: props.layoutRuntime, ...props }}
       header={props.header}
     />
   );
 }
 
-type HistoryServiceHandle = Parameters<
-  RecordingIntegration['subscribeToJournal']
->[0];
-
-function getInitializedHistoryService(
-  uiRuntime: UiRuntime,
-): HistoryServiceHandle | null {
-  const agentClient = uiRuntime.agentClientSource.getAgentClient();
-  if (agentClient.hasChatInitialized() !== true) {
-    return null;
-  }
-  return agentClient.getHistoryService() ?? null;
-}
-
-/**
- * Latest context boundary snapshot (#854), or null until a HistoryService
- * exists. Mirrors the service-swap subscription pattern in
- * useTokenMetricsTracking: a poll watches for the initialized service,
- * subscribes to contextRangeChanged, and reads the current range on swap.
- */
-function useContextRangeSnapshot(uiRuntime: UiRuntime): ContextRange | null {
+function useContextRangeSnapshot(
+  subscribe: DefaultAppLayoutProps['subscribeContextRange'],
+): ContextRange | null {
   const [range, setRange] = useState<ContextRange | null>(null);
-  const cleanupRef = useRef<(() => void) | null>(null);
-  const serviceRef = useRef<HistoryServiceHandle | null>(null);
-
-  const turn = useTurnStore();
-  useEffect(() => {
-    const checkInterval = setInterval(() => {
-      if (turn.store.getState().quittingMessages !== null) {
-        clearInterval(checkInterval);
-        return;
-      }
-      const historyService = getInitializedHistoryService(uiRuntime);
-      if (historyService === serviceRef.current) return;
-      if (cleanupRef.current !== null) {
-        cleanupRef.current();
-        cleanupRef.current = null;
-      }
-      serviceRef.current = historyService;
-      if (historyService === null) {
-        setRange(null);
-        return;
-      }
-      const handleRangeChanged = (snapshot: ContextRange): void => {
-        setRange(snapshot);
-      };
-      historyService.on('contextRangeChanged', handleRangeChanged);
-      setRange(historyService.getContextRange());
-      cleanupRef.current = () => {
-        historyService.off('contextRangeChanged', handleRangeChanged);
-      };
-    }, 100);
-    return () => {
-      clearInterval(checkInterval);
-      if (cleanupRef.current !== null) {
-        cleanupRef.current();
-        cleanupRef.current = null;
-      }
-      serviceRef.current = null;
-    };
-  }, [uiRuntime, turn.store]);
-
+  useEffect(() => subscribe(setRange), [subscribe]);
   return range;
 }
 
 function PagerTranscript({
   pager,
-  uiRuntime,
-  slashCommandRuntime,
+  subscribeContextRange,
+  layoutRuntime,
+  readIdeMode,
+  readIdeDiffingEnabled,
+  subscribeIdeDiffing,
+  resolveIdeDiff,
   header,
 }: {
   pager: ScrollbackPagerLayoutBinding;
-  uiRuntime: UiRuntime;
-  slashCommandRuntime: SlashCommandRuntime;
+  subscribeContextRange: DefaultAppLayoutProps['subscribeContextRange'];
+  layoutRuntime: LayoutRuntime;
+  readIdeMode: DefaultAppLayoutProps['readIdeMode'];
+  readIdeDiffingEnabled: DefaultAppLayoutProps['readIdeDiffingEnabled'];
+  subscribeIdeDiffing: DefaultAppLayoutProps['subscribeIdeDiffing'];
+  resolveIdeDiff: DefaultAppLayoutProps['resolveIdeDiff'];
   header: React.ReactNode;
 }) {
-  const contextRange = useContextRangeSnapshot(uiRuntime);
+  const contextRange = useContextRangeSnapshot(subscribeContextRange);
   const turn = useTurnStore();
   const showClearNotice = useStoreSelector(
     turn.store,
@@ -338,7 +329,13 @@ function PagerTranscript({
       viewport={pager.viewport}
       pollMs={SCROLLBACK_VIEWPORT_POLL_MS}
       range={contextRange ?? undefined}
-      config={slashCommandRuntime}
+      rendering={{
+        config: layoutRuntime,
+        readIdeMode,
+        readIdeDiffingEnabled,
+        subscribeIdeDiffing,
+        resolveIdeDiff,
+      }}
       pendingToolControls={pendingToolControls}
       header={header}
       showClearNotice={showClearNotice}

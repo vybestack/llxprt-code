@@ -1,36 +1,40 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { createTestChildOrchestrator } from '../core/__tests__/child-launch-fixture.js';
+import { SubAgentScope } from '../core/subagent.js';
+import type { ChildAgentScope } from '../core/subagentOrchestrator.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
-import { createMockOrchestrator } from './__tests__/task-orchestrator-fixture.js';
-import { taskSelection } from './__tests__/task-selection-fixture.js';
 
-import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
-const fixturePaths = installTestWorkspacePaths({
-  targetDir: process.cwd(),
-  isTrusted: () => true,
-});
+import { taskSelection } from './__tests__/task-selection-fixture.js';
 
 /**
  * TaskTool core tests: orchestrator launch, output extraction, termination.
  * Sibling files cover max_turns, timeout, async mode, and issue-specific tests.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { taskPolicyFixture } from './__tests__/task-policy-fixture.js';
-import { TaskTool, type TaskToolParams } from './task.js';
-import { DEFAULT_TASK_TIMEOUT_SECONDS } from './taskAbortHelpers.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   ContextState,
   SubagentTerminateMode,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
+import { taskPolicyFixture } from './__tests__/task-policy-fixture.js';
+import { TaskTool, type TaskToolParams } from './task.js';
+import { DEFAULT_TASK_TIMEOUT_SECONDS } from './taskAbortHelpers.js';
 
 describe('TaskTool', () => {
   let config: Config;
@@ -99,10 +103,8 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       ...taskPolicyFixture(settingsOwner),
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: () => orchestrator,
+
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       messageBus,
       isInteractiveEnvironment: () => true,
     });
@@ -160,17 +162,50 @@ describe('TaskTool', () => {
   });
 
   it('passes the exact runtime MessageBus into injected orchestrator factories', async () => {
-    const { orchestrator, scope } = createMockOrchestrator('agent-messagebus');
     let receivedMessageBus: MessageBus | undefined;
-    const tool = new TaskTool(config, {
-      ...taskPolicyFixture(settingsOwner),
+    let scope: ChildAgentScope | undefined;
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
+      workspaceTrust: createSessionSettingsFixture(config).workspaceTrust,
+      toolRegistry: await taskSelection({ getEnabledTools: () => [] }),
+      instructions: emptyInstructionReads,
       workspacePaths: fixturePaths(),
       readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: (coreSchedulerMessageBus) => {
-        receivedMessageBus = coreSchedulerMessageBus;
-        return orchestrator;
+      foregroundConfig: config,
+      createChildSettings: () => settingsOwner.createChildStore(),
+      readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
+      messageBus,
+      subagentManager: {
+        loadSubagent: async (name) => ({
+          name,
+          profile: 'bus-profile',
+          systemPrompt: 'Do work',
+          createdAt: '2026-10-18',
+          updatedAt: '2026-10-18',
+        }),
+        listSubagents: async () => [],
       },
+      profileManager: {
+        loadProfile: async () => ({
+          version: 1,
+          provider: 'openai',
+          model: 'gpt-4o',
+          modelParams: {},
+          ephemeralSettings: { 'auth-key': 'test-key' },
+        }),
+      },
+      scopeFactory: async (...args) => {
+        receivedMessageBus = args[2].messageBus;
+        scope = await SubAgentScope.create(...args);
+        vi.spyOn(scope, 'runInteractive').mockResolvedValue(undefined);
+        vi.spyOn(scope, 'runNonInteractive');
+        return scope;
+      },
+    });
+    const tool = new TaskTool(config, {
+      ...taskPolicyFixture(settingsOwner),
+
+      launchChild: orchestrator.launch.bind(orchestrator),
       isInteractiveEnvironment: () => true,
       messageBus,
     });
@@ -180,11 +215,15 @@ describe('TaskTool', () => {
       goal_prompt: 'Ship the feature',
     });
 
-    await invocation.execute(new AbortController().signal, undefined);
+    const result = await invocation.execute(
+      new AbortController().signal,
+      undefined,
+    );
+    expect(result.error).toBeUndefined();
 
     expect(receivedMessageBus).toBe(messageBus);
-    expect(scope.runInteractive).toHaveBeenCalledTimes(1);
-    expect(scope.runNonInteractive).not.toHaveBeenCalled();
+    expect(scope?.runInteractive).toHaveBeenCalledTimes(1);
+    expect(scope?.runNonInteractive).not.toHaveBeenCalled();
   });
 
   it('rejects malformed construction without a concrete runtime messageBus', () => {
@@ -228,10 +267,8 @@ describe('TaskTool', () => {
           { name: 'list_subagents' },
         ],
       }),
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: () => orchestrator,
+
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       messageBus,
       isInteractiveEnvironment: () => true,
     });
@@ -287,10 +324,8 @@ describe('TaskTool', () => {
           { name: 'list_subagents' },
         ],
       }),
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: () => orchestrator,
+
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       messageBus,
       isInteractiveEnvironment: () => true,
     });
@@ -346,10 +381,8 @@ describe('TaskTool', () => {
           { name: 'list_subagents' },
         ],
       }),
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: () => orchestrator,
+
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       messageBus,
       isInteractiveEnvironment: () => true,
     });
@@ -404,10 +437,8 @@ describe('TaskTool', () => {
           { name: 'list_subagents' },
         ],
       }),
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: () => orchestrator,
+
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       messageBus,
       isInteractiveEnvironment: () => true,
     });
@@ -465,10 +496,8 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       ...taskPolicyFixture(settingsOwner),
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: () => orchestrator,
+
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       messageBus,
       isInteractiveEnvironment: () => true,
     });
@@ -520,10 +549,8 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       ...taskPolicyFixture(settingsOwner),
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: () => orchestrator,
+
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       messageBus,
       isInteractiveEnvironment: () => true,
     });
@@ -579,10 +606,8 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(configWithoutSessionId, {
       ...taskPolicyFixture(settingsOwner),
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: () => orchestrator,
+
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       messageBus,
       isInteractiveEnvironment: () => true,
     });
@@ -621,10 +646,8 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       ...taskPolicyFixture(settingsOwner),
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: () => orchestrator,
+
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       messageBus,
       isInteractiveEnvironment: () => false,
     });
@@ -664,10 +687,8 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       ...taskPolicyFixture(settingsOwner),
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: () => orchestrator,
+
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       messageBus,
       isInteractiveEnvironment: () => true,
       openChildDisplay: () => displayCallbacks,
@@ -690,10 +711,8 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       ...taskPolicyFixture(settingsOwner),
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: () => orchestrator,
+
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       messageBus,
       isInteractiveEnvironment: () => true,
     });
@@ -738,10 +757,8 @@ describe('TaskTool', () => {
 
     const tool = new TaskTool(config, {
       ...taskPolicyFixture(settingsOwner),
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: () => orchestrator,
+
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       messageBus,
       isInteractiveEnvironment: () => false,
     });
@@ -781,10 +798,8 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       ...taskPolicyFixture(settingsOwner),
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: () => orchestrator,
+
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       messageBus,
       isInteractiveEnvironment: () => true,
     });
@@ -853,10 +868,8 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       ...taskPolicyFixture(settingsOwner),
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
-      orchestratorFactory: () => orchestrator,
+
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       messageBus,
     });
     const invocation = tool.build({

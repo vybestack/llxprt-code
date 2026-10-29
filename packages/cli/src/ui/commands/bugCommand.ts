@@ -4,15 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import { isBrowserLaunchDisabledDuringTests } from '@vybestack/llxprt-code-core';
+import type { IContent } from '@vybestack/llxprt-code-core';
 import open from 'open';
 import process from 'node:process';
-import {
-  type CommandContext,
-  type SlashCommand,
-  CommandKind,
-} from './types.js';
+import { type SlashCommand, CommandKind } from './types.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import { MessageType } from '../types.js';
 import { getGitCommitInfo } from '../../utils/gitCommitInfo.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
@@ -20,12 +17,20 @@ import { getCliVersion } from '../../utils/version.js';
 import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
 import { exportHistoryForBugReport } from '../utils/historyExportUtils.js';
 
-interface BugCommandDependencies {
+export interface BugCommandOperations {
+  readonly getModel: () => string;
+  readonly getReportUrlTemplate: () => string | undefined;
+  readonly getIdeDisplayName: () => string;
+  readonly getConversationHistory: () => AsyncIterable<IContent> | undefined;
+  readonly addItem: UseHistoryManagerReturn['addItem'];
+}
+
+interface BugCommandDependencies extends BugCommandOperations {
   readonly openUrl: (url: string) => Promise<unknown>;
   readonly isBrowserLaunchDisabledDuringTests: () => boolean;
 }
 
-const defaultDependencies: BugCommandDependencies = {
+const defaultEnvironment = {
   openUrl: open,
   isBrowserLaunchDisabledDuringTests,
 };
@@ -40,18 +45,14 @@ function getSandboxEnv(): string {
   return 'no sandbox';
 }
 
-async function buildBugInfo(context: CommandContext): Promise<string> {
-  const { config } = context.services;
+async function buildBugInfo(operations: BugCommandOperations): Promise<string> {
   const osVersion = `${process.platform} ${process.version}`;
   const sandboxEnv = getSandboxEnv();
-  const modelVersion = config?.getModel() ?? 'Unknown';
+  const modelVersion = operations.getModel();
   const cliVersion = await getCliVersion();
   const gitCommitInfo = getGitCommitInfo();
   const memoryUsage = formatMemoryUsage(process.memoryUsage().rss);
-  const ideClient =
-    (config?.getIdeMode() === true &&
-      config.getIdeClient()?.getDetectedIdeDisplayName()) ??
-    '';
+  const ideClient = operations.getIdeDisplayName();
   const terminalName = terminalCapabilityManager.getTerminalName() ?? 'Unknown';
   const terminalBgColor =
     terminalCapabilityManager.getTerminalBackgroundColor() ?? 'Unknown';
@@ -78,46 +79,28 @@ async function buildBugInfo(context: CommandContext): Promise<string> {
 }
 
 async function appendHistoryExport(
-  context: CommandContext,
+  dependencies: BugCommandDependencies,
   info: string,
 ): Promise<string> {
-  const client = context.services.agent?.agentClient;
-  if (client?.hasChatInitialized() !== true) {
+  const history = dependencies.getConversationHistory();
+  if (history === undefined) {
     return info;
   }
 
   try {
-    const chat = client.getChat() as unknown;
-    const getHistory =
-      typeof chat === 'object' && chat !== null && 'getHistory' in chat
-        ? chat.getHistory
-        : undefined;
-    const history =
-      typeof getHistory === 'function' ? getHistory.call(chat) : undefined;
+    const { filePath } = await exportHistoryForBugReport(history);
+    info += `* **Conversation Transcript:** Exported to \`${filePath}\` (please attach to your bug report)\n`;
 
-    if (Array.isArray(history) && history.length > 0) {
-      const { filePath } = await exportHistoryForBugReport(history);
-      info += `* **Conversation Transcript:** Exported to \`${filePath}\` (please attach to your bug report)\n`;
-
-      await writeCommandOutput(
-        () => context.services.agent?.agentClient.getHistoryService() ?? null,
-        context.services.agent?.session,
-        context.recordingOwner,
-        context.ui.addItem,
-        {
-          type: MessageType.INFO,
-          text: `Conversation history exported to: ${filePath}`,
-        },
-        Date.now(),
-      );
-    }
+    dependencies.addItem(
+      {
+        type: MessageType.INFO,
+        text: `Conversation history exported to: ${filePath}`,
+      },
+      Date.now(),
+    );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    dependencies.addItem(
       {
         type: MessageType.WARNING,
         text: `Warning: Could not export conversation history: ${errorMessage}`,
@@ -132,14 +115,14 @@ async function appendHistoryExport(
 function buildBugReportUrl(
   info: string,
   bugDescription: string,
-  config: CommandContext['services']['config'],
+  operations: BugCommandOperations,
 ): string {
   let bugReportUrl =
     'https://github.com/vybestack/llxprt-code/issues/new?template=bug_report.yml&title={title}&info={info}';
 
-  const bugCommandSettings = config?.getBugCommand();
-  if (bugCommandSettings?.urlTemplate) {
-    bugReportUrl = bugCommandSettings.urlTemplate;
+  const template = operations.getReportUrlTemplate();
+  if (template) {
+    bugReportUrl = template;
   }
 
   return bugReportUrl
@@ -148,15 +131,10 @@ function buildBugReportUrl(
 }
 
 async function openBugReport(
-  context: CommandContext,
-  bugReportUrl: string,
   dependencies: BugCommandDependencies,
+  bugReportUrl: string,
 ): Promise<void> {
-  await writeCommandOutput(
-    () => context.services.agent?.agentClient.getHistoryService() ?? null,
-    context.services.agent?.session,
-    context.recordingOwner,
-    context.ui.addItem,
+  dependencies.addItem(
     {
       type: MessageType.INFO,
       text: `To submit your bug report, please open the following URL in your browser:\n${bugReportUrl}`,
@@ -172,11 +150,7 @@ async function openBugReport(
     await dependencies.openUrl(bugReportUrl);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    dependencies.addItem(
       {
         type: MessageType.ERROR,
         text: `Could not open URL in browser: ${errorMessage}`,
@@ -187,24 +161,30 @@ async function openBugReport(
 }
 
 export function createBugCommand(
-  dependencies: BugCommandDependencies = defaultDependencies,
+  operations: BugCommandOperations,
+  environment: Pick<
+    BugCommandDependencies,
+    'openUrl' | 'isBrowserLaunchDisabledDuringTests'
+  > = defaultEnvironment,
 ): SlashCommand {
+  const dependencies: BugCommandDependencies = {
+    ...operations,
+    ...environment,
+  };
   return {
     name: 'bug',
     description: 'submit a bug report',
     kind: CommandKind.BUILT_IN,
-    action: async (context: CommandContext, args?: string): Promise<void> => {
+    action: async (_context, args?: string): Promise<void> => {
       const bugDescription = (args ?? '').trim();
-      const info = await buildBugInfo(context);
-      const infoWithHistory = await appendHistoryExport(context, info);
+      const info = await buildBugInfo(dependencies);
+      const infoWithHistory = await appendHistoryExport(dependencies, info);
       const bugReportUrl = buildBugReportUrl(
         infoWithHistory,
         bugDescription,
-        context.services.config,
+        dependencies,
       );
-      await openBugReport(context, bugReportUrl, dependencies);
+      await openBugReport(dependencies, bugReportUrl);
     },
   };
 }
-
-export const bugCommand = createBugCommand();

@@ -33,6 +33,10 @@ export interface ResponsesRequest {
   };
   readonly invocation: {
     readonly runtimeId: string;
+    readonly fetch: (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => Promise<Response>;
     readonly sessionId?: string;
     readonly signal?: AbortSignal;
     readonly ephemerals: Readonly<Record<string, unknown>>;
@@ -89,6 +93,7 @@ export function captureResponsesRequest(
     }),
     invocation: Object.freeze({
       runtimeId: invocation.runtimeId,
+      fetch: invocation.fetch,
       sessionId: invocation.sessionId,
       signal: invocation.signal,
       ephemerals,

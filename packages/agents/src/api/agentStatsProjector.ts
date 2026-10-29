@@ -7,7 +7,7 @@
 /**
  * P20 stats/compression projection helpers extracted from agentImpl.ts to keep
  * that module under the project's max-lines limit. These are pure projection
- * functions over the uiTelemetryService singleton and a HistoryService; they
+ * functions over the session-owned metric source and a HistoryService; they
  * hold no state.
  *
  * @plan:PLAN-20260617-COREAPI.P20
@@ -17,7 +17,10 @@
 
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
+import type {
+  SessionMetricReads,
+  SessionMetricSubscriptions,
+} from '@vybestack/llxprt-code-telemetry';
 import type { CompressionResult } from './agent.js';
 import type { SessionStats } from './agent.js';
 
@@ -30,15 +33,16 @@ export function projectCurrentSequenceModel(
 export function subscribeSessionStats(
   readHistoryService: () => HistoryService | null,
   cb: (stats: SessionStats) => void,
+  metrics: SessionMetricReads & SessionMetricSubscriptions,
 ): () => void {
-  const handler = (): void => cb(projectSessionStats(readHistoryService()));
+  const handler = (): void =>
+    cb(projectSessionStats(readHistoryService(), metrics));
   handler();
-  uiTelemetryService.on('update', handler);
-  return () => uiTelemetryService.off('update', handler);
+  return metrics.subscribe(handler);
 }
 
 /**
- * Projects the in-process uiTelemetryService singleton canonical snapshot +
+ * Projects the in-process session-owned metric source canonical snapshot +
  * HistoryService into the public SessionStats shape. Token fields, API
  * counts, tool counts, and timing all come from the single canonical
  * SessionMetricsAggregator snapshot — no split fallback to
@@ -54,15 +58,16 @@ export function subscribeSessionStats(
  */
 export function projectSessionStats(
   historyService: HistoryService | null,
+  metrics: SessionMetricReads,
 ): SessionStats {
-  const snap = uiTelemetryService.getSessionSnapshot();
+  const snap = metrics.getSessionSnapshot();
   return {
     promptTokens: snap.totalInputTokens,
     candidateTokens: snap.totalOutputTokens,
     totalTokens: snap.totalInputTokens + snap.totalOutputTokens,
     cachedTokens: snap.totalCachedTokens,
     contextWindowSize: 0,
-    contextWindowUsed: uiTelemetryService.getLastPromptTokenCount(),
+    contextWindowUsed: metrics.getLastPromptTokenCount(),
     turnCount: readTurnCount(historyService),
     apiRequests: snap.totalApiRequests,
     apiErrors: snap.totalApiErrors,
@@ -98,23 +103,31 @@ export function projectCompressionResult(
   promptId: string,
   originalTokenCount: number,
   newTokenCount: number,
+  wasRecentlyCompressed: boolean,
 ): CompressionResult {
+  const detail = {
+    result: raw,
+    originalTokenCount,
+    newTokenCount,
+    wasRecentlyCompressed,
+  };
   if (raw === PerformCompressionResult.COMPRESSED) {
     return {
       status: 'compressed',
       originalTokenCount: Math.max(originalTokenCount, newTokenCount),
       newTokenCount,
       promptId,
+      detail,
     };
   }
   if (raw === PerformCompressionResult.NOOP) {
     // Structural no-op: history unchanged by a deterministic strategy guard.
     // Distinct from 'skipped' (cooldown/empty) per issue #2602.
-    return { status: 'noop', promptId };
+    return { status: 'noop', promptId, detail };
   }
   const status: 'skipped' | 'failed' =
     raw === PerformCompressionResult.FAILED ? 'failed' : 'skipped';
-  return { status, promptId };
+  return { status, promptId, detail };
 }
 /**
  * Reads the conversation turn/message count from the HistoryService. Returns 0

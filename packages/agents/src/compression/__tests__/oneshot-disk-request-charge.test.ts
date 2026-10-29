@@ -28,7 +28,12 @@ async function charge(size: number): Promise<number> {
       const oracle = await oneshotOracle(history, size);
       const expected = expectedCharge(oracle.requests[0]);
       const { runtime, transport } = oneshotSetup(history);
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const snapshot = await history.openDumpSnapshot();
       const source = new HistoryDensityRows();
       const candidate = new HistoryDensityRows();
@@ -38,6 +43,7 @@ async function charge(size: number): Promise<number> {
         const metadata = await buildCompressionMetadata(
           'charge',
           runtime,
+          undefined,
           history,
           async () => ({
             provider: transport,

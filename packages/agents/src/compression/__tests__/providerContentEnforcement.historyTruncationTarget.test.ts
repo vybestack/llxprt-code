@@ -1,3 +1,4 @@
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 import { createHistoryRuntimeFixture } from '../../core/__tests__/history-runtime-fixture.js';
 /**
  * @license
@@ -94,10 +95,17 @@ async function buildHarness(): Promise<Harness> {
   const pending = [textContent('human', `pending ${'word '.repeat(500)}`)];
 
   const handler = new CompressionHandler(
-    runtimeContext,
+    chatSessionPorts(runtimeContext).compression,
+    undefined,
     historyService,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     { maxOutputTokens: COMPLETION_BUDGET },
-    () => ({ provider: {} as never, runtime: {} as never }),
+    () => {
+      throw new Error('Truncation must not resolve a summary provider');
+    },
     async () => {},
   );
   // Middle-out and one-shot both refuse on a small number of large

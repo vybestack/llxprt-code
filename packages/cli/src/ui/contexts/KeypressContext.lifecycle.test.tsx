@@ -43,6 +43,7 @@ class MockStdin extends EventEmitter {
   isTTY = true;
   isRaw: boolean | undefined = false;
   setRawMode = vi.fn();
+  setEncoding = vi.fn();
   override on = this.addListener;
   override removeListener = super.removeListener;
   resume = vi.fn();

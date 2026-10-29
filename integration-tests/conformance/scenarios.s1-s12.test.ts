@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+import { runTwoAgentIdentity } from '../../packages/agents/src/api/__tests__/two-agent-identity.driver.js';
+import { usePromptFixture } from '../../packages/agents/src/api/__tests__/helpers/prompt-fixture.js';
+import { runSameAgentAdmission } from '../../packages/agents/src/api/__tests__/same-agent-admission.driver.js';
 
 /**
  * Frozen slice A contract: #3633, architecture report 2026-09-08, section 8.
@@ -25,6 +28,8 @@ import { describe, it } from 'bun:test';
  * isolation and S12 soak. A smoke or packed MCP import never proves the suite.
  */
 describe('Slice A conformance targets (#3633)', () => {
+  usePromptFixture();
+
   /**
    * S1 | Two-agent identity | Gates: C and E.
    * Clients: client-neutral core; additionally runs per client cutover.
@@ -38,7 +43,11 @@ describe('Slice A conformance targets (#3633)', () => {
    * Skip tracking: #2616 and #2615 own execution/session isolation; #3633 freezes
    * the contract. Controller independence alone does not satisfy the agent matrix.
    */
-  it.skip('S1: Two-agent identity');
+  it('S1: Two-agent identity', async () => {
+    const result = await runTwoAgentIdentity();
+    expect(result.requestsA).toHaveLength(2);
+    expect(result.requestsB).toHaveLength(3);
+  }, 30_000);
 
   /**
    * S2 | Same-agent admission | Gates: C.
@@ -53,7 +62,13 @@ describe('Slice A conformance targets (#3633)', () => {
    * Skip tracking: #2616, slice C under #2619; #3647's profile-command boundary
    * does not prove public ordinary-turn admission or rebuild exclusion.
    */
-  it.skip('S2: Same-agent admission');
+  it('S2: Same-agent admission', async () => {
+    expect(await runSameAgentAdmission()).toStrictEqual([
+      'capture-a',
+      'capture-a',
+      'after-safe-boundary',
+    ]);
+  }, 30_000);
 
   /**
    * S3 | Failure injection matrix | Gates: D.

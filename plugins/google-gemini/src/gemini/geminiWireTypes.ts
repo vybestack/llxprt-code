@@ -270,6 +270,24 @@ export interface GeminiModelsSeam {
 }
 
 /**
+ * A Google credential file's JSON, as parsed from an explicit value or a file.
+ * The credential source validates it by `type`; the library validates its fields.
+ */
+export type GoogleCredentialJson = Readonly<Record<string, unknown>>;
+
+/**
+ * The environment facts Google credential discovery depends on, captured by the
+ * caller so the credential source never reads `process.env`.
+ */
+export interface GoogleCredentialEnvironment {
+  readonly credentialsFile?: string;
+  readonly wellKnownFile?: string;
+  readonly metadataHost?: string;
+  readonly metadataDetection?: string;
+  readonly quotaProject?: string;
+}
+
+/**
  * Options accepted when constructing a Gemini client.
  *
  * `vertexai` plus `project`/`location` select the Vertex endpoint; `apiKey`
@@ -278,7 +296,10 @@ export interface GeminiModelsSeam {
 export interface GeminiApiClientOptions {
   requestMetadata?: Record<string, unknown>;
   requestContents?: () => AsyncIterable<Content>;
+  fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   apiKey?: string;
+  credentials?: GoogleCredentialJson;
+  credentialEnvironment?: GoogleCredentialEnvironment;
   vertexai?: boolean;
   googleAuthOptions?: GoogleAuthOptions;
   project?: string;

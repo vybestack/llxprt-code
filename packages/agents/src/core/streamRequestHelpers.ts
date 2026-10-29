@@ -23,6 +23,7 @@ import type {
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
+import { logApiRequest, type TurnTelemetryPorts } from './turnLogging.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -331,6 +332,18 @@ export function turnSystemInstruction(
   session: Pick<ChatSessionConfig, 'systemInstruction'>,
 ): ChatSessionConfig['systemInstruction'] {
   return params.config?.systemInstruction ?? session.systemInstruction;
+}
+
+/**
+ * Log the outgoing API request through the turn telemetry ports.
+ */
+export function logOutgoingRequest(
+  telemetry: TurnTelemetryPorts,
+  requestPayload: { contents: IContent[] },
+  modelName: string,
+  promptId: string,
+): Promise<void> {
+  return logApiRequest(telemetry, requestPayload.contents, modelName, promptId);
 }
 
 const systemInstructionLogger = new DebugLogger(

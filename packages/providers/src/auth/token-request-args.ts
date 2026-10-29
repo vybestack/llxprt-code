@@ -22,6 +22,15 @@ export function resolveImplicitBucketToCheck(
   return profileBuckets.length === 1 ? profileBuckets[0] : undefined;
 }
 
+export function resolveTokenRequestBucket(bucket: unknown): {
+  explicitBucket: boolean;
+  requestMetadata: OAuthTokenRequestMetadata | undefined;
+} {
+  const explicitBucket = typeof bucket === 'string';
+  const requestMetadata = extractRequestMetadata(bucket);
+  return { explicitBucket, requestMetadata };
+}
+
 export function extractRequestMetadata(
   bucket: string | unknown,
 ): OAuthTokenRequestMetadata | undefined {

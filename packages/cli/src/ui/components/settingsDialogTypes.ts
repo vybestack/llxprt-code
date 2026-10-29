@@ -5,14 +5,14 @@
  */
 
 import type { LoadedSettings, SettingScope } from '../../config/settings.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { DynamicToolSettingsSource } from '../../utils/dynamicSettings.js';
 
 export interface SettingsDialogProps {
   settings: LoadedSettings;
   onSelect: (settingName: string | undefined, scope: SettingScope) => void;
   onRestartRequest?: () => void;
   availableTerminalHeight?: number;
-  config?: CliUiRuntime;
+  config?: DynamicToolSettingsSource;
 }
 
 export type PendingValue = boolean | number | string | string[];

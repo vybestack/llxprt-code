@@ -9,14 +9,43 @@ import {
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { AgentSessionControl } from '../agent.js';
 import type { SessionControlDeps } from './sessionControl.js';
 import { warnSkippedRecordings } from './skippedRecordings.js';
 import {
   adoptRecordingSessionId,
   cleanupSessionResources,
+  cleanupPreviousSession,
   captureRollbackFailure,
   restoreConfigSessionId,
 } from './sessionControlRollback.js';
+
+async function rollbackAdoptedSession(
+  deps: SessionControlDeps,
+  result: ResumeResult,
+  integration: RecordingIntegration,
+  priorSessionId: string,
+  adoptionAttempted: boolean,
+  discardOnFailure: boolean,
+): Promise<unknown[]> {
+  const filePath = discardOnFailure ? result.recording.getFilePath() : null;
+  const failures = await cleanupSessionResources(
+    integration,
+    result.recording,
+    result.lockHandle,
+  );
+  await restoreConfigSessionId(
+    deps.readOwnedSessionId,
+    deps.adoptOwnedSessionId,
+    deps.sessionIdentityOwnership,
+    priorSessionId,
+    adoptionAttempted,
+    failures,
+  );
+  if (filePath !== null)
+    await captureRollbackFailure(failures, () => rm(filePath, { force: true }));
+  return failures;
+}
 
 export async function adoptSessionResume(
   deps: SessionControlDeps,
@@ -30,10 +59,12 @@ export async function adoptSessionResume(
   publish: (integration: RecordingIntegration) => () => void,
   owner: object,
   discardOnFailure = false,
+  options?: Parameters<AgentSessionControl['resume']>[1],
 ): Promise<void> {
-  const client = deps.resolveClient();
+  const client = deps.nativeHistory;
   const integration = new RecordingIntegration(result.recording);
   let adoptionAttempted = false;
+  const replacement = { attempted: false, completed: false };
   let restorePublication: (() => void) | undefined;
   try {
     if (client.getHistoryService() === null) await client.resumeChat([]);
@@ -42,10 +73,13 @@ export async function adoptSessionResume(
       throw new Error(
         'History service unavailable after resume initialization',
       );
+    replacement.attempted = true;
     await history.adoptResumeBoot(result.recording, result.boot, async () => {
+      replacement.completed = true;
       await integration.subscribeToJournal(history, owner);
       adoptRecordingSessionId(
-        deps.config,
+        deps.readOwnedSessionId,
+        deps.adoptOwnedSessionId,
         deps.sessionIdentityOwnership,
         prior.sessionId,
         result.recording,
@@ -57,23 +91,25 @@ export async function adoptSessionResume(
     });
   } catch (error) {
     restorePublication?.();
-    const filePath = discardOnFailure ? result.recording.getFilePath() : null;
-    const failures = await cleanupSessionResources(
+    const failures = await rollbackAdoptedSession(
+      deps,
+      result,
       integration,
-      result.recording,
-      result.lockHandle,
-    );
-    await restoreConfigSessionId(
-      deps.config,
-      deps.sessionIdentityOwnership,
       prior.sessionId,
       adoptionAttempted,
-      failures,
+      discardOnFailure,
     );
-    if (filePath !== null)
-      await captureRollbackFailure(failures, () =>
-        rm(filePath, { force: true }),
+    if (
+      options?.startup === true &&
+      replacement.attempted &&
+      !replacement.completed &&
+      failures.length === 0
+    ) {
+      options.onStartupRestoreFailure?.(
+        result.recording.getSessionId(),
+        error instanceof Error ? error.message : String(error),
       );
+    }
     if (failures.length > 0)
       throw new AggregateError(
         [error, ...failures],
@@ -82,16 +118,7 @@ export async function adoptSessionResume(
     throw error;
   }
   await client.discardDeferredHistory();
-  const failures = await cleanupSessionResources(
-    prior.integration,
-    prior.recording,
-    prior.lock,
-  );
-  if (failures.length > 0)
-    throw new AggregateError(
-      failures,
-      'Previous session cleanup failed after adoption',
-    );
+  await cleanupPreviousSession(prior.integration, prior.recording, prior.lock);
 }
 
 export async function openSessionResume(
@@ -103,7 +130,7 @@ export async function openSessionResume(
   const result = await resumeSession({
     continueRef: target === 'latest' ? CONTINUE_LATEST : target,
     projectHash,
-    chatsDir: deps.config.projectChatsDir,
+    chatsDir: deps.paths.projectChatsDir,
     currentProvider: deps.getProvider(),
     currentModel: deps.getModel(),
     workspaceDirs: [...deps.directories()],

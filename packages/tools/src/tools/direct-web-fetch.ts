@@ -72,7 +72,13 @@ export class DirectWebFetchTool extends BaseDeclarativeTool<
 > {
   static readonly Name = DIRECT_WEB_FETCH_TOOL;
 
-  constructor(private readonly host: IToolHost) {
+  constructor(
+    private readonly host: IToolHost,
+    private readonly requestFetch: (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => Promise<Response> = globalThis.fetch,
+  ) {
     super(
       DirectWebFetchTool.Name,
       'DirectWebFetch',
@@ -105,7 +111,12 @@ export class DirectWebFetchTool extends BaseDeclarativeTool<
     params: DirectWebFetchToolParams,
     messageBus: IToolMessageBus,
   ): ToolInvocation<DirectWebFetchToolParams, ToolResult> {
-    return new DirectWebFetchToolInvocation(this.host, params, messageBus);
+    return new DirectWebFetchToolInvocation(
+      this.host,
+      params,
+      messageBus,
+      this.requestFetch,
+    );
   }
 }
 
@@ -117,6 +128,10 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
     _host: IToolHost,
     params: DirectWebFetchToolParams,
     messageBus: IToolMessageBus,
+    private readonly requestFetch: (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => Promise<Response>,
   ) {
     super(params, messageBus);
   }
@@ -214,7 +229,7 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
         try {
           if (overallSignal.aborted) attemptController.abort();
 
-          const resp = await fetch(this.params.url, {
+          const resp = await this.requestFetch(this.params.url, {
             signal: attemptController.signal,
             headers: {
               'User-Agent':

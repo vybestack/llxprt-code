@@ -80,7 +80,7 @@ export class AuthPrecedenceResolver {
   private config: AuthPrecedenceConfig;
   private oauthManager?: OAuthManager;
   private settingsService?: ISettingsService;
-  private providerKeyStorage?: IProviderKeyStorage;
+  private providerKeyStorage?: Pick<IProviderKeyStorage, 'getKey'>;
   private logger: IDebugLogger;
 
   /**
@@ -97,7 +97,7 @@ export class AuthPrecedenceResolver {
     options?: {
       oauthManager?: OAuthManager;
       settingsService?: ISettingsService;
-      providerKeyStorage?: IProviderKeyStorage;
+      providerKeyStorage?: Pick<IProviderKeyStorage, 'getKey'>;
       logger?: IDebugLogger;
     },
   ) {

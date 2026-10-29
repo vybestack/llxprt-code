@@ -63,7 +63,11 @@ describe('interactive owner session replay', () => {
     await first.session.setRecording({ enabled: false });
 
     const next = await build(root, 'second-owner');
-    await resumeOwnerSession(next, 'first-owner');
+    await resumeOwnerSession(
+      next.session.resume.bind(next.session),
+      'first-owner',
+      next.session.listBrowserTargetsDetailed.bind(next.session),
+    );
     expect(
       (await Array.fromAsync(next.streamHistory())).some((item) =>
         item.blocks.some(
@@ -101,7 +105,11 @@ describe('interactive owner session replay', () => {
     }
     const checkpoint = await agent.session.createCheckpoint('fork-point');
     const source = agent.session.getRecording().path;
-    await resumeOwnerSession(agent, checkpoint.checkpointId);
+    await resumeOwnerSession(
+      agent.session.resume.bind(agent.session),
+      checkpoint.checkpointId,
+      agent.session.listBrowserTargetsDetailed.bind(agent.session),
+    );
     expect(
       (await readJournalItems(agent)).some(
         (item) => item.type === 'user' && item.text === 'before owner fork',
@@ -127,9 +135,13 @@ describe('interactive owner session replay', () => {
     for await (const _event of agent.stream('retain failed resume session')) {
       // Consume the real Agent turn.
     }
-    await expect(resumeOwnerSession(agent, 'absent-owner')).rejects.toThrow(
-      'Failed to resume session',
-    );
+    await expect(
+      resumeOwnerSession(
+        agent.session.resume.bind(agent.session),
+        'absent-owner',
+        agent.session.listBrowserTargetsDetailed.bind(agent.session),
+      ),
+    ).rejects.toThrow('Failed to resume session');
     await agent.session.recordRecordingEvent({
       type: 'directories_changed',
       directories: ['/still-running-after-failed-resume'],
@@ -139,9 +151,9 @@ describe('interactive owner session replay', () => {
     expect((await readRecordedFacts(path)).directories).toStrictEqual([
       '/still-running-after-failed-resume',
     ]);
-    expect(JSON.stringify(await agent.session.getHistory())).toContain(
-      'retain failed resume session',
-    );
+    expect(
+      JSON.stringify(await Array.fromAsync(agent.streamHistory())),
+    ).toContain('retain failed resume session');
     await agent.session.setRecording({ enabled: false });
     expect(
       (await readdir(dirname(path))).filter((file) => file.endsWith('.lock')),

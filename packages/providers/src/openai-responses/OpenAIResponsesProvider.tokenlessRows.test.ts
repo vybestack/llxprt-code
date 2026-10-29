@@ -55,6 +55,7 @@ async function setupWith(retries: unknown) {
   const options: GenerateChatOptions = {
     ...base,
     invocation: createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: base.invocation.runtimeId,
       providerName: setup.provider.name,
       ephemeralsSnapshot: {

@@ -40,7 +40,7 @@ export async function heapTurn(
       `turn ${turn}\n`,
     );
   }
-  const history = fixture.live.agentClient.getHistoryService();
+  const history = fixture.clientFor(fixture.live).getHistoryService();
   if (history === null) throw new Error('Missing whole-product history');
   await history.waitForTokenUpdates();
   await history.waitForCommit();

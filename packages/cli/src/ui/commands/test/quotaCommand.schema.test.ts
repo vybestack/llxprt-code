@@ -4,20 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { beforeEach, describe, it, expect } from 'bun:test';
 import { createCompletionHandler } from '../schema/index.js';
-import { quotaCommand } from '../quotaCommand.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
+import { registerQuotaCommand } from '../../../__tests__/credential-command-test-owner.js';
+import type { SlashCommand } from '../types.js';
 import type {
   CommandArgumentSchema,
   CompletionResult,
 } from '../schema/types.js';
 
 describe('quotaCommand schema completion', () => {
-  // The completion handler is read-only with respect to the context for these
-  // tests (it never mutates it), so a single shared mock is safe and avoids
-  // per-test boilerplate.
-  const mockContext = createMockCommandContext();
+  let mockContext: ReturnType<typeof createMockCommandContext>;
+  let quotaCommand: SlashCommand;
+  beforeEach(() => {
+    mockContext = createMockCommandContext();
+    quotaCommand = registerQuotaCommand(mockContext);
+  });
 
   /**
    * Resolve the reset subcommand, asserting its schema exists at runtime and
@@ -41,7 +44,7 @@ describe('quotaCommand schema completion', () => {
    * Invoke the reset completion handler and return the full result object.
    */
   async function getResetResult(partialArg: string): Promise<CompletionResult> {
-    const handler = createCompletionHandler(getResetSchema());
+    const handler = createCompletionHandler(getResetSchema(), true);
     return handler(
       mockContext,
       {

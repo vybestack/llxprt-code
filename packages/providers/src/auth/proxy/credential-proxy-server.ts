@@ -207,7 +207,8 @@ export class CredentialProxyServer {
     // connected to hang its next request to the request timeout rather than
     // report the loss (issue #3061).
     for (const socket of this.connections) {
-      this.endAndDestroyAfter(socket, Buffer.alloc(0));
+      if (socket.writableEnded) socket.destroy();
+      else this.endAndDestroyAfter(socket, Buffer.alloc(0));
     }
     this.connections.clear();
 

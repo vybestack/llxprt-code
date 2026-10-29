@@ -22,6 +22,41 @@ import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';
 
 const logger = new DebugLogger('llxprt:oauth:token');
 
+export type RefreshErrorPolicy = 'return-null' | 'throw';
+
+/**
+ * Releases refresh locks for one owner and retains each release failure until
+ * the owner retires. The releasing caller still sees the failure; retirement
+ * reports it once, because the caller's outcome does not reach the owner.
+ */
+export class RefreshLockReleases {
+  private readonly failures: unknown[] = [];
+
+  constructor(private readonly tokenStore: TokenStore) {}
+
+  async release(
+    providerName: string,
+    bucket: string | undefined,
+  ): Promise<void> {
+    try {
+      await this.tokenStore.releaseRefreshLock(providerName, bucket);
+    } catch (error) {
+      this.failures.push(error);
+      throw error;
+    }
+  }
+
+  /** Throws the retained failures once, then forgets them. */
+  throwRetained(): void {
+    if (this.failures.length > 0) {
+      throw new AggregateError(
+        this.failures.splice(0),
+        'Refresh lock release failed',
+      );
+    }
+  }
+}
+
 // --------------------------------------------------------------------------
 // Refresh-lock-miss handler
 // --------------------------------------------------------------------------
@@ -36,6 +71,7 @@ export async function handleRefreshLockMiss(
   thirtySecondsFromNow: number,
   tokenStore: TokenStore,
   proactiveRenewalManager: ProactiveRenewalManager,
+  releases: RefreshLockReleases,
   signal?: AbortSignal,
 ): Promise<OAuthToken | null> {
   logger.debug(
@@ -75,7 +111,7 @@ export async function handleRefreshLockMiss(
       try {
         return await readFreshToken();
       } finally {
-        await tokenStore.releaseRefreshLock(providerName, bucketToUse);
+        await releases.release(providerName, bucketToUse);
       }
     }
 
@@ -111,6 +147,7 @@ export async function executeTokenRefresh(
   providerRegistry: ProviderRegistry,
   proactiveRenewalManager: ProactiveRenewalManager,
   signal?: AbortSignal,
+  errorPolicy: RefreshErrorPolicy = signal ? 'throw' : 'return-null',
 ): Promise<OAuthToken | null> {
   try {
     const recheckToken = await tokenStore.getToken(providerName, bucketToUse);
@@ -158,6 +195,8 @@ export async function executeTokenRefresh(
       return null;
     }
 
+    // Upstream may have consumed a single-use refresh token. Persist its
+    // replacement before cancellation can release the refresh lock.
     const mergedToken = mergeRefreshedToken(
       (recheckToken ?? token) as OAuthTokenWithExtras,
       refreshedToken as OAuthTokenWithExtras,
@@ -174,7 +213,7 @@ export async function executeTokenRefresh(
     );
     return mergedToken;
   } catch (refreshError) {
-    if (signal) throw refreshError;
+    if (signal?.aborted === true || errorPolicy === 'throw') throw refreshError;
     logger.debug(
       () =>
         `[FLOW] Token refresh FAILED for ${providerName}: ${refreshError instanceof Error ? refreshError.message : refreshError}`,
@@ -274,7 +313,9 @@ export async function refreshTokenUnderLock(
   tokenStore: TokenStore,
   providerRegistry: ProviderRegistry,
   renewals: ProactiveRenewalManager,
+  releases: RefreshLockReleases,
   signal?: AbortSignal,
+  errorPolicy: RefreshErrorPolicy = signal ? 'throw' : 'return-null',
 ): Promise<OAuthToken | null> {
   logger.debug(
     () =>
@@ -294,6 +335,7 @@ export async function refreshTokenUnderLock(
       thirtySecondsFromNow,
       tokenStore,
       renewals,
+      releases,
       signal,
     );
   }
@@ -309,8 +351,9 @@ export async function refreshTokenUnderLock(
       providerRegistry,
       renewals,
       signal,
+      errorPolicy,
     );
   } finally {
-    await tokenStore.releaseRefreshLock(providerName, bucketToUse);
+    await releases.release(providerName, bucketToUse);
   }
 }

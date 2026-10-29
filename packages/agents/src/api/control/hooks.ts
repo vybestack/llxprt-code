@@ -24,28 +24,27 @@
  *    observers.
  */
 
-import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
-  MessageBusType,
   type HookExecutionRequest as BusHookExecutionRequest,
   type HookExecutionResponse as BusHookExecutionResponse,
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import {
-  triggerSessionStartHook,
   triggerSessionEndHook,
+  triggerSessionStartHook,
 } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
+import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
 import {
   HookEventName,
-  SessionStartSource,
   SessionEndReason,
+  SessionStartSource,
   type HookInput,
   type HookOutput,
-  type SessionStartInput,
   type SessionEndInput,
+  type SessionStartInput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type {
   AgentHookControl,
+  HookExecutionPhase,
   HookExecutionRequest,
   HookExecutionResponse,
   HookInfo,
@@ -80,7 +79,12 @@ export interface HookControlDeps {
     | 'finishSession'
   >;
   /** The single shared MessageBus the runtime threads through every surface. */
-  readonly messageBus: MessageBus;
+  readonly observeRequests: (
+    listener: (request: BusHookExecutionRequest) => void,
+  ) => Unsubscribe;
+  readonly observeResponses: (
+    listener: (response: BusHookExecutionResponse) => void,
+  ) => Unsubscribe;
   /**
    * Resolves the per-agent session id used to populate the hook input. Read
    * lazily so a session id assigned after construction is observed.
@@ -116,6 +120,9 @@ export class HookControl implements AgentHookControl {
   private static readonly MAX_PENDING_CORRELATIONS = 1000;
 
   private readonly observers = new Set<HookObserver>();
+  private readonly phaseObservers = new Set<
+    (phase: HookExecutionPhase) => void
+  >();
   private readonly pendingByCorrelation = new Map<
     string,
     BusHookExecutionRequest
@@ -136,6 +143,20 @@ export class HookControl implements AgentHookControl {
    */
   execution(identity: Parameters<SessionHookOwner['execution']>[0]) {
     return this.deps.hookOperations.execution(identity);
+  }
+
+  subscribeExecutionPhase(
+    listener: (phase: HookExecutionPhase) => void,
+  ): Unsubscribe {
+    this.phaseObservers.add(listener);
+    return () => {
+      this.phaseObservers.delete(listener);
+    };
+  }
+
+  private emitPhase(phase: HookExecutionPhase): void {
+    const data = Object.freeze({ ...phase });
+    for (const listener of [...this.phaseObservers]) listener(data);
   }
 
   onHookExecution(cb: HookObserver): Unsubscribe {
@@ -243,6 +264,7 @@ export class HookControl implements AgentHookControl {
    */
   clear(): void {
     this.observers.clear();
+    this.phaseObservers.clear();
     this.pendingByCorrelation.clear();
   }
 
@@ -308,31 +330,31 @@ export class HookControl implements AgentHookControl {
    * @requirement:REQ-015
    */
   private subscribeToBus(): void {
-    this.busUnsubscribeRequest =
-      this.deps.messageBus.subscribe<BusHookExecutionRequest>(
-        MessageBusType.HOOK_EXECUTION_REQUEST,
-        (message) => {
-          this.pendingByCorrelation.set(message.payload.correlationId, message);
-          // Bound the buffer: if a response never arrives the map would grow
-          // unbounded. Evict the oldest insertion-ordered entry past the cap.
-          if (
-            this.pendingByCorrelation.size >
-            HookControl.MAX_PENDING_CORRELATIONS
-          ) {
-            const oldest = this.pendingByCorrelation.keys().next().value;
-            if (oldest !== undefined) {
-              this.pendingByCorrelation.delete(oldest);
-            }
-          }
-        },
-      );
-    this.busUnsubscribeResponse =
-      this.deps.messageBus.subscribe<BusHookExecutionResponse>(
-        MessageBusType.HOOK_EXECUTION_RESPONSE,
-        (message) => {
-          this.handleBusResponse(message);
-        },
-      );
+    this.busUnsubscribeRequest = this.deps.observeRequests((message) => {
+      this.pendingByCorrelation.set(message.payload.correlationId, message);
+      this.emitPhase({
+        phase: 'start',
+        eventName: message.payload.eventName,
+        correlationId: message.payload.correlationId,
+      });
+      // Bound the buffer: if a response never arrives the map would grow
+      // unbounded. Evict the oldest insertion-ordered entry past the cap.
+      if (
+        this.pendingByCorrelation.size > HookControl.MAX_PENDING_CORRELATIONS
+      ) {
+        const oldest = this.pendingByCorrelation.keys().next().value;
+        if (oldest !== undefined) {
+          this.pendingByCorrelation.delete(oldest);
+        }
+      }
+    });
+    this.busUnsubscribeResponse = this.deps.observeResponses((message) => {
+      this.emitPhase({
+        phase: 'end',
+        correlationId: message.payload.correlationId,
+      });
+      this.handleBusResponse(message);
+    });
   }
 
   /**
@@ -467,14 +489,16 @@ export class HookControl implements AgentHookControl {
 
 export function createAgentHookControl(
   hookOperations: HookControlDeps['hookOperations'],
-  messageBus: MessageBus,
+  observeRequests: HookControlDeps['observeRequests'],
+  observeResponses: HookControlDeps['observeResponses'],
   sessionId: () => string,
   cwd: () => string,
   transcriptPath: () => string | undefined,
 ): HookControl {
   return new HookControl({
     hookOperations,
-    messageBus,
+    observeRequests,
+    observeResponses,
     sessionId,
     cwd,
     transcriptPath,

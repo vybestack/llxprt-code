@@ -1,3 +1,4 @@
+import { capturedAgentClient } from './helpers/agent-client-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import {
@@ -45,12 +46,12 @@ for (const size of [65]) {
             });
             expect(next.owners.snapshot().liveRows).toBe(0);
             expect(next.owners.within(carryBounds)).toBe(true);
-            expect(agent.agentClient).toBe(previous);
+            expect(capturedAgentClient(agent)).toBe(previous);
             expect(await historyDigest(agent.streamHistory())).toStrictEqual(
               expectedDigest(size),
             );
             await agent.setModel('retried-carry-model');
-            expect(agent.agentClient).not.toBe(previous);
+            expect(capturedAgentClient(agent)).not.toBe(previous);
             expect(await historyDigest(agent.streamHistory())).toStrictEqual(
               expectedDigest(size),
             );

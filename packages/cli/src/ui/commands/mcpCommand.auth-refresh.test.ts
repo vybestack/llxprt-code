@@ -5,8 +5,8 @@
  */
 
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
-import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { registerMcpCommand } from '../../__tests__/credential-command-test-owner.js';
 import type { MessageActionReturn } from './types.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
@@ -41,8 +41,11 @@ function assertMessageAction(
   }
 }
 
-function requireCommandAction(name: string) {
-  const action = mcpCommand.subCommands?.find(
+function requireCommandAction(
+  name: string,
+  context: ReturnType<typeof createMockCommandContext>,
+) {
+  const action = registerMcpCommand(context).subCommands?.find(
     (command) => command.name === name,
   )?.action;
   if (action === undefined) {
@@ -130,7 +133,7 @@ describe('mcpCommand', () => {
         },
       });
 
-      const authCommand = mcpCommand.subCommands?.find(
+      const authCommand = registerMcpCommand(context).subCommands?.find(
         (cmd) => cmd.name === 'auth',
       );
       expect(authCommand).toBeDefined();
@@ -156,7 +159,7 @@ describe('mcpCommand', () => {
         },
       });
 
-      const authCommand = mcpCommand.subCommands?.find(
+      const authCommand = registerMcpCommand(context).subCommands?.find(
         (cmd) => cmd.name === 'auth',
       );
       const result = await authCommand!.action!(context, '');
@@ -216,7 +219,10 @@ describe('mcpCommand', () => {
         messages.push(item);
         return 1;
       };
-      const work = requireCommandAction('auth')(context, 'test-server');
+      const work = requireCommandAction('auth', context)(
+        context,
+        'test-server',
+      );
       expect(reloads).toBe(0);
       expect(JSON.stringify(messages)).not.toContain(
         'Successfully authenticated',
@@ -259,7 +265,10 @@ describe('mcpCommand', () => {
       context.ui.reloadCommands = () => {
         reloads++;
       };
-      const result = await requireCommandAction('auth')(context, 'test-server');
+      const result = await requireCommandAction('auth', context)(
+        context,
+        'test-server',
+      );
       assertMessageAction(result);
       expect(result.messageType).toBe('error');
       expect(result.content).toContain('Failed to authenticate');
@@ -278,7 +287,7 @@ describe('mcpCommand', () => {
         },
       });
 
-      const authCommand = mcpCommand.subCommands?.find(
+      const authCommand = registerMcpCommand(context).subCommands?.find(
         (cmd) => cmd.name === 'auth',
       );
       const result = await authCommand!.action!(context, 'non-existent');
@@ -306,7 +315,7 @@ describe('mcpCommand', () => {
         },
       });
       context.ui.reloadCommands = vi.fn();
-      const reloadAction = requireCommandAction('reload');
+      const reloadAction = requireCommandAction('reload', context);
       const result = await reloadAction(context, '');
 
       expect(context.ui.addItem).toHaveBeenCalledWith(
@@ -332,7 +341,7 @@ describe('mcpCommand', () => {
         },
       });
       context.ui.reloadCommands = vi.fn();
-      const reloadAction = requireCommandAction('reload');
+      const reloadAction = requireCommandAction('reload', context);
       const result = await reloadAction(context, '');
 
       expect(context.ui.addItem).toHaveBeenCalledWith(
@@ -352,7 +361,7 @@ describe('mcpCommand', () => {
         services: { config: mockConfig, agent: createMockAgent({ reload }) },
       });
       context.ui.reloadCommands = vi.fn();
-      const reloadAction = requireCommandAction('reload');
+      const reloadAction = requireCommandAction('reload', context);
       const result = await reloadAction(context, '');
 
       expect(context.ui.addItem).toHaveBeenCalledWith(
@@ -368,7 +377,7 @@ describe('mcpCommand', () => {
       const context = createMockCommandContext({
         services: { config: null, agent: createMockAgent() },
       });
-      const reloadAction = requireCommandAction('reload');
+      const reloadAction = requireCommandAction('reload', context);
       const result = await reloadAction(context, '');
 
       expect(result).toStrictEqual({
@@ -382,7 +391,7 @@ describe('mcpCommand', () => {
       const context = createMockCommandContext({
         services: { config: mockConfig, agent: null },
       });
-      const reloadAction = requireCommandAction('reload');
+      const reloadAction = requireCommandAction('reload', context);
       const result = await reloadAction(context, '');
 
       expect(result).toStrictEqual({
@@ -411,7 +420,7 @@ describe('mcpCommand', () => {
       });
       context.ui.reloadCommands = vi.fn();
 
-      const refreshCommand = mcpCommand.subCommands?.find(
+      const refreshCommand = registerMcpCommand(context).subCommands?.find(
         (cmd) => cmd.name === 'refresh',
       );
       expect(refreshCommand).toBeDefined();
@@ -447,7 +456,7 @@ describe('mcpCommand', () => {
       });
       context.ui.reloadCommands = vi.fn();
 
-      const refreshCommand = mcpCommand.subCommands?.find(
+      const refreshCommand = registerMcpCommand(context).subCommands?.find(
         (cmd) => cmd.name === 'refresh',
       );
 
@@ -481,7 +490,7 @@ describe('mcpCommand', () => {
       });
       context.ui.reloadCommands = vi.fn();
 
-      const refreshCommand = mcpCommand.subCommands?.find(
+      const refreshCommand = registerMcpCommand(context).subCommands?.find(
         (cmd) => cmd.name === 'refresh',
       );
       const result = await refreshCommand!.action!(context, '');
@@ -508,7 +517,7 @@ describe('mcpCommand', () => {
       });
       context.ui.reloadCommands = vi.fn();
 
-      const refreshCommand = mcpCommand.subCommands?.find(
+      const refreshCommand = registerMcpCommand(context).subCommands?.find(
         (cmd) => cmd.name === 'refresh',
       );
       const result = await refreshCommand!.action!(context, '');
@@ -527,9 +536,9 @@ describe('mcpCommand', () => {
         },
       });
 
-      const refreshCommand = mcpCommand.subCommands?.find(
-        (cmd) => cmd.name === 'refresh',
-      );
+      const refreshCommand = registerMcpCommand(
+        contextWithoutConfig,
+      ).subCommands?.find((cmd) => cmd.name === 'refresh');
       const result = await refreshCommand!.action!(contextWithoutConfig, '');
 
       expect(result).toStrictEqual({
@@ -550,9 +559,9 @@ describe('mcpCommand', () => {
         },
       });
 
-      const refreshCommand = mcpCommand.subCommands?.find(
-        (cmd) => cmd.name === 'refresh',
-      );
+      const refreshCommand = registerMcpCommand(
+        contextWithNoAgent,
+      ).subCommands?.find((cmd) => cmd.name === 'refresh');
       const result = await refreshCommand!.action!(contextWithNoAgent, '');
 
       expect(result).toStrictEqual({

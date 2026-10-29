@@ -15,8 +15,6 @@ import {
   type SubagentDefinitionReads,
 } from '../services/workspace-definition-owner.js';
 
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
-
 import type { WorkspacePathOperations } from '../services/workspace-filesystem-owner.js';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 
@@ -531,8 +529,19 @@ describe('tool registry assembly', () => {
   // ─── #3222 review finding: reconcile must report ACTUAL registration ────────
   //
   describe('explicit task registration respects caller workspace ownership', () => {
-    function registration(): TaskToolRegistration {
-      return createTaskRegistration();
+    function registration(
+      config: Config,
+      settings: SessionSettingsOwner,
+      messageBus: MessageBus,
+    ): TaskToolRegistration {
+      return createTaskRegistration(config, {
+        messageBus,
+        readTaskPolicy: () => settings.readTaskPolicy(),
+        readGovernance: () => settings.readToolGovernance([]),
+        launchChild: async () => {
+          throw new Error('Registration-only scenario');
+        },
+      });
     }
 
     it('keeps an excluded task absent without modifying the existing caller catalog', async () => {
@@ -546,7 +555,7 @@ describe('tool registry assembly', () => {
         host,
         createConfigBoundary(),
         new MessageBus(),
-        registration(),
+        registration,
       );
       expect(caller.registry.getTool('task')).toBeUndefined();
       expect(session.registry.getTool('task')).toBeUndefined();
@@ -569,13 +578,13 @@ describe('tool registry assembly', () => {
         host,
         createConfigBoundary(),
         new MessageBus(),
-        registration(),
+        registration,
       );
       const second = await assembleFixtureToolRegistry(
         host,
         createConfigBoundary(),
         new MessageBus(),
-        registration(),
+        registration,
       );
       expect(caller.registry.getTool('task')).toBeUndefined();
       expect(first.registry.getTool('task')).toBeDefined();
@@ -592,8 +601,12 @@ describe('tool registry assembly', () => {
   async function assembleFixtureToolRegistry(
     host: ReturnType<typeof createHost>,
     config: Config,
-    messageBus: Parameters<typeof createToolRegistry>[2],
-    registration?: TaskToolRegistration,
+    messageBus: MessageBus,
+    registration?: (
+      config: Config,
+      settings: SessionSettingsOwner,
+      messageBus: MessageBus,
+    ) => TaskToolRegistration,
     imageOperation?: ImageOperationRunner,
   ): Promise<
     Awaited<ReturnType<typeof createToolRegistry>> & {
@@ -614,50 +627,28 @@ describe('tool registry assembly', () => {
       isTrusted: () => trust.isTrustedFolder(),
     });
     return {
-      ...(await createToolRegistry(
-        host,
+      ...(await createToolRegistry({
+        requestFetch: globalThis.fetch,
         config,
+        host,
         messageBus,
-        () => settingsOwner.readRegistryPolicy(config.getExcludeTools() ?? []),
-        () => settingsOwner.readToolExecutionPolicy(),
-        root.paths,
-        root.files,
-        root.ignore,
-        root.scans,
-        undefined,
-        undefined,
-        registration === undefined
-          ? undefined
-          : {
-              ...registration,
-              create: (config, args) =>
-                registration.create(config, {
-                  ...args,
-                  createChildSettings: () => settingsOwner.createChildStore(),
-                  readTaskPolicy: () => settingsOwner.readTaskPolicy(),
-                  readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
-                  readGovernance: () => settingsOwner.readToolGovernance([]),
-                  instructions: emptyInstructionReads,
-                }),
-              buildArgs: (config, args) =>
-                registration.buildArgs(config, {
-                  ...args,
-                  createChildSettings: () => settingsOwner.createChildStore(),
-                  readTaskPolicy: () => settingsOwner.readTaskPolicy(),
-                  readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
-                  readGovernance: () => settingsOwner.readToolGovernance([]),
-                  instructions: emptyInstructionReads,
-                }),
-            },
-        undefined,
-        true,
-        host.profileDefinitions,
-        host.subagentDefinitions,
-        undefined,
-        trust,
-        undefined,
+        readTaskSchemaPolicy: () =>
+          settingsOwner.readRegistryPolicy(config.getExcludeTools() ?? []),
+        readExecution: () => settingsOwner.readToolExecutionPolicy(),
+        workspace: {
+          paths: root.paths,
+          files: root.files,
+          ignore: root.ignore,
+          scans: root.scans,
+          trust,
+        },
+        definitions: {
+          profiles: host.profileDefinitions,
+          subagents: host.subagentDefinitions,
+        },
+        registration: registration?.(config, settingsOwner, messageBus),
         imageOperation,
-      )),
+      })),
       workspacePaths: root.paths,
     };
   }

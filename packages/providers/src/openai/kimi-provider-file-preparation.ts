@@ -165,7 +165,7 @@ export async function prepareKimiProviderFiles(
   providerName: string,
   mediaTransportCapabilities: ProviderMediaTransportCapabilities,
   fileBindings: ProviderFileBindingStore | undefined,
-  fileLifecycle: object | undefined,
+  fileLifecycle: ProviderFileLifecycle | undefined,
   workspaceDirectory: string | undefined,
   media: RowsMediaInput,
 ): Promise<ChatRowInput | undefined> {

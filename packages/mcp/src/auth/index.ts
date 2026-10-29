@@ -43,8 +43,4 @@ export type {
   McpAuthFactoryContribution,
   McpAuthFactoryRegistry,
 } from './mcp-auth-factory.js';
-export {
-  buildMcpAuthFactoryRegistry,
-  registerMcpAuthFactories,
-  getRegisteredMcpAuthFactoryRegistry,
-} from './mcp-auth-factory.js';
+export { buildMcpAuthFactoryRegistry } from './mcp-auth-factory.js';

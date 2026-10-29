@@ -23,7 +23,7 @@ const execFileAsync = promisify(execFile);
 export const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = join(SCRIPT_DIR, '..', '..');
 export const SCRIPT = join(REPO_ROOT, 'scripts', 'check-legacy-paths.ts');
-export const RUNTIME = process.env.BUN_EXECUTABLE || 'bun';
+export const RUNTIME = process.env.BUN_EXECUTABLE || process.execPath;
 
 let cachedBunAvailable: boolean | undefined;
 

@@ -45,6 +45,7 @@ export async function oneshotOracle(
   const metadata = await buildCompressionMetadata(
     'oracle',
     runtime,
+    undefined,
     history,
     async () => ({
       provider: transport,

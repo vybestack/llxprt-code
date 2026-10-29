@@ -26,23 +26,49 @@ jobs:
   # Run the canonical test shards independently so the nightly wall clock is
   # bounded by its slowest shard instead of the sum of every workspace.
   windows_ci:
-    name: 'Windows CI (Nightly) [${{ matrix.shard }}]'
+    name: 'Windows CI (Nightly) [${{ matrix.shard }} ${{ matrix.partition }}]'
     runs-on: '${{ matrix.os }}'
     timeout-minutes: 45
     strategy:
       fail-fast: false
+      # The cli shard is split into three partitions, matching the PR workflow
+      # (SHARD_PARTITION_COUNTS in scripts/affected-test-shards.ts), so a slow
+      # runner cannot push one job past the time limit. Every other shard
+      # runs whole as 1of1.
       matrix:
-        shard:
-          - 'cli'
-          - 'agents'
-          - 'providers'
-          - 'core'
-          - 'rest'
-          - 'scripts'
-        os:
-          - 'windows-latest'
-        node-version:
-          - '24.x'
+        include:
+          - shard: 'cli'
+            partition: '1of3'
+            os: 'windows-latest'
+            node-version: '24.x'
+          - shard: 'cli'
+            partition: '2of3'
+            os: 'windows-latest'
+            node-version: '24.x'
+          - shard: 'cli'
+            partition: '3of3'
+            os: 'windows-latest'
+            node-version: '24.x'
+          - shard: 'agents'
+            partition: '1of1'
+            os: 'windows-latest'
+            node-version: '24.x'
+          - shard: 'providers'
+            partition: '1of1'
+            os: 'windows-latest'
+            node-version: '24.x'
+          - shard: 'core'
+            partition: '1of1'
+            os: 'windows-latest'
+            node-version: '24.x'
+          - shard: 'rest'
+            partition: '1of1'
+            os: 'windows-latest'
+            node-version: '24.x'
+          - shard: 'scripts'
+            partition: '1of1'
+            os: 'windows-latest'
+            node-version: '24.x'
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
@@ -86,6 +112,18 @@ jobs:
           node scripts/link-bun-runtime.ts
           node scripts/postinstall.cjs
 
+      # Root postinstall no longer installs the checkout's runtime plugins.
+      # The cli, providers and scripts shards load them (they failed with
+      # "Provider 'gemini' not found" and missing installed-plugin
+      # directories when the plugin node_modules were absent), so install them
+      # with the job's own pinned bun.
+      - name: 'Install runtime plugin dependencies'
+        if: matrix.shard == 'cli' || matrix.shard == 'providers' || matrix.shard == 'scripts'
+        run: |-
+          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
+            (cd "$plugin" && bun install --frozen-lockfile --omit=peer)
+          done
+
       - name: 'Fix rollup platform dependency'
         run: |-
           npm install @rollup/rollup-win32-x64-msvc@4.59.0 --no-save --ignore-scripts || true
@@ -110,6 +148,9 @@ jobs:
           LLXPRT_AUTH_TYPE: provider
           NO_COLOR: true
           CI: true
+          # Partition identity consumed by the CLI runner
+          # (packages/cli/run-bun-tests.ts); other shards carry 1of1.
+          LLXPRT_CLI_TEST_PARTITION: ${{ matrix.partition }}
         run: 'bun scripts/test.ts --shard "${{ matrix.shard }}"'
 
       - name: 'Smoke test CLI entry (launcher -> Bun, no Node in chain)'
@@ -124,7 +165,7 @@ jobs:
           ${{ always() && matrix.shard != 'scripts' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # ratchet:dorny/test-reporter@v3
         with:
-          name: 'Windows Test Results [${{ matrix.shard }}] (Node ${{ matrix.node-version }})'
+          name: 'Windows Test Results [${{ matrix.shard }} ${{ matrix.partition }}] (Node ${{ matrix.node-version }})'
           path: 'packages/*/junit.xml'
           reporter: 'java-junit'
           fail-on-error: 'false'
@@ -134,30 +175,56 @@ jobs:
           ${{ always() && matrix.shard != 'scripts' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
-          name: 'test-results-fork-windows-${{ matrix.shard }}-${{ matrix.node-version }}'
+          name: 'test-results-fork-windows-${{ matrix.shard }}-${{ matrix.partition }}-${{ matrix.node-version }}'
           path: 'packages/*/junit.xml'
 
   #
   # macOS CI (Nightly) — issue #2876
   #
   macos_ci:
-    name: 'macOS CI (Nightly) [${{ matrix.shard }}]'
+    name: 'macOS CI (Nightly) [${{ matrix.shard }} ${{ matrix.partition }}]'
     runs-on: '${{ matrix.os }}'
     timeout-minutes: 45
     strategy:
       fail-fast: false
+      # The cli shard is split into three partitions, matching the PR workflow
+      # (SHARD_PARTITION_COUNTS in scripts/affected-test-shards.ts), so a slow
+      # runner cannot push one job past the time limit. Every other shard
+      # runs whole as 1of1.
       matrix:
-        shard:
-          - 'cli'
-          - 'agents'
-          - 'providers'
-          - 'core'
-          - 'rest'
-          - 'scripts'
-        os:
-          - 'macos-latest'
-        node-version:
-          - '24.x'
+        include:
+          - shard: 'cli'
+            partition: '1of3'
+            os: 'macos-latest'
+            node-version: '24.x'
+          - shard: 'cli'
+            partition: '2of3'
+            os: 'macos-latest'
+            node-version: '24.x'
+          - shard: 'cli'
+            partition: '3of3'
+            os: 'macos-latest'
+            node-version: '24.x'
+          - shard: 'agents'
+            partition: '1of1'
+            os: 'macos-latest'
+            node-version: '24.x'
+          - shard: 'providers'
+            partition: '1of1'
+            os: 'macos-latest'
+            node-version: '24.x'
+          - shard: 'core'
+            partition: '1of1'
+            os: 'macos-latest'
+            node-version: '24.x'
+          - shard: 'rest'
+            partition: '1of1'
+            os: 'macos-latest'
+            node-version: '24.x'
+          - shard: 'scripts'
+            partition: '1of1'
+            os: 'macos-latest'
+            node-version: '24.x'
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
@@ -183,6 +250,18 @@ jobs:
           node scripts/link-bun-runtime.ts
           node scripts/postinstall.cjs
 
+      # Root postinstall no longer installs the checkout's runtime plugins.
+      # The cli, providers and scripts shards load them (they failed with
+      # "Provider 'gemini' not found" and missing installed-plugin
+      # directories when the plugin node_modules were absent), so install them
+      # with the job's own pinned bun.
+      - name: 'Install runtime plugin dependencies'
+        if: matrix.shard == 'cli' || matrix.shard == 'providers' || matrix.shard == 'scripts'
+        run: |-
+          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
+            (cd "$plugin" && bun install --frozen-lockfile --omit=peer)
+          done
+
       - name: 'Fix rollup platform dependency'
         run: |-
           if [ "$(uname -m)" == "arm64" ]; then
@@ -196,6 +275,12 @@ jobs:
         if: matrix.shard == 'agents' || matrix.shard == 'scripts'
         run: |-
           npm run build
+
+      # scripts/tests/tmux-harness-input-diagnostics.bun.test.ts drives a real
+      # tmux server, so the scripts shard needs the executable provisioned.
+      - name: 'Install tmux (scripts shard)'
+        if: matrix.shard == 'scripts'
+        uses: './.github/actions/install-tmux'
 
       - name: 'Verify test shard completeness'
         run: 'npm run lint:test-shards'
@@ -211,6 +296,9 @@ jobs:
           LLXPRT_AUTH_TYPE: provider
           NO_COLOR: true
           CI: true
+          # Partition identity consumed by the CLI runner
+          # (packages/cli/run-bun-tests.ts); other shards carry 1of1.
+          LLXPRT_CLI_TEST_PARTITION: ${{ matrix.partition }}
         run: 'bun scripts/test.ts --shard "${{ matrix.shard }}"'
 
       - name: 'Run shell-script behavioral tests (#2606)'
@@ -231,7 +319,7 @@ jobs:
           ${{ always() && matrix.shard != 'scripts' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # ratchet:dorny/test-reporter@v3
         with:
-          name: 'macOS Test Results [${{ matrix.shard }}] (Node ${{ matrix.node-version }})'
+          name: 'macOS Test Results [${{ matrix.shard }} ${{ matrix.partition }}] (Node ${{ matrix.node-version }})'
           path: 'packages/*/junit.xml'
           reporter: 'java-junit'
           fail-on-error: 'false'
@@ -241,8 +329,109 @@ jobs:
           ${{ always() && matrix.shard != 'scripts' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
-          name: 'test-results-fork-macos-${{ matrix.shard }}-${{ matrix.node-version }}'
+          name: 'test-results-fork-macos-${{ matrix.shard }}-${{ matrix.partition }}-${{ matrix.node-version }}'
           path: 'packages/*/junit.xml'
+
+  #
+  # Windows runtime plugins (Nightly)
+  #
+  # The first-party plugins are not root workspaces, so the shard runner never
+  # tests them. This job installs and tests each one on Windows.
+  #
+  windows_plugins:
+    name: 'Windows Runtime Plugins (Nightly)'
+    runs-on: 'windows-latest'
+    timeout-minutes: 30
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      # The plugin contexts sit outside the root workspaces (issue #2759), so
+      # each one installs and tests from its own directory with its own
+      # lockfile. The root install runs first because plugin tsconfig paths
+      # resolve host source under ../../packages/*.
+      - name: 'Install root dependencies'
+        run: |-
+          bun install
+          git checkout -- bun.lock
+
+      - name: 'Build host packages'
+        run: 'npm run build'
+
+      - name: 'Install runtime plugin dependencies'
+        run: |-
+          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
+            (cd "$plugin" && bun install --frozen-lockfile --omit=peer)
+          done
+
+      - name: 'Run runtime plugin tests'
+        run: |
+          set -euo pipefail
+          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
+            echo "::group::${plugin}"
+            (cd "$plugin" && bun run typecheck && bun test)
+            echo "::endgroup::"
+          done
+
+  #
+  # macOS runtime plugins (Nightly)
+  #
+  # Same coverage as the Windows leg, on macOS.
+  #
+  macos_plugins:
+    name: 'macOS Runtime Plugins (Nightly)'
+    runs-on: 'macos-latest'
+    timeout-minutes: 30
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      # The plugin contexts sit outside the root workspaces (issue #2759), so
+      # each one installs and tests from its own directory with its own
+      # lockfile. The root install runs first because plugin tsconfig paths
+      # resolve host source under ../../packages/*.
+      - name: 'Install root dependencies'
+        run: |-
+          bun install
+          git checkout -- bun.lock
+
+      - name: 'Build host packages'
+        run: 'npm run build'
+
+      - name: 'Install runtime plugin dependencies'
+        run: |-
+          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
+            (cd "$plugin" && bun install --frozen-lockfile --omit=peer)
+          done
+
+      - name: 'Run runtime plugin tests'
+        run: |
+          set -euo pipefail
+          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
+            echo "::group::${plugin}"
+            (cd "$plugin" && bun run typecheck && bun test)
+            echo "::endgroup::"
+          done
 
   #
   # macOS SecureStore backend (Nightly) — issue #2876
@@ -370,22 +559,26 @@ jobs:
         if: "matrix.sandbox == 'sandbox:docker'"
         uses: 'docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c' # ratchet:docker/setup-buildx-action@v4
 
+      # Same pinned Ollama + Gemma 4 E2B runtime as the PR E2E workflow. It
+      # exports the provider environment (OPENAI_*, LLXPRT_DEFAULT_*, ...) for
+      # the steps below, so no paid provider secret is needed.
+      - name: 'Set up local Gemma 4 E2B model'
+        uses: './.github/actions/setup-local-gemma'
+
       - name: 'Run E2E tests'
         if: runner.os != 'Windows'
         env:
-          # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
-          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
-          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
-          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
-          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
-          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
-          # Set auth type to provider for API key authentication
-          LLXPRT_AUTH_TYPE: 'provider'
+          GIT_CEILING_DIRECTORIES: '${{ github.workspace }}/.integration-tests'
+          # The sandbox container shares the host network namespace, so the
+          # loopback Ollama endpoint in OPENAI_BASE_URL reaches the host server.
+          SANDBOX_FLAGS: "${{ matrix.sandbox == 'sandbox:docker' && '--network host' || '' }}"
           KEEP_OUTPUT: 'true'
           VERBOSE: 'true'
           # Force file storage to avoid keytar/libsecret dependency in CI
           LLXPRT_FORCE_FILE_STORAGE: 'true'
+          # Sends reasoning_effort=none so the CPU model skips its thinking
+          # pass; with it on, gemma sometimes writes the tool call as text.
+          LLXPRT_LOCAL_MODEL_THINKING: 'none'
         shell: 'bash'
         run: |
           if [[ "${{ matrix.sandbox }}" == "sandbox:docker" ]]; then
@@ -397,17 +590,11 @@ jobs:
       - name: 'Run E2E tests (Windows)'
         if: runner.os == 'Windows'
         env:
-          # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
-          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
-          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
-          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
-          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
-          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
-          # Set auth type to provider for API key authentication
-          LLXPRT_AUTH_TYPE: 'provider'
           # Force file storage to avoid keytar/libsecret dependency in CI
           LLXPRT_FORCE_FILE_STORAGE: 'true'
+          # Sends reasoning_effort=none so the CPU model skips its thinking
+          # pass; with it on, gemma sometimes writes the tool call as text.
+          LLXPRT_LOCAL_MODEL_THINKING: 'none'
           KEEP_OUTPUT: 'true'
           VERBOSE: 'true'
           SANDBOX: '${{ matrix.sandbox }}'
@@ -422,13 +609,22 @@ jobs:
             npm run test:integration:sandbox:none
           }
 
+      - name: 'Upload local model diagnostics'
+        if: always()
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
+        with:
+          name: "local-gemma4-nightly-${{ matrix.os }}-${{ matrix.sandbox == 'sandbox:docker' && 'docker' || 'none' }}"
+          if-no-files-found: 'warn'
+          path: |
+            ${{ runner.temp }}/ollama-server.log
+            ${{ runner.temp }}/ollama-server.err.log
+            ${{ runner.temp }}/ollama-inference.json
+
   behavioral_evals:
     name: 'Behavioral Evals (Nightly)'
     uses: './.github/workflows/_evals-run.yml'
     permissions:
       contents: 'read'
-    secrets:
-      provider-api-key: ${{ secrets[vars.KEY_VAR_NAME] }}
     with:
       # The broad nightly only needs a single behavioral signal; the dedicated
       # evals-nightly.yml gathers the 3-sample statistical matrix.

@@ -124,47 +124,6 @@ function appliesToRequest(
   return registration.appliesToProvider?.(request.activeProvider) ?? true;
 }
 
-const degradationLogger = new DebugLogger('llxprt:model-prompt-estimator');
-
-/**
- * Degradation warnings fire once per provider+model per process: the first
- * estimate for a pair tells the user their token counts may be off, and
- * repeating that on every request would only bury it in noise.
- */
-const warnedDegradations = new Set<string>();
-
-function warnDegradationOnce(
-  request: RuntimePromptEstimateRequest,
-  detail: string,
-): void {
-  const key = `${request.activeProvider}:${request.canonicalModel}`;
-  if (warnedDegradations.has(key)) return;
-  warnedDegradations.add(key);
-  degradationLogger.warn(
-    `model ${request.canonicalModel} on provider ${request.activeProvider} ${detail}`,
-  );
-}
-
-function warnPointReleaseOnce(
-  request: RuntimePromptEstimateRequest,
-  registration: ModelPromptEstimatorRegistration,
-): void {
-  warnDegradationOnce(
-    request,
-    `is not directly calibrated; applying ${registration.family} calibration until a dedicated calibration exists; estimates may be less accurate`,
-  );
-}
-
-function warnLegacyFallbackOnce(
-  request: RuntimePromptEstimateRequest,
-  registration: ModelPromptEstimatorRegistration,
-): void {
-  warnDegradationOnce(
-    request,
-    `is not a sanctioned identity of ${registration.family}; falling back to the legacy estimate; token estimates may be inaccurate`,
-  );
-}
-
 async function legacyEstimate(
   request: RuntimePromptEstimateRequest,
   family: string,
@@ -196,9 +155,24 @@ function createProtocolError(
 }
 
 export class ModelPromptEstimatorRegistry {
+  private readonly warnedDegradations = new Set<string>();
   constructor(
     private readonly registrations: readonly ModelPromptEstimatorRegistration[] = DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS,
+    private readonly reportWarning: (message: string) => void = (message) =>
+      new DebugLogger('llxprt:model-prompt-estimator').warn(message),
   ) {}
+
+  private warnDegradationOnce(
+    request: RuntimePromptEstimateRequest,
+    detail: string,
+  ): void {
+    const key = `${request.activeProvider}:${request.canonicalModel}`;
+    if (this.warnedDegradations.has(key)) return;
+    this.warnedDegradations.add(key);
+    this.reportWarning(
+      `model ${request.canonicalModel} on provider ${request.activeProvider} ${detail}`,
+    );
+  }
 
   /**
    * Whether any registered family covers this model.
@@ -239,10 +213,16 @@ export class ModelPromptEstimatorRegistry {
       // degrade, never throw: a point release inherits the family estimate,
       // anything else falls back to the legacy heuristic. Both warn once.
       if (registration.matchesPointRelease?.(request.canonicalModel) !== true) {
-        warnLegacyFallbackOnce(request, registration);
+        this.warnDegradationOnce(
+          request,
+          `is not a sanctioned identity of ${registration.family}; falling back to the legacy estimate; token estimates may be inaccurate`,
+        );
         return legacyEstimate(request, 'legacy-unresolved-identity');
       }
-      warnPointReleaseOnce(request, registration);
+      this.warnDegradationOnce(
+        request,
+        `is not directly calibrated; applying ${registration.family} calibration until a dedicated calibration exists; estimates may be less accurate`,
+      );
     }
     if (!registration.protocols.has(request.protocol)) {
       throw createProtocolError(request, registration);

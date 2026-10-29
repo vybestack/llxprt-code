@@ -1,5 +1,5 @@
-import { afterEach as closeInvocationRoots } from 'bun:test';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { afterEach as closeInvocationRoots } from 'bun:test';
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
 const retainedHistories: HistoryService[] = [];
 closeInvocationRoots(async () => {
@@ -21,7 +21,6 @@ closeInvocationRoots(async () => {
  * disable is needed.
  */
 
-import { vi } from 'bun:test';
 import {
   regressionHistory,
   installSummaryTransport,
@@ -30,19 +29,25 @@ import {
 import { OneShotStrategy } from '../OneShotStrategy.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import * as compressionFactory from '../compressionStrategyFactory.js';
-import { ChatSession } from '../../core/chatSession.js';
-import type { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { vi } from 'bun:test';
+import { ChatSession } from '../../core/chatSession.js';
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
+import * as compressionFactory from '../compressionStrategyFactory.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // ---------------------------------------------------------------------------
 // Helper error factories
@@ -148,6 +153,8 @@ export function makeChatSession(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
     state: runtimeState,
     history: historyService,
@@ -170,14 +177,19 @@ export function makeChatSession(
     providerRuntime: providerRuntimeSnapshot,
   });
 
-  const mockContentGenerator = {
-    generateContent: vi.fn(),
-    generateContentStream: vi.fn(),
-    countTokens: vi.fn().mockResolvedValue({ totalTokens: 100 }),
-    embedContent: vi.fn(),
-  };
-
-  return new ChatSession(view, mockContentGenerator, {}, []);
+  return new ChatSession(
+    chatSessionPorts(view),
+    runtimeSetup.config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    compressionContentGenerator(),
+    {},
+    [],
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -208,14 +220,12 @@ export function installEmptySummaryDiskFailure(provider: RuntimeProvider): {
   const primary = vi
     .spyOn(OneShotStrategy.prototype, 'prepareDisk')
     .mockImplementation(async (context) => {
-      const { provider } = await context.resolveProvider(undefined);
+      const { provider, invocation } = await context.resolveProvider(undefined);
       for await (const _row of provider.generateChatCompletion({
         contents: (async function* () {
           yield context.history.readRow(0);
         })(),
-        invocation: context.runtimeContext.prepareProviderInvocation(
-          provider.name,
-        ),
+        invocation,
       })) {
         throw new Error(
           'Empty-summary failure transport unexpectedly returned a row',
@@ -286,6 +296,8 @@ export function makeChatForEnforceContextWindow(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
     state: runtimeState,
     history: historyService,
@@ -308,6 +320,14 @@ export function makeChatForEnforceContextWindow(
     providerRuntime: providerRuntimeSnapshot,
   });
 
+  return createEnforceContextChat(view, runtimeSetup.config, maxOutputTokens);
+}
+
+function createEnforceContextChat(
+  view: Parameters<typeof chatSessionPorts>[0],
+  config: ConstructorParameters<typeof ChatSession>[1],
+  maxOutputTokens: number,
+): ChatSession {
   const mockContentGenerator = {
     generateContent: vi.fn(),
     generateContentStream: vi.fn(),
@@ -315,7 +335,19 @@ export function makeChatForEnforceContextWindow(
     embedContent: vi.fn(),
   };
 
-  return new ChatSession(view, mockContentGenerator, { maxOutputTokens }, []);
+  return new ChatSession(
+    chatSessionPorts(view),
+    config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    mockContentGenerator,
+    { maxOutputTokens },
+    [],
+  );
 }
 
 export function hardLimitReplacement(): IContent[] {
@@ -372,4 +404,13 @@ export function mockHardLimitRewriteStrategy(): () => boolean {
     },
   );
   return () => fallbackApplied;
+}
+
+function compressionContentGenerator() {
+  return {
+    generateContent: vi.fn(),
+    generateContentStream: vi.fn(),
+    countTokens: vi.fn().mockResolvedValue({ totalTokens: 100 }),
+    embedContent: vi.fn(),
+  };
 }

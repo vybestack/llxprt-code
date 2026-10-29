@@ -6,10 +6,11 @@
  * Behavioral tests for diagnostics command load-balancer token accounting
  * output (issue #2207).
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
-import { diagnosticsCommand } from './diagnosticsCommand.js';
-import { type CommandContext } from './types.js';
+import { registerDiagnosticsCommand } from '../../__tests__/diagnostics-command-test-owner.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { MessageActionReturn } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -44,15 +45,13 @@ function setupDefaultRuntimeMocks(): void {
   });
 }
 
-function addConfigStubs(mockContext: CommandContext): void {
+function addConfigStubs(mockContext: CommandOwnerFixture): void {
   const config = mockContext.services.config as unknown as Record<
     string,
     unknown
   >;
   config.getDebugMode = () => false;
   config.getApprovalMode = () => 'normal';
-  config.getIdeMode = () => false;
-  config.getIdeClient = () => undefined;
   config.getMcpServers = () => undefined;
   config.getMcpServerCommand = () => undefined;
   config.getUserMemory = () => '';
@@ -70,9 +69,9 @@ function addConfigStubs(mockContext: CommandContext): void {
 }
 
 async function getDiagnosticsOutput(
-  mockContext: CommandContext,
+  mockContext: CommandOwnerFixture,
 ): Promise<string> {
-  const result = (await diagnosticsCommand.action!(
+  const result = (await registerDiagnosticsCommand(mockContext).action!(
     mockContext,
     '',
   )) as MessageActionReturn;
@@ -80,7 +79,7 @@ async function getDiagnosticsOutput(
 }
 
 describe('diagnosticsCommand - load balancer token accounting (issue #2207)', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
 
   beforeEach(() => {
     providerManagerMock.mockReset();

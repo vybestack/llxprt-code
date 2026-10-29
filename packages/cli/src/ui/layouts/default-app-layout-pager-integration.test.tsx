@@ -24,9 +24,6 @@ void vi.mock('../components/LoadingIndicator.js', () => ({
 const { renderWithProviders, createMockSettings, waitFor } = await import(
   '../../__tests__/render.js'
 );
-const { createTestAgentClient } = await import(
-  '@vybestack/llxprt-code-test-utils/core/config.js'
-);
 const { Config } = await import('@vybestack/llxprt-code-core');
 const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
 const { JournalStandardTranscript } = await import(
@@ -35,8 +32,8 @@ const { JournalStandardTranscript } = await import(
 const { createUiSessionOwner } = await import(
   '../../__tests__/uiSessionOwner.js'
 );
-const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
-  '../cliUiRuntime.js'
+const { buildLayoutRuntimeForTest } = await import(
+  '../../__tests__/slash-command-runtime-fixture.js'
 );
 const { TerminalProvider } = await import(
   '../stores/terminal/TerminalContext.js'
@@ -65,7 +62,7 @@ async function writeJournal(filePath: string): Promise<void> {
   }
 }
 
-function makeUiRuntime(dir: string, alternate: boolean) {
+async function makeUiRuntime(dir: string, alternate: boolean) {
   const config = new Config({
     sessionId: 'critical-pager',
     targetDir: dir,
@@ -82,16 +79,16 @@ function makeUiRuntime(dir: string, alternate: boolean) {
       showTodoPanel: false,
     },
   });
-  const owner = createUiSessionOwner(config);
-  const base = buildUiRuntimeFromSource(config, owner);
-  const uiRuntime = {
-    ...base,
-    agentClientSource: {
-      getAgentClient: () =>
-        createTestAgentClient({ hasChatInitialized: () => false }),
-    },
+  const owner = await createUiSessionOwner(config);
+  const layoutRuntime = buildLayoutRuntimeForTest(config, owner);
+  const rendering = {
+    config: layoutRuntime,
+    readIdeMode: () => false,
+    readIdeDiffingEnabled: () => false,
+    subscribeIdeDiffing: () => () => {},
+    resolveIdeDiff: async () => {},
   };
-  return { config, owner, terminal, turn, settings, uiRuntime };
+  return { config, terminal, turn, settings, layoutRuntime, rendering };
 }
 
 describe('layout disk-pager integration', () => {
@@ -116,15 +113,21 @@ describe('layout disk-pager integration', () => {
           purgeDebounceMs: 0,
         },
       });
-      const { config, owner, terminal, turn, settings, uiRuntime } =
-        makeUiRuntime(dir, alternate);
+      const { config, terminal, turn, settings, layoutRuntime, rendering } =
+        await makeUiRuntime(dir, alternate);
       await store.resumeFromJournal();
       const view = renderWithProviders(
         <TerminalProvider store={terminal}>
           <TurnProvider store={turn}>
             <DefaultAppLayout
-              uiRuntime={uiRuntime}
-              slashCommandRuntime={buildSlashCommandRuntime(config, owner)}
+              {...rendering}
+              screenReaderEnabled={false}
+              disableLoadingPhrases={false}
+              debugMode={false}
+              layoutRuntime={layoutRuntime}
+              readIdeWorkspaceTrust={() => undefined}
+              subscribeIdeWorkspaceTrust={() => () => {}}
+              subscribeContextRange={() => () => {}}
               settings={settings}
               startupWarnings={[]}
               version="test"
@@ -193,7 +196,7 @@ describe('standard transcript residency', () => {
         purgeDebounceMs: 0,
       },
     });
-    const { config, owner, terminal, turn, settings } = makeUiRuntime(
+    const { config, terminal, turn, settings, rendering } = await makeUiRuntime(
       dir,
       false,
     );
@@ -203,7 +206,7 @@ describe('standard transcript residency', () => {
         <TurnProvider store={turn}>
           <JournalStandardTranscript
             store={store}
-            config={buildSlashCommandRuntime(config, owner)}
+            rendering={rendering}
             viewport={viewport}
           />
         </TurnProvider>

@@ -1,3 +1,4 @@
+import { chatSessionPorts } from '../../chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import { retainedShapeEntries } from './token-usage-source-fixture.js';
@@ -222,15 +223,7 @@ async function assemble(root: string, mode: Mode, large: boolean) {
     undefined,
     () => captureProviderRequestDiagnostics(setup.config, settingsOwner),
   );
-  const processor = new StreamProcessor(
-    setup.runtime,
-    new ConversationManager(setup.history, setup.runtime),
-    setup.compression,
-    () => wrapper,
-    (_source, metadata) => ({ ...setup.runtime.providerRuntime, metadata }),
-    setup.history,
-    setup.generation,
-  );
+  const processor = loggingProcessor(setup, wrapper);
   if (mode === 'shape')
     setup.compression.tokenUsageLogger = new TokenUsageLogger(
       true,
@@ -434,3 +427,25 @@ await run(
   process.argv[4] === 'source',
   process.argv[5] === 'large',
 );
+
+function loggingProcessor(
+  setup: Awaited<ReturnType<typeof processorFixture>>,
+  wrapper: LoggingProviderWrapper,
+): StreamProcessor {
+  return new StreamProcessor(
+    chatSessionPorts(setup.runtime).stream,
+    setup.config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new ConversationManager(setup.history, setup.runtime),
+    setup.compression,
+    () => wrapper,
+    (_source, metadata) => ({ ...setup.runtime.providerRuntime, metadata }),
+    setup.history,
+    setup.generation,
+  );
+}

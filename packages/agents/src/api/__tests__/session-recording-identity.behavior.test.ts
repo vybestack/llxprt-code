@@ -1,24 +1,54 @@
+import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
+import { recordedRows } from './support/recorded-rows.js';
+import { basename } from 'node:path';
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
+import { openRouteBPreflight } from './helpers/route-b-preflight.js';
+import { openClientOwner } from './helpers/client-owner-session.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, readdir, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  nativeRows,
+  requireRecordingPath,
+  readJournalFileFacts,
+} from './helpers/native-session-fixture.js';
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, spyOn } from 'bun:test';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
-import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
-import { basename } from 'node:path';
-import { buildAgent, internalConfig } from './helpers/agentHarness.js';
-import { collectAgentHistory } from './helpers/collect-agent-history.js';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
-import { recordedRows } from './support/recorded-rows.js';
+async function locks(dir: string): Promise<string[]> {
+  return (await readdir(dir)).filter((file) => file.endsWith('.lock'));
+}
 
-async function withAgents(
+interface RouteBBuilt {
+  readonly agent: Agent;
+  readonly config: Config;
+  readonly cleanup: () => Promise<void>;
+}
+
+/**
+ * Agents built through the foreground preflight route the CLI takes (the
+ * route that gives the agent ownership of its Config's session identity),
+ * over one working directory. The runtime id is the session id, as it is for
+ * agents created from an `AgentConfig`.
+ */
+async function withRouteBAgents(
+  authority: CredentialAuthority,
   scenario: (input: {
-    root: string;
-    build: (id?: string) => ReturnType<typeof buildAgent>;
+    build: (id?: string) => Promise<RouteBBuilt>;
   }) => Promise<void>,
 ): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'session-identity-'));
@@ -26,34 +56,87 @@ async function withAgents(
   let storageDir: string | undefined;
   try {
     await scenario({
-      root,
-      build: async (id) => {
-        const built = await buildAgent('plain-text.jsonl', {
-          workingDir: root,
-          ...(id === undefined ? {} : { sessionId: id }),
+      build: async (id = randomUUID()) => {
+        const route = await openRouteBPreflight({
+          authority,
+          runtimeId: id,
+          config: { workingDir: root, sessionId: id },
         });
-        storageDir = internalConfig(built.agent).projectTempDir;
-        cleanups.push(built.cleanup);
-        return built;
+        let cleanup = async (): Promise<void> => {};
+        try {
+          await route.prepare();
+          const agent = await route.createAgent();
+          let closed = false;
+          cleanup = async (): Promise<void> => {
+            if (closed) return;
+            closed = true;
+            await runCleanupSteps([() => agent.dispose(), () => route.close()]);
+          };
+          storageDir = route.config.projectTempDir;
+          cleanups.push(cleanup);
+          return { agent, config: route.config, cleanup };
+        } catch (primary) {
+          await route.close();
+          throw primary;
+        }
       },
     });
   } finally {
-    for (const cleanup of cleanups.reverse()) await cleanup();
-    if (storageDir !== undefined)
-      await rm(storageDir, { recursive: true, force: true });
-    await rm(root, { recursive: true, force: true });
+    await runCleanupSteps([
+      ...cleanups.reverse().map((cleanup) => () => cleanup()),
+      () =>
+        storageDir === undefined
+          ? undefined
+          : rm(storageDir, { recursive: true, force: true }),
+      () => rm(root, { recursive: true, force: true }),
+    ]);
   }
 }
 
-async function locks(dir: string): Promise<string[]> {
-  return (await readdir(dir)).filter((file) => file.endsWith('.lock'));
+/**
+ * The session control owns the Config's session identity (the ownership mode
+ * `createAgent` and the foreground route both use). The client's history read
+ * has no Agent form and no public input makes it fail, so the subject is the
+ * SessionControl a SessionClientOwner builds over its real client, with a
+ * one-shot fault wrapped around that client's `getHistory` on the instance
+ * (the same form as session-restore-history-failure.behavior.test.ts).
+ */
+async function openControl(
+  authority: CredentialAuthority,
+  directory: string,
+  sessionId: string,
+) {
+  const opened = await openClientOwner(
+    authority,
+    {
+      provider: 'fake',
+      model: 'fake-model',
+      workingDir: directory,
+      sessionId,
+      interactive: true,
+      harness: { includeProcessCwd: false },
+    },
+    { provider: 'fake', model: 'fake-model' },
+  );
+  const session = opened.owner.createSessionControl(
+    'config',
+    () => sessionId,
+    (operation) => operation(),
+    () => {},
+    () => {},
+    () => 'fake',
+    () => 'fake-model',
+  );
+  return { opened, session };
 }
 
 describe('Agent recording identity transitions', () => {
+  useRecordingPrompts();
+  useFakeResponsesReplay('plain-text.jsonl');
+  const credentials = useOwnedCredentials();
   it('initializes generated facade recording identity in Config before resume', async () => {
-    await withAgents(async ({ build }) => {
-      const { agent } = await build();
-      const config = internalConfig(agent);
+    await withRouteBAgents(credentials().authority, async ({ build }) => {
+      const { agent, config } = await build();
       expect(config.getSessionId()).toBe(agent.getRuntimeId());
       await agent.setHistory([
         {
@@ -69,7 +152,7 @@ describe('Agent recording identity transitions', () => {
   }, 30000);
 
   it('adopts a different recording ID and keeps facade runtime ID stable across stop/start', async () => {
-    await withAgents(async ({ build }) => {
+    await withRouteBAgents(credentials().authority, async ({ build }) => {
       const source = await build('identity-source');
       await source.agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'identity-seed' }] },
@@ -80,7 +163,7 @@ describe('Agent recording identity transitions', () => {
       await source.cleanup();
 
       const owner = await build('identity-owner');
-      const config = internalConfig(owner.agent);
+      const { config } = owner;
       const restored = await owner.agent.session.resume('identity-source');
       expect(JSON.stringify(await Array.fromAsync(restored))).toContain(
         'identity-seed',
@@ -98,9 +181,8 @@ describe('Agent recording identity transitions', () => {
   }, 30000);
 
   it('adopts checkpoint fork identity while preserving the facade runtime ID', async () => {
-    await withAgents(async ({ build }) => {
-      const { agent } = await build('fork-owner');
-      const config = internalConfig(agent);
+    await withRouteBAgents(credentials().authority, async ({ build }) => {
+      const { agent, config } = await build('fork-owner');
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'fork-seed' }] },
       ]);
@@ -118,7 +200,11 @@ describe('Agent recording identity transitions', () => {
       await agent.session.setRecording({ enabled: false });
       await agent.session.setRecording({ enabled: true });
       expect(
-        await readFile(agent.session.getRecording().path ?? '', 'utf8'),
+        JSON.stringify(
+          await nativeRows(
+            requireRecordingPath(agent.session.getRecording().path),
+          ),
+        ),
       ).toContain('fork-seed');
       await agent.session.setRecording({ enabled: false });
       expect(await locks(config.projectChatsDir)).toStrictEqual([]);
@@ -126,7 +212,7 @@ describe('Agent recording identity transitions', () => {
   }, 30000);
 
   it('rolls back Config ID, history and prepared lock when adoption throws after mutating Config', async () => {
-    await withAgents(async ({ build }) => {
+    await withRouteBAgents(credentials().authority, async ({ build }) => {
       const source = await build('rollback-source');
       await source.agent.setHistory([
         {
@@ -138,8 +224,7 @@ describe('Agent recording identity transitions', () => {
       await source.agent.session.setRecording({ enabled: false });
       await source.cleanup();
 
-      const { agent } = await build('rollback-owner');
-      const config = internalConfig(agent);
+      const { agent, config } = await build('rollback-owner');
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'prior-history' }] },
       ]);
@@ -166,43 +251,130 @@ describe('Agent recording identity transitions', () => {
         severity: 'info',
         message: 'after-failed-adoption',
       });
-
       await agent.session.recordRecordingTitle('after-failed-adoption');
-
-      const durableFact = (await readJournalFileFacts(previousPath))?.facts
-        .title;
-      expect(durableFact).toContain('after-failed-adoption');
-      expect(
-        JSON.stringify(await Array.fromAsync(agent.streamHistory())),
-      ).toContain('prior-history');
-      expect(
-        JSON.stringify(await Array.fromAsync(agent.streamHistory())),
-      ).not.toContain('source-history');
+      expect((await readJournalFileFacts(previousPath))?.facts.title).toContain(
+        'after-failed-adoption',
+      );
+      expect(JSON.stringify(await collectAgentHistory(agent))).toContain(
+        'prior-history',
+      );
+      expect(JSON.stringify(await collectAgentHistory(agent))).not.toContain(
+        'source-history',
+      );
       expect(await locks(config.projectChatsDir)).toHaveLength(1);
       await agent.session.setRecording({ enabled: false });
       await agent.session.setRecording({ enabled: true });
-      expect(await readFile(previousPath, 'utf8')).toContain('prior-history');
+      expect(JSON.stringify(await nativeRows(previousPath))).toContain(
+        'prior-history',
+      );
       await agent.session.setRecording({ enabled: false });
       expect(await locks(config.projectChatsDir)).toStrictEqual([]);
     });
   }, 30000);
 
+  it('resumes two independent facades without sharing their Config identity', async () => {
+    const routes: RouteAAgent[] = [];
+    try {
+      const first = await openRouteAAgent({
+        authority: credentials().authority,
+        config: { interactive: true },
+      });
+      routes.push(first);
+      const second = await openRouteAAgent({
+        authority: credentials().authority,
+        config: { interactive: true, workingDir: first.directory },
+      });
+      routes.push(second);
+      const a = first.agent;
+      const b = second.agent;
+      const chatsDir = first.config.projectChatsDir;
+      await a.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'a-seed' }] },
+      ]);
+      await a.session.setRecording({ enabled: true });
+      const aPath = a.session.getRecording().path;
+      await a.session.setRecording({ enabled: false });
+      await b.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'b-seed' }] },
+      ]);
+      await b.session.setRecording({ enabled: true });
+      const bPath = b.session.getRecording().path;
+      await b.session.setRecording({ enabled: false });
+      if (!aPath || !bPath) throw new Error('Recording path missing');
+      expect(aPath).not.toBe(bPath);
+      await a.session.resume(b.getRuntimeId());
+      expect(a.getRuntimeId()).not.toBe(b.getRuntimeId());
+      expect(a.session.getRecording().path).toBe(bPath);
+      await a.session.setRecording({ enabled: false });
+      await b.session.resume(a.getRuntimeId());
+      expect(b.session.getRecording().path).toBe(aPath);
+      await b.session.setRecording({ enabled: false });
+      await a.session.setRecording({ enabled: true });
+      expect(a.session.getRecording().path).toBe(bPath);
+      await a.session.setRecording({ enabled: false });
+      await b.session.setRecording({ enabled: true });
+      expect(b.session.getRecording().path).toBe(aPath);
+      expect(JSON.stringify(await nativeRows(bPath))).toContain('b-seed');
+      expect(JSON.stringify(await nativeRows(aPath))).toContain('a-seed');
+      await b.session.setRecording({ enabled: false });
+      await a.dispose();
+      const surviving = await collectAgentHistory(b);
+      expect(JSON.stringify(surviving)).toContain('a-seed');
+      await b.setHistory([
+        ...surviving,
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'after sibling disposal' }],
+        },
+      ]);
+      await b.session.setRecording({ enabled: true });
+      await b.session.flushRecording();
+      expect(JSON.stringify(await nativeRows(aPath))).toContain(
+        'after sibling disposal',
+      );
+      await b.session.setRecording({ enabled: false });
+      expect(await locks(chatsDir)).toStrictEqual([]);
+    } finally {
+      await runCleanupSteps(
+        [...routes].reverse().map((route) => () => route.close()),
+      );
+    }
+  }, 30000);
+
   it('releases prepared recording and lock when reading prior history fails before adoption', async () => {
-    await withAgents(async ({ build }) => {
-      const source = await build('history-source');
-      await source.agent.setHistory([
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'resume-history-read-failure-')),
+    );
+    const cleanups: Array<() => Promise<void>> = [];
+    try {
+      const source = await openControl(
+        credentials().authority,
+        directory,
+        'history-source',
+      );
+      cleanups.push(() => source.opened.close());
+      await source.opened.client.restoreHistory([
         {
           speaker: 'human',
           blocks: [{ type: 'text', text: 'history-source-turn' }],
         },
       ]);
-      await source.agent.session.setRecording({ enabled: true });
-      await source.agent.session.setRecording({ enabled: false });
-      await source.cleanup();
+      await source.session.setRecording({ enabled: true });
+      await source.session.setRecording({ enabled: false });
+      await source.session.dispose();
+      await source.opened.close();
+      cleanups.pop();
 
-      const { agent } = await build('history-owner');
-      const config = internalConfig(agent);
-      const client = agent.agentClient;
+      const { opened, session } = await openControl(
+        credentials().authority,
+        directory,
+        'history-owner',
+      );
+      cleanups.push(
+        () => session.dispose(),
+        () => opened.close(),
+      );
+      const { config, client } = opened;
       const failure = new Error('prior history unavailable');
       const fault = spyOn(client, 'getHistoryService').mockImplementationOnce(
         () => {
@@ -210,21 +382,27 @@ describe('Agent recording identity transitions', () => {
         },
       );
       try {
-        await expect(agent.session.resume('history-source')).rejects.toThrow(
-          failure,
-        );
+        await expect(session.resume('history-source')).rejects.toThrow(failure);
       } finally {
         fault.mockRestore();
       }
       expect(config.getSessionId()).toBe('history-owner');
-      expect(agent.session.getRecording().enabled).toBe(false);
+      expect(session.getRecording().enabled).toBe(false);
       expect(await locks(config.projectChatsDir)).toStrictEqual([]);
-      await agent.session.resume('history-source');
+      const restored = await session.resume('history-source');
+      expect(JSON.stringify(await Array.fromAsync(restored))).toContain(
+        'history-source-turn',
+      );
       expect(config.getSessionId()).toBe('history-source');
-      await agent.session.setRecording({ enabled: false });
-    });
+      await session.setRecording({ enabled: false });
+      expect(await locks(config.projectChatsDir)).toStrictEqual([]);
+    } finally {
+      await runCleanupSteps([
+        ...cleanups.reverse(),
+        () => rm(directory, { recursive: true, force: true }),
+      ]);
+    }
   }, 30000);
-
   it('resumes two borrowed facades independently without adopting their shared Config identity', async () => {
     await withRecordingLifetimeFixture(
       async ({ agent: a, config, borrow, chatsDir }) => {
@@ -258,8 +436,8 @@ describe('Agent recording identity transitions', () => {
         await a.session.setRecording({ enabled: false });
         await b.session.setRecording({ enabled: true });
         expect(b.session.getRecording().path).toBe(aPath);
-        expect(await readFile(bPath, 'utf8')).toContain('b-seed');
-        expect(await readFile(aPath, 'utf8')).toContain('a-seed');
+        expect(JSON.stringify(await nativeRows(bPath))).toContain('b-seed');
+        expect(JSON.stringify(await nativeRows(aPath))).toContain('a-seed');
         expect(config.getSessionId()).toBeUndefined();
         await a.dispose();
         const surviving = await collectAgentHistory(b);

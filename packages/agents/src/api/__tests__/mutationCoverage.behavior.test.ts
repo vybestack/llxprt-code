@@ -1,3 +1,4 @@
+import { createTerminalOnlyIdePort } from './helpers/terminal-only-ide.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -23,7 +24,7 @@
 //
 // NON-OBSERVABLE (documented honestly, NOT faked):
 //   3. agentImpl.ts:1035-1042 token-tracking ternaries — the model token sums
-//      in uiTelemetryService.getMetrics().models stay 0 under the FakeProvider
+//      in session metric reads.models stay 0 under the FakeProvider
 //      drive (that map is populated by the CLI UI's setTokenTrackingMetrics,
 //      not by the agent stream path), so the `promptTokens > 0` branch is
 //      never taken and the asserted value is the sessionUsage fallback for
@@ -45,10 +46,11 @@ import {
   isTextEvent,
   isToolCallEvent,
   isToolResultEvent,
-  internalConfig,
   ASYNC_PROPERTY_TIMEOUT_MS,
+  buildPropertyAgent,
+  scratchWorkspace,
 } from './helpers/agentHarness.js';
-import { createTerminalOnlyIdePort } from './helpers/buildCliStyleConfig.js';
+import { buildReplayProviderAgent } from './helpers/replay-provider-agent.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
@@ -70,13 +72,9 @@ describe('mutation P23 — target 1: post-auth client guard (createAgent.ts:253-
     }
   }, 30000);
 
-  it('the built agent exposes the genuine Config identity it owns (REQ-001)', async () => {
+  it('the built agent reports the provider and model it was activated with (REQ-001)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      // The success path binds the createAgent-owned Config (an
-      // AgentBootstrapError on the throw-branch would have rejected the build).
-      const config = internalConfig(agent);
-      expect(config).toBeDefined();
       // A populated provider/model proves the post-auth client is live and
       // the runtime was activated.
       expect(agent.getProvider()).toBe('fake');
@@ -218,9 +216,18 @@ describe('mutation P23 — target 4: seedAuthState equality guards observable vi
 
 describe('mutation P23 — target 5: provider-switch model-change guard (agentImpl.ts:1128-1130) (REQ-005)', () => {
   it('a provider+model switch reflects the NEW model on getModel (model !== undefined && !== current guard) (REQ-005)', async () => {
-    const { agent, cleanup } = await buildAgent(
-      'provider-switch-two-turn.jsonl',
-    );
+    const { agent, cleanup } = await buildReplayProviderAgent({
+      initial: {
+        alias: 'fake',
+        script: { fixtureRelPath: 'provider-switch-two-turn.jsonl' },
+      },
+      targets: [
+        {
+          alias: 'other-provider',
+          script: { fixtureRelPath: 'provider-switch-two-turn.jsonl' },
+        },
+      ],
+    });
     try {
       const beforeModel = agent.getModel();
       expect(beforeModel).toBe('fake-model');
@@ -281,9 +288,7 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
       fc.string({ minLength: 1, maxLength: 60 }).map((s) => s.trim()),
       async (prompt) => {
         if (prompt.length === 0) return true;
-        const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-          idePort: createTerminalOnlyIdePort(),
-        });
+        const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
         try {
           const events: AgentEvent[] = await drain(agent.stream(prompt));
           return (
@@ -313,8 +318,7 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
 
   function createPROPTarget4ForAnyNonEmptyKeyNameStringGetProviderStatusSurfacesItProperty() {
     return fc.asyncProperty(nonBlankStringArbitrary, async (keyName) => {
-      const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-        idePort: createTerminalOnlyIdePort(),
+      const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl', {
         auth: { keyName },
       });
       try {
@@ -329,11 +333,12 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
   }
 
   it(
-    'PROP target-5: for any model string differing from the current, setProvider reflects the new model (change guard) (REQ-005)',
+    'PROP target-5: for any nonblank model differing from the current one, a provider switch selects exactly that model (REQ-005)',
     async () => {
       await expect(
         fc.assert(
           createPROPTarget5ForAnyModelStringDifferingFromTheCurrentSetProviderProperty(),
+          { examples: [['  switched-model  ']] },
         ),
       ).resolves.toBeUndefined();
     },
@@ -344,12 +349,24 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
     return fc.asyncProperty(
       fc
         .string({ minLength: 1, maxLength: 40 })
-        .filter((m) => m !== 'fake-model'),
+        .filter((m) => m.trim() !== '' && m !== 'fake-model'),
       async (model) => {
-        const { agent, cleanup } = await buildAgent(
-          'provider-switch-two-turn.jsonl',
-          { idePort: createTerminalOnlyIdePort() },
-        );
+        const { agent, cleanup } = await buildReplayProviderAgent({
+          initial: {
+            alias: 'fake',
+            script: { fixtureRelPath: 'provider-switch-two-turn.jsonl' },
+          },
+          targets: [
+            {
+              alias: 'p',
+              script: { fixtureRelPath: 'provider-switch-two-turn.jsonl' },
+            },
+          ],
+          configOverrides: {
+            workingDir: scratchWorkspace(),
+            idePort: createTerminalOnlyIdePort(),
+          },
+        });
         try {
           await agent.setProvider('p', model);
           return agent.getModel() === model && agent.getProvider() === 'p';
@@ -374,8 +391,7 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
 
   function createPROPTarget4bForAnyNonEmptyApiKeyGetProviderStatusReportsAuthenticatedAndProperty() {
     return fc.asyncProperty(nonBlankStringArbitrary, async (apiKey) => {
-      const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-        idePort: createTerminalOnlyIdePort(),
+      const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl', {
         auth: { apiKey },
       });
       try {
@@ -404,19 +420,19 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
   function createPROPTarget2HandlerPresenceDivergesWITHOnApprovalYieldsToolResultsWITHOUTProperty() {
     return fc.asyncProperty(fc.integer({ min: 1, max: 5 }), async (seed) => {
       // The WITH-handler agent drives a tool fixture to a real result.
-      const withHandler = await buildAgent('tool-call-then-answer.jsonl', {
-        idePort: createTerminalOnlyIdePort(),
-        onApproval: () => ToolConfirmationOutcome.ProceedOnce,
-      });
+      const withHandler = await buildPropertyAgent(
+        'tool-call-then-answer.jsonl',
+        {
+          onApproval: () => ToolConfirmationOutcome.ProceedOnce,
+        },
+      );
       try {
         const withEvents: AgentEvent[] = await drain(
           withHandler.agent.stream(`seed-${seed}`),
         );
         const withResults = withEvents.filter(isToolResultEvent).length >= 1;
         // The WITHOUT-handler agent on a plain fixture yields no tools.
-        const without = await buildAgent('plain-text.jsonl', {
-          idePort: createTerminalOnlyIdePort(),
-        });
+        const without = await buildPropertyAgent('plain-text.jsonl');
         try {
           const withoutEvents: AgentEvent[] = await drain(
             without.agent.stream(`seed-${seed}`),
@@ -435,13 +451,25 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
   }
 
   it(
-    'setProvider without a model preserves the current model (kills 1139 ConditionalExpression true) (REQ-005)',
+    'setProvider without a model adopts the new provider default model and never clobbers it with undefined (kills 1139 ConditionalExpression true) (REQ-005)',
     async () => {
-      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+      const { agent, cleanup } = await buildReplayProviderAgent({
+        initial: {
+          alias: 'fake',
+          script: { fixtureRelPath: 'plain-text.jsonl' },
+        },
+        targets: [
+          {
+            alias: 'replay-openai',
+            script: { fixtureRelPath: 'plain-text.jsonl' },
+          },
+        ],
+      });
       try {
-        const beforeModel = agent.getModel();
-        await agent.setProvider('openai');
-        expect(agent.getModel()).toBe(beforeModel);
+        const result = await agent.setProvider('replay-openai');
+        // A real switch selects the new provider's default model.
+        expect(result.defaultModel).toBeDefined();
+        expect(result.defaultModel).toBe(agent.getModel());
       } finally {
         await cleanup();
       }
@@ -450,35 +478,54 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
   );
 
   it(
-    'PROP setProvider model preservation: for any provider switch name under the fake seam, setProvider without model preserves the current model (REQ-005)',
+    'PROP setProvider model selection: for any registered provider name, setProvider without a model yields the provider default or keeps the current model (REQ-005)',
     async () => {
       await expect(
         fc.assert(
-          createPROPSetProviderModelPreservationForAnyProviderSwitchNameUnderTheFakeProperty(),
+          createPROPSetProviderModelSelectionForAnyRegisteredProviderNameProperty(),
         ),
       ).resolves.toBeUndefined();
     },
     ASYNC_PROPERTY_TIMEOUT_MS,
   );
 
-  function createPROPSetProviderModelPreservationForAnyProviderSwitchNameUnderTheFakeProperty() {
+  function createPROPSetProviderModelSelectionForAnyRegisteredProviderNameProperty() {
     return fc.asyncProperty(
-      // Under the fake seam only 'fake' is registered, so any other name
-      // triggers the provider-not-found path in applyProviderSwitch (which
-      // is suppressed as a no-op when the fake seam is active). Constrain to
-      // realistic provider names — this exercises the same code path as the
-      // sibling concrete test above across multiple distinct values without
-      // relying on arbitrary strings that widen the env-var race window.
-      fc.constantFrom('openai', 'anthropic', 'gemini', 'ollama', 'fake'),
+      // Each name is registered on the agent before the switch, so every
+      // value performs a real provider switch. Constrain to realistic
+      // provider names rather than arbitrary strings.
+      fc.constantFrom(
+        'replay-openai',
+        'replay-anthropic',
+        'replay-gemini',
+        'replay-ollama',
+        'fake',
+      ),
       async (providerName) => {
-        const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-          idePort: createTerminalOnlyIdePort(),
+        const { agent, cleanup } = await buildReplayProviderAgent({
+          initial: {
+            alias: 'fake',
+            script: { fixtureRelPath: 'plain-text.jsonl' },
+          },
+          targets: [
+            'replay-openai',
+            'replay-anthropic',
+            'replay-gemini',
+            'replay-ollama',
+          ].map((alias) => ({
+            alias,
+            script: { fixtureRelPath: 'plain-text.jsonl' },
+          })),
+          configOverrides: {
+            workingDir: scratchWorkspace(),
+            idePort: createTerminalOnlyIdePort(),
+          },
         });
         try {
           const beforeModel = agent.getModel();
-          await agent.setProvider(providerName);
+          const result = await agent.setProvider(providerName);
           return (
-            agent.getModel() === beforeModel &&
+            agent.getModel() === (result.defaultModel ?? beforeModel) &&
             agent.getProvider() === providerName
           );
         } finally {
@@ -543,15 +590,24 @@ describe('mutation P23 — target 7: rebuild propagates approvalHandler (agentIm
   it(
     'onApproval survives setProvider: tool auto-approves on turn 2 after rebuild (REQ-006)',
     async () => {
-      const { agent, cleanup } = await buildAgentFromContent(
-        twoToolFourTurnFixture(),
-        {
+      const { agent, cleanup } = await buildReplayProviderAgent({
+        initial: {
+          alias: 'fake',
+          script: { content: twoToolFourTurnFixture() },
+        },
+        targets: [
+          {
+            alias: 'replay-openai',
+            script: { fixtureRelPath: 'tool-call-then-answer.jsonl' },
+          },
+        ],
+        configOverrides: {
           onApproval: () => ToolConfirmationOutcome.ProceedOnce,
         },
-      );
+      });
       try {
         await drain(agent.stream('turn1'));
-        await agent.setProvider('openai');
+        await agent.setProvider('replay-openai');
         const events = await drain(agent.stream('turn2'));
         const results = events.filter(isToolResultEvent);
         const done = events.filter(isDoneEvent);
@@ -616,9 +672,8 @@ describe('mutation P23 — target 7: rebuild propagates approvalHandler (agentIm
         fc.asyncProperty(
           fc.string({ minLength: 1, maxLength: 20 }),
           async (prompt) => {
-            const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-              idePort: createTerminalOnlyIdePort(),
-            });
+            const { agent, cleanup } =
+              await buildPropertyAgent('plain-text.jsonl');
             try {
               await drain(agent.stream(prompt));
               await agent.dispose();

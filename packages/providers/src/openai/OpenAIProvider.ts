@@ -105,6 +105,7 @@ import type { ModelDefaultRule } from '../composition/providerAliases.js';
 import { createUnallowedModelParametersResolver as makeResolver } from '../openai-responses/unallowedModelParameters.js';
 
 import { streamContinuationAfterToolCalls } from './OpenAIContinuationStream.js';
+import type { ProviderFileLifecycle } from '../providerFilePolicy.js';
 import {
   createHttpAgents,
   resolveRuntimeKey,
@@ -141,7 +142,7 @@ interface DispatchResponseOptions {
 }
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
-  protected requestProviderFileLifecycle?: object;
+  protected requestProviderFileLifecycle?: ProviderFileLifecycle;
   protected requestProviderFileBindings?: ProviderFileBindingStore;
   protected requestWorkspaceDirectory?: string;
   private readonly textToolParser = new GemmaToolCallParser();
@@ -351,6 +352,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const headers = mergeInvocationHeaders(options);
 
     return instantiateClient(authToken, baseURL, agents, headers, {
+      fetch: options.invocation.fetch,
       headersTimeoutMs: agentSettings['openai-headers-timeout-ms'] as
         | number
         | undefined,
@@ -384,7 +386,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       const baseURL = this.getBaseURL();
       const agentSettings = this.providerConfig?.readConnectionPolicy?.() ?? {};
       const agents = createHttpAgents({ ...agentSettings });
-      const client = instantiateClient(authToken, baseURL, agents);
+      const client = instantiateClient(authToken, baseURL, agents, undefined, {
+        fetch: this.requestFetch,
+      });
 
       const modelsEndpoint = `${baseURL ?? 'https://api.openai.com/v1'}/models`;
       this.getLogger().debug(

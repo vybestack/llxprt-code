@@ -1,23 +1,26 @@
+import type { SessionControl } from '../../../../agents/src/api/control/sessionControl.js';
+import { afterEach, describe, expect, it } from 'bun:test';
+
+import { createCapturedSessionOwner } from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import type { CommandHandlerFixture as SlashCommandHandlerDeps } from './slash-command-handler-deps-test-helpers.js';
+import { bindCommandRawResume } from './commandRawResumeHost.js';
+import { buildSettingsRuntime } from '../../runtime/createRuntimeOwnerFeatures.js';
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
-import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
-import { buildSettingsRuntime } from '../../runtime/createRuntimeOwnerFeatures.js';
-
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import {
-  createTestFilesystem,
-  installTestWorkspaceFilesystem,
-  testConfigInitialization,
-} from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { afterEach, describe, expect, it } from 'bun:test';
-import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 const makeFixtureFilesystem = installTestWorkspaceFilesystem();
 let fixtureFilesystem: ReturnType<typeof makeFixtureFilesystem> | undefined;
 function fixturePaths() {
@@ -27,62 +30,67 @@ function fixturePaths() {
   });
   return fixtureFilesystem.paths;
 }
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
+import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
 import {
-  Config,
-  DebugLogger,
-  emptyModelOutput,
-  getProjectHash,
-  LocalMediaStore,
-  PerformCompressionResult,
-  SessionDiscovery,
-  type AgentChatContract,
-  type AgentClientContract,
-  type IContent,
-  type LockHandle,
-  type RecordingIntegration,
-  type RuntimeProviderManager,
-  type SessionMetadata,
-  type SessionRecordingPort,
-} from '@vybestack/llxprt-code-core';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { assertDefined } from '@vybestack/llxprt-code-test-utils';
+import { createPortablePackage as createPackage } from '../../__tests__/support/portable-package.js';
+import { recordedRows } from '../../../../agents/src/api/__tests__/support/recorded-rows.js';
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { randomUUID } from 'node:crypto';
 import {
   mkdir,
   mkdtemp,
   readdir,
+  rm,
   readFile,
   writeFile,
-  rm,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
-import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { createPortablePackage as createPackage } from '../../__tests__/support/portable-package.js';
-import { continueCommand } from '../commands/continueCommand.js';
 import {
-  processSlashCommand,
-  type SlashCommandHandlerDeps,
-} from './slashCommandHandlers.js';
+  Config,
+  DebugLogger,
+  LocalMediaStore,
+  PerformCompressionResult,
+  SessionDiscovery,
+  type SessionRecordingPort,
+  emptyModelOutput,
+  getProjectHash,
+  type AgentChatContract,
+  type AgentClientContract,
+  type IContent,
+  type RuntimeProviderManager,
+  type LockHandle,
+  type RecordingIntegration,
+  type SessionMetadata,
+} from '@vybestack/llxprt-code-core';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { createContinueCommandForTest } from '../commands/__tests__/continue-command-test-owner.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
-
-import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
-import { recordedRows } from '../../../../agents/src/api/__tests__/support/recorded-rows.js';
-
-import { setupSessionRecording } from '../../cliSessionBootstrap.js';
-import type { RecordingSwapCallbacks } from '../../services/performResume.js';
+import { processSlashCommand } from './slashCommandHandlers.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import {
+  performResume,
+  type RecordingSwapCallbacks,
+} from '../../services/performResume.js';
+import { MessageType, type Message } from '../types.js';
+import { CliSessionPersistence } from '../../cliSessionPersistence.js';
+import { setupOwnerSessionRecording } from '../../cliSessionBootstrap.js';
 import {
   __resetCleanupStateForTesting,
   runExitCleanup,
+  registerCleanup,
 } from '../../utils/cleanup.js';
-import { MessageType, type Message } from '../types.js';
 
 interface ActiveRecordingState {
   recording: SessionRecordingPort | null;
@@ -98,8 +106,10 @@ function createAgentClient(
   manager: RuntimeProviderManager,
 ): AgentClientContract {
   async function* emptyStream() {}
-  let deferredHistory: readonly IContent[] | undefined;
   const chat: AgentChatContract = {
+    appendGeneration: async () => {
+      throw new Error('Fixture chat does not publish detached generation');
+    },
     takeHistoryAdmissions: () => [],
     sendMessage: async (_params, promptId) => ({
       status: 'empty',
@@ -119,11 +129,17 @@ function createAgentClient(
   };
   let tools: AgentClientContract['tools'] | undefined;
   return {
+    bindTokenization: () => {},
+    bindProviderSelection: () => {},
     get tools() {
       if (tools === undefined)
         throw new Error('Missing fixture tool selection');
       return tools;
     },
+    bindModelNotifications: () => {},
+    bindIdeContext: () => {},
+    bindWorkspaceDefinitions: () => {},
+    bindProviderFiles: () => {},
     bindRuntimeSettings: () => {},
     bindTelemetry: () => {},
     bindProviderInvocation: () => {},
@@ -151,43 +167,27 @@ function createAgentClient(
         'Profile history rebinding is not used by session resume tests',
       );
     },
-    storeHistoryForLaterUse: async (next) => {
-      const rows: IContent[] = [];
-      for await (const row of next) rows.push(row);
-      deferredHistory = rows;
-      await history.replaceAll(deferredHistory);
+    storeHistoryForLaterUse: async (source) => {
+      await history.replaceAll(await Array.fromAsync(source));
     },
-    discardDeferredHistory: async () => {
-      deferredHistory = undefined;
+    discardDeferredHistory: async () => {},
+    setHistoryFromSource: async (source) => {
+      await history.replaceAll(await Array.fromAsync(source));
     },
     dispose: async () => {},
     setTools: async () => {},
     clearTools: () => {},
     updateSystemInstruction: async () => {},
     addHistory: async (content) => history.add(content),
-    resetChat: async (preserveHistory) => {
-      const rows: IContent[] = [];
-      for await (const row of preserveHistory ?? []) rows.push(row);
-      await history.replaceAll(rows);
-      deferredHistory = undefined;
-    },
+    resetChat: async () => history.clear(),
     resumeChat: (next) => history.replaceAll([...next]),
     setHistory: (next) => history.replaceAll([...next]),
-    setHistoryFromSource: async () => {
-      throw new Error('Streamed history requires a real agent client');
-    },
     restoreHistory: (next) => history.replaceAll([...next]),
     addDirectoryContext: async () => {},
     getContentGenerator: () => {
       throw new Error('Content generation is not used by session resume tests');
     },
-    startChat: async () => {
-      if (deferredHistory !== undefined) {
-        await history.replaceAll([...deferredHistory]);
-        deferredHistory = undefined;
-      }
-      return chat;
-    },
+    startChat: async () => chat,
     generateDirectMessage: async () => emptyModelOutput(),
     generateJson: async () => ({}),
     generateContent: async () => emptyModelOutput(),
@@ -204,8 +204,10 @@ async function createConfig(
   continueSession?: string,
 ): Promise<{
   config: Config;
+  client: AgentClientContract;
   sessionClient: SessionClientOwner;
   settingsOwner: SessionSettingsOwner;
+  session: SessionControl;
   dispose(): Promise<void>;
 }> {
   await mkdir(projectRoot, { recursive: true });
@@ -227,13 +229,18 @@ async function createConfig(
   const settingsService = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(settingsService);
   settingsOwner.bindTelemetry(config);
-  const manager = new ProviderManager({
-    config,
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
-  });
+    config,
+  );
   const client = createAgentClient(history, store, config, manager);
-  const factories = configureProviderRuntimeFactories(config, manager);
-  const sessionClient = await SessionClientOwner.create(
+  const factoriesTokenizer = configureProviderTokenizer(manager);
+  const factoriesContent = createRuntimeContentGeneratorFactory();
+  const sessionClient = await createCapturedSessionOwner(
     config,
     assembleTaskSchemaPolicy(settingsService),
     manager,
@@ -242,23 +249,28 @@ async function createConfig(
     () => undefined,
     fixturePaths(),
     settingsOwner,
-    factories.contentGeneratorFactory,
-    factories.tokenizerFactory,
-    client,
+    factoriesContent,
+    factoriesTokenizer,
   );
-  await config.initialize(
-    testConfigInitialization(
-      config,
-      configPolicy.session.messageBus,
-      configPolicy,
-      createTestFilesystem(config),
-    ),
+
+  sessionClient.clients.conversationBinding.initializeConversation();
+  const session = sessionClient.createSessionControl(
+    'config',
+    () => config.getSessionId(),
+    (operation) => operation(),
+    () => {},
+    () => {},
+    () => config.getProvider() ?? '',
+    () => config.getModel(),
   );
   return {
     config,
+    client,
     sessionClient,
     settingsOwner,
+    session,
     dispose: async () => {
+      await session.dispose();
       await history.dispose();
       await sessionClient.dispose();
       await settingsOwner.dispose();
@@ -319,39 +331,68 @@ function createRecordingCallbacks(
   };
 }
 
-function createHandlerDeps(
+async function createHandlerDeps(
   config: Config,
-  sessionClient: SessionClientOwner,
+  client: AgentClientContract,
   callbacks: RecordingSwapCallbacks,
   messages: Message[],
-  mediaStore: LocalMediaStore,
+  persistence: CliSessionPersistence,
   settingsOwner: SessionSettingsOwner,
-): SlashCommandHandlerDeps {
+): Promise<SlashCommandHandlerDeps> {
   const commandContext = createMockCommandContext({
     services: {
       config,
       agent: {
-        get agentClient() {
-          return sessionClient.getAgentClient();
+        session: {
+          getHistory: async () => Array.fromAsync(client.getHistory()),
+          replaceHistory: async (next: readonly IContent[]) =>
+            client.setHistory(next),
+          attachRecordingHistory: async (recording: RecordingIntegration) => {
+            const current = client.getHistoryService();
+            if (!current) throw new Error('Missing fixture history');
+            await recording.subscribeToJournal(current);
+          },
         },
         setHistory: async (next: readonly IContent[]) =>
-          sessionClient.getAgentClient().setHistory(next),
+          client.setHistory(next),
       },
     },
     recordingSwapCallbacks: callbacks,
   });
-  return {
+  const continueCommand = createContinueCommandForTest(
+    () => commandContext,
+    () => persistence.mediaStore,
+  );
+  const resumeRuntime = {
+    ...composeFixtureRuntime(config),
+    ...buildSettingsRuntime(
+      config,
+      await createUiSessionOwner(),
+      settingsOwner,
+    ),
+  };
+  const deps: SlashCommandHandlerDeps = {
     commands: [continueCommand],
-    config: {
-      ...composeFixtureRuntime(config),
-      ...buildSettingsRuntime(config, createUiSessionOwner(), settingsOwner),
-    },
-    sessionMediaStore: mediaStore,
+    config: resumeRuntime,
     commandContext,
     actions: createActions(),
-    addItem: (item) => {
-      commandContext.ui.addItem(item);
-      if (item.type === MessageType.ERROR || item.type === MessageType.INFO) {
+    addItem: commandContext.ui.addItem,
+    addMessage: (message) => messages.push(message),
+    setIsProcessing: () => {},
+    setLocalIsProcessing: () => {},
+    setPendingItem: () => {},
+    setSessionShellAllowlist: () => {},
+    setConfirmationRequest: () => {},
+    confirmationLogger: new DebugLogger('continue-package-confirmation-test'),
+    slashCommandLogger: new DebugLogger('continue-package-resume-test'),
+    beginSlashCommandAction: () => new AbortController(),
+    endSlashCommandAction: () => {},
+    resumeOwnedSession: null,
+    isMcpDiscoveryPending: () => false,
+    resumeRawSession: null,
+    refreshResumedHistory: () => {},
+    writeOutput: async (item) => {
+      if (item.type === MessageType.ERROR || item.type === MessageType.INFO)
         messages.push({
           type:
             item.type === MessageType.ERROR
@@ -360,20 +401,29 @@ function createHandlerDeps(
           content: item.text,
           timestamp: new Date(),
         });
-      }
     },
-    addMessage: (message) => messages.push(message),
-    setIsProcessing: () => {},
-    setLocalIsProcessing: () => {},
-    setPendingItem: () => {},
-    setSessionShellAllowlist: () => {},
-    setConfirmationRequest: () => {},
-    recordingSwapCallbacks: callbacks,
-    confirmationLogger: new DebugLogger('continue-package-confirmation-test'),
-    slashCommandLogger: new DebugLogger('continue-package-resume-test'),
-    beginSlashCommandAction: () => new AbortController(),
-    endSlashCommandAction: () => {},
+    recordCommandError: async () => {},
   };
+  deps.resumeRawSession = bindCommandRawResume(
+    resumeRuntime,
+    persistence,
+    {
+      adoptResumeBoot: async (recording, boot, publish) => {
+        const history = client.getHistoryService();
+        if (history === null) throw new Error('Missing native history');
+        return history.adoptResumeBoot(recording, boot, publish);
+      },
+      attachRecording: async (integration) => {
+        const history = client.getHistoryService();
+        if (history === null) throw new Error('Missing native history');
+        await integration.subscribeToJournal(history);
+      },
+    },
+    callbacks,
+    deps.slashCommandLogger,
+    performResume,
+  );
+  return deps;
 }
 
 async function disposeActiveState(state: ActiveRecordingState): Promise<void> {
@@ -389,7 +439,6 @@ function historyText(history: readonly IContent[]): string {
     .map((block) => block.text)
     .join('\n');
 }
-
 async function readHistoryText(history: HistoryService): Promise<string> {
   let text = '';
   await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
@@ -425,7 +474,13 @@ describe('continue package perform_resume integration', () => {
       metadata: null,
     };
     const messages: Message[] = [];
-    const persistence = requireMediaStore(built.sessionClient.getAgentClient());
+    const persistence = new CliSessionPersistence(
+      {
+        projectRoot: config.getProjectRoot(),
+        chatsDir: config.projectChatsDir,
+      },
+      { mediaStore: requireMediaStore(built.client) },
+    );
     Object.defineProperty(config, 'createSessionPersistenceService', {
       value: () => {
         throw new Error('Config persistence factory must not be used');
@@ -436,9 +491,9 @@ describe('continue package perform_resume integration', () => {
       const mediaBytes = new Uint8Array([3, 1, 4, 1, 5]);
       const sessionPackage = await createPackage(root, [mediaBytes]);
       const result = await processSlashCommand(
-        createHandlerDeps(
+        await createHandlerDeps(
           config,
-          built.sessionClient,
+          built.client,
           createRecordingCallbacks(state, false),
           messages,
           persistence,
@@ -475,9 +530,7 @@ describe('continue package perform_resume integration', () => {
       assertDefined(reference, 'Expected portable media');
       expect(persisted[0]?.blocks).toContainEqual(reference);
       expect(
-        await requireMediaStore(
-          built.sessionClient.getAgentClient(),
-        ).readVerified(reference),
+        await requireMediaStore(built.client).readVerified(reference),
       ).toStrictEqual(mediaBytes);
       await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
         expect(historyText(rows)).not.toContain('prior session history');
@@ -509,9 +562,7 @@ describe('continue package perform_resume integration', () => {
     );
     const config = built.config;
     const projectTemp = config.projectTempDir;
-    const destinationStore = requireMediaStore(
-      built.sessionClient.getAgentClient(),
-    );
+    const destinationStore = requireMediaStore(built.client);
     const deduplicatedBytes = new Uint8Array([10, 20, 30]);
     const importedOnlyBytes = new Uint8Array([40, 50, 60, 70]);
     const preExistingReference = await destinationStore.admit({
@@ -537,13 +588,19 @@ describe('continue package perform_resume integration', () => {
       metadata: null,
     };
     const messages: Message[] = [];
-    const persistence = requireMediaStore(built.sessionClient.getAgentClient());
+    const persistence = new CliSessionPersistence(
+      {
+        projectRoot: config.getProjectRoot(),
+        chatsDir: config.projectChatsDir,
+      },
+      { mediaStore: requireMediaStore(built.client) },
+    );
 
     try {
       await processSlashCommand(
-        createHandlerDeps(
+        await createHandlerDeps(
           config,
-          built.sessionClient,
+          built.client,
           createRecordingCallbacks(state, true),
           messages,
           persistence,
@@ -617,8 +674,14 @@ describe('continue package perform_resume integration', () => {
     const id = randomUUID();
     const built = await createConfig(join(root, 'workspace'), id, history);
     const config = built.config;
-    const store = requireMediaStore(built.sessionClient.getAgentClient());
-    const persistence = store;
+    const store = requireMediaStore(built.client);
+    const persistence = new CliSessionPersistence(
+      {
+        projectRoot: config.getProjectRoot(),
+        chatsDir: config.projectChatsDir,
+      },
+      { mediaStore: store },
+    );
     const state: ActiveRecordingState = {
       recording: null,
       integration: null,
@@ -628,9 +691,9 @@ describe('continue package perform_resume integration', () => {
     const messages: Message[] = [];
     try {
       await processSlashCommand(
-        createHandlerDeps(
+        await createHandlerDeps(
           config,
-          built.sessionClient,
+          built.client,
           createRecordingCallbacks(state, false),
           messages,
           persistence,
@@ -679,51 +742,52 @@ describe('continue package perform_resume integration', () => {
           throw new Error('Config persistence factory must not be used');
         },
       });
-      const started = await setupSessionRecording(
+      registerCleanup(() => first.session.dispose());
+      await setupOwnerSessionRecording(
         first.config,
+        first.session,
+        first.session.listBrowserTargetsDetailed.bind(first.session),
         { listSessions: false, deleteSession: undefined },
         null,
-        first.sessionClient,
       );
-      const sessionId = started.recordingService.getSessionId();
-      const firstHistory = first.sessionClient
-        .getAgentClient()
-        .getHistoryService();
-      if (firstHistory === null) throw new Error('Missing startup history');
-      await started.recordingIntegration.subscribeToJournal(firstHistory);
-      firstHistory.add({
+      const sessionId = first.session.getSessionId();
+      await first.client.addHistory({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'legacy early resume' }],
       });
-      await firstHistory.waitForCommit();
-      await started.recordingService.flush();
-      const oldJournal = started.recordingService.getFilePath();
+      await first.session.flushRecording();
+      const oldJournal = first.session.getRecording().path;
       await runExitCleanup();
       __resetCleanupStateForTesting();
-      expect(started.recordingService.isActive()).toBe(false);
+      expect(first.session.getRecording().enabled).toBe(false);
       expect(
         (await readdir(first.config.projectChatsDir)).filter((file) =>
           file.endsWith('.lock'),
         ),
       ).toStrictEqual([]);
-      const resumedHistoryService = new HistoryService();
       resumed = await createConfig(
         workspace,
         randomUUID(),
-        resumedHistoryService,
+        new HistoryService(),
         sessionId,
       );
-      const resumedSetup = await setupSessionRecording(
+      registerCleanup(() => resumed?.session.dispose());
+      const resumedHistory = await setupOwnerSessionRecording(
         resumed.config,
+        resumed.session,
+        resumed.session.listBrowserTargetsDetailed.bind(resumed.session),
         { listSessions: false, deleteSession: undefined },
         null,
-        resumed.sessionClient,
-      );
-      expect(await readHistoryText(resumedHistoryService)).toContain(
-        'legacy early resume',
-      );
-      expect(resumedSetup.recordingService.getSessionId()).toBe(sessionId);
-      expect(resumedSetup.recordingService.getFilePath()).toBe(oldJournal);
+      ).then(({ resumedBoot }) => resumedBoot);
+      expect(
+        historyText(
+          resumedHistory === null
+            ? []
+            : await Array.fromAsync(resumedHistory.streamRows()),
+        ),
+      ).toContain('legacy early resume');
+      expect(resumed.session.getSessionId()).toBe(sessionId);
+      expect(resumed.session.getRecording().path).toBe(oldJournal);
     } finally {
       await runExitCleanup();
       __resetCleanupStateForTesting();

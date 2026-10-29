@@ -75,11 +75,16 @@ export function instantiateClient(
   classifyOAuthToken: (token: string) => boolean,
   authToken: string,
   baseURL?: string,
+  requestFetch?: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
 ): Anthropic {
   const isOAuthToken = classifyOAuthToken(authToken);
   const clientConfig: Record<string, unknown> = {
     dangerouslyAllowBrowser: true,
     maxRetries: 0,
+    fetch: requestFetch,
   };
 
   if (isOAuthToken) {

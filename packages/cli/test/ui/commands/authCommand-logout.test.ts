@@ -13,11 +13,7 @@
 import { describe, expect, beforeEach, afterEach, it } from 'bun:test';
 import * as fc from 'fast-check';
 import { AuthCommandExecutor } from '../../../src/ui/commands/authCommand.js';
-import {
-  KeyringTokenStore,
-  OAuthToken,
-  Logger,
-} from '@vybestack/llxprt-code-core';
+import { KeyringTokenStore, OAuthToken } from '@vybestack/llxprt-code-core';
 import {
   SecureStore,
   type KeyringAdapter,
@@ -27,12 +23,7 @@ import {
   CodexOAuthProvider,
   AnthropicOAuthProvider,
 } from '@vybestack/llxprt-code-providers/auth.js';
-import {
-  CommandContext,
-  MessageActionReturn,
-} from '../../../src/ui/commands/types.js';
-import { LoadedSettings } from '../../../src/config/settings.js';
-import { SessionStatsState } from '../../../src/ui/contexts/SessionContext.js';
+import { MessageActionReturn } from '../../../src/ui/commands/types.js';
 import { promises as fsP } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -72,51 +63,25 @@ async function createTestTokenStore(): Promise<KeyringTokenStore> {
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';
 
-// Mock command context for testing
-function createMockContext(): CommandContext {
-  return {
-    services: {
-      config: null,
-      settings: {} as LoadedSettings,
-      git: undefined,
-      logger: {} as Logger,
-    },
-    ui: {
-      addItem: () => {},
-      clear: () => {},
-      setDebugMessage: () => {},
-      pendingItem: null,
-      setPendingItem: () => {},
-      loadHistory: () => {},
-      toggleCorgiMode: () => {},
-      toggleVimEnabled: async () => true,
-      setLlxprtMdFileCount: () => {},
-      reloadCommands: () => {},
-    },
-    session: {
-      stats: {} as SessionStatsState,
-      sessionShellAllowlist: new Set(),
-    },
-  };
-}
-
 describe.skipIf(skipInCI)(
   'AuthCommand - Logout Command Parsing (REQ-002)',
   () => {
     let tokenStore: KeyringTokenStore;
     let oauthManager: OAuthManager;
     let authCommand: AuthCommandExecutor;
-    let context: CommandContext;
 
     beforeEach(async () => {
       tokenStore = await createTestTokenStore();
       oauthManager = new OAuthManager(tokenStore);
-      authCommand = new AuthCommandExecutor(oauthManager);
-      context = createMockContext();
+      authCommand = new AuthCommandExecutor(oauthManager, () => {});
 
       // Register test providers
-      oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
-      oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
+      oauthManager.registerProvider(
+        new CodexOAuthProvider(globalThis.fetch, tokenStore),
+      );
+      oauthManager.registerProvider(
+        new AnthropicOAuthProvider(globalThis.fetch, tokenStore),
+      );
     });
 
     afterEach(async () => {
@@ -151,7 +116,7 @@ describe.skipIf(skipInCI)(
 
       await tokenStore.saveToken('codex', token);
 
-      const result = await authCommand.execute(context, 'codex logout');
+      const result = await authCommand.execute('codex logout');
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -169,10 +134,7 @@ describe.skipIf(skipInCI)(
      * @then Error message returned
      */
     it('should return error for invalid provider', async () => {
-      const result = await authCommand.execute(
-        context,
-        'invalid-provider logout',
-      );
+      const result = await authCommand.execute('invalid-provider logout');
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -190,7 +152,7 @@ describe.skipIf(skipInCI)(
      * @then Error message includes supported providers
      */
     it('should list supported providers in error message', async () => {
-      const result = await authCommand.execute(context, 'unknown logout');
+      const result = await authCommand.execute('unknown logout');
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -213,7 +175,7 @@ describe.skipIf(skipInCI)(
       const existingToken = await tokenStore.getToken('codex');
       expect(existingToken).toBeNull();
 
-      const result = await authCommand.execute(context, 'codex logout');
+      const result = await authCommand.execute('codex logout');
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -238,7 +200,7 @@ describe.skipIf(skipInCI)(
       ];
 
       for (const args of testCases) {
-        const result = await authCommand.execute(context, args);
+        const result = await authCommand.execute(args);
 
         expect(result.type).toBe('message');
         const messageResult = result as MessageActionReturn;
@@ -264,7 +226,7 @@ describe.skipIf(skipInCI)(
       ];
 
       for (const args of testCases) {
-        const result = await authCommand.execute(context, args);
+        const result = await authCommand.execute(args);
 
         expect(result.type).toBe('message');
         const messageResult = result as MessageActionReturn;
@@ -282,7 +244,7 @@ describe.skipIf(skipInCI)(
      * @then Appropriate error handling
      */
     it('should handle logout with no provider specified', async () => {
-      const result = await authCommand.execute(context, 'logout');
+      const result = await authCommand.execute('logout');
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -306,7 +268,7 @@ describe.skipIf(skipInCI)(
         throw new Error('OAuth manager failure');
       };
 
-      const result = await authCommand.execute(context, 'codex logout');
+      const result = await authCommand.execute('codex logout');
 
       // Restore original method
       oauthManager.logout = originalLogout;
@@ -327,17 +289,19 @@ describe.skipIf(skipInCI)(
     let tokenStore: KeyringTokenStore;
     let oauthManager: OAuthManager;
     let authCommand: AuthCommandExecutor;
-    let context: CommandContext;
 
     beforeEach(async () => {
       tokenStore = await createTestTokenStore();
       oauthManager = new OAuthManager(tokenStore);
-      authCommand = new AuthCommandExecutor(oauthManager);
-      context = createMockContext();
+      authCommand = new AuthCommandExecutor(oauthManager, () => {});
 
       // Register test providers
-      oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
-      oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
+      oauthManager.registerProvider(
+        new CodexOAuthProvider(globalThis.fetch, tokenStore),
+      );
+      oauthManager.registerProvider(
+        new AnthropicOAuthProvider(globalThis.fetch, tokenStore),
+      );
     });
 
     afterEach(async () => {
@@ -367,7 +331,7 @@ describe.skipIf(skipInCI)(
       const supportedProviders = oauthManager.getSupportedProviders();
 
       for (const provider of supportedProviders) {
-        const result = await authCommand.execute(context, `${provider} logout`);
+        const result = await authCommand.execute(`${provider} logout`);
 
         expect(result.type).toBe('message');
         const messageResult = result as MessageActionReturn;
@@ -389,7 +353,7 @@ describe.skipIf(skipInCI)(
       const unsupportedProviders = ['openai', 'claude', 'gpt', 'invalid'];
 
       for (const provider of unsupportedProviders) {
-        const result = await authCommand.execute(context, `${provider} logout`);
+        const result = await authCommand.execute(`${provider} logout`);
 
         expect(result.type).toBe('message');
         const messageResult = result as MessageActionReturn;
@@ -411,7 +375,7 @@ describe.skipIf(skipInCI)(
       const providerVariations = ['codex', 'Codex', 'CODEX'];
 
       for (const provider of providerVariations) {
-        const result = await authCommand.execute(context, `${provider} logout`);
+        const result = await authCommand.execute(`${provider} logout`);
 
         expect(result.type).toBe('message');
         const messageResult = result as MessageActionReturn;
@@ -436,7 +400,7 @@ describe.skipIf(skipInCI)(
       expect(availableProviders).toContain('claudecode');
 
       // Test that error messages include these providers
-      const result = await authCommand.execute(context, 'unknown logout');
+      const result = await authCommand.execute('unknown logout');
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
 
@@ -453,17 +417,19 @@ describe.skipIf(skipInCI)(
     let tokenStore: KeyringTokenStore;
     let oauthManager: OAuthManager;
     let authCommand: AuthCommandExecutor;
-    let context: CommandContext;
 
     beforeEach(async () => {
       tokenStore = await createTestTokenStore();
       oauthManager = new OAuthManager(tokenStore);
-      authCommand = new AuthCommandExecutor(oauthManager);
-      context = createMockContext();
+      authCommand = new AuthCommandExecutor(oauthManager, () => {});
 
       // Register test providers
-      oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
-      oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
+      oauthManager.registerProvider(
+        new CodexOAuthProvider(globalThis.fetch, tokenStore),
+      );
+      oauthManager.registerProvider(
+        new AnthropicOAuthProvider(globalThis.fetch, tokenStore),
+      );
     });
 
     afterEach(async () => {
@@ -490,7 +456,7 @@ describe.skipIf(skipInCI)(
      * @then Success message contains required information
      */
     it('should provide informative success messages', async () => {
-      const result = await authCommand.execute(context, 'codex logout');
+      const result = await authCommand.execute('codex logout');
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -510,7 +476,7 @@ describe.skipIf(skipInCI)(
      * @then Error message contains helpful information
      */
     it('should provide helpful error messages', async () => {
-      const result = await authCommand.execute(context, 'invalid logout');
+      const result = await authCommand.execute('invalid logout');
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -532,12 +498,12 @@ describe.skipIf(skipInCI)(
      */
     it('should use appropriate message types', async () => {
       // Success case should be 'info'
-      const successResult = await authCommand.execute(context, 'codex logout');
+      const successResult = await authCommand.execute('codex logout');
       expect(successResult.type).toBe('message');
       expect((successResult as MessageActionReturn).messageType).toBe('info');
 
       // Error case should be 'error'
-      const errorResult = await authCommand.execute(context, 'invalid logout');
+      const errorResult = await authCommand.execute('invalid logout');
       expect(errorResult.type).toBe('message');
       expect((errorResult as MessageActionReturn).messageType).toBe('error');
     });
@@ -559,7 +525,7 @@ describe.skipIf(skipInCI)(
       ];
 
       for (const testCase of testCases) {
-        const result = await authCommand.execute(context, testCase.args);
+        const result = await authCommand.execute(testCase.args);
 
         expect(result.type).toBe('message');
         const messageResult = result as MessageActionReturn;
@@ -588,7 +554,7 @@ describe.skipIf(skipInCI)(
      */
     it('should provide contextual error information', async () => {
       // Test unknown provider error includes help
-      const result = await authCommand.execute(context, 'unknown logout');
+      const result = await authCommand.execute('unknown logout');
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -617,17 +583,19 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
   let tokenStore: KeyringTokenStore;
   let oauthManager: OAuthManager;
   let authCommand: AuthCommandExecutor;
-  let context: CommandContext;
 
   beforeEach(async () => {
     tokenStore = await createTestTokenStore();
     oauthManager = new OAuthManager(tokenStore);
-    authCommand = new AuthCommandExecutor(oauthManager);
-    context = createMockContext();
+    authCommand = new AuthCommandExecutor(oauthManager, () => {});
 
     // Register test providers
-    oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
-    oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
+    oauthManager.registerProvider(
+      new CodexOAuthProvider(globalThis.fetch, tokenStore),
+    );
+    oauthManager.registerProvider(
+      new AnthropicOAuthProvider(globalThis.fetch, tokenStore),
+    );
   });
 
   afterEach(async () => {
@@ -659,7 +627,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
           const middleSpace = leadingSpace || ' '; // At least one space between provider and logout
           const args = `${leadingSpace}${provider}${middleSpace}logout${trailingSpace}`;
 
-          const result = await authCommand.execute(context, args);
+          const result = await authCommand.execute(args);
 
           expect(result.type).toBe('message');
           const messageResult = result as MessageActionReturn;
@@ -684,7 +652,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
         async (provider, logoutAction) => {
           const args = `${provider} ${logoutAction}`;
 
-          const result = await authCommand.execute(context, args);
+          const result = await authCommand.execute(args);
 
           expect(result.type).toBe('message');
           const messageResult = result as MessageActionReturn;
@@ -721,7 +689,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
 
           // Execute concurrent logout commands
           const commandPromises = providers.map((provider) =>
-            authCommand.execute(context, `${provider} logout`),
+            authCommand.execute(`${provider} logout`),
           );
 
           const results = await Promise.all(commandPromises);
@@ -748,10 +716,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
       fc.asyncProperty(
         fc.constantFrom('codex', 'claudecode'),
         async (provider) => {
-          const result = await authCommand.execute(
-            context,
-            `${provider} logout`,
-          );
+          const result = await authCommand.execute(`${provider} logout`);
 
           expect(result.type).toBe('message');
           const messageResult = result as MessageActionReturn;

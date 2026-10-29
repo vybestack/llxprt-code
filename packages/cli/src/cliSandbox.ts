@@ -9,9 +9,9 @@ import {
   ExitCodes,
   WorkspaceFilesystemOwner,
 } from '@vybestack/llxprt-code-core';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { setTuiOwnsTerminal } from '@vybestack/llxprt-code-providers/auth.js';
-import { loadCliConfig } from './config/config.js';
+import type { ConfigBuildPreflight } from './config/config.js';
+import { ignoreReady, loadCliConfig } from './config/config.js';
 import { isImageModeActive } from './config/imageMode.js';
 import { buildImageModeFlags } from './config/imageModeDispatch.js';
 import { start_sandbox } from './utils/sandbox.js';
@@ -19,7 +19,7 @@ import {
   computeSandboxMemoryArgs,
   parseDockerMemoryToMB,
 } from './utils/bootstrap.js';
-import { runExitCleanup } from './utils/cleanup.js';
+import { runExitCleanup, registerCleanup } from './utils/cleanup.js';
 import { sessionId } from '@vybestack/llxprt-code-telemetry';
 import { ExtensionStorage } from './config/extension.js';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
@@ -139,7 +139,7 @@ export interface SandboxHopOptions {
   settings: LoadedSettings;
   argv: ParsedCliArgs;
   workspaceRoot: string;
-  runtimeSettingsService: SettingsService;
+  prepareSandboxPreflight: () => Promise<ConfigBuildPreflight>;
   initialAuthFailed: boolean;
   readStdin: () => Promise<string>;
   hasPipedInput: boolean;
@@ -165,7 +165,7 @@ export async function maybeHopIntoSandbox(
     settings,
     argv,
     workspaceRoot,
-    runtimeSettingsService,
+    prepareSandboxPreflight,
     initialAuthFailed,
     readStdin: readStdinData,
     hasPipedInput,
@@ -185,16 +185,24 @@ export async function maybeHopIntoSandbox(
   }
 
   const sandboxMemoryArgs = computeSandboxMemoryArgsFromEnv(config, settings);
+  const sandboxPreflight = await prepareSandboxPreflight();
+  registerCleanup(() => sandboxPreflight.dispose());
   const partialConfig = await loadCliConfig(
-    settings.merged,
-    [],
-    new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
-    sessionId,
-    argv,
-    workspaceRoot,
-    { settingsService: runtimeSettingsService },
+    {
+      settings: settings.merged,
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+      ),
+      sessionId,
+      argv,
+      cwd: workspaceRoot,
+      preflight: sandboxPreflight,
+    },
+    ignoreReady,
   );
 
+  await sandboxPreflight.dispose();
   const stdinData = hasPipedInput ? await readStdinData() : '';
   const sandboxArgs = injectStdinIntoArgs(process.argv, stdinData);
   // Transport the env-origin bootstrap selection into the child argv (without

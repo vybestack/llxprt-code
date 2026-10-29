@@ -52,7 +52,12 @@ describe('native fallback after external compression transport rejection', () =>
         });
         const handler = new CompressionHandler(
           runtime,
+          undefined,
           history,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
           {},
           () => ({
             provider,

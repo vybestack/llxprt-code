@@ -1,3 +1,5 @@
+import { waitFor } from '../../__tests__/render.js';
+import { readJournalItems } from '../stores/turn/read-journal-items.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -94,10 +96,13 @@ describe('Notifications', () => {
         text: 'UNRELATED_ERROR_DISTRACTOR: provider connection timed out.',
       });
       turn.commands.addItem({ type: 'error', text: historyText });
-      const history = agent.agentClient.getHistoryService();
-      if (!history) throw new Error('Missing journal');
-      await history.waitForCommit();
-      const filePath = history.journalPath();
+      await waitFor(async () => {
+        const rows = await readJournalItems(agent);
+        expect(
+          rows.some((row) => row.type === 'error' && row.text === historyText),
+        ).toBe(true);
+      });
+      const filePath = agent.session.getRecording().path;
       if (!filePath) throw new Error('Missing journal path');
       const pager = createScrollbackPagerStore({
         filePath,

@@ -15,8 +15,12 @@ import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createSessionSettingsFixture } from '../../../agents/src/api/__tests__/helpers/session-settings-fixture.js';
-import { createConfigParams } from '../../../agents/src/core/chatSession-runtime-helpers.js';
-import { ChatSession } from '../../../agents/src/core/chatSession.js';
+import {
+  createConfigParams,
+  createHistoryChat,
+  invocationData,
+} from '../../../agents/src/core/chatSession-runtime-helpers.js';
+import type { ChatSession } from '../../../agents/src/core/chatSession.js';
 import { accountingRow } from '../../../core/src/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { createMockCommandContext } from './mockCommandContext.js';
 import type { CommandContext } from '../ui/commands/types.js';
@@ -62,7 +66,12 @@ export function publicChat(history: HistoryService): ChatSession {
   const settings = createSessionSettingsFixture(config, settingsService);
   const context = createAgentRuntimeContext({
     prepareProviderInvocation: (name, parameters, signal) =>
-      captureProviderInvocation(runtime, name, parameters, signal),
+      captureProviderInvocation(
+        invocationData(runtime, name, settingsService),
+        name,
+        parameters,
+        signal,
+      ),
     state: createAgentRuntimeState({
       runtimeId: 'public-cursor',
       provider: 'test-provider',
@@ -76,20 +85,7 @@ export function publicChat(history: HistoryService): ChatSession {
     tools: createToolRegistryViewFromRegistry(undefined),
     providerRuntime: runtime,
   });
-  const unavailable = async (): Promise<never> => {
-    throw new Error('No provider request expected in a history read');
-  };
-  return new ChatSession(
-    context,
-    {
-      generateContent: unavailable,
-      generateContentStream: unavailable,
-      countTokens: unavailable,
-      embedContent: unavailable,
-    },
-    {},
-    [],
-  );
+  return createHistoryChat(context, config);
 }
 
 export function publicCommandContext(
@@ -98,17 +94,7 @@ export function publicCommandContext(
 ): CommandContext {
   return createMockCommandContext({
     signal,
-    services: {
-      config: { getModel: () => 'public-cursor-model' },
-      agent: {
-        agentClient: {
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-          getHistory: (_curated?: false, historySignal?: AbortSignal) =>
-            chat.streamHistory(historySignal),
-        },
-      },
-    },
+    services: { config: { getModel: () => 'public-cursor-model' } },
   });
 }
 

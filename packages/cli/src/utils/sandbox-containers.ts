@@ -33,7 +33,6 @@ import {
 } from './sandbox-env.js';
 import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
 import { addSandboxOwnershipLabels } from './sandbox-owner-labels.js';
-import { stopProxy } from '@vybestack/llxprt-code-providers/auth.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import type { DependencyVolumeLifecycle } from './sandbox-node-modules.js';
 import type { SandboxLaunchLifecycle } from './sandbox-lifecycle.js';
@@ -706,24 +705,6 @@ export function wireCleanupHandlers(
     process.on('SIGTERM', runBridgeCleanup);
     sandboxProcess.on('close', runBridgeCleanup);
   }
-
-  // @plan:PLAN-20250214-CREDPROXY.P34 R25.2, R25.3: Clean up credential proxy on sandbox exit
-  let proxyStopped = false;
-  const stopCredentialProxy = (): void => {
-    if (proxyStopped) return;
-    proxyStopped = true;
-    process.off('exit', stopCredentialProxy);
-    process.off('SIGINT', stopCredentialProxy);
-    process.off('SIGTERM', stopCredentialProxy);
-    sandboxProcess.off('close', stopCredentialProxy);
-    void stopProxy().catch((err) => {
-      debugLogger.error('Credential proxy stop() failed during cleanup:', err);
-    });
-  };
-  process.on('exit', stopCredentialProxy);
-  process.on('SIGINT', stopCredentialProxy);
-  process.on('SIGTERM', stopCredentialProxy);
-  sandboxProcess.on('close', stopCredentialProxy);
 }
 
 /** Handles stdin pause/raw-mode before spawning, and restores after. */

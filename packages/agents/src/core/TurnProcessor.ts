@@ -3,6 +3,41 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { TurnReceipt } from '@vybestack/llxprt-code-core/core/turnReceipt.js';
+import {
+  StreamEventType,
+  type StreamEvent,
+  INVALID_CONTENT_RETRY_OPTIONS,
+} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
+import type {
+  IContent,
+  UsageStats,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type {
+  ProviderRequestCollaborators,
+  ProviderFileBindingStore,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
+import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
+import {
+  AgentExecutionBlockedError,
+  AgentExecutionStoppedError,
+} from './chatSession.js';
+import type { TurnProcessorRuntime } from './chatSessionPorts.js';
+import type { StreamProcessor } from './StreamProcessor.js';
+import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import { responseTransportAttempts } from './response-transport-source.js';
 import { TurnAdmission } from './turn-admission.js';
 import {
@@ -10,21 +45,7 @@ import {
   failDirectTurn,
   type DirectResponseArrival,
 } from './directResponseArrival.js';
-import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { withRetryRequestState } from './retry-request-state.js';
-import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
-import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
-import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type {
-  IContent,
-  UsageStats,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { recordSourceSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
 import { buildProviderChatOptions } from './promptEnvelopeSendSeam.js';
 import {
@@ -32,48 +53,28 @@ import {
   type PreparedSourcePromptEnvelopeSend,
 } from './prompt-envelope-source-send.js';
 import { sendTurnSource } from './turnSourceRequest.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { CompressionHandler } from '../compression/CompressionHandler.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { StreamProcessor } from './StreamProcessor.js';
 import { normalizeToolInteractionInput } from './MessageConverter.js';
-import {
-  StreamEventType,
-  type StreamEvent,
-  INVALID_CONTENT_RETRY_OPTIONS,
-} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import {
   selectDirectRequestTools,
   logDirectRequestTools,
   type ToolSelectionHookResult,
 } from './directRequestTools.js';
 import {
-  shouldRetryStreamAttempt,
   applyRetryTemperature,
   chunkHasVisibleOutput,
+  shouldRetryStreamAttempt,
 } from './turnAbortHelpers.js';
 import { turnSystemInstruction } from './streamRequestHelpers.js';
-
-import {
-  AgentExecutionStoppedError,
-  AgentExecutionBlockedError,
-} from './chatSession.js';
 import {
   createProviderSendTiming,
   logModelOutputResponse,
+  turnTelemetryPorts,
   validateProviderForSend,
   type ProviderSendTiming,
 } from './turnLogging.js';
 import { throwTurnSendError } from './turnSendError.js';
-
-import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { TurnReceipt } from '@vybestack/llxprt-code-core/core/turnReceipt.js';
 import { recordAbandonedStreamAttempt } from './tokenUsageActualLogger.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
-
-type SemanticMediaPurgeFactory = () => Promise<
-  SemanticMediaPurgeAttempt | undefined
->;
 import {
   prepareAdmittedUserTurn,
   withPromptContextRollback,
@@ -84,6 +85,10 @@ import {
   throwAfterFailedTurnCleanup,
   wrapStreamGeneratorLifecycle,
 } from './turnMediaAdmissionLifecycle.js';
+
+type SemanticMediaPurgeFactory = () => Promise<
+  SemanticMediaPurgeAttempt | undefined
+>;
 
 /**
  * Wraps a neutral ModelStreamChunk into a CHUNK StreamEvent.
@@ -103,6 +108,10 @@ function wrapChunk(chunk: ModelStreamChunk): StreamEvent {
  * Orchestrates non-streaming sends and delegates streaming to StreamProcessor.
  */
 export class TurnProcessor {
+  private loggingPorts() {
+    return turnTelemetryPorts(this.ports.state, this.ports.telemetry);
+  }
+
   private logger = new DebugLogger('llxprt:turn-processor');
   private sendPromise: Promise<void> = Promise.resolve();
   private lastPromptTokenCount: number | null = null;
@@ -123,13 +132,22 @@ export class TurnProcessor {
     return this.currentPromptEnvelopeEstimate;
   }
 
-  rebindHistory(runtimeContext: AgentRuntimeContext): void {
-    this.runtimeContext = runtimeContext;
-    this.historyService = runtimeContext.history;
+  rebindHistory(
+    ports: TurnProcessorRuntime,
+    providerFileBindings: ProviderFileBindingStore,
+  ): void {
+    this.ports = ports;
+    this.historyService = ports.history;
+    this.providerFileBindings = providerFileBindings;
   }
 
   constructor(
-    private runtimeContext: AgentRuntimeContext,
+    private ports: TurnProcessorRuntime,
+    private readonly config: Config | undefined,
+    private readonly mediaResolver: RequestMediaResolutionService | undefined,
+    private readonly requestMediaBudgetBytes: number | undefined,
+    private providerFileBindings: ProviderFileBindingStore | undefined,
+    private readonly providerFileLifecycle: ProviderFileLifecycle | undefined,
     private readonly compressionHandler: CompressionHandler,
     private readonly providerResolver: (contextLabel: string) => IProvider,
     private readonly providerRuntimeBuilder: (
@@ -182,7 +200,7 @@ export class TurnProcessor {
 
     const prepared = withPromptContextRollback(
       await prepareAdmittedUserTurn(
-        this.runtimeContext,
+        this.ports,
         this.historyService,
         this._normalizeUserContent(params),
         prompt_id,
@@ -262,7 +280,7 @@ export class TurnProcessor {
 
     const prepared = withPromptContextRollback(
       await prepareAdmittedUserTurn(
-        this.runtimeContext,
+        this.ports,
         this.historyService,
         this._normalizeUserContent(params),
         prompt_id,
@@ -538,7 +556,7 @@ export class TurnProcessor {
         semanticMediaPurge,
       );
       logModelOutputResponse(
-        this.runtimeContext,
+        this.loggingPorts(),
         prompt_id,
         timing.elapsedSinceSend(),
         response.terminal.metadata(),
@@ -549,7 +567,7 @@ export class TurnProcessor {
       this.currentPromptEnvelopeEstimate = null;
       return throwTurnSendError(
         error,
-        this.runtimeContext,
+        this.loggingPorts(),
         prompt_id,
         timing.elapsedSinceSend(),
         this._normalizeRequestTools(params),
@@ -561,11 +579,8 @@ export class TurnProcessor {
   }
 
   private _validateProvider(provider: IProvider): void {
-    validateProviderForSend(
-      provider,
-      this.logger,
-      this.runtimeContext.state.model,
-      () => this.resolveProviderBaseUrl(provider),
+    validateProviderForSend(provider, this.logger, this.ports.state.model, () =>
+      this.resolveProviderBaseUrl(provider),
     );
   }
 
@@ -586,7 +601,7 @@ export class TurnProcessor {
   ): Promise<DirectResponseArrival> {
     const requestTools = this._selectRequestTools(requestParams);
     const toolSelection = await selectDirectRequestTools(
-      this.runtimeContext.state.model,
+      this.ports.state.model,
       requestTools,
       requestParams.hookOwner ?? requestParams.recordingExecution?.hookOwner,
     );
@@ -596,14 +611,14 @@ export class TurnProcessor {
     logDirectRequestTools(
       this.logger,
       provider.name,
-      this.runtimeContext.state.model,
+      this.ports.state.model,
       toolSelection.tools,
       providerBaseUrl,
     );
     const signal = requestParams.config?.abortSignal;
     let response: DirectResponseArrival | undefined;
     await sendTurnSource({
-      runtime: this.runtimeContext,
+      runtime: this.ports,
       compression: this.compressionHandler,
       history: this.historyService,
       provider,
@@ -670,11 +685,11 @@ export class TurnProcessor {
     return {
       provider: bindProviderMediaAndFiles(
         provider,
-        runtimeContext.mediaResolver,
-        runtimeContext.requestMediaBudgetBytes,
-        runtimeContext.providerFileBindings,
-        runtimeContext.providerFileLifecycle,
-        runtimeContext.config?.getTargetDir(),
+        this.mediaResolver,
+        this.requestMediaBudgetBytes,
+        this.providerFileBindings,
+        this.providerFileLifecycle,
+        this.config?.getTargetDir(),
       ),
       runtimeContext,
     };
@@ -687,19 +702,19 @@ export class TurnProcessor {
     systemInstruction: ChatSessionConfig['systemInstruction'],
   ): Promise<void> {
     this.currentPromptEnvelopeEstimate = prepared.estimate;
-    await this.runtimeContext.telemetry.logApiRequest({
-      model: this.runtimeContext.state.model,
+    await this.ports.telemetry.logApiRequest({
+      model: this.ports.state.model,
       promptId,
-      sessionId: this.runtimeContext.state.sessionId,
-      runtimeId: this.runtimeContext.state.runtimeId,
-      provider: this.runtimeContext.state.provider,
+      sessionId: this.ports.state.sessionId,
+      runtimeId: this.ports.state.runtimeId,
+      provider: this.ports.state.provider,
       timestamp: Date.now(),
     });
     await recordSourceSendSeamTelemetry({
       usageLogger: this.compressionHandler.tokenUsageLogger,
       promptId,
       estimate: prepared.estimate,
-      runtimeState: this.runtimeContext.state,
+      runtimeState: this.ports.state,
       historyService: this.historyService,
       requestRows: prepared.source,
       tools,
@@ -735,7 +750,7 @@ export class TurnProcessor {
             ...transport.options,
             onTransportAttempt: responseTransportAttempts(arrival),
           }),
-        runtime: this.runtimeContext,
+        runtime: this.ports,
         history: this.historyService,
         promptId,
         turnId: this.currentTurnId,
@@ -764,7 +779,7 @@ export class TurnProcessor {
       requestContents,
       tools,
       runtimeContext.metadata,
-      this.runtimeContext.prepareProviderInvocation(
+      this.ports.prepareProviderInvocation(
         providerName,
         undefined,
         timeoutSignal,

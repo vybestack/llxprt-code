@@ -1,5 +1,6 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -26,11 +27,17 @@ const requestContents = replayableContents([
 function makeProviderManager(): ProviderManager {
   const settingsService = new SettingsService();
   const config = createRuntimeConfigStub(settingsService);
-  return new ProviderManager({
-    sessionSettings: fixtureOwners.adopt(config, settingsService).settingsOwner,
+  return new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
     config,
-  });
+    undefined,
+    undefined,
+    borrowedSettings(config, settingsService),
+  );
 }
 
 describe('LoadBalancingProvider - Failover Strategy [part 1]', () => {
@@ -77,6 +84,7 @@ describe('LoadBalancingProvider - Failover Strategy [part 1]', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
+        invocation: makeLoadBalancerInvocation(),
         contents: requestContents,
       };
 
@@ -131,6 +139,7 @@ describe('LoadBalancingProvider - Failover Strategy [part 2]', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
+        invocation: makeLoadBalancerInvocation(),
         contents: requestContents,
       };
 
@@ -188,6 +197,7 @@ describe('LoadBalancingProvider - Failover Strategy [part 3]', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
+        invocation: makeLoadBalancerInvocation(),
         contents: requestContents,
       };
 
@@ -242,6 +252,7 @@ describe('LoadBalancingProvider - Failover Strategy [part 4]', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
+        invocation: makeLoadBalancerInvocation(),
         contents: requestContents,
       };
 
@@ -327,6 +338,7 @@ describe('LoadBalancingProvider - Failover Strategy [part 6]', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
+        invocation: makeLoadBalancerInvocation(),
         contents: requestContents,
       };
 
@@ -370,6 +382,7 @@ describe('LoadBalancingProvider - Failover Strategy [part 7]', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
+        invocation: makeLoadBalancerInvocation(),
         contents: requestContents,
       };
 

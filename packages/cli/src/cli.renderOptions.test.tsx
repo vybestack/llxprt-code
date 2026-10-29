@@ -1,11 +1,14 @@
-import { createUiSessionOwner } from './__tests__/uiSessionOwner.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { CliSessionPersistence } from './cliSessionPersistence.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import { useCommandOwners as installCommandOwners } from './__tests__/command-owner-fixture.js';
+const makeRenderAgent = installCommandOwners();
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
@@ -18,12 +21,8 @@ import { __setRenderForTesting } from './session/interactiveUI.js';
 
 import { LoadedSettings } from './config/settings.js';
 
-const createFakeAgent = (config: Config): Agent =>
-  ({
-    workspace: createUiSessionOwner(config).workspace,
-    dispose: vi.fn().mockResolvedValue(undefined),
-    getConfig: () => config,
-  }) as unknown as Agent;
+const createFakeAgent = async (_config: Config): Promise<Agent> =>
+  makeRenderAgent(crypto.randomUUID());
 
 void vi.mock('./utils/version.js', () => ({
   getCliVersion: vi.fn(() => Promise.resolve('1.0.0')),
@@ -114,7 +113,9 @@ describe('startInteractiveUI ink render options', () => {
   });
 
   it('passes computed Ink render options to ink.render()', async () => {
-    const { startInteractiveUI } = await import('./cli.js');
+    const { startInteractiveUI } = await import(
+      './__tests__/raw-interactive-startup-fixture.js'
+    );
     const config = new Config({
       sessionId: 'test-session',
       targetDir: tempDir,
@@ -128,7 +129,7 @@ describe('startInteractiveUI ink render options', () => {
 
     await startInteractiveUI(
       config,
-      createFakeAgent(config),
+      await createFakeAgent(config),
       settings,
       [],
       tempDir,
@@ -137,9 +138,8 @@ describe('startInteractiveUI ink render options', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       'raw',
-      rawMediaStore(),
+      rawPersistence(tempDir),
       startupSettings(),
     );
 
@@ -158,7 +158,9 @@ describe('startInteractiveUI ink render options', () => {
   }, 120_000);
 
   it('forces alternate buffer off when screen reader mode is enabled', async () => {
-    const { startInteractiveUI } = await import('./cli.js');
+    const { startInteractiveUI } = await import(
+      './__tests__/raw-interactive-startup-fixture.js'
+    );
     const config = new Config({
       sessionId: 'test-session',
       targetDir: tempDir,
@@ -170,7 +172,7 @@ describe('startInteractiveUI ink render options', () => {
 
     await startInteractiveUI(
       config,
-      createFakeAgent(config),
+      await createFakeAgent(config),
       createLoadedSettings(),
       [],
       tempDir,
@@ -179,9 +181,8 @@ describe('startInteractiveUI ink render options', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       'raw',
-      rawMediaStore(),
+      rawPersistence(tempDir),
       startupSettings(),
     );
 
@@ -199,19 +200,21 @@ describe('startInteractiveUI ink render options', () => {
   }, 120_000);
 });
 
-function startupSettings(): {
-  owner: SessionSettingsOwner;
-  store: SettingsService;
-} {
+function startupSettings(): SessionSettingsOwner {
   const store = new SettingsService();
   const owner = new SessionSettingsOwner(store);
   startupOwners.push(owner);
-  return { owner, store };
+  return owner;
 }
 
-function rawMediaStore(): LocalMediaStore {
-  return new LocalMediaStore({
-    rootDirectory: '/unused/test-media',
-    quotaBytes: 1024,
-  });
+function rawPersistence(root: string): CliSessionPersistence {
+  return new CliSessionPersistence(
+    { projectRoot: root, chatsDir: path.join(root, 'chats') },
+    {
+      mediaStore: new LocalMediaStore({
+        rootDirectory: path.join(root, 'media'),
+        quotaBytes: 1024,
+      }),
+    },
+  );
 }

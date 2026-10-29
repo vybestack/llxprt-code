@@ -84,7 +84,7 @@ export async function runDiskHighDensity(
   ...args: Parameters<typeof buildCompressionMetadata>
 ): Promise<Outcome> {
   const metadata = await buildCompressionMetadata(...args);
-  const history = args[2];
+  const history = args[3];
   const input = await history.openCompressionInput();
   let result: { readonly outcome: Outcome } | { readonly error: unknown };
   try {
@@ -93,7 +93,7 @@ export async function runDiskHighDensity(
         { ...metadata, history: input.rows },
         history,
         input.previous,
-        args[7]?.historyOrigin,
+        args[8]?.historyOrigin,
       ),
     };
   } catch (error) {

@@ -25,7 +25,15 @@ describe('checkpoint resume adoption', () => {
   beforeEach(async () => {
     await setup.beforeEach();
     history = new HistoryService();
-    context = { ...makeResumeContext(setup.chatsDir), historyService: history };
+    context = {
+      ...makeResumeContext(setup.chatsDir),
+      history: {
+        adoptResumeBoot: history.adoptResumeBoot.bind(history),
+        attachRecording: async (integration) => {
+          await integration.subscribeToJournal(history);
+        },
+      },
+    };
     const source = createSessionRecorder(
       makeConfig(setup.chatsDir, { sessionId: 'checkpoint-source' }),
     );

@@ -144,12 +144,13 @@ describe('apiKeyQuotaResolver', () => {
     });
 
     it('should return null for empty API key', async () => {
-      const result = await fetchApiKeyQuota('zai', '');
+      const result = await fetchApiKeyQuota(globalThis.fetch, 'zai', '');
       expect(result).toBeNull();
     });
 
     it('should return null for invalid API key', async () => {
       const result = await fetchApiKeyQuota(
+        globalThis.fetch,
         'zai',
         undefined as unknown as string,
       );
@@ -172,12 +173,14 @@ describe('apiKeyQuotaResolver', () => {
       );
 
       const result = await fetchApiKeyQuota(
+        globalThis.fetch,
         'zai',
         'test-key',
         'https://api.z.ai/v1',
       );
 
       expect(fetchZaiUsage).toHaveBeenCalledWith(
+        globalThis.fetch,
         'test-key',
         'https://api.z.ai/v1',
       );
@@ -205,9 +208,16 @@ describe('apiKeyQuotaResolver', () => {
         formatSyntheticUsage as Mock<typeof formatSyntheticUsage>
       ).mockReturnValue(mockLines);
 
-      const result = await fetchApiKeyQuota('synthetic', 'test-key');
+      const result = await fetchApiKeyQuota(
+        globalThis.fetch,
+        'synthetic',
+        'test-key',
+      );
 
-      expect(fetchSyntheticUsage).toHaveBeenCalledWith('test-key');
+      expect(fetchSyntheticUsage).toHaveBeenCalledWith(
+        globalThis.fetch,
+        'test-key',
+      );
       expect(result).toStrictEqual({ provider: 'Synthetic', lines: mockLines });
     });
 
@@ -232,9 +242,16 @@ describe('apiKeyQuotaResolver', () => {
         mockLines,
       );
 
-      const result = await fetchApiKeyQuota('chutes', 'test-key');
+      const result = await fetchApiKeyQuota(
+        globalThis.fetch,
+        'chutes',
+        'test-key',
+      );
 
-      expect(fetchChutesUsage).toHaveBeenCalledWith('test-key');
+      expect(fetchChutesUsage).toHaveBeenCalledWith(
+        globalThis.fetch,
+        'test-key',
+      );
       expect(result).toStrictEqual({ provider: 'Chutes', lines: mockLines });
     });
 
@@ -254,12 +271,14 @@ describe('apiKeyQuotaResolver', () => {
       );
 
       const result = await fetchApiKeyQuota(
+        globalThis.fetch,
         'kimi',
         'sk-standard-key',
         'https://api.moonshot.ai/v1',
       );
 
       expect(fetchKimiUsage).toHaveBeenCalledWith(
+        globalThis.fetch,
         'sk-standard-key',
         'https://api.moonshot.ai/v1',
       );
@@ -286,12 +305,14 @@ describe('apiKeyQuotaResolver', () => {
       );
 
       const result = await fetchApiKeyQuota(
+        globalThis.fetch,
         'kimi',
         'sk-kimi-subscription-key',
         'https://api.kimi.com/coding/v1',
       );
 
       expect(fetchKimiCodeUsage).toHaveBeenCalledWith(
+        globalThis.fetch,
         'sk-kimi-subscription-key',
         'https://api.kimi.com/coding/v1',
       );
@@ -304,7 +325,11 @@ describe('apiKeyQuotaResolver', () => {
         null,
       );
 
-      const result = await fetchApiKeyQuota('kimi', 'sk-kimi-subscription-key');
+      const result = await fetchApiKeyQuota(
+        globalThis.fetch,
+        'kimi',
+        'sk-kimi-subscription-key',
+      );
       expect(result).toBeNull();
     });
 
@@ -312,12 +337,20 @@ describe('apiKeyQuotaResolver', () => {
       const { fetchZaiUsage } = await import('./zai/usageInfo.js');
       (fetchZaiUsage as Mock<typeof fetchZaiUsage>).mockResolvedValue(null);
 
-      const result = await fetchApiKeyQuota('zai', 'test-key');
+      const result = await fetchApiKeyQuota(
+        globalThis.fetch,
+        'zai',
+        'test-key',
+      );
       expect(result).toBeNull();
     });
 
     it('should return null for unknown provider', async () => {
-      const result = await fetchApiKeyQuota('unknown', 'test-key');
+      const result = await fetchApiKeyQuota(
+        globalThis.fetch,
+        'unknown',
+        'test-key',
+      );
       expect(result).toBeNull();
     });
 
@@ -327,7 +360,11 @@ describe('apiKeyQuotaResolver', () => {
         new Error('test error'),
       );
 
-      const result = await fetchApiKeyQuota('zai', 'test-key');
+      const result = await fetchApiKeyQuota(
+        globalThis.fetch,
+        'zai',
+        'test-key',
+      );
       expect(result).toBeNull();
     });
   });

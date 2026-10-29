@@ -198,8 +198,8 @@ export async function runDiskTruncation(
   readonly summary?: IContent;
 }> {
   const metadata = await buildCompressionMetadata(...args);
-  const history = args[2];
-  const origin = args[7]?.historyOrigin;
+  const history = args[3];
+  const origin = args[8]?.historyOrigin;
   const compress = (
     rows: CompressionIndexedRows,
   ): Promise<DiskTruncationResult> =>

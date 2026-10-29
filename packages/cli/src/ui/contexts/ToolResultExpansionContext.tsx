@@ -54,8 +54,12 @@ export function ToolResultExpansionProvider({
   pager?: ScrollbackPagerStore;
   children: ReactNode;
 }): ReactNode {
+  const currentPathReader = useRef(getTranscriptFilePath);
+  currentPathReader.current = getTranscriptFilePath;
   const storeRef = useRef<ToolResultExpansionStore | null>(null);
-  storeRef.current ??= createToolResultExpansionStore(getTranscriptFilePath);
+  storeRef.current ??= createToolResultExpansionStore(() =>
+    currentPathReader.current(),
+  );
   const expansion = storeRef.current;
 
   useHistoryAppendPurge(pager, expansion);

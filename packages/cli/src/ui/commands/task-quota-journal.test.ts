@@ -3,12 +3,14 @@ import { describe, expect, it } from 'bun:test';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
-import { taskCommand } from './tasksCommand.js';
-import { quotaCommand } from './quotaCommand.js';
-import type { CommandContext, SlashCommand } from './types.js';
+import { createTaskCommand } from './tasksCommand.js';
+import { createQuotaCommand } from './quotaCommand.js';
+import { journalCommandOutput } from '../../__tests__/journal-command-output-fixture.js';
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 
 interface CommandCase {
-  readonly command: SlashCommand;
+  readonly command: 'task' | 'quota';
   readonly subcommand: string;
   readonly args: string;
   readonly type: 'info' | 'error';
@@ -17,49 +19,49 @@ interface CommandCase {
 
 const cases: readonly CommandCase[] = [
   {
-    command: taskCommand,
+    command: 'task',
     subcommand: 'list',
     args: '',
     type: 'info',
     text: 'No async tasks.',
   },
   {
-    command: taskCommand,
+    command: 'task',
     subcommand: 'end',
     args: '',
     type: 'error',
     text: 'Usage: /task end <task_id>',
   },
   {
-    command: taskCommand,
+    command: 'task',
     subcommand: 'end',
     args: 'missing-task',
     type: 'error',
     text: 'Task not found: missing-task',
   },
   {
-    command: quotaCommand,
+    command: 'quota',
     subcommand: 'credits',
     args: '',
     type: 'info',
     text: 'No Codex reset credits available. Reset credits are earned via referrals or purchased.',
   },
   {
-    command: quotaCommand,
+    command: 'quota',
     subcommand: 'reset',
     args: 'other',
     type: 'error',
     text: "Only 'codex' supports reset.",
   },
   {
-    command: quotaCommand,
+    command: 'quota',
     subcommand: 'reset',
     args: 'codex extra',
     type: 'error',
     text: 'Too many arguments. Usage: /quota reset [codex]',
   },
   {
-    command: quotaCommand,
+    command: 'quota',
     subcommand: 'reset',
     args: 'codex',
     type: 'info',
@@ -67,9 +69,7 @@ const cases: readonly CommandCase[] = [
   },
 ];
 
-function journalContext(
-  agent: NonNullable<CommandContext['services']['agent']>,
-): CommandContext {
+function journalContext(agent: Agent): CommandOwnerFixture {
   const base = createMockCommandContext();
   return {
     ...base,
@@ -103,15 +103,33 @@ async function readNotices(
 
 describe('task and quota journal presentation', () => {
   for (const scenario of cases) {
-    it(`persists /${scenario.command.name} ${scenario.subcommand} ${scenario.args} before completion`, async () => {
+    it(`persists /${scenario.command} ${scenario.subcommand} ${scenario.args} before completion`, async () => {
       await withRecordingLifetimeFixture(async ({ agent }) => {
         await agent.session.setRecording({ enabled: true });
         const context = journalContext(agent);
-        const action = scenario.command.subCommands?.find(
+        const output = journalCommandOutput(agent.session);
+        context.ui.addItem = output.addItem;
+        const registered =
+          scenario.command === 'task'
+            ? createTaskCommand(agent.tasks, output.addItem)
+            : createQuotaCommand({
+                oauthControl: {
+                  isAvailable: () => true,
+                  hasCodexToken: async () => false,
+                  listBuckets: async () => [],
+                  getAllCodexRateLimitResetCredits: async () => new Map(),
+                  readCodexBucketToken: async () => null,
+                },
+                fetch: agent.sessionClient.fetch,
+                baseUrlSetting: () => undefined,
+                fetchQuotaLines: async () => [],
+              });
+        const action = registered.subCommands?.find(
           (command) => command.name === scenario.subcommand,
         )?.action;
         if (!action) throw new Error('Missing command action');
         await action(context, scenario.args);
+        await output.settle();
         const path = agent.session.getRecording().path;
         if (!path) throw new Error('Missing journal path');
         await agent.session.setRecording({ enabled: false });

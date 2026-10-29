@@ -5,7 +5,6 @@
  */
 
 import { installZedFilesystemFixture } from './zed-filesystem-fixture.js';
-import { projectZedSessionSettings } from '../zed-session-ports.js';
 const fixtureFilesystem = installZedFilesystemFixture();
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -19,7 +18,7 @@ import {
 } from '@vybestack/llxprt-code-tools';
 import type { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
 
-import { Session } from '../zedIntegration.js';
+import { Session } from '../zed-session.js';
 
 export type ConfirmationCapture = {
   confirmationId: string;
@@ -582,17 +581,56 @@ export function createSession(
   connection: RecordingConnection,
   config: Config = buildMinimalConfig(),
 ): Session {
-  return new Session(
-    'test-session-id',
-    agent,
-    projectZedSessionSettings(
-      config,
-      agent,
-      fixtureFilesystem().files,
-      fixtureFilesystem().ignore,
+  const filesystem = fixtureFilesystem();
+  return new Session({
+    id: 'test-session-id',
+    streamTurn: (input, options) => agent.stream(input, options),
+    readModel: () => agent.getModel(),
+    selectModel: (model) => agent.setModel(model),
+    listModels: () => agent.listAvailableModels(),
+    readContextLimit: () => agent.getProviderContextLimit(),
+    readApprovalMode: () => agent.getApprovalMode(),
+    writeApprovalMode: (mode) => agent.setApprovalMode(mode),
+    readHistory: (signal) => agent.streamHistory(signal),
+    compressHistory: (options) => agent.compress(options),
+    retireAgent: () => agent.dispose(),
+    lookupTool: (name) => agent.tools.get(name),
+    listTools: () => agent.tools.list(),
+    replyConfirmation: (id, decision, payload, requiresConfirmation) =>
+      agent.tools.respondToConfirmation(
+        id,
+        decision,
+        payload,
+        requiresConfirmation,
+      ),
+    readTitle: () => agent.session.getRecordingTitle(),
+    writeTitle: (title) => agent.session.recordRecordingTitle(title),
+    readMemoryFiles: () => agent.memory.getFilePaths(),
+    listProfiles: () => agent.profiles.list(),
+    listTasks: () => agent.tasks.list(),
+    readProjectRoot: config.getProjectRoot.bind(config),
+    readMaxTurns: config.getMaxSessionTurns.bind(config),
+    readDebugMode: config.getDebugMode.bind(config),
+    readFiltering: config.getFileFilteringOptions.bind(config),
+    readTargetDir: config.getTargetDir.bind(config),
+    readRecursiveSearch: config.getEnableRecursiveFileSearch.bind(config),
+    readTextFile: filesystem.files.readTextFile.bind(filesystem.files),
+    shouldIgnoreFile: filesystem.ignore.shouldIgnoreFile.bind(
+      filesystem.ignore,
     ),
-    connection as unknown as acp.AgentSideConnection,
-  );
+    readIgnorePatterns: filesystem.ignore.getCoreIgnorePatterns.bind(
+      filesystem.ignore,
+    ),
+    readSetting: agent.getEphemeralSetting.bind(agent),
+    writeSetting: agent.setEphemeralSetting.bind(agent),
+    subscribeModelChanges: (listener) =>
+      new SessionSettingsOwner(new SettingsService()).subscribeModelChanges(
+        listener,
+      ),
+    connection: connection as unknown as acp.AgentSideConnection,
+    configOptionsEnabled: false,
+    terminals: null,
+  });
 }
 
 export async function runPrompt(session: Session): Promise<acp.PromptResponse> {

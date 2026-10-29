@@ -37,6 +37,10 @@ import type {
   OAuthManager,
   CodexOAuthToken,
 } from '@vybestack/llxprt-code-auth';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 export const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 export const TEST_RUNTIME_ID = 'codex-stateful-remediation-test';
@@ -114,10 +118,10 @@ export function buildOptions(
 ): NormalizedGenerateChatOptions {
   const settings = new SettingsService();
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: TEST_RUNTIME_ID,
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
 

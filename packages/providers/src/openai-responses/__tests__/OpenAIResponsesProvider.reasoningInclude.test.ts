@@ -1,3 +1,6 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -87,7 +90,6 @@ function registerReasoningIncludeCase1(): void {
 
         const runtime = createProviderRuntimeContext({
           runtimeId: 'reasoning-include-enabled-test',
-          settingsService: settings,
         });
 
         let capturedBody: string | undefined;
@@ -106,6 +108,7 @@ function registerReasoningIncludeCase1(): void {
         );
 
         const options = streamCallOptions({
+          fetch: requestFetch,
           providerName: provider.name,
           settings,
           runtime,
@@ -149,7 +152,6 @@ function registerReasoningIncludeCase2(): void {
 
         const runtime = createProviderRuntimeContext({
           runtimeId: 'reasoning-include-effort-test',
-          settingsService: settings,
         });
 
         let capturedBody: string | undefined;
@@ -168,6 +170,7 @@ function registerReasoningIncludeCase2(): void {
         );
 
         const options = streamCallOptions({
+          fetch: requestFetch,
           providerName: provider.name,
           settings,
           runtime,
@@ -212,7 +215,6 @@ function registerReasoningIncludeCase3(): void {
 
         const runtime = createProviderRuntimeContext({
           runtimeId: 'reasoning-include-disabled-test',
-          settingsService: settings,
         });
 
         let capturedBody: string | undefined;
@@ -231,6 +233,7 @@ function registerReasoningIncludeCase3(): void {
         );
 
         const options = streamCallOptions({
+          fetch: requestFetch,
           providerName: provider.name,
           settings,
           runtime,
@@ -275,7 +278,6 @@ function registerReasoningIncludeCase4(): void {
 
         const runtime = createProviderRuntimeContext({
           runtimeId: 'reasoning-strip-enabled-test',
-          settingsService: settings,
         });
 
         let capturedBody: string | undefined;
@@ -294,6 +296,7 @@ function registerReasoningIncludeCase4(): void {
         );
 
         const options = streamCallOptions({
+          fetch: requestFetch,
           providerName: provider.name,
           settings,
           runtime,
@@ -341,7 +344,6 @@ function registerReasoningIncludeCase5(): void {
 
         const runtime = createProviderRuntimeContext({
           runtimeId: 'reasoning-parse-output-item-test',
-          settingsService: settings,
         });
 
         // Base64 encode some reasoning content (simulating encrypted_content)
@@ -378,6 +380,7 @@ function registerReasoningIncludeCase5(): void {
         );
 
         const options = streamCallOptions({
+          fetch: requestFetch,
           providerName: provider.name,
           settings,
           runtime,
@@ -428,7 +431,6 @@ function registerReasoningIncludeCase6(): void {
 
         const runtime = createProviderRuntimeContext({
           runtimeId: 'reasoning-parse-summary-delta-test',
-          settingsService: settings,
         });
 
         mockFetch.mockImplementation(
@@ -462,6 +464,7 @@ function registerReasoningIncludeCase6(): void {
         );
 
         const options = streamCallOptions({
+          fetch: requestFetch,
           providerName: provider.name,
           settings,
           runtime,
@@ -507,7 +510,6 @@ function registerReasoningIncludeCase7(): void {
 
         const runtime = createProviderRuntimeContext({
           runtimeId: 'reasoning-context-test',
-          settingsService: settings,
         });
 
         const encryptedContent = Buffer.from(
@@ -530,6 +532,7 @@ function registerReasoningIncludeCase7(): void {
         );
 
         const options = streamCallOptions({
+          fetch: requestFetch,
           providerName: provider.name,
           settings,
           runtime,
@@ -599,7 +602,6 @@ function registerReasoningIncludeCase8(): void {
 
         const runtime = createProviderRuntimeContext({
           runtimeId: 'reasoning-strip-context-test',
-          settingsService: settings,
         });
 
         const encryptedContent = Buffer.from(
@@ -622,6 +624,7 @@ function registerReasoningIncludeCase8(): void {
         );
 
         const options = streamCallOptions({
+          fetch: requestFetch,
           providerName: provider.name,
           settings,
           runtime,

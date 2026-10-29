@@ -1,3 +1,5 @@
+import type { ComponentProps } from 'react';
+type HistoryItemIdeProps = ComponentProps<typeof HistoryItemDisplay>;
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -8,7 +10,25 @@ import { selectDialogOpen } from '../stores/dialog/dialogStore.js';
 import React from 'react';
 import { Box, type DOMElement } from 'ink';
 import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
-import type { SlashCommandRuntime } from '../cliUiRuntime.js';
+import type { AppHeaderRuntime } from '../components/AppHeader.js';
+import type { StoreDialogRuntime } from '../components/DialogManagerRenderers.js';
+import type { ToolGroupRuntime } from '../components/messages/ToolGroupMessage.js';
+import type { InlineContentRuntime } from './InlineContent.js';
+
+/**
+ * Composition of the ports the layout's regions hand to their children: the
+ * header, the transcript rows, the inline content (composer plus MCP status),
+ * the dialogs, and the footer's directory/debug labels. Nothing here is a
+ * runtime the layout itself reads wholesale; it is assembled at
+ * AppContainerRuntime and forwarded field by field.
+ */
+export type LayoutRuntime = AppHeaderRuntime &
+  ToolGroupRuntime &
+  InlineContentRuntime &
+  StoreDialogRuntime & {
+    getTargetDir(): string;
+    getDebugMode(): boolean;
+  };
 import type { LoadedSettings } from '../../config/settings.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
 import type { SlashCommand } from '../commands/types.js';
@@ -47,7 +67,11 @@ export function useHasActiveDialog(): boolean {
 }
 
 function useHistoryItemDisplayProps(
-  config: SlashCommandRuntime,
+  readIdeMode: () => boolean,
+  readIdeDiffingEnabled: () => boolean | null,
+  subscribeIdeDiffing: (listener: () => void) => () => void,
+  resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
+  config: LayoutRuntime,
   mainAreaWidth: number,
   showTodoPanelSetting: boolean,
   slashCommands: readonly SlashCommand[] | undefined,
@@ -56,6 +80,10 @@ function useHistoryItemDisplayProps(
 ) {
   return {
     terminalWidth: mainAreaWidth,
+    readIdeMode,
+    readIdeDiffingEnabled,
+    subscribeIdeDiffing,
+    resolveIdeDiff,
     config,
     slashCommands,
     showTodoPanel: showTodoPanelSetting,
@@ -68,7 +96,11 @@ export function useListItems(
   headerElement: React.ReactElement,
   pendingElement: React.ReactElement,
   history: HistoryItem[],
-  config: SlashCommandRuntime,
+  readIdeMode: () => boolean,
+  readIdeDiffingEnabled: () => boolean | null,
+  subscribeIdeDiffing: (listener: () => void) => () => void,
+  resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
+  config: LayoutRuntime,
   mainAreaWidth: number,
   staticAreaMaxItemHeight: number,
   slashCommands: readonly SlashCommand[] | undefined,
@@ -77,6 +109,10 @@ export function useListItems(
   embeddedShellFocused: boolean,
 ): ScrollableMainContentItem[] {
   const base = useHistoryItemDisplayProps(
+    readIdeMode,
+    readIdeDiffingEnabled,
+    subscribeIdeDiffing,
+    resolveIdeDiff,
     config,
     mainAreaWidth,
     showTodoPanelSetting,
@@ -115,7 +151,11 @@ export function useListItems(
 }
 
 export function useStaticItems(
-  config: SlashCommandRuntime,
+  readIdeMode: () => boolean,
+  readIdeDiffingEnabled: () => boolean | null,
+  subscribeIdeDiffing: (listener: () => void) => () => void,
+  resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
+  config: LayoutRuntime,
   settings: LoadedSettings,
   version: string,
   nightly: boolean,
@@ -129,6 +169,10 @@ export function useStaticItems(
   embeddedShellFocused: boolean,
 ): React.ReactElement[] {
   const base = useHistoryItemDisplayProps(
+    readIdeMode,
+    readIdeDiffingEnabled,
+    subscribeIdeDiffing,
+    resolveIdeDiff,
     config,
     mainAreaWidth,
     showTodoPanelSetting,
@@ -183,7 +227,11 @@ export function useStaticItems(
 
 export function usePendingItems(
   pendingHistoryItems: HistoryItemWithoutId[],
-  config: SlashCommandRuntime,
+  readIdeMode: () => boolean,
+  readIdeDiffingEnabled: () => boolean | null,
+  subscribeIdeDiffing: (listener: () => void) => () => void,
+  resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
+  config: LayoutRuntime,
   mainAreaWidth: number,
   constrainHeight: boolean,
   effectiveAvailableHeight: number,
@@ -193,6 +241,10 @@ export function usePendingItems(
   embeddedShellFocused: boolean,
 ): React.ReactElement[] {
   const base = useHistoryItemDisplayProps(
+    readIdeMode,
+    readIdeDiffingEnabled,
+    subscribeIdeDiffing,
+    resolveIdeDiff,
     config,
     mainAreaWidth,
     showTodoPanelSetting,
@@ -233,7 +285,11 @@ export function usePendingItems(
 export function usePendingElement(
   pendingHistoryItems: HistoryItemWithoutId[],
   pendingHistoryItemRef: React.RefObject<DOMElement | null>,
-  config: SlashCommandRuntime,
+  readIdeMode: () => boolean,
+  readIdeDiffingEnabled: () => boolean | null,
+  subscribeIdeDiffing: (listener: () => void) => () => void,
+  resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
+  config: LayoutRuntime,
   mainAreaWidth: number,
   constrainHeight: boolean,
   effectiveAvailableHeight: number,
@@ -244,6 +300,10 @@ export function usePendingElement(
 ): React.ReactElement {
   const pendingItems = usePendingItems(
     pendingHistoryItems,
+    readIdeMode,
+    readIdeDiffingEnabled,
+    subscribeIdeDiffing,
+    resolveIdeDiff,
     config,
     mainAreaWidth,
     constrainHeight,
@@ -272,7 +332,11 @@ export function usePendingElement(
  * the virtualized list built from them.
  */
 function useScrollableCenterItems(
-  config: SlashCommandRuntime,
+  readIdeMode: () => boolean,
+  readIdeDiffingEnabled: () => boolean | null,
+  subscribeIdeDiffing: (listener: () => void) => () => void,
+  resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
+  config: LayoutRuntime,
   settings: LoadedSettings,
   version: string,
   nightly: boolean,
@@ -305,6 +369,10 @@ function useScrollableCenterItems(
   const pendingElement = usePendingElement(
     pendingHistoryItems,
     pendingHistoryItemRef,
+    readIdeMode,
+    readIdeDiffingEnabled,
+    subscribeIdeDiffing,
+    resolveIdeDiff,
     config,
     mainAreaWidth,
     constrainHeight,
@@ -319,6 +387,10 @@ function useScrollableCenterItems(
     headerElement,
     pendingElement,
     history,
+    readIdeMode,
+    readIdeDiffingEnabled,
+    subscribeIdeDiffing,
+    resolveIdeDiff,
     config,
     mainAreaWidth,
     staticAreaMaxItemHeight,
@@ -330,7 +402,11 @@ function useScrollableCenterItems(
 }
 
 export function useScrollableContent(
-  config: SlashCommandRuntime,
+  readIdeMode: () => boolean,
+  readIdeDiffingEnabled: () => boolean | null,
+  subscribeIdeDiffing: (listener: () => void) => () => void,
+  resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
+  config: LayoutRuntime,
   settings: LoadedSettings,
   version: string,
   nightly: boolean,
@@ -348,6 +424,10 @@ export function useScrollableContent(
   embeddedShellFocused: boolean,
 ) {
   const listItems = useScrollableCenterItems(
+    readIdeMode,
+    readIdeDiffingEnabled,
+    subscribeIdeDiffing,
+    resolveIdeDiff,
     config,
     settings,
     version,
@@ -367,6 +447,10 @@ export function useScrollableContent(
   );
 
   const staticItems = useStaticItems(
+    readIdeMode,
+    readIdeDiffingEnabled,
+    subscribeIdeDiffing,
+    resolveIdeDiff,
     config,
     settings,
     version,
@@ -383,6 +467,10 @@ export function useScrollableContent(
 
   const pendingItems = usePendingItems(
     pendingHistoryItems,
+    readIdeMode,
+    readIdeDiffingEnabled,
+    subscribeIdeDiffing,
+    resolveIdeDiff,
     config,
     mainAreaWidth,
     constrainHeight,
@@ -398,7 +486,7 @@ export function useScrollableContent(
 
 export interface FooterProps {
   isTrustedFolder: boolean;
-  config: SlashCommandRuntime;
+  config: LayoutRuntime;
   settings: LoadedSettings;
   hideFooter: boolean;
   showMemoryUsage: boolean;
@@ -476,11 +564,19 @@ export function FooterSection(props: FooterProps) {
 }
 
 export interface QuittingDisplayProps {
+  readIdeMode: () => boolean;
+  readIdeDiffingEnabled: () => boolean | null;
+  subscribeIdeDiffing: (listener: () => void) => () => void;
+  resolveIdeDiff: (
+    filePath: string,
+    outcome: 'accepted' | 'rejected',
+  ) => Promise<void>;
+
   constrainHeight: boolean;
   effectiveAvailableHeight: number;
   terminalWidth: number;
   quittingMessages: HistoryItem[];
-  config: SlashCommandRuntime;
+  config: LayoutRuntime;
   slashCommands: readonly SlashCommand[] | undefined;
   showTodoPanelSetting: boolean;
 }
@@ -491,6 +587,10 @@ export function QuittingDisplay(props: QuittingDisplayProps) {
     effectiveAvailableHeight,
     terminalWidth,
     quittingMessages,
+    readIdeMode,
+    readIdeDiffingEnabled,
+    subscribeIdeDiffing,
+    resolveIdeDiff,
     config,
     slashCommands,
     showTodoPanelSetting,
@@ -508,6 +608,10 @@ export function QuittingDisplay(props: QuittingDisplayProps) {
           item={item}
           isPending={false}
           config={config}
+          readIdeMode={readIdeMode}
+          readIdeDiffingEnabled={readIdeDiffingEnabled}
+          subscribeIdeDiffing={subscribeIdeDiffing}
+          resolveIdeDiff={resolveIdeDiff}
           slashCommands={slashCommands}
           showTodoPanel={showTodoPanelSetting}
         />

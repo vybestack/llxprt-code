@@ -6,7 +6,9 @@ import { readFixtureSessionAuthPolicy } from './__tests__/session-auth-policy-fi
  */
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { InteractiveAuthCoordinator } from './interactive-auth-coordinator.js';
 import type {
   BucketFailoverOAuthManagerLike,
   OAuthManagerRuntimeMessageBusDeps,
@@ -82,7 +84,7 @@ void vi.mock('./provider-usage-info.js', () => ({
 
 import { OAuthManager } from './oauth-manager.js';
 
-function createTokenStore(): TokenStore {
+function makeTokenStore(): TokenStore {
   return {
     saveToken: vi.fn(async () => undefined),
     getToken: vi.fn(async () => null),
@@ -197,7 +199,7 @@ describe('OAuthManager wiring', () => {
   });
 
   it('constructs submodules, passes shared instances, and wires authenticator/delegate', () => {
-    const tokenStore = createTokenStore();
+    const tokenStore = makeTokenStore();
     const config = {
       getEphemeralSetting: vi.fn(),
     } as unknown as import('@vybestack/llxprt-code-core').Config;
@@ -229,6 +231,7 @@ describe('OAuthManager wiring', () => {
       proactiveRenewalManager,
       bucketManager,
       manager,
+      expect.any(InteractiveAuthCoordinator),
       undefined,
       expect.any(Function),
       expect.any(Function),
@@ -241,6 +244,7 @@ describe('OAuthManager wiring', () => {
       tokenStore,
       providerRegistry,
       manager,
+      expect.any(OAuthUIBridge),
       messageBus,
       expect.any(Function),
       expect.any(Function),
@@ -270,14 +274,14 @@ describe('OAuthManager wiring', () => {
       'authenticateMultipleBuckets',
     );
 
-    new OAuthManager(createTokenStore());
+    new OAuthManager(makeTokenStore());
 
     expect(getOAuthTokenSpy).not.toHaveBeenCalled();
     expect(authenticateMultipleBucketsSpy).not.toHaveBeenCalled();
   });
 
   it('delegates provider registry methods', async () => {
-    const tokenStore = createTokenStore();
+    const tokenStore = makeTokenStore();
     const manager = new OAuthManager(tokenStore);
     const provider = createProvider('claudecode');
 
@@ -312,7 +316,7 @@ describe('OAuthManager wiring', () => {
   });
 
   it('delegates coordinator, orchestrator, status service, and usage module methods', async () => {
-    const tokenStore = createTokenStore();
+    const tokenStore = makeTokenStore();
     // Issue #2616: the manager reads its settings reader via
     // config.getSettingsService() — the stub models that surface.
     const settingsService = new SettingsService();
@@ -339,8 +343,6 @@ describe('OAuthManager wiring', () => {
       doGetProfileBuckets: ReturnType<typeof vi.fn>;
     };
     const authFlowOrchestrator = wiring.state.authFlowOrchestrator as {
-      authenticate: ReturnType<typeof vi.fn>;
-      authenticateMultipleBuckets: ReturnType<typeof vi.fn>;
       setRuntimeMessageBus: ReturnType<typeof vi.fn>;
     };
     const authStatusService = wiring.state.authStatusService as {
@@ -412,6 +414,7 @@ describe('OAuthManager wiring', () => {
     expect(tokenAccessCoordinator.getToken).toHaveBeenCalledWith(
       'claudecode',
       undefined,
+      expect.any(AbortSignal),
     );
 
     await expect(manager.peekStoredToken('claudecode')).resolves.toStrictEqual(
@@ -420,18 +423,6 @@ describe('OAuthManager wiring', () => {
     await expect(manager.getOAuthToken('claudecode')).resolves.toStrictEqual(
       tokenObj,
     );
-
-    await manager.authenticate('claudecode', 'bucket-a');
-    expect(authFlowOrchestrator.authenticate).toHaveBeenCalledWith(
-      'claudecode',
-      'bucket-a',
-      undefined,
-    );
-
-    await manager.authenticateMultipleBuckets('claudecode', ['bucket-a']);
-    expect(
-      authFlowOrchestrator.authenticateMultipleBuckets,
-    ).toHaveBeenCalledWith('claudecode', ['bucket-a'], undefined);
 
     await expect(manager.getAuthStatus()).resolves.toStrictEqual([
       { provider: 'claudecode', authenticated: true, oauthEnabled: true },
@@ -474,29 +465,36 @@ describe('OAuthManager wiring', () => {
       false,
     );
 
-    await expect(manager.getAnthropicUsageInfo()).resolves.toStrictEqual({
+    await expect(
+      manager.getAnthropicUsageInfo(globalThis.fetch),
+    ).resolves.toStrictEqual({
       usage: 1,
     });
     expect(wiring.getAnthropicUsageInfo).toHaveBeenCalledWith(
+      globalThis.fetch,
       tokenStore,
       'bucket-a',
     );
 
-    await expect(manager.getAllAnthropicUsageInfo()).resolves.toStrictEqual(
-      new Map([['bucket-a', { usage: 1 }]]),
+    await expect(
+      manager.getAllAnthropicUsageInfo(globalThis.fetch),
+    ).resolves.toStrictEqual(new Map([['bucket-a', { usage: 1 }]]));
+    expect(wiring.getAllAnthropicUsageInfo).toHaveBeenCalledWith(
+      globalThis.fetch,
+      tokenStore,
     );
-    expect(wiring.getAllAnthropicUsageInfo).toHaveBeenCalledWith(tokenStore);
 
-    await expect(manager.getAllCodexUsageInfo()).resolves.toStrictEqual(
-      new Map([['bucket-a', { usage: 2 }]]),
-    );
+    await expect(
+      manager.getAllCodexUsageInfo(globalThis.fetch),
+    ).resolves.toStrictEqual(new Map([['bucket-a', { usage: 2 }]]));
     expect(wiring.getAllCodexUsageInfo).toHaveBeenCalledWith(
+      globalThis.fetch,
       tokenStore,
       'https://api.example.test',
     );
 
     await expect(
-      manager.getAllCodexRateLimitResetCredits(),
+      manager.getAllCodexRateLimitResetCredits(globalThis.fetch),
     ).resolves.toStrictEqual(
       new Map([
         [
@@ -508,6 +506,7 @@ describe('OAuthManager wiring', () => {
       ]),
     );
     expect(wiring.getAllCodexRateLimitResetCredits).toHaveBeenCalledWith(
+      globalThis.fetch,
       tokenStore,
       'https://api.example.test',
     );
@@ -518,7 +517,7 @@ describe('OAuthManager wiring', () => {
   });
 
   it('getAnthropicUsageInfo returns null when the claudecode provider is not registered', async () => {
-    const tokenStore = createTokenStore();
+    const tokenStore = makeTokenStore();
     const manager = new OAuthManager(tokenStore);
 
     const providerRegistry = wiring.state.providerRegistry as {
@@ -526,12 +525,14 @@ describe('OAuthManager wiring', () => {
     };
     providerRegistry.getProvider.mockReturnValue(undefined);
 
-    await expect(manager.getAnthropicUsageInfo()).resolves.toBeNull();
+    await expect(
+      manager.getAnthropicUsageInfo(globalThis.fetch),
+    ).resolves.toBeNull();
     expect(wiring.getAnthropicUsageInfo).not.toHaveBeenCalled();
   });
 
   it('satisfies BucketFailoverOAuthManagerLike at compile-time', () => {
-    const manager = new OAuthManager(createTokenStore());
+    const manager = new OAuthManager(makeTokenStore());
     const managerLike: BucketFailoverOAuthManagerLike = manager;
     expect(managerLike).toBeDefined();
   });

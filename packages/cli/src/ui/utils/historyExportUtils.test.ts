@@ -33,6 +33,12 @@ import {
   exportHistoryForBugReport,
 } from './historyExportUtils.js';
 
+async function* streamRows(
+  rows: readonly IContent[],
+): AsyncGenerator<IContent> {
+  yield* rows;
+}
+
 describe('historyExportUtils', () => {
   describe('sanitizeTranscript', () => {
     it('should redact LLXPRT_API_KEY', () => {
@@ -148,7 +154,7 @@ describe('historyExportUtils', () => {
         },
       ];
 
-      const result = await exportHistoryForBugReport(history);
+      const result = await exportHistoryForBugReport(streamRows(history));
       exportedFilePath = result.filePath;
 
       expect(result.filePath).toMatch(/llxprt-bug-report-.*\.md$/);
@@ -173,13 +179,19 @@ describe('historyExportUtils', () => {
         },
       ];
 
-      const result = await exportHistoryForBugReport(history);
+      const result = await exportHistoryForBugReport(streamRows(history));
       exportedFilePath = result.filePath;
 
-      expect(result.sanitized).toContain('## User');
-      expect(result.sanitized).toContain('User question');
-      expect(result.sanitized).toContain('## Assistant');
-      expect(result.sanitized).toContain('Assistant answer');
+      expect(await readFile(result.filePath, 'utf-8')).toContain('## User');
+      expect(await readFile(result.filePath, 'utf-8')).toContain(
+        'User question',
+      );
+      expect(await readFile(result.filePath, 'utf-8')).toContain(
+        '## Assistant',
+      );
+      expect(await readFile(result.filePath, 'utf-8')).toContain(
+        'Assistant answer',
+      );
     });
 
     it('should format function calls in markdown', async () => {
@@ -197,12 +209,16 @@ describe('historyExportUtils', () => {
         },
       ];
 
-      const result = await exportHistoryForBugReport(history);
+      const result = await exportHistoryForBugReport(streamRows(history));
       exportedFilePath = result.filePath;
 
-      expect(result.sanitized).toContain('**Function Call:** `read_file`');
-      expect(result.sanitized).toContain('```json');
-      expect(result.sanitized).toContain('"/tmp/test.txt"');
+      expect(await readFile(result.filePath, 'utf-8')).toContain(
+        '**Function Call:** `read_file`',
+      );
+      expect(await readFile(result.filePath, 'utf-8')).toContain('```json');
+      expect(await readFile(result.filePath, 'utf-8')).toContain(
+        '"/tmp/test.txt"',
+      );
     });
 
     it('should format function responses in markdown', async () => {
@@ -220,12 +236,16 @@ describe('historyExportUtils', () => {
         },
       ];
 
-      const result = await exportHistoryForBugReport(history);
+      const result = await exportHistoryForBugReport(streamRows(history));
       exportedFilePath = result.filePath;
 
-      expect(result.sanitized).toContain('**Function Response:** `read_file`');
-      expect(result.sanitized).toContain('```json');
-      expect(result.sanitized).toContain('File contents here');
+      expect(await readFile(result.filePath, 'utf-8')).toContain(
+        '**Function Response:** `read_file`',
+      );
+      expect(await readFile(result.filePath, 'utf-8')).toContain('```json');
+      expect(await readFile(result.filePath, 'utf-8')).toContain(
+        'File contents here',
+      );
     });
 
     it('should sanitize sensitive data in exported history', async () => {
@@ -238,23 +258,63 @@ describe('historyExportUtils', () => {
         },
       ];
 
-      const result = await exportHistoryForBugReport(history);
+      const result = await exportHistoryForBugReport(streamRows(history));
       exportedFilePath = result.filePath;
 
-      expect(result.sanitized).not.toContain('sk-secret123');
-      expect(result.sanitized).toContain('OPENAI_API_KEY=[REDACTED]');
+      expect(await readFile(result.filePath, 'utf-8')).not.toContain(
+        'sk-secret123',
+      );
+      expect(await readFile(result.filePath, 'utf-8')).toContain(
+        'OPENAI_API_KEY=[REDACTED]',
+      );
 
       const fileContent = await readFile(result.filePath, 'utf-8');
       expect(fileContent).not.toContain('sk-secret123');
     });
 
+    it('writes each sanitized row before requesting the next row', async () => {
+      const random = realNodeCryptoModule.randomBytes(8);
+      const fixedTime = '2026-10-28T12:34:56.789Z';
+      const stamped = fixedTime.replace(/[:.]/g, '-');
+      const destination = join(
+        tmpdir(),
+        `llxprt-bug-report-${stamped}-${random.toString('hex')}.md`,
+      );
+      const dateSpy = vi
+        .spyOn(Date.prototype, 'toISOString')
+        .mockReturnValue(fixedTime);
+      mockRandomBytes.mockReturnValueOnce(random);
+      let consumed = 0;
+      async function* rows(): AsyncGenerator<IContent> {
+        yield {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'OPENAI_API_KEY=private-first-row' }],
+        };
+        consumed++;
+        const prefix = await readFile(destination, 'utf8');
+        expect(prefix).toContain('OPENAI_API_KEY=[REDACTED]');
+        expect(prefix).not.toContain('private-first-row');
+        expect(prefix).not.toContain('second-row');
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'second-row' }] };
+        consumed++;
+      }
+      try {
+        const result = await exportHistoryForBugReport(rows());
+        exportedFilePath = result.filePath;
+        expect(consumed).toBe(2);
+        expect(await readFile(result.filePath, 'utf8')).toContain('second-row');
+      } finally {
+        dateSpy.mockRestore();
+      }
+    });
+
     it('should handle empty history', async () => {
       const history: IContent[] = [];
 
-      const result = await exportHistoryForBugReport(history);
+      const result = await exportHistoryForBugReport(streamRows(history));
       exportedFilePath = result.filePath;
 
-      expect(result.sanitized).toContain(
+      expect(await readFile(result.filePath, 'utf-8')).toContain(
         '# LLxprt Code Conversation Transcript',
       );
 
@@ -273,11 +333,11 @@ describe('historyExportUtils', () => {
         },
       ];
 
-      const result = await exportHistoryForBugReport(history);
+      const result = await exportHistoryForBugReport(streamRows(history));
       exportedFilePath = result.filePath;
 
-      expect(result.sanitized).toContain('First part');
-      expect(result.sanitized).toContain('Second part');
+      expect(await readFile(result.filePath, 'utf-8')).toContain('First part');
+      expect(await readFile(result.filePath, 'utf-8')).toContain('Second part');
     });
 
     it('should create unique filenames with timestamps', async () => {
@@ -288,13 +348,13 @@ describe('historyExportUtils', () => {
         },
       ];
 
-      const result1 = await exportHistoryForBugReport(history);
+      const result1 = await exportHistoryForBugReport(streamRows(history));
       exportedFilePath = result1.filePath;
 
       // Wait a tiny bit to ensure different timestamp
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      const result2 = await exportHistoryForBugReport(history);
+      const result2 = await exportHistoryForBugReport(streamRows(history));
 
       // Different exports should have different filenames
       expect(result1.filePath).not.toBe(result2.filePath);
@@ -312,8 +372,8 @@ describe('historyExportUtils', () => {
       ];
 
       const [result1, result2] = await Promise.all([
-        exportHistoryForBugReport(history),
-        exportHistoryForBugReport(history),
+        exportHistoryForBugReport(streamRows(history)),
+        exportHistoryForBugReport(streamRows(history)),
       ]);
       exportedFilePath = result1.filePath;
 
@@ -331,7 +391,7 @@ describe('historyExportUtils', () => {
           },
         ];
 
-        const result = await exportHistoryForBugReport(history);
+        const result = await exportHistoryForBugReport(streamRows(history));
         exportedFilePath = result.filePath;
 
         const mode = (await stat(result.filePath)).mode & 0o777;
@@ -368,7 +428,7 @@ describe('historyExportUtils', () => {
             blocks: [{ type: 'text', text: 'Test' }],
           },
         ];
-        const result = await exportHistoryForBugReport(history);
+        const result = await exportHistoryForBugReport(streamRows(history));
         exportedFilePath = result.filePath;
 
         expect(result.filePath).not.toBe(collidedPath);

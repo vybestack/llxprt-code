@@ -18,27 +18,32 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
  * ChatSession still uses Config directly.
  */
 
-import { afterEach, describe, it, expect, vi } from 'bun:test';
-import { ChatSession } from '../chatSession.js';
 import {
   Config,
   type ConfigParameters,
 } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Test helper: Create minimal Config for testing
@@ -94,8 +99,6 @@ function createTestRuntimeContext(
   historyService?: HistoryService,
 ): AgentRuntimeContext {
   const providerRuntime = createProviderRuntimeContext({
-    settingsService: root.settingsService,
-    config: root.config,
     runtimeId: runtimeState.runtimeId,
     metadata: { source: 'chatSession.runtimeState.test' },
   });
@@ -116,6 +119,8 @@ function createTestRuntimeContext(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
   });
 }
@@ -254,7 +259,19 @@ function facadeCallback0(): void {
 
   // Phase 6: Use AgentRuntimeContext constructor
   expect(() => {
-    new ChatSession(view, contentGenerator, { systemInstruction: 'test' }, []);
+    new ChatSession(
+      chatSessionPorts(view),
+      root.config,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      contentGenerator,
+      { systemInstruction: 'test' },
+      [],
+    );
   }).not.toThrow();
 }
 
@@ -272,7 +289,14 @@ async function facadeCallback2(): Promise<void> {
   const view = createTestRuntimeContext(runtimeState, root, historyService);
 
   const chat = new ChatSession(
-    view,
+    chatSessionPorts(view),
+    root.config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     contentGenerator,
     { systemInstruction: 'test' },
     [],
@@ -297,7 +321,14 @@ async function facadeCallback3(): Promise<void> {
   const view = createTestRuntimeContext(runtimeState, root, historyService);
 
   const chat = new ChatSession(
-    view,
+    chatSessionPorts(view),
+    root.config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     contentGenerator,
     { systemInstruction: 'test' },
     [],
@@ -322,7 +353,14 @@ async function facadeCallback4(): Promise<void> {
   const view = createTestRuntimeContext(runtimeState, root, historyService);
 
   const chat = new ChatSession(
-    view,
+    chatSessionPorts(view),
+    root.config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     contentGenerator,
     { systemInstruction: 'test' },
     [],
@@ -348,7 +386,14 @@ async function facadeCallback5(): Promise<void> {
   const view = createTestRuntimeContext(runtimeState, root, historyService);
 
   const chat = new ChatSession(
-    view,
+    chatSessionPorts(view),
+    root.config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     contentGenerator,
     { systemInstruction: 'test' },
     [],
@@ -371,7 +416,14 @@ async function facadeCallback6(): Promise<void> {
   const view = createTestRuntimeContext(runtimeState, root, historyService);
 
   const chat = new ChatSession(
-    view,
+    chatSessionPorts(view),
+    root.config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     contentGenerator,
     { systemInstruction: 'test' },
     [],
@@ -392,7 +444,14 @@ function facadeCallback8(): void {
   const historyService = createMockHistoryService();
   const view = createTestRuntimeContext(runtimeState, root, historyService);
   const chat = new ChatSession(
-    view,
+    chatSessionPorts(view),
+    root.config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     contentGenerator,
     { systemInstruction: 'test' },
     [],
@@ -414,7 +473,14 @@ function facadeCallback9(): void {
   const historyService = createMockHistoryService();
   const view = createTestRuntimeContext(runtimeState, root, historyService);
   const chat = new ChatSession(
-    view,
+    chatSessionPorts(view),
+    root.config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     contentGenerator,
     { systemInstruction: 'test' },
     [],
@@ -438,7 +504,19 @@ function facadeCallback10(): void {
 
   const getProviderSpy = vi.spyOn(root.config, 'getProvider');
 
-  new ChatSession(view, contentGenerator, { systemInstruction: 'test' }, []);
+  new ChatSession(
+    chatSessionPorts(view),
+    root.config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    contentGenerator,
+    { systemInstruction: 'test' },
+    [],
+  );
 
   // ChatSession should NOT call getProvider when runtime state is provided
   // Note: getModel() may still be called as a fallback in line 425 of chatSession.ts
@@ -459,7 +537,19 @@ function facadeCallback11(): void {
 
   root.settingsOwner.writeUserParameter('temperature', 0.4);
 
-  new ChatSession(view, contentGenerator, { systemInstruction: 'test' }, []);
+  new ChatSession(
+    chatSessionPorts(view),
+    root.config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    contentGenerator,
+    { systemInstruction: 'test' },
+    [],
+  );
 
   expect(root.config.getInitialSettings()).not.toHaveProperty('temperature');
   expect(root.settingsOwner.readNamedParameter('temperature')).toBe(0.4);

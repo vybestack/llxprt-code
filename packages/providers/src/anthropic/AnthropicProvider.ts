@@ -335,6 +335,7 @@ export class AnthropicProvider extends BaseProvider {
       (token) => this.classifyOAuthToken(token),
       authToken,
       baseURL,
+      options.invocation.fetch,
     );
 
     telemetry?.record?.('stateless-provider.call', {
@@ -382,6 +383,7 @@ export class AnthropicProvider extends BaseProvider {
         (token) => this.classifyOAuthToken(token),
         authToken,
         baseURL,
+        this.requestFetch,
       );
 
       this.getLogger().debug(() => 'Fetching models from Anthropic API');

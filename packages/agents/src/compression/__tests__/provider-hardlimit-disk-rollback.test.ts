@@ -37,6 +37,7 @@ describe('actual disk provider candidate compensation', () => {
                 },
                 promptId,
                 runtime,
+                undefined,
                 history,
                 async () => ({
                   provider: transport,

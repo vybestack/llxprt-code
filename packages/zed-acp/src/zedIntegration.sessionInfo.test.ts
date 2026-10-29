@@ -1,3 +1,27 @@
+import { useRecordingPrompts } from '../../agents/src/api/__tests__/helpers/recording-prompts.js';
+import { useFakeResponsesReplay } from '../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import {
+  openRouteAAgent,
+  type RouteAAgent,
+} from '../../agents/src/api/__tests__/helpers/route-a-agent.js';
+import { afterEach, describe, expect, it } from 'bun:test';
+import {
+  decodeSessionFact,
+  SESSION_KEYS,
+} from '@vybestack/llxprt-code-core/recording/sessionMetaKeys.js';
+import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
+import { stateReaderOf } from '@vybestack/llxprt-code-core/journal/journalReaderState.js';
+import { sha256KeyHash } from '@vybestack/llxprt-code-core/journal/idKeys.js';
+import type { Session } from './zed-session.js';
+import {
+  buildFakeAgent,
+  buildScriptedAgent,
+  RecordingConnection,
+  createSession,
+  editConfirmation,
+} from './__tests__/zed-test-helpers.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -10,25 +34,6 @@
  * - Finding 3: slash command success/failure shares exact-once metadata finally.
  * - Finding 4: pre-turn listing timestamp stable (initialized once).
  */
-
-import { afterEach, describe, expect, it } from 'bun:test';
-
-import {
-  decodeSessionFact,
-  SESSION_KEYS,
-} from '@vybestack/llxprt-code-core/recording/sessionMetaKeys.js';
-import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
-import { stateReaderOf } from '@vybestack/llxprt-code-core/journal/journalReaderState.js';
-import { sha256KeyHash } from '@vybestack/llxprt-code-core/journal/idKeys.js';
-import { withRecordingLifetimeFixture } from '../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
-import {
-  buildFakeAgent,
-  buildScriptedAgent,
-  createSession,
-  editConfirmation,
-  RecordingConnection,
-} from './__tests__/zed-test-helpers.js';
-import type { Session } from './zedIntegration.js';
 
 async function assertDurableTitle(path: string): Promise<void> {
   const reader = await openJournalReadOnly(path);
@@ -45,39 +50,54 @@ async function assertDurableTitle(path: string): Promise<void> {
 }
 
 describe('Zed Session recording title owner', () => {
-  it('writes a durable title and hydrates only the owning facade when Config is borrowed', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config, borrow }) => {
-      const sibling = await borrow();
-      await agent.session.setRecording({ enabled: true });
-      const connection = new RecordingConnection();
-      const owned = createSession(agent, connection, config);
-      const first = await owned.prompt({
-        sessionId: 'test-session-id',
-        prompt: [{ type: 'text', text: '/tools owner title' }],
-      });
-      expect(first.stopReason).toBe('end_turn');
-      const path = agent.session.getRecording().path;
-      if (path === undefined) throw new Error('Recording was not materialized');
-      await assertDurableTitle(path);
-      await owned.prompt({
-        sessionId: 'test-session-id',
-        prompt: [{ type: 'text', text: '/tools second prompt' }],
-      });
-      expect(agent.session.getRecordingTitle()).toBe('/tools owner title');
+  useRecordingPrompts();
+  useFakeResponsesReplay('multi-turn-text.jsonl');
+  const credentials = useOwnedCredentials();
+  const opened: RouteAAgent[] = [];
+  afterEach(async () => {
+    await Promise.allSettled(opened.splice(0).map((route) => route.close()));
+  });
 
-      const hydrated = createSession(agent, connection, config);
-      const other = createSession(sibling, connection, config);
-      expect(hydrated.getLifecycleInfo().title).toBe('/tools owner title');
-      expect(other.getLifecycleInfo().title).toBeUndefined();
-
-      const recorded = (await agent.session.listSessions()).at(0);
-      if (recorded === undefined) throw new Error('Session was not listed');
-      await agent.session.setRecording({ enabled: false });
-      await agent.session.resume(recorded.id);
-      expect(
-        createSession(agent, connection, config).getLifecycleInfo().title,
-      ).toBe('/tools owner title');
+  it('writes a durable title and hydrates only the owning facade', async () => {
+    const owner = await openRouteAAgent({ authority: credentials().authority });
+    opened.push(owner);
+    const siblingRoute = await openRouteAAgent({
+      authority: credentials().authority,
+      config: { workingDir: owner.directory },
     });
+    opened.push(siblingRoute);
+    const agent = owner.agent;
+    const config = owner.config;
+    const sibling = siblingRoute.agent;
+    await agent.session.setRecording({ enabled: true });
+    const connection = new RecordingConnection();
+    const owned = createSession(agent, connection, config);
+    const first = await owned.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: '/tools owner title' }],
+    });
+    expect(first.stopReason).toBe('end_turn');
+    const path = agent.session.getRecording().path;
+    if (path === undefined) throw new Error('Recording was not materialized');
+    await assertDurableTitle(path);
+    await owned.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: '/tools second prompt' }],
+    });
+    expect(agent.session.getRecordingTitle()).toBe('/tools owner title');
+
+    const hydrated = createSession(agent, connection, config);
+    const other = createSession(sibling, connection, siblingRoute.config);
+    expect(hydrated.getLifecycleInfo().title).toBe('/tools owner title');
+    expect(other.getLifecycleInfo().title).toBeUndefined();
+
+    const recorded = (await agent.session.listSessions()).at(0);
+    if (recorded === undefined) throw new Error('Session was not listed');
+    await agent.session.setRecording({ enabled: false });
+    await agent.session.resume(recorded.id);
+    expect(
+      createSession(agent, connection, config).getLifecycleInfo().title,
+    ).toBe('/tools owner title');
   }, 30000);
 });
 
@@ -90,6 +110,7 @@ async function disposeCreatedSessions(): Promise<void> {
 }
 
 describe('Zed Session - session_info_update findings (issue #1611 remediation)', () => {
+  useRecordingPrompts();
   afterEach(disposeCreatedSessions);
 
   async function verifyFinding1TheFirstACCEPTEDPromptWinsTheTitleEvenIfALaterOverlappingPromptFinishesFirst() {

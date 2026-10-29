@@ -8,9 +8,20 @@ import { describe, expect, it, vi } from 'bun:test';
 import type { OAuthProvider } from './types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 import {
-  createIssue1468Fixture,
   mockLoadProfile,
+  MockTokenStore,
+  createFakeOAuthSettings,
+  resetIssue1468Mocks,
 } from './__tests__/oauth-manager.issue1468.test-helpers.js';
+import { OAuthManager } from './oauth-manager.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { readFixtureSessionAuthPolicy } from './__tests__/session-auth-policy-fixture.js';
+import {
+  installOwnedConfig,
+  installBorrowedConfigSettings,
+} from '../__tests__/helpers/session-settings-owner-fixture.js';
+const acquireIssueSettings = installBorrowedConfigSettings();
+const acquireIssueConfig = installOwnedConfig();
 
 async function loadCaseOneProfile(profileName: string) {
   if (profileName === 'foreground-profile') {
@@ -30,7 +41,21 @@ async function loadCaseOneProfile(profileName: string) {
 
 describe('Issue #1468 getProfileBuckets case 1', () => {
   it('uses request profile metadata to resolve bucketed tokens for subagent runtimes', async () => {
-    const { tokenStore, manager, settingsService } = createIssue1468Fixture();
+    const settingsService = new SettingsService();
+    const config = acquireIssueConfig({
+      sessionId: 'issue1468',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      model: 'gpt-5',
+    });
+    acquireIssueSettings(config, settingsService);
+    const tokenStore = new MockTokenStore();
+    const manager = new OAuthManager(tokenStore, createFakeOAuthSettings(), {
+      config,
+      readSessionAuthPolicy: readFixtureSessionAuthPolicy(settingsService),
+    });
+    resetIssue1468Mocks();
 
     settingsService.setCurrentProfileName('foreground-profile');
     mockLoadProfile.mockImplementation(loadCaseOneProfile);

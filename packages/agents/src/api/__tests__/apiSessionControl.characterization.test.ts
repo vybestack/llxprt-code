@@ -13,12 +13,10 @@ const fixturePaths = installTestWorkspacePaths({
 import { describe, it, expect, vi } from 'bun:test';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
-import {
-  SessionControl,
-  type SessionControlDeps,
-} from '../control/sessionControl.js';
+import { SessionControl } from '../control/sessionControl.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SessionRecordingPaths } from '../control/sessionControl.js';
+import { SessionConversationBinding } from '../../session/session-conversation-binding.js';
 import type {
   IContent,
   TextBlock,
@@ -67,20 +65,14 @@ function makeMockClient(history: IContent[]): AgentClientContract {
   } as unknown as AgentClientContract;
 }
 
-function makeConfig(): Config {
+function makeRecordingPaths(): SessionRecordingPaths {
   return {
-    getProjectRoot: () => '/tmp/test-session-control',
-    setSessionRecordingService: () => undefined,
-    getSessionRecordingService: () => undefined,
-    storage: {
-      readProjectTempData: () => Promise.resolve(null),
-      writeProjectTempData: () => Promise.resolve(),
-      deleteProjectTempData: () => Promise.resolve(),
-      projectTempDataPath: () => '/tmp/test-session-control/data',
-      getProjectTempDir: () => '/tmp/test-session-control/tmp',
-      getProjectChatsDir: () => '/tmp/test-session-control/chats',
-    },
-  } as unknown as Config;
+    projectRoot: '/tmp/test-session-control',
+    storageRoot: '/tmp/test-session-control/data',
+    projectTempDir: '/tmp/test-session-control/tmp',
+    projectChatsDir: '/tmp/test-session-control/chats',
+    persistenceQueueBytes: 1024 * 1024,
+  };
 }
 
 function textContent(
@@ -94,32 +86,50 @@ function textContent(
   };
 }
 
-function makeDeps(client: AgentClientContract): SessionControlDeps {
-  return {
-    readRecordingQueueLimit: () => 1024 * 1024,
-    directories: () => fixturePaths().directories(),
-    config: makeConfig(),
-    mediaStore: new LocalMediaStore({
+function createSessionControl(
+  client: AgentClientContract,
+  id = 'test-session',
+): SessionControl {
+  let ownedSessionId = id;
+  let closed = false;
+  const conversation = new SessionConversationBinding({
+    readClient: () => client,
+    assertOpen: () => {
+      if (closed) throw new Error('Characterization session is closed');
+    },
+  });
+  return conversation.createSessionControl(
+    makeRecordingPaths(),
+    new LocalMediaStore({
       rootDirectory: '/tmp/test-session-control/media',
       quotaBytes: 1024 * 1024,
     }),
-    sessionIdentityOwnership: 'config',
-    sessionId: () => 'test-session',
-    resolveClient: () => client,
-    withSessionTransition: (operation) => operation(),
-    closeSessionAdmission: () => {},
-    prepareNewSessionClient: async () => {
+    () => 1024 * 1024,
+    () => fixturePaths().directories(),
+    'config',
+    () => ownedSessionId,
+    (operation) => operation(),
+    () => {
+      closed = true;
+    },
+    async () => {
       await client.resetChat();
       return {
-        client,
         publish: () => {},
         retire: async () => {},
         discard: async () => {},
+        attachRecording: async () => {
+          throw new Error('Characterization fixture cannot attach recording');
+        },
       };
     },
-    getProvider: () => 'test-provider',
-    getModel: () => 'test-model',
-  };
+    () => 'test-provider',
+    () => 'test-model',
+    () => ownedSessionId,
+    (nextId) => {
+      ownedSessionId = nextId;
+    },
+  );
 }
 
 describe('SessionControl (characterization)', () => {
@@ -136,22 +146,14 @@ function registerSessionCharacterizationGroup0(): void {
   describe('constructor and interface', () => {
     it('creates a SessionControl instance', () => {
       const client = makeMockClient([]);
-      const sc = new SessionControl(makeDeps(client));
+      const sc = createSessionControl(client);
       expect(sc).toBeDefined();
     });
 
     it('creates instances with different session IDs', () => {
       const client = makeMockClient([]);
-      const deps1 = {
-        ...makeDeps(client),
-        sessionId: () => 'session-1',
-      };
-      const deps2 = {
-        ...makeDeps(client),
-        sessionId: () => 'session-2',
-      };
-      const sc1 = new SessionControl(deps1);
-      const sc2 = new SessionControl(deps2);
+      const sc1 = createSessionControl(client, 'session-1');
+      const sc2 = createSessionControl(client, 'session-2');
       expect(sc1).toBeDefined();
       expect(sc2).toBeDefined();
     });
@@ -202,7 +204,7 @@ function registerSessionCharacterizationGroup2(): void {
   describe('dispose', () => {
     it('completes without error on fresh instance', async () => {
       const client = makeMockClient([]);
-      const sc = new SessionControl(makeDeps(client));
+      const sc = createSessionControl(client);
       await expect(sc.dispose()).resolves.toBeUndefined();
     });
   });

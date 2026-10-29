@@ -1,3 +1,5 @@
+import { bindTurnModel } from '../../../session/bind-turn-model.js';
+import { TurnToolExecutionOwner } from '../../../session/turn-tool-execution-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -72,19 +74,23 @@ function loopFor(
     [finishedEvent()],
   ]);
   return new AgenticLoop({
-    agentClient: { ...client, getHistoryService: () => history },
+    ...bindTurnModel({ ...client, getHistoryService: () => history }),
     config,
-    messageBus: bus,
-    createSchedulerOwner: bindSchedulerOwner(
-      config,
+
+    tools: new TurnToolExecutionOwner(
       bus,
-      false,
-      registry,
-      (options) => new CoreToolScheduler(options),
-      () => settingsOwner.readToolExecutionPolicy(),
-      () => settingsOwner.readToolGovernance([]),
       undefined,
-      settingsOwner.telemetry,
+      bindSchedulerOwner(
+        config,
+        bus,
+        false,
+        registry,
+        (options) => new CoreToolScheduler(options),
+        () => settingsOwner.readToolExecutionPolicy(),
+        () => settingsOwner.readToolGovernance([]),
+        undefined,
+        settingsOwner.telemetry,
+      ),
     ),
   });
 }

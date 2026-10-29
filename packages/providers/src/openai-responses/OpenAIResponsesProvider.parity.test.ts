@@ -95,7 +95,6 @@ describe('OpenAIResponsesProvider ↔ OpenAIProvider delegated Responses parity 
     standaloneSettings.setProviderSetting('openai-responses', 'model', model);
     const standaloneRuntime = createProviderRuntimeContext({
       runtimeId: 'parity-standalone',
-      settingsService: standaloneSettings,
     });
 
     const standaloneCapture = createFetchCapture();
@@ -121,7 +120,6 @@ describe('OpenAIResponsesProvider ↔ OpenAIProvider delegated Responses parity 
     delegatedSettings.setProviderSetting('openai', 'model', model);
     const delegatedRuntime = createProviderRuntimeContext({
       runtimeId: 'parity-delegated',
-      settingsService: delegatedSettings,
     });
 
     const delegatedCapture = createFetchCapture();
@@ -185,7 +183,6 @@ describe('OpenAIResponsesProvider ↔ OpenAIProvider delegated Responses parity 
     standaloneSettings.set('reasoning.enabled', true);
     const standaloneRuntime = createProviderRuntimeContext({
       runtimeId: 'parity-effort-standalone',
-      settingsService: standaloneSettings,
     });
 
     const standaloneCapture = createFetchCapture();
@@ -212,7 +209,6 @@ describe('OpenAIResponsesProvider ↔ OpenAIProvider delegated Responses parity 
     delegatedSettings.set('reasoning.enabled', true);
     const delegatedRuntime = createProviderRuntimeContext({
       runtimeId: 'parity-effort-delegated',
-      settingsService: delegatedSettings,
     });
 
     const delegatedCapture = createFetchCapture();

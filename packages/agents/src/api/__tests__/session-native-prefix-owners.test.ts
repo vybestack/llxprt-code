@@ -1,3 +1,4 @@
+import { capturedAgentClient } from './helpers/agent-client-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -5,11 +6,7 @@ import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/hi
 import { describe, expect, it } from 'bun:test';
 import { useTempDir } from './helpers/journal-fixture-support.js';
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
-import {
-  buildAgent,
-  drain,
-  internalAgentClient,
-} from './helpers/agentHarness.js';
+import { buildAgent, drain } from './helpers/agentHarness.js';
 
 function row(index: number): IContent {
   return {
@@ -42,7 +39,7 @@ describe('native public prefix current source owners', () => {
       const b = {};
       try {
         await drain(agent.stream('initialize session'));
-        const history = internalAgentClient(agent).getHistoryService();
+        const history = capturedAgentClient(agent).getHistoryService();
         if (history === null) throw new Error('Missing native history');
         await history.clear();
         await seedOwners(history, size, a, b);

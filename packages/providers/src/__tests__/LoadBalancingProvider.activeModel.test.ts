@@ -1,3 +1,4 @@
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -37,7 +38,17 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      config,
+      undefined,
+      undefined,
+      undefined,
+    );
   });
 
   describe('members', () => {
@@ -96,6 +107,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
       try {
         await drain(
           provider.generateChatCompletion({
+            invocation: makeLoadBalancerInvocation(),
             contents: [
               { speaker: 'human', blocks: [{ type: 'text', text: 'one' }] },
             ],
@@ -132,6 +144,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
         // First request → 'fast' (gemini-flash)
         await drain(
           provider.generateChatCompletion({
+            invocation: makeLoadBalancerInvocation(),
             contents: [
               { speaker: 'human', blocks: [{ type: 'text', text: 'one' }] },
             ],
@@ -144,6 +157,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
         // Second request → 'smart' (gpt-4)
         await drain(
           provider.generateChatCompletion({
+            invocation: makeLoadBalancerInvocation(),
             contents: [
               { speaker: 'human', blocks: [{ type: 'text', text: 'two' }] },
             ],
@@ -181,6 +195,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
       try {
         await drain(
           provider.generateChatCompletion({
+            invocation: makeLoadBalancerInvocation(),
             contents: [
               { speaker: 'human', blocks: [{ type: 'text', text: 'one' }] },
             ],
@@ -213,6 +228,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
       try {
         await drain(
           provider.generateChatCompletion({
+            invocation: makeLoadBalancerInvocation(),
             contents: [
               { speaker: 'human', blocks: [{ type: 'text', text: 'one' }] },
             ],

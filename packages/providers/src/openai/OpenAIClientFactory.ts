@@ -26,21 +26,10 @@ import OpenAI from 'openai';
 import * as http from 'http';
 import * as https from 'https';
 import * as net from 'net';
-import { createRequire } from 'node:module';
-import { Readable } from 'node:stream';
-import type * as Undici from 'undici';
-import { forwardPreconnect } from '../utils/fetchPreconnect.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { OPENAI_TRANSPORT_SELECTOR_KEYS } from './openaiModelPolicy.js';
 import { createReaderBasedStreamFetch } from './openaiStreamFetchSafety.js';
-import { readRequestBody, responseBody } from './openai-transport-streams.js';
-
-// Bun's 'undici' shim does not apply dispatcher headersTimeout; load the
-// installed package's public entry instead of the shim.
-const undiciRequire = createRequire(
-  createRequire(import.meta.url).resolve('undici/package.json'),
-);
-const { request: undiciRequest } = undiciRequire('./') as typeof Undici;
 
 /**
  * Create HTTP/HTTPS agents with socket configuration for local AI servers
@@ -177,49 +166,14 @@ export function resolveRuntimeKey(
   return 'openai.runtime.unscoped';
 }
 
-function fetchWithHeadersTimeout(headersTimeoutMs: number): typeof fetch {
+function fetchWithHeadersTimeout(
+  headersTimeoutMs: number,
+  requestFetch: NetworkFetch,
+): NetworkFetch {
   if (!Number.isSafeInteger(headersTimeoutMs) || headersTimeoutMs <= 0) {
     throw new Error('openai-headers-timeout-ms must be a positive integer');
   }
-  return Object.assign(
-    async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (input instanceof Request) {
-        throw new Error('Scoped OpenAI transport requires a URL');
-      }
-      const body = init?.body;
-      if (
-        body !== undefined &&
-        body !== null &&
-        typeof body !== 'string' &&
-        !(body instanceof ReadableStream)
-      ) {
-        throw new Error('Scoped OpenAI transport requires a JSON body');
-      }
-      const result = await undiciRequest(String(input), {
-        method: init?.method ?? 'GET',
-        headers: Object.fromEntries(new Headers(init?.headers)),
-        body:
-          body instanceof ReadableStream
-            ? Readable.from(readRequestBody(body))
-            : body,
-        signal: init?.signal ?? undefined,
-        headersTimeout: headersTimeoutMs,
-      });
-      const headers = new Headers();
-      for (const [key, value] of Object.entries(result.headers)) {
-        if (Array.isArray(value)) {
-          for (const item of value) headers.append(key, item);
-        } else if (value !== undefined) {
-          headers.append(key, String(value));
-        }
-      }
-      return new Response(
-        result.statusCode === 204 ? null : responseBody(result.body),
-        { status: result.statusCode, headers },
-      );
-    },
-    forwardPreconnect(() => globalThis.fetch),
-  );
+  return (input, init) => requestFetch(input, init, { headersTimeoutMs });
 }
 
 /**
@@ -229,20 +183,20 @@ function fetchWithHeadersTimeout(headersTimeoutMs: number): typeof fetch {
  */
 export function instantiateClient(
   authToken: string,
-  baseURL?: string,
-  agents?: { httpAgent: http.Agent; httpsAgent: https.Agent },
-  headers?: Record<string, string>,
-  transport?: {
+  baseURL: string | undefined,
+  agents: { httpAgent: http.Agent; httpsAgent: https.Agent } | undefined,
+  headers: Record<string, string> | undefined,
+  transport: {
     headersTimeoutMs?: number;
     requestTimeoutMs?: number;
-    fetch?: typeof fetch;
+    fetch: NetworkFetch;
   },
 ): OpenAI {
   const clientOptions: Record<string, unknown> = {
     apiKey: authToken || '',
     maxRetries: 0,
   };
-  if (transport?.requestTimeoutMs !== undefined) {
+  if (transport.requestTimeoutMs !== undefined) {
     if (
       !Number.isSafeInteger(transport.requestTimeoutMs) ||
       transport.requestTimeoutMs <= 0
@@ -253,9 +207,9 @@ export function instantiateClient(
   }
 
   const scopedFetch =
-    transport?.headersTimeoutMs === undefined
-      ? transport?.fetch
-      : fetchWithHeadersTimeout(transport.headersTimeoutMs);
+    transport.headersTimeoutMs === undefined
+      ? transport.fetch
+      : fetchWithHeadersTimeout(transport.headersTimeoutMs, transport.fetch);
   clientOptions.fetch = createReaderBasedStreamFetch(scopedFetch);
 
   if (headers && Object.keys(headers).length > 0) {

@@ -1,13 +1,10 @@
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { observeAgentConstruction } from './agent-client-observation.js';
+import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { AgentImpl } from '../../agentImpl.js';
-import { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
-
 /**
  * @plan:PLAN-20260617-COREAPI.P11
  * @requirement:REQ-001
@@ -33,18 +30,9 @@ import { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
 
 import { fileURLToPath } from 'node:url';
 import { resolve, join } from 'node:path';
-import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { writeFileSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import {
-  FakeProvider,
-  OpenAIProvider,
-  AnthropicProvider,
-} from '@vybestack/llxprt-code-providers';
-import { createProviderKeyStorage } from '../../../../../providers/src/auth/proxy/credential-store-factory.js';
-import { vi } from 'bun:test';
 import {
   createAgent,
   type Agent,
@@ -55,6 +43,7 @@ import {
   type DoneReason,
 } from '@vybestack/llxprt-code-agents';
 import { stripSandboxSegment } from './fixtureRoot.js';
+import { createTerminalOnlyIdePort } from './terminal-only-ide.js';
 
 const HARNESS_DIR = stripSandboxSegment(
   fileURLToPath(new URL('.', import.meta.url)),
@@ -82,45 +71,6 @@ export type {
   DoneReason,
 } from '@vybestack/llxprt-code-agents';
 export { createAgent } from '@vybestack/llxprt-code-agents';
-export function internalConfig(agent: Agent): Config {
-  if (
-    !('deps' in agent) ||
-    !isRecord(agent.deps) ||
-    !(agent.deps.config instanceof Config)
-  ) {
-    throw new Error('Expected an AgentImpl with its owned Config dependency');
-  }
-  return agent.deps.config;
-}
-
-export function internalAgentClient(agent: Agent): AgentClientContract {
-  if (!(agent instanceof AgentImpl)) {
-    throw new Error('Expected an AgentImpl with an owned agent client');
-  }
-  return agent.agentClient;
-}
-
-export function internalSettingsService(agent: Agent): SettingsService {
-  if (
-    !('deps' in agent) ||
-    !isRecord(agent.deps) ||
-    !(agent.deps.settingsService instanceof SettingsService)
-  )
-    throw new Error('Expected an Agent with its session SettingsService');
-  return agent.deps.settingsService;
-}
-
-export function internalSettingsOwner(agent: Agent): SessionSettingsOwner {
-  if (
-    !('deps' in agent) ||
-    !isRecord(agent.deps) ||
-    !(agent.deps.settingsOwner instanceof SessionSettingsOwner)
-  )
-    throw new Error(
-      'Expected an Agent with its selected session settings owner',
-    );
-  return agent.deps.settingsOwner;
-}
 
 // ─── Agent construction via the production env seam ─────────────────────────
 
@@ -132,12 +82,13 @@ export interface BuiltAgent {
 /**
  * Builds a real public Agent over a real FakeProvider by pointing the
  * LLXPRT_FAKE_RESPONSES env var at a fixture JSONL file (the production seam
- * in providerManagerInstance.ts). The returned cleanup restores the prior env
- * value and disposes the agent.
+ * in providerManagerInstance.ts). The environment is restored after acquisition;
+ * the returned cleanup disposes the agent.
  */
 export async function buildAgent(
   fixtureRelPath: string,
   configOverrides: Readonly<Partial<AgentConfig>> = {},
+  clientFactory?: AgentClientFactory,
 ): Promise<BuiltAgent> {
   const prev = process.env.LLXPRT_FAKE_RESPONSES;
   const fixturePath = resolve(FIXTURES_DIR, fixtureRelPath);
@@ -149,26 +100,21 @@ export async function buildAgent(
   };
   let agent: Agent;
   try {
-    agent = await createAgent({ ...baseConfig, ...configOverrides });
-  } catch (error) {
-    // createAgent failed before a cleanup could be returned — restore the env
-    // var so the mutation does not leak into later tests, then rethrow.
+    agent = await observeAgentConstruction(
+      () => createAgent({ ...baseConfig, ...configOverrides }),
+      clientFactory,
+    );
+  } finally {
     if (prev === undefined) {
       delete process.env.LLXPRT_FAKE_RESPONSES;
     } else {
       process.env.LLXPRT_FAKE_RESPONSES = prev;
     }
-    throw error;
   }
   const cleanup = async (): Promise<void> => {
     await agent.dispose().catch(() => {
       /* disposed via cleanup regardless of impl state */
     });
-    if (prev === undefined) {
-      delete process.env.LLXPRT_FAKE_RESPONSES;
-    } else {
-      process.env.LLXPRT_FAKE_RESPONSES = prev;
-    }
   };
   return { agent, cleanup };
 }
@@ -178,74 +124,15 @@ export {
   FIXTURES_DIR as fixturesDir,
 };
 
-export async function buildProfileAgent(
-  fixtureRelPath: string,
-): Promise<BuiltAgent> {
-  const built = await buildAgent(fixtureRelPath);
-  const config = internalConfig(built.agent);
-  const manager = built.agent.providerManager;
-
-  for (const name of ['openai', 'anthropic']) {
-    const provider = new FakeProvider(
-      resolve(FIXTURES_DIR, fixtureRelPath),
-      config.getTargetDir(),
-    );
-    provider.name = name;
-    manager.registerProvider(provider);
-  }
-  const keys = vi
-    .spyOn(createProviderKeyStorage(), 'getKey')
-    .mockImplementation(async (name) => {
-      if (name !== 'openai-prod' && name !== 'anthropic-prod')
-        throw new Error(`Unexpected fixture key: ${name}`);
-      return `fixture-credential-${name}`;
-    });
-  return {
-    agent: built.agent,
-    cleanup: async () => {
-      keys.mockRestore();
-      await built.cleanup();
-    },
-  };
-}
-
 export { TEMP_ROOT as tempRoot };
-
-export async function buildProfilesAgent(
-  fixtureRelPath: string,
-): Promise<BuiltAgent> {
-  const built = await buildAgent(fixtureRelPath);
-  const manager = built.agent.providerManager;
-
-  manager.registerProvider(new OpenAIProvider('local-test-key'));
-  manager.registerProvider(new AnthropicProvider('local-test-key'));
-  const keys = vi
-    .spyOn(createProviderKeyStorage(), 'getKey')
-    .mockImplementation(async (name) => {
-      if (
-        name !== 'openai-prod' &&
-        name !== 'anthropic-prod' &&
-        name !== 'saved-key-ref'
-      )
-        throw new Error(`Unexpected fixture key: ${name}`);
-      return `fixture-credential-${name}`;
-    });
-  return {
-    agent: built.agent,
-    cleanup: async () => {
-      keys.mockRestore();
-      await built.cleanup();
-    },
-  };
-}
 
 /**
  * Builds an agent backed by an inline (programmatic) JSONL content string,
  * written to an ephemeral temp fixture file, via the SAME LLXPRT_FAKE_RESPONSES
  * production seam buildAgent uses. Useful when a scenario needs ad-hoc provider
  * responses (e.g. property-generated tool args) without a committed fixture
- * file. The returned cleanup restores the prior env value, disposes the agent,
- * and removes the temp directory.
+ * file. The environment is restored after acquisition; the returned cleanup
+ * disposes the agent and removes the temp directory.
  *
  * @plan:PLAN-20260617-COREAPI.P17
  * @requirement:REQ-006
@@ -253,6 +140,7 @@ export async function buildProfilesAgent(
 export async function buildAgentFromContent(
   jsonlContent: string,
   configOverrides: Readonly<Partial<AgentConfig>> = {},
+  clientFactory?: AgentClientFactory,
 ): Promise<BuiltAgent> {
   const prev = process.env.LLXPRT_FAKE_RESPONSES;
   const dir = mkdtempSync(join(tmpdir(), 'llxprt-agent-fixture-'));
@@ -266,31 +154,69 @@ export async function buildAgentFromContent(
   };
   let agent: Agent;
   try {
-    agent = await createAgent({ ...baseConfig, ...configOverrides });
+    agent = await observeAgentConstruction(
+      () => createAgent({ ...baseConfig, ...configOverrides }),
+      clientFactory,
+    );
   } catch (error) {
-    // createAgent failed before a cleanup could be returned — restore the env
-    // var and remove the temp dir so neither leaks into later tests, then
-    // rethrow.
-    if (prev === undefined) {
-      delete process.env.LLXPRT_FAKE_RESPONSES;
-    } else {
-      process.env.LLXPRT_FAKE_RESPONSES = prev;
-    }
     rmSync(dir, { recursive: true, force: true });
     throw error;
-  }
-  const cleanup = async (): Promise<void> => {
-    await agent.dispose().catch(() => {
-      /* disposed via cleanup regardless of impl state */
-    });
+  } finally {
     if (prev === undefined) {
       delete process.env.LLXPRT_FAKE_RESPONSES;
     } else {
       process.env.LLXPRT_FAKE_RESPONSES = prev;
     }
-    rmSync(dir, { recursive: true, force: true });
+  }
+  const cleanup = async (): Promise<void> => {
+    try {
+      await agent.dispose().catch(() => {
+        /* disposed via cleanup regardless of impl state */
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   };
   return { agent, cleanup };
+}
+
+let scratchWorkspaceDir: string | undefined;
+
+/**
+ * One small empty workspace per test process for generated cases. They never
+ * read workspace content, and building a real agent over the default workspace
+ * (the test tree inside the repository) makes every generated case admit and
+ * scan that tree, which dominates a property's time on slow filesystems.
+ */
+export function scratchWorkspace(): string {
+  scratchWorkspaceDir ??= realpathSync(
+    mkdtempSync(join(TEMP_ROOT, 'property-workspace-')),
+  );
+  return scratchWorkspaceDir;
+}
+
+/** `buildAgent` over the shared small workspace, for generated cases. */
+export function buildPropertyAgent(
+  fixtureRelPath: string,
+  configOverrides: Readonly<Partial<AgentConfig>> = {},
+): Promise<BuiltAgent> {
+  return buildAgent(fixtureRelPath, {
+    workingDir: scratchWorkspace(),
+    idePort: createTerminalOnlyIdePort(),
+    ...configOverrides,
+  });
+}
+
+/** `buildAgentFromContent` over the shared small workspace. */
+export function buildPropertyAgentFromContent(
+  jsonlContent: string,
+  configOverrides: Readonly<Partial<AgentConfig>> = {},
+): Promise<BuiltAgent> {
+  return buildAgentFromContent(jsonlContent, {
+    workingDir: scratchWorkspace(),
+    idePort: createTerminalOnlyIdePort(),
+    ...configOverrides,
+  });
 }
 
 /**
@@ -477,63 +403,6 @@ export const DONE_REASONS: readonly DoneReason[] = [
   'refusal',
 ];
 
-// ─── HistoryService identity (T4d/T4e) ──────────────────────────────────────
-//
-// The product-critical guarantee for provider/profile switching is that the
-// SAME HistoryService instance is reused across a switch — IDENTITY, not equal
-// contents. The public Agent surface has no HistoryService accessor (it is an
-// internal-only seam), so the reach happens here via documented structural
-// narrowing of the AgentImpl internals. At RED the AgentImpl has no
-// historyService / agentClient / chat field wired, so this returns undefined;
-// at GREEN (P15/P16) the real wiring is present and the SAME object reference
-// is returned before and after a switch.
-
-/**
- * Reaches the Agent's underlying HistoryService instance via structural
- * narrowing of the (opaque) AgentImpl internals. Returns `undefined` when the
- * field is absent (RED) — the caller compares the result with `toBe` so a
- * missing field fails the identity assertion NATURALLY.
- *
- * The narrowing is cast-free: the Agent is treated as `Record<string, unknown>`
- * and probed for a documented `historyService` field, then for the
- * `agentClient.getHistoryService()` chain, then for a `chat.historyService`
- * path. Each probe is guarded by `typeof` / `in` / truthiness checks.
- */
-export function captureHistoryServiceIdentity(agent: Agent): unknown {
-  const impl = agent as unknown as Record<string, unknown>;
-  // Probe 1: AgentImpl.historyService (direct field, planned at P15).
-  if (
-    'historyService' in impl &&
-    impl['historyService'] !== undefined &&
-    impl['historyService'] !== null
-  ) {
-    return impl['historyService'];
-  }
-  // Probe 2: AgentImpl.agentClient.getHistoryService() (the chat-session path).
-  const maybeClient = impl['agentClient'];
-  if (isRecord(maybeClient)) {
-    const getHs = maybeClient['getHistoryService'];
-    if (typeof getHs === 'function') {
-      const hs = getHs.call(maybeClient);
-      if (hs !== undefined && hs !== null) {
-        return hs;
-      }
-    }
-  }
-  // Probe 3: AgentImpl.chat.historyService (ChatSession direct field).
-  const maybeChat = impl['chat'];
-  if (isRecord(maybeChat)) {
-    const hs = maybeChat['historyService'];
-    if (hs !== undefined && hs !== null) {
-      return hs;
-    }
-  }
-  // No documented path populated yet — RED returns undefined; the caller's
-  // `toBe(existing)` identity check fails because both are undefined only if
-  // the switch even ran (the switch throws NYI first at RED).
-  return undefined;
-}
-
 export function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
@@ -551,7 +420,9 @@ export async function loadProfileFixture(
   const { readFile } = await import('node:fs/promises');
   const abs = fixturePath(fixtureRelPath);
   const raw = await readFile(abs, 'utf8');
-  return JSON.parse(raw) as Record<string, unknown>;
+  const parsed: unknown = JSON.parse(raw);
+  if (!isRecord(parsed)) throw new Error('Profile fixture must be an object');
+  return parsed;
 }
 
 /**
@@ -579,14 +450,3 @@ export async function withFixtureAgent<T>(
 
 export { WorkspaceIdeOwner } from '@vybestack/llxprt-code-core/services/workspace-ide-owner.js';
 export { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core';
-
-export function internalWorkspace(agent: Agent): McpRuntimeOwner {
-  if (
-    !('deps' in agent) ||
-    !isRecord(agent.deps) ||
-    !(agent.deps.mcpOperations instanceof McpRuntimeOwner)
-  ) {
-    throw new Error('Expected retained Agent workspace root');
-  }
-  return agent.deps.mcpOperations;
-}

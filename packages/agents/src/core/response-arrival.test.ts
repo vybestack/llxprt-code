@@ -1,5 +1,7 @@
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { createSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
 import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
 import { TranscriptReader } from '@vybestack/llxprt-code-core/journal/transcript-reader.js';
@@ -36,6 +38,7 @@ async function readResponses(path: string) {
 
 describe('production response arrival', () => {
   const root = sourceRootSetup();
+  afterEach(() => vi.useRealTimers());
   for (const retry of [false, true]) {
     for (const complete of [false, true]) {
       it(`admits prefetch once and retains distinct attempts (retry=${retry}, complete=${complete})`, async () => {
@@ -68,11 +71,21 @@ describe('production response arrival', () => {
           model: 'gpt-5.6',
         });
         await setup.history.attachJournal(recording);
-        const stream = await setup.processor.makeApiCallAndProcessStream(
+        if (retry) vi.useFakeTimers();
+        const sending = setup.processor.makeApiCallAndProcessStream(
           { message: 'test', config: {} },
           'submission',
           sourcePending,
         );
+        const enteredRetry =
+          !retry ||
+          (await waitForCondition(
+            () => attempts === 1 && vi.getTimerCount() > 0,
+          ));
+        expect(enteredRetry).toBe(true);
+        if (retry) await advanceTimersByTimeAsync(10_000);
+        const stream = await sending;
+        vi.useRealTimers();
         try {
           await finishAndCheck(
             stream,

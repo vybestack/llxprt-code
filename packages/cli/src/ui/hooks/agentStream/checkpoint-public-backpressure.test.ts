@@ -57,7 +57,7 @@ async function backpressure(size: number, active: boolean): Promise<number> {
       checkpointTool,
       dir,
       checkpointGit,
-      fixture.client,
+      fixture.history.streamRawHistory.bind(fixture.history),
 
       () => {},
       sink.ops,

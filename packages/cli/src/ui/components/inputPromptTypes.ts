@@ -9,9 +9,22 @@ import type { Key } from '../hooks/useKeypress.js';
 import type { StreamingState } from '../types.js';
 import type { TextBuffer } from './shared/text-buffer.js';
 import type { ApprovalMode } from '@vybestack/llxprt-code-core';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { CommandCompletionRuntime } from '../hooks/useCommandCompletion.js';
+
+import type { PromptTextGenerator } from '../hooks/usePromptCompletion.js';
+
+/**
+ * Runtime the prompt reads: the target directory and history path, plus every
+ * completion read it delegates to.
+ */
+export type InputPromptRuntime = CommandCompletionRuntime & {
+  getTargetDir(): string;
+  readonly historyFilePath: string;
+};
 
 export interface InputPromptProps {
+  generatePromptContent: PromptTextGenerator | null;
+  enableFuzzyFiltering: boolean;
   buffer: TextBuffer;
   onSubmit: (value: string) => void;
   /**
@@ -22,7 +35,7 @@ export interface InputPromptProps {
   onSteer?: (text: string) => boolean;
   userMessages: readonly string[];
   onClearScreen: () => void;
-  config: CliUiRuntime;
+  config: InputPromptRuntime;
   slashCommands: readonly SlashCommand[];
   commandContext: CommandContext;
   placeholder?: string;

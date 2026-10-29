@@ -8,7 +8,7 @@ import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { StatsDisplay } from './StatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
-import * as RuntimeContext from '../contexts/RuntimeContext.js';
+import * as RuntimeContext from '../../__tests__/runtime-context-fixture.js';
 import {
   createMockRuntimeApi,
   defaultZeroMetrics,
@@ -25,10 +25,94 @@ void vi.mock('../contexts/SessionContext.js', () => ({
 
 // Mock the RuntimeContext to provide controlled data for testing
 const actualActual = { ...(await import('../contexts/RuntimeContext.js')) };
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  ...actualActual,
-  useRuntimeApi: vi.fn(),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = vi.fn();
+    return {
+      ...actualActual,
+      useGetActiveProviderDetails: () =>
+        useSelectedTestRuntime().getActiveProviderDetails,
+      useGetProviderDumpMetadata: () =>
+        useSelectedTestRuntime().getProviderDumpMetadata,
+      useGetActiveProviderAliasConfig: () =>
+        useSelectedTestRuntime().getActiveProviderAliasConfig,
+      useDetectProviderQuota: () =>
+        useSelectedTestRuntime().detectProviderQuota,
+      useGetLoadBalancerStats: () =>
+        useSelectedTestRuntime().getLoadBalancerStats,
+      useGetLoadBalancerTokenAccounting: () =>
+        useSelectedTestRuntime().getLoadBalancerTokenAccounting,
+      useListSavedProfiles: () => useSelectedTestRuntime().listSavedProfiles,
+      useGetProfileByName: () => useSelectedTestRuntime().getProfileByName,
+      useSaveProfileDefinition: () =>
+        useSelectedTestRuntime().saveProfileDefinition,
+      useSaveLoadBalancerProfile: () =>
+        useSelectedTestRuntime().saveLoadBalancerProfile,
+      useListProviders: () => useSelectedTestRuntime().listProviders,
+      useGetActiveProviderName: () =>
+        useSelectedTestRuntime().getActiveProviderName,
+      useListAvailableModels: () =>
+        useSelectedTestRuntime().listAvailableModels,
+      useGetActiveModelName: () => useSelectedTestRuntime().getActiveModelName,
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+      useGetUnallowedParametersForActiveModel: () =>
+        useSelectedTestRuntime().getUnallowedParametersForActiveModel,
+      useGetActiveProviderMetrics: () =>
+        useSelectedTestRuntime().getActiveProviderMetrics,
+      useGetSessionTokenUsage: () =>
+        useSelectedTestRuntime().getSessionTokenUsage,
+      useGetEphemeralSettings: () =>
+        useSelectedTestRuntime().getEphemeralSettings,
+      useSetEphemeralSetting: () =>
+        useSelectedTestRuntime().setEphemeralSetting,
+      useGetActiveToolFormatState: () =>
+        useSelectedTestRuntime().getActiveToolFormatState,
+      useSetActiveToolFormatOverride: () =>
+        useSelectedTestRuntime().setActiveToolFormatOverride,
+      useGetEphemeralSetting: () =>
+        useSelectedTestRuntime().getEphemeralSetting,
+      useGetSessionSetting: () => useSelectedTestRuntime().getSessionSetting,
+      useSetSessionSetting: () => useSelectedTestRuntime().setSessionSetting,
+      useClearSessionSetting: () =>
+        useSelectedTestRuntime().clearSessionSetting,
+      useSetActiveModel: () => useSelectedTestRuntime().setActiveModel,
+      useGetActiveModelParams: () =>
+        useSelectedTestRuntime().getActiveModelParams,
+      useSetActiveModelParam: () =>
+        useSelectedTestRuntime().setActiveModelParam,
+      useClearActiveModelParam: () =>
+        useSelectedTestRuntime().clearActiveModelParam,
+      useUpdateActiveProviderApiKey: () =>
+        useSelectedTestRuntime().updateActiveProviderApiKey,
+      useGetWorkspaceDirectories: () =>
+        useSelectedTestRuntime().getWorkspaceDirectories,
+      useGetDefaultProfileName: () =>
+        useSelectedTestRuntime().getDefaultProfileName,
+      useGetOpenAIProviderInfo: () =>
+        useSelectedTestRuntime().getOpenAIProviderInfo,
+      useGetActiveProfileName: () =>
+        useSelectedTestRuntime().getActiveProfileName,
+      useSetDefaultProfileName: () =>
+        useSelectedTestRuntime().setDefaultProfileName,
+      useGetRuntimeDiagnosticsSnapshot: () =>
+        useSelectedTestRuntime().getRuntimeDiagnosticsSnapshot,
+      useSaveProfileSnapshot: () =>
+        useSelectedTestRuntime().saveProfileSnapshot,
+      useDeleteProfileByName: () =>
+        useSelectedTestRuntime().deleteProfileByName,
+      useFetch: () => useSelectedTestRuntime().fetch,
+      useSetProvider: () => useSelectedTestRuntime().setProvider,
+      useLoadProfileByName: () => useSelectedTestRuntime().loadProfileByName,
+      useUpdateActiveProviderBaseUrl: () =>
+        useSelectedTestRuntime().updateActiveProviderBaseUrl,
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 const useSessionStatsMock = SessionContext.useSessionStats as Mock<
   typeof SessionContext.useSessionStats

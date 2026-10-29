@@ -1,3 +1,4 @@
+import { chatSessionPorts } from '../../chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -25,8 +26,13 @@ export function mediaRequestFixture(
     telemetry: { ...base.telemetry, logApiRequest: () => {} },
   };
   const compressionHandler = new CompressionHandler(
-    runtimeContext,
+    chatSessionPorts(runtimeContext).compression,
+    undefined,
     history,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {},
     () => {
       throw new Error('unexpected compression');

@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { admitDeferredHistorySource } from './deferredHistorySource.js';
-import { buildAgent } from '../api/__tests__/helpers/agentHarness.js';
+import { buildCliStyleConfig } from '../api/__tests__/helpers/buildCliStyleConfig.js';
 import {
   withValueTransformFixture,
   transformProbes,
@@ -116,9 +116,10 @@ async function expectBoundedDeferred(
   size: number,
   rollback: boolean,
 ): Promise<void> {
-  const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+  const { agentClient: client, cleanup } =
+    await buildCliStyleConfig('plain-text.jsonl');
   try {
-    const store = agent.agentClient.mediaStore;
+    const store = client.mediaStore;
     if (store === undefined)
       throw new Error('Agent client is missing its media store');
     expect(await observeDeferred(size, rollback, store)).toBe(

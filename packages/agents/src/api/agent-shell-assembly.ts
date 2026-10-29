@@ -5,36 +5,9 @@
  */
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
-import type { SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
 import { TaskLaunchOwner } from '../session/task-launch-owner.js';
-import { ShellJobOwner } from '../session/shell-job-owner.js';
-import { createChildToolAssembly } from '../session/childToolAssembly.js';
-import {
-  resolveMaxAsyncTasks,
-  resolveShellJobSettings,
-} from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
-
-export function prepareAgentShellOwner(
-  settings: SettingsService,
-  borrowedTasks: AsyncTaskManager | undefined,
-  schedulerFactory: SchedulerConstruction,
-): {
-  taskLaunchOwner: TaskLaunchOwner;
-  shellOwner: ShellJobOwner;
-  loopHolder: ReturnType<typeof createChildToolAssembly>;
-} {
-  const taskLaunchOwner = assembleTaskOwner(settings, borrowedTasks);
-  const shellOwner = new ShellJobOwner(() => resolveShellJobSettings(settings));
-  return {
-    taskLaunchOwner,
-    shellOwner,
-    loopHolder: createChildToolAssembly(
-      schedulerFactory,
-      taskLaunchOwner,
-      shellOwner,
-    ),
-  };
-}
+import type { ShellJobOwner } from '../session/shell-job-owner.js';
+import { resolveMaxAsyncTasks } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
 
 export async function cleanupFailedShellBootstrap(
   primaryError: unknown,
@@ -59,7 +32,7 @@ export async function cleanupFailedShellBootstrap(
   throw primaryError;
 }
 
-function assembleTaskOwner(
+export function assembleTaskOwner(
   settings: SettingsService,
   borrowed?: AsyncTaskManager,
 ): TaskLaunchOwner {

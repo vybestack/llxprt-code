@@ -26,7 +26,7 @@ import {
   HookType,
   type HookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { escapeShellArg } from '@vybestack/llxprt-code-core/utils/shell-utils.js';
+import { physicalHookCommand } from '../api/__tests__/helpers/physicalHookCommand.js';
 import { AgentHookManager } from './AgentHookManager.js';
 
 const inputSchema = z.object({
@@ -54,7 +54,7 @@ console.log(readFileSync(${JSON.stringify(join(directory, 'output'))}, 'utf8'));
 `,
     );
     await writeFile(join(directory, 'output'), '{}');
-    const command = `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(script, 'bash')}`;
+    const command = physicalHookCommand(script);
     const config = new Config({
       sessionId: 'hook-manager',
       targetDir: directory,

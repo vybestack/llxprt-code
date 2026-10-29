@@ -6,10 +6,14 @@
 import { registerJournalPagerFixture } from '../stores/turn/journal-turn-test-helpers.js';
 const journalPager = registerJournalPagerFixture();
 
+import {
+  createConsentOwner,
+  createHookControlDeps,
+} from '../../__tests__/ui-consent-hook-owners.js';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 import { act, cloneElement, useState } from 'react';
-import { describe, expect, it, vi } from 'bun:test';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { setEnv, restoreEnv } from '@vybestack/llxprt-code-test-utils';
 
 interface Fiber {
@@ -63,8 +67,11 @@ const { renderWithProviders, createMockSettings } = await import(
   '../../__tests__/render.js'
 );
 const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
-const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
-  '../cliUiRuntime.js'
+const { buildUiRuntimeFromSource } = await import(
+  '../../__tests__/ui-runtime-composition-fixture.js'
+);
+const { buildLayoutRuntimeForTest } = await import(
+  '../../__tests__/slash-command-runtime-fixture.js'
 );
 const { Config, MessageBus, MessageBusType, PolicyEngine } = await import(
   '@vybestack/llxprt-code-core'
@@ -80,9 +87,16 @@ const { createTerminalStore } = await import(
 const { createTurnStore } = await import('../stores/turn/turnStore.js');
 const { createDialogStore } = await import('../stores/dialog/dialogStore.js');
 
-async function mountLayout(
-  runtimeMessageBus?: InstanceType<typeof MessageBus>,
-) {
+const consentHookCleanups: Array<() => void> = [];
+
+async function mountLayout(borrowedBus?: InstanceType<typeof MessageBus>) {
+  const auth =
+    borrowedBus === undefined ? undefined : createConsentOwner(borrowedBus);
+  const hooks =
+    borrowedBus === undefined
+      ? undefined
+      : createHookControlDeps({ messageBus: borrowedBus }).control;
+  if (hooks) consentHookCleanups.push(() => hooks.detach());
   const terminal = createTerminalStore();
   const turn = createTurnStore();
   const pager = await journalPager([
@@ -106,8 +120,13 @@ async function mountLayout(
     debugMode: false,
     model: 'test-model',
   });
+  const uiRuntime = buildUiRuntimeFromSource(
+    config,
+    await createUiSessionOwner(),
+  );
   const layout = (
     <DefaultAppLayout
+      subscribeContextRange={() => () => {}}
       scrollbackPager={{
         store: pager,
         viewport: {
@@ -116,11 +135,23 @@ async function mountLayout(
           rowHeightLines: () => 1,
         },
       }}
-      runtimeMessageBus={runtimeMessageBus}
-      uiRuntime={buildUiRuntimeFromSource(config, createUiSessionOwner())}
-      slashCommandRuntime={buildSlashCommandRuntime(
+      readIdeMode={() => false}
+      readIdeDiffingEnabled={() => false}
+      subscribeIdeDiffing={() => () => {}}
+      resolveIdeDiff={async () => {}}
+      readIdeWorkspaceTrust={() => undefined}
+      subscribeIdeWorkspaceTrust={() => () => {}}
+      subscribeBucketConsent={auth?.subscribeBucketConsent.bind(auth)}
+      respondToBucketConsent={auth?.respondToBucketConsent.bind(auth)}
+      subscribeHookPhase={hooks?.subscribeExecutionPhase.bind(hooks)}
+      screenReaderEnabled={uiRuntime.app.getScreenReader()}
+      disableLoadingPhrases={
+        uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+      }
+      debugMode={uiRuntime.app.getDebugMode()}
+      layoutRuntime={buildLayoutRuntimeForTest(
         config,
-        createUiSessionOwner(),
+        await createUiSessionOwner(),
       )}
       settings={settings}
       startupWarnings={[]}
@@ -153,6 +184,9 @@ async function mountLayout(
 }
 
 describe('production layout render isolation', () => {
+  afterEach(() => {
+    for (const cleanup of consentHookCleanups.splice(0)) cleanup();
+  });
   it('keeps the transcript and static parent idle on dialog, clock, and geometry updates', async () => {
     renders.clear();
     setEnv('DEV', 'true');
@@ -211,6 +245,9 @@ describe('production layout render isolation', () => {
 });
 
 describe('store migration regressions', () => {
+  afterEach(() => {
+    for (const cleanup of consentHookCleanups.splice(0)) cleanup();
+  });
   it.each([true, false])(
     'shows bucket authentication requests only when the layout receives the bus (provided: %s)',
     async (provided) => {

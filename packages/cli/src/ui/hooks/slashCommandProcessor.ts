@@ -3,22 +3,10 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import type { CliUiRuntime } from '../cliUiRuntime.js';
-import type { RecordingIntegration, Todo } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { UseHistoryManagerReturn } from './useHistoryManager.js';
-import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { HistoryItem, ConfirmationRequest } from '../types.js';
-import type { LoadedSettings } from '../../config/settings.js';
 import type { ModelsDialogData } from '../commands/types.js';
-import type { DialogStore } from '../stores/dialog/dialogStore.js';
-import type {
-  ExtensionUpdateState,
-  ExtensionUpdateAction,
-} from '../state/extensions.js';
+import type { ExtensionUpdateAction } from '../state/extensions.js';
 import type { SubagentView } from '../components/SubagentManagement/types.js';
-import { useSlashCommandProcessorCore } from './useSlashCommandProcessorCore.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 export const confirmationLogger = new DebugLogger('llxprt:ui:selection');
@@ -56,54 +44,3 @@ export interface SlashCommandProcessorActions {
    */
   openSessionBrowserDialog: () => void;
 }
-
-interface TodoContextValue {
-  todos: Todo[];
-  updateTodos: (todos: Todo[]) => void;
-  refreshTodos: () => void;
-}
-
-/**
- * Hook to define and process slash commands (e.g., /help, /clear).
- *
- * @plan PLAN-20260129-TODOPERSIST.P07 - Added todoContext param
- * @plan PLAN-20260214-SESSIONBROWSER.P23 - Added recordingSwapCallbacks for /continue command
- */
-export const useSlashCommandProcessor = (
-  config: CliUiRuntime | null,
-  agent: Agent | null,
-  settings: LoadedSettings,
-  addItem: UseHistoryManagerReturn['addItem'],
-  clearItems: UseHistoryManagerReturn['clearItems'],
-  refreshStatic: () => void,
-  toggleVimEnabled: () => Promise<boolean>,
-  setIsProcessing: (isProcessing: boolean) => void,
-  setLlxprtMdFileCount: (count: number) => void,
-  actions: SlashCommandProcessorActions,
-  store: DialogStore,
-  extensionsUpdateState: Map<string, ExtensionUpdateState>,
-  isConfigInitialized: boolean,
-  todoContext?: TodoContextValue,
-  recordingIntegration?: RecordingIntegration,
-  recordingSwapCallbacks?: RecordingSwapCallbacks,
-  recordingOwner?: 'agent' | 'raw',
-) =>
-  useSlashCommandProcessorCore({
-    config,
-    agent,
-    settings,
-    addItem,
-    clearItems,
-    refreshStatic,
-    toggleVimEnabled,
-    setIsProcessing,
-    setLlxprtMdFileCount,
-    actions,
-    store,
-    extensionsUpdateState,
-    isConfigInitialized,
-    todoContext,
-    recordingIntegration,
-    recordingSwapCallbacks,
-    recordingOwner,
-  });

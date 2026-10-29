@@ -1,6 +1,15 @@
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
+import { createAgentRuntimeStateFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeStateFactory.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
+import { adaptGenerator } from './__tests__/chatSession-thinking-toolcalls-helpers.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -15,29 +24,25 @@ const modelTools = installModelToolFixture();
  * avoid file-level max-lines disable).
  */
 
+import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import {
   advanceTimersByTimeAsync,
   assertDefined,
 } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ChatSession } from './chatSession.js';
-import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeStateFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeStateFactory.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
@@ -111,52 +116,67 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       // Verify ChatSession.getConfig() returns a config that provides the setting
       localProviderRuntime = createProviderRuntimeContext({
-        settingsService: localSettingsService,
-        config: localConfig,
         runtimeId: 'test.runtime',
         metadata: { source: 'timeout-test' },
       });
 
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      const { tokenizerFactory: promptEstimator } =
-        configureProviderRuntimeFactories(localConfig, localManager);
+      const promptEstimator = configureProviderTokenizer(localManager);
 
       const provider: IProvider = {
         name: 'stub',
         isDefault: true,
         getModels: vi.fn(async () => []),
         getDefaultModel: () => 'stub-model',
-        generateChatCompletion: vi.fn(async function* () {}),
+        generateChatCompletion: adaptGenerator(
+          vi.fn(async function* (): AsyncGenerator<IContent> {}),
+        ),
       };
       localManager.registerProvider(provider);
       localManager.setActiveProvider('stub');
 
       const contentGenerator = {} as ContentGenerator;
       const chat = new ChatSession(
-        createAgentRuntimeContext({
-          promptEstimator,
-          readRuntimeSettings: fixtureRuntimePolicyReader(
-            localConfig,
-            localSettingsService,
-          ),
-          prepareProviderInvocation: (name, parameters, signal) =>
-            captureProviderInvocation(
-              localProviderRuntime,
-              name,
-              parameters,
-              signal,
+        chatSessionPorts(
+          createAgentRuntimeContext({
+            promptEstimator,
+            readRuntimeSettings: fixtureRuntimePolicyReader(
+              localConfig,
+              localSettingsService,
             ),
-          state: createAgentRuntimeStateFromConfig(localConfig),
-          settings: { compressionThreshold: 0.8 },
-          provider: createProviderAdapterFromManager(localManager),
-          telemetry: createTelemetryAdapter(
-            localConfig,
-            createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
-          ),
-          tools: createToolRegistryViewFromRegistry(modelTools()),
-          providerRuntime: localProviderRuntime,
-        }),
+            prepareProviderInvocation: (name, parameters, signal) =>
+              captureProviderInvocation(
+                {
+                  fetch: requestFetch,
+                  runtimeId: localProviderRuntime.runtimeId,
+                  metadata: localProviderRuntime.metadata,
+                  globalSettings: localSettingsService.getAllGlobalSettings(),
+                  providerSettings:
+                    localSettingsService.getProviderSettings(name),
+                },
+                name,
+                parameters,
+                signal,
+              ),
+            state: createAgentRuntimeStateFromConfig(localConfig),
+            settings: { compressionThreshold: 0.8 },
+            provider: createProviderAdapterFromManager(localManager),
+            telemetry: createTelemetryAdapter(
+              localConfig,
+              createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
+            ),
+            tools: createToolRegistryViewFromRegistry(modelTools()),
+            providerRuntime: localProviderRuntime,
+          }),
+        ),
+        localConfig,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         contentGenerator,
         {},
         [],
@@ -173,52 +193,67 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       localSettingsService.set('stream-idle-timeout-ms', 0);
 
       localProviderRuntime = createProviderRuntimeContext({
-        settingsService: localSettingsService,
-        config: localConfig,
         runtimeId: 'test.runtime',
         metadata: { source: 'disabled-test' },
       });
 
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      const { tokenizerFactory: promptEstimator } =
-        configureProviderRuntimeFactories(localConfig, localManager);
+      const promptEstimator = configureProviderTokenizer(localManager);
 
       const provider: IProvider = {
         name: 'stub',
         isDefault: true,
         getModels: vi.fn(async () => []),
         getDefaultModel: () => 'stub-model',
-        generateChatCompletion: vi.fn(async function* () {}),
+        generateChatCompletion: adaptGenerator(
+          vi.fn(async function* (): AsyncGenerator<IContent> {}),
+        ),
       };
       localManager.registerProvider(provider);
       localManager.setActiveProvider('stub');
 
       const contentGenerator = {} as ContentGenerator;
       const chat = new ChatSession(
-        createAgentRuntimeContext({
-          promptEstimator,
-          readRuntimeSettings: fixtureRuntimePolicyReader(
-            localConfig,
-            localSettingsService,
-          ),
-          prepareProviderInvocation: (name, parameters, signal) =>
-            captureProviderInvocation(
-              localProviderRuntime,
-              name,
-              parameters,
-              signal,
+        chatSessionPorts(
+          createAgentRuntimeContext({
+            promptEstimator,
+            readRuntimeSettings: fixtureRuntimePolicyReader(
+              localConfig,
+              localSettingsService,
             ),
-          state: createAgentRuntimeStateFromConfig(localConfig),
-          settings: { compressionThreshold: 0.8 },
-          provider: createProviderAdapterFromManager(localManager),
-          telemetry: createTelemetryAdapter(
-            localConfig,
-            createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
-          ),
-          tools: createToolRegistryViewFromRegistry(modelTools()),
-          providerRuntime: localProviderRuntime,
-        }),
+            prepareProviderInvocation: (name, parameters, signal) =>
+              captureProviderInvocation(
+                {
+                  fetch: requestFetch,
+                  runtimeId: localProviderRuntime.runtimeId,
+                  metadata: localProviderRuntime.metadata,
+                  globalSettings: localSettingsService.getAllGlobalSettings(),
+                  providerSettings:
+                    localSettingsService.getProviderSettings(name),
+                },
+                name,
+                parameters,
+                signal,
+              ),
+            state: createAgentRuntimeStateFromConfig(localConfig),
+            settings: { compressionThreshold: 0.8 },
+            provider: createProviderAdapterFromManager(localManager),
+            telemetry: createTelemetryAdapter(
+              localConfig,
+              createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
+            ),
+            tools: createToolRegistryViewFromRegistry(modelTools()),
+            providerRuntime: localProviderRuntime,
+          }),
+        ),
+        localConfig,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         contentGenerator,
         {},
         [],
@@ -234,29 +269,24 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       localConfig = new Config(createConfigParams(localSettingsService));
       localSettingsService.set('stream-idle-timeout-ms', timeoutMs);
       localProviderRuntime = createProviderRuntimeContext({
-        settingsService: localSettingsService,
-        config: localConfig,
         runtimeId: 'test.runtime.deadlock',
         metadata: { source: 'deadlock-test' },
       });
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      const { tokenizerFactory: promptEstimator } =
-        configureProviderRuntimeFactories(localConfig, localManager, {
-          tokenizerFactory: {
-            getTokenizer: () => undefined,
-            async estimatePrompt(request) {
-              return {
-                count: await request.legacyEstimate(),
-                method: 'calibrated',
-                family: 'legacy-unregistered',
-                estimatorVersion: 'core-estimate-tokens-v1',
-                assetRevision: 'none',
-                projectionRevision: request.projectionRevision,
-              };
-            },
-          },
-        });
+      const promptEstimator = configureProviderTokenizer(localManager, {
+        getTokenizer: () => undefined,
+        async estimatePrompt(request) {
+          return {
+            count: await request.legacyEstimate(),
+            method: 'calibrated',
+            family: 'legacy-unregistered',
+            estimatorVersion: 'core-estimate-tokens-v1',
+            assetRevision: 'none',
+            projectionRevision: request.projectionRevision,
+          };
+        },
+      });
       const firstRead = Promise.withResolvers<void>();
       let transports = 0;
       let pendingReads = 0;
@@ -267,39 +297,43 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         isDefault: true,
         getModels: vi.fn(async () => []),
         getDefaultModel: () => 'stub-model',
-        generateChatCompletion: vi.fn(
-          (options: GenerateChatOptions): AsyncIterableIterator<IContent> => {
-            transports++;
-            const transportToken = options.promptEnvelopeTransportToken;
-            if (
-              transportToken === undefined ||
-              preparedRequests.get(transportToken) === undefined
-            ) {
-              throw new Error('transport did not consume the prepared request');
-            }
-            if (transports === 1) {
-              firstTransportSignal = options.invocation?.signal;
-              assertDefined(
-                firstTransportSignal,
-                'transport did not receive an abort signal',
-              );
-              return createNoncooperativeStream(() => {
-                pendingReads++;
-                firstRead.resolve();
-              });
-            }
-            return (async function* () {
-              yield {
-                speaker: 'ai',
-                blocks: [{ type: 'text', text: 'OK' }],
-              };
-              yield {
-                speaker: 'ai',
-                blocks: [],
-                metadata: { finishReason: 'stop' },
-              };
-            })();
-          },
+        generateChatCompletion: adaptGenerator(
+          vi.fn(
+            (options: GenerateChatOptions): AsyncIterableIterator<IContent> => {
+              transports++;
+              const transportToken = options.promptEnvelopeTransportToken;
+              if (
+                transportToken === undefined ||
+                preparedRequests.get(transportToken) === undefined
+              ) {
+                throw new Error(
+                  'transport did not consume the prepared request',
+                );
+              }
+              if (transports === 1) {
+                firstTransportSignal = options.invocation?.signal;
+                assertDefined(
+                  firstTransportSignal,
+                  'transport did not receive an abort signal',
+                );
+                return createNoncooperativeStream(() => {
+                  pendingReads++;
+                  firstRead.resolve();
+                });
+              }
+              return (async function* (): AsyncGenerator<IContent> {
+                yield {
+                  speaker: 'ai',
+                  blocks: [{ type: 'text', text: 'OK' }],
+                };
+                yield {
+                  speaker: 'ai',
+                  blocks: [],
+                  metadata: { finishReason: 'stop' },
+                };
+              })();
+            },
+          ),
         ),
         projectPromptEnvelope: async (options) => {
           const transportToken = Object.freeze({});
@@ -322,41 +356,57 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       localManager.registerProvider(provider);
       localManager.setActiveProvider('stub');
       const chat = new ChatSession(
-        createAgentRuntimeContext({
-          promptEstimator,
-          readRuntimeSettings: fixtureRuntimePolicyReader(
-            localConfig,
-            localSettingsService,
-          ),
-          prepareProviderInvocation: (name, parameters, signal) =>
-            captureProviderInvocation(
-              localProviderRuntime,
-              name,
-              parameters,
-              signal,
+        chatSessionPorts(
+          createAgentRuntimeContext({
+            promptEstimator,
+            readRuntimeSettings: fixtureRuntimePolicyReader(
+              localConfig,
+              localSettingsService,
             ),
-          state: createAgentRuntimeState({
-            runtimeId: 'test.runtime.deadlock',
-            provider: 'stub',
-            model: 'stub-model',
-            sessionId: localConfig.getSessionId(),
+            prepareProviderInvocation: (name, parameters, signal) =>
+              captureProviderInvocation(
+                {
+                  fetch: requestFetch,
+                  runtimeId: localProviderRuntime.runtimeId,
+                  metadata: localProviderRuntime.metadata,
+                  globalSettings: localSettingsService.getAllGlobalSettings(),
+                  providerSettings:
+                    localSettingsService.getProviderSettings(name),
+                },
+                name,
+                parameters,
+                signal,
+              ),
+            state: createAgentRuntimeState({
+              runtimeId: 'test.runtime.deadlock',
+              provider: 'stub',
+              model: 'stub-model',
+              sessionId: localConfig.getSessionId(),
+            }),
+            history: new HistoryService(),
+            settings: { compressionThreshold: 0.8 },
+            provider: createProviderAdapterFromManager(localManager),
+            telemetry: createTelemetryAdapter(
+              localConfig,
+              createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
+            ),
+            tools: createToolRegistryViewFromRegistry(modelTools()),
+            providerRuntime: localProviderRuntime,
           }),
-          history: new HistoryService(),
-          settings: { compressionThreshold: 0.8 },
-          provider: createProviderAdapterFromManager(localManager),
-          telemetry: createTelemetryAdapter(
-            localConfig,
-            createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
-          ),
-          tools: createToolRegistryViewFromRegistry(modelTools()),
-          providerRuntime: localProviderRuntime,
-        }),
+        ),
+        localConfig,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         createContentGeneratorStub(),
         {},
         [],
       );
       const firstSend = chat
-        .sendMessage({ message: [{ text: 'first request' }] }, 'first-prompt')
+        .sendMessage({ message: 'first request' }, 'first-prompt')
         .catch((error: unknown) => error);
 
       // Wait for the provider stream to be entered so pendingReads has
@@ -371,7 +421,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       expect(firstError).toMatchObject({ name: 'StreamIdleTimeoutError' });
 
       const secondResponse = await chat.sendMessage(
-        { message: [{ text: 'second request' }] },
+        { message: 'second request' },
         'second-prompt',
       );
       expect(transports).toBe(2);
@@ -411,29 +461,24 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       localConfig = new Config(createConfigParams(localSettingsService));
       localSettingsService.set('stream-idle-timeout-ms', timeoutMs);
       localProviderRuntime = createProviderRuntimeContext({
-        settingsService: localSettingsService,
-        config: localConfig,
         runtimeId: 'test.runtime.concurrent',
         metadata: { source: 'concurrent-test' },
       });
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      const { tokenizerFactory: promptEstimator } =
-        configureProviderRuntimeFactories(localConfig, localManager, {
-          tokenizerFactory: {
-            getTokenizer: () => undefined,
-            async estimatePrompt(request) {
-              return {
-                count: await request.legacyEstimate(),
-                method: 'calibrated',
-                family: 'legacy-unregistered',
-                estimatorVersion: 'core-estimate-tokens-v1',
-                assetRevision: 'none',
-                projectionRevision: request.projectionRevision,
-              };
-            },
-          },
-        });
+      const promptEstimator = configureProviderTokenizer(localManager, {
+        getTokenizer: () => undefined,
+        async estimatePrompt(request) {
+          return {
+            count: await request.legacyEstimate(),
+            method: 'calibrated',
+            family: 'legacy-unregistered',
+            estimatorVersion: 'core-estimate-tokens-v1',
+            assetRevision: 'none',
+            projectionRevision: request.projectionRevision,
+          };
+        },
+      });
 
       const bothReads = Promise.withResolvers<void>();
       let pendingReads = 0;
@@ -444,18 +489,23 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         isDefault: true,
         getModels: vi.fn(async () => []),
         getDefaultModel: () => 'stub-model',
-        generateChatCompletion: vi.fn(
-          (options: GenerateChatOptions): AsyncIterableIterator<IContent> => {
-            const signal = options.invocation?.signal;
-            assertDefined(signal, 'transport did not receive an abort signal');
-            capturedSignals.push(signal);
-            return createNoncooperativeStream(() => {
-              const rid = options.invocation?.runtimeId ?? 'unknown';
-              pendingReadsBySession[rid] =
-                (pendingReadsBySession[rid] ?? 0) + 1;
-              if (++pendingReads === 2) bothReads.resolve();
-            });
-          },
+        generateChatCompletion: adaptGenerator(
+          vi.fn(
+            (options: GenerateChatOptions): AsyncIterableIterator<IContent> => {
+              const signal = options.invocation?.signal;
+              assertDefined(
+                signal,
+                'transport did not receive an abort signal',
+              );
+              capturedSignals.push(signal);
+              return createNoncooperativeStream(() => {
+                const rid = options.invocation?.runtimeId ?? 'unknown';
+                pendingReadsBySession[rid] =
+                  (pendingReadsBySession[rid] ?? 0) + 1;
+                if (++pendingReads === 2) bothReads.resolve();
+              });
+            },
+          ),
         ),
         projectPromptEnvelope: async () => {
           const transportToken = Object.freeze({});
@@ -476,35 +526,51 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       const createChat = (): ChatSession =>
         new ChatSession(
-          createAgentRuntimeContext({
-            promptEstimator,
-            readRuntimeSettings: fixtureRuntimePolicyReader(
-              localConfig,
-              localSettingsService,
-            ),
-            prepareProviderInvocation: (name, parameters, signal) =>
-              captureProviderInvocation(
-                localProviderRuntime,
-                name,
-                parameters,
-                signal,
+          chatSessionPorts(
+            createAgentRuntimeContext({
+              promptEstimator,
+              readRuntimeSettings: fixtureRuntimePolicyReader(
+                localConfig,
+                localSettingsService,
               ),
-            state: createAgentRuntimeState({
-              runtimeId: 'test.runtime.concurrent',
-              provider: 'stub',
-              model: 'stub-model',
-              sessionId: localConfig.getSessionId(),
+              prepareProviderInvocation: (name, parameters, signal) =>
+                captureProviderInvocation(
+                  {
+                    runtimeId: localProviderRuntime.runtimeId,
+                    fetch: requestFetch,
+                    globalSettings: localSettingsService.getAllGlobalSettings(),
+                    providerSettings:
+                      localSettingsService.getProviderSettings(name),
+                  },
+                  name,
+                  parameters,
+                  signal,
+                ),
+              state: createAgentRuntimeState({
+                runtimeId: 'test.runtime.concurrent',
+                provider: 'stub',
+                model: 'stub-model',
+                sessionId: localConfig.getSessionId(),
+              }),
+              history: new HistoryService(),
+              settings: { compressionThreshold: 0.8 },
+              provider: createProviderAdapterFromManager(localManager),
+              telemetry: createTelemetryAdapter(
+                localConfig,
+                createSessionSettingsFixture(localConfig).settingsOwner
+                  .telemetry,
+              ),
+              tools: createToolRegistryViewFromRegistry(modelTools()),
+              providerRuntime: localProviderRuntime,
             }),
-            history: new HistoryService(),
-            settings: { compressionThreshold: 0.8 },
-            provider: createProviderAdapterFromManager(localManager),
-            telemetry: createTelemetryAdapter(
-              localConfig,
-              createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
-            ),
-            tools: createToolRegistryViewFromRegistry(modelTools()),
-            providerRuntime: localProviderRuntime,
-          }),
+          ),
+          localConfig,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
           createContentGeneratorStub(),
           {},
           [],
@@ -514,10 +580,10 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       const sibling = createChat();
       // A session serializes its own turns; independent sessions can overlap.
       const sendA = chat
-        .sendMessage({ message: [{ text: 'A' }] }, 'prompt-a')
+        .sendMessage({ message: 'A' }, 'prompt-a')
         .catch((error: unknown) => error);
       const sendB = sibling
-        .sendMessage({ message: [{ text: 'B' }] }, 'prompt-b')
+        .sendMessage({ message: 'B' }, 'prompt-b')
         .catch((error: unknown) => error);
 
       // Wait for BOTH sends to reach the blocked read before advancing time.

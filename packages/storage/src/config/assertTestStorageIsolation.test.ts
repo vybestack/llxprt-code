@@ -40,7 +40,7 @@ const originalEnv = new Map<string, string | undefined>(
 );
 
 /** A redirect assigned after startup, which an inherited child must not see. */
-const afterStartupConfigHome = path.join(
+const afterStartupConfigHome = path.resolve(
   path.sep,
   'tmp',
   'llxprt-isolated-after-startup',

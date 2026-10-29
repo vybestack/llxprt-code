@@ -104,6 +104,7 @@ describe('native continuation declared envelope refusal', () => {
           contents: [],
           metadata: {},
           invocation: createRuntimeInvocationContext({
+            fetch: (input, init) => globalThis.fetch(input, init),
             runtimeId: 'refusal-oracle',
             providerName: 'openai',
             ephemeralsSnapshot: { streaming: 'enabled' },

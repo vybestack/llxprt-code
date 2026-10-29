@@ -34,7 +34,9 @@ export async function sendAndCheckpoint(
   await verifyFacts(path, agent.session.getSessionId(), fixture.root);
   expect(await nativeRows(path)).toStrictEqual([]);
   await send(agent, 'Remember the lifecycle receipt.');
-  expect(await nativeRows(await activePath(agent))).toHaveLength(2);
+  expect(
+    await nativeRows(await activePath(agent, fixture.clientFor(agent))),
+  ).toHaveLength(2);
   const events = await send(
     agent,
     'Write the lifecycle receipt to receipt.txt.',
@@ -62,7 +64,9 @@ export async function sendAndCheckpoint(
   expect(await readFile(join(fixture.root, 'receipt.txt'), 'utf8')).toBe(
     'durable tool receipt\n',
   );
-  const rows = await nativeRows(await activePath(agent));
+  const rows = await nativeRows(
+    await activePath(agent, fixture.clientFor(agent)),
+  );
   expect(rows.map((row) => row.speaker)).toStrictEqual([
     'human',
     'ai',
@@ -90,10 +94,12 @@ export async function forkAndSwitch(
     agent,
     'This source-only suffix must remain outside the checkpoint.',
   );
-  const sourceRows = await nativeRows(await activePath(agent));
+  const sourceRows = await nativeRows(
+    await activePath(agent, fixture.clientFor(agent)),
+  );
   expect(sourceRows).toHaveLength(checkpoint.rows.length + 2);
   await fixture.command('/chat resume w24-cut');
-  const fork = await activePath(agent);
+  const fork = await activePath(agent, fixture.clientFor(agent));
   expect(fork).not.toBe(checkpoint.path);
   await verifyFork(fork);
   await verifyFacts(fork, agent.session.getSessionId(), fixture.root, null);
@@ -107,11 +113,15 @@ export async function forkAndSwitch(
   ]);
   await verifyReleased([checkpoint.path]);
   await send(agent, 'This child-only turn must not mutate the parent.');
-  const forkRows = await nativeRows(await activePath(agent));
+  const forkRows = await nativeRows(
+    await activePath(agent, fixture.clientFor(agent)),
+  );
   expect(forkRows).toHaveLength(checkpoint.rows.length + 2);
   expect(await nativeRows(checkpoint.path)).toStrictEqual(sourceRows);
   await fixture.command('/continue w24-source');
-  expect(await activePath(agent)).toBe(checkpoint.path);
+  expect(await activePath(agent, fixture.clientFor(agent))).toBe(
+    checkpoint.path,
+  );
   expect(agent.session.getSessionId()).toBe('w24-source');
   expect(await nativeRows(checkpoint.path)).toStrictEqual(sourceRows);
   expect(await nativeRows(fork)).toStrictEqual(forkRows);
@@ -128,7 +138,7 @@ export async function compressAndPackage(
   agent.setEphemeralSetting('compression.strategy', 'one-shot');
   const result = await agent.compress({ promptId: 'w24-compression' });
   expect(result.status).toBe('compressed');
-  expect(await activePath(agent)).toBe(branch.source);
+  expect(await activePath(agent, fixture.clientFor(agent))).toBe(branch.source);
   const rows = await nativeRows(branch.source);
   expect(rows.length).toBeLessThan(before.length);
   expect(rows.some((row) => row.metadata?.isSummary === true)).toBe(true);
@@ -153,7 +163,7 @@ export async function compressAndPackage(
   const destination = join(fixture.root, 'portable-package');
   await fixture.command(`/continue export w24-source ${destination}`);
   await agent.session.importSession(destination);
-  const path = await activePath(agent);
+  const path = await activePath(agent, fixture.clientFor(agent));
   const id = agent.session.getSessionId();
   expect(id).not.toBe('w24-source');
   expect(path).not.toBe(branch.source);
@@ -181,7 +191,7 @@ export async function reopen(
     replayed++;
   }
   expect(replayed).toBe(imported.rows.length);
-  expect(await activePath(agent)).toBe(imported.path);
+  expect(await activePath(agent, fixture.clientFor(agent))).toBe(imported.path);
   await verifyFacts(
     imported.path,
     imported.id,
@@ -191,9 +201,9 @@ export async function reopen(
   );
   await verifyCheckpoint(imported.path);
   await send(agent, 'Continue after cold reopen.');
-  expect(await nativeRows(await activePath(agent))).toHaveLength(
-    imported.rows.length + 2,
-  );
+  expect(
+    await nativeRows(await activePath(agent, fixture.clientFor(agent))),
+  ).toHaveLength(imported.rows.length + 2);
   await agent.dispose();
   await verifyReleased([imported.path]);
   await recordingArtifacts(imported.path);

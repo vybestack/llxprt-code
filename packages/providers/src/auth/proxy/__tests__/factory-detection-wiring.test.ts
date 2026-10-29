@@ -16,9 +16,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  createTokenStore,
+  HostCredentialOwner,
   createProviderKeyStorage,
-  resetFactorySingletons,
 } from '../credential-store-factory.js';
 import { OAuthManager } from '../../oauth-manager.js';
 
@@ -27,6 +26,10 @@ const FACTORY_MODULE_PATH = fileURLToPath(
   new URL('../credential-store-factory.ts', import.meta.url),
 );
 const CHILD_RUNTIME = 'bun';
+// Direct (non-bash) spawns must use the native Bun executable: a bare `bun`
+// resolves to the .bin/bun.cmd shim on Windows, and Bun 1.4+ refuses to pass
+// cmd.exe special characters in arguments to .cmd files.
+const NATIVE_CHILD_RUNTIME = process.execPath;
 
 function runBashChild(bashScript: string): ReturnType<typeof spawnSync> {
   return spawnSync(
@@ -48,7 +51,6 @@ describe('Factory Detection Wiring (P33)', () => {
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     delete process.env.LLXPRT_CAPABILITY_FD;
     delete process.env.LLXPRT_CAPABILITY_TOKEN;
-    resetFactorySingletons();
   });
 
   afterEach(() => {
@@ -59,45 +61,60 @@ describe('Factory Detection Wiring (P33)', () => {
       process.env.LLXPRT_CAPABILITY_FD = originalFdEnv;
     else delete process.env.LLXPRT_CAPABILITY_FD;
     delete process.env.LLXPRT_CAPABILITY_TOKEN;
-    resetFactorySingletons();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  describe('createTokenStore factory', () => {
+  describe('authority token acquisition', () => {
     it('returns KeyringTokenStore when LLXPRT_CREDENTIAL_SOCKET is not set', () => {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      const store = createTokenStore();
+      const store = new HostCredentialOwner(
+        process.env,
+      ).authority.createTokenStore();
       expect(store).toBeDefined();
       expect(typeof store.getToken).toBe('function');
     });
 
     it('returns ProxyTokenStore when LLXPRT_CREDENTIAL_SOCKET is set', () => {
       process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/test-socket.sock';
-      expect(createTokenStore()).toBeDefined();
+      expect(
+        new HostCredentialOwner(process.env).authority.createTokenStore(),
+      ).toBeDefined();
     });
 
-    it('returns singleton instances (caches per mode)', () => {
+    it('returns independently owned instances', () => {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      expect(createTokenStore()).toBe(createTokenStore());
+      expect(
+        new HostCredentialOwner(process.env).authority.createTokenStore(),
+      ).not.toBe(
+        new HostCredentialOwner(process.env).authority.createTokenStore(),
+      );
     });
 
     it('returns different singletons for different modes', () => {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      const directStore = createTokenStore();
+      const directStore = new HostCredentialOwner(
+        process.env,
+      ).authority.createTokenStore();
       process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/test-socket.sock';
-      expect(directStore).not.toBe(createTokenStore());
+      expect(directStore).not.toBe(
+        new HostCredentialOwner(process.env).authority.createTokenStore(),
+      );
     });
   });
 
   describe('createProviderKeyStorage factory', () => {
     it('clears all proxy state when switching to direct mode', () => {
       process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/test-socket.sock';
-      const proxyTokenStore = createTokenStore();
-      createProviderKeyStorage();
+      const proxyTokenStore = new HostCredentialOwner(
+        process.env,
+      ).authority.createTokenStore();
+      createProviderKeyStorage(new HostCredentialOwner(process.env).authority);
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      createProviderKeyStorage();
+      createProviderKeyStorage(new HostCredentialOwner(process.env).authority);
       process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/test-socket.sock';
-      expect(createTokenStore()).not.toBe(proxyTokenStore);
+      expect(
+        new HostCredentialOwner(process.env).authority.createTokenStore(),
+      ).not.toBe(proxyTokenStore);
     });
 
     const KEY_STORAGE_METHODS = [
@@ -115,7 +132,9 @@ describe('Factory Detection Wiring (P33)', () => {
       'returns %s storage with the correct interface',
       (_mode, socket) => {
         process.env.LLXPRT_CREDENTIAL_SOCKET = socket;
-        const storage = createProviderKeyStorage() as Record<string, unknown>;
+        const storage = createProviderKeyStorage(
+          new HostCredentialOwner(process.env).authority,
+        ) as Record<string, unknown>;
         expect(storage).toBeDefined();
         expect(
           KEY_STORAGE_METHODS.every((m) => typeof storage[m] === 'function'),
@@ -123,9 +142,17 @@ describe('Factory Detection Wiring (P33)', () => {
       },
     );
 
-    it('returns singleton instances (caches per mode)', () => {
+    it('returns independently owned instances', () => {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      expect(createProviderKeyStorage()).toBe(createProviderKeyStorage());
+      expect(
+        createProviderKeyStorage(
+          new HostCredentialOwner(process.env).authority,
+        ),
+      ).not.toBe(
+        createProviderKeyStorage(
+          new HostCredentialOwner(process.env).authority,
+        ),
+      );
     });
   });
 
@@ -135,7 +162,9 @@ describe('Factory Detection Wiring (P33)', () => {
         process.env.LLXPRT_CREDENTIAL_SOCKET = socketEnv;
       else delete process.env.LLXPRT_CREDENTIAL_SOCKET;
       return (
-        new OAuthManager(createTokenStore()) as unknown as {
+        new OAuthManager(
+          new HostCredentialOwner(process.env).authority.createTokenStore(),
+        ) as unknown as {
           proactiveRenewalManager: { clearAllTimers: () => void };
         }
       ).proactiveRenewalManager;
@@ -150,42 +179,61 @@ describe('Factory Detection Wiring (P33)', () => {
     });
   });
 
-  describe('resetFactorySingletons', () => {
+  describe('independent factory acquisitions', () => {
     it('clears cached TokenStore instances', () => {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      const store1 = createTokenStore();
-      resetFactorySingletons();
-      expect(store1).not.toBe(createTokenStore());
+      const store1 = new HostCredentialOwner(
+        process.env,
+      ).authority.createTokenStore();
+      expect(store1).not.toBe(
+        new HostCredentialOwner(process.env).authority.createTokenStore(),
+      );
     });
 
     it('clears cached proxy instances when in proxy mode', () => {
       process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/test-socket.sock';
-      const store1 = createTokenStore();
-      const storage1 = createProviderKeyStorage();
-      resetFactorySingletons();
-      expect(store1).not.toBe(createTokenStore());
-      expect(storage1).not.toBe(createProviderKeyStorage());
+      const store1 = new HostCredentialOwner(
+        process.env,
+      ).authority.createTokenStore();
+      const storage1 = createProviderKeyStorage(
+        new HostCredentialOwner(process.env).authority,
+      );
+      expect(store1).not.toBe(
+        new HostCredentialOwner(process.env).authority.createTokenStore(),
+      );
+      expect(storage1).not.toBe(
+        createProviderKeyStorage(
+          new HostCredentialOwner(process.env).authority,
+        ),
+      );
     });
 
     it('factory internal cache is cleared for direct key storage', () => {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      const storage1 = createProviderKeyStorage();
-      resetFactorySingletons();
-      expect(storage1).toBe(createProviderKeyStorage());
+      const storage1 = createProviderKeyStorage(
+        new HostCredentialOwner(process.env).authority,
+      );
+      expect(storage1).not.toBe(
+        createProviderKeyStorage(
+          new HostCredentialOwner(process.env).authority,
+        ),
+      );
     });
   });
 
   describe('Consumer code wiring verification', () => {
     it('verifies factory functions are importable', async () => {
       const factory = await import('../credential-store-factory.js');
-      expect(typeof factory.createTokenStore).toBe('function');
+      expect(typeof factory.CredentialAuthority).toBe('function');
       expect(typeof factory.createProviderKeyStorage).toBe('function');
-      expect(typeof factory.resetFactorySingletons).toBe('function');
+      expect(typeof factory.HostCredentialOwner).toBe('function');
     });
 
     it('verifies token store factory returns TokenStore interface', () => {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      const store = createTokenStore() as Record<string, unknown>;
+      const store = new HostCredentialOwner(
+        process.env,
+      ).authority.createTokenStore() as Record<string, unknown>;
       expect(
         (
           [
@@ -201,7 +249,9 @@ describe('Factory Detection Wiring (P33)', () => {
 
     it('verifies provider key storage factory returns ProviderKeyStorage interface', () => {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      const storage = createProviderKeyStorage() as Record<string, unknown>;
+      const storage = createProviderKeyStorage(
+        new HostCredentialOwner(process.env).authority,
+      ) as Record<string, unknown>;
       expect(
         (
           ['getKey', 'saveKey', 'deleteKey', 'hasKey', 'listKeys'] as const
@@ -230,10 +280,10 @@ describe('Factory Detection Wiring (P33)', () => {
         };
       }
 
-      it('caches the consumed token in module-private state shared by both factories within one process', () => {
+      it('uses captured authority for both stores after consuming the descriptor', () => {
         const childScript = [
-          `const { createTokenStore, createProviderKeyStorage } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
-          'let threw = null; try { createTokenStore(); createProviderKeyStorage(); } catch (e) { threw = e.message; }',
+          `const { HostCredentialOwner, createProviderKeyStorage } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
+          'let threw = null; try { const authority = new HostCredentialOwner(process.env).authority; authority.createTokenStore(); createProviderKeyStorage(authority); } catch (e) { threw = e.message; }',
           'process.stdout.write(JSON.stringify({ threw }));',
         ].join('');
         const result = runFactoryChild(
@@ -250,13 +300,15 @@ describe('Factory Detection Wiring (P33)', () => {
       type FactoryOp = 'tokenStore' | 'keyStorage';
       function fdConsumeScript(op: FactoryOp): string {
         const fnName =
-          op === 'tokenStore' ? 'createTokenStore' : 'createProviderKeyStorage';
+          op === 'tokenStore'
+            ? 'authority.createTokenStore'
+            : 'authority.createProviderKeyStorage';
         return [
-          `const { ${fnName}, resetFactorySingletons } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
+          `const { HostCredentialOwner } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
           'const fs = require("node:fs");',
           'const fd = Number(process.env.LLXPRT_CAPABILITY_FD || "3");',
           'let threw = null;',
-          `try { ${fnName}(); } catch (e) { threw = e.message; }`,
+          `try { const authority = new HostCredentialOwner(process.env).authority; ${fnName}(); } catch (e) { threw = e.message; }`,
           'let fdClosed = false;',
           'try { const b = Buffer.alloc(8); fs.readSync(fd, b, 0, 8, null); fdClosed = false; } catch (e) { fdClosed = true; }',
           'const capKeys = Object.keys(process.env).filter((k) => k.startsWith("LLXPRT_CAPABILITY"));',
@@ -297,11 +349,11 @@ describe('Factory Detection Wiring (P33)', () => {
   describe('AC4 (marker-only): invalid LLXPRT_CAPABILITY_FD markers fail fast', () => {
     function runMarkerOnlyChild(fdValue: string, socketName: string) {
       const childScript = [
-        `const { createTokenStore } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
-        'let threw = null; try { createTokenStore(); } catch (e) { threw = e.message; }',
+        `const { HostCredentialOwner } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
+        'let threw = null; try { new HostCredentialOwner(process.env).authority.createTokenStore(); } catch (e) { threw = e.message; }',
         'process.stdout.write(JSON.stringify({ threw, markerGone: process.env.LLXPRT_CAPABILITY_FD === undefined }));',
       ].join('');
-      const result = spawnSync(CHILD_RUNTIME, ['-e', childScript], {
+      const result = spawnSync(NATIVE_CHILD_RUNTIME, ['-e', childScript], {
         encoding: 'utf8',
         env: {
           ...process.env,
@@ -344,8 +396,8 @@ describe('Factory Detection Wiring (P33)', () => {
         fdSetup: string,
       ) {
         const childScript = [
-          `const { createTokenStore } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
-          'let threw = null; try { createTokenStore(); } catch (e) { threw = e.message; }',
+          `const { HostCredentialOwner } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
+          'let threw = null; try { new HostCredentialOwner(process.env).authority.createTokenStore(); } catch (e) { threw = e.message; }',
           'process.stdout.write(JSON.stringify({ threw, markerGone: process.env.LLXPRT_CAPABILITY_FD === undefined }));',
         ].join('');
         const fdLines = fdSetup ? `${fdSetup}\n` : '';
@@ -404,10 +456,10 @@ describe('Factory Detection Wiring (P33)', () => {
 
       it('throws on duplicate transport: a second marker supplied after consumption', () => {
         const childScript = [
-          `const { createTokenStore, createProviderKeyStorage } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
-          'let firstOk = null; try { createTokenStore(); firstOk = true; } catch (e) { firstOk = e.message; }',
+          `const { HostCredentialOwner, createProviderKeyStorage } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
+          'let firstOk = null; try { new HostCredentialOwner(process.env).authority.createTokenStore(); firstOk = true; } catch (e) { firstOk = e.message; }',
           'process.env.LLXPRT_CAPABILITY_FD = "3";',
-          'let dupThrew = null; try { createProviderKeyStorage(); } catch (e) { dupThrew = e.message; }',
+          'let dupThrew = null; try { createProviderKeyStorage(new HostCredentialOwner(process.env).authority); } catch (e) { dupThrew = e.message; }',
           'process.stdout.write(JSON.stringify({ firstOk, dupThrew }));',
         ].join('');
         const bashScript = [
@@ -421,13 +473,13 @@ describe('Factory Detection Wiring (P33)', () => {
           dupThrew: string | null;
         };
         expect(payload.firstOk).toBe(true);
-        expect(payload.dupThrew).toMatch(/duplicate capability transport/i);
+        expect(payload.dupThrew).toMatch(/Capability descriptor/i);
       });
 
       it('throws when a capability descriptor is supplied without a proxy socket', () => {
         const childScript = [
-          `const { createTokenStore } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
-          'let threw = null; try { createTokenStore(); } catch (e) { threw = e.message; }',
+          `const { HostCredentialOwner } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
+          'let threw = null; try { new HostCredentialOwner(process.env).authority.createTokenStore(); } catch (e) { threw = e.message; }',
           'process.stdout.write(JSON.stringify({ threw, markerGone: process.env.LLXPRT_CAPABILITY_FD === undefined }));',
         ].join('');
         const bashScript = [
@@ -460,8 +512,8 @@ describe('Factory Detection Wiring (P33)', () => {
         ].join('');
         const childScript = [
           'const { spawnSync } = require("node:child_process");',
-          `const { createTokenStore } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
-          'createTokenStore();',
+          `const { HostCredentialOwner } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
+          'new HostCredentialOwner(process.env).authority.createTokenStore();',
           `const r = spawnSync(${JSON.stringify(CHILD_RUNTIME)}, ["-e", ${JSON.stringify(probeScript)}], { encoding: "utf8", env: process.env, stdio: ["ignore", "pipe", "inherit"] });`,
           'process.stdout.write(r.stdout);',
         ].join('');
@@ -485,23 +537,30 @@ describe('Factory Detection Wiring (P33)', () => {
     it('returns KeyringTokenStore without consuming any descriptor', () => {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
       delete process.env.LLXPRT_CAPABILITY_FD;
-      expect(createTokenStore()).toBeDefined();
+      expect(
+        new HostCredentialOwner(process.env).authority.createTokenStore(),
+      ).toBeDefined();
     });
 
     it('returns direct ProviderKeyStorage without consuming any descriptor', () => {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
       delete process.env.LLXPRT_CAPABILITY_FD;
-      expect(createProviderKeyStorage()).toBeDefined();
+      expect(
+        createProviderKeyStorage(
+          new HostCredentialOwner(process.env).authority,
+        ),
+      ).toBeDefined();
     });
   });
 
-  describe('AC3/AC8: resetFactorySingletons clears cached capability token', () => {
+  describe('AC3/AC8: new host capture retains no prior capability cache', () => {
     it('clears the cached capability token so no token is retained after reset', () => {
       process.env.LLXPRT_CREDENTIAL_SOCKET = path.join(tmpDir, 'reset.sock');
-      resetFactorySingletons();
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
       delete process.env.LLXPRT_CAPABILITY_FD;
-      expect(createTokenStore()).toBeDefined();
+      expect(
+        new HostCredentialOwner(process.env).authority.createTokenStore(),
+      ).toBeDefined();
     });
 
     describe.skipIf(process.platform === 'win32')(
@@ -569,7 +628,7 @@ describe('Factory Detection Wiring (P33)', () => {
             const grandchildFile = path.join(tmpDir, 'o17-grandchild.ts');
             const childFile = path.join(tmpDir, 'o17-child.ts');
             const childSrc = [
-              `import { createTokenStore, resetFactorySingletons } from ${JSON.stringify(FACTORY_MODULE_PATH)};`,
+              `import { HostCredentialOwner } from ${JSON.stringify(FACTORY_MODULE_PATH)};`,
               'import { spawnSync } from "node:child_process";',
               'const socket1 = process.env.S1!;',
               'const socket2 = process.env.S2!;',
@@ -578,9 +637,9 @@ describe('Factory Detection Wiring (P33)', () => {
               'const runtime = process.env.RT!;',
               'process.env.LLXPRT_CREDENTIAL_SOCKET = socket1;',
               'let threw1: string | null = null;',
-              'try { createTokenStore(); } catch (e) { threw1 = (e as Error).message; }',
+              'try { new HostCredentialOwner(process.env).authority.createTokenStore(); } catch (e) { threw1 = (e as Error).message; }',
               'const markerGone1 = process.env.LLXPRT_CAPABILITY_FD === undefined;',
-              'resetFactorySingletons();',
+
               'const gb = "exec 3<" + JSON.stringify(token2File) + "\\nLLXPRT_CAPABILITY_FD=3 " + runtime + " " + JSON.stringify(grandchildFile);',
               'const gr = spawnSync("env", ["-u","BASH_ENV","bash","--noprofile","--norc","-c", gb], { encoding: "utf8", env: { ...process.env, LLXPRT_CREDENTIAL_SOCKET: socket2 } });',
               'let threw2: string | null = null, markerGone2 = false;',
@@ -591,9 +650,9 @@ describe('Factory Detection Wiring (P33)', () => {
               'process.stdout.write(JSON.stringify({ threw1, markerGone1, threw2, markerGone2 }));',
             ].join('\n');
             const grandchildSrc = [
-              `import { createTokenStore } from ${JSON.stringify(FACTORY_MODULE_PATH)};`,
+              `import { HostCredentialOwner } from ${JSON.stringify(FACTORY_MODULE_PATH)};`,
               'let t2: string | null = null;',
-              'try { createTokenStore(); } catch (e) { t2 = (e as Error).message; }',
+              'try { new HostCredentialOwner(process.env).authority.createTokenStore(); } catch (e) { t2 = (e as Error).message; }',
               'const m2 = process.env.LLXPRT_CAPABILITY_FD === undefined;',
               'process.stdout.write(JSON.stringify({ t2, m2 }));',
             ].join('\n');

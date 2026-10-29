@@ -4,12 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { writeCommandOutput } from '../hooks/command-journal-output.js';
-import {
-  type CommandContext,
-  type SlashCommand,
-  CommandKind,
-} from './types.js';
+import { type SlashCommand, CommandKind } from './types.js';
+import type { HistoryItemWithoutId } from '../types.js';
 import { MessageType } from '../types.js';
 import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import {
@@ -32,6 +28,18 @@ const toolsSchema: CommandArgumentSchema = [
   },
 ];
 
+export interface ToolsCommandOperations {
+  readonly listTools: () => readonly ToolInfo[];
+  readonly readSetting: (key: string) => unknown;
+  readonly writeSetting: (key: string, value: unknown) => void;
+  readonly refreshToolSchema: () => Promise<void>;
+}
+
+type AddToolsCommandItem = (
+  item: HistoryItemWithoutId,
+  baseTimestamp?: number,
+) => void;
+
 // Tokenizes quoted/unquoted args. The pattern is passed to RegExp via an
 // identifier so it is not a static literal flagged by sonarjs/regular-expr.
 const ARG_TOKEN_PATTERN = '(?:[^\\s"\']+|"[^"]*"|\'[^\']*\')+';
@@ -48,28 +56,24 @@ function stripQuotes(value: string): string {
   return trimmed;
 }
 
-function readToolLists(context: CommandContext): {
+function readToolLists(readSetting: (key: string) => unknown): {
   disabled: Set<string>;
   allowed: Set<string>;
 } {
-  const runtime = context.services.agent;
-
-  const read = (key: string): unknown =>
-    runtime?.getEphemeralSetting(key) ?? undefined;
-
-  const disabled = Array.isArray(read('tools.disabled'))
-    ? new Set((read('tools.disabled') as string[]).map(canonicalizeToolName))
+  const disabledSetting = readSetting('tools.disabled');
+  const allowedSetting = readSetting('tools.allowed');
+  const disabled = Array.isArray(disabledSetting)
+    ? new Set((disabledSetting as string[]).map(canonicalizeToolName))
     : new Set<string>();
-
-  const allowed = Array.isArray(read('tools.allowed'))
-    ? new Set((read('tools.allowed') as string[]).map(canonicalizeToolName))
+  const allowed = Array.isArray(allowedSetting)
+    ? new Set((allowedSetting as string[]).map(canonicalizeToolName))
     : new Set<string>();
 
   return { disabled, allowed };
 }
 
 function persistToolLists(
-  context: CommandContext,
+  writeSetting: (key: string, value: unknown) => void,
   disabled: Set<string>,
   allowed: Set<string>,
 ): void {
@@ -79,12 +83,8 @@ function persistToolLists(
   const allowedList = Array.from(new Set(allowed)).map((name) =>
     name === INVALID_TOOL_NAME ? '' : name,
   );
-  const runtime = context.services.agent;
-
-  if (runtime) {
-    runtime.setEphemeralSetting('tools.disabled', disabledList);
-    runtime.setEphemeralSetting('tools.allowed', allowedList);
-  }
+  writeSetting('tools.disabled', disabledList);
+  writeSetting('tools.allowed', allowedList);
 }
 
 function buildStatusLine(
@@ -155,25 +155,9 @@ function resolveToolByName(
   return null;
 }
 
-function toggleToolState(
-  subcommand: string,
-  canonical: string,
-  display: string,
-  disabled: Set<string>,
-  allowed: Set<string>,
-): string {
-  if (subcommand === 'disable') {
-    disabled.add(canonical);
-    allowed.delete(canonical);
-    return `Disabled tool '${display}'.`;
-  }
-  disabled.delete(canonical);
-  if (allowed.size > 0) allowed.add(canonical);
-  return `Enabled tool '${display}'.`;
-}
-
 async function handleToggleTool(
-  context: CommandContext,
+  operations: ToolsCommandOperations,
+  addItem: AddToolsCommandItem,
   subcommand: string,
   remainder: string,
   disabled: Set<string>,
@@ -182,158 +166,114 @@ async function handleToggleTool(
 ): Promise<void> {
   const identifier = stripQuotes(remainder);
   if (!identifier) {
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
-      {
-        type: MessageType.ERROR,
-        text: `Usage: /tools ${subcommand} <tool name>`,
-      },
-      Date.now(),
-    );
+    addItem({
+      type: MessageType.ERROR,
+      text: `Usage: /tools ${subcommand} <tool name>`,
+    });
     return;
   }
 
   const target = resolveToolByName(identifier, tools);
   if (!target || target.source === 'mcp') {
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
-      {
-        type: MessageType.ERROR,
-        text: `Tool "${identifier}" not found.`,
-      },
-      Date.now(),
-    );
+    addItem({
+      type: MessageType.ERROR,
+      text: `Tool "${identifier}" not found.`,
+    });
     return;
   }
 
   const canonical = canonicalizeToolName(target.name);
   const display = target.displayName ?? target.name;
-  const feedback = toggleToolState(
-    subcommand,
-    canonical,
-    display,
-    disabled,
-    allowed,
-  );
+  let feedback: string;
 
-  persistToolLists(context, disabled, allowed);
-
-  const agentClient = context.services.agent?.agentClient;
-
-  if (agentClient && typeof agentClient.setTools === 'function') {
-    try {
-      await agentClient.setTools();
-    } catch (error) {
-      await writeCommandOutput(
-        () => context.services.agent?.agentClient.getHistoryService() ?? null,
-        context.services.agent?.session,
-        context.recordingOwner,
-        context.ui.addItem,
-        {
-          type: MessageType.INFO,
-          text: `Warning: failed to refresh tool schema after ${
-            subcommand === 'disable' ? 'disabling' : 'enabling'
-          } '${display}': ${error instanceof Error ? error.message : String(error)}`,
-        },
-        Date.now(),
-      );
+  if (subcommand === 'disable') {
+    disabled.add(canonical);
+    allowed.delete(canonical);
+    feedback = `Disabled tool '${display}'.`;
+  } else {
+    disabled.delete(canonical);
+    if (allowed.size > 0) {
+      allowed.add(canonical);
     }
+    feedback = `Enabled tool '${display}'.`;
   }
 
-  await writeCommandOutput(
-    () => context.services.agent?.agentClient.getHistoryService() ?? null,
-    context.services.agent?.session,
-    context.recordingOwner,
-    context.ui.addItem,
-    { type: MessageType.INFO, text: feedback },
-    Date.now(),
-  );
+  persistToolLists(operations.writeSetting, disabled, allowed);
+
+  try {
+    await operations.refreshToolSchema();
+  } catch (error) {
+    addItem({
+      type: MessageType.INFO,
+      text: `Warning: failed to refresh tool schema after ${
+        subcommand === 'disable' ? 'disabling' : 'enabling'
+      } '${display}': ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+
+  addItem({ type: MessageType.INFO, text: feedback });
 }
 
-export const toolsCommand: SlashCommand = {
-  name: 'tools',
-  description: 'List, enable, or disable LLxprt Code tools',
-  kind: CommandKind.BUILT_IN,
-  schema: toolsSchema,
-  action: async (context: CommandContext, args = ''): Promise<void> => {
-    const agent = context.services.agent;
-    if (!agent) {
-      await writeCommandOutput(
-        () => context.services.agent?.agentClient.getHistoryService() ?? null,
-        context.services.agent?.session,
-        context.recordingOwner,
-        context.ui.addItem,
-        {
-          type: MessageType.ERROR,
-          text: 'Could not retrieve tools from the agent.',
-        },
-        Date.now(),
-      );
-      return;
-    }
+export function createToolsCommand(
+  operations: ToolsCommandOperations | null,
+  addItem: AddToolsCommandItem,
+): SlashCommand {
+  return {
+    name: 'tools',
+    description: 'List, enable, or disable LLxprt Code tools',
+    kind: CommandKind.BUILT_IN,
+    schema: toolsSchema,
+    action: async (_invocation: unknown, args = ''): Promise<void> => {
+      if (operations === null) {
+        addItem(
+          {
+            type: MessageType.ERROR,
+            text: 'Could not retrieve tools from the agent.',
+          },
+          Date.now(),
+        );
+        return;
+      }
 
-    const raw = args.trim();
-    const tokens = raw.match(ARG_TOKEN_REGEX) ?? [];
-    const rawSubcommand = tokens.shift();
-    const subcommand = (rawSubcommand ?? 'list').toLowerCase();
-    const remainder =
-      raw.length > 0 && rawSubcommand
-        ? raw.slice(raw.indexOf(rawSubcommand) + rawSubcommand.length).trim()
-        : tokens.join(' ');
+      const raw = args.trim();
+      const tokens = raw.match(ARG_TOKEN_REGEX) ?? [];
+      const rawSubcommand = tokens.shift();
+      const subcommand = (rawSubcommand ?? 'list').toLowerCase();
+      const remainder =
+        raw.length > 0 && rawSubcommand
+          ? raw.slice(raw.indexOf(rawSubcommand) + rawSubcommand.length).trim()
+          : tokens.join(' ');
 
-    const { disabled, allowed } = readToolLists(context);
-    const tools = agent.tools.list();
+      const { disabled, allowed } = readToolLists(operations.readSetting);
+      const tools = operations.listTools();
+      const showDescriptions = subcommand === 'desc';
 
-    const showDescriptions = subcommand === 'desc';
+      if (subcommand === 'list' || showDescriptions) {
+        const message = formatListMessage(
+          tools,
+          disabled,
+          allowed,
+          showDescriptions,
+        );
+        addItem({ type: MessageType.INFO, text: message });
+        return;
+      }
 
-    if (subcommand === 'list' || showDescriptions) {
-      const message = formatListMessage(
-        tools,
-        disabled,
-        allowed,
-        showDescriptions,
-      );
-      await writeCommandOutput(
-        () => context.services.agent?.agentClient.getHistoryService() ?? null,
-        context.services.agent?.session,
-        context.recordingOwner,
-        context.ui.addItem,
-        {
-          type: MessageType.INFO,
-          text: message,
-        },
-      );
-      return;
-    }
+      if (subcommand === 'disable' || subcommand === 'enable') {
+        await handleToggleTool(
+          operations,
+          addItem,
+          subcommand,
+          remainder,
+          disabled,
+          allowed,
+          tools,
+        );
+        return;
+      }
 
-    if (subcommand === 'disable' || subcommand === 'enable') {
-      await handleToggleTool(
-        context,
-        subcommand,
-        remainder,
-        disabled,
-        allowed,
-        tools,
-      );
-      return;
-    }
-
-    const message = formatListMessage(tools, disabled, allowed, false);
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
-      {
-        type: MessageType.INFO,
-        text: message,
-      },
-    );
-  },
-};
+      const message = formatListMessage(tools, disabled, allowed, false);
+      addItem({ type: MessageType.INFO, text: message });
+    },
+  };
+}

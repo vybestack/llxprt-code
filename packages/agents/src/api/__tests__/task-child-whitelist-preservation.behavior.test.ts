@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { fromConfig } from '../fromConfig.js';
 import { describe, expect, it } from 'bun:test';
 import { createServer } from 'node:http';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -13,12 +13,12 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
   ApprovalMode,
-  fromConfig,
   toConfigParameters,
   type Agent,
 } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   ProfileManager,
   SettingsService,
@@ -137,7 +137,6 @@ async function observeChild(
       'whitelist-child',
       'Complete the task without invoking tools.',
     );
-    const factories = createAgentRuntimeFactoryBindings();
     config = new Config({
       ...toConfigParameters({
         provider: 'openai',
@@ -154,17 +153,18 @@ async function observeChild(
       subagentDirectory: join(directory, 'subagents'),
       sessionId: 'task-child-whitelist-session',
     });
-    agent = await fromConfig({
-      settingsService: new SettingsService(),
-      runtimeFactoryBindings: factories,
+    agent = await fromConfig(
       config,
-      activation: {
-        provider: 'openai',
-        model: 'whitelist-parent-model',
-        cliOverrides: { key: 'local-test-key', baseUrl },
+      new SettingsService(),
+      {
+        activation: {
+          provider: 'openai',
+          model: 'whitelist-parent-model',
+          cliOverrides: { key: 'local-test-key', baseUrl },
+        },
       },
-    });
-    const registry = agent.agentClient.tools;
+      new CredentialAuthority(),
+    );
     const task = agent.tools.get('task');
     if (!task) throw new Error('Public direct task handle unavailable');
     if (blockAll) await agent.tools.setEnabled(['task']);
@@ -177,7 +177,7 @@ async function observeChild(
       flatAllowed: ephemerals['tools.allowed'],
       nestedTools: ephemerals.tools,
     };
-    expect(registry.getAllTools().map((tool) => tool.name)).toStrictEqual(
+    expect(agent.tools.list().map((tool) => tool.name)).toStrictEqual(
       expect.arrayContaining(requestedTools),
     );
     if (blockAll)

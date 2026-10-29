@@ -199,7 +199,6 @@ function setupProvider(
     },
   );
   const { provider, runtime, settingsService: svc } = result;
-  runtime.config ??= createRuntimeConfigStub(svc);
   // The budget must reach the provider through the real runtime path:
   // invocation.ephemerals is built by buildEphemeralsSnapshot from the
   // SettingsService global map (the same path model defaults take via
@@ -223,7 +222,7 @@ const buildCallOptions = (
     contents,
     settings: settingsService,
     runtime: runtimeContext,
-    config: runtimeContext.config,
+    config: createRuntimeConfigStub(settingsService),
   });
 
 async function consumeGenerator(
@@ -657,7 +656,7 @@ function registerAnthropicBehavior8(): void {
         contents: messages,
         settings: settingsService,
         runtime: runtimeContext,
-        config: runtimeContext.config,
+        config: createRuntimeConfigStub(settingsService),
         ephemerals: { retries: 2, retrywait: 0 },
       });
 
@@ -721,7 +720,7 @@ function registerAnthropicBehavior9(): void {
         contents: messages,
         settings: settingsService,
         runtime: runtimeContext,
-        config: runtimeContext.config,
+        config: createRuntimeConfigStub(settingsService),
         ephemerals: { retries: 2, retrywait: 0 },
       });
 
@@ -786,7 +785,7 @@ function registerAnthropicBehavior10(): void {
         contents: messages,
         settings: settingsService,
         runtime: runtimeContext,
-        config: runtimeContext.config,
+        config: createRuntimeConfigStub(settingsService),
         ephemerals: { retries: 3, retrywait: 0 },
         resolved: { streaming: true },
       });

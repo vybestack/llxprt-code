@@ -1,3 +1,4 @@
+import type { SpawnOptions, ChildProcess } from 'node:child_process';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -25,7 +26,13 @@ function restoreHookRunnerGlobals(): void {
 
 // Mock child_process with sync importOriginal for partial mocking
 const __actual = { ...(await import('node:child_process')) };
-const spawnMock = vi.fn(__actual.spawn);
+const spawnMock = vi.fn(
+  (
+    command: string,
+    args: readonly string[],
+    options: SpawnOptions = {},
+  ): ChildProcess => __actual.spawn(command, args, options),
+);
 void vi.mock('node:child_process', () => {
   const actual = __actual as typeof import('node:child_process');
   return {
@@ -114,7 +121,10 @@ function registerDiskSourceTests(): void {
   describe('disk-source command input', () => {
     registerDiskOutputLifecycleTests();
     beforeEach(() => {
-      spawnMock.mockImplementation(__actual.spawn);
+      spawnMock.mockImplementation(
+        (command, args, options = {}): ChildProcess =>
+          __actual.spawn(command, args, options),
+      );
     });
 
     registerInputParity(() => hookRunner);
@@ -329,7 +339,8 @@ function registerDiskOutputSyntaxTests(): void {
             );
             const reader = result.output?.replacement?.openReader();
             const decoded = (await reader?.next())?.value;
-            expect(JSON.stringify(decoded)).toBe(
+            const serialized: unknown = JSON.stringify(decoded);
+            expect(serialized).toBe(
               count === 1 ? JSON.stringify(rich) : undefined,
             );
             await reader?.return();

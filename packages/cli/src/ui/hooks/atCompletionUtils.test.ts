@@ -14,6 +14,7 @@ import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import {
   filterEntriesByPrefix,
   findFilesRecursively,
+  mapEntriesToSuggestions,
 } from './atCompletionUtils.js';
 
 function names(entries: readonly Dirent[]): string[] {
@@ -46,7 +47,6 @@ describe('atCompletionUtils', () => {
       'hidden-ish.txt': '',
       'MixedCase.TXT': '',
       "single'quote.txt": '',
-      'double"quote.txt': '',
       'café.txt': '',
       'emoji-😀.txt': '',
       nested: {
@@ -144,18 +144,11 @@ describe('atCompletionUtils', () => {
       expect(labels(envSuggestions)).toStrictEqual(['.env']);
     });
 
-    it('surfaces single-quoted and double-quoted filenames with escaped values', async () => {
+    it('surfaces single-quoted filenames with escaped values', async () => {
       const singleQuoteLabel = "single'quote.txt";
-      const doubleQuoteLabel = 'double"quote.txt';
       const singleQuoteSuggestions = await findFilesRecursively(
         testRootDir,
         'single',
-        null,
-        {},
-      );
-      const doubleQuoteSuggestions = await findFilesRecursively(
-        testRootDir,
-        'double',
         null,
         {},
       );
@@ -164,14 +157,33 @@ describe('atCompletionUtils', () => {
         singleQuoteSuggestions,
         singleQuoteLabel,
       );
-      const doubleQuoteSuggestion = requireSuggestion(
-        doubleQuoteSuggestions,
-        doubleQuoteLabel,
-      );
 
       expect(singleQuoteSuggestion.value).toBe(escapePath(singleQuoteLabel));
       expect(singleQuoteSuggestion.value).not.toBe(singleQuoteSuggestion.label);
       expect(unescapePath(singleQuoteSuggestion.value)).toBe(singleQuoteLabel);
+    });
+
+    // A double quote cannot appear in a Windows filename, so the entry for it
+    // is a real directory entry whose name is replaced, instead of a file
+    // created on disk.
+    it('surfaces double-quoted filenames with escaped values', async () => {
+      const doubleQuoteLabel = 'double"quote.txt';
+      const listing = await fs.readdir(testRootDir, { withFileTypes: true });
+      const entry = listing.find((candidate) => candidate.isFile());
+      if (entry === undefined) throw new Error('Expected a file entry');
+      entry.name = doubleQuoteLabel;
+
+      const suggestions = mapEntriesToSuggestions(
+        filterEntriesByPrefix([entry], 'double'),
+        testRootDir,
+        testRootDir,
+        testRootDir,
+      );
+
+      const doubleQuoteSuggestion = requireSuggestion(
+        suggestions,
+        doubleQuoteLabel,
+      );
       expect(doubleQuoteSuggestion.value).toBe(escapePath(doubleQuoteLabel));
       expect(doubleQuoteSuggestion.value).not.toBe(doubleQuoteSuggestion.label);
       expect(unescapePath(doubleQuoteSuggestion.value)).toBe(doubleQuoteLabel);

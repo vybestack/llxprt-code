@@ -1,5 +1,6 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -17,7 +18,7 @@ import {
 } from '../LoadBalancingProvider.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '../GenerateChatOptions.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 import { replayableContents } from '../utils/collectContents.js';
 
 const requestContents = replayableContents([
@@ -29,7 +30,7 @@ async function* generateUniqueChunkAfterInitialFailure(
   recordCall: () => number,
 ): AsyncGenerator<IContent> {
   if (recordCall() === 1) throw new Error('first attempt failed');
-  yield { type: 'text' as const, content: 'unique-chunk' };
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unique-chunk' }] };
 }
 
 async function* generateRateLimitedThenNumberedResponse(
@@ -41,7 +42,10 @@ async function* generateRateLimitedThenNumberedResponse(
     error.status = 429;
     throw error;
   }
-  yield { type: 'text' as const, content: `response-${callCount}` };
+  yield {
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: `response-${callCount}` }],
+  };
 }
 
 async function* generateSuccessfulSameBackendRetry(
@@ -52,28 +56,34 @@ async function* generateSuccessfulSameBackendRetry(
     error.status = 429;
     throw error;
   }
-  yield { type: 'text' as const, content: 'success' };
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
 }
 
 async function* generateSuccessAfterNonStatusFailure(
   recordCall: () => number,
 ): AsyncGenerator<IContent> {
   if (recordCall() === 1) throw new Error('Backend error without status');
-  yield { type: 'text' as const, content: 'success' };
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
 }
 
 async function* generatePartialResponseThenRateLimit(
   recordCall: () => number,
 ): AsyncGenerator<IContent> {
   if (recordCall() === 1) {
-    yield { type: 'text' as const, content: 'partial-response' };
+    yield {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'partial-response' }],
+    };
     const error = new Error('Rate limited mid-stream') as Error & {
       status: number;
     };
     error.status = 429;
     throw error;
   }
-  yield { type: 'text' as const, content: 'backend2-response' };
+  yield {
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: 'backend2-response' }],
+  };
 }
 
 function createSuccessfulStreamingProvider(
@@ -82,9 +92,9 @@ function createSuccessfulStreamingProvider(
   const mockProvider: IProvider = {
     name: 'test-provider',
     async *generateChatCompletion(): AsyncGenerator<IContent> {
-      yield { type: 'text' as const, content: 'chunk1' };
-      yield { type: 'text' as const, content: 'chunk2' };
-      yield { type: 'text' as const, content: 'chunk3' };
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'chunk1' }] };
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'chunk2' }] };
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'chunk3' }] };
     },
     getModels: async () => [],
     getDefaultModel: () => 'test-model',
@@ -126,8 +136,8 @@ function registerStreamingCase1(getContext: () => TestContext): void {
       const { providerManager } = getContext();
       const provider = createSuccessfulStreamingProvider(providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
         contents: requestContents,
       };
 
@@ -137,9 +147,18 @@ function registerStreamingCase1(getContext: () => TestContext): void {
       }
 
       expect(results).toHaveLength(3);
-      expect(results[0]).toStrictEqual({ type: 'text', content: 'chunk1' });
-      expect(results[1]).toStrictEqual({ type: 'text', content: 'chunk2' });
-      expect(results[2]).toStrictEqual({ type: 'text', content: 'chunk3' });
+      expect(results[0]).toStrictEqual({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'chunk1' }],
+      });
+      expect(results[1]).toStrictEqual({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'chunk2' }],
+      });
+      expect(results[2]).toStrictEqual({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'chunk3' }],
+      });
     });
   });
 }
@@ -183,8 +202,8 @@ function registerStreamingCase2(getContext: () => TestContext): void {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
         contents: requestContents,
       };
 
@@ -195,8 +214,8 @@ function registerStreamingCase2(getContext: () => TestContext): void {
 
       expect(results).toHaveLength(1);
       expect(results[0]).toStrictEqual({
-        type: 'text',
-        content: 'unique-chunk',
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'unique-chunk' }],
       });
     });
   });
@@ -245,8 +264,8 @@ function registerStickyCase1(getContext: () => TestContext): void {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
         contents: requestContents,
       };
 
@@ -302,8 +321,8 @@ function registerStickyCase2(getContext: () => TestContext): void {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
         contents: requestContents,
       };
 
@@ -359,8 +378,8 @@ function registerStickyCase3(getContext: () => TestContext): void {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
         contents: requestContents,
       };
 
@@ -429,8 +448,8 @@ function registerStickyCase4(getContext: () => TestContext): void {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
         contents: requestContents,
       };
 
@@ -484,8 +503,8 @@ function registerStickyCase5(getContext: () => TestContext): void {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
         contents: requestContents,
       };
 
@@ -550,8 +569,8 @@ function registerStickyCase6(getContext: () => TestContext): void {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
         contents: requestContents,
       };
 
@@ -611,8 +630,8 @@ function registerStickyCase7(getContext: () => TestContext): void {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
         contents: requestContents,
       };
 
@@ -633,8 +652,8 @@ function registerStickyCase7(getContext: () => TestContext): void {
       // Should have received the partial chunk before the error
       expect(chunks).toHaveLength(1);
       expect(chunks[0]).toStrictEqual({
-        type: 'text',
-        content: 'partial-response',
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'partial-response' }],
       });
 
       // Backend 2 should NOT have been called (no mixed response)
@@ -657,12 +676,17 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      borrowedSettings(config, settingsService),
+    );
   });
 
   describe('Streaming Behavior', () => {

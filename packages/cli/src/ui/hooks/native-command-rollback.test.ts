@@ -17,8 +17,8 @@ describe('native CLI resume rollback', () => {
     const target = await fixture.agent('cli-fault-target');
     let primaryFailure: unknown;
     try {
-      const targetStore = target.agentClient.mediaStore;
-      const priorStore = fixture.live.agentClient.mediaStore;
+      const targetStore = fixture.clientFor(target).mediaStore;
+      const priorStore = fixture.clientFor(fixture.live).mediaStore;
       if (targetStore === undefined || priorStore === undefined)
         throw new Error('Missing actual CLI media stores');
       const targetMedia = await targetStore.admit({
@@ -40,7 +40,7 @@ describe('native CLI resume rollback', () => {
       await turn(fixture.live, 'prior only', priorMedia);
       const priorPath = await recording(fixture.live);
       const priorBefore = await durable(priorPath);
-      const history = fixture.live.agentClient.getHistoryService();
+      const history = fixture.clientFor(fixture.live).getHistoryService();
       if (history === null) throw new Error('Missing actual CLI history');
       const before = {
         prior: priorBefore,

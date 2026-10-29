@@ -5,6 +5,7 @@ import {
   ProgressiveJsonBody,
   jsonValueBytes,
 } from '../utils/progressive-json-body.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { forwardPreconnect } from '../utils/fetchPreconnect.js';
 import { reportRequestSize } from '../logging/requestSizeReport.js';
 
@@ -145,10 +146,10 @@ async function* envelopeBytes(
 
 /** Only the small SDK envelope is parsed. History is never handed to its builder. */
 export function createStreamedVercelFetch(
-  innerFetch: typeof fetch,
+  innerFetch: NetworkFetch,
   messages: () => AsyncIterable<ModelMessage>,
   metadata: Record<string, unknown>,
-): typeof fetch {
+): NetworkFetch & ReturnType<typeof forwardPreconnect> {
   return Object.assign(
     async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       if (typeof init?.body !== 'string')

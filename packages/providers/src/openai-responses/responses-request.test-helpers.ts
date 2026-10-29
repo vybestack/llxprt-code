@@ -4,11 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import {
   executeOpenAIResponsesRequest,
@@ -19,6 +18,10 @@ import {
   type ResponsesRequest,
 } from './responses-request.js';
 import { buildDiskTextResponsesContext } from './responses-disk-text-projection.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 export interface ResponsesTestDeps extends ResponsesExecutorDeps {
   readonly requestBaseURL: string;
@@ -83,13 +86,11 @@ export async function* executeResponsesTestRequest(
 export function buildNormalizedOptions(
   overrides: Partial<NormalizedGenerateChatOptions> = {},
 ): NormalizedGenerateChatOptions {
-  const settings = new SettingsService();
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: 'test-runtime',
-    config: createRuntimeConfigStub(settings, {}),
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     sessionId: 'test-session',
     runtimeMetadata: runtime.metadata,

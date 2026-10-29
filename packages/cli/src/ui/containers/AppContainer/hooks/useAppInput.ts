@@ -3,6 +3,25 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type {
+  AgentStreamInputs,
+  StreamInteractionInputs,
+} from '../../../hooks/agentStream/useAgentStream.js';
+import type { SlashCommandProcessorCoreResult } from '../../../hooks/useSlashCommandProcessorCore.js';
+import type { LoadedSettings } from '../../../../config/settings.js';
+import type { BrowserTargetDeleter } from '../../../hooks/browserCatalogHost.js';
+import type { AppCommands } from '../../../contexts/AppCommandsContext.js';
+
+import { useIdePromptComplete } from './useIdePromptComplete.js';
+import {
+  computeIsInputActive,
+  computeIsAwaitingSlashCommandConfirmation,
+} from './inputActivity.js';
+
+import {
+  isEditorAvailable,
+  isValidEditorType,
+} from '@vybestack/llxprt-code-core';
 import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
 
 import {
@@ -13,31 +32,19 @@ import type React from 'react';
 import { useStdin, useStdout } from 'ink';
 import { useTodoContext } from '../../../contexts/TodoContext.js';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useAgentStream } from '../../../hooks/agentStream/index.js';
+import { useAgentStream } from '../../../hooks/agentStream/useAgentStream.js';
 import type { OperationLifecycleRegistry } from '../../../hooks/agentStream/operationLifecycle.js';
 import { useAutoAcceptIndicator } from '../../../hooks/useAutoAcceptIndicator.js';
 import { useLoadingIndicator } from '../../../hooks/useLoadingIndicator.js';
-import { useSlashCommandProcessor } from '../../../hooks/slashCommandProcessor.js';
 import { useTerminalSize } from '../../../hooks/useTerminalSize.js';
-import { useVimMode } from '../../../contexts/VimModeContext.js';
 import { useVim } from '../../../hooks/vim.js';
 import { useTextBuffer } from '../../../components/shared/text-buffer.js';
 import { useInputHistoryStore } from '../../../hooks/useInputHistoryStore.js';
 import { shouldClearTodos } from '../../../hooks/useTodoPausePreserver.js';
-import {
-  StreamingState,
-  ToolCallStatus,
-  type HistoryItem,
-  type HistoryItemWithoutId,
-} from '../../../types.js';
+import { type HistoryItem } from '../../../types.js';
 import { submitOAuthCode } from '../../../oauth-submission.js';
-import { getPendingOAuthProvider } from '../../../oauthGlobalState.js';
-import type { EditorType } from '@vybestack/llxprt-code-core';
-import { isEditorAvailable } from '@vybestack/llxprt-code-core';
-import { SettingScope } from '../../../../config/settings.js';
+import type { PromptTextGenerator } from '../../../hooks/usePromptCompletion.js';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
-import type { IdeIntegrationNudgeResult } from '../../../IdeIntegrationNudge.js';
-import { useSlashCommandActions } from './useSlashCommandActions.js';
 import { useExitHandling } from './useExitHandling.js';
 import { useInputHandling } from './useInputHandling.js';
 import { useShellFocusAutoReset } from './useShellFocusAutoReset.js';
@@ -51,30 +58,51 @@ import type {
 import type { SettingsProfileStore } from '../../../stores/settings/settingsStore.js';
 import type { TurnStore } from '../../../stores/turn/turnStore.js';
 import { useStoreSelector } from '../../../stores/useStoreSelector.js';
-import type { SlashCommandProcessorActions } from '../../../hooks/slashCommandProcessor.js';
 
 import * as fs from 'fs';
 import type { AppBootstrapResult } from './useAppBootstrap.js';
 import { useMemoryRefreshAction } from './useMemoryRefreshAction.js';
-import { useExtensionUpdates } from '../../../hooks/useExtensionUpdates.js';
 import { useLogger } from '../../../hooks/useLogger.js';
 import { useInputHistoryBootstrap } from './useInputHistoryBootstrap.js';
 import { useInitialPromptSubmit } from './useInitialPromptSubmit.js';
 import { useInputKeybindings } from './useInputKeybindings.js';
-import type {
-  SlashCommandRuntime,
-  UiRuntime,
-  UiSubagentManager,
-} from '../../../cliUiRuntime.js';
+import type { UiSubagentManager } from '../../../cliUiRuntime.js';
 
-export interface AppInputParams {
-  uiRuntime: UiRuntime;
-  // From bootstrap
-  streamRuntime: AppBootstrapResult['streamRuntime'];
-  slashCommandRuntime: SlashCommandRuntime;
-  agent: AppBootstrapResult['agent'];
-  stopTokenMetricsTracking: AppBootstrapResult['stopTokenMetricsTracking'];
-  settings: AppBootstrapResult['settings'];
+type InputStreamOperations = Omit<
+  AgentStreamInputs,
+  keyof StreamInteractionInputs | 'history'
+>;
+
+export interface AppInputParams extends InputStreamOperations {
+  commands: SlashCommandProcessorCoreResult;
+  setQuittingMessagesRef: React.MutableRefObject<
+    ((messages: HistoryItem[]) => void) | null
+  >;
+  disposeInput: () => Promise<void>;
+  readApprovalMode: Parameters<
+    typeof useAutoAcceptIndicator
+  >[0]['readApprovalMode'];
+  setApprovalMode: Parameters<
+    typeof useAutoAcceptIndicator
+  >[0]['setApprovalMode'];
+  generatePromptContent: PromptTextGenerator;
+  resumeBrowserTarget: AppCommands['resumeBrowserTarget'];
+  readBrowserCatalog: AppCommands['readBrowserCatalog'];
+  deleteBrowserTarget: BrowserTargetDeleter;
+  refreshMemory: Parameters<typeof useMemoryRefreshAction>[0]['refreshMemory'];
+  readDebugMode: () => boolean;
+  projectTempDir: string;
+  readInitialPrompt: () => string | undefined;
+  isAgentClientPresent: () => boolean;
+  injectInputSteer: (text: string) => void;
+  endInputHookSession: Parameters<typeof useExitHandling>[0]['endHookSession'];
+  readIdeMode: Parameters<typeof useInputKeybindings>[0]['readIdeMode'];
+  readInteractiveShellEnabled: Parameters<
+    typeof useInputKeybindings
+  >[0]['readInteractiveShellEnabled'];
+  readMcpServers: Parameters<typeof useInputKeybindings>[0]['readMcpServers'];
+  readJournal: Parameters<typeof useMemoryRefreshAction>[0]['readHistory'];
+  settings: LoadedSettings;
   subagentManager?: UiSubagentManager;
   /**
    * Turn store; owns the committed history and the addItem/removeItems/
@@ -82,11 +110,6 @@ export interface AppInputParams {
    * selector where the stream needs it; commands are stable references.
    */
   turnStore: TurnStore;
-  recordingIntegrationRef: AppBootstrapResult['recordingIntegrationRef'];
-  recordingOwner?: 'agent' | 'raw';
-  recordingSwapCallbacks: AppBootstrapResult['recordingSwapCallbacks'];
-  recordingIntegration: AppBootstrapResult['recordingIntegration'];
-  runtimeMessageBus: AppBootstrapResult['runtimeMessageBus'];
   setIdePromptAnswered: AppBootstrapResult['setIdePromptAnswered'];
   setLlxprtMdFileCount: AppBootstrapResult['setLlxprtMdFileCount'];
 
@@ -145,11 +168,15 @@ function useInputCoreCallbacks(p: AppInputParams) {
   }, []);
   const getPreferredEditor = useCallback(() => {
     const editorType = settings.merged.ui.preferredEditor;
-    if (!isEditorAvailable(editorType)) {
+    if (
+      editorType === undefined ||
+      !isValidEditorType(editorType) ||
+      !isEditorAvailable(editorType)
+    ) {
       dialogs.editor.open({});
       return undefined;
     }
-    return editorType as EditorType;
+    return editorType;
   }, [settings, dialogs]);
   const onAuthError = useCallback(() => {
     settingsStore.commands.setAuthError('reauth required');
@@ -168,105 +195,17 @@ function useInputCoreCallbacks(p: AppInputParams) {
   };
 }
 
-function useSlashActions(
-  p: AppInputParams,
-  quitHandler: (messages: HistoryItem[]) => void,
-  extensions: ReturnType<typeof useExtensionUpdates>,
-): SlashCommandProcessorActions {
-  const actions = useStoreSelector(
-    p.settingsStore.store,
-    (s) => s.dialogActions,
-  );
-  return useSlashCommandActions({
-    ...actions,
-    dialogs: p.dialogs,
-    quitHandler,
-    setDebugMessage: p.settingsStore.commands.setDebugMessage,
-    toggleCorgiMode: noop,
-    toggleDebugProfiler: p.terminalStore.commands.toggleDebugProfiler,
-    dispatchExtensionStateUpdate: extensions.dispatchExtensionStateUpdate,
-    addConfirmUpdateExtensionRequest:
-      extensions.addConfirmUpdateExtensionRequest,
-  });
-}
-
 function noop(): void {}
 
-function useSlashCommandSetup(
-  p: AppInputParams,
-  quitHandler: (messages: HistoryItem[]) => void,
-  toggleVimEnabled: () => Promise<boolean>,
-) {
-  const {
-    agent,
-    settings,
-    recordingIntegrationRef,
-    recordingSwapCallbacks,
-    setLlxprtMdFileCount,
-  } = p;
-  const { addItem, clearItems, refreshStatic, setIsProcessing } =
-    p.turnStore.commands;
-  const extensions = useExtensionUpdates(
-    p.slashCommandRuntime.getExtensions(),
-    addItem,
-    p.slashCommandRuntime.getWorkingDir(),
-    p.store,
-  );
-  const slashCommandProcessorActions = useSlashActions(
-    p,
-    quitHandler,
-    extensions,
-  );
-  const { todos, updateTodos } = useTodoContext();
-  const todoContextForCommands = useMemo(
-    () => ({ todos, updateTodos, refreshTodos: () => {} }),
-    [todos, updateTodos],
-  );
-  return useSlashCommandProcessor(
-    p.slashCommandRuntime,
-    agent,
-    settings,
-    addItem,
-    clearItems,
-    refreshStatic,
-    toggleVimEnabled,
-    setIsProcessing,
-    setLlxprtMdFileCount,
-    slashCommandProcessorActions,
-    p.store,
-    extensions.extensionsUpdateState,
-    true,
-    todoContextForCommands,
-    recordingIntegrationRef?.current ?? undefined,
-    recordingSwapCallbacks,
-    p.recordingOwner,
-  );
-}
-
 function useInputCoreProcessors(p: AppInputParams) {
-  const { toggleVimEnabled } = useVimMode();
-  const setQuittingMessagesRef = useRef<
-    ((messages: HistoryItem[]) => void) | null
-  >(null);
-  const quitHandler = useCallback((messages: HistoryItem[]) => {
-    if (setQuittingMessagesRef.current)
-      setQuittingMessagesRef.current(messages);
-  }, []);
-  const slashResult = useSlashCommandSetup(p, quitHandler, toggleVimEnabled);
-  const { agent, stopTokenMetricsTracking } = p;
-  const disposeAgentBeforeExit = useCallback(() => {
-    stopTokenMetricsTracking();
-    return agent.dispose();
-  }, [agent, stopTokenMetricsTracking]);
   const exitResult = useExitHandling({
-    handleSlashCommand: slashResult.handleSlashCommand,
-    config: p.streamRuntime.hooks,
-    onBeforeExit: disposeAgentBeforeExit,
+    handleSlashCommand: p.commands.handleSlashCommand,
+    endHookSession: p.endInputHookSession,
+    onBeforeExit: p.disposeInput,
   });
-  setQuittingMessagesRef.current = exitResult.setQuittingMessages;
+  p.setQuittingMessagesRef.current = exitResult.setQuittingMessages;
   return {
-    setQuittingMessagesRef,
-    ...slashResult,
+    ...p.commands,
     ...exitResult,
   };
 }
@@ -301,7 +240,7 @@ function useInputBuffer(
     shellModeActive,
   });
   const inputHistoryStore = useInputHistoryStore();
-  const logger = useLogger(p.uiRuntime.projectTempDir);
+  const logger = useLogger(p.projectTempDir);
   useInputHistoryBootstrap({ inputHistoryStore, logger });
   const lastSubmittedPromptRef = useRef<string | null>('');
   const handleOAuthCodeDialogClose = useCallback(() => {
@@ -312,7 +251,7 @@ function useInputBuffer(
       submitOAuthCode(
         {
           submitCode: oauthControl.submitCode,
-          getActiveProvider: getPendingOAuthProvider,
+          getActiveProvider: () => oauthControl.getCodeRequest().provider,
         },
         code,
       );
@@ -339,12 +278,11 @@ function useInputBuffer(
   };
 }
 
-function useInputStreamSetup(
+function useStreamInteraction(
   p: AppInputParams,
   core: ReturnType<typeof useInputCore>,
 ) {
-  const { streamRuntime, settings, recordingIntegration, runtimeMessageBus } =
-    p;
+  const { settings } = p;
   const { stdout } = useStdout();
   const { setEmbeddedShellFocused } = p.terminalStore.commands;
   const { refreshStatic } = p.turnStore.commands;
@@ -354,11 +292,12 @@ function useInputStreamSetup(
   const handleSlashCommand = core.handleSlashCommand;
   const setDebugMessage = p.settingsStore.commands.setDebugMessage;
   const performMemoryRefresh = useMemoryRefreshAction({
-    config: p.slashCommandRuntime,
+    refreshMemory: p.refreshMemory,
+    readDebugMode: p.readDebugMode,
     addItem,
-    readHistory: () => p.agent.agentClient.getHistoryService(),
-    origin: p.agent.session,
-    recordingOwner: p.recordingOwner === 'agent' ? 'agent' : undefined,
+    origin: undefined,
+    recordingOwner: 'agent',
+    readHistory: p.readJournal,
     setLlxprtMdFileCount: p.setLlxprtMdFileCount,
   });
   const shellModeActive = useStoreSelector(
@@ -367,30 +306,79 @@ function useInputStreamSetup(
   );
   const bufferSetup = useInputBuffer(p, core);
   const { handleUserCancel } = bufferSetup;
-  const agentStreamResult = useAgentStream(
-    p.agent,
-    addItem,
-    streamRuntime,
-    settings,
-    setDebugMessage,
-    handleSlashCommand,
-    shellModeActive,
-    core.getPreferredEditor,
-    core.onAuthError,
-    performMemoryRefresh,
-    refreshStatic,
-    handleUserCancel,
-    setEmbeddedShellFocused,
-    stdout.columns,
-    stdout.rows,
-    noop,
-    recordingIntegration,
-    runtimeMessageBus,
-    p.subagentManager,
-    p.operationLifecycle,
-    core.cancelActiveSlashCommand,
-    p.recordingOwner,
-  );
+  return {
+    bufferSetup,
+    input: {
+      addItem,
+      settings,
+      onDebugMessage: setDebugMessage,
+      handleSlashCommand,
+      shellModeActive,
+      getPreferredEditor: core.getPreferredEditor,
+      onAuthError: core.onAuthError,
+      performMemoryRefresh,
+      onEditorClose: refreshStatic,
+      onCancelSubmit: handleUserCancel,
+      setShellInputFocused: setEmbeddedShellFocused,
+      terminalWidth: stdout.columns,
+      terminalHeight: stdout.rows,
+      onEditorOpen: noop,
+      operationLifecycle: p.operationLifecycle,
+      cancelActiveSlashCommand: core.cancelActiveSlashCommand,
+    },
+  };
+}
+
+function useInputStreamSetup(
+  p: AppInputParams,
+  core: ReturnType<typeof useInputCore>,
+) {
+  const { bufferSetup, input } = useStreamInteraction(p, core);
+  const agentStreamResult = useAgentStream({
+    ...input,
+    readHistory: p.readHistory,
+    isCheckpointingEnabled: p.isCheckpointingEnabled,
+    projectCheckpointsDir: p.projectCheckpointsDir,
+    stream: p.stream,
+    setDisplayCallbacks: p.setDisplayCallbacks,
+    setEditorCallbacks: p.setEditorCallbacks,
+    openClientChannel: p.openClientChannel,
+    subscribeChildTools: p.subscribeChildTools,
+    appendShellHistory: p.appendShellHistory,
+    injectSteer: p.injectSteer,
+    cancelRunningAsyncTasks: p.cancelRunningAsyncTasks,
+    getProviderContextLimit: p.getProviderContextLimit,
+    getContentPrefixIdentity: p.getContentPrefixIdentity,
+    getToolHandle: p.getToolHandle,
+    findResource: p.findResource,
+    readResource: p.readResource,
+    setLastPromptTokenCount: p.setLastPromptTokenCount,
+    subscribeTaskNotifications: p.subscribeTaskNotifications,
+    flushRecording: p.flushRecording,
+    readSessionId: p.readSessionId,
+    subscribeMcpUpdates: p.subscribeMcpUpdates,
+    resetBuckets: p.resetBuckets,
+    resetBucketSession: p.resetBucketSession,
+    ensureBucketsAuthenticated: p.ensureBucketsAuthenticated,
+    atCommandConfig: p.atCommandConfig,
+    logUserPrompt: p.logUserPrompt,
+    getModel: p.getModel,
+    getProvider: p.getProvider,
+    readSelectedProvider: p.readSelectedProvider,
+    readCitations: p.readCitations,
+    readProfileName: p.readProfileName,
+    readContextLimit: p.readContextLimit,
+    getMaxSessionTurns: p.getMaxSessionTurns,
+    readEmojiFilterMode: p.readEmojiFilterMode,
+    projectTempDir: p.projectTempDir,
+    checkpointOperations: p.checkpointOperations,
+    readTargetDir: p.readTargetDir,
+    readUsePty: p.readUsePty,
+    readShellExecutionConfig: p.readShellExecutionConfig,
+    readPtyWidth: p.readPtyWidth,
+    readPtyHeight: p.readPtyHeight,
+    subagentManager: p.subagentManager,
+  });
   return { ...bufferSetup, agentStreamResult };
 }
 
@@ -414,7 +402,10 @@ function useInputStreamWiring(
   const { submitQuery } = agentStreamResult;
   const pendingHistoryItems = useMemo(
     () => [
-      ...(core.pendingHistoryItems as HistoryItem[]),
+      ...core.pendingHistoryItems.map((item, index) => ({
+        ...item,
+        id: -index - 1,
+      })),
       ...agentStreamResult.pendingHistoryItems,
     ],
     [core.pendingHistoryItems, agentStreamResult.pendingHistoryItems],
@@ -445,7 +436,7 @@ function useInputStreamWiring(
     [todos, updateTodos, handleFinalSubmit],
   );
   const handleSteer = useSteer(
-    p.agent,
+    p.injectInputSteer,
     agentStreamResult.streamingState,
     agentStreamResult.sanitizeContent,
   );
@@ -474,86 +465,6 @@ function useInputStream(
   const wiring = useInputStreamWiring(p, core, setup);
   const { agentStreamResult: _agentStreamResult, ...setupRest } = setup;
   return { ...setupRest, ...wiring };
-}
-
-export interface IsInputActiveInputs {
-  streamingState: StreamingState;
-  initError: string | null;
-  hasSlashCommands: boolean;
-  /** True while a slash command is blocked on a shell-expansion approval. */
-  isAwaitingSlashCommandConfirmation: boolean;
-}
-
-/**
- * True when a slash command has put a confirmation on screen that owns the
- * keyboard. `confirm_action` renders through the dialog manager, which
- * replaces the whole inline layout; `confirm_shell_commands` instead parks a
- * Confirming tool group in the processor's pending items, which is what this
- * detects.
- */
-export function computeIsAwaitingSlashCommandConfirmation(
-  pendingItems: readonly HistoryItemWithoutId[],
-): boolean {
-  return pendingItems.some(
-    (item) =>
-      item.type === 'tool_group' &&
-      item.tools.some((tool) => tool.status === ToolCallStatus.Confirming),
-  );
-}
-
-/**
- * Decides whether the composer is rendered.
- *
- * This deliberately does NOT key off the slash-command pipeline being busy.
- * Doing so hid the prompt for the entire duration of a long command
- * (issue #2976). The composer only has to stand down when something else owns
- * the keyboard, which is what the streaming and confirmation terms cover.
- */
-export function computeIsInputActive(inputs: IsInputActiveInputs): boolean {
-  const isStreamingIdleOrResponding =
-    inputs.streamingState === StreamingState.Idle ||
-    inputs.streamingState === StreamingState.Responding;
-  return (
-    isStreamingIdleOrResponding &&
-    !inputs.initError &&
-    inputs.hasSlashCommands &&
-    !inputs.isAwaitingSlashCommandConfirmation
-  );
-}
-
-/**
- * IDE nudge resolution: slash-command-driven enable/install plus a persisted
- * "seen" flag so the nudge never renders twice.
- */
-function useIdePromptComplete(
-  settings: AppInputParams['settings'],
-  handleSlashCommand: ReturnType<typeof useInputCore>['handleSlashCommand'],
-  setIdePromptAnswered: AppInputParams['setIdePromptAnswered'],
-) {
-  return useCallback(
-    (result: IdeIntegrationNudgeResult) => {
-      if (result.userSelection === 'yes') {
-        if (result.isExtensionPreInstalled) {
-          void handleSlashCommand('/ide enable');
-        } else {
-          void handleSlashCommand('/ide install');
-        }
-        settings.setValue(
-          SettingScope.User,
-          'hasSeenIdeIntegrationNudge',
-          true,
-        );
-      } else if (result.userSelection === 'dismiss') {
-        settings.setValue(
-          SettingScope.User,
-          'hasSeenIdeIntegrationNudge',
-          true,
-        );
-      }
-      setIdePromptAnswered(true);
-    },
-    [handleSlashCommand, settings, setIdePromptAnswered],
-  );
 }
 
 /**
@@ -671,7 +582,8 @@ function useInputFinish(
     stream.lastOutputTime,
   );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({
-    agent: p.agent,
+    readApprovalMode: p.readApprovalMode,
+    setApprovalMode: p.setApprovalMode,
     addItem: p.turnStore.commands.addItem,
   });
   // Store mirrors: the stream/command projections the layout tree reads live
@@ -708,7 +620,9 @@ function useInputStartup(
   stream: ReturnType<typeof useInputStream>,
 ): void {
   useInputKeybindings({
-    uiRuntime: p.uiRuntime,
+    readIdeMode: p.readIdeMode,
+    readInteractiveShellEnabled: p.readInteractiveShellEnabled,
+    readMcpServers: p.readMcpServers,
     terminalStore: p.terminalStore,
     settingsStore: p.settingsStore,
     turnStore: p.turnStore,
@@ -722,14 +636,13 @@ function useInputStartup(
     p.settingsStore.store,
     (s) => s.startupGuardsInitialized,
   );
-  const initialPrompt = useMemo(
-    () => p.uiRuntime.app.getQuestion(),
-    [p.uiRuntime],
-  );
+  const { readInitialPrompt } = p;
+  const initialPrompt = useMemo(() => readInitialPrompt(), [readInitialPrompt]);
   useInitialPromptSubmit({
     initialPrompt,
+    commandsReady: core.slashCommands !== undefined,
     submitPrompt: stream.handleUserInputSubmit,
-    agentClientPresent: Boolean(p.uiRuntime.agentClientSource.getAgentClient()),
+    agentClientPresent: p.isAgentClientPresent(),
     interactiveRuntimeReady: stream.interactiveRuntimeReady,
     store: p.store,
     startupGuardsInitialized,
@@ -744,6 +657,10 @@ export function useAppInput(params: AppInputParams) {
   return {
     buffer: stream.buffer,
     commandContext: core.commandContext,
+    generatePromptContent: params.generatePromptContent,
+    resumeBrowserTarget: params.resumeBrowserTarget,
+    readBrowserCatalog: params.readBrowserCatalog,
+    deleteBrowserTarget: params.deleteBrowserTarget,
     inputHistoryStore: stream.inputHistoryStore,
     handleUserInputSubmit: stream.handleUserInputSubmit,
     handleSteer: stream.handleSteer,

@@ -50,8 +50,12 @@ export const useStdin = () => ({
   isRawModeSupported: true,
 });
 
+// One stream for the whole process, like Ink's `stdout`: hooks that list it as
+// an effect dependency would otherwise resubscribe on every render.
+const stubStdout = new EventEmitter();
+
 export const useStdout = () => ({
-  stdout: new EventEmitter(),
+  stdout: stubStdout,
   write: () => {},
 });
 

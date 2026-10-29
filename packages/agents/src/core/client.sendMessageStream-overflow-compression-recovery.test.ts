@@ -1,3 +1,4 @@
+import { chatSessionPorts } from './chatSessionPorts.js';
 /**
  * @license
  * Copyright 2026 Google LLC
@@ -140,7 +141,14 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
       });
 
       const realChat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         buildMockContentGenerator(),
         { maxOutputTokens: 100 },
         [],

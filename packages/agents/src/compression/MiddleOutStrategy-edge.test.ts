@@ -1,3 +1,4 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -32,6 +33,10 @@ import {
   toolResponseMsg,
   testProviderRuntime,
 } from './__tests__/MiddleOutStrategy-test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('MiddleOutStrategy edge cases', () => {
   // -----------------------------------------------------------------------
@@ -50,7 +55,9 @@ describe('MiddleOutStrategy edge cases', () => {
       // made, and the strategy is middle-out.
       expect(result).toStrictEqual({ kind: 'noop', candidateRows: 0 });
       expect(providerCalls()).toBe(0);
-      expect(new MiddleOutStrategy().name).toBe('middle-out');
+      expect(
+        new MiddleOutStrategy(undefined, undefined, undefined, undefined).name,
+      ).toBe('middle-out');
     });
 
     it('returns original history for very small conversation', async () => {
@@ -145,7 +152,15 @@ describe('MiddleOutStrategy edge cases', () => {
         history,
         resolveProvider: () => ({
           invocation: captureProviderInvocation(
-            testProviderRuntime,
+            {
+              fetch: requestFetch,
+              runtimeId: testProviderRuntime.runtimeId,
+              metadata: testProviderRuntime.metadata,
+              globalSettings: new SettingsService().getAllGlobalSettings(),
+              providerSettings: new SettingsService().getProviderSettings(
+                multiChunkProvider.name,
+              ),
+            },
             multiChunkProvider.name,
           ),
           provider: multiChunkProvider,
@@ -239,7 +254,9 @@ describe('MiddleOutStrategy edge cases', () => {
         await compressMiddleOutViaDisk(ctx),
       );
 
-      expect(new MiddleOutStrategy().name).toBe('middle-out');
+      expect(
+        new MiddleOutStrategy(undefined, undefined, undefined, undefined).name,
+      ).toBe('middle-out');
       expect(result.newHistory[result.top].metadata?.isSummary).toBe(true);
     });
 
@@ -281,7 +298,9 @@ describe('MiddleOutStrategy edge cases', () => {
       const { result, ackText, providerCalls } =
         await observeHandlesLargeLastUserPromptViaContextInjection();
       expect(providerCalls).toBe(1);
-      expect(new MiddleOutStrategy().name).toBe('middle-out');
+      expect(
+        new MiddleOutStrategy(undefined, undefined, undefined, undefined).name,
+      ).toBe('middle-out');
       expect(result.newHistory[result.top].metadata?.isSummary).toBe(true);
       expect(ackText).toContain('most recent request');
     });

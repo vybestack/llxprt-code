@@ -10,10 +10,7 @@ import {
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { ApiRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
-import {
-  SettingsService,
-  type SettingsService as SettingsServiceType,
-} from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { LoggingProviderWrapper } from './LoggingProviderWrapper.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions, IProvider } from './IProvider.js';
@@ -92,14 +89,20 @@ function harness(send: Send): Harness {
     () => diagnostics,
   );
   const runtime: ProviderRuntimeContext = {
-    settingsService: settings as unknown as SettingsServiceType,
-    config,
     runtimeId: 'request-size-runtime',
     metadata: { source: 'LoggingProviderWrapper.requestSize.test' },
   };
   const options = (): GenerateChatOptions => ({
     contents: humanRows(),
-    invocation: captureProviderInvocation(runtime, provider.name),
+    invocation: captureProviderInvocation(
+      {
+        ...runtime,
+        globalSettings: settings.getAllGlobalSettings(),
+        providerSettings: settings.getProviderSettings(provider.name),
+        fetch: (input, init) => globalThis.fetch(input, init),
+      },
+      provider.name,
+    ),
   });
   return {
     requests,

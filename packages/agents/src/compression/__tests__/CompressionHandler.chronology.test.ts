@@ -1,3 +1,4 @@
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -30,10 +31,13 @@ import { OneShotStrategy } from '../OneShotStrategy.js';
 const original = { ...(await import('@vybestack/llxprt-code-settings')) };
 void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...original,
-  Storage: {
-    ...original.Storage,
-    getGlobalConfigDir: vi.fn(() => '/tmp/llxprt-test-config'),
-  },
+  Storage: new Proxy(original.Storage, {
+    get(target, property, receiver) {
+      return property === 'getGlobalConfigDir'
+        ? () => '/tmp/llxprt-test-config'
+        : Reflect.get(target, property, receiver);
+    },
+  }),
 }));
 
 function summaryContent(text: string): IContent {
@@ -89,14 +93,23 @@ function makeChronologyHandler(
     compressionThreshold: 0.8,
   });
 
-  const provider = {
+  const provider: RuntimeProvider = {
     name: 'test',
+    getModels: async () => [],
     generateChatCompletion: vi.fn(),
-  } as unknown as RuntimeProvider;
-  const providerResult: CompressionProviderResult = { provider };
+  };
+  const providerResult: CompressionProviderResult = {
+    provider,
+    runtime: runtimeContext.providerRuntime,
+  };
   return new CompressionHandler(
-    runtimeContext,
+    chatSessionPorts(runtimeContext).compression,
+    undefined,
     historyService,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {},
     vi.fn().mockResolvedValue(providerResult),
     vi.fn().mockResolvedValue(undefined),

@@ -66,6 +66,7 @@ const uiItem = z.discriminatedUnion('type', [
     icon: z.string().optional(),
     color: z.string().optional(),
   }),
+  z.object({ type: z.literal('user'), text: z.string() }),
   z.object({ type: z.literal('gemini_content'), text: z.string() }),
   z.object({ type: z.literal('warning'), text: z.string() }),
   z.object({ type: z.literal('error'), text: z.string() }),

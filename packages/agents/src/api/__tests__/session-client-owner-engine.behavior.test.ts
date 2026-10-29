@@ -1,39 +1,126 @@
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { openClientOwner } from './helpers/client-owner-session.js';
+import { captureSessionOwner } from './helpers/capture-session-owner.js';
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
-import {
-  createWorkspaceEngineFixture,
-  createSessionClientEngineFixture,
-} from './helpers/session-client-engine-fixture.js';
-import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
-import { registerProvidersOntoManager, createAgent } from '../createAgent.js';
-import { assembleAgentActivationBootstrap } from '../providerSwitchAssembly.js';
-import { FakeProvider } from '@vybestack/llxprt-code-providers';
-import { fileURLToPath } from 'node:url';
+import { mkdtemp, readdir, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { Agent } from '../agent.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { createAgent } from '../createAgent.js';
 import { fromConfig } from '../fromConfig.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import type { RouteAAgent } from './helpers/route-a-agent.js';
+
+const PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
 
 describe('Explicit session client lifetime', () => {
+  useFakeResponsesReplay('multi-turn-text.jsonl');
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+  const credentials = useOwnedCredentials();
+
+  async function openEngine(options: { authority: CredentialAuthority }) {
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'engine-caller-')),
+    );
+    const caller = await openClientOwner(
+      options.authority,
+      {
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: 'shared-engine-label',
+        workingDir: directory,
+        harness: { includeProcessCwd: false },
+      },
+      { provider: 'fake', model: 'fake-model' },
+    );
+    await caller.client.addHistory({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'caller before adoption' }],
+    });
+    const settings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      caller.config.getInitialSettings(),
+    ))
+      settings.set(key, value);
+    const { value: agent, owner } = await captureSessionOwner(() =>
+      fromConfig(
+        caller.config,
+        settings,
+        { activation: { provider: 'fake', model: 'fake-model' } },
+        options.authority,
+      ),
+    );
+    return {
+      agent,
+      owner,
+      config: caller.config,
+      settings,
+      authority: options.authority,
+      directory,
+      caller,
+      close: () =>
+        runCleanupSteps([
+          () => agent.dispose(),
+          () => caller.close(),
+          () => rm(directory, { recursive: true, force: true }),
+        ]),
+    };
+  }
+
+  /** A further facade over the first one's `Config`, with its own seeded settings. */
+  async function openSibling(
+    first: RouteAAgent,
+    activation: { provider: string; model?: string },
+  ): Promise<Agent> {
+    const settings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      first.config.getInitialSettings(),
+    ))
+      settings.set(key, value);
+    return fromConfig(first.config, settings, { activation }, first.authority);
+  }
+
   for (const firstClosed of [0, 1]) {
     it(`keeps the shared caller and surviving facade usable when facade ${firstClosed} closes first`, async () => {
-      const built = await createSessionClientEngineFixture();
-      const caller = built.owner.getAgentClient();
-      const options = {
-        settingsService: built.settingsService,
-        config: built.config,
-        providerManager: built.handle.providerManager,
-        messageBus: built.messageBus,
-        mcpRuntime: built.mcp,
-        agentClient: caller,
-      };
-      const facades = [await fromConfig(options), await fromConfig(options)];
+      const built = await openEngine({
+        authority: credentials().authority,
+      });
+      let sibling: Agent | undefined;
       try {
+        sibling = await openSibling(built, {
+          provider: 'fake',
+          model: 'fake-model',
+        });
+        const facades = [built.agent, sibling];
         const closing = facades[firstClosed].dispose();
         expect(new Set([closing, facades[firstClosed].dispose()]).size).toBe(1);
         await closing;
-        await built.mcp.refreshContext();
         await facades[1 - firstClosed].setHistory([
           {
             speaker: 'human',
@@ -41,51 +128,37 @@ describe('Explicit session client lifetime', () => {
           },
         ]);
         expect(
-          (
-            await Array.fromAsync(facades[1 - firstClosed].streamHistory())
-          ).filter((item) => item.speaker === 'human'),
+          (await collectAgentHistory(facades[1 - firstClosed])).filter(
+            (item) => item.speaker === 'human',
+          ),
         ).toHaveLength(1);
         await facades[1 - firstClosed].dispose();
-        await built.mcp.refreshContext();
-        await caller.addHistory({
+        await built.caller.mcp.refreshContext();
+        await built.caller.client.addHistory({
           speaker: 'human',
           blocks: [{ type: 'text', text: 'caller after both facades' }],
         });
         expect(
-          (await Array.fromAsync(caller.getHistory())).filter(
-            (item) => item.speaker === 'human',
+          (await Array.fromAsync(built.caller.client.getHistory())).filter(
+            (row) => row.speaker === 'human',
           ),
         ).toHaveLength(2);
-        expect(await caller.mediaStore?.getStoredByteLength()).toBe(0);
-        expect(built.handle.providerManager.getActiveProviderName()).toBe(
-          'fake',
-        );
+        expect(
+          await built.caller.client.mediaStore?.getStoredByteLength(),
+        ).toBe(0);
       } finally {
-        await Promise.all(facades.map((facade) => facade.dispose()));
-        await built.cleanup();
+        await sibling?.dispose();
+        await built.close();
       }
     }, 30000);
   }
   it('releases failed shared activation without losing a surviving facade or the caller MCP collaborator', async () => {
-    const built = await createSessionClientEngineFixture();
-    const caller = built.owner.getAgentClient();
-    const options = {
-      settingsService: built.settingsService,
-      config: built.config,
-      providerManager: built.handle.providerManager,
-      messageBus: built.messageBus,
-      mcpRuntime: built.mcp,
-      agentClient: caller,
-    };
-    const facade = await fromConfig(options);
+    const built = await openEngine({ authority: credentials().authority });
+    const facade = built.agent;
     try {
       await expect(
-        fromConfig({
-          ...options,
-          activation: { provider: 'missing-shared-provider' },
-        }),
+        openSibling(built, { provider: 'missing-shared-provider' }),
       ).rejects.toThrow(/activation failed/i);
-      await built.mcp.refreshContext();
       await facade.setHistory([
         {
           speaker: 'human',
@@ -93,453 +166,182 @@ describe('Explicit session client lifetime', () => {
         },
       ]);
       expect(
-        (await Array.fromAsync(facade.streamHistory())).filter(
+        (await collectAgentHistory(facade)).filter(
           (item) => item.speaker === 'human',
         ),
       ).toHaveLength(1);
       await facade.dispose();
-      await built.mcp.refreshContext();
-      await caller.addHistory({
+      await built.caller.mcp.refreshContext();
+      await built.caller.client.addHistory({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'caller survives failed sibling' }],
       });
       expect(
-        (await Array.fromAsync(caller.getHistory())).filter(
-          (item) => item.speaker === 'human',
+        (await Array.fromAsync(built.caller.client.getHistory())).filter(
+          (row) => row.speaker === 'human',
         ),
       ).toHaveLength(2);
     } finally {
-      await facade.dispose();
-      await built.cleanup();
+      await built.close();
     }
   }, 30000);
   it('creates and disposes an owned public agent with its separate media lifetime', async () => {
-    const workspace = await createWorkspaceEngineFixture();
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'public-media-owner-')),
+    );
+    const location = new Config(
+      toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: directory,
+      }),
+    );
+    const liveMedia = async (): Promise<readonly string[]> => {
+      try {
+        return await readdir(join(location.projectTempDir, 'media-live'));
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          'code' in error &&
+          error.code === 'ENOENT'
+        )
+          return [];
+        throw error;
+      }
+    };
     try {
       const agent = await createAgent({
         provider: 'fake',
         model: 'fake-model',
-        workingDir: workspace.config.getTargetDir(),
+        workingDir: directory,
+        credentialAuthority: credentials().authority,
       });
-      const client = agent.agentClient;
-      const store = client.mediaStore;
-      if (store === undefined) throw new Error('Missing owned media');
       try {
         await agent.setHistory([
           {
             speaker: 'human',
-            blocks: [{ type: 'text', text: 'owned public session' }],
+            blocks: [
+              { type: 'text', text: 'owned public session' },
+              {
+                type: 'media',
+                encoding: 'base64',
+                mimeType: 'image/png',
+                data: PNG_BASE64,
+              },
+            ],
           },
         ]);
         expect(
-          (await Array.fromAsync(agent.streamHistory())).filter(
+          (await collectAgentHistory(agent)).filter(
             (item) => item.speaker === 'human',
           ),
         ).toHaveLength(1);
+        expect(await liveMedia()).toHaveLength(1);
         await agent.dispose();
-        expect(() => agent.agentClient).toThrow(/disposed/i);
-        await expect(store.getStoredByteLength()).rejects.toThrow(/closed/i);
+        await expect(collectAgentHistory(agent)).rejects.toThrow(/disposed/i);
+        expect(await liveMedia()).toHaveLength(0);
       } finally {
         await agent.dispose();
       }
     } finally {
-      await workspace.cleanup();
+      await location.dispose();
+      await rm(directory, { recursive: true, force: true });
     }
   }, 30000);
-  it('publishes a profile client through its owner and retains the borrowed caller after profile retirement', async () => {
-    const built = await createSessionClientEngineFixture();
-    const client = built.owner.getAgentClient();
-    const provider = new FakeProvider(
-      fileURLToPath(
-        new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
-      ),
-      built.config.getTargetDir(),
-    );
-    provider.name = 'engine-profile-provider';
-    built.handle.providerManager.registerProvider(provider);
-    const agent = await fromConfig({
-      settingsService: built.settingsService,
-      config: built.config,
-      providerManager: built.handle.providerManager,
-      messageBus: built.messageBus,
-      mcpRuntime: built.mcp,
-      agentClient: client,
-    });
-    try {
-      await agent.setHistory([
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'profile carries history' }],
-        },
-      ]);
-      await agent.profiles.applySnapshot({
-        version: 1,
-        provider: provider.name,
-        model: 'engine-profile-model',
-        modelParams: {},
-        ephemeralSettings: {},
-      });
-      expect(agent.agentClient).not.toBe(client);
-      expect(
-        (await Array.fromAsync(agent.streamHistory())).filter(
-          (item) => item.speaker === 'human',
-        ),
-      ).toHaveLength(1);
-      expect(agent.providerManager.getActiveProviderName()).toBe(provider.name);
-      await agent.dispose();
-      await built.mcp.refreshContext();
-      await client.addHistory({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'caller after profile retirement' }],
-      });
-      expect(
-        (await Array.fromAsync(client.getHistory())).filter(
-          (item) => item.speaker === 'human',
-        ),
-      ).toHaveLength(2);
-    } finally {
-      await agent.dispose();
-      await built.cleanup();
-    }
-  }, 30000);
-  it('restores caller MCP and retains the borrowed client after facade activation fails', async () => {
-    const built = await createSessionClientEngineFixture();
-    const client = built.owner.getAgentClient();
-    try {
-      await expect(
-        fromConfig({
-          settingsService: built.settingsService,
-          config: built.config,
-          providerManager: built.handle.providerManager,
-          messageBus: built.messageBus,
-          mcpRuntime: built.mcp,
-          agentClient: client,
-          activation: { provider: 'missing-engine-provider' },
-        }),
-      ).rejects.toThrow(/activation failed/i);
-      await built.mcp.refreshContext();
-      await client.addHistory({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'caller after failed activation' }],
-      });
-      expect(
-        (await Array.fromAsync(client.getHistory())).filter(
-          (item) => item.speaker === 'human',
-        ),
-      ).toHaveLength(1);
-      expect(built.handle.providerManager.getActiveProviderName()).toBe('fake');
-    } finally {
-      await built.cleanup();
-    }
-  }, 30000);
-  it('transfers the owned preflight client and media into one facade lifetime', async () => {
-    const built = await createWorkspaceEngineFixture();
-    const handle = createIsolatedRuntimeContext(
-      {
-        runtimeId: 'engine-owned-preflight',
-        config: built.config,
-        messageBus: built.messageBus,
-        prepare: (ctx) =>
-          registerProvidersOntoManager(ctx.providerManager, ctx, built.config),
+  type Engine = Awaited<ReturnType<typeof openEngine>>;
+  const replacements = [
+    {
+      name: 'model',
+      replace: async (
+        built: Engine,
+        prior: AgentClientContract,
+      ): Promise<void> => {
+        await built.agent.setModel('replacement-model');
+        expect(built.owner.clients.getAgentClient()).not.toBe(prior);
       },
-      built.settingsService,
-    );
-    await handle.activate();
-    const operation = assembleAgentActivationBootstrap(
-      built.config,
-      handle.settingsService,
-      handle.providerManager,
-      handle.oauthManager,
-      () => handle.readRuntimeKind(),
-      undefined,
-      built.mcp,
-    );
-    try {
-      await built.mcp.initialize();
-      const intent = { provider: 'fake', model: 'fake-model' };
-      const result = await operation.preflight(intent);
-      if (result.token === undefined)
-        throw new Error('Missing owned preflight handoff');
-      const owner = operation.sessionClient;
-      const client = owner.getAgentClient();
-      const store = client.mediaStore;
-      if (store === undefined) throw new Error('Missing preflight media store');
-      const agent = await fromConfig({
-        settingsService: built.settingsService,
-        config: built.config,
-        providerManager: handle.providerManager,
-        messageBus: built.messageBus,
-        mcpRuntime: built.mcp,
-        activation: intent,
-        activationPreflight: { operation, token: result.token },
-      });
+    },
+    {
+      name: 'profile',
+      replace: async (
+        built: Engine,
+        _prior: AgentClientContract,
+      ): Promise<void> => {
+        await built.agent.profiles.applySnapshot({
+          version: 1,
+          provider: 'fake',
+          model: 'replacement-profile-model',
+          modelParams: {},
+          ephemeralSettings: {},
+        });
+        expect(built.agent.getModel()).toBe('replacement-profile-model');
+      },
+    },
+  ];
+  for (const replacement of replacements) {
+    it(`keeps the original caller alive after facade ${replacement.name} replacement and retirement`, async () => {
+      const built = await openEngine({ authority: credentials().authority });
+      const prior = built.owner.clients.getAgentClient();
+
       try {
-        expect(agent.agentClient).toBe(client);
-        await agent.setHistory([
+        await built.agent.setHistory([
           {
             speaker: 'human',
-            blocks: [{ type: 'text', text: 'owned preflight history' }],
+            blocks: [{ type: 'text', text: 'retained across replacement' }],
           },
         ]);
-        expect(await store.getStoredByteLength()).toBe(0);
+        await replacement.replace(built, prior);
+        expect(
+          (await collectAgentHistory(built.agent)).filter(
+            (row) => row.speaker === 'human',
+          ),
+        ).toHaveLength(1);
+        await built.agent.dispose();
+        await built.caller.mcp.refreshContext();
+        await built.caller.client.addHistory({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'caller after replacement' }],
+        });
+        expect(
+          (await Array.fromAsync(built.caller.client.getHistory())).filter(
+            (row) => row.speaker === 'human',
+          ),
+        ).toHaveLength(2);
+        expect(
+          await built.caller.client.mediaStore?.getStoredByteLength(),
+        ).toBe(0);
       } finally {
-        await agent.dispose();
+        await built.close();
       }
-      expect(() => owner.getAgentClient()).toThrow(/disposed/i);
-      await expect(store.getStoredByteLength()).rejects.toThrow(/closed/i);
-    } finally {
-      await operation.dispose();
-      await handle.cleanup();
-      await built.cleanup();
-    }
-  }, 30000);
-  it('keeps same-label clients separate and leaves a sibling conversation usable after one facade closes', async () => {
-    const left = await createSessionClientEngineFixture('shared-engine-label');
-    const right = await createSessionClientEngineFixture('shared-engine-label');
-    const a = await fromConfig({
-      settingsService: left.settingsService,
-      config: left.config,
-      providerManager: left.handle.providerManager,
-      messageBus: left.messageBus,
-      mcpRuntime: left.mcp,
-      agentClient: left.owner.getAgentClient(),
-    });
-    const b = await fromConfig({
-      settingsService: right.settingsService,
-      config: right.config,
-      providerManager: right.handle.providerManager,
-      messageBus: right.messageBus,
-      mcpRuntime: right.mcp,
-      agentClient: right.owner.getAgentClient(),
-    });
+    }, 30000);
+  }
+  it('isolates same-label caller clients and keeps the sibling usable after another facade closes', async () => {
+    const left = await openEngine({ authority: credentials().authority });
+    const right = await openEngine({ authority: credentials().authority });
     try {
-      await a.setHistory([
+      await left.agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'left only' }] },
       ]);
-      await b.setHistory([
+      await right.agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'right only' }] },
       ]);
-      await a.dispose();
-      await right.mcp.refreshContext();
-      await b.agentClient.addHistory({
+      await left.agent.dispose();
+      await right.caller.mcp.refreshContext();
+      await right.owner.clients.getAgentClient().addHistory({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'right continues' }],
       });
+      const rows = await collectAgentHistory(right.agent);
+      expect(rows.filter((row) => row.speaker === 'human')).toHaveLength(2);
       expect(
-        (await Array.fromAsync(b.streamHistory())).filter(
-          (item) => item.speaker === 'human',
-        ),
-      ).toHaveLength(2);
-      expect(
-        (await Array.fromAsync(b.streamHistory()))
-          .flatMap((item) => item.blocks)
-          .filter((block) => block.type === 'text')
-          .map((block) => block.text),
+        rows
+          .flatMap((row) => row.blocks)
+          .flatMap((block) => (block.type === 'text' ? [block.text] : [])),
       ).not.toContain('left only');
+      expect(left.config.getSessionId()).toBe(right.config.getSessionId());
+      expect(right.caller.client).not.toBe(left.caller.client);
     } finally {
-      await b.dispose();
-      await a.dispose();
-      await right.cleanup();
-      await left.cleanup();
-    }
-  }, 30000);
-  it('owns a model replacement without retiring the original borrowed client or media', async () => {
-    const built = await createSessionClientEngineFixture();
-    const client = built.owner.getAgentClient();
-    const agent = await fromConfig({
-      settingsService: built.settingsService,
-      config: built.config,
-      providerManager: built.handle.providerManager,
-      messageBus: built.messageBus,
-      mcpRuntime: built.mcp,
-      agentClient: client,
-    });
-    try {
-      await agent.setHistory([
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'retained across replacement' }],
-        },
-      ]);
-      await agent.setModel('replacement-model');
-      expect(agent.agentClient).not.toBe(client);
-      expect(
-        (await Array.fromAsync(agent.streamHistory())).filter(
-          (item) => item.speaker === 'human',
-        ),
-      ).toHaveLength(1);
-      await agent.dispose();
-      await built.mcp.refreshContext();
-      await client.addHistory({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'caller retains original' }],
-      });
-      expect(
-        (await Array.fromAsync(client.getHistory())).filter(
-          (item) => item.speaker === 'human',
-        ),
-      ).toHaveLength(2);
-      expect(await built.media.store.getStoredByteLength()).toBe(0);
-    } finally {
-      await agent.dispose();
-      await built.cleanup();
-    }
-  }, 30000);
-  it('rejects a borrowed client paired with a different provider manager', async () => {
-    const left = await createSessionClientEngineFixture();
-    const right = await createSessionClientEngineFixture();
-    try {
-      await expect(
-        fromConfig({
-          settingsService: left.settingsService,
-          config: left.config,
-          providerManager: right.handle.providerManager,
-          messageBus: left.messageBus,
-          mcpRuntime: left.mcp,
-          agentClient: left.owner.getAgentClient(),
-        }),
-      ).rejects.toThrow(/different ProviderManager/i);
-    } finally {
-      await right.cleanup();
-      await left.cleanup();
-    }
-  }, 30000);
-  it('rejects a borrowed client from another Config even when both session labels match', async () => {
-    const left = await createSessionClientEngineFixture('same-engine-label');
-    const right = await createSessionClientEngineFixture('same-engine-label');
-    try {
-      await expect(
-        fromConfig({
-          settingsService: right.settingsService,
-          config: right.config,
-          providerManager: right.handle.providerManager,
-          messageBus: right.messageBus,
-          mcpRuntime: right.mcp,
-          agentClient: left.owner.getAgentClient(),
-        }),
-      ).rejects.toThrow(/different Config/i);
-    } finally {
-      await right.cleanup();
-      await left.cleanup();
-    }
-  }, 30000);
-  it('transfers one borrowed preflight owner without closing the caller client, manager, media or MCP', async () => {
-    const built = await createSessionClientEngineFixture();
-    const client = built.owner.getAgentClient();
-    await client.startChat();
-    const intent = { provider: 'fake', model: 'fake-model' };
-    const operation = assembleAgentActivationBootstrap(
-      built.config,
-      built.handle.settingsService,
-      built.handle.providerManager,
-      built.handle.oauthManager,
-      () => built.handle.readRuntimeKind(),
-      client,
-      built.mcp,
-    );
-    try {
-      const result = await operation.preflight(intent);
-      if (result.token === undefined)
-        throw new Error('Missing preflight receipt');
-      const agent = await fromConfig({
-        settingsService: built.settingsService,
-        config: built.config,
-        providerManager: built.handle.providerManager,
-        messageBus: built.messageBus,
-        mcpRuntime: built.mcp,
-        agentClient: client,
-        activation: intent,
-        activationPreflight: { operation, token: result.token },
-      });
-      try {
-        expect(agent.agentClient).toBe(client);
-        expect(agent.agentClient).toBe(
-          operation.sessionClient.getAgentClient(),
-        );
-      } finally {
-        await agent.dispose();
-      }
-      await built.mcp.refreshContext();
-      await client.addHistory({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'caller retains preflight session' }],
-      });
-      expect(
-        (await Array.fromAsync(client.getHistory())).filter(
-          (item) => item.speaker === 'human',
-        ),
-      ).toHaveLength(1);
-      expect(await built.media.store.getStoredByteLength()).toBe(0);
-      expect(built.handle.providerManager.getActiveProviderName()).toBe('fake');
-    } finally {
-      await operation.dispose();
-      await built.cleanup();
-    }
-  }, 30000);
-  it('restores the borrowed caller MCP client after facade disposal so context refresh remains usable', async () => {
-    const built = await createSessionClientEngineFixture();
-    const client = built.owner.getAgentClient();
-    try {
-      await client.startChat();
-      await client.addHistory({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'borrowed conversation' }],
-      });
-      const agent = await fromConfig({
-        settingsService: built.settingsService,
-        config: built.config,
-        providerManager: built.handle.providerManager,
-        messageBus: built.messageBus,
-        mcpRuntime: built.mcp,
-        agentClient: client,
-      });
-      await agent.dispose();
-      await built.mcp.refreshContext();
-      await client.addHistory({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'caller after MCP refresh' }],
-      });
-      expect(
-        (await Array.fromAsync(client.getHistory())).filter(
-          (item) => item.speaker === 'human',
-        ),
-      ).toHaveLength(2);
-    } finally {
-      await built.cleanup();
-    }
-  }, 30000);
-  it('initializes workspace and MCP infrastructure without a client factory', async () => {
-    const built = await createWorkspaceEngineFixture();
-    const mcp = built.mcp;
-    try {
-      await mcp.initialize();
-      expect(built.mcp.toolSelection.getFunctionDeclarations()).toStrictEqual(
-        [],
-      );
-      const agent = await fromConfig({
-        settingsService: built.settingsService,
-        config: built.config,
-        messageBus: built.messageBus,
-        mcpRuntime: mcp,
-      });
-      try {
-        await agent.setHistory([
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'workspace before chat' }],
-          },
-        ]);
-        expect(
-          (await Array.fromAsync(agent.streamHistory())).filter(
-            (item) => item.speaker === 'human',
-          ),
-        ).toHaveLength(1);
-      } finally {
-        await agent.dispose();
-      }
-    } finally {
-      await mcp.dispose();
-      await built.cleanup();
+      await runCleanupSteps([() => right.close(), () => left.close()]);
     }
   }, 30000);
 });

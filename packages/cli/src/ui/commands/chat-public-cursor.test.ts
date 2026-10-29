@@ -4,7 +4,7 @@ import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { deferred } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { chatCommand } from './chatCommand.js';
+import { rawChatCommand } from '../../__tests__/raw-chat-command.fixture.js';
 import {
   publicChat,
   publicCommandContext,
@@ -20,6 +20,11 @@ for (const size of [65]) {
       await withSuffixFixture(
         size,
         async (history, reader) => {
+          const chatCommand = rawChatCommand(
+            () => null,
+            () => publicChat(history).streamHistory(),
+            () => 'public-cursor-model',
+          );
           const debug = chatCommand.subCommands?.find(
             (command) => command.name === 'debug',
           );
@@ -149,6 +154,11 @@ describe('public chat cursor cancellation', () => {
           entered.resolve();
           await resume.promise;
         };
+        const chatCommand = rawChatCommand(
+          () => null,
+          () => publicChat(history).streamHistory(controller.signal),
+          () => 'public-cursor-model',
+        );
         const debug = chatCommand.subCommands?.find(
           (command) => command.name === 'debug',
         );

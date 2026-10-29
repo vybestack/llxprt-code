@@ -60,7 +60,7 @@ async function facadeCallback0(): Promise<void> {
       ) => source,
       clearProviderCompressionCallback: () => undefined,
     },
-    runtimeContext: {
+    ports: {
       ...createSessionPolicyFixture(),
       state: { model: 'test-model' },
       providerRuntime: {},

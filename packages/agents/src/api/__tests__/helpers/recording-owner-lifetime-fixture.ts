@@ -4,22 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { spyOn } from 'bun:test';
-import { fileURLToPath } from 'node:url';
 import {
-  OAuthManager,
-  AnthropicOAuthProvider,
+  type OAuthManager,
+  CredentialAuthority,
 } from '@vybestack/llxprt-code-providers/auth.js';
-import { FakeProvider } from '../../../../../providers/src/fake/FakeProvider.js';
 import {
   MemoryTokenStore,
   makeExpiredToken,
 } from '../../../../../providers/src/auth/__tests__/behavioral/test-utils.js';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { captureSessionOwner } from './capture-session-owner.js';
+import type { SessionClientOwner } from '../../../session/session-client-owner.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import {
+  createAgent,
+  fromConfig,
+  type Agent,
+} from '@vybestack/llxprt-code-agents';
+import { createRefreshableOAuthContribution } from './refreshable-oauth-provider.js';
+import { enableOAuthProviders } from './oauth-contribution.js';
 import type { AgentConfig } from '../../config-types.js';
 import {
   buildCliStyleConfig,
@@ -34,6 +41,11 @@ interface RecordingLifetimeFixture {
   readonly chatsDir: string;
   readonly oauthManager: OAuthManager;
   readonly borrow: () => Promise<Agent>;
+  readonly clientFor: (agent: Agent) => AgentClientContract;
+  readonly shareHistory: (
+    first: Agent,
+    second: Agent,
+  ) => Promise<HistoryService>;
 }
 
 async function settleFixtureSteps(
@@ -93,80 +105,103 @@ export interface RecordingRefreshBarrier {
   readonly body: Promise<void>;
 }
 
-async function pauseProviderRefresh(
-  built: BuiltCliConfig,
+async function createPausedRefreshAgent(
+  authority: CredentialAuthority,
   workingDir: string,
   barrier: RecordingRefreshBarrier,
-): Promise<{
-  readonly oauthManager: OAuthManager;
-  readonly restore: () => void;
-}> {
-  const manager = built.providerManager;
-
-  const provider = new FakeProvider(
-    fileURLToPath(
-      new URL('../fixtures/multi-turn-text.jsonl', import.meta.url),
-    ),
-    workingDir,
-  );
-  provider.name = 'claudecode';
-  provider.baseProviderConfig = { baseURL: 'https://api.anthropic.com' };
-  manager.registerProvider(provider);
+): Promise<{ agent: Agent; oauthManager: OAuthManager }> {
+  const contribution = createRefreshableOAuthContribution([
+    {
+      alias: 'recording-refresh-oauth',
+      refresh: async (current, signal) => {
+        if (signal === undefined)
+          throw new Error('Token refresh has no abort signal');
+        barrier.entered(signal);
+        await barrier.body;
+        return {
+          ...current,
+          access_token: 'recording-rotated',
+          refresh_token: 'recording-rotated-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 120,
+        };
+      },
+    },
+  ]);
   const store = new MemoryTokenStore();
+  const previous = process.env.LLXPRT_FAKE_RESPONSES;
+  delete process.env.LLXPRT_FAKE_RESPONSES;
+  let agent: Agent;
+  try {
+    agent = await createAgent({
+      provider: 'recording-refresh-oauth',
+      model: 'initial-model',
+      workingDir,
+      interactive: true,
+      telemetry: { enabled: false },
+      recording: { enabled: false },
+      credentialAuthority: authority,
+      tokenStore: store,
+      providerContributions: contribution.contributions,
+      harness: { includeProcessCwd: false },
+    });
+  } finally {
+    if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previous;
+  }
   await store.saveToken(
-    'claudecode',
+    'recording-refresh-oauth',
     makeExpiredToken('recording-refresh'),
     'primary',
   );
-  const oauth = new OAuthManager(store, undefined, {
-    config: built.config,
-    messageBus: built.messageBus,
-  });
-  oauth.registerProvider(new AnthropicOAuthProvider(store));
-  await oauth.toggleOAuthEnabled('claudecode');
-  built.sessionClient.bindProviderFiles(
-    built.runtime.providerFileLifecycle,
-    (provider) => oauth.composeRetryOperations(provider),
+  await store.saveToken(
+    'recording-refresh-oauth',
+    makeExpiredToken('recording-refresh-secondary'),
+    'secondary',
   );
-  const { preconnect } = globalThis.fetch;
-  const transport = spyOn(globalThis, 'fetch').mockImplementation(
-    Object.assign(
-      async (
-        input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (
-          String(input) !== 'https://console.anthropic.com/v1/oauth/token' ||
-          !(init?.body instanceof URLSearchParams) ||
-          init.body.get('grant_type') !== 'refresh_token' ||
-          !init.signal
-        )
-          throw new Error(`Unexpected provider request: ${String(input)}`);
-        const signal = init.signal;
-        return new Response(
-          new ReadableStream<Uint8Array>({
-            async start(controller): Promise<void> {
-              barrier.entered(signal);
-              await barrier.body;
-              controller.enqueue(
-                new TextEncoder().encode(
-                  JSON.stringify({
-                    access_token: 'recording-rotated',
-                    refresh_token: 'recording-rotated-refresh',
-                    expires_in: 120,
-                  }),
-                ),
-              );
-              controller.close();
-            },
-          }),
-          { headers: { 'Content-Type': 'application/json' } },
-        );
+  const oauthManager = [...contribution.managers].pop();
+  if (oauthManager === undefined)
+    throw new Error('Contributed provider has no OAuth owner');
+  return { agent, oauthManager };
+}
+
+function adoptRecordingAgent(
+  built: BuiltCliConfig,
+  authority: CredentialAuthority,
+): Promise<Agent> {
+  return fromConfig(
+    built.config,
+    built.settingsService,
+    {
+      sessionId: randomUUID(),
+      activation: {
+        provider: built.config.getProvider(),
+        model: built.config.getModel(),
       },
-      { preconnect },
-    ),
+    },
+    authority,
   );
-  return { oauthManager: oauth, restore: () => transport.mockRestore() };
+}
+
+function recordingClientCaptures() {
+  const owners = new Map<Agent, SessionClientOwner>();
+  const clientFor = (selected: Agent): AgentClientContract => {
+    const owner = owners.get(selected);
+    if (owner === undefined) throw new Error('Unknown recording fixture agent');
+    return owner.clients.getAgentClient();
+  };
+  const shareHistory = async (
+    first: Agent,
+    second: Agent,
+  ): Promise<HistoryService> => {
+    const shared = clientFor(first).getHistoryService();
+    if (shared === null) throw new Error('Missing shared fixture history');
+    const client = clientFor(second);
+    const previous = client.getHistoryService();
+    client.storeHistoryServiceForReuse(shared);
+    if (previous !== null && previous !== shared) await previous.dispose();
+    return shared;
+  };
+  return { owners, clientFor, shareHistory };
 }
 
 export async function withRecordingLifetimeFixture(
@@ -178,44 +213,39 @@ export async function withRecordingLifetimeFixture(
   const workingDir = await mkdtemp(join(tmpdir(), 'recording-owner-lifetime-'));
   let built: BuiltCliConfig | undefined;
   const agents: Agent[] = [];
-  let restoreTransport: (() => void) | undefined;
+  const previousConfigHome = process.env.LLXPRT_CONFIG_HOME;
   const failures: unknown[] = [];
   try {
+    if (refreshBarrier !== undefined) {
+      const configHome = join(workingDir, 'config');
+      await mkdir(configHome);
+      process.env.LLXPRT_CONFIG_HOME = configHome;
+      await enableOAuthProviders(configHome, ['recording-refresh-oauth']);
+    }
     built = await buildCliStyleConfig(fixture, {
       workingDir,
       ...overrides,
     });
     let selectedOAuth = built.runtime.oauthManager;
-    if (refreshBarrier) {
-      const paused = await pauseProviderRefresh(
-        built,
-        workingDir,
-        refreshBarrier,
-      );
-      restoreTransport = paused.restore;
-      selectedOAuth = paused.oauthManager;
-    }
-    const {
-      config,
-      messageBus,
-      mcpRuntime,
-      providerManager,
-      agentClient,
-      settingsService,
-      runtime,
-    } = built;
+    const prepared = built;
+    const { config } = prepared;
+    const authority =
+      overrides.credentialAuthority ?? new CredentialAuthority();
+    const { owners, clientFor, shareHistory } = recordingClientCaptures();
     const borrow = async (): Promise<Agent> => {
-      const agent = await fromConfig({
-        oauthManager: selectedOAuth,
-        providerFileLifecycle: runtime.providerFileLifecycle,
-        settingsService,
-        config,
-        agentClient,
-        providerManager,
-        messageBus,
-        mcpRuntime,
-        sessionId: `${randomUUID()}-recording-lifetime`,
-      });
+      if (refreshBarrier !== undefined) {
+        const { value: paused, owner } = await captureSessionOwner(() =>
+          createPausedRefreshAgent(authority, workingDir, refreshBarrier),
+        );
+        owners.set(paused.agent, owner);
+        agents.push(paused.agent);
+        selectedOAuth = paused.oauthManager;
+        return paused.agent;
+      }
+      const { value: agent, owner } = await captureSessionOwner(() =>
+        adoptRecordingAgent(prepared, authority),
+      );
+      owners.set(agent, owner);
       agents.push(agent);
       return agent;
     };
@@ -226,21 +256,25 @@ export async function withRecordingLifetimeFixture(
       config,
       agent,
       borrow,
+      clientFor,
+      shareHistory,
       oauthManager: selectedOAuth,
       chatsDir: join(config.projectTempDir, 'chats'),
     });
   } catch (error) {
     failures.push(error);
   } finally {
-    for (const step of [
-      () => cleanupRecordingFixture(agents, built, workingDir),
-      () => restoreTransport?.(),
-    ]) {
-      try {
-        await step();
-      } catch (error) {
-        failures.push(error);
-      }
+    try {
+      await settleFixtureSteps([
+        () => cleanupRecordingFixture(agents, built, workingDir),
+        () => {
+          if (previousConfigHome === undefined)
+            delete process.env.LLXPRT_CONFIG_HOME;
+          else process.env.LLXPRT_CONFIG_HOME = previousConfigHome;
+        },
+      ]);
+    } catch (error) {
+      failures.push(error);
     }
   }
   if (failures.length > 0)

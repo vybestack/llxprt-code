@@ -15,6 +15,7 @@ import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/reques
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { streamCallOptions as createProviderCallOptions } from '../__tests__/streamCallOptions.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
@@ -47,6 +48,7 @@ describe('provider request ownership', () => {
   async function fixture(
     provider: IProvider,
     pauseRows = false,
+    requestFetch?: NetworkFetch,
   ): Promise<{
     options: ReturnType<typeof createProviderCallOptions>;
     provider: IProvider;
@@ -88,24 +90,17 @@ describe('provider request ownership', () => {
     });
     const runtime = createProviderRuntimeContext({
       runtimeId: 'same-label',
-      settingsService: settings,
-      config,
-      mediaResolver: {
-        verify: (input) => resolver.verify(input),
-        resolve: async (input) => {
-          entered.open();
-          await resume.promise;
-          return resolver.resolve(input);
-        },
-        openReservations: (requestId) => resolver.openReservations(requestId),
-      },
     });
     if (
       !(provider instanceof OpenAIProvider) &&
       !(provider instanceof OpenAIResponsesProvider)
     )
       throw new Error('Expected concrete provider owner');
-    provider.setRuntimeSettingsService(settings);
+    const owned =
+      requestFetch === undefined
+        ? provider
+        : provider.bindOwnerAuthentication(settings, () => requestFetch);
+    owned.setRuntimeSettingsService(settings);
     const options = createProviderCallOptions({
       providerName: provider.name,
       settings,
@@ -162,9 +157,17 @@ describe('provider request ownership', () => {
       settings,
       resolver,
       provider: bindProviderMedia(
-        provider,
-        runtime.mediaResolver,
-        runtime.requestMediaBudgetBytes,
+        owned,
+        {
+          verify: (input) => resolver.verify(input),
+          openReservations: (requestId) => resolver.openReservations(requestId),
+          resolve: async (input) => {
+            entered.open();
+            await resume.promise;
+            return resolver.resolve(input);
+          },
+        },
+        undefined,
       ),
     };
   }
@@ -247,22 +250,23 @@ describe('provider request ownership', () => {
       });
 
       it('honors replacement policy on a later request rather than ignoring policy changes', async () => {
+        let transported = '';
+        const transportFetch: NetworkFetch = async (
+          _input,
+          init,
+        ): Promise<Response> => {
+          transported = await new Response(init?.body).text();
+          return new Response(
+            'data: {"type":"response.completed","response":{"id":"done","status":"completed"}}\n\ndata: [DONE]\n\n',
+            { headers: { 'content-type': 'text/event-stream' } },
+          );
+        };
         let provider = create();
-        const fixtureOwner = await fixture(provider);
+        const fixtureOwner = await fixture(provider, false, transportFetch);
         const { options, resume, settings } = fixtureOwner;
         provider = fixtureOwner.provider;
         mutateOwner(settings, provider.name);
         resume.open();
-        let transported = '';
-        global.fetch = withFetchPreconnect(
-          async (_input, init): Promise<Response> => {
-            transported = await new Response(init?.body).text();
-            return new Response(
-              'data: {"type":"response.completed","response":{"id":"done","status":"completed"}}\n\ndata: [DONE]\n\n',
-              { headers: { 'content-type': 'text/event-stream' } },
-            );
-          },
-        );
         await drain(provider, { ...options, invocation: undefined });
         expect(transported).not.toContain('original tool payload');
       });

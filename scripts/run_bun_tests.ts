@@ -557,7 +557,9 @@ export function applyFilters(
     return files;
   }
   return files.filter((entry) =>
-    filters.some((filter) => entry.file.includes(filter)),
+    filters.some((filter) =>
+      entry.file.replaceAll('\\', '/').includes(filter.replaceAll('\\', '/')),
+    ),
   );
 }
 

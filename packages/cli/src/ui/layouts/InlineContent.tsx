@@ -10,7 +10,8 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { StreamingState } from '../types.js';
 import type { ConsoleMessageItem } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
-import type { SlashCommandRuntime } from '../cliUiRuntime.js';
+import type { McpState } from '../cliUiRuntime.js';
+import type { InputPromptRuntime } from '../components/inputPromptTypes.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
 import { Colors } from '../colors.js';
 import { ShowMoreLines } from '../components/ShowMoreLines.js';
@@ -30,6 +31,16 @@ function isSystemMdEnabled(): boolean {
   return Boolean(process.env[SYSTEM_MD_ENVIRONMENT_VARIABLE]);
 }
 
+/**
+ * Runtime reads the inline content makes: MCP status for the context summary
+ * and everything the composer needs.
+ */
+export type InlineContentRuntime = Pick<
+  McpState,
+  'getMcpServers' | 'getBlockedMcpServers'
+> &
+  InputPromptRuntime & { getSkillCount(): number };
+
 export interface InlineContentProps {
   streamingState: StreamingState;
   disableLoadingPhrases: boolean;
@@ -45,7 +56,7 @@ export interface InlineContentProps {
   llxprtMdFileCount: number;
   coreMemoryFileCount: number;
   contextFileNames: string[];
-  config: SlashCommandRuntime;
+  config: InlineContentRuntime;
   showToolDescriptions: boolean;
   showAutoAcceptIndicator: ApprovalMode;
   shellModeActive: boolean;
@@ -114,7 +125,7 @@ function StatusBarLeftPrompt(props: InlineContentProps) {
         contextFileNames={props.contextFileNames}
         mcpServers={props.config.getMcpServers()}
         blockedMcpServers={props.config.getBlockedMcpServers()}
-        skillCount={props.config.skillOperations?.list().length ?? 0}
+        skillCount={props.config.getSkillCount()}
         showToolDescriptions={props.showToolDescriptions}
       />
     );

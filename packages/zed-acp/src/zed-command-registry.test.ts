@@ -9,7 +9,7 @@ import type * as acp from '@agentclientprotocol/sdk';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   buildAvailableCommandsUpdate,
-  executeZedCommand,
+  createZedCommandExecutor,
   getZedAvailableCommands,
   parseZedCommandPrompt,
 } from './zed-command-registry.js';
@@ -24,6 +24,17 @@ function buildAgent(): Agent {
     profiles: { list: () => [] },
     tasks: { list: () => [] },
   } as unknown as Agent;
+}
+
+function commandExecutor(agent: Agent = buildAgent()) {
+  return createZedCommandExecutor(
+    agent.compress.bind(agent),
+    agent.getModel.bind(agent),
+    agent.tools.list.bind(agent.tools),
+    agent.memory.getFilePaths.bind(agent.memory),
+    agent.profiles.list.bind(agent.profiles),
+    agent.tasks.list.bind(agent.tasks),
+  );
 }
 
 describe('Zed available commands', () => {
@@ -53,12 +64,10 @@ describe('Zed available commands', () => {
       name: 'model',
       args: '',
     });
-    await expect(
-      executeZedCommand('/unknown', { agent: buildAgent() }),
-    ).resolves.toBeNull();
-    await expect(
-      executeZedCommand('/MODEL', { agent: buildAgent() }),
-    ).resolves.toStrictEqual({ text: 'Current model: test-model' });
+    await expect(commandExecutor()('/unknown')).resolves.toBeNull();
+    await expect(commandExecutor()('/MODEL')).resolves.toStrictEqual({
+      text: 'Current model: test-model',
+    });
   });
 
   it('returns a protocol-visible error without exposing command details', async () => {
@@ -66,9 +75,7 @@ describe('Zed available commands', () => {
     (agent.compress as Mock<typeof agent.compress>).mockRejectedValue(
       new Error('secret compression diagnostic'),
     );
-    await expect(
-      executeZedCommand('/compact', { agent }),
-    ).resolves.toStrictEqual({
+    await expect(commandExecutor(agent)('/compact')).resolves.toStrictEqual({
       text: 'Command /compact failed. See logs for details.',
     });
   });
@@ -77,7 +84,7 @@ describe('Zed available commands', () => {
     const updates: acp.SessionUpdate[] = [];
     const handled = await tryHandleZedCommand(
       [{ type: 'text', text: '/model' }],
-      buildAgent(),
+      commandExecutor(),
       async (update) => {
         updates.push(update);
       },
@@ -99,7 +106,7 @@ describe('Zed available commands', () => {
         { type: 'text', text: '/compact' },
         { type: 'image', data: 'image', mimeType: 'image/png' },
       ],
-      buildAgent(),
+      commandExecutor(),
       async (update) => {
         updates.push(update);
       },

@@ -110,7 +110,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     settings.setProviderSetting('openai', 'model', 'gpt-5.6');
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-gpt56-responses-runtime',
-      settingsService: settings,
     });
 
     let capturedUrl: string | undefined;
@@ -149,7 +148,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     settings.setProviderSetting('openai', 'model', 'gpt-5.6-sol');
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-gpt56-sol-responses-runtime',
-      settingsService: settings,
     });
 
     let capturedUrl: string | undefined;
@@ -188,7 +186,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     settings.setProviderSetting('openai', 'model', 'gpt-5.5');
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-gpt55-chat-runtime',
-      settingsService: settings,
     });
 
     let capturedUrl: string | undefined;
@@ -227,7 +224,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     settings.setProviderSetting('openai', 'model', 'gpt-5.6');
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-gpt56-custom-url-runtime',
-      settingsService: settings,
     });
 
     let capturedUrl: string | undefined;
@@ -268,7 +264,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     settings.set('reasoning.enabled', true);
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-gpt56-max-effort-runtime',
-      settingsService: settings,
     });
 
     let capturedBody: string | undefined;
@@ -311,7 +306,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     settings.set('reasoning.enabled', true);
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-gpt56-minimal-effort-runtime',
-      settingsService: settings,
     });
 
     let capturedBody: string | undefined;
@@ -354,7 +348,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
       settings.setProviderSetting('openai', 'model', model);
       const runtime = createProviderRuntimeContext({
         runtimeId: `openai-${model}-responses-runtime`,
-        settingsService: settings,
       });
 
       let capturedUrl: string | undefined;
@@ -398,7 +391,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
       settings.setProviderSetting('openai', 'model', model);
       const runtime = createProviderRuntimeContext({
         runtimeId: `openai-${model}-chat-runtime`,
-        settingsService: settings,
       });
 
       let capturedUrl: string | undefined;
@@ -441,7 +433,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     settings.setProviderSetting('openai', 'apiMode', 'responses');
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-gpt55-explicit-responses-runtime',
-      settingsService: settings,
     });
 
     let capturedUrl: string | undefined;
@@ -480,7 +471,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     settings.setProviderSetting('openai', 'apiMode', 'responses');
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-gpt56-custom-explicit-responses-runtime',
-      settingsService: settings,
     });
 
     let capturedUrl: string | undefined;
@@ -519,7 +509,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     settings.setProviderSetting('openai', 'model', model);
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-hyphenated-date-runtime',
-      settingsService: settings,
     });
 
     let capturedUrl: string | undefined;
@@ -559,7 +548,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     settings.setProviderSetting('openai', 'openaiResponsesEnabled', true);
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-runtime-setting-precedence-runtime',
-      settingsService: settings,
     });
 
     let capturedUrl: string | undefined;
@@ -598,7 +586,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     settings.setProviderSetting('openai', 'model', model);
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-bad-date-runtime',
-      settingsService: settings,
     });
 
     let capturedUrl: string | undefined;
@@ -643,7 +630,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
       settings.set('openaiResponsesEnabled', true);
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-selector-leak-responses-runtime',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -697,7 +683,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
       settings.set('openaiResponsesEnabled', true);
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-selector-leak-chat-runtime',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -747,7 +732,6 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
       settings.setProviderSetting('openai', 'apiMode', 'responses');
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-selector-endpoint-proof-runtime',
-        settingsService: settings,
       });
 
       let capturedUrl: string | undefined;

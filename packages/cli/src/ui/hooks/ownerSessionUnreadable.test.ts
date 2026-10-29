@@ -1,3 +1,4 @@
+import type { SlashCommandHandlerDeps } from './slashCommandHandlers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,22 +9,28 @@
  * raw recording path does.
  */
 
+import { bindOwnerBrowserCatalog } from './browserCatalogHost.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  DebugLogger,
+  validateSessionMediaPackage,
+} from '@vybestack/llxprt-code-core';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { appendJournalUiItem } from './command-journal-output.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { renderHook, waitFor } from '../../__tests__/render.js';
-import { continueCommand } from '../commands/continueCommand.js';
+import { createContinueCommand } from '../commands/continueCommand.js';
+import { bindContinueCommandOperations } from '../commands/continueCommandHost.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
 import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
 import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
-import { useSessionBrowser } from './useSessionBrowser.js';
 import {
-  processSlashCommand,
-  type SlashCommandHandlerDeps,
-} from './slashCommandHandlers.js';
+  type UseSessionBrowserProps,
+  useSessionBrowser,
+} from './useSessionBrowser.js';
+import { processSlashCommand } from './slashCommandHandlers.js';
 import { convertMessageToHistoryItem } from './slashCommandProcessorSupport.js';
 
 const BROKEN_NAME = 'session-2026-10-08T21-18-08-broken000001.llxj';
@@ -53,6 +60,18 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
       const { commands } = turnStore;
       const addItem: SlashCommandHandlerDeps['addItem'] = (item, timestamp) =>
         commands.addItem(item, timestamp);
+      commands.bindJournal(() => ({
+        appendDisplay: next.session.appendDisplay.bind(next.session),
+        length: () => next.session.getJournalLength(),
+      }));
+      const continueCommand = createContinueCommand(
+        bindContinueCommandOperations(
+          next.session.exportSession.bind(next.session),
+          () => false,
+          async () => [...(await next.session.listBrowserTargets())],
+          validateSessionMediaPackage,
+        ),
+      );
       const deps: SlashCommandHandlerDeps = {
         commands: [continueCommand],
         config: {
@@ -84,8 +103,27 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
         slashCommandLogger: new DebugLogger('test-slash'),
         beginSlashCommandAction: () => new AbortController(),
         endSlashCommandAction: () => {},
+        resumeOwnedSession: null,
+        isMcpDiscoveryPending: () => false,
+        resumeRawSession: null,
+        refreshResumedHistory: commands.clearItems,
+        recordCommandError: async () => {},
+        writeOutput: async (item) => {
+          await appendJournalUiItem(next.session, undefined, item);
+        },
       };
 
+      deps.resumeOwnedSession = async (action) => {
+        if (action.sessionRef === undefined)
+          throw new Error('Expected session reference');
+        return (
+          await resumeOwnerSession(
+            next.session.resume.bind(next.session),
+            action.sessionRef,
+            next.session.listBrowserTargetsDetailed.bind(next.session),
+          )
+        ).warnings;
+      };
       await processSlashCommand(deps, `/continue ${sourceId}`);
 
       const path = next.session.getRecording().path;
@@ -115,7 +153,11 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
       const brokenPath = join(chatsDir, BROKEN_NAME);
       await writeFile(brokenPath, 'LLXJRNL\0', 'utf-8');
       const next = await borrow();
-      const failure = await resumeOwnerSession(next, BROKEN_NAME).then(
+      const failure = await resumeOwnerSession(
+        next.session.resume.bind(next.session),
+        BROKEN_NAME,
+        next.session.listBrowserTargetsDetailed.bind(next.session),
+      ).then(
         () => null,
         (error: unknown) => error,
       );
@@ -139,12 +181,27 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
         await writeFile(join(chatsDir, BROKEN_NAME), 'LLXJRNL\0', 'utf-8');
         const next = await borrow();
 
+        const catalog: Pick<
+          UseSessionBrowserProps,
+          'readCatalog' | 'deleteTarget'
+        > = {
+          readCatalog: bindOwnerBrowserCatalog(
+            () => next.session.listBrowserTargetsDetailed(),
+            () => next.session.getRecording().path,
+            () => config.getSessionId(),
+          ),
+          deleteTarget: async (target) => {
+            if (target.kind === 'checkpoint')
+              await next.session.deleteCheckpoint(target.checkpointId);
+            else await next.session.deleteSession(target.session.sessionId);
+          },
+        };
         const browser = renderHook(() =>
           useSessionBrowser({
             chatsDir,
             projectHash: config.projectTempDir.split('/').at(-1) ?? '',
             currentSessionId: config.getSessionId(),
-            ownerAgent: next,
+            ...catalog,
             onSelect: async () => ({ ok: false, error: 'not selected' }),
             onClose: () => {},
           }),

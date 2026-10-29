@@ -92,10 +92,11 @@ function gitAdd(dir: string): void {
 async function executeGrep(
   host: IToolHost,
   params: GrepToolParams,
+  signal: AbortSignal = new AbortController().signal,
 ): Promise<ToolResult> {
   const tool = new GrepTool(host);
   try {
-    return await tool.build(params).execute(new AbortController().signal);
+    return await tool.build(params).execute(signal);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { llmContent: message, returnDisplay: message };
@@ -105,10 +106,11 @@ async function executeGrep(
 async function executeRipgrep(
   host: IToolHost,
   params: RipGrepToolParams,
+  signal: AbortSignal = new AbortController().signal,
 ): Promise<ToolResult> {
   const tool = new RipGrepTool(host);
   try {
-    return await tool.build(params).execute(new AbortController().signal);
+    return await tool.build(params).execute(signal);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { llmContent: message, returnDisplay: message };
@@ -118,15 +120,45 @@ async function executeRipgrep(
 describe('Exact-limit evidence: producer at exactly the cap is exhaustive (item 1)', () => {
   let tempDir: string;
   let cleanup: () => void;
+  // The test owns every search it starts: if a test watchdog fires first,
+  // teardown aborts the search and waits for its subprocess to be reaped
+  // before the fixture directory is removed, so nothing leaks into later tests.
+  let searchController: AbortController;
+  let startedSearches: Array<Promise<ToolResult>>;
+
+  const searchWithGrep = (
+    host: IToolHost,
+    params: GrepToolParams,
+  ): Promise<ToolResult> => {
+    const search = executeGrep(host, params, searchController.signal);
+    startedSearches.push(search);
+    return search;
+  };
+
+  const searchWithRipgrep = (
+    host: IToolHost,
+    params: RipGrepToolParams,
+  ): Promise<ToolResult> => {
+    const search = executeRipgrep(host, params, searchController.signal);
+    startedSearches.push(search);
+    return search;
+  };
 
   beforeEach(() => {
     const tmp = createTempDir();
     tempDir = tmp.dir;
     cleanup = tmp.cleanup;
+    searchController = new AbortController();
+    startedSearches = [];
   });
 
-  afterEach(() => {
-    cleanup();
+  afterEach(async () => {
+    searchController.abort();
+    try {
+      await Promise.all(startedSearches);
+    } finally {
+      cleanup();
+    }
   });
 
   const observeGrepWithExactlyMaxResultsMatchesIsNOTMarkedIncompleteAt133 =
@@ -134,7 +166,7 @@ describe('Exact-limit evidence: producer at exactly the cap is exhaustive (item 
       for (let i = 0; i < 5; i++) {
         writeFileSync(join(tempDir, `f${i}.txt`), `match_line_${i}\n`);
       }
-      const result = await executeGrep(createToolHost(tempDir), {
+      const result = await searchWithGrep(createToolHost(tempDir), {
         pattern: 'match_line',
         max_results: 5,
         max_files: 100,
@@ -161,7 +193,7 @@ describe('Exact-limit evidence: producer at exactly the cap is exhaustive (item 
     for (let i = 0; i < 6; i++) {
       writeFileSync(join(tempDir, `f${i}.txt`), `match_line_${i}\n`);
     }
-    const result = await executeGrep(createToolHost(tempDir), {
+    const result = await searchWithGrep(createToolHost(tempDir), {
       pattern: 'match_line',
       max_results: 5,
       max_files: 100,
@@ -190,7 +222,7 @@ describe('Exact-limit evidence: producer at exactly the cap is exhaustive (item 
         lines.push(`match_${i}`);
       }
       writeFileSync(join(tempDir, 'big.txt'), lines.join('\n'));
-      const result = await executeRipgrep(createToolHost(tempDir), {
+      const result = await searchWithRipgrep(createToolHost(tempDir), {
         pattern: 'match_',
       });
       const text =

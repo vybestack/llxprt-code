@@ -4,59 +4,72 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createSessionClientEngineFixture } from '../../../agents/src/api/__tests__/helpers/session-client-engine-fixture.js';
-import { createDetachedAutoPromptClient } from './autoPromptDetachedClient.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { createGenerationProvider } from '../../../agents/src/api/__tests__/helpers/generation-provider.js';
+import {
+  generationRecording,
+  withGenerationClientOwner,
+} from '../../../agents/src/api/__tests__/helpers/generation-client-owner.js';
 
-type Fixture = Awaited<ReturnType<typeof createSessionClientEngineFixture>>;
+describe('detached auto prompt generation ownership', () => {
+  const credentials = useOwnedCredentials();
 
-async function rawHistory(fixture: Fixture): Promise<IContent[]> {
-  const history = fixture.owner.getAgentClient().getHistoryService();
-  if (history === null)
-    throw new Error('Expected the primary client to own a history service');
-  return Array.fromAsync(history.streamRawHistory());
-}
-
-describe('detached auto prompt client', () => {
   it('initializes an owner-tracked client without adding to primary history', async () => {
-    const fixture = await createSessionClientEngineFixture();
-    try {
-      const client = await createDetachedAutoPromptClient(
-        { sessionClient: fixture.owner },
-        fixture.owner.getAgentClient().getContentGeneratorConfig(),
-      );
-      const output = await client.generateDirectMessage(
-        { message: 'detached prompt' },
-        'detached-owner-control',
-      );
-      expect(output.content.blocks.some((block) => block.type === 'text')).toBe(
-        true,
-      );
-      expect(client).not.toBe(fixture.owner.getAgentClient());
-      expect(client.mediaStore).toBe(fixture.media.store);
-      expect(await rawHistory(fixture)).toHaveLength(0);
-      await client.dispose();
-    } finally {
-      await fixture.cleanup();
-    }
+    const released = await withGenerationClientOwner(
+      {
+        authority: credentials().authority,
+        provider: createGenerationProvider({ alias: 'gemini' }),
+      },
+      async ({ owner, clients }) => {
+        const primary = clients[1];
+        await primary.startChat();
+        const output = await owner.clients.generateText(
+          'detached prompt',
+          undefined,
+          generationRecording,
+        );
+        expect(output).toBe('turn one reply');
+        const detached = clients[2];
+        expect(detached).not.toBe(primary);
+        expect(detached.mediaStore).toBe(primary.mediaStore);
+        expect(detached.initialized).toBe(1);
+        expect(detached.disposed).toBe(1);
+        expect(primary.disposed).toBe(0);
+        expect(await Array.fromAsync(primary.streamHistory())).toHaveLength(0);
+      },
+    );
+    expect(released).toStrictEqual([]);
   });
 
-  it('rejects missing content generator configuration without constructing an implicit client', async () => {
-    const fixture = await createSessionClientEngineFixture();
-    try {
-      await expect(
-        createDetachedAutoPromptClient(
-          { sessionClient: fixture.owner },
-          undefined,
-        ),
-      ).rejects.toThrow('Content generator configuration is unavailable');
-      await fixture.owner.getAgentClient().addHistory({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'still usable' }],
-      });
-      expect(await rawHistory(fixture)).toHaveLength(1);
-    } finally {
-      await fixture.cleanup();
-    }
+  it('rejects failed generation preparation without constructing an implicit client or retiring the primary', async () => {
+    const released = await withGenerationClientOwner(
+      {
+        authority: credentials().authority,
+        provider: createGenerationProvider({ alias: 'gemini' }),
+        prepareTokenizer: async () => {
+          throw new Error('generation preparation unavailable');
+        },
+      },
+      async ({ owner, clients }) => {
+        const primary = clients[1];
+        await primary.startChat();
+        const before = clients.length;
+        await expect(
+          owner.clients.generateText(
+            'detached prompt',
+            undefined,
+            generationRecording,
+          ),
+        ).rejects.toThrow('generation preparation unavailable');
+        expect(clients).toHaveLength(before);
+        expect(primary.disposed).toBe(0);
+        await primary.addHistory({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'still usable' }],
+        });
+        expect(await Array.fromAsync(primary.streamHistory())).toHaveLength(1);
+      },
+    );
+    expect(released).toStrictEqual([]);
   });
 });

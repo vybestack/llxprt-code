@@ -1,3 +1,4 @@
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
@@ -137,15 +138,24 @@ describe('native read/write consumer lifetime', () => {
     await withNativeFallbackFixture(async ({ history, seed }) => {
       await seed(Array.from({ length: 512 }, (_, index) => densityRow(index)));
       const chat = new ChatSession(
-        buildRuntimeContext(history, {
-          compressionStrategy: 'high-density',
-          contextLimit: 1e9,
-          'compression.density.optimizeThreshold': 0,
-          'compression.density.readWritePruning': true,
-          'compression.density.fileDedupe': true,
-          'compression.density.recencyPruning': true,
-          'compression.density.recencyRetention': 3,
-        }),
+        chatSessionPorts(
+          buildRuntimeContext(history, {
+            compressionStrategy: 'high-density',
+            contextLimit: 1e9,
+            'compression.density.optimizeThreshold': 0,
+            'compression.density.readWritePruning': true,
+            'compression.density.fileDedupe': true,
+            'compression.density.recencyPruning': true,
+            'compression.density.recencyRetention': 3,
+          }),
+        ),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         buildMockContentGenerator(),
         {},
         [],

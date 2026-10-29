@@ -64,6 +64,7 @@ async function send(
   receivedBytes = [];
   const reported: number[] = [];
   const client = await createGeminiApiClient({
+    fetch: globalThis.fetch,
     apiKey: 'test-key',
     httpOptions: { baseUrl: origin },
     onRequestBytes: (bytes) => reported.push(bytes),

@@ -1,5 +1,6 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -24,7 +25,10 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
 import { LoadBalancerAllContextLimitsExceededError } from '../loadBalancing/contextLimitError.js';
-import { collectContents } from '../utils/collectContents.js';
+import {
+  collectContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 
 import {
   trackedRequestRows,
@@ -91,6 +95,14 @@ function createTokenizerFactory(
   reportSource?: (model: string) => void,
 ): RuntimeTokenizerFactory {
   return {
+    estimatePrompt: async (request) => ({
+      count: await request.legacyEstimate(),
+      method: 'calibrated',
+      family: 'test',
+      estimatorVersion: 'test',
+      assetRevision: 'test',
+      projectionRevision: request.projectionRevision,
+    }),
     getTokenizer: (
       providerName: string,
       model?: string,
@@ -110,8 +122,9 @@ async function consumeIterator(
 ): Promise<IContent[]> {
   const results: IContent[] = [];
   for await (const chunk of provider.generateChatCompletion({
-    contents,
-  } as GenerateChatOptions)) {
+    invocation: makeLoadBalancerInvocation(),
+    contents: replayableContents(contents),
+  })) {
     results.push(chunk);
   }
   return results;
@@ -146,9 +159,14 @@ function createFailoverCompressionConfig(): LoadBalancingProviderConfig {
 function registerCompressionCase01(): void {
   describe('replacement request selection', () => {
     it('asks for a fresh replacement selection per failover target and sends it as the request', async () => {
+      const originalReads: string[] = [];
+      const observeOriginal = (text: string): void => {
+        if (text.includes('this message needs compression'))
+          originalReads.push(text);
+      };
       const factory = createTokenizerFactory({
-        'gpt-4.1': createCountingTokenizer(() => {}),
-        'claude-opus-4': createCountingTokenizer(() => {}),
+        'gpt-4.1': createCountingTokenizer(observeOriginal),
+        'claude-opus-4': createCountingTokenizer(observeOriginal),
       });
       providerManager.setTokenizerFactory(factory);
 
@@ -167,8 +185,9 @@ function registerCompressionCase01(): void {
       providerManager.registerProvider({
         name: 'anthropic',
         async *generateChatCompletion(
-          options: GenerateChatOptions,
+          optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
         ): AsyncGenerator<IContent> {
+          const options = optionsOnly(optionsOrStream);
           sentToAnthropic.push(await collectContents(options.contents));
           yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
         },
@@ -194,6 +213,8 @@ function registerCompressionCase01(): void {
 
       expect(openAiAttempts).toBe(1);
       expect(compressionCallback).toHaveBeenCalledTimes(2);
+      expect(originalReads).toHaveLength(2);
+      expect(originalReads[0]).toBe(originalReads[1]);
       expect(replacements).toHaveLength(2);
       expect(sentToAnthropic).toStrictEqual([[createTextContent('ok')]]);
       // The load balancer only reads replacement selections; the preparer
@@ -217,8 +238,9 @@ function registerCompressionCase02(): void {
         createMockProvider({
           name: 'openai',
           async *generateChatCompletion(
-            options: GenerateChatOptions,
+            optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
           ): AsyncGenerator<IContent> {
+            const options = optionsOnly(optionsOrStream);
             sentToOpenAi.push(
               structuredClone(await collectContents(options.contents)),
             );
@@ -270,8 +292,9 @@ function registerCompressionCase03(): void {
         createMockProvider({
           name: 'openai',
           async *generateChatCompletion(
-            options: GenerateChatOptions,
+            optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
           ): AsyncGenerator<IContent> {
+            const options = optionsOnly(optionsOrStream);
             sentToOpenAi.push(
               structuredClone(await collectContents(options.contents)),
             );
@@ -549,12 +572,17 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
   beforeEach(() => {
     const settingsService = new SettingsService();
     const config: Config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      borrowedSettings(config, settingsService),
+    );
   });
 
   registerCompressionCase01();
@@ -571,3 +599,11 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
 
   registerCompressionCase07();
 });
+
+function optionsOnly(
+  options: GenerateChatOptions | AsyncIterable<IContent>,
+): GenerateChatOptions {
+  if (Symbol.asyncIterator in options)
+    throw new Error('Expected request options');
+  return options;
+}

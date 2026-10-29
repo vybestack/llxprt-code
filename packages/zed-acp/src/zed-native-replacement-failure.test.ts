@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import { access } from 'node:fs/promises';
-import { Config, todoEvents } from '@vybestack/llxprt-code-core';
+import { todoEvents } from '@vybestack/llxprt-code-core';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import {
   SessionLockManager,
@@ -16,6 +16,7 @@ import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media
 import {
   nativeAcpFixture,
   nativeRows,
+  nativeFailureLeaves,
   replayText,
 } from './__tests__/support/native-acp-fault-fixture.js';
 import { observeNativeAcpResources } from './__tests__/support/native-acp-resources.js';
@@ -159,7 +160,7 @@ describe('native ACP retire-first replacement failure', () => {
     }, 30000);
   }
 
-  it('reports a replacement lock failure with independent Config cleanup failure and releases the retired owner exactly once', async () => {
+  it('reports a replacement lock failure with independent credential cleanup failure and releases the retired owner exactly once', async () => {
     let target: JournalRecordingService | undefined;
     let contender: LockHandle | undefined;
     let chatsDir = '';
@@ -172,19 +173,22 @@ describe('native ACP retire-first replacement failure', () => {
     });
     const fixture = await nativeAcpFixture();
     chatsDir = fixture.config.projectChatsDir;
-    const disposeConfig = Config.prototype.dispose;
+    const acquireKeys =
+      fixture.credentialAuthority.createProviderKeyStorage.bind(
+        fixture.credentialAuthority,
+      );
     let configCount = 0;
-    const cleanup = new Error('Replacement Config cleanup rejected');
+    const cleanup = new Error('Replacement credential cleanup rejected');
     const configs = vi
-      .spyOn(Config.prototype, 'dispose')
-      .mockImplementation(async function (this: Config): Promise<void> {
-        await disposeConfig.call(this);
-        if (
-          target !== undefined &&
-          this.getSessionId() === target.getSessionId() &&
-          ++configCount === 2
-        )
-          throw cleanup;
+      .spyOn(fixture.credentialAuthority, 'createProviderKeyStorage')
+      .mockImplementation(() => {
+        const keys = acquireKeys();
+        const close = keys.close.bind(keys);
+        keys.close = () => {
+          close();
+          if (target !== undefined && ++configCount === 2) throw cleanup;
+        };
+        return keys;
       });
     try {
       const id = await fixture.create();
@@ -198,18 +202,17 @@ describe('native ACP retire-first replacement failure', () => {
       const error = await fixture.zed
         .loadSession({ sessionId: id, cwd: fixture.root, mcpServers: [] })
         .catch((reason: unknown) => reason);
-      expect(error).toBeInstanceOf(AggregateError);
-      if (!(error instanceof AggregateError))
+      expect(error).toMatchObject({ code: -32603 });
+      expect(String(error)).toContain('in use');
+      if (!(error instanceof Error) || !(error.cause instanceof AggregateError))
         throw new Error('Missing primary and cleanup errors');
-      expect(error.errors).toHaveLength(2);
-      expect(error.errors[0]).toMatchObject({ code: -32603 });
-      expect(String(error.errors[0])).toContain('in use');
-      expect(error.errors[1]).toMatchObject({ errors: [cleanup] });
-      const infrastructure: unknown = error.errors[1];
-      if (!(infrastructure instanceof AggregateError))
-        throw new Error('Missing Config error');
-      expect(infrastructure.errors[0]).toBe(cleanup);
-      expect(error.cause).toBe(error.errors[0]);
+      expect(error.cause.errors).toHaveLength(1);
+      const failures = nativeFailureLeaves(error);
+      expect(failures).toStrictEqual([cleanup]);
+      expect(failures[0]).toBe(cleanup);
+      expect(error.cause.errors[0]).toMatchObject({
+        name: 'AggregateDisposeError',
+      });
       expect(resources.disposals.get(target)).toBe(1);
       expect(target.isActive()).toBe(false);
       expect(await contender?.ownsLock()).toBe(true);

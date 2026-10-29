@@ -1,4 +1,3 @@
-import { cliSkillOperations } from '../../config/configBuilder.js';
 /**
  * @license
  * Copyright 2026 Google LLC
@@ -11,13 +10,15 @@ import {
 } from '@vybestack/llxprt-code-mcp';
 import { defaultBrowserLauncher } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 
-import { McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
+import { discoverAgentSkills } from '@vybestack/llxprt-code-agents';
 
 import type { CommandModule } from 'yargs';
-import { discoverSkillsForConfig } from '@vybestack/llxprt-code-core';
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import { writeToStdout } from '@vybestack/llxprt-code-core';
 import { loadSettings } from '../../config/settings.js';
-import { loadCliConfig } from '../../config/config.js';
+import {
+  resolveDeclarativeCliConfig,
+  type DeclarativeCliConfig,
+} from '../../config/declarativeCliConfig.js';
 import { type CliArgs } from '../../config/cliArgParser.js';
 import {
   loadExtensions,
@@ -27,61 +28,70 @@ import {
 import { exitCli } from '../utils.js';
 import chalk from 'chalk';
 
+function printLine(line: string): void {
+  writeToStdout(`${line}\n`);
+}
+
+type SkillDiscoveryIntent = Parameters<typeof discoverAgentSkills>[0];
+
+function skillDiscoveryIntent(
+  declarative: DeclarativeCliConfig,
+  argv: CliArgs,
+  workspaceDir: string,
+): SkillDiscoveryIntent {
+  const { context, intermediate } = declarative;
+  const profileSettings = intermediate.profileSettingsWithTools;
+  const mcpEnabled = intermediate.mcpEnabled;
+  return {
+    workingDir: workspaceDir,
+    debugMode: context.debugMode,
+    trustedFolder: context.trustedFolder,
+    skillsEnabled:
+      profileSettings.experimental?.skills === true ||
+      (profileSettings.skills?.enabled ?? true),
+    disabledSkills: profileSettings.skills?.disabled,
+    adminSkillsEnabled: intermediate.adminSkillsEnabled,
+    extensions: context.allExtensions,
+    mcpEnabled,
+    mcpServers: mcpEnabled ? declarative.mcpServers : {},
+    mcpServerCommand: mcpEnabled ? profileSettings.mcpServerCommand : undefined,
+    allowedMcpServers: mcpEnabled
+      ? (argv.allowedMcpServerNames ?? profileSettings.mcp?.allowed)
+      : undefined,
+    blockedMcpServers: declarative.blockedMcpServers,
+    includeDirectories: context.includeDirectories,
+  };
+}
+
 export async function handleList(showAll = false) {
   const workspaceDir = process.cwd();
   const settings = loadSettings(workspaceDir);
   const extensionEnablementManager = new ExtensionEnablementManager(
     workspaceDir,
+    { disabled: settings.merged.extensions.disabled },
   );
   const extensions = loadExtensions(extensionEnablementManager, workspaceDir);
+  const argv = { debug: false } as Partial<CliArgs> as CliArgs;
 
-  const config = await loadCliConfig(
-    settings.merged,
+  const declarative = await resolveDeclarativeCliConfig({
+    settings: settings.merged,
+    argv,
+    cwd: workspaceDir,
     extensions,
     extensionEnablementManager,
-    'skills-list-session',
-    {
-      debug: false,
-    } as Partial<CliArgs> as CliArgs,
-    workspaceDir,
-  );
+  });
 
-  const mcpRuntime = await McpRuntimeOwner.create(
+  let skills = await discoverAgentSkills(
+    skillDiscoveryIntent(declarative, argv, workspaceDir),
     {
-      tokenStorage: new MCPOAuthTokenStorage(
-        new KeychainTokenStorage('llxprt-cli-mcp-oauth'),
-      ),
-      openBrowser: defaultBrowserLauncher,
+      oauth: {
+        tokenStorage: new MCPOAuthTokenStorage(
+          new KeychainTokenStorage('llxprt-cli-mcp-oauth'),
+        ),
+        openBrowser: defaultBrowserLauncher,
+      },
     },
-    config,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    cliSkillOperations(config),
   );
-  let skills;
-  try {
-    skills = await discoverSkillsForConfig(
-      { list: (all) => mcpRuntime.workspaceSkills.operations.list(all) },
-      () => mcpRuntime.initialize(),
-    );
-  } finally {
-    await mcpRuntime.dispose();
-    await config.dispose();
-  }
 
   // By default, filter out built-in skills unless --all is specified
   if (!showAll) {
@@ -89,12 +99,12 @@ export async function handleList(showAll = false) {
   }
 
   if (skills.length === 0) {
-    debugLogger.log('No skills discovered.');
+    printLine('No skills discovered.');
     return;
   }
 
-  debugLogger.log(chalk.bold('Discovered Skills:'));
-  debugLogger.log('');
+  printLine(chalk.bold('Discovered Skills:'));
+  printLine('');
 
   for (const skill of skills) {
     const status =
@@ -110,10 +120,10 @@ export async function handleList(showAll = false) {
       sourceLabel = chalk.dim(' [Extension]');
     }
 
-    debugLogger.log(`${chalk.bold(skill.name)} ${status}${sourceLabel}`);
-    debugLogger.log(`  Description: ${skill.description}`);
-    debugLogger.log(`  Location:    ${skill.location}`);
-    debugLogger.log('');
+    printLine(`${chalk.bold(skill.name)} ${status}${sourceLabel}`);
+    printLine(`  Description: ${skill.description}`);
+    printLine(`  Location:    ${skill.location}`);
+    printLine('');
   }
 }
 

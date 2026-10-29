@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useGetWorkspaceDirectories } from '../contexts/RuntimeContext.js';
 import { useMemo } from 'react';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 /**
  * Resolve the workspace directories for file-path linking.
@@ -21,7 +21,7 @@ import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 export function useResolvedWorkspaceDirectories(
   workspaceDirectories?: readonly string[],
 ): readonly string[] | undefined {
-  const { getWorkspaceDirectories } = useRuntimeApi();
+  const getWorkspaceDirectories = useGetWorkspaceDirectories();
 
   return useMemo(() => {
     if (workspaceDirectories) {

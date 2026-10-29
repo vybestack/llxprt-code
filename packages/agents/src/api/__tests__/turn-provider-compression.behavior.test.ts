@@ -5,14 +5,20 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { AgentBusyError } from '@vybestack/llxprt-code-agents';
 import {
   ProfileManager,
   type LoadBalancerProfile,
+  type Profile,
 } from '@vybestack/llxprt-code-settings';
 import { successful, withOwners } from './turn-revision-capture.fixture.js';
 
+import { usePromptFixture } from './helpers/prompt-fixture.js';
+
 describe('Foreground compression on an admitted provider route', () => {
-  it('compresses a hard-limit continuation on the admitted HTTP endpoint and model after profile replacement', async () => {
+  usePromptFixture();
+
+  it('compresses a hard-limit continuation on the admitted HTTP endpoint and model while profile replacement is busy', async () => {
     await withOwners(
       async (a, _b, original, replacement, start) => {
         a.setEphemeralSetting('compression.strategy', 'one-shot');
@@ -26,7 +32,7 @@ describe('Foreground compression on an admitted provider route', () => {
         }
         const admitted = start(a, 'Pause before reducing the context limit');
         await original.entered;
-        await a.profiles.applySnapshot({
+        const replacementProfile: Profile = {
           version: 1,
           provider: 'openai',
           model: 'capture-replacement',
@@ -35,7 +41,10 @@ describe('Foreground compression on an admitted provider route', () => {
             'base-url': replacement.url,
             'auth-key': 'turn-capture-local-only',
           },
-        });
+        };
+        await expect(
+          a.profiles.applySnapshot(replacementProfile),
+        ).rejects.toBeInstanceOf(AgentBusyError);
         a.setEphemeralSetting('context-limit', 12000);
         a.setEphemeralSetting('maxOutputTokens', 100);
         a.setEphemeralSetting('compression.strategy', 'one-shot');
@@ -63,6 +72,14 @@ describe('Foreground compression on an admitted provider route', () => {
         expect(
           JSON.stringify(original.requests().slice(-1)[0]?.messages),
         ).toContain('Keep answering after context compression');
+        await a.profiles.applySnapshot(replacementProfile);
+        successful(
+          await start(a, 'Fresh admission after safe-boundary replacement'),
+        );
+        expect(replacement.requests().slice(-1)[0]).toMatchObject({
+          model: 'capture-replacement',
+          temperature: 0.8,
+        });
       },
       false,
       false,
@@ -70,7 +87,7 @@ describe('Foreground compression on an admitted provider route', () => {
     );
   }, 30_000);
 
-  it('compresses on the admitted load-balancer member after replacement', async () => {
+  it('compresses on the admitted load-balancer member before safe-boundary replacement', async () => {
     await withOwners(
       async (a, _b, original, replacement, start) => {
         const profiles = new ProfileManager();
@@ -113,7 +130,9 @@ describe('Foreground compression on an admitted provider route', () => {
         }
         const admitted = start(a, 'Pause the LB compression turn');
         await original.entered;
-        await a.profiles.applySnapshot(lb('new-compression-member'));
+        await expect(
+          a.profiles.applySnapshot(lb('new-compression-member')),
+        ).rejects.toBeInstanceOf(AgentBusyError);
         a.setEphemeralSetting('context-limit', 12000);
         a.setEphemeralSetting('maxOutputTokens', 100);
         a.setEphemeralSetting('compression.strategy', 'one-shot');
@@ -137,6 +156,14 @@ describe('Foreground compression on an admitted provider route', () => {
           model: 'old-compression-model',
           temperature: 0.2,
         });
+        await a.profiles.applySnapshot(lb('new-compression-member'));
+        successful(
+          await start(a, 'Fresh admission after safe-boundary replacement'),
+        );
+        expect(replacement.requests().slice(-1)[0]).toMatchObject({
+          model: 'new-compression-model',
+          temperature: 0.8,
+        });
       },
       false,
       false,
@@ -155,7 +182,7 @@ describe('Foreground compression on an admitted provider route', () => {
         }
         const admitted = start(a, 'Pause before revoking the original key');
         await original.entered;
-        await a.profiles.applySnapshot({
+        const replacementProfile: Profile = {
           version: 1,
           provider: 'openai',
           model: 'revoked-compression-model',
@@ -164,10 +191,14 @@ describe('Foreground compression on an admitted provider route', () => {
             'base-url': replacement.url,
             'auth-key': 'new-key-revokes-original',
           },
-        });
+        };
+        await expect(
+          a.profiles.applySnapshot(replacementProfile),
+        ).rejects.toBeInstanceOf(AgentBusyError);
         a.setEphemeralSetting('context-limit', 12000);
         a.setEphemeralSetting('maxOutputTokens', 100);
         a.setEphemeralSetting('compression.strategy', 'one-shot');
+        await a.auth.keys.setRaw('new-key-revokes-original');
         a.injectSteer('Do not send compressed history with a revoked key');
         original.release();
         const completed = await admitted;
@@ -176,6 +207,14 @@ describe('Foreground compression on an admitted provider route', () => {
         );
         expect(original.requests()).toHaveLength(4);
         expect(replacement.requests()).toHaveLength(0);
+        await a.profiles.applySnapshot(replacementProfile);
+        successful(
+          await start(a, 'Fresh admission after safe-boundary replacement'),
+        );
+        expect(replacement.requests().slice(-1)[0]).toMatchObject({
+          model: 'revoked-compression-model',
+          temperature: 0.8,
+        });
       },
       false,
       false,
@@ -183,7 +222,7 @@ describe('Foreground compression on an admitted provider route', () => {
     );
   }, 30_000);
 
-  it('honors a separately configured compression profile after replacing the foreground profile', async () => {
+  it('honors a separately configured compression profile while foreground profile replacement is busy', async () => {
     await withOwners(
       async (a, _b, original, replacement, start) => {
         const profiles = new ProfileManager();
@@ -208,7 +247,7 @@ describe('Foreground compression on an admitted provider route', () => {
         }
         const admitted = start(a, 'Pause before selecting the compressor');
         await original.entered;
-        await a.profiles.applySnapshot({
+        const replacementProfile: Profile = {
           version: 1,
           provider: 'openai',
           model: 'capture-replacement',
@@ -217,7 +256,10 @@ describe('Foreground compression on an admitted provider route', () => {
             'base-url': replacement.url,
             'auth-key': 'turn-capture-local-only',
           },
-        });
+        };
+        await expect(
+          a.profiles.applySnapshot(replacementProfile),
+        ).rejects.toBeInstanceOf(AgentBusyError);
         a.setEphemeralSetting('compression.profile', 'dedicated-compressor');
         a.setEphemeralSetting('compression.strategy', 'one-shot');
         a.setEphemeralSetting('context-limit', 12000);
@@ -235,6 +277,14 @@ describe('Foreground compression on an admitted provider route', () => {
           model: 'capture-a',
           temperature: 0.2,
         });
+        await a.profiles.applySnapshot(replacementProfile);
+        successful(
+          await start(a, 'Fresh admission after safe-boundary replacement'),
+        );
+        expect(replacement.requests().slice(-1)[0]).toMatchObject({
+          model: 'capture-replacement',
+          temperature: 0.8,
+        });
       },
       false,
       false,
@@ -251,7 +301,7 @@ describe('Foreground compression on an admitted provider route', () => {
         }
         const admitted = start(a, 'Pause before a 413 continuation');
         await original.entered;
-        await a.profiles.applySnapshot({
+        const replacementProfile: Profile = {
           version: 1,
           provider: 'openai',
           model: 'replacement-after-413',
@@ -260,7 +310,10 @@ describe('Foreground compression on an admitted provider route', () => {
             'base-url': replacement.url,
             'auth-key': 'turn-capture-local-only',
           },
-        });
+        };
+        await expect(
+          a.profiles.applySnapshot(replacementProfile),
+        ).rejects.toBeInstanceOf(AgentBusyError);
         a.setEphemeralSetting('compression.strategy', 'one-shot');
         a.injectSteer('Retry this request after the 413');
         original.release();
@@ -292,6 +345,14 @@ describe('Foreground compression on an admitted provider route', () => {
           'Retry this request after the 413',
         );
         expect(replacement.requests()).toHaveLength(0);
+        await a.profiles.applySnapshot(replacementProfile);
+        successful(
+          await start(a, 'Fresh admission after safe-boundary replacement'),
+        );
+        expect(replacement.requests().slice(-1)[0]).toMatchObject({
+          model: 'replacement-after-413',
+          temperature: 0.8,
+        });
       },
       false,
       false,

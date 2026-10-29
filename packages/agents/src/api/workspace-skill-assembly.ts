@@ -19,11 +19,13 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import type { McpConstructionResources } from './mcp-construction-resources.js';
 import type { SessionClientHookBinding } from './session-hook-binding.js';
+import { deepFreezeTable } from './immutableTable.js';
 
-export const DEFAULT_SKILL_OPERATIONS: WorkspaceSkillAssemblyOperations = {
-  reloadPolicy: async () => ({}),
-  registerTools: registerActivateSkillTool,
-};
+export const DEFAULT_SKILL_OPERATIONS: WorkspaceSkillAssemblyOperations =
+  deepFreezeTable<WorkspaceSkillAssemblyOperations>({
+    reloadPolicy: async () => ({}),
+    registerTools: registerActivateSkillTool,
+  });
 
 import { registerActivateSkillTool } from '../skill-tool-registrar.js';
 import type { WorkspaceExtensionOwner } from '@vybestack/llxprt-code-core/utils/workspace-extension-owner.js';

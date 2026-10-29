@@ -15,33 +15,32 @@
  * @see project-plans/issue1581/README.md
  */
 
-import type { SessionSchedulerOwner } from '../session/sessionSchedulerOwner.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import {
+  SubagentTerminateMode,
+  UNLIMITED_OUTPUT_TOKENS_TOTAL,
+  type OutputConfig,
+  type OutputObject,
+  type RunConfig,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { EmojiFilter } from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
+import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import type {
+  ContentBlock,
   IContent,
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { EmojiFilter } from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
-import type { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
-import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { SubagentExecutionOptions } from './subagentScheduler.js';
+import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
+import type { SessionSchedulerOwner } from '../session/sessionSchedulerOwner.js';
 import type {
   CompletedToolCall,
   OutputUpdateHandler,
 } from './coreToolScheduler.js';
-import {
-  SubagentTerminateMode,
-  UNLIMITED_OUTPUT_TOKENS_TOTAL,
-  type OutputObject,
-  type OutputConfig,
-  type RunConfig,
-} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { isToolNameRestricted } from './hookToolRestrictions.js';
+import type { SubagentExecutionOptions } from './subagentScheduler.js';
 import { completeWithGoal } from './subagentToolProcessing.js';
 
 // ---------------------------------------------------------------------------
@@ -55,7 +54,7 @@ export interface ExecutionLoopContext {
   readonly outputConfig?: OutputConfig;
   readonly emojiFilter?: EmojiFilter;
   readonly textToolParser: GemmaToolCallParser;
-  readonly toolsView: ToolRegistryView;
+  readonly resolveToolName: (rawName: string | undefined) => string | null;
   readonly logger: DebugLogger;
   onMessage?: (message: string) => void;
   onOutputReset?: () => void;
@@ -401,15 +400,12 @@ export function processNonInteractiveTextResponse(
     | 'emojiFilter'
     | 'onMessage'
     | 'textToolParser'
-    | 'toolsView'
+    | 'resolveToolName'
     | 'output'
     | 'subagentId'
     | 'logger'
   >,
-  resolveToolNameFn: (
-    rawName: string | undefined,
-    toolsView: ToolRegistryView,
-  ) => string | null,
+  resolveToolNameFn: (rawName: string | undefined) => string | null,
   hookRestrictedAllowedTools?: readonly string[],
 ): NonInteractiveTextResult {
   const messageToSend = textResponse;
@@ -528,16 +524,13 @@ interface ParsedToolCall {
 
 function synthesizeToolCalls(
   toolCalls: ParsedToolCall[],
-  ctx: Pick<ExecutionLoopContext, 'subagentId' | 'logger' | 'toolsView'>,
-  resolveToolNameFn: (
-    rawName: string | undefined,
-    toolsView: ToolRegistryView,
-  ) => string | null,
+  ctx: Pick<ExecutionLoopContext, 'subagentId' | 'logger'>,
+  resolveToolNameFn: (rawName: string | undefined) => string | null,
   hookRestrictedAllowedTools: readonly string[] | undefined,
 ): ToolCallBlock[] {
   const synthesized: ToolCallBlock[] = [];
   toolCalls.forEach((call, index) => {
-    const normalizedName = resolveToolNameFn(call.name, ctx.toolsView);
+    const normalizedName = resolveToolNameFn(call.name);
     if (!normalizedName) {
       ctx.logger.debug(
         () =>
@@ -727,4 +720,16 @@ export async function initInteractiveScheduler(
     },
     schedulerDispose,
   };
+}
+
+export async function checkInteractiveGoal(
+  execCtx: ExecutionLoopContext,
+  startTime: number,
+  turnCounter: number,
+  currentTurn: number,
+  readTodoPrompt: () => Promise<string | null>,
+): Promise<IContent[] | null> {
+  if (checkTerminationConditions(turnCounter, startTime, execCtx).shouldStop)
+    return null;
+  return checkGoalCompletion(execCtx, await readTodoPrompt(), currentTurn);
 }

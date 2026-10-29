@@ -16,7 +16,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { loadProviderAliasEntries } from './providerAliases.js';
-import { computeModelDefaults } from '../runtime/providerMutations.js';
+import { computeModelDefaults } from '../model-defaults.js';
 
 function claudecodeModelDefaults() {
   const entry = loadProviderAliasEntries().find(

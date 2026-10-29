@@ -4,7 +4,15 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { listProviders } from './providerReadOperations.js';
+import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { ProviderFileLifecycle } from '../providerFilePolicy.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+} from '../../../agents/src/api/__tests__/helpers/provider-acquisition.js';
 
 import { describe, expect, it, vi } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -16,8 +24,6 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
-import { createIsolatedRuntimeContext } from './runtimeActivationBindings.js';
-import { assembleCliProviderRuntime } from './assembleCliProviderRuntime.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IProvider } from '../IProvider.js';
 import { replayableContents } from '../utils/collectContents.js';
@@ -63,6 +69,7 @@ class CacheProvider implements IProvider {
   }
 }
 describe('Config-independent provider owner lifecycle', () => {
+  const credentials = useOwnedCredentials();
   it('releases the telemetry subscription even when the real settings unsubscribe throws', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'manager-release-'));
     const outfile = join(directory, 'retained-root.jsonl');
@@ -80,11 +87,17 @@ describe('Config-independent provider owner lifecycle', () => {
     await owner.startTelemetry(host);
     settings.set('model', 'test-model');
     settings.set('base-url', 'http://127.0.0.1:10');
-    const manager = new ProviderManager({
-      config: host,
-      settingsService: settings,
-      sessionSettings: owner,
-    });
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      host,
+      undefined,
+      undefined,
+      owner,
+    );
     const provider = new CacheProvider();
     manager.registerProvider(provider);
     manager.setActiveProvider('cache-provider');
@@ -140,55 +153,75 @@ describe('Config-independent provider owner lifecycle', () => {
   });
 
   it('rejects a missing listing owner without consulting another session', () => {
-    expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-      'Provider listing requires an explicit owner',
+    expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
+      'Provider reads require an explicit session owner',
     );
   });
   it('keeps borrowed manager subscriptions usable after facade runtime cleanup', async () => {
     const settings = new SettingsService();
     const owner = config(settings);
-    const manager = new ProviderManager({
-      config: owner.config,
-      settingsService: settings,
-    });
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      owner.config,
+      undefined,
+      undefined,
+      owner.settingsOwner,
+    );
     const provider = new CacheProvider();
     manager.registerProvider(provider);
     manager.setActiveProvider(provider.name);
-    const handle = createIsolatedRuntimeContext(
-      {
-        config: owner.config,
-        settingsOwner: owner.settingsOwner,
-        providerManager: manager,
-      },
-      owner.settingsService,
+    const release = new AcquisitionRelease();
+    const policy = new RuntimePolicyOwner(owner.config);
+    acquirePreferredOAuth(
+      undefined,
+      policy.session.messageBus,
+      owner.config,
+      settings,
+      manager,
+      'borrowed-manager',
+      undefined,
+      credentials().authority,
+      release,
+      undefined,
     );
     try {
-      await handle.activate();
-      await handle.cleanup();
+      await release.close();
       const revision = provider.clientRevision;
       owner.settingsService.set('base-url', 'http://127.0.0.1:2');
       expect(provider.clientRevision).toBe(revision + 1);
       expect(manager.getActiveProviderName()).toBe(provider.name);
     } finally {
-      await handle.cleanup();
+      await release.close();
+      await policy.dispose();
       manager.dispose();
       await owner.dispose();
     }
   });
   it('stops owned-manager Config subscriptions after runtime cleanup', async () => {
     const owner = config(new SettingsService());
-    const handle = createIsolatedRuntimeContext(
-      {
-        config: owner.config,
-        settingsOwner: owner.settingsOwner,
-      },
+    const release = new AcquisitionRelease();
+    const files = new ProviderFileLifecycle({ maxFiles: 100, maxBytes: 1024 });
+    const providerManager = acquirePreferredProviderManager(
+      owner.config,
       owner.settingsService,
+      owner.settingsOwner,
+      files,
+      'shared-label',
+      credentials().authority,
+      release,
     );
+    const handle = {
+      providerManager,
+      cleanup: () => release.close(),
+    };
     const provider = new CacheProvider();
     handle.providerManager.registerProvider(provider);
-    await handle.providerManager.setActiveProvider(provider.name);
+    handle.providerManager.setActiveProvider(provider.name);
     try {
-      await handle.activate();
       owner.settingsService.set('base-url', 'http://127.0.0.1:1');
       const attached = provider.clientRevision;
       expect(attached).toBeGreaterThan(0);
@@ -202,12 +235,35 @@ describe('Config-independent provider owner lifecycle', () => {
   });
   it('retains the pre-Config root manager and token totals across explicit host adoption', async () => {
     const settings = new SettingsService();
-    const early = assembleCliProviderRuntime({
-      settingsService: settings,
-      config: undefined,
-      runtimeId: 'shared-label',
-    });
     const owner = config(settings);
+    const release = new AcquisitionRelease();
+    const files = new ProviderFileLifecycle({ maxFiles: 100, maxBytes: 1024 });
+    const policy = new RuntimePolicyOwner(owner.config);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      files,
+      settings,
+      undefined,
+      createProviderRuntimeContext({ runtimeId: 'shared-label' }),
+      credentials().authority,
+      owner.settingsOwner,
+    );
+    release.acquire('manager', () => manager.dispose());
+    const oauth = acquirePreferredOAuth(
+      undefined,
+      policy.session.messageBus,
+      owner.config,
+      settings,
+      manager,
+      'shared-label',
+      undefined,
+      credentials().authority,
+      release,
+      undefined,
+    );
+    const early = { providerManager: manager, oauthManager: oauth };
     early.providerManager.accumulateSessionTokens('openai', {
       input: 9,
       output: 3,
@@ -216,41 +272,58 @@ describe('Config-independent provider owner lifecycle', () => {
       thought: 0,
     });
     try {
-      const final = assembleCliProviderRuntime({
-        settingsService: settings,
-        config: owner.config,
-        runtimeId: 'shared-label',
-        registration: early.registration,
-        oauthManager: early.oauthManager,
-      });
+      manager.setRuntimeContext(
+        createProviderRuntimeContext({ runtimeId: 'shared-label' }),
+        owner.settingsOwner,
+        settings,
+        owner.config,
+      );
+      const final = {
+        providerManager: manager,
+        oauthManager: oauth,
+        runtimeMessageBus: policy.session.messageBus,
+      };
       expect(final.providerManager).toBe(early.providerManager);
       expect(final.oauthManager).toBe(early.oauthManager);
-      expect(final.oauthManager?.runtimeMessageBus).toBe(
+      expect(final.oauthManager.runtimeMessageBus).toBe(
         final.runtimeMessageBus,
       );
       owner.settingsService.set('auth.noBrowser', true);
-      expect(final.oauthManager?.isBrowserDisabled()).toBe(true);
+      expect(final.oauthManager.isBrowserDisabled()).toBe(true);
       owner.settingsService.set('auth.noBrowser', false);
-      expect(final.oauthManager?.isBrowserDisabled()).toBe(false);
+      expect(final.oauthManager.isBrowserDisabled()).toBe(false);
       expect(final.providerManager.getSessionTokenUsage().total).toBe(12);
     } finally {
-      early.registration.dispose();
+      await release.close();
+      await policy.dispose();
       await owner.dispose();
     }
   });
   it('invalidates only the active same-label owner caches and detaches the former settings store', async () => {
     const left = config(new SettingsService());
     const right = config(new SettingsService());
-    const a = new ProviderManager({
-      sessionSettings: left.settingsOwner,
-      settingsService: left.settingsService,
-      config: left.config,
-    });
-    const b = new ProviderManager({
-      sessionSettings: right.settingsOwner,
-      settingsService: right.settingsService,
-      config: right.config,
-    });
+    const a = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      left.settingsService,
+      left.config,
+      undefined,
+      undefined,
+      left.settingsOwner,
+    );
+    const b = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      right.settingsService,
+      right.config,
+      undefined,
+      undefined,
+      right.settingsOwner,
+    );
     const first = new CacheProvider();
     const second = new CacheProvider();
     a.registerProvider(first);
@@ -266,11 +339,11 @@ describe('Config-independent provider owner lifecycle', () => {
       const detached = first.clientRevision;
       a.setRuntimeContext(
         createProviderRuntimeContext({
-          config: right.config,
-          sessionSettings: right.settingsOwner,
-          settingsService: right.settingsService,
           runtimeId: 'rebound-owner',
         }),
+        right.settingsOwner,
+        right.settingsService,
+        right.config,
       );
       left.settingsService.set('auth-key', 'former-owner-key');
       expect(detached).toBe(first.clientRevision);
@@ -285,16 +358,28 @@ describe('Config-independent provider owner lifecycle', () => {
   it('rewraps only the telemetry owner and leaves sibling accounting untouched', async () => {
     const left = config(new SettingsService());
     const right = config(new SettingsService());
-    const a = new ProviderManager({
-      sessionSettings: left.settingsOwner,
-      settingsService: left.settingsService,
-      config: left.config,
-    });
-    const b = new ProviderManager({
-      sessionSettings: right.settingsOwner,
-      settingsService: right.settingsService,
-      config: right.config,
-    });
+    const a = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      left.settingsService,
+      left.config,
+      undefined,
+      undefined,
+      left.settingsOwner,
+    );
+    const b = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      right.settingsService,
+      right.config,
+      undefined,
+      undefined,
+      right.settingsOwner,
+    );
     a.registerProvider(new CacheProvider());
     b.registerProvider(new CacheProvider());
     a.setActiveProvider('cache-provider');

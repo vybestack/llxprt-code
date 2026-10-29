@@ -54,7 +54,12 @@ describe('native pending-token last-resort ranking', () => {
       });
       const handler = new CompressionHandler(
         runtime,
+        undefined,
         history,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         {},
         () => ({
           provider,

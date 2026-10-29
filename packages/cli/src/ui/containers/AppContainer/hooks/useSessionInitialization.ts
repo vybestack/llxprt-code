@@ -3,13 +3,10 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { appendJournalUiItem } from '../../../hooks/command-journal-output.js';
 
 import { useEffect, useRef, useState } from 'react';
-import type { IContent } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { IContent, EmojiFilterMode } from '@vybestack/llxprt-code-core';
 import type { HistoryItemWithoutId } from '../../../types.js';
-import type { UiRuntime } from '../../../cliUiRuntime.js';
 
 /**
  * @hook useSessionInitialization
@@ -35,9 +32,14 @@ import type { UiRuntime } from '../../../cliUiRuntime.js';
  */
 
 export interface UseSessionInitializationParams {
-  uiRuntime: UiRuntime;
-  agent: Agent;
-  recordingOwner?: 'agent' | 'raw';
+  triggerSessionStart: () => Promise<{
+    systemMessage?: string;
+    additionalContext?: string;
+  }>;
+  appendHookContext: (text: string) => Promise<void>;
+  readEmojiFilterMode: () => EmojiFilterMode;
+  readLlxprtMdFileCount: () => number;
+  readCoreMemoryFileCount: () => number;
   addItem: (item: HistoryItemWithoutId, baseTimestamp: number) => number;
   resumedBoot?: { streamRows(): AsyncIterable<IContent> };
 }
@@ -54,15 +56,12 @@ function isAbortSignalAborted(signal: AbortSignal): boolean {
 }
 
 async function runSessionStartHook(
-  uiRuntime: UiRuntime,
-  agent: Agent,
+  triggerSessionStart: UseSessionInitializationParams['triggerSessionStart'],
+  appendHookContext: UseSessionInitializationParams['appendHookContext'],
   addItem: UseSessionInitializationParams['addItem'],
   signal: AbortSignal,
-  recordingOwner: UseSessionInitializationParams['recordingOwner'],
 ): Promise<void> {
-  const sessionStartOutput = await agent.hooks
-    .triggerSessionStart()
-    .catch(() => ({ systemMessage: undefined, additionalContext: undefined }));
+  const sessionStartOutput = await triggerSessionStart();
 
   if (signal.aborted) {
     return;
@@ -73,23 +72,13 @@ async function runSessionStartHook(
       type: 'info',
       text: sessionStartOutput.systemMessage,
     } satisfies HistoryItemWithoutId;
-    if (recordingOwner === 'agent')
-      await appendJournalUiItem(
-        agent.agentClient.getHistoryService(),
-        agent.session,
-        item,
-      );
-    else addItem(item, Date.now());
+    addItem(item, Date.now());
   }
 
   const additionalContext = sessionStartOutput.additionalContext;
   if (additionalContext && !isAbortSignalAborted(signal)) {
-    const agentClient = uiRuntime.agentClientSource.getAgentClient();
     try {
-      await agentClient.addHistory({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: additionalContext }],
-      });
+      await appendHookContext(additionalContext);
     } catch {
       // Failures adding hook-provided context to history are non-fatal.
     }
@@ -97,9 +86,10 @@ async function runSessionStartHook(
 }
 
 export function useSessionInitialization({
-  uiRuntime,
-  agent,
-  recordingOwner,
+  triggerSessionStart,
+  appendHookContext,
+  readLlxprtMdFileCount,
+  readCoreMemoryFileCount,
   addItem,
 }: UseSessionInitializationParams): UseSessionInitializationResult {
   const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
@@ -128,11 +118,10 @@ export function useSessionInitialization({
     const signal = abortControllerRef.current.signal;
 
     void runSessionStartHook(
-      uiRuntime,
-      agent,
+      triggerSessionStart,
+      appendHookContext,
       addItem,
       signal,
-      recordingOwner,
     ).catch((error: unknown) => {
       if (mounted.current) setInitializationError(() => error);
     });
@@ -142,13 +131,13 @@ export function useSessionInitialization({
         abortControllerRef.current.abort();
       }
     };
-  }, [uiRuntime, agent, addItem, recordingOwner]);
+  }, [triggerSessionStart, appendHookContext, addItem]);
 
   // Effect: Initialize memory file counts from uiRuntime.memory
   useEffect(() => {
-    setLlxprtMdFileCount(uiRuntime.memory.getLlxprtMdFileCount());
-    setCoreMemoryFileCount(uiRuntime.memory.getCoreMemoryFileCount());
-  }, [uiRuntime]);
+    setLlxprtMdFileCount(readLlxprtMdFileCount());
+    setCoreMemoryFileCount(readCoreMemoryFileCount());
+  }, [readLlxprtMdFileCount, readCoreMemoryFileCount]);
 
   if (initializationError !== null) throw initializationError;
   return {

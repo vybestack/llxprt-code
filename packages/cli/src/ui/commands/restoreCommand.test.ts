@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
@@ -19,19 +20,30 @@ import {
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { restoreCommand } from './restoreCommand.js';
-import { type CommandContext } from './types.js';
+import { bindRestoreCommand } from './restoreCommandHost.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { Config, GitService } from '@vybestack/llxprt-code-core';
 import { createCompletionHandler } from './schema/index.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 
 describe('restoreCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   let mockConfig: Config;
   let mockGitService: GitService;
   let mockSetHistoryFromSource: ReturnType<typeof vi.fn>;
   let restoredRows: unknown[];
+  function registerRestore(config: Parameters<typeof bindRestoreCommand>[0]) {
+    return bindRestoreCommand(
+      config,
+      async (source, signal) => {
+        signal.throwIfAborted();
+        await mockSetHistoryFromSource(source);
+      },
+      mockContext.services.git === undefined ? undefined : mockGitService,
+      () => mockContext.services.settings.merged.enableFuzzyFiltering ?? true,
+    );
+  }
   let testRootDir: string;
   let agentTempDir: string;
   let checkpointsDir: string;
@@ -67,7 +79,7 @@ describe('restoreCommand', () => {
       services: {
         config: mockConfig,
         agent: {
-          agentClient: { setHistoryFromSource: mockSetHistoryFromSource },
+          session: { replaceHistoryFromSource: mockSetHistoryFromSource },
         },
         git: mockGitService,
       },
@@ -86,11 +98,11 @@ describe('restoreCommand', () => {
       >
     ).mockReturnValue(false);
 
-    expect(restoreCommand(composeFixtureRuntime(mockConfig))).toBeNull();
+    expect(registerRestore(composeFixtureRuntime(mockConfig))).toBeNull();
   });
 
   it('should return the command if checkpointing is enabled', () => {
-    expect(restoreCommand(composeFixtureRuntime(mockConfig))).toStrictEqual(
+    expect(registerRestore(composeFixtureRuntime(mockConfig))).toStrictEqual(
       expect.objectContaining({
         name: 'restore',
         description: expect.any(String),
@@ -109,14 +121,14 @@ describe('restoreCommand', () => {
             projectCheckpointsDir: '',
           },
           agent: {
-            agentClient: { setHistoryFromSource: mockSetHistoryFromSource },
+            session: { replaceHistoryFromSource: mockSetHistoryFromSource },
           },
           git: mockGitService,
         },
       });
 
       expect(
-        await restoreCommand({
+        await registerRestore({
           ...composeFixtureRuntime(mockConfig),
           projectCheckpointsDir: '',
         })?.action?.(mockContext, ''),
@@ -130,7 +142,7 @@ describe('restoreCommand', () => {
     it('should inform when no checkpoints are found if no args are passed', async () => {
       // Remove the directory to ensure the command creates it.
       await fs.rm(checkpointsDir, { recursive: true, force: true });
-      const command = restoreCommand(composeFixtureRuntime(mockConfig));
+      const command = registerRestore(composeFixtureRuntime(mockConfig));
 
       expect(await command?.action?.(mockContext, '')).toStrictEqual({
         type: 'message',
@@ -144,7 +156,7 @@ describe('restoreCommand', () => {
     it('should list available checkpoints if no args are passed', async () => {
       await fs.writeFile(path.join(checkpointsDir, 'test1.json'), '{}');
       await fs.writeFile(path.join(checkpointsDir, 'test2.json'), '{}');
-      const command = restoreCommand(composeFixtureRuntime(mockConfig));
+      const command = registerRestore(composeFixtureRuntime(mockConfig));
 
       expect(await command?.action?.(mockContext, '')).toStrictEqual({
         type: 'message',
@@ -155,7 +167,7 @@ describe('restoreCommand', () => {
 
     it('should return an error if the specified file is not found', async () => {
       await fs.writeFile(path.join(checkpointsDir, 'test1.json'), '{}');
-      const command = restoreCommand(composeFixtureRuntime(mockConfig));
+      const command = registerRestore(composeFixtureRuntime(mockConfig));
 
       expect(await command?.action?.(mockContext, 'test2')).toStrictEqual({
         type: 'message',
@@ -172,7 +184,7 @@ describe('restoreCommand', () => {
       );
       // Create a directory instead of a file to cause a read error.
       await fs.mkdir(checkpointPath);
-      const command = restoreCommand(composeFixtureRuntime(mockConfig));
+      const command = registerRestore(composeFixtureRuntime(mockConfig));
 
       expect(
         await command?.action?.(mockContext, checkpointName),
@@ -198,7 +210,7 @@ describe('restoreCommand', () => {
         path.join(checkpointsDir, 'my-checkpoint.json'),
         JSON.stringify(toolCallData),
       );
-      const command = restoreCommand(composeFixtureRuntime(mockConfig));
+      const command = registerRestore(composeFixtureRuntime(mockConfig));
 
       expect(
         await command?.action?.(mockContext, 'my-checkpoint'),
@@ -234,7 +246,7 @@ describe('restoreCommand', () => {
         JSON.stringify(toolCallData),
       );
 
-      const command = restoreCommand(composeFixtureRuntime(mockConfig));
+      const command = registerRestore(composeFixtureRuntime(mockConfig));
 
       expect(
         await command?.action?.(mockContext, 'my-checkpoint'),
@@ -255,7 +267,7 @@ describe('restoreCommand', () => {
       path.join(checkpointsDir, `${checkpointName}.json`),
       JSON.stringify({ history: [] }), // An object that is valid JSON but missing the 'toolCall' property
     );
-    const command = restoreCommand(composeFixtureRuntime(mockConfig));
+    const command = registerRestore(composeFixtureRuntime(mockConfig));
 
     expect(await command?.action?.(mockContext, checkpointName)).toStrictEqual({
       type: 'message',
@@ -270,10 +282,10 @@ describe('restoreCommand', () => {
       partialArg: string,
       fullLine: string = `/restore ${partialArg}`,
     ): Promise<string[]> => {
-      const command = restoreCommand(composeFixtureRuntime(mockConfig));
+      const command = registerRestore(composeFixtureRuntime(mockConfig));
       assertDefined(command?.schema);
 
-      const handler = createCompletionHandler(command.schema);
+      const handler = createCompletionHandler(command.schema, true);
       const result = await handler(
         mockContext,
         {
@@ -295,7 +307,7 @@ describe('restoreCommand', () => {
             projectCheckpointsDir: '',
           },
           agent: {
-            agentClient: { setHistoryFromSource: mockSetHistoryFromSource },
+            session: { replaceHistoryFromSource: mockSetHistoryFromSource },
           },
           git: mockGitService,
         },

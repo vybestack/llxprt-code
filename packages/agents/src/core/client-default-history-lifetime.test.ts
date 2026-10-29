@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import {
   StreamOnlyHistory,
   withPublicHistory,
-} from '../api/__tests__/helpers/public-history-fixture.js';
+} from './__tests__/support/core-public-history-fixture.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { publicDefaultBounds } from './__tests__/support/public-default-history-test-helpers.js';
 
@@ -17,8 +17,7 @@ for (const { size, active } of cases) {
       await withPublicHistory(
         size,
         active,
-        async (agent, history, reader, decoded) => {
-          const client = agent.agentClient;
+        async (_agent, history, reader, decoded, client) => {
           const cursor = client.getHistory();
           const first = await cursor.next();
           expect(first.value).toStrictEqual(accountingRow(0));
@@ -49,10 +48,9 @@ for (const { size, active } of cases) {
       await withPublicHistory(
         size,
         active,
-        async (agent, history, reader, decoded) => {
+        async (_agent, history, reader, decoded, client) => {
           if (!(history instanceof StreamOnlyHistory))
             throw new Error('Expected controlled history');
-          const client = agent.agentClient;
           history.failAfter = 3;
           let sourceRows = 0;
           async function consumeSource(): Promise<void> {

@@ -23,6 +23,7 @@ function richOptions(
   return {
     ...base,
     invocation: createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: base.invocation.runtimeId,
       providerName,
       ephemeralsSnapshot: {
@@ -131,6 +132,7 @@ describe('source prepared options rejection', () => {
     if (options.invocation === undefined)
       throw new Error('Missing fixture invocation');
     const invocation = createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: options.invocation.runtimeId,
       providerName: setup.provider.name,
       ephemeralsSnapshot: { 'responses-stateful': true },

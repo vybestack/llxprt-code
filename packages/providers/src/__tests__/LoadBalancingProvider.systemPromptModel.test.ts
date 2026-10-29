@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -31,6 +31,7 @@ import {
   type ResolvedSubProfile,
 } from '../LoadBalancingProvider.js';
 import { LoadBalancerFailoverError } from '../errors.js';
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
@@ -185,7 +186,10 @@ async function consume(
   provider: LoadBalancingProvider,
   options: GenerateChatOptions,
 ): Promise<void> {
-  for await (const _ of provider.generateChatCompletion(options)) {
+  for await (const _ of provider.generateChatCompletion({
+    invocation: makeLoadBalancerInvocation(),
+    ...options,
+  })) {
     // exhaust
   }
 }
@@ -219,12 +223,17 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      fixtureOwnersBorrowedSettings(config, settingsService),
+    );
   });
 
   describe('Round-robin', () => {

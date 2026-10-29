@@ -166,7 +166,14 @@ function registerTool1_1(): void {
     it('renders single successful tool call', () => {
       const toolCalls = [createToolCall()];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -193,7 +200,14 @@ function registerTool1_1(): void {
         }),
       ];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -214,7 +228,14 @@ function registerTool1_1(): void {
         }),
       ];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -233,7 +254,14 @@ function registerTool1_2(): void {
         }),
       ];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -260,7 +288,14 @@ function registerTool1_2(): void {
         }),
       ];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -283,6 +318,10 @@ function registerTool1_2(): void {
       ];
       const { lastFrame } = render(
         <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
           {...baseProps}
           toolCalls={toolCalls}
           availableTerminalHeight={10}
@@ -299,6 +338,10 @@ function registerTool1_3(): void {
       const toolCalls = [createToolCall()];
       const { lastFrame } = render(
         <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
           {...baseProps}
           toolCalls={toolCalls}
           isFocused={false}
@@ -317,6 +360,10 @@ function registerTool1_3(): void {
       ];
       const { lastFrame } = render(
         <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
           {...baseProps}
           toolCalls={toolCalls}
           terminalWidth={40}
@@ -327,7 +374,14 @@ function registerTool1_3(): void {
 
     it('renders empty tool calls array', () => {
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={[]} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={[]}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -339,7 +393,14 @@ function registerTool2_1(): void {
     it('uses yellow border when tools are pending', () => {
       const toolCalls = [createToolCall({ status: ToolCallStatus.Pending })];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       // The snapshot will capture the visual appearance including border color
       expect(lastFrame()).toMatchSnapshot();
@@ -353,7 +414,14 @@ function registerTool2_1(): void {
         }),
       ];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -368,7 +436,14 @@ function registerTool2_1(): void {
         }),
       ];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -394,6 +469,10 @@ function registerTool3_1(): void {
       ];
       const { lastFrame } = render(
         <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
           {...baseProps}
           toolCalls={toolCalls}
           availableTerminalHeight={20}
@@ -432,7 +511,14 @@ function registerTool4_1(): void {
         }),
       ];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       // Should only show confirmation for the first tool
       expect(lastFrame()).toMatchSnapshot();
@@ -462,7 +548,14 @@ function registerTool5_1(): void {
       ];
 
       renderWithContexts(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
         { todos: [defaultTodo], showTodoPanel: true },
       );
 
@@ -502,7 +595,14 @@ function registerTool5_2(): void {
       ];
 
       renderWithContexts(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
         { todos: [defaultTodo], showTodoPanel: false },
       );
 
@@ -540,7 +640,14 @@ function registerTool5_2(): void {
       ];
 
       renderWithContexts(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
         { todos: [], showTodoPanel: true },
       );
 
@@ -574,7 +681,14 @@ function registerTool6_1(): void {
       });
 
       const { lastFrame } = renderWithContexts(
-        <ToolGroupMessage {...baseProps} toolCalls={[readCall]} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={[readCall]}
+        />,
         { todos: [defaultTodo], showTodoPanel: true },
       );
 
@@ -624,7 +738,14 @@ function registerTool7_1(): void {
       ];
 
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
 
       const frame = lastFrame() ?? '';
@@ -691,7 +812,14 @@ function registerTool7_2(): void {
       ];
 
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
 
       const frame = lastFrame() ?? '';
@@ -714,6 +842,10 @@ describe('<ToolGroupMessage />', () => {
   it('labels a bounded page as part of its original tool group', () => {
     const { lastFrame } = render(
       <ToolGroupMessage
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
         {...baseProps}
         toolCalls={[createToolCall()]}
         toolPage={{ start: 16, total: 1024, groupIndex: 5 }}

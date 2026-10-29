@@ -1,3 +1,4 @@
+import { chatSessionPorts } from './chatSessionPorts.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -149,13 +150,20 @@ async function createSession(): Promise<ChatSession> {
       }),
     ),
     tools: createToolRegistryViewFromRegistry(),
-    providerRuntime: { ...setup.runtime, config: setup.config },
+    providerRuntime: setup.runtime,
     mediaStore: store,
     mediaAdmission: admission,
   });
   await registerRuntimeMediaOwner(runtime);
   const chat = new ChatSession(
-    runtime,
+    chatSessionPorts(runtime),
+    setup.config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {
       generateContent: vi.fn(),
       generateContentStream: vi.fn(),

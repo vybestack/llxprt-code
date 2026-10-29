@@ -32,6 +32,7 @@ import {
   ToolConfirmationOutcome,
   ASYNC_PROPERTY_TIMEOUT_MS,
   type Agent,
+  buildPropertyAgent,
 } from './helpers/agentHarness.js';
 
 // ─── auth.status() winner mapping (line 1208) ───────────────────────────────
@@ -196,7 +197,7 @@ describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23
   // baseline), so samples cannot leak into each other.
 
   it('PROP auth.status: for any provider string, a no-auth agent reports unauthenticated (REQ-002)', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
     try {
       expect(agent.auth.status('fake')).toBe('unauthenticated');
       await fc.assert(
@@ -216,7 +217,7 @@ describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23
     // deletes that name, which restores the keyfile baseline (keys.delete
     // clears a matching keyName reference).
     const keyFile = '/tmp/competing.pem';
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+    const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl', {
       auth: { apiKeyFile: keyFile },
     });
     try {
@@ -264,7 +265,7 @@ describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23
   }
 
   it('PROP setModelParam: for any distinct two numbers, overwrite replaces the first value (REQ-005)', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
     try {
       await expect(
         fc.assert(
@@ -305,7 +306,7 @@ describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23
   }
 
   it('PROP setBaseUrl: for any non-empty URL, getProviderStatus surfaces it (REQ-002)', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
     try {
       await fc.assert(
         fc.asyncProperty(fc.webUrl(), async (url) => {
@@ -323,7 +324,7 @@ describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23
   }, 30000);
 
   it('PROP clearModelParam: after clear, the key is absent from getModelParams (REQ-005)', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
     try {
       await fc.assert(
         fc.asyncProperty(
@@ -416,7 +417,8 @@ describe('mutation P23.d — compress + generate NoCoverage (REQ-005)', () => {
             .string({ minLength: 1, maxLength: 30 })
             .filter((s) => !s.includes('__proto__')),
           async (id) => {
-            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            const { agent, cleanup } =
+              await buildPropertyAgent('plain-text.jsonl');
             try {
               await drain(agent.stream('init'));
               const result = await agent.compress({ promptId: id });
@@ -509,7 +511,7 @@ describe('mutation P23.e — rebuild with approval + display callbacks (REQ-005)
         .string({ minLength: 1, maxLength: 30 })
         .filter((s) => !s.includes('__proto__') && s.trim() !== ''),
       async (model) => {
-        const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+        const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
         try {
           await agent.setModel(model);
           return agent.getModel() === model;

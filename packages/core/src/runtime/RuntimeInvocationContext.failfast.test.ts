@@ -7,17 +7,18 @@
 import { describe, expect, it } from 'bun:test';
 import { createRuntimeInvocationContext } from './RuntimeInvocationContext.js';
 import { createProviderRuntimeContext } from './providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { NetworkFetch } from '../utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('RuntimeInvocationContext fail-fast requirements', () => {
   it('throws when runtimeId is missing', () => {
-    const settings = new SettingsService();
-    const runtime = createProviderRuntimeContext({
-      settingsService: settings,
-    });
+    const runtime = createProviderRuntimeContext({});
 
     expect(() =>
       createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: runtime.runtimeId,
         runtimeMetadata: runtime.metadata,
 
@@ -27,14 +28,13 @@ describe('RuntimeInvocationContext fail-fast requirements', () => {
   });
 
   it('throws when provider ephemerals are not available', () => {
-    const settings = new SettingsService();
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'runtime-missing-ephemerals',
     });
 
     expect(() =>
       createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: runtime.runtimeId,
         runtimeMetadata: runtime.metadata,
 

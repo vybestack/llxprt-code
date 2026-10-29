@@ -19,12 +19,12 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-// Imported relatively (same barrel the './runtime.js' export entry maps to
-// under the bun condition) because the self-referencing package import trips
-// TS2209 (ambiguous project root) during in-package typechecking.
-import * as runtimeApi from './index.js';
+// Read from the public barrels because the retired './runtime.js' entry and
+// its `src/runtime/index.ts` barrel were deleted by the #2616 migration.
+import * as providerApi from '../index.js';
+import * as compositionApi from '../composition/index.js';
 
-const surface = runtimeApi as unknown as Record<string, unknown>;
+const surface = { ...providerApi, ...compositionApi };
 
 /** Any export whose name registers, resets, or attaches agent runtime factories. */
 const AGENT_FACTORY_SEAM_PATTERN =

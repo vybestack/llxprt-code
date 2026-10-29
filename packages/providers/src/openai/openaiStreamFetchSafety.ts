@@ -4,22 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { forwardPreconnect } from '../utils/fetchPreconnect.js';
 
 /** Avoid runtime-native stream iteration in the OpenAI SDK's SSE reader. */
 export function createReaderBasedStreamFetch(
-  innerFetch?: typeof fetch,
-): typeof fetch {
+  innerFetch: NetworkFetch,
+): NetworkFetch & ReturnType<typeof forwardPreconnect> {
   return Object.assign(
     async (input: RequestInfo | URL, init?: RequestInit) => {
-      const response = await (innerFetch ?? globalThis.fetch)(input, init);
+      const response = await innerFetch(input, init);
       return response.ok &&
         response.body &&
         Boolean(Reflect.get(response.body, Symbol.asyncIterator))
         ? wrapResponseWithReaderIteratedBody(response)
         : response;
     },
-    forwardPreconnect(() => innerFetch ?? globalThis.fetch),
+    forwardPreconnect(() => innerFetch),
   );
 }
 

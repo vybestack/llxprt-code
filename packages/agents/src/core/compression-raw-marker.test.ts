@@ -50,6 +50,8 @@ for (const size of [65]) {
                   name,
                   parameters,
                   signal,
+                  undefined,
+                  globalThis.fetch,
                 ),
               state,
               history,

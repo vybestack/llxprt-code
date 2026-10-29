@@ -16,7 +16,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildAgent } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
-import { bindClientTokenization } from '../../../agents/src/session/session-client-binding.js';
+import { captureSessionOwner } from '../../../agents/src/api/__tests__/helpers/capture-session-owner.js';
 import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { restoreResumeBoot } from './restoreResumeBoot.js';
 
@@ -62,12 +62,12 @@ describe('startup journal restoration', () => {
     await rm(root, { recursive: true, force: true });
   });
   it('uses the inactive client tokenizer while adopting a journal before authentication', async () => {
-    const built = await buildAgent('plain-text.jsonl');
-    const client = await built.agent.sessionClient.createDetachedAgentClient();
-    bindClientTokenization(
-      client,
-      accountingFactory((text) => text.length),
+    const { value: built, owner } = await captureSessionOwner(() =>
+      buildAgent('plain-text.jsonl'),
     );
+    const client = owner.clients.getAgentClient();
+    const tokenizer = accountingFactory((text) => text.length);
+    client.bindTokenization(tokenizer.getTokenizer, tokenizer);
     try {
       await restoreResumeBoot(
         client,

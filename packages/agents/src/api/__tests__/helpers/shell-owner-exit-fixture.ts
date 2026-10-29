@@ -36,7 +36,7 @@ async function launch(
   const shell = agent.tools.get('run_shell_command');
   if (!shell) throw new Error('Missing public shell tool');
   const marker = join(tmpdir(), `owner-${index}.pid`);
-  const script = `require('node:fs').writeFileSync(${JSON.stringify(marker)}, String(process.pid));setTimeout(()=>{},120000)`;
+  const script = `const { renameSync, writeFileSync } = require('node:fs');writeFileSync(${JSON.stringify(marker + '.tmp')}, String(process.pid));renameSync(${JSON.stringify(marker + '.tmp')}, ${JSON.stringify(marker)});setTimeout(()=>{},120000)`;
   const quote = (value: string): string =>
     `'${value.replaceAll("'", "'\\''")}'`;
   const command = `exec ${quote(process.execPath)} -e ${quote(script)}`;

@@ -83,7 +83,14 @@ describe('LoadBalancingProvider selection emits a dedicated selection event', ()
   beforeEach(() => {
     settingsService = new SettingsService();
     const config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      config,
+    );
     coreEvents.removeAllListeners();
   });
 

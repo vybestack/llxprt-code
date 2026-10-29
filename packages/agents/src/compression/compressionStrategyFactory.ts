@@ -1,3 +1,6 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -44,14 +47,28 @@ export function parseCompressionStrategyName(
  */
 export function getCompressionStrategy(
   name: CompressionStrategyName,
+  mediaResolver: RequestMediaResolutionService | undefined,
+  requestMediaBudgetBytes: number | undefined,
+  providerFileBindings: ProviderFileBindingStore | undefined,
+  providerFileLifecycle: ProviderFileLifecycle | undefined,
 ): CompressionStrategy {
   switch (name) {
     case 'middle-out':
-      return new MiddleOutStrategy();
+      return new MiddleOutStrategy(
+        mediaResolver,
+        requestMediaBudgetBytes,
+        providerFileBindings,
+        providerFileLifecycle,
+      );
     case 'top-down-truncation':
       return new TopDownTruncationStrategy();
     case 'one-shot':
-      return new OneShotStrategy();
+      return new OneShotStrategy(
+        mediaResolver,
+        requestMediaBudgetBytes,
+        providerFileBindings,
+        providerFileLifecycle,
+      );
     case 'high-density':
       return new HighDensityStrategy();
     default: {

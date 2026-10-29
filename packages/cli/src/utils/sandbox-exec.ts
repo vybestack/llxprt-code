@@ -34,7 +34,6 @@ import {
   validateContainerSandboxEnv,
   LOCAL_DEV_SANDBOX_IMAGE_NAME,
 } from './sandbox-containers.js';
-import { stopProxy } from '@vybestack/llxprt-code-providers/auth.js';
 import { entrypoint } from './sandbox-entrypoint.js';
 import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
 import {
@@ -408,14 +407,6 @@ async function startCredentialProxyGuarded(
     'credential proxy bridge',
     cpResult.credentialProxyBridgeCleanup,
   );
-  lifecycle.own('credential-proxy', 'credential proxy server', () => {
-    void stopProxy().catch((err) => {
-      debugLogger.error(
-        'Credential proxy stop() failed after failed launch:',
-        err,
-      );
-    });
-  });
   return cpResult;
 }
 
@@ -604,14 +595,18 @@ function buildSandboxImage(
     image,
   );
   try {
-    execFileSync('bun', buildArgsArray, {
-      cwd: gcRoot,
-      stdio: 'inherit',
-      env: {
-        ...process.env,
-        LLXPRT_SANDBOX: config.command,
+    execFileSync(
+      process.versions.bun ? process.execPath : 'bun',
+      buildArgsArray,
+      {
+        cwd: gcRoot,
+        stdio: 'inherit',
+        env: {
+          ...process.env,
+          LLXPRT_SANDBOX: config.command,
+        },
       },
-    });
+    );
   } catch (error) {
     if (
       isNodeError(error) &&

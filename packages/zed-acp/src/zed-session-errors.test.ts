@@ -29,6 +29,7 @@ import {
   findMatchingSessionFile,
   mapResumeError,
   wrapReplayFailure,
+  rethrowZedSessionFailure,
 } from './zed-session-errors.js';
 
 const SESSION_ID = 'sess-xyz';
@@ -356,4 +357,72 @@ describe('findMatchingSessionFile (issue #1604: shared session-file matcher)', (
       matchingFileName(ID),
     );
   });
+});
+
+describe('mandatory ACP startup release error preservation', () => {
+  it.each([undefined, new Error('primary acquisition failed')])(
+    'throws the exact original primary without cleanup failures %#',
+    async (primary) => {
+      const [result] = await Promise.allSettled([
+        Promise.resolve().then(() => rethrowZedSessionFailure(primary, [])),
+      ]);
+      expect(result.status).toBe('rejected');
+      if (result.status !== 'rejected')
+        throw new Error('Primary failure was hidden');
+      expect(result.reason).toBe(primary);
+    },
+  );
+  it('retains primary-first order, undefined causes and repeated cleanup identities without deduplication', async () => {
+    const repeated = new Error('same physical close failure');
+    const [result] = await Promise.allSettled([
+      Promise.resolve().then(() =>
+        rethrowZedSessionFailure(undefined, [repeated, undefined, repeated]),
+      ),
+    ]);
+    expect(result.status).toBe('rejected');
+    if (result.status !== 'rejected')
+      throw new Error('Startup release failure was hidden');
+    expect(result.reason).toBeInstanceOf(AggregateError);
+    if (!(result.reason instanceof AggregateError)) throw result.reason;
+    expect(result.reason.errors).toStrictEqual([
+      undefined,
+      repeated,
+      undefined,
+      repeated,
+    ]);
+  });
+  it.each([undefined, new Error('existing transport failure')])(
+    'preserves actual RequestError identity, protocol data and an explicitly owned prior cause %#',
+    async (prior) => {
+      const primary = new RequestError(-32603, 'Replay failed', {
+        sessionId: SESSION_ID,
+        phase: 'replay',
+      });
+      primary.cause = prior;
+      const repeated = new Error('credential release failed');
+      const [result] = await Promise.allSettled([
+        Promise.resolve().then(() =>
+          rethrowZedSessionFailure(primary, [undefined, repeated, repeated]),
+        ),
+      ]);
+      expect(result.status).toBe('rejected');
+      if (result.status !== 'rejected')
+        throw new Error('Protocol failure was hidden');
+      expect(result.reason).toBe(primary);
+      expect([primary.code, primary.message, primary.data]).toStrictEqual([
+        -32603,
+        'Replay failed',
+        { sessionId: SESSION_ID, phase: 'replay' },
+      ]);
+      expect(primary.cause).toBeInstanceOf(AggregateError);
+      if (!(primary.cause instanceof AggregateError))
+        throw new Error('Missing cleanup causes');
+      expect(primary.cause.errors).toStrictEqual([
+        prior,
+        undefined,
+        repeated,
+        repeated,
+      ]);
+    },
+  );
 });

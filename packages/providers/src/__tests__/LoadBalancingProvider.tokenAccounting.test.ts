@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -21,6 +21,7 @@ import {
   type LoadBalancingProviderConfig,
   type ResolvedSubProfile,
 } from '../LoadBalancingProvider.js';
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
@@ -128,6 +129,7 @@ async function consumeIterator(
 ): Promise<IContent[]> {
   const results: IContent[] = [];
   for await (const chunk of provider.generateChatCompletion({
+    invocation: makeLoadBalancerInvocation(),
     contents,
   } as GenerateChatOptions)) {
     results.push(chunk);
@@ -204,12 +206,17 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      fixtureOwnersBorrowedSettings(config, settingsService),
+    );
   });
 
   describe('Shared context limit fallback', () => {

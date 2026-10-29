@@ -1,221 +1,111 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-/**
- * @plan:PLAN-20260617-COREAPI.P15
- * @requirement:REQ-001
- * @requirement:REQ-007
- *
- * Behavioral tests for the shared loop-rebuild routine (used by createAgent's
- * initial build and by every client-rebinding mutation). We drive the REAL
- * rebuildLoop through its dependency-injection seam (a recording fake ctor) and
- * assert on REAL observable effects:
- *  - a fresh loop is constructed bound to the CURRENT resolved client;
- *  - on rebuild, the PRIOR run's facade AbortController is aborted (real
- *    AbortSignal state) and the PRIOR recorded subscriptions are unsubscribed;
- *  - a throwing unsubscribe is swallowed (best-effort teardown);
- *  - with no recorded subscriptions the teardown is a clean no-op.
- * No mock theater: effects are observed via real signal state, real unsubscribe
- * calls (recorded by the unsubscribers themselves), and the captured ctor
- * options.
- */
-
-import { describe, it, expect } from 'bun:test';
 import {
-  createRebuildLoopProbe,
-  makeClient,
-  createInteractiveConfig,
-} from './helpers/rebuildLoopProbe.js';
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core';
+import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 
-describe('rebuildLoop @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001 @requirement:REQ-007', () => {
-  it('initial build constructs a loop bound to the current client and arms a fresh run controller @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001', () => {
-    const probe = createRebuildLoopProbe();
-    const client = makeClient('initial');
-    probe.setClient(client);
-
-    const loop = probe.rebuild();
-
-    // exactly one construction, bound to the current client
-    expect(probe.constructions).toHaveLength(1);
-    expect(probe.constructions[0].options.agentClient).toBe(client);
-    // the holder now owns the new loop + a fresh, un-aborted run controller
-    expect(probe.holder.current).toBe(loop);
-    expect(probe.holder.activeRunController).toBeDefined();
-    expect(probe.holder.activeRunController?.signal.aborted).toBe(false);
-    // no subscriptions recorded on a P15 initial build
-    expect(probe.holder.subscriptions).toBeUndefined();
+describe('public Agent loop replacement contract', () => {
+  const suiteCleanup: Array<() => void | Promise<void>> = [];
+  const cleanup: Array<() => void | Promise<void>> = [];
+  afterAll(async () => runCleanupSteps(suiteCleanup.splice(0).reverse()));
+  afterEach(async () => runCleanupSteps(cleanup.splice(0).reverse()));
+  const credentials = useOwnedCredentials();
+  let agent: Agent;
+  beforeAll(async () => {
+    const prompts = await mkdtemp(join(tmpdir(), 'public-loop-prompts-'));
+    suiteCleanup.push(() => rm(prompts, { recursive: true, force: true }));
+    const previous = process.env.LLXPRT_PROMPTS_DIR;
+    suiteCleanup.push(() => {
+      if (previous === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+      else process.env.LLXPRT_PROMPTS_DIR = previous;
+    });
+    process.env.LLXPRT_PROMPTS_DIR = prompts;
+    await initializePromptSystem();
   });
-
-  it('rebuild aborts the prior run controller and rebinds to the NEW client @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-007', () => {
-    const probe = createRebuildLoopProbe();
-    probe.setClient(makeClient('first'));
-    probe.rebuild();
-    const priorController = probe.holder.activeRunController;
-    expect(priorController).toBeDefined();
-    expect(priorController?.signal.aborted).toBe(false);
-
-    const secondClient = makeClient('second');
-    probe.setClient(secondClient);
-    const secondLoop = probe.rebuild();
-
-    // the PRIOR controller was aborted as part of teardown
-    expect(priorController?.signal.aborted).toBe(true);
-    // a brand-new, un-aborted controller is armed
-    expect(probe.holder.activeRunController).not.toBe(priorController);
-    expect(probe.holder.activeRunController?.signal.aborted).toBe(false);
-    // the new loop is bound to the SECOND client
-    expect(probe.constructions).toHaveLength(2);
-    expect(probe.constructions[1].options.agentClient).toBe(secondClient);
-    expect(probe.holder.current).toBe(secondLoop);
-  });
-
-  it('rebuild unsubscribes every prior recorded subscription exactly once @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-007', () => {
-    const probe = createRebuildLoopProbe();
-    probe.setClient(makeClient('first'));
-    probe.rebuild();
-
-    // record real per-turn subscriptions on the holder; each appends its tag
-    const order: string[] = [];
-    probe.holder.subscriptions = [() => order.push('a'), () => order.push('b')];
-
-    probe.setClient(makeClient('second'));
-    probe.rebuild();
-
-    // both unsubscribers were invoked, in recorded order
-    expect(order).toStrictEqual(['a', 'b']);
-    // and the holder's subscription slot was cleared
-    expect(probe.holder.subscriptions).toBeUndefined();
-  });
-
-  it('a throwing unsubscribe reports cleanup failure after publishing the replacement @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-007', () => {
-    const probe = createRebuildLoopProbe();
-    probe.setClient(makeClient('first'));
-    probe.rebuild();
-
-    const order: string[] = [];
-    probe.holder.subscriptions = [
-      () => {
-        throw new Error('boom');
-      },
-      () => order.push('after-throw'),
-    ];
-
-    probe.setClient(makeClient('second'));
-    const priorLoop = probe.holder.current;
-    expect(() => probe.rebuild()).toThrow(AggregateError);
-
-    expect(order).toStrictEqual(['after-throw']);
-    expect(probe.holder.current).not.toBe(priorLoop);
-    expect(probe.holder.boundClient).toBe(
-      probe.constructions[1].options.agentClient,
+  beforeEach(async () => {
+    const temporary = await mkdtemp(join(tmpdir(), 'public-loop-'));
+    cleanup.push(() => rm(temporary, { recursive: true, force: true }));
+    const directory = await realpath(temporary);
+    const previous = process.env.LLXPRT_FAKE_RESPONSES;
+    cleanup.push(() => {
+      if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+      else process.env.LLXPRT_FAKE_RESPONSES = previous;
+    });
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
     );
-    expect(probe.constructions).toHaveLength(2);
-    expect(probe.holder.subscriptions).toBeUndefined();
-  });
-
-  it('initial build (no prior loop) SKIPS teardown — does not touch pre-seeded subscriptions @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-007', () => {
-    const probe = createRebuildLoopProbe();
-    probe.setClient(makeClient('initial'));
-
-    // Pre-seed subscriptions while there is NO current loop. The teardown
-    // branch is guarded on `holder.current !== undefined`, so on the FIRST
-    // build it must be SKIPPED entirely: these unsubscribers must NOT run.
-    const order: string[] = [];
-    probe.holder.subscriptions = [() => order.push('should-not-run')];
-
-    probe.rebuild();
-
-    // teardown was skipped → the pre-seeded unsubscriber never fired
-    expect(order).toStrictEqual([]);
-    // and the build still produced its fresh loop + controller
-    expect(probe.constructions).toHaveLength(1);
-    expect(probe.holder.activeRunController?.signal.aborted).toBe(false);
-  });
-
-  it('rebuild with a prior loop but no armed controller tears down safely (optional abort) @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-007', () => {
-    const probe = createRebuildLoopProbe();
-    probe.setClient(makeClient('first'));
-    probe.rebuild();
-
-    // Simulate a prior loop whose run controller was already cleared: current
-    // is set, but activeRunController is undefined. Teardown must use optional
-    // chaining (no throw) and still rebuild.
-    probe.holder.activeRunController = undefined;
-    expect(probe.holder.current).toBeDefined();
-
-    probe.setClient(makeClient('second'));
-    const secondLoop = probe.rebuild();
-
-    // no throw from the absent-controller abort; a fresh controller is armed
-    expect(probe.holder.current).toBe(secondLoop);
-    expect(probe.constructions).toHaveLength(2);
-    expect(probe.holder.activeRunController).toBeDefined();
-    expect(probe.holder.activeRunController?.signal.aborted).toBe(false);
-  });
-
-  it('rebuild with no recorded subscriptions tears down cleanly (no-op unsubscribe path) @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-007', () => {
-    const probe = createRebuildLoopProbe();
-    probe.setClient(makeClient('first'));
-    probe.rebuild();
-    // explicitly leave subscriptions undefined
-    expect(probe.holder.subscriptions).toBeUndefined();
-
-    probe.setClient(makeClient('second'));
-    const secondLoop = probe.rebuild();
-
-    // a second loop is constructed regardless; no throw from the empty path
-    expect(probe.constructions).toHaveLength(2);
-    expect(probe.holder.current).toBe(secondLoop);
-  });
-
-  it('threads interactiveMode from config.isInteractive() into the constructed loop (true) @requirement:REQ-007', () => {
-    const probe = createRebuildLoopProbe();
-    probe.setClient(makeClient('interactive'));
-
-    probe.rebuild({
-      config: createInteractiveConfig(true),
+    agent = await createAgent({
+      provider: 'fake',
+      model: 'original-model',
+      workingDir: directory,
+      credentialAuthority: credentials().authority,
+      harness: { includeProcessCwd: false },
+      recording: { enabled: false },
+      coreTools: [],
     });
-
-    expect(probe.constructions).toHaveLength(1);
-    expect(probe.constructions[0].options.interactiveMode).toBe(true);
+    cleanup.push(() => agent.dispose());
   });
-
-  it('threads interactiveMode from config.isInteractive() into the constructed loop (false when non-interactive) @requirement:REQ-007', () => {
-    const probe = createRebuildLoopProbe();
-    probe.setClient(makeClient('non-interactive'));
-
-    probe.rebuild({
-      config: createInteractiveConfig(false),
-    });
-
-    expect(probe.constructions).toHaveLength(1);
-    expect(probe.constructions[0].options.interactiveMode).toBe(false);
+  it('generates through the initial loop and a new model-bound loop without losing prior conversation', async () => {
+    expect((await agent.chat('Keep original conversation')).text).toContain(
+      'turn one reply',
+    );
+    await agent.setModel('replacement-model');
+    expect(agent.getModel()).toBe('replacement-model');
+    expect((await agent.chat('Continue after model change')).text).toContain(
+      'turn two reply',
+    );
+    const history = JSON.stringify(await agent.session.getHistory());
+    expect(history).toContain('Keep original conversation');
+    expect(history).toContain('Continue after model change');
   });
-
-  it('records the bound client in holder.boundClient on initial build @requirement:REQ-007', () => {
-    const probe = createRebuildLoopProbe();
-    const client = makeClient('initial-bound');
-    probe.setClient(client);
-
-    probe.rebuild();
-
-    expect(probe.holder.boundClient).toBe(client);
+  it('starts a fresh conversation on the same Agent and still executes the newly selected client loop', async () => {
+    await agent.chat('Old conversation marker');
+    expect(JSON.stringify(await agent.session.getHistory())).toContain(
+      'Old conversation marker',
+    );
+    await agent.session.startNewSession();
+    expect(await agent.session.getHistory()).toStrictEqual([]);
+    expect((await agent.chat('New conversation marker')).text).toContain(
+      'reply',
+    );
+    const history = JSON.stringify(await agent.session.getHistory());
+    expect(history).toContain('New conversation marker');
+    expect(history).not.toContain('Old conversation marker');
   });
-
-  it('updates holder.boundClient to the NEW client on rebuild @requirement:REQ-007', () => {
-    const probe = createRebuildLoopProbe();
-    const first = makeClient('first-bound');
-    probe.setClient(first);
-    probe.rebuild();
-    expect(probe.holder.boundClient).toBe(first);
-
-    const second = makeClient('second-bound');
-    probe.setClient(second);
-    probe.rebuild();
-
-    expect(probe.holder.boundClient).toBe(second);
+  it('keeps the existing conversation runnable when a candidate provider cannot be acquired', async () => {
+    await agent.chat('Preserve before rejected profile');
+    const history = structuredClone(await agent.session.getHistory());
+    await expect(
+      agent.profiles.applySnapshot({
+        version: 1,
+        provider: 'unregistered-loop-provider',
+        model: 'unpublished-model',
+        modelParams: {},
+        ephemeralSettings: {},
+      }),
+    ).rejects.toThrow(/unregistered-loop-provider/);
+    expect(agent.getProvider()).toBe('fake');
+    expect(agent.getModel()).toBe('original-model');
+    expect(await agent.session.getHistory()).toStrictEqual(history);
+    expect(
+      (await agent.chat('Continue after candidate failure')).text,
+    ).toContain('reply');
   });
 });

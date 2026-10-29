@@ -130,6 +130,7 @@ export function lifecycleProvider() {
     requestRows: source,
     contentCount: source.count,
     invocation: createRuntimeInvocationContext({
+      fetch: globalThis.fetch,
       runtimeId: 'source-lifecycle-runtime',
       providerName: provider.name,
       ephemeralsSnapshot: {},

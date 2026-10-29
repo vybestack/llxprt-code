@@ -10,7 +10,6 @@ import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { AnthropicProvider } from './anthropic/AnthropicProvider.js';
-import { resetFactorySingletons } from './auth/proxy/credential-store-factory.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from './BaseProvider.js';
 import { streamCallOptions } from './__tests__/streamCallOptions.js';
@@ -66,7 +65,6 @@ function createSettings(providerName: string): SettingsService {
 
 function createOptions(providerName: string, settings: SettingsService) {
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: RUNTIME_ID,
     metadata: { source: 'credential-resolution-errors.test.ts' },
   });
@@ -145,11 +143,9 @@ describe('Provider credential-resolution error surface', () => {
     process.env.LLXPRT_CREDENTIAL_SOCKET = UNUSED_PROXY_SOCKET;
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
-    resetFactorySingletons();
   });
 
   afterEach(() => {
-    resetFactorySingletons();
     if (originalSocket === undefined) {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     } else {

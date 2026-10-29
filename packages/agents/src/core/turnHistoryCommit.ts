@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type {
@@ -17,17 +16,20 @@ import {
   type ModelOutput,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
+import type { ReasoningInclusionPolicy } from './runtimePorts.js';
 import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
 import {
   admitModelOutputForHistory,
   releaseAdmissionsAfterError,
+  type MediaAdmissionRuntime,
   type PreparedUserTurn,
 } from './mediaAdmissionSeam.js';
 import { syncAndRecordTurnUsage } from './tokenUsageActualLogger.js';
 
 interface CommitTurnHistoryOptions {
   readonly origin?: object;
-  readonly runtimeContext: AgentRuntimeContext;
+  readonly mediaRuntime: MediaAdmissionRuntime;
+  readonly reasoningInclusion: ReasoningInclusionPolicy;
   readonly historyService: HistoryService;
   readonly compressionHandler: CompressionHandler;
   readonly response: ModelOutput;
@@ -58,8 +60,7 @@ function outputHistoryEntries(
 ): IContent[] {
   const outputContent = response.content;
   if (outputContent.blocks.length > 0) {
-    const includeThoughts =
-      options.runtimeContext.ephemerals.reasoning.includeInContext();
+    const includeThoughts = options.reasoningInclusion.includeInContext();
     const allowedTools = response.hookRestrictions?.allowedToolNames;
     const filteredBlocks = allowedTools
       ? filterHookRestrictedBlocks(outputContent.blocks, allowedTools)
@@ -93,7 +94,7 @@ async function settlePublishedMediaAdmissions(
     failures.push(error);
   }
   try {
-    await options.runtimeContext.mediaAdmission?.releaseAdmissions(admissions);
+    await options.mediaRuntime.mediaAdmission?.releaseAdmissions?.(admissions);
   } catch (error: unknown) {
     failures.push(error);
   }
@@ -114,7 +115,7 @@ export async function commitTurnHistory(
     | undefined;
   try {
     admitted = await admitModelOutputForHistory(
-      options.runtimeContext,
+      options.mediaRuntime,
       options.response,
       options.preparedUserTurn.turnId,
     );
@@ -154,7 +155,7 @@ export async function commitTurnHistory(
   } catch (error: unknown) {
     if (admitted === undefined) throw error;
     await releaseAdmissionsAfterError(
-      options.runtimeContext,
+      options.mediaRuntime,
       admitted.admissions,
       error,
       'Turn history commit failed and output media cleanup was incomplete',

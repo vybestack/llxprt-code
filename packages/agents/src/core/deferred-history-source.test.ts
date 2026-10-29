@@ -15,8 +15,7 @@ import {
   withSuffixFixture,
 } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { appendFileSync } from 'node:fs';
-import { buildAgent } from '../api/__tests__/helpers/agentHarness.js';
-import { bindClientTokenization } from '../session/session-client-binding.js';
+import { buildCliStyleConfig } from '../api/__tests__/helpers/buildCliStyleConfig.js';
 import { observeNativeDeferredAcknowledgement } from './__tests__/support/native-deferred-acknowledgement.js';
 
 async function buildDeferredClient(): Promise<{
@@ -24,21 +23,23 @@ async function buildDeferredClient(): Promise<{
   store: LocalMediaStore;
   cleanup: () => Promise<void>;
 }> {
-  const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-  const client = await agent.sessionClient.createDetachedAgentClient();
+  const built = await buildCliStyleConfig('plain-text.jsonl');
+  await built.sessionClient.clients.refreshAuth();
+  const client = built.agentClient;
   const store = requireMediaStore(client);
   bindClientTokenization(
     client,
     accountingFactory((text) => text.length),
   );
-  return {
-    client,
-    store,
-    cleanup: async () => {
-      await client.dispose();
-      await cleanup();
-    },
-  };
+  expect(client.hasChatInitialized()).toBe(false);
+  return { client, store, cleanup: built.cleanup };
+}
+
+function bindClientTokenization(
+  client: AgentClientContract,
+  tokenizer: ReturnType<typeof accountingFactory>,
+): void {
+  client.bindTokenization(tokenizer.getTokenizer, tokenizer);
 }
 
 const bounds = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
@@ -111,39 +112,49 @@ describe('streamed deferred history admission', () => {
 });
 
 describe('deferred source failures and oversized rows', () => {
-  it('rolls back a source failure and cancellation without changing admitted history', async () => {
-    const { client, cleanup } = await buildDeferredClient();
-    const previous: IContent = {
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'previous' }],
-    };
-    const abort = new AbortController();
-    async function* failing(): AsyncIterable<IContent> {
-      yield { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] };
-      throw new Error('disk source failed');
-    }
-    async function* cancelled(): AsyncIterable<IContent> {
-      yield { speaker: 'human', blocks: [{ type: 'text', text: 'cancelled' }] };
-      abort.abort(new Error('source cancelled'));
-    }
-    try {
-      await client.storeHistoryForLaterUse([previous]);
-      await expect(client.storeHistoryForLaterUse(failing())).rejects.toThrow(
-        'disk source failed',
-      );
-      expect(
-        (await Array.fromAsync(client.getHistory())).map((row) => row.blocks),
-      ).toStrictEqual([previous.blocks]);
-      await expect(
-        client.storeHistoryForLaterUse(cancelled(), { signal: abort.signal }),
-      ).rejects.toThrow('source cancelled');
-      expect(
-        (await Array.fromAsync(client.getHistory())).map((row) => row.blocks),
-      ).toStrictEqual([previous.blocks]);
-    } finally {
-      await cleanup();
-    }
-  });
+  it.each([false, true])(
+    'rolls back a source failure and cancellation without changing admitted history, replacement=%s',
+    async (replacement) => {
+      const { client, cleanup } = await buildDeferredClient();
+      const replace = replacement
+        ? client.setHistoryFromSource.bind(client)
+        : client.storeHistoryForLaterUse.bind(client);
+      const previous: IContent = {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'previous' }],
+      };
+      const abort = new AbortController();
+      async function* failing(): AsyncIterable<IContent> {
+        yield {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'candidate' }],
+        };
+        throw new Error('disk source failed');
+      }
+      async function* cancelled(): AsyncIterable<IContent> {
+        yield {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'cancelled' }],
+        };
+        abort.abort(new Error('source cancelled'));
+      }
+      try {
+        await client.storeHistoryForLaterUse([previous]);
+        await expect(replace(failing())).rejects.toThrow('disk source failed');
+        expect(
+          (await Array.fromAsync(client.getHistory())).map((row) => row.blocks),
+        ).toStrictEqual([previous.blocks]);
+        await expect(
+          replace(cancelled(), { signal: abort.signal }),
+        ).rejects.toThrow('source cancelled');
+        expect(
+          (await Array.fromAsync(client.getHistory())).map((row) => row.blocks),
+        ).toStrictEqual([previous.blocks]);
+      } finally {
+        await cleanup();
+      }
+    },
+  );
 
   it('accepts a valid disk row larger than the aggregate byte limit', async () => {
     await withSuffixFixture(
@@ -215,53 +226,57 @@ describe('paused deferred source', () => {
 });
 
 describe('streamed deferred media ownership', () => {
-  it('keeps media usable after startup failure, transfers on retry, and releases on disposal', async () => {
-    const { client, store, cleanup } = await buildDeferredClient();
-    async function* source(): AsyncIterable<IContent> {
-      yield {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            encoding: 'base64',
-            mimeType: 'image/png',
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=',
-          },
-        ],
-      };
-    }
-    try {
-      await client.storeHistoryForLaterUse(source());
-      const cursor = client.streamHistory();
-      const row = await nextContent(cursor);
-      await cursor.return();
-      const reference = row.blocks[0];
-      if (reference.type !== 'media' || reference.encoding !== 'reference')
-        throw new Error('Expected admitted media');
-      expect(await store.hasReservations(reference.contentId)).toBe(true);
-      bindClientTokenization(
-        client,
-        accountingFactory(() => {
-          throw new Error('startup token failure');
-        }),
-      );
-      await expect(client.startChat([])).rejects.toThrow(
-        'startup token failure',
-      );
-      expect(await store.hasReservations(reference.contentId)).toBe(true);
-      expect(client.hasChatInitialized()).toBe(false);
-      bindClientTokenization(
-        client,
-        accountingFactory((text) => text.length),
-      );
-      await client.startChat([]);
-      expect(await store.hasReservations(reference.contentId)).toBe(true);
-      await client.dispose();
-      expect(await store.hasReservations(reference.contentId)).toBe(false);
-    } finally {
-      await cleanup();
-    }
-  });
+  it.each([false, true])(
+    'keeps media usable after startup failure, transfers on retry, and releases on disposal, replacement=%s',
+    async (replacement) => {
+      const { client, store, cleanup } = await buildDeferredClient();
+      async function* source(): AsyncIterable<IContent> {
+        yield {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              encoding: 'base64',
+              mimeType: 'image/png',
+              data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=',
+            },
+          ],
+        };
+      }
+      try {
+        if (replacement) await client.setHistoryFromSource(source());
+        else await client.storeHistoryForLaterUse(source());
+        const cursor = client.streamHistory();
+        const row = await nextContent(cursor);
+        await cursor.return();
+        const reference = row.blocks[0];
+        if (reference.type !== 'media' || reference.encoding !== 'reference')
+          throw new Error('Expected admitted media');
+        expect(await store.hasReservations(reference.contentId)).toBe(true);
+        bindClientTokenization(
+          client,
+          accountingFactory(() => {
+            throw new Error('startup token failure');
+          }),
+        );
+        await expect(client.startChat([])).rejects.toThrow(
+          'startup token failure',
+        );
+        expect(await store.hasReservations(reference.contentId)).toBe(true);
+        expect(client.hasChatInitialized()).toBe(false);
+        bindClientTokenization(
+          client,
+          accountingFactory((text) => text.length),
+        );
+        await client.startChat([]);
+        expect(await store.hasReservations(reference.contentId)).toBe(true);
+        await client.dispose();
+        expect(await store.hasReservations(reference.contentId)).toBe(false);
+      } finally {
+        await cleanup();
+      }
+    },
+  );
 });
 
 describe('deferred disk commit acknowledgement', () => {

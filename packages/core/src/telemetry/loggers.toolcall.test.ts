@@ -27,7 +27,6 @@ import { logToolCall } from '@vybestack/llxprt-code-telemetry/telemetry/loggers.
 import { ToolCallDecision } from '@vybestack/llxprt-code-telemetry/telemetry/tool-call-decision.js';
 import { ToolCallEvent } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
 import { vi, describe, beforeEach, it, expect, setSystemTime } from 'bun:test';
-import * as uiTelemetry from '@vybestack/llxprt-code-telemetry/telemetry/uiTelemetry.js';
 import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 
 describe('loggers', () => {
@@ -82,7 +81,7 @@ describe('loggers', () => {
       { isTrustedFolder: () => true, getIdeTrust: () => undefined },
       telemetry,
     );
-    uiTelemetry.uiTelemetryService.reset();
+    telemetry.localMetrics.reset();
     setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
   });
   afterEach(async () => {
@@ -272,9 +271,7 @@ describe('loggers', () => {
         }),
       );
       expect(
-        uiTelemetry.uiTelemetryService.getMetrics().tools.byName[
-          'test-function'
-        ],
+        telemetry.localMetrics.getMetrics().tools.byName['test-function'],
       ).toMatchObject({
         count: 1,
         success: 1,
@@ -378,9 +375,7 @@ describe('loggers', () => {
         }),
       );
       expect(
-        uiTelemetry.uiTelemetryService.getMetrics().tools.byName[
-          'test-function'
-        ],
+        telemetry.localMetrics.getMetrics().tools.byName['test-function'],
       ).toMatchObject({
         count: 1,
         success: 0,
@@ -487,9 +482,7 @@ describe('loggers', () => {
         }),
       );
       expect(
-        uiTelemetry.uiTelemetryService.getMetrics().tools.byName[
-          'test-function'
-        ],
+        telemetry.localMetrics.getMetrics().tools.byName['test-function'],
       ).toMatchObject({
         count: 1,
         success: 1,
@@ -594,9 +587,7 @@ describe('loggers', () => {
         }),
       );
       expect(
-        uiTelemetry.uiTelemetryService.getMetrics().tools.byName[
-          'test-function'
-        ],
+        telemetry.localMetrics.getMetrics().tools.byName['test-function'],
       ).toMatchObject({
         count: 1,
         success: 1,
@@ -704,9 +695,7 @@ describe('loggers', () => {
         }),
       );
       expect(
-        uiTelemetry.uiTelemetryService.getMetrics().tools.byName[
-          'test-function'
-        ],
+        telemetry.localMetrics.getMetrics().tools.byName['test-function'],
       ).toMatchObject({
         count: 1,
         success: 0,

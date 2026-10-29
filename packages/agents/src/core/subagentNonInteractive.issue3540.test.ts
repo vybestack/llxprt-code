@@ -1,5 +1,5 @@
+import { afterAll } from 'bun:test';
 import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,7 +15,7 @@ import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-s
  * synthesize-and-resolve route, not a native tool_call chunk.
  */
 
-import { afterAll, describe, expect, it, vi, beforeEach } from 'bun:test';
+import { describe, expect, it, vi, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
@@ -25,15 +25,21 @@ import {
   type OutputConfig,
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { ChatSession, StreamEventType } from './chatSession.js';
-import { executeNonInteractiveRun } from './subagentNonInteractive.js';
-import type { ExecutionLoopContext } from './subagentExecution.js';
-import { getScopeLocalFuncDefs } from './subagentRuntimeSetup.js';
+
 import {
-  createMockConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createStatelessRuntimeBundle,
+  createSubagentConfig,
   defaultRunConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
 } from './__tests__/subagent-test-helpers.js';
+import { ChatSession, StreamEventType } from './chatSession.js';
+import type { ExecutionLoopContext } from './subagentExecution.js';
+import { executeNonInteractiveRun } from './subagentNonInteractive.js';
+import { getScopeLocalFuncDefs } from './subagentRuntimeSetup.js';
+import { processFunctionCalls } from './subagentToolProcessing.js';
 
 const { readTodos, TodoStoreMock } = (() => {
   const readTodos = vi.fn(async () => []);
@@ -63,9 +69,13 @@ function stopped(): IContent {
 }
 
 async function runDirectNonInteractive(
+  retainSubagentCleanup: (close: () => void | Promise<void>) => () => void,
   responses: readonly IContent[],
 ): Promise<{ readonly output: OutputObject; readonly requestCount: number }> {
-  const { config, toolRegistry } = await createMockConfig();
+  const configSettings = seedSubagentSettings();
+  const config = createSubagentConfig(configSettings, retainSubagentCleanup);
+  await acquireSubagentSettings(config, configSettings, retainSubagentCleanup);
+  await acquireSubagentWorkspace(config, retainSubagentCleanup);
   const baseBundle = createStatelessRuntimeBundle();
   const output: OutputObject = {
     terminate_reason: SubagentTerminateMode.ERROR,
@@ -78,7 +88,10 @@ async function runDirectNonInteractive(
     runConfig: defaultRunConfig,
     outputConfig: OUTPUT_CONFIG,
     textToolParser: new GemmaToolCallParser(),
-    toolsView: baseBundle.runtimeContext.tools,
+    resolveToolName: (name) =>
+      name && baseBundle.runtimeContext.tools.getToolMetadata(name)
+        ? name
+        : null,
     logger,
   };
   let requestCount = 0;
@@ -96,37 +109,58 @@ async function runDirectNonInteractive(
     },
   } as unknown as ChatSession;
 
-  const settingsRoot = createSessionSettingsFixture(config);
   await executeNonInteractiveRun(
-    chat,
     [...getScopeLocalFuncDefs(OUTPUT_CONFIG)],
     new AbortController(),
     [{ speaker: 'human', blocks: [{ type: 'text', text: 'start' }] }],
     Date.now(),
-    execCtx,
+    {
+      ...execCtx,
+      resolveToolName: (name) =>
+        name && baseBundle.runtimeContext.tools.getToolMetadata(name)
+          ? name
+          : null,
+    },
     {
       output,
       subagentId: 'direct-issue3540-agent',
       name: 'direct-issue3540-agent',
-      runtimeContext: baseBundle.runtimeContext,
+      sessionId: config.getSessionId(),
       logger,
-      config,
       runConfig: defaultRunConfig,
       outputConfig: OUTPUT_CONFIG,
-      toolExecutorContext: {
-        telemetry: settingsRoot.settingsOwner.telemetry,
-        getToolRegistry: () => toolRegistry,
-        getTelemetryLogPromptsEnabled: () =>
-          config.getTelemetryLogPromptsEnabled(),
-        readExecutionPolicy: () =>
-          settingsRoot.settingsOwner.readToolExecutionPolicy(),
-        readGovernance: () =>
-          settingsRoot.settingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        getExcludeTools: () => config.getExcludeTools(),
-        getSessionId: () => config.getSessionId(),
-      },
+      streamTimeoutPolicy: chat.getStreamTimeoutPolicy(),
+      imagePayloadBudgetBytes: config.getImagePayloadBudgetBytes(),
+      streamModel: (message, tools, signal, promptId, modelParameters) =>
+        chat.sendMessageStream(
+          {
+            message,
+            modelParameters,
+            hookOwner: undefined,
+            config: { abortSignal: signal, tools },
+          },
+          promptId,
+        ),
+      executeToolCalls: (calls, controller, promptId, allowedToolNames) =>
+        processFunctionCalls(
+          calls,
+          controller,
+          promptId,
+          {
+            output,
+            outputConfig: OUTPUT_CONFIG,
+            subagentId: 'direct-issue3540-agent',
+            logger,
+            imagePayloadBudgetBytes: config.getImagePayloadBudgetBytes(),
+            executeToolCall: async () => {
+              throw new Error(
+                'Unexpected ordinary tool call in Hermes emitter test',
+              );
+            },
+          },
+          allowedToolNames,
+        ),
+      readTodoCompletionPrompt: async () => null,
     },
     () => undefined,
   );
@@ -138,6 +172,7 @@ describe('issue 3540 textual Hermes emitter rejection', () => {
   afterAll(() => {
     void vi.mock('@vybestack/llxprt-code-tools', () => toolsModule);
   });
+  const retainSubagentCleanup = installSubagentCleanup();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -145,7 +180,7 @@ describe('issue 3540 textual Hermes emitter rejection', () => {
   });
 
   it('rejects a Hermes emitter call with a null value without emitting', async () => {
-    const { output } = await runDirectNonInteractive([
+    const { output } = await runDirectNonInteractive(retainSubagentCleanup, [
       hermesEmission({
         emit_variable_name: 'alpha',
         emit_variable_value: null,
@@ -157,7 +192,7 @@ describe('issue 3540 textual Hermes emitter rejection', () => {
   });
 
   it('rejects a Hermes emitter call with missing arguments without emitting', async () => {
-    const { output } = await runDirectNonInteractive([
+    const { output } = await runDirectNonInteractive(retainSubagentCleanup, [
       hermesEmission({ emit_variable_name: 'alpha' }),
     ]);
 
@@ -166,7 +201,7 @@ describe('issue 3540 textual Hermes emitter rejection', () => {
   });
 
   it('still completes GOAL when a later Hermes call is well-formed', async () => {
-    const { output } = await runDirectNonInteractive([
+    const { output } = await runDirectNonInteractive(retainSubagentCleanup, [
       hermesEmission({
         emit_variable_name: 'alpha',
         emit_variable_value: null,
@@ -177,5 +212,11 @@ describe('issue 3540 textual Hermes emitter rejection', () => {
 
     expect(output.emitted_vars).toStrictEqual({ alpha: 'A', beta: 'B' });
     expect(output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
+  });
+});
+
+describe('module isolation', () => {
+  afterAll(() => {
+    void vi.mock('@vybestack/llxprt-code-tools', () => toolsModule);
   });
 });

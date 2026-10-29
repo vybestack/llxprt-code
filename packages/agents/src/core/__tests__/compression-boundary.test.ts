@@ -1,5 +1,11 @@
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { PerformCompressionResult } from '../turn.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
+import { createHistoryRuntimeFixture } from './history-runtime-fixture.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { compressionBackendFixture } from './support/compression-backend-fixture.js';
-import { createSessionPolicyFixture } from './session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -20,14 +26,7 @@ import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+
 import { adjustForToolCallBoundary } from '../../compression/utils.js';
 let fixture: ReturnType<typeof compressionBackendFixture>;
 function createHistory(): HistoryService {
@@ -76,59 +75,30 @@ function createAiTextMessage(text: string): IContent {
 }
 function buildRuntimeContext(
   historyService: HistoryService,
+  overrides: { topPreserveThreshold?: number } = {},
 ): AgentRuntimeContext {
-  const runtimeState = createAgentRuntimeState({
-    runtimeId: 'test-runtime',
-    provider: 'test-provider',
-    model: 'test-model',
-    sessionId: 'test-session',
-  });
-  const mockProviderAdapter = {
-    getActiveProvider: vi.fn(() => ({
-      name: 'test-provider',
-      generateChatCompletion: vi.fn(),
-    })),
-  };
-  const mockTelemetryAdapter = {
-    recordTokenUsage: vi.fn(),
-    recordEvent: vi.fn(),
-  };
-  const mockToolsView = {
-    getToolRegistry: vi.fn(() => undefined),
-  };
-  return createAgentRuntimeContext({
-    ...createSessionPolicyFixture(
-      createProviderRuntimeContext({
-        runtimeId: 'test-runtime',
-        settingsService: new SettingsService(),
-      }).settingsService,
-      createProviderRuntimeContext({
-        runtimeId: 'test-runtime',
-        settingsService: new SettingsService(),
-      }).runtimeId,
-    ),
-    state: runtimeState,
+  return createHistoryRuntimeFixture({
+    state: createAgentRuntimeState({
+      runtimeId: 'test-runtime',
+      provider: 'test-provider',
+      model: 'test-model',
+      sessionId: 'test-session',
+    }),
     history: historyService,
-    settings: {
+    policy: {
       compressionThreshold: 0.8,
       contextLimit: 131134,
       preserveThreshold: 0.2,
+      ...overrides,
       telemetry: { enabled: false, target: null },
     },
-    provider: mockProviderAdapter,
-    telemetry: mockTelemetryAdapter,
-    tools: mockToolsView,
-    providerRuntime: createProviderRuntimeContext({
-      runtimeId: 'test-runtime',
-      settingsService: new SettingsService(),
-    }),
   });
 }
 function buildMockProvider(summaryText: string): RuntimeProvider {
   return {
     name: 'test-provider',
     isDefault: true,
-    generateChatCompletion: vi.fn(async function* () {
+    generateChatCompletion: vi.fn(async function* (): AsyncGenerator<IContent> {
       yield {
         speaker: 'ai',
         blocks: [{ type: 'text', text: summaryText }],
@@ -233,7 +203,14 @@ async function legacyTest6() {
     legacySuite0_historyService.add(createToolResponseMessage(toolCallId));
   }
   const chat = new ChatSession(
-    legacySuite1_runtimeContext,
+    chatSessionPorts(legacySuite1_runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     legacySuite2_mockContentGenerator,
     {},
     [],
@@ -242,7 +219,6 @@ async function legacyTest6() {
     '<state_snapshot><overall_goal>Continuous tools</overall_goal></state_snapshot>';
   const mockProvider = buildMockProvider(summaryText);
   vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
-  vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
   const beforeCount = (await sampleCurated(legacySuite0_historyService)).length;
   await chat.performCompression('test-prompt-id');
   const afterCount = (await sampleCurated(legacySuite0_historyService)).length;
@@ -266,7 +242,14 @@ async function legacyTest8() {
   const curated = await sampleCurated(legacySuite0_historyService);
   expect(curated.length).toBe(202);
   const chat = new ChatSession(
-    legacySuite1_runtimeContext,
+    chatSessionPorts(legacySuite1_runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     legacySuite2_mockContentGenerator,
     {},
     [],
@@ -275,7 +258,6 @@ async function legacyTest8() {
     '<state_snapshot><overall_goal>Issue 982</overall_goal></state_snapshot>';
   const mockProvider = buildMockProvider(summaryText);
   vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
-  vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
   await chat.performCompression('test-prompt-id');
   const finalHistory = await sampleCurated(legacySuite0_historyService);
   // Should have compressed: fewer messages than 202
@@ -291,7 +273,14 @@ async function legacyTest9() {
     legacySuite0_historyService.add(createToolResponseMessage(id));
   }
   const chat = new ChatSession(
-    legacySuite1_runtimeContext,
+    chatSessionPorts(legacySuite1_runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     legacySuite2_mockContentGenerator,
     {},
     [],
@@ -300,7 +289,6 @@ async function legacyTest9() {
     '<state_snapshot><overall_goal>Edge case</overall_goal></state_snapshot>';
   const mockProvider = buildMockProvider(summaryText);
   vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
-  vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
   // Should not throw - small history may or may not compress, so assert
   // only that a valid result is produced rather than an exception.
   const result = await chat.performCompression('test-prompt-id');
@@ -315,7 +303,14 @@ const legacySuite4_observeCompressWhenContextHasToolDominatedHistory =
       legacySuite0_historyService.add(createToolResponseMessage(toolCallId));
     }
     const chat = new ChatSession(
-      legacySuite1_runtimeContext,
+      chatSessionPorts(legacySuite1_runtimeContext),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       legacySuite2_mockContentGenerator,
       {},
       [],
@@ -324,7 +319,6 @@ const legacySuite4_observeCompressWhenContextHasToolDominatedHistory =
       '<state_snapshot><overall_goal>Tool heavy</overall_goal></state_snapshot>';
     const mockProvider = buildMockProvider(summaryText);
     vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
-    vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
     const beforeCount = (await sampleCurated(legacySuite0_historyService))
       .length;
     await chat.performCompression('test-prompt-id');
@@ -346,7 +340,14 @@ const legacySuite5_observePreservedToolPairs = async () => {
     legacySuite0_historyService.add(createToolResponseMessage(toolCallId));
   }
   const chat = new ChatSession(
-    legacySuite1_runtimeContext,
+    chatSessionPorts(legacySuite1_runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     legacySuite2_mockContentGenerator,
     {},
     [],
@@ -355,7 +356,6 @@ const legacySuite5_observePreservedToolPairs = async () => {
     '<state_snapshot><overall_goal>Boundary preserve</overall_goal></state_snapshot>';
   const mockProvider = buildMockProvider(summaryText);
   vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
-  vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
   await chat.performCompression('test-prompt-id');
   const finalHistory = await sampleCurated(legacySuite0_historyService);
   // In the preserved sections (non-summary), tool calls should have matching responses
@@ -416,7 +416,14 @@ const legacySuite6_observeHandleEdgeCaseWhereSplitFallsInsideLongToolSequence =
     }
     const curated = await sampleCurated(legacySuite0_historyService);
     const chat = new ChatSession(
-      legacySuite1_runtimeContext,
+      chatSessionPorts(legacySuite1_runtimeContext),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       legacySuite2_mockContentGenerator,
       {},
       [],
@@ -425,7 +432,6 @@ const legacySuite6_observeHandleEdgeCaseWhereSplitFallsInsideLongToolSequence =
       '<state_snapshot><overall_goal>Long tool seq</overall_goal></state_snapshot>';
     const mockProvider = buildMockProvider(summaryText);
     vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
-    vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
     await chat.performCompression('test-prompt-id');
     const finalHistory = await sampleCurated(legacySuite0_historyService);
     const hasSummary = finalHistory.some((msg) =>

@@ -15,7 +15,6 @@
  * The hook accepts an injectable `fsOps` parameter so tests can avoid real I/O.
  */
 
-import type { CheckpointRuntime, StreamRuntime } from '../../cliUiRuntime.js';
 import { useEffect, useRef } from 'react';
 import path from 'path';
 import type { WorkspaceCheckpointOperations } from '@vybestack/llxprt-code-core';
@@ -33,6 +32,8 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import { getErrorMessage, isNodeError } from '@vybestack/llxprt-code-core';
 import type { TrackedToolCall } from '../useReactToolScheduler.js';
 
+type CheckpointHistoryReader = Agent['streamHistory'];
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 // ─── createToolCheckpoint ─────────────────────────────────────────────────────
@@ -44,7 +45,7 @@ import type { TrackedToolCall } from '../useReactToolScheduler.js';
  * @param toolCall - The tool call to checkpoint (replace/write_file).
  * @param checkpointDir - Directory to write the checkpoint file.
  * @param gitService - Git service for snapshot/commit hash resolution.
- * @param agent - Agent facade for fetching current chat history.
+ * @param readHistory - Bound read of the owning session's chat history.
  * @param history - Current UI history for checkpoint context.
  * @param onDebugMessage - Debug message callback.
  * @param fsOps - Injected filesystem operations (defaults to node:fs).
@@ -56,14 +57,14 @@ export async function createToolCheckpoint(
     WorkspaceCheckpointOperations,
     'createFileSnapshot' | 'getCurrentCommitHash'
   >,
-  agent: Pick<Agent, 'streamHistory'>,
+  readHistory: CheckpointHistoryReader,
   onDebugMessage: (message: string) => void,
   fsOps: FsOps = checkpointFs,
   signal?: AbortSignal,
 ): Promise<void> {
   signal?.throwIfAborted();
-  const filePath = toolCall.request.args['file_path'] as string;
-  if (!filePath) {
+  const filePath = toolCall.request.args['file_path'];
+  if (typeof filePath !== 'string' || filePath.length === 0) {
     onDebugMessage(
       `Skipping restorable tool call due to missing file_path: ${toolCall.request.name}`,
     );
@@ -103,7 +104,7 @@ export async function createToolCheckpoint(
     checkpointFilePath,
     streamPrettyCheckpointJson(
       {
-        clientHistory: new CheckpointHistoryArray(agent.streamHistory(signal)),
+        clientHistory: new CheckpointHistoryArray(readHistory(signal)),
         toolCall: {
           name: toolCall.request.name,
           args: toolCall.request.args,
@@ -133,21 +134,21 @@ function isRestorableToolCall(toolCall: TrackedToolCall): boolean {
 
 async function saveRestorableToolCalls(
   toolCalls: TrackedToolCall[],
-  checkpoint: Pick<CheckpointRuntime, 'getCheckpointingEnabled'>,
+  isCheckpointingEnabled: () => boolean,
   gitService:
     | Pick<
         WorkspaceCheckpointOperations,
         'createFileSnapshot' | 'getCurrentCommitHash'
       >
     | undefined,
-  agent: Pick<Agent, 'streamHistory'>,
-  checkpointDir: StreamRuntime['projectCheckpointsDir'],
+  readHistory: CheckpointHistoryReader,
+  checkpointDir: string,
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
   checkpointedCallIds?: Set<string>,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (!checkpoint.getCheckpointingEnabled()) return;
+  if (!isCheckpointingEnabled()) return;
 
   const restorableToolCalls = toolCalls.filter(
     (tc) =>
@@ -188,7 +189,7 @@ async function saveRestorableToolCalls(
         toolCall,
         checkpointDir,
         gitService,
-        agent,
+        readHistory,
         onDebugMessage,
         effectiveFsOps,
         signal,
@@ -208,7 +209,7 @@ async function saveRestorableToolCalls(
  * Runs the checkpoint persistence effect for restorable tool calls.
  *
  * @param toolCalls - All currently tracked tool calls.
- * @param runtime - StreamRuntime or bare CheckpointRuntime used for checkpoint enablement.
+ * @param isCheckpointingEnabled - Bound read of checkpoint enablement.
  * @param gitService - Git service (may be undefined if no project root).
  * @param history - Current UI history items.
  * @param agent - Agent facade for fetching chat history.
@@ -218,21 +219,20 @@ async function saveRestorableToolCalls(
  */
 export function useCheckpointPersistence(
   toolCalls: TrackedToolCall[],
-  runtime: StreamRuntime | Pick<CheckpointRuntime, 'getCheckpointingEnabled'>,
+  isCheckpointingEnabled: () => boolean,
   gitService:
     | Pick<
         WorkspaceCheckpointOperations,
         'createFileSnapshot' | 'getCurrentCommitHash'
       >
     | undefined,
-  agent: Pick<Agent, 'streamHistory'>,
-  checkpointDir: StreamRuntime['projectCheckpointsDir'],
+  readHistory: CheckpointHistoryReader,
+  checkpointDir: string,
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
 ): void {
   const checkpointedCallIdsRef = useRef<Set<string>>(new Set());
   const lifetime = useRef(new AbortController());
-  const checkpoint = 'checkpoint' in runtime ? runtime.checkpoint : runtime;
 
   useEffect(() => {
     lifetime.current = new AbortController();
@@ -251,9 +251,9 @@ export function useCheckpointPersistence(
 
     void saveRestorableToolCalls(
       toolCalls,
-      checkpoint,
+      isCheckpointingEnabled,
       gitService,
-      agent,
+      readHistory,
       checkpointDir,
       onDebugMessage,
       fsOps,
@@ -262,10 +262,10 @@ export function useCheckpointPersistence(
     );
   }, [
     toolCalls,
-    checkpoint,
+    isCheckpointingEnabled,
     onDebugMessage,
     gitService,
-    agent,
+    readHistory,
     checkpointDir,
     fsOps,
   ]);

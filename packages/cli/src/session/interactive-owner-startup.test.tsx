@@ -8,22 +8,21 @@ import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import {
-  Config,
+  type Config,
   getProjectHash,
   listSessions,
 } from '@vybestack/llxprt-code-core';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { LoadedSettings } from '../config/settings.js';
-import { setupOwnerSessionRecording } from '../cliSessionBootstrap.js';
-import { dispatchInteractiveOrNonInteractive } from './nonInteractiveSession.js';
 import {
-  __setRenderForTesting,
-  __resetInteractiveUIStateForTesting,
-} from './interactiveUI.js';
+  openRouteBPreflight,
+  type RouteBPreflight,
+} from '../../../agents/src/api/__tests__/helpers/route-b-preflight.js';
+import { useFakeResponsesReplay } from '../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
+import { createMockSettings } from '../__tests__/render.js';
+import { setupOwnerSessionRecording as setupOwnerSessionRecordingCore } from '../cliSessionBootstrap.js';
+import { dispatchInteractiveOrNonInteractive } from '../__tests__/session-dispatch-fixture.js';
+import { __setRenderForTesting } from './interactiveUI.js';
 import {
   __resetCleanupStateForTesting,
   registerCleanup,
@@ -31,36 +30,46 @@ import {
 } from '../utils/cleanup.js';
 import { AppWrapper } from '../ui/App.js';
 import { iContentToHistoryItems } from '../ui/utils/iContentToHistoryItems.js';
-import { listOwnerBrowserTargets } from '../ui/utils/ownerSessionUi.js';
 import { collectResumeRows } from '../__tests__/resumeRows.js';
 
-const fixture = fileURLToPath(
-  new URL(
-    '../../../agents/src/api/__tests__/fixtures/plain-text.jsonl',
-    import.meta.url,
-  ),
-);
-const settings = {
-  merged: { ui: { hideWindowTitle: true, unicode: 'auto' } },
-} as LoadedSettings;
+const settings = createMockSettings({
+  ui: { hideWindowTitle: true, unicode: 'auto' },
+});
+
+function setupOwnerSessionRecording(
+  config: Parameters<typeof setupOwnerSessionRecordingCore>[0],
+  agent: Agent,
+  argv: Parameters<typeof setupOwnerSessionRecordingCore>[3],
+  selection: Parameters<typeof setupOwnerSessionRecordingCore>[4],
+  warnings?: Parameters<typeof setupOwnerSessionRecordingCore>[5],
+) {
+  return setupOwnerSessionRecordingCore(
+    config,
+    agent.session,
+    agent.session.listBrowserTargetsDetailed.bind(agent.session),
+    argv,
+    selection,
+    warnings,
+  ).then(({ resumedBoot }) => resumedBoot);
+}
 
 describe('interactive CLI owner startup', () => {
   const roots: string[] = [];
   const agents: Agent[] = [];
+  const routes: RouteBPreflight[] = [];
   const oldHome = process.env.LLXPRT_CONFIG_HOME;
-  const oldFake = process.env.LLXPRT_FAKE_RESPONSES;
+  useFakeResponsesReplay('plain-text.jsonl');
   afterEach(async () => {
     __setRenderForTesting(null);
-    __resetInteractiveUIStateForTesting();
+
     await runExitCleanup();
     __resetCleanupStateForTesting();
     for (const agent of agents.splice(0)) await agent.dispose();
+    for (const route of routes.splice(0)) await route.close();
     for (const root of roots.splice(0))
       await rm(root, { recursive: true, force: true });
     if (oldHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
     else process.env.LLXPRT_CONFIG_HOME = oldHome;
-    if (oldFake === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = oldFake;
   });
 
   async function build(
@@ -70,49 +79,38 @@ describe('interactive CLI owner startup', () => {
     agent: Agent;
     config: Config;
     root: string;
-    runtimeSettings: { owner: SessionSettingsOwner; store: SettingsService };
+    runtimeSettings: RouteBPreflight['preflight'];
   }> {
     const directory =
       root ?? (await mkdtemp(join(tmpdir(), 'interactive-owner-')));
     if (root === undefined) roots.push(directory);
     process.env.LLXPRT_CONFIG_HOME = directory;
-    process.env.LLXPRT_FAKE_RESPONSES = fixture;
-    const id = `owner-${agents.length + 1}`;
-    const config = new Config({
-      cwd: directory,
-      targetDir: directory,
-      debugMode: false,
-      question: undefined,
-      userMemory: '',
-      sessionId: id,
-      model: 'fake-model',
-      provider: 'fake',
-      continueSession,
-      interactive: true,
+    const route = await openRouteBPreflight({
+      config: {
+        workingDir: directory,
+        sessionId: `owner-${agents.length + 1}`,
+        interactive: true,
+        settings: { continueSession },
+      },
     });
-    const store = new SettingsService();
-    const owner = new SessionSettingsOwner(store);
-    const runtimeSettings = { owner, store };
-    registerCleanup(async () => {
-      await owner.dispose();
-      await config.dispose();
-    });
-    const agent = await fromConfig({
-      config,
-      settingsService: store,
-      settingsOwner: owner,
-      activation: { provider: 'fake', model: 'fake-model' },
-    });
+    routes.push(route);
+    await route.prepare();
+    const agent = await route.createAgent();
     agents.push(agent);
     registerCleanup(() => agent.dispose());
-    return { agent, config, root: directory, runtimeSettings };
+    return {
+      agent,
+      config: route.config,
+      root: directory,
+      runtimeSettings: route.preflight,
+    };
   }
 
   async function renderOwner(
     config: Config,
     agent: Agent,
     history: Awaited<ReturnType<typeof setupOwnerSessionRecording>>,
-    runtimeSettings: { owner: SessionSettingsOwner; store: SettingsService },
+    runtimeSettings: RouteBPreflight['preflight'],
   ): Promise<React.ReactElement> {
     let tree: React.ReactElement | undefined;
     __setRenderForTesting((node) => {
@@ -140,15 +138,22 @@ describe('interactive CLI owner startup', () => {
     return tree;
   }
 
-  function appProps(tree: React.ReactElement): Record<string, unknown> {
+  function appProps(
+    tree: React.ReactElement,
+  ): React.ComponentProps<typeof AppWrapper> {
     const visit = (
       node: React.ReactNode,
-    ): Record<string, unknown> | undefined => {
-      if (!React.isValidElement(node)) return undefined;
-      if (node.type === AppWrapper)
-        return node.props as Record<string, unknown>;
-      const props = node.props as { children?: React.ReactNode };
-      return React.Children.toArray(props.children)
+    ): React.ComponentProps<typeof AppWrapper> | undefined => {
+      if (
+        !React.isValidElement<
+          React.ComponentProps<typeof AppWrapper> & {
+            children?: React.ReactNode;
+          }
+        >(node)
+      )
+        return undefined;
+      if (node.type === AppWrapper) return node.props;
+      return React.Children.toArray(node.props.children)
         .map(visit)
         .find((value) => value !== undefined);
     };
@@ -181,14 +186,7 @@ describe('interactive CLI owner startup', () => {
       { listSessions: false, deleteSession: undefined },
       null,
     );
-    const props = appProps(
-      await renderOwner(config, agent, history, runtimeSettings),
-    );
-    expect(props.agent).toBe(agent);
-    expect(props.recordingOwner).toBe('agent');
-    expect(props).not.toHaveProperty('recordingIntegration');
-    expect(props).not.toHaveProperty('initialRecordingService');
-    expect(props).not.toHaveProperty('initialLockHandle');
+    await renderOwner(config, agent, history, runtimeSettings);
     expect(await locks(config)).toHaveLength(1);
     for await (const _event of agent.stream('fresh-interactive-turn')) {
       /* consume */
@@ -197,13 +195,53 @@ describe('interactive CLI owner startup', () => {
     if (!path) throw new Error('No recording path');
     expect(await readFile(path, 'utf8')).toContain('fresh-interactive-turn');
     await agent.session.setRecording({ enabled: false });
-    expect(
-      appProps(await renderOwner(config, agent, null, runtimeSettings))
-        .recordingOwner,
-    ).toBe('agent');
+    await renderOwner(config, agent, null, runtimeSettings);
     expect(agent.session.getRecording().enabled).toBe(false);
     await runExitCleanup();
     expect(await locks(config)).toHaveLength(0);
+  }, 30000);
+
+  it('disposes only the rendered owner through the input shutdown operation', async () => {
+    const first = await build();
+    const second = await build();
+    const history = await setupOwnerSessionRecording(
+      first.config,
+      first.agent,
+      { listSessions: false, deleteSession: undefined },
+      null,
+    );
+    await setupOwnerSessionRecording(
+      second.config,
+      second.agent,
+      { listSessions: false, deleteSession: undefined },
+      null,
+    );
+    const props = appProps(
+      await renderOwner(
+        first.config,
+        first.agent,
+        history,
+        first.runtimeSettings,
+      ),
+    );
+    expect(await locks(first.config)).toHaveLength(1);
+    expect(await locks(second.config)).toHaveLength(1);
+    const disposeInput = props.disposeInput;
+    if (typeof disposeInput !== 'function')
+      throw new Error('Missing input shutdown');
+    await disposeInput();
+    expect(await locks(first.config)).toHaveLength(0);
+    expect(await locks(second.config)).toHaveLength(1);
+    for await (const _event of second.agent.stream(
+      'surviving-interactive-owner',
+    )) {
+      /* consume */
+    }
+    const path = second.agent.session.getRecording().path;
+    if (!path) throw new Error('No sibling recording path');
+    expect(await readFile(path, 'utf8')).toContain(
+      'surviving-interactive-owner',
+    );
   }, 30000);
 
   it('replays a resumed session into the same Agent and continues writing to its original JSONL', async () => {
@@ -220,7 +258,7 @@ describe('interactive CLI owner startup', () => {
     const recording = source.agent.session.getRecording();
     const path = recording.path;
     await source.agent.session.setRecording({ enabled: false });
-    const targets = await listOwnerBrowserTargets(source.agent);
+    const targets = await source.agent.session.listBrowserTargets();
     const persisted = targets.find(
       (target) => target.kind === 'session' && target.session.filePath === path,
     );
@@ -241,7 +279,10 @@ describe('interactive CLI owner startup', () => {
         resumed.runtimeSettings,
       ),
     );
-    expect(props.agent).toBe(resumed.agent);
+    expect(props.readAgentRecordingPath()).toBe(
+      resumed.agent.session.getRecording().path,
+    );
+    if (history === null) throw new Error('Missing resumed journal boot');
     expect(props.resumedBoot).toBe(history);
     expect(
       (await resumedItems(history)).some(
@@ -251,15 +292,13 @@ describe('interactive CLI owner startup', () => {
     ).toBe(true);
     expect(resumed.agent.session.getRecording().path).toBe(path);
     expect(
-      (await listOwnerBrowserTargets(resumed.agent)).some(
+      (await resumed.agent.session.listBrowserTargets()).some(
         (target) =>
           target.kind === 'session' && target.session.filePath === path,
       ),
     ).toBe(true);
     expect(await locks(resumed.config)).toHaveLength(1);
-    for await (const _event of resumed.agent.stream(
-      'resume-interactive-continued',
-    )) {
+    for await (const _event of props.stream('resume-interactive-continued')) {
       /* consume */
     }
     if (!path) throw new Error('No recording path');
@@ -292,6 +331,7 @@ describe('interactive CLI owner startup', () => {
     const props = appProps(
       await renderOwner(fork.config, fork.agent, history, fork.runtimeSettings),
     );
+    if (history === null) throw new Error('Missing resumed journal boot');
     expect(props.resumedBoot).toBe(history);
     expect(
       (await resumedItems(history)).some(

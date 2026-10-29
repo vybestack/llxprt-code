@@ -19,7 +19,12 @@ async function highDensityRegression(size: number): Promise<number> {
       });
       const handler = new CompressionHandler(
         runtime,
+        undefined,
         history,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         {},
         () => {
           throw new Error('High-density compression must not call an LLM');

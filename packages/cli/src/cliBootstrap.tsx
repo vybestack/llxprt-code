@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import { parseArguments } from './config/cliArgParser.js';
 import { parseBootstrapArgs } from './config/profileBootstrap.js';
 import { coerceDebugFlag } from './config/yargsOptions.js';
@@ -26,7 +25,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import {
   debugLogger,
-  ConfigurationManager,
+  type ConfigurationManager,
   DebugLogger,
 } from '@vybestack/llxprt-code-telemetry';
 import { runExitCleanup } from './utils/cleanup.js';
@@ -48,7 +47,9 @@ export function validateDnsResolutionOrder(
   return defaultValue;
 }
 
-export function configureEarlyDebugLogging(): void {
+export function configureEarlyDebugLogging(
+  configuration: Pick<ConfigurationManager, 'setCliConfig'>,
+): void {
   const bootstrapParsed = parseBootstrapArgs();
   const debugArg = coerceDebugFlag(
     bootstrapParsed.bootstrapArgs.debug ?? undefined,
@@ -58,7 +59,7 @@ export function configureEarlyDebugLogging(): void {
     return;
   }
   const namespaces = typeof debugArg === 'string' ? debugArg : 'llxprt:*';
-  ConfigurationManager.getInstance().setCliConfig({
+  configuration.setCliConfig({
     enabled: true,
     namespaces: namespaces
       .split(',')
@@ -138,10 +139,14 @@ export async function maybeRelaunchForMemory(
 }
 
 /** Register per-tool dynamic settings once Config is fully initialized. */
-export function registerDynamicToolSettings(tools: Agent['tools']): void {
+export function registerDynamicToolSettings(
+  describeToolConfiguration: NonNullable<
+    Parameters<typeof generateDynamicToolSettings>[0]
+  >['describeToolConfiguration'],
+): void {
   try {
     const dynamicToolSettings = generateDynamicToolSettings({
-      describeToolConfiguration: () => tools.describeConfiguration(),
+      describeToolConfiguration,
     });
     const fullDynamicSettings: Record<string, SettingDefinition> = {};
     for (const [toolName, definition] of Object.entries(dynamicToolSettings)) {

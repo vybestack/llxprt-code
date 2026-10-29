@@ -1,3 +1,7 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import { finishClientDisposal } from './client-disposal.js';
+import { AuxiliaryWork } from './auxiliary-work.js';
+import * as modelNotifications from './client-model-subscriptions.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -21,7 +25,7 @@ import {
   assertSessionClientProvider,
   assertClientRuntimeState,
 } from './client-tool-selection.js';
-import { releaseClientModelSubscriptions } from './client-model-subscriptions.js';
+
 import { publishClientPromptTokens } from './client-telemetry.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderManager.js';
@@ -54,11 +58,9 @@ import {
 
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  createContentGenerator,
   type ContentGenerator,
   type ContentGeneratorConfig,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import { restoreClientHistory } from './clientRestoreHistory.js';
 import type { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
@@ -67,15 +69,13 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import { BaseLLMClient } from './baseLlmClient.js';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
+import type { SubscribeModelChanges } from '@vybestack/llxprt-code-core/utils/events.js';
 export {
   isThinkingSupported,
   findCompressSplitPoint,
 } from './clientHelpers.js';
 import {
+  initializeClientContentGenerator,
   generateJson as clientLlmGenerateJson,
   generateContent as clientLlmGenerateContent,
   generateEmbedding as clientLlmGenerateEmbedding,
@@ -188,10 +188,10 @@ export class AgentClient
     assertSessionClientProvider(this.selectionManager, manager);
   }
 
-  private providerFileLifecycle: object | undefined;
+  private providerFileLifecycle: ProviderFileLifecycle | undefined;
   private composeRetryOperations: CreateChatSessionDeps['composeRetryOperations'];
   bindProviderFiles(
-    lifecycle: object,
+    lifecycle: ProviderFileLifecycle,
     composeRetryOperations: NonNullable<
       CreateChatSessionDeps['composeRetryOperations']
     >,
@@ -238,11 +238,6 @@ export class AgentClient
 
     void this._historyService;
 
-    const proxyUrl = runtimeState.proxyUrl;
-    if (proxyUrl) {
-      setGlobalDispatcher(new ProxyAgent(proxyUrl));
-    }
-
     this.embeddingModel = config.getEmbeddingModel() ?? runtimeState.model;
     this.loopDetector = this.createLoopDetector(config);
     this.lastPromptId = runtimeState.sessionId;
@@ -268,12 +263,6 @@ export class AgentClient
 
     this.messageStreamOrchestrator = new MessageStreamOrchestrator(
       this._buildOrchestratorDeps(createTurn),
-    );
-
-    coreEvents.on(CoreEvent.ModelChanged, this.handleModelChanged);
-    coreEvents.on(
-      CoreEvent.ModelProfileChanged,
-      this.handleModelProfileChanged,
     );
   }
 
@@ -321,6 +310,18 @@ export class AgentClient
     };
   }
 
+  private releaseModelNotifications: (() => void) | undefined;
+
+  bindModelNotifications(subscribe: SubscribeModelChanges): void {
+    this.releaseModelNotifications = modelNotifications.subscribe(
+      subscribe,
+      this.handleModelChanged,
+      this.handleModelProfileChanged,
+      this.releaseModelNotifications,
+      () => (this.releaseModelNotifications = undefined),
+    );
+  }
+
   private handleModelChanged = () => {
     this.currentSequenceModel = null;
   };
@@ -344,34 +345,42 @@ export class AgentClient
     this._baseLlmClient = undefined;
   }
 
-  async dispose(): Promise<void> {
-    const failures = releaseClientModelSubscriptions(
-      this.handleModelChanged,
-      this.handleModelProfileChanged,
+  private readonly auxiliary = new AuxiliaryWork();
+
+  dispose(): Promise<void> {
+    return finishClientDisposal(
+      this.auxiliary.close(),
+      () => modelNotifications.release(this.releaseModelNotifications),
+      () => this.releaseJournalForDisposal(),
+      () => this.historyAdmissions.release(this.historyAdmissions.all),
+      () => {
+        if (this.historyAdmissions.all.length === 0)
+          this._deferredHistoryAdmission = undefined;
+      },
     );
-    if (this.chat !== undefined) {
-      try {
-        await clearClientHistoryForDisposal(this.chat, true);
-        this.chat = undefined;
-      } catch (error: unknown) {
-        failures.push(error);
-      }
-    }
-    try {
-      await releaseDeferredSource(this.deferredHistory);
-      await this._storedHistoryService?.dispose();
-    } catch (error) {
-      failures.push(error);
-    }
-    failures.push(
-      ...(await this.historyAdmissions.release(this.historyAdmissions.all)),
+  }
+
+  private async releaseJournalForDisposal(): Promise<void> {
+    const results = await Promise.allSettled([
+      Promise.resolve().then(async () => {
+        if (this.chat !== undefined) {
+          await clearClientHistoryForDisposal(this.chat, true);
+          this.chat = undefined;
+        }
+      }),
+      Promise.resolve().then(async () => {
+        await releaseDeferredSource(this.deferredHistory);
+        await this._storedHistoryService?.dispose();
+      }),
+    ]);
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
     );
-    if (failures.length === 0 && this.historyAdmissions.all.length === 0) {
-      this._deferredHistoryAdmission = undefined;
-    }
-    if (failures.length > 0) {
-      throw new AggregateError(failures, 'Agent client disposal failed');
-    }
+    if (failures.length > 0)
+      throw new AggregateError(
+        failures,
+        'Agent client journal disposal failed',
+      );
   }
 
   async initialize(
@@ -410,16 +419,9 @@ export class AgentClient
     if (this.isInitialized()) {
       return;
     }
-    const contentGenConfig = this.sessionContentGeneratorConfig;
-    if (!contentGenConfig) {
-      throw new Error(
-        'Content generator config not initialized. Initialize the session client owner first.',
-      );
-    }
-    this.contentGenerator = await createContentGenerator(
-      contentGenConfig,
+    this.contentGenerator = await initializeClientContentGenerator(
+      this.sessionContentGeneratorConfig,
       this.config,
-      this.config.getSessionId(),
     );
 
     // Don't create chat here - that causes infinite recursion with startChat()
@@ -641,10 +643,13 @@ export class AgentClient
 
   /**
    * Updates the UI telemetry service with the current prompt token count from chat.
-   * This decouples ChatSession from directly knowing about uiTelemetryService.
+   * This decouples ChatSession from directly knowing about session metrics.
    */
   private updateTelemetryTokenCount(): void {
-    publishClientPromptTokens(this.chat?.getLastPromptTokenCount());
+    publishClientPromptTokens(
+      this.chat?.getLastPromptTokenCount(),
+      this.requireTelemetry().localMetrics,
+    );
   }
 
   async resetChat(
@@ -745,8 +750,11 @@ export class AgentClient
     promptId: string,
     execution?: AgentChatRecordingExecution,
   ): Promise<ModelOutput> {
+    params.config?.abortSignal?.throwIfAborted();
     await this.lazyInitialize();
-    this.chat ??= await this.startChat([]);
+    params.config?.abortSignal?.throwIfAborted();
+    this.chat ??= await this.startChat();
+    params.config?.abortSignal?.throwIfAborted();
     return this.getChat().generateDirectMessage(params, promptId, execution);
   }
 
@@ -832,24 +840,26 @@ export class AgentClient
     model: string,
     config: ModelGenerationSettings = {},
   ): Promise<Record<string, unknown>> {
-    await this.lazyInitialize();
-    return clientLlmGenerateJson(
-      this.config,
-      this.readMcpInstructions,
-      this.getContentGenerator(),
-      this.getBaseLlmClient(),
-      contents,
-      schema,
-      abortSignal,
-      model,
-      { ...this.generateContentConfig, ...config },
-      this.lastPromptId ?? this.config.getSessionId(),
-      this.runtimeState.provider,
-      getEnabledToolNamesForPrompt(this.tools),
-      requireInstructionReads(this.instructions),
-      this.requireRuntimeSettings().promptPolicy ?? {},
-      this.subagentDefinitions,
-    );
+    return this.auxiliary.run(async (signal) => {
+      await this.lazyInitialize();
+      return clientLlmGenerateJson(
+        this.config,
+        this.readMcpInstructions,
+        this.getContentGenerator(),
+        this.getBaseLlmClient(),
+        contents,
+        schema,
+        signal,
+        model,
+        { ...this.generateContentConfig, ...config },
+        this.lastPromptId ?? this.config.getSessionId(),
+        this.runtimeState.provider,
+        getEnabledToolNamesForPrompt(this.tools),
+        requireInstructionReads(this.instructions),
+        this.requireRuntimeSettings().promptPolicy ?? {},
+        this.subagentDefinitions,
+      );
+    }, abortSignal);
   }
 
   async generateContent(
@@ -877,12 +887,18 @@ export class AgentClient
     );
   }
 
-  async generateEmbedding(texts: string[]): Promise<number[][]> {
-    await this.lazyInitialize();
-    return clientLlmGenerateEmbedding(
-      this.getBaseLlmClient(),
-      texts,
-      this.embeddingModel,
-    );
+  async generateEmbedding(
+    texts: string[],
+    abortSignal?: AbortSignal,
+  ): Promise<number[][]> {
+    return this.auxiliary.run(async (signal) => {
+      await this.lazyInitialize();
+      return clientLlmGenerateEmbedding(
+        this.getBaseLlmClient(),
+        texts,
+        this.embeddingModel,
+        signal,
+      );
+    }, abortSignal);
   }
 }

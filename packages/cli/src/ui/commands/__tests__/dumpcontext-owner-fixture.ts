@@ -3,11 +3,11 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { CommandContext } from '../types.js';
+import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
-import { getProviderDumpMetadata } from '../../../runtime/providerInspection.js';
+import { getProviderDumpMetadata } from '@vybestack/llxprt-code-agents';
 export function bindDumpManager(
-  context: CommandContext,
+  context: CommandOwnerFixture,
   runtimeApi: () => Record<string, unknown>,
   manager: () =>
     | {

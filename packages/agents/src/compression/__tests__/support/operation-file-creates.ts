@@ -1,7 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { spyOn } from 'bun:test';
+import { afterEach, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import * as promises from 'node:fs/promises';
+
+const activeRestorations = new Set<() => void>();
+const activeActions = new Set<Promise<void>>();
+afterEach(async () => {
+  try {
+    await Promise.allSettled(activeActions);
+  } finally {
+    for (const restore of activeRestorations) restore();
+  }
+}, 60000);
 
 export interface OperationFileCreates {
   readonly directories: string[];
@@ -125,9 +135,24 @@ export async function operationFileCreates(
     callback: fs.open,
   };
   const spies = creationSpies();
+  const restore = (): void => {
+    if (!activeRestorations.delete(restore)) return;
+    for (const spy of [
+      ...spies.directories,
+      ...spies.writes,
+      spies.openSync,
+      spies.open,
+      spies.callbackOpen,
+    ])
+      spy.mockRestore();
+  };
+  activeRestorations.add(restore);
+  let work: Promise<void> | undefined;
   try {
     if (deny) denyCreation(spies, originals);
-    await action();
+    work = action();
+    activeActions.add(work);
+    await work;
     return {
       directories: spies.directories.flatMap((spy) =>
         spy.mock.calls.map(([path]) => String(path)),
@@ -142,13 +167,7 @@ export async function operationFileCreates(
       ].map(([path]) => String(path)),
     };
   } finally {
-    for (const spy of [
-      ...spies.directories,
-      ...spies.writes,
-      spies.openSync,
-      spies.open,
-      spies.callbackOpen,
-    ])
-      spy.mockRestore();
+    if (work !== undefined) activeActions.delete(work);
+    restore();
   }
 }

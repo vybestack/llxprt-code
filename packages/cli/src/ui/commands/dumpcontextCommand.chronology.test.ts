@@ -8,10 +8,13 @@
  * to stay byte-for-byte what the provider receives, because providers reject
  * unknown fields with HTTP 400.
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
+import type { ChronologyTraceEntry } from '@vybestack/llxprt-code-core';
 import { vi, describe, it, expect, type Mock } from 'bun:test';
-import { dumpcontextCommand } from './dumpcontextCommand.js';
-import { type CommandContext } from './types.js';
+import { createDumpcontextCommand } from './dumpcontextCommand.js';
+import { bindDumpcontextCommand } from './dumpcontextCommandHost.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import {
   snapshotFixture,
@@ -34,12 +37,7 @@ void vi.mock('@vybestack/llxprt-code-providers', () => ({
 
 import { dumpRequestContext } from '@vybestack/llxprt-code-providers';
 
-import { assertDefined } from '../../__tests__/assertions.js';
-
-const dumpcontextAction = dumpcontextCommand.action;
-assertDefined(dumpcontextAction);
-
-const TRACE = [
+const TRACE: ChronologyTraceEntry[] = [
   {
     seq: 1,
     userTurn: 1,
@@ -53,7 +51,7 @@ const TRACE = [
   },
 ];
 
-function contextWithTrace(): CommandContext {
+function contextWithTrace(): CommandOwnerFixture {
   const historyService = {
     streamRawHistory: () =>
       fixtureRows([
@@ -68,28 +66,41 @@ function contextWithTrace(): CommandContext {
   const context = createMockCommandContext({
     services: {
       agent: {
-        get agentClient() {
-          return vi.fn().mockReturnValue({
-            getHistoryService: vi.fn().mockReturnValue(historyService),
-          })();
+        session: {
+          openDumpSnapshot: () => historyService.openDumpSnapshot(),
         },
       },
-      config: {} as unknown as CommandContext['services']['config'],
+      config: {} as unknown as CommandOwnerFixture['services']['config'],
     },
   });
   Object.defineProperty(context, 'runtimeApi', {
     get: () => ({
       getProviderDumpMetadata: () => ({ providerName: 'anthropic' }),
+      getSessionSetting: () => 'off',
+      setSessionSetting: vi.fn(),
     }),
   });
   return context;
 }
 
-// Declared as a const arrow (not a hoisted function declaration) so the
-// assertDefined narrowing of dumpcontextAction above applies inside the body.
 const dumpAndCaptureCall = async (): Promise<unknown[]> => {
   (dumpRequestContext as Mock<typeof dumpRequestContext>).mockClear();
-  await dumpcontextAction(contextWithTrace(), 'now');
+  const context = contextWithTrace();
+  const command = createDumpcontextCommand(
+    bindDumpcontextCommand({
+      readMode: () => context.runtimeApi.getSessionSetting('dumpcontext'),
+      writeMode: (mode) =>
+        context.runtimeApi.setSessionSetting('dumpcontext', mode),
+      readHistory: async () =>
+        context.services.agent?.session.openDumpSnapshot() ?? null,
+      readProvider: () => context.runtimeApi.getProviderDumpMetadata(),
+      readOutputSettings: () => ({}),
+    }),
+  );
+  const action = command.action;
+  if (action === undefined)
+    throw new Error('Dumpcontext action is unavailable');
+  await action(context, 'now');
   return (dumpRequestContext as Mock<typeof dumpRequestContext>).mock.calls[0];
 };
 

@@ -1,3 +1,5 @@
+import type { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+let metricSource: UiTelemetryService;
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -28,7 +30,6 @@ import {
   installZeroCountGenerator,
 } from './__tests__/support/client-send-stream-test-helpers.js';
 import { AgentEventType } from './turn.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import {
   fromAsync,
@@ -143,7 +144,7 @@ void vi.mock('@vybestack/llxprt-code-tools', () => ({
   ...actual,
   LocalTodoStore: mockTodoStoreConstructor,
 }));
-const __actual = { ...(await import('./turn')) };
+const __actual = { ...(await import('./turn.js')) };
 void vi.mock('./turn', () => {
   const result = __actual as
     | typeof import('./turn.js')
@@ -219,12 +220,6 @@ void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
     ),
   };
 });
-void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
-  uiTelemetryService: {
-    setLastPromptTokenCount: vi.fn(),
-    getLastPromptTokenCount: vi.fn(),
-  },
-}));
 
 let client: AgentClient;
 
@@ -335,6 +330,8 @@ describe('AgentClient (client.ts)', () => {
       mockEmbedContentFn,
     });
     client = ctx.client;
+    metricSource = ctx.metrics;
+    overflowCases.bindOverflowMetrics(metricSource);
 
     mockTodoStoreConstructor.mockImplementation(() => ({
       readTodos: todoStoreReadMock,
@@ -356,7 +353,6 @@ async function testShouldDeferOverflowDecisionsToFinalizedProviderEnforcement1()
   const { events, mockChat } =
     await overflowCases.testShouldDeferOverflowDecisionsToFinalizedProviderEnforcement1(
       client,
-      mockTurnRunFn,
     );
   // Assert
   expect(events).not.toContainEqual(
@@ -454,11 +450,7 @@ async function testShouldNotInvokeTheLegacyClientTokenizerDuringPreflightWhenIt7
   const MOCKED_TOKEN_LIMIT = 1000;
   (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(MOCKED_TOKEN_LIMIT);
   const lastPromptTokenCount = 0;
-  (
-    uiTelemetryService.getLastPromptTokenCount as Mock<
-      typeof uiTelemetryService.getLastPromptTokenCount
-    >
-  ).mockReturnValue(lastPromptTokenCount);
+  metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
   installOverflowMockChat(client, lastPromptTokenCount, {
     estimatePendingTokens: vi
@@ -496,11 +488,7 @@ async function testShouldNotLetInlineDataFileDataBinaryPayloadsInflateThePrefli8
   const MOCKED_TOKEN_LIMIT = 1000;
   (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(MOCKED_TOKEN_LIMIT);
   const lastPromptTokenCount = 0;
-  (
-    uiTelemetryService.getLastPromptTokenCount as Mock<
-      typeof uiTelemetryService.getLastPromptTokenCount
-    >
-  ).mockReturnValue(lastPromptTokenCount);
+  metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
   installOverflowMockChat(client, lastPromptTokenCount);
 
@@ -538,11 +526,7 @@ async function testShouldDeferStickyModelLimitEnforcementToTheFinalizedProvider9
   client['currentSequenceModel'] = 'gemini-1.5-flash';
   (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(STICKY_MODEL_LIMIT);
   const lastPromptTokenCount = 900;
-  (
-    uiTelemetryService.getLastPromptTokenCount as Mock<
-      typeof uiTelemetryService.getLastPromptTokenCount
-    >
-  ).mockReturnValue(lastPromptTokenCount);
+  metricSource.setLastPromptTokenCount(lastPromptTokenCount);
   const mockChat = installOverflowMockChat(client, lastPromptTokenCount);
 
   installZeroCountGenerator(client);
@@ -638,7 +622,7 @@ async function testShouldRecursivelyCallSendMessageStreamWithPleaseContinueWhen1
 
   installOverflowMockChat(client, 0);
 
-  const initialRequest = [{ type: 'text', text: 'Hi' }];
+  const initialRequest: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
   const promptId = 'prompt-id-invalid-stream';
   const signal = new AbortController().signal;
 
@@ -704,7 +688,7 @@ async function testShouldNotRecursivelyCallSendMessageStreamWithPleaseContinueW1
 
   installOverflowMockChat(client, 0);
 
-  const initialRequest = [{ type: 'text', text: 'Hi' }];
+  const initialRequest: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
   const promptId = 'prompt-id-invalid-stream';
   const signal = new AbortController().signal;
 
@@ -780,7 +764,7 @@ async function testShouldStopRecursingAfterOneRetryWhenInvalidStreamEventsAreRe1
 
   installOverflowMockChat(client, 0);
 
-  const initialRequest = [{ type: 'text', text: 'Hi' }];
+  const initialRequest: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
   const promptId = 'prompt-id-infinite-invalid-stream';
   const signal = new AbortController().signal;
 

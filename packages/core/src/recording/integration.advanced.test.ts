@@ -1,3 +1,4 @@
+import { versionOf } from '../journal/version.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { describe, expect, it } from 'bun:test';
@@ -34,7 +35,7 @@ function generatedRows(prefix: string, count: number): IContent[] {
 
 function config(
   chatsDir: string,
-  sessionId = crypto.randomUUID(),
+  sessionId: string = crypto.randomUUID(),
 ): Parameters<typeof JournalRecordingService.create>[0] {
   return {
     sessionId,
@@ -70,8 +71,9 @@ async function record(
 async function assertMonotonic(file: string): Promise<void> {
   const reader = await openJournalReadOnly(file);
   try {
-    let current = reader.trailer;
-    if (current === undefined) throw new Error('Missing committed trailer');
+    const trailer = reader.trailer;
+    if (trailer === undefined) throw new Error('Missing committed trailer');
+    let current = versionOf(trailer);
     while (current.parent !== 0) {
       const parent = await readVersionAt(reader, current.parent);
       expect(current.commitSeq).toBeGreaterThan(parent.commitSeq);

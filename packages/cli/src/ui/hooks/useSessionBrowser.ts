@@ -15,11 +15,12 @@
 
 import type {
   ContinueTarget,
-  LocalMediaStore,
-  SessionRecordingPort,
   SessionSummary,
 } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type {
+  BrowserCatalogReader,
+  BrowserTargetDeleter,
+} from './browserCatalogHost.js';
 import type { Key } from './useKeypress.js';
 import { useSessionBrowserController } from './useSessionBrowserHelpers.js';
 
@@ -63,12 +64,8 @@ export interface UseSessionBrowserProps {
     | { ok: true; history?: unknown; metadata?: unknown; warnings?: unknown }
     | { ok: false; error: string }
   >;
-  /** Explicit owner branch. The raw recording remains attached unless selected. */
-  ownerAgent?: Agent;
-  /** Active recording, used to tombstone checkpoints in the current session. */
-  activeRecording?: SessionRecordingPort | null;
-  /** Project store used to validate references during discovery. */
-  mediaStore?: LocalMediaStore;
+  readCatalog: BrowserCatalogReader;
+  deleteTarget: BrowserTargetDeleter;
   /** Callback to close the browser */
   onClose: () => void;
   /** Whether there's an active conversation that would be abandoned */

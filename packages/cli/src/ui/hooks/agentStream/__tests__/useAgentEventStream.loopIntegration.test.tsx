@@ -5,15 +5,18 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { act } from 'react';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { openRouteAAgent } from '../../../../../../agents/src/api/__tests__/helpers/route-a-agent.js';
+import { useFakeResponsesReplay } from '../../../../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
+import { createGatedEchoMcp } from '../../../../../../agents/src/api/__tests__/helpers/gated-echo-mcp.js';
+import { awaitMcpDiscoveryReady } from '../../../../../../agents/src/api/__tests__/helpers/mcp-discovery-ready.js';
+import { agentStreamOperations } from './helpers/agentStreamOperations.js';
 import {
   PolicyDecision,
   ToolConfirmationOutcome,
   type IContent,
   type ToolCall,
 } from '@vybestack/llxprt-code-core';
-import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
-import { buildCliStyleConfig } from '../../../../../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
 import { renderHook } from '../../../../__tests__/render.js';
 import { readJournalItems } from '../../../stores/turn/journal-turn-test-helpers.js';
 import { useAgentEventStream } from '../useAgentEventStream.js';
@@ -21,7 +24,7 @@ import { gate, scriptProvider } from './journal-provider-test-helpers.js';
 import { ToolCallStatus } from '../../../types.js';
 
 type LoopFixture = {
-  agent: Awaited<ReturnType<typeof fromConfig>>;
+  agent: Agent;
   state: () => readonly ToolCall[];
   awaitApproval(): Promise<void>;
   run(signal?: AbortSignal): Promise<void>;
@@ -32,45 +35,32 @@ async function withLoop(
   decision: PolicyDecision,
   run: (fixture: LoopFixture) => Promise<void>,
 ): Promise<void> {
-  const built = await buildCliStyleConfig('plain-text.jsonl', {
-    folderTrust: true,
-    telemetry: { enabled: false },
-    recording: { enabled: false },
-  });
-  built.policyOwner.session.confirmation.addRule({
+  const mcp = await createGatedEchoMcp({
     toolName: 'echo_tool',
-    decision,
-    priority: 1000,
+    outputPrefix: 'echoed display',
+    trust: decision === PolicyDecision.ALLOW,
   });
-  const tool = new MockTool({
-    name: 'echo_tool',
-    shouldConfirmExecute: async () => ({
-      type: 'info',
-      title: 'Echo',
-      prompt: 'Run echo?',
-      onConfirm: async () => {},
-    }),
-    execute: async () => ({
-      llmContent: 'echoed result',
-      returnDisplay: 'echoed display',
-    }),
+  const route = await openRouteAAgent({
+    config: {
+      interactive: true,
+      folderTrust: true,
+      mcpServers: mcp.mcpServers,
+      recording: { enabled: false },
+      policy: {
+        rules: [{ toolName: 'echo__echo_tool', decision, priority: 1000 }],
+      },
+    },
   });
-  const agent = await fromConfig({
-    settingsService: built.settingsService,
-    prepareSessionTools: (_config, _bus, tools) => tools.registerTool(tool),
-    agentClient: built.agentClient,
-    providerManager: built.providerManager,
-    config: built.config,
-    messageBus: built.messageBus,
-    mcpRuntime: built.mcpRuntime,
-  });
-  await agent.agentClient.startChat();
+  const agent = route.agent;
+  await awaitMcpDiscoveryReady(agent);
+  await mcp.release();
   await agent.session.setRecording({ enabled: true });
+  const operations = agentStreamOperations(agent);
   let calls: readonly ToolCall[] = [];
   const approval = gate();
   const rendered = renderHook(() =>
     useAgentEventStream({
-      agent,
+      ...operations,
       addItem: () => {
         throw new Error('Duplicate CLI transcript write');
       },
@@ -97,9 +87,8 @@ async function withLoop(
     });
   } finally {
     rendered.unmount();
-    await agent.dispose();
-    await built.config.dispose();
-    await built.cleanup();
+    await route.close();
+    await mcp.close();
   }
 }
 
@@ -107,7 +96,12 @@ const request: IContent = {
   speaker: 'ai',
   blocks: [
     { type: 'text', text: 'Before the tool' },
-    { type: 'tool_call', id: 'call-1', name: 'echo_tool', parameters: {} },
+    {
+      type: 'tool_call',
+      id: 'call-1',
+      name: 'mcp__echo__echo_tool',
+      parameters: { invocation: 'result' },
+    },
   ],
 };
 const answer: IContent = {
@@ -145,7 +139,7 @@ async function assertCompletedJournal(fixture: LoopFixture): Promise<void> {
     items
       .flatMap((item) => (item.type === 'tool_group' ? item.tools : []))
       .map((tool) => [tool.callId, tool.status, tool.resultDisplay]),
-  ).toStrictEqual([['call-1', 'Success', 'echoed display']]);
+  ).toStrictEqual([['call-1', 'Success', 'echoed display:result']]);
   expect(
     items.flatMap((item) => {
       if (item.type === 'gemini') return [item.text];
@@ -161,6 +155,7 @@ async function assertCompletedJournal(fixture: LoopFixture): Promise<void> {
 }
 
 describe('useAgentEventStream real loop integration', () => {
+  useFakeResponsesReplay('plain-text.jsonl');
   it('records the tool continuation once and displays rationale, result and answer in order', async () => {
     await withLoop(PolicyDecision.ALLOW, async (fixture) => {
       const provider = conversation(fixture.agent);

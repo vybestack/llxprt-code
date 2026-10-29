@@ -6,7 +6,10 @@
 
 import os from 'node:os';
 import type { SandboxConfig } from '@vybestack/llxprt-code-core';
-import { FatalSandboxError } from '@vybestack/llxprt-code-core';
+import {
+  createKeyringTokenStore,
+  FatalSandboxError,
+} from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { CredentialProxyBridgeResult } from './sandbox-ssh.js';
 import {
@@ -21,13 +24,13 @@ import {
 import { setupCredentialProxyPodmanMacOS } from './sandbox-podman.js';
 import {
   createAndStartProxy,
-  getProxyCapabilityToken,
-  getProxySocketPath,
-  stopProxy,
+  type SandboxProxyHandle,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   cleanupCredentialSocketRuntime,
   createCredentialSocketRuntime,
+  removeCredentialSessionTmpdir,
+  type CredentialSocketRuntime,
 } from './sandbox-credential-runtime.js';
 
 /** Composes cleanup callbacks and surfaces failures after attempting each one. */
@@ -76,25 +79,6 @@ async function setupMacOSCredProxyBridge(
   }
 }
 
-/** Starts credential proxy and sets up bridge for Podman/Docker macOS. */
-async function failOnMissingSocketPath(
-  sessionTmpdirCleanup: () => void,
-): Promise<Error> {
-  const invariantError = new FatalSandboxError(
-    'Credential proxy started but did not produce a socket path',
-  );
-  const errors: unknown[] = [invariantError];
-  try {
-    await stopProxy();
-  } catch (stopErr) {
-    errors.push(stopErr);
-  }
-  runCapabilityCleanupStep(sessionTmpdirCleanup, errors);
-  return errors.length === 1
-    ? invariantError
-    : new AggregateError(errors, 'Credential proxy setup failed');
-}
-
 function throwCredentialProxySetupError(
   error: unknown,
   sessionTmpdirCleanup: () => void,
@@ -133,30 +117,6 @@ function assertSupportedCredentialNetwork(config: SandboxConfig): void {
  * exposure far below a session's lifetime.
  */
 const CAPABILITY_ENV_FILE_FALLBACK_MS = 10 * 60 * 1000;
-
-/**
- * #3524: the credential proxy, its socket, and its capability token are
- * process-wide, so a sandbox handshake carries no launch identity. At most
- * one launch may hold a live capability env file: a second launch's
- * handshake would be attributed to the first launch's release holder and
- * could delete the wrong launch's env file mid-launch.
- */
-let capabilityEnvFileLaunchActive = false;
-
-/**
- * Claims the single active capability env-file launch slot or throws. The
- * claim is a synchronous check-and-set, so of two concurrent callers only
- * one can hold it; the other fails before creating a bridge or env file
- * whose handshake could be attributed to the wrong launch.
- */
-function claimCapabilityEnvFileLaunch(): void {
-  if (capabilityEnvFileLaunchActive) {
-    throw new FatalSandboxError(
-      'Concurrent sandbox launches in one process are not supported by the capability transport: the credential proxy, its socket, and its capability token are process-wide, so a sandbox handshake cannot be attributed to a specific launch and could delete the env file of the wrong launch. Run the active launch cleanup before starting another sandbox.',
-    );
-  }
-  capabilityEnvFileLaunchActive = true;
-}
 
 /**
  * Bridge cleanup returned by setupCredentialProxy. When a capability env
@@ -238,16 +198,22 @@ function createCapabilityEnvFileRelease(): CapabilityEnvFileRelease {
  * sandbox process has spawned (#3524). The exit-time cleanup stays
  * registered as the backstop; early deletion only makes it a no-op. The
  * env-file leg is release() itself — the same path the handshake and the
- * fallback take — so running the composed cleanup also cancels the armed
- * fallback timer and ends the single-active-launch claim.
+ * fallback take, so running the composed cleanup also cancels the armed
+ * fallback timer and stops this launch's proxy.
  */
 function composeArmableBridgeCleanup(
   bridgeCleanup: (() => void) | undefined,
   envFileRelease: CapabilityEnvFileRelease,
   sessionTmpdirCleanup: () => void,
+  proxy: SandboxProxyHandle,
 ): CredentialProxyBridgeCleanup {
   const launchTeardown = (): void => {
-    capabilityEnvFileLaunchActive = false;
+    void proxy.stop().catch((error: unknown) => {
+      debugLogger.error(
+        'Credential proxy stop() failed during cleanup:',
+        error,
+      );
+    });
     // release is always a function, so the composed cleanup always exists;
     // the optional call only satisfies composeCleanups' union return type.
     composeCleanups(
@@ -262,21 +228,19 @@ function composeArmableBridgeCleanup(
 }
 
 async function startCredentialProxyForSandbox(
-  config: SandboxConfig,
   socketRuntimePath: string,
   sessionTmpdirCleanup: () => void,
   onSandboxHandshake: () => void,
-): Promise<string> {
+): Promise<SandboxProxyHandle> {
   try {
-    assertSupportedCredentialNetwork(config);
-  } catch (error) {
-    throwCredentialProxySetupError(error, sessionTmpdirCleanup);
-  }
-  try {
-    await createAndStartProxy({
-      socketPath: socketRuntimePath,
-      onSandboxHandshake,
-    });
+    return await createAndStartProxy(
+      {
+        socketPath: socketRuntimePath,
+        tokenStore: createKeyringTokenStore(),
+        onSandboxHandshake,
+      },
+      globalThis.fetch,
+    );
   } catch (error) {
     throwCredentialProxySetupError(
       new FatalSandboxError(
@@ -285,11 +249,20 @@ async function startCredentialProxyForSandbox(
       sessionTmpdirCleanup,
     );
   }
-  const socketPath = getProxySocketPath();
-  if (socketPath === undefined) {
-    throw await failOnMissingSocketPath(sessionTmpdirCleanup);
+}
+
+function prepareCredentialSocketRuntime(
+  config: SandboxConfig,
+  sessionTmpdir: string,
+): CredentialSocketRuntime {
+  try {
+    assertSupportedCredentialNetwork(config);
+    return createCredentialSocketRuntime(config, sessionTmpdir);
+  } catch (error) {
+    return throwCredentialProxySetupError(error, () =>
+      removeCredentialSessionTmpdir(sessionTmpdir),
+    );
   }
-  return socketPath;
 }
 
 export async function setupCredentialProxy(
@@ -302,16 +275,19 @@ export async function setupCredentialProxy(
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   credentialProxyBridgeCleanup: CredentialProxyBridgeCleanup | undefined;
 }> {
-  const socketRuntime = createCredentialSocketRuntime(config, sessionTmpdir);
+  // The session directory is owned by this setup from the first line: every
+  // failure below, including network-policy validation and runtime
+  // allocation, removes it. Policy is validated first so a rejected launch
+  // allocates no runtime resources.
+  const socketRuntime = prepareCredentialSocketRuntime(config, sessionTmpdir);
   const sessionTmpdirCleanup = (): void =>
     cleanupCredentialSocketRuntime(socketRuntime, sessionTmpdir);
   const envFileRelease = createCapabilityEnvFileRelease();
 
   // @plan:PLAN-20250214-CREDPROXY.P34 R25.1: Start credential proxy BEFORE spawning container
-  let socketPath: string;
+  let proxy: SandboxProxyHandle;
   try {
-    socketPath = await startCredentialProxyForSandbox(
-      config,
+    proxy = await startCredentialProxyForSandbox(
       socketRuntime.path,
       sessionTmpdirCleanup,
       // bestEffort: the handshake fires on the proxy's frame-processing path,
@@ -322,14 +298,7 @@ export async function setupCredentialProxy(
     throwCredentialProxySetupError(error, sessionTmpdirCleanup);
   }
 
-  // #3524: claim the single-launch slot before any bridge or env-file side
-  // effects. A losing concurrent launch cleans up only its own socket runtime;
-  // it must not stop the process-wide proxy owned by the active launch.
-  try {
-    claimCapabilityEnvFileLaunch();
-  } catch (error) {
-    throwCredentialProxySetupError(error, sessionTmpdirCleanup);
-  }
+  const socketPath = proxy.socketPath;
 
   let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   let credentialProxyBridgeCleanup: (() => void) | undefined;
@@ -355,7 +324,7 @@ export async function setupCredentialProxy(
     }
     // @plan project-plans/issue-1954-sandbox-hardening.md (AC1): host-only env file.
     const envFileResult = createHostOnlyCapabilityEnvFile(
-      getProxyCapabilityToken(),
+      proxy.capabilityToken,
       containerMountSources(args),
     );
     if (envFileResult !== undefined) {
@@ -363,12 +332,11 @@ export async function setupCredentialProxy(
       envFileRelease.adopt(envFileResult.cleanup);
     }
   } catch (err) {
-    capabilityEnvFileLaunchActive = false;
     const errors: unknown[] = [err];
     runCapabilityCleanupStep(() => envFileRelease.release(), errors);
     runCapabilityCleanupStep(() => credentialProxyBridgeCleanup?.(), errors);
     try {
-      await stopProxy();
+      await proxy.stop();
     } catch (stopErr) {
       errors.push(stopErr);
     }
@@ -381,6 +349,7 @@ export async function setupCredentialProxy(
       credentialProxyBridgeCleanup,
       envFileRelease,
       sessionTmpdirCleanup,
+      proxy,
     ),
   };
 }

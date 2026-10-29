@@ -8,7 +8,11 @@ import type {
 await import('ink-testing-library');
 const ink = await import('../../../test-utils/real-ink.js');
 void vi.mock('ink', () => ink);
+const runtimeContext = await import('../contexts/RuntimeContext.js');
 void vi.mock('../contexts/RuntimeContext.js', () => ({
+  ...runtimeContext,
+  useGetEphemeralSetting: () => () => undefined,
+  useGetWorkspaceDirectories: () => () => [],
   useRuntimeApi: () => ({
     getEphemeralSetting: () => undefined,
     getWorkspaceDirectories: () => [],
@@ -128,7 +132,13 @@ async function fixture(root: string) {
         viewport={viewport}
         viewportLines={viewportLines}
         pollMs={10}
-        config={config}
+        rendering={{
+          config,
+          readIdeMode: () => false,
+          readIdeDiffingEnabled: () => false,
+          subscribeIdeDiffing: () => () => {},
+          resolveIdeDiff: async () => {},
+        }}
         pendingToolControls={pending}
       />
     ),

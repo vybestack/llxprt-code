@@ -1,7 +1,14 @@
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import { adaptGenerator } from './__tests__/chatSession-thinking-toolcalls-helpers.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
+import { buildMockContentGenerator } from './__tests__/chatSession-density-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /// <reference lib="esnext.array" />
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -20,27 +27,29 @@ import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+
 import type {
+  ContentBlock,
   IContent,
   ThinkingBlock,
-  ContentBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-thinking-helpers.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const realRetryModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/retry.js')),
@@ -76,15 +85,13 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
     settingsService.set('reasoning.stripFromContext', 'none');
 
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
-      config,
       runtimeId: 'test.runtime.issue1150.repro',
       metadata: { source: 'chatSession.thinking-toolcalls.repro.test' },
     });
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   });
 
   it(
@@ -238,8 +245,7 @@ function createRoundTripProvider(
     isDefault: true,
     getModels: vi.fn(async () => []),
     getDefaultModel: () => 'claude-sonnet-4-5-20250929',
-    generateChatCompletion: generateChatCompletionMock,
-    getAuthToken: vi.fn(async () => 'test-auth-token'),
+    generateChatCompletion: adaptGenerator(generateChatCompletionMock),
   };
 
   return provider;
@@ -259,7 +265,17 @@ function createThinkingChat(
   });
   const view = createAgentRuntimeContext({
     prepareProviderInvocation: (name, parameters, signal) =>
-      captureProviderInvocation(providerRuntime, name, parameters, signal),
+      captureProviderInvocation(
+        {
+          runtimeId: providerRuntime.runtimeId,
+          fetch: requestFetch,
+          globalSettings: config.getInitialSettings(),
+          providerSettings: {},
+        },
+        name,
+        parameters,
+        signal,
+      ),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -276,7 +292,19 @@ function createThinkingChat(
     tools: createToolRegistryViewFromRegistry(modelTools()),
     providerRuntime: { ...providerRuntime },
   });
-  return new ChatSession(view, {} as unknown as ContentGenerator, {}, []);
+  return new ChatSession(
+    chatSessionPorts(view),
+    config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    buildMockContentGenerator(),
+    {},
+    [],
+  );
 }
 
 async function testSplitCase2(): Promise<void> {
@@ -428,8 +456,7 @@ async function testSplitCase4(): Promise<void> {
     isDefault: true,
     getModels: vi.fn(async () => []),
     getDefaultModel: () => 'claude-sonnet-4-5-20250929',
-    generateChatCompletion: generateChatCompletionMock,
-    getAuthToken: vi.fn(async () => 'test-auth-token'),
+    generateChatCompletion: adaptGenerator(generateChatCompletionMock),
   };
 
   const historyService = new HistoryService();
@@ -519,7 +546,7 @@ async function testSplitCase5(): Promise<void> {
   const iContent: IContent = {
     speaker: 'ai',
     blocks: [
-      ...thoughtBlocks,
+      ..._thinkingBlocksForHistory,
       { type: 'text', text: "I'll help you." },
       {
         type: 'tool_call',

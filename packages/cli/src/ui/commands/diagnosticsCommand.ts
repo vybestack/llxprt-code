@@ -6,18 +6,19 @@
  * @plan PLAN-20250909-TOKTRACK.P16
  * @requirement REQ-INT-001.3
  */
-import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
+import {
+  type GetLoadBalancerStatsOperation,
+  type GetLoadBalancerTokenAccountingOperation,
+  type GetRuntimeDiagnosticsSnapshotOperation,
+  type GetSessionTokenUsageOperation,
+} from '../contexts/RuntimeContext.js';
 
-import type {
-  SlashCommand,
-  CommandContext,
-  MessageActionReturn,
-} from './types.js';
+import type { SlashCommand, MessageActionReturn } from './types.js';
 import { CommandKind } from './types.js';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
+
 import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import path from 'node:path';
 import process from 'node:process';
 import {
@@ -28,9 +29,40 @@ import type {
   ExtendedLoadBalancerStats,
   TokenAccountingDiagnostics,
 } from '@vybestack/llxprt-code-providers';
-import { appendOAuthTokens } from './diagnosticsTokens.js';
 
-type RuntimeOAuthManager = OAuthControl | null;
+interface DiagnosticStaticInfo {
+  readonly workingDirectory: string;
+  readonly debugMode: boolean;
+  readonly approvalMode: string;
+  readonly theme: string | undefined;
+  readonly defaultProfile: string | undefined;
+  readonly sandbox: unknown;
+  readonly ideMode: boolean;
+  readonly ideConnected: boolean;
+  readonly mcpServers: readonly string[];
+  readonly mcpServerCommand: string | undefined;
+  readonly userMemory: unknown;
+  readonly memoryFileCount: number;
+  readonly usageStatistics: boolean;
+}
+export interface DiagnosticsCommandReads {
+  readonly isConfigured: boolean;
+  readonly readSnapshot: GetRuntimeDiagnosticsSnapshotOperation;
+  readonly isOAuthAvailable: OAuthControl['isAvailable'];
+  readonly readSessionBucket: OAuthControl['getSessionBucket'];
+  readonly readFailoverBuckets: () => readonly string[];
+  readonly readCurrentBucket: () => string | undefined;
+  readonly readProviderName: () => string | undefined;
+  readonly readLoadBalancerStats: GetLoadBalancerStatsOperation;
+  readonly readTokenAccounting: GetLoadBalancerTokenAccountingOperation;
+  readonly readSessionTokens: GetSessionTokenUsageOperation;
+  readonly readStaticInfo: () => DiagnosticStaticInfo;
+  readonly listTools: () => readonly ToolInfo[];
+  readonly appendTokens: (
+    lines: string[],
+    logger: DebugLogger,
+  ) => Promise<void>;
+}
 
 interface RuntimeSessionTokenUsage {
   input: number;
@@ -73,31 +105,35 @@ function isSessionTokenUsage(
 function appendProviderInfo(
   diagnostics: string[],
   providerName: string | undefined,
-  oauthMgr: RuntimeOAuthManager,
+  oauthAvailable: boolean,
+  readSessionBucket: OAuthControl['getSessionBucket'],
 ): void {
   diagnostics.push('## Provider Information');
   diagnostics.push(`- Active Provider: ${providerName ?? 'none'}`);
 
-  if (oauthMgr && providerName) {
-    const sessionBucket = oauthMgr.getSessionBucket(providerName);
+  if (oauthAvailable && providerName) {
+    const sessionBucket = readSessionBucket(providerName);
     diagnostics.push(`- OAuth Bucket: ${sessionBucket ?? 'default'}`);
   }
 }
 
 function appendFailoverInfo(
   diagnostics: string[],
-  config: NonNullable<CommandContext['services']['config']>,
+  reads: Pick<
+    DiagnosticsCommandReads,
+    'readFailoverBuckets' | 'readCurrentBucket'
+  >,
   providerName: string | undefined,
-  oauthMgr: RuntimeOAuthManager,
+  oauthAvailable: boolean,
 ): void {
-  const buckets = config.readFailoverBuckets?.() ?? [];
+  const buckets = reads.readFailoverBuckets();
   if (buckets.length === 0) {
-    if (oauthMgr && providerName) {
+    if (oauthAvailable && providerName) {
       diagnostics.push(`- Bucket Failover: Not configured`);
     }
     return;
   }
-  const currentBucket = config.readCurrentBucket?.();
+  const currentBucket = reads.readCurrentBucket();
   const isEnabled = buckets.length > 1;
   diagnostics.push(`- Bucket Failover: ${isEnabled ? 'Enabled' : 'Disabled'}`);
   if (buckets.length === 0) {
@@ -131,10 +167,10 @@ function appendProfileDistribution(
 
 function appendTokenAccountingDiagnostics(
   diagnostics: string[],
-  runtimeApi: RuntimeApi,
+  readSessionTokens: DiagnosticsCommandReads['readSessionTokens'],
   tokenAccounting: TokenAccountingDiagnostics,
 ): void {
-  const sessionTokens = runtimeApi.getSessionTokenUsage();
+  const sessionTokens = readSessionTokens();
   appendOptionalDiagnostics(diagnostics, [
     {
       label: 'Load Balancer Profile',
@@ -182,14 +218,19 @@ function appendTokenAccountingDiagnostics(
 function appendLoadBalancerStats(
   diagnostics: string[],
   logger: DebugLogger,
-  runtimeApi: RuntimeApi,
+  reads: Pick<
+    DiagnosticsCommandReads,
+    | 'readProviderName'
+    | 'readLoadBalancerStats'
+    | 'readTokenAccounting'
+    | 'readSessionTokens'
+  >,
 ): void {
-  const providerStatus = runtimeApi.providerStatus();
-  if (providerStatus.providerName !== 'load-balancer') {
+  if (reads.readProviderName() !== 'load-balancer') {
     return;
   }
   try {
-    const lbStats = runtimeApi.getLoadBalancerStats();
+    const lbStats = reads.readLoadBalancerStats();
     if (lbStats === undefined) return;
     diagnostics.push('\n## Load Balancer Stats');
     diagnostics.push(
@@ -206,9 +247,13 @@ function appendLoadBalancerStats(
     diagnostics.push(`- Total Requests: ${lbStats.totalRequests}`);
     appendProfileDistribution(diagnostics, lbStats);
 
-    const accounting = runtimeApi.getLoadBalancerTokenAccounting();
+    const accounting = reads.readTokenAccounting();
     if (accounting !== undefined) {
-      appendTokenAccountingDiagnostics(diagnostics, runtimeApi, accounting);
+      appendTokenAccountingDiagnostics(
+        diagnostics,
+        reads.readSessionTokens,
+        accounting,
+      );
     }
   } catch (error) {
     logger.debug(
@@ -309,18 +354,15 @@ function appendDumpContextInfo(
 
 function appendStaticSections(
   diagnostics: string[],
-  config: NonNullable<CommandContext['services']['config']>,
-  settings: CommandContext['services']['settings'],
+  info: DiagnosticStaticInfo,
   ephemeralSettings: Record<string, unknown>,
 ): void {
   diagnostics.push('\n## System Information');
   diagnostics.push(`- Platform: ${process.platform}`);
   diagnostics.push(`- Node Version: ${process.version}`);
-  diagnostics.push(`- Working Directory: ${process.cwd()}`);
-  diagnostics.push(
-    `- Debug Mode: ${config.getDebugMode() ? 'Enabled' : 'Disabled'}`,
-  );
-  diagnostics.push(`- Approval Mode: ${config.getApprovalMode()}`);
+  diagnostics.push(`- Working Directory: ${info.workingDirectory}`);
+  diagnostics.push(`- Debug Mode: ${info.debugMode ? 'Enabled' : 'Disabled'}`);
+  diagnostics.push(`- Approval Mode: ${info.approvalMode}`);
 
   diagnostics.push('\n## Compression');
   const compressionThreshold =
@@ -332,49 +374,43 @@ function appendStaticSections(
   );
 
   diagnostics.push('\n## Settings');
-  const { merged } = settings;
-  diagnostics.push(`- Theme: ${merged.ui.theme ?? 'default'}`);
-  diagnostics.push(`- Default Profile: ${merged.defaultProfile ?? 'none'}`);
-  diagnostics.push(`- Sandbox: ${merged.sandbox ?? 'disabled'}`);
+  diagnostics.push(`- Theme: ${info.theme ?? 'default'}`);
+  diagnostics.push(`- Default Profile: ${info.defaultProfile ?? 'none'}`);
+  diagnostics.push(`- Sandbox: ${info.sandbox ?? 'disabled'}`);
 
   diagnostics.push('\n## IDE Integration');
-  diagnostics.push(
-    `- IDE Mode: ${config.getIdeMode() ? 'Enabled' : 'Disabled'}`,
-  );
-  const ideClient = config.getIdeClient();
+  diagnostics.push(`- IDE Mode: ${info.ideMode ? 'Enabled' : 'Disabled'}`);
+  const ideClient = info.ideConnected;
   diagnostics.push(`- IDE Client: ${ideClient ? 'Connected' : 'Offline'}`);
 
   diagnostics.push('\n## MCP (Model Context Protocol)');
-  const mcpServers = config.getMcpServers();
-  if (mcpServers && Object.keys(mcpServers).length > 0) {
-    diagnostics.push(`- MCP Servers: ${Object.keys(mcpServers).join(', ')}`);
+  const mcpServers = info.mcpServers;
+  if (mcpServers.length > 0) {
+    diagnostics.push(`- MCP Servers: ${mcpServers.join(', ')}`);
   } else {
     diagnostics.push('- MCP Servers: None configured');
   }
-  const mcpServerCommand = config.getMcpServerCommand();
+  const mcpServerCommand = info.mcpServerCommand;
   diagnostics.push(`- MCP Server Command: ${mcpServerCommand ?? 'not set'}`);
 
   diagnostics.push('\n## Memory/Context');
-  const userMemory = config.getUserMemory();
+  const userMemory = info.userMemory;
   const userMemoryText =
     typeof userMemory === 'string' && userMemory.length > 0
       ? `${userMemory.length} characters`
       : 'Not loaded';
   diagnostics.push(`- User Memory: ${userMemoryText}`);
-  diagnostics.push(`- Context Files: ${config.getLlxprtMdFileCount()} files`);
+  diagnostics.push(`- Context Files: ${info.memoryFileCount} files`);
 }
 
 function appendToolsAndTelemetry(
   diagnostics: string[],
-  agent: Agent | null,
-  settings: CommandContext['services']['settings'],
+  listTools: () => readonly ToolInfo[],
+  usageStatistics: boolean,
 ): void {
   diagnostics.push('\n## Tools');
   try {
-    if (!agent) {
-      throw new Error('agent not available');
-    }
-    const tools = agent.tools.list();
+    const tools = listTools();
     diagnostics.push(`- Available Tools: ${tools.length}`);
     const toolNames = tools.map((t) => t.name).slice(0, 10);
     if (toolNames.length > 0) {
@@ -386,98 +422,105 @@ function appendToolsAndTelemetry(
 
   diagnostics.push('\n## Telemetry');
   diagnostics.push(
-    `- Usage Statistics: ${settings.merged.ui.usageStatisticsEnabled === true ? 'Enabled' : 'Disabled'}`,
+    `- Usage Statistics: ${usageStatistics ? 'Enabled' : 'Disabled'}`,
   );
 }
 
-export const diagnosticsCommand: SlashCommand = {
-  name: 'diagnostics',
-  description: 'show current configuration and diagnostic information',
-  kind: CommandKind.BUILT_IN,
-  action: async (context: CommandContext): Promise<MessageActionReturn> => {
-    try {
-      const config = context.services.config;
-      const settings = context.services.settings;
-      const logger = new DebugLogger('llxprt:ui:diagnostics');
+function appendModelParameters(
+  diagnostics: string[],
+  modelParams: Readonly<Record<string, unknown>>,
+): void {
+  diagnostics.push('\n## Model Parameters');
+  if (Object.keys(modelParams).length === 0) {
+    diagnostics.push('- No custom model parameters set');
+  } else {
+    for (const [key, value] of Object.entries(modelParams)) {
+      diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
+    }
+  }
+}
 
-      if (!config) {
+export function createDiagnosticsCommand(
+  reads: DiagnosticsCommandReads,
+): SlashCommand {
+  return {
+    name: 'diagnostics',
+    description: 'show current configuration and diagnostic information',
+    kind: CommandKind.BUILT_IN,
+    action: async (): Promise<MessageActionReturn> => {
+      try {
+        const logger = new DebugLogger('llxprt:ui:diagnostics');
+
+        if (!reads.isConfigured) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: 'Configuration not available',
+          };
+        }
+
+        const snapshot = reads.readSnapshot();
+        let oauthAvailable = false;
+        try {
+          oauthAvailable = reads.isOAuthAvailable();
+        } catch (oauthError) {
+          logger.debug(
+            () =>
+              `[diagnostics] Failed to retrieve OAuth manager: ${oauthError instanceof Error ? oauthError.message : String(oauthError)}`,
+          );
+        }
+        logger.debug(
+          () =>
+            `[diagnostics] snapshot provider=${snapshot.providerName ?? 'unknown'}`,
+        );
+        const diagnostics: string[] = ['# LLxprt Diagnostics\n'];
+
+        appendProviderInfo(
+          diagnostics,
+          snapshot.providerName ?? undefined,
+          oauthAvailable,
+          reads.readSessionBucket,
+        );
+        diagnostics.push(`- Current Model: ${snapshot.modelName ?? 'unknown'}`);
+        diagnostics.push(
+          `- Current Profile: ${snapshot.profileName ?? 'none'}`,
+        );
+        diagnostics.push(`- API Key: unavailable via runtime helpers`);
+
+        appendFailoverInfo(
+          diagnostics,
+          reads,
+          snapshot.providerName ?? undefined,
+          oauthAvailable,
+        );
+        appendLoadBalancerStats(diagnostics, logger, reads);
+
+        appendModelParameters(diagnostics, snapshot.modelParams);
+
+        const ephemeralSettings = snapshot.ephemeralSettings;
+        appendEphemeralSettings(diagnostics, ephemeralSettings, logger);
+        appendDumpContextInfo(diagnostics, ephemeralSettings);
+        const info = reads.readStaticInfo();
+        appendStaticSections(diagnostics, info, ephemeralSettings);
+        appendToolsAndTelemetry(
+          diagnostics,
+          reads.listTools,
+          info.usageStatistics,
+        );
+        await reads.appendTokens(diagnostics, logger);
+
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: diagnostics.join('\n'),
+        };
+      } catch (error) {
         return {
           type: 'message',
           messageType: 'error',
-          content: 'Configuration not available',
+          content: `Failed to generate diagnostics: ${error instanceof Error ? error.message : String(error)}`,
         };
       }
-
-      const runtimeApi = context.runtimeApi;
-      const snapshot = runtimeApi.getRuntimeDiagnosticsSnapshot();
-      let runtimeOAuthManager: RuntimeOAuthManager = null;
-      try {
-        runtimeOAuthManager = context.oauthControl.isAvailable()
-          ? context.oauthControl
-          : null;
-      } catch (oauthError) {
-        logger.debug(
-          () =>
-            `[diagnostics] Failed to retrieve OAuth manager: ${oauthError instanceof Error ? oauthError.message : String(oauthError)}`,
-        );
-      }
-      logger.debug(
-        () =>
-          `[diagnostics] snapshot provider=${snapshot.providerName ?? 'unknown'}`,
-      );
-      const diagnostics: string[] = ['# LLxprt Diagnostics\n'];
-
-      appendProviderInfo(
-        diagnostics,
-        snapshot.providerName ?? undefined,
-        runtimeOAuthManager,
-      );
-      diagnostics.push(`- Current Model: ${snapshot.modelName ?? 'unknown'}`);
-      diagnostics.push(`- Current Profile: ${snapshot.profileName ?? 'none'}`);
-      diagnostics.push(`- API Key: unavailable via runtime helpers`);
-
-      appendFailoverInfo(
-        diagnostics,
-        config,
-        snapshot.providerName ?? undefined,
-        runtimeOAuthManager,
-      );
-      appendLoadBalancerStats(diagnostics, logger, context.runtimeApi);
-
-      diagnostics.push('\n## Model Parameters');
-      const modelParams = snapshot.modelParams;
-      if (Object.keys(modelParams).length === 0) {
-        diagnostics.push('- No custom model parameters set');
-      } else {
-        for (const [key, value] of Object.entries(modelParams)) {
-          diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
-        }
-      }
-
-      const ephemeralSettings = snapshot.ephemeralSettings;
-      appendEphemeralSettings(diagnostics, ephemeralSettings, logger);
-      appendDumpContextInfo(diagnostics, ephemeralSettings);
-      appendStaticSections(diagnostics, config, settings, ephemeralSettings);
-      appendToolsAndTelemetry(diagnostics, context.services.agent, settings);
-      await appendOAuthTokens(
-        () =>
-          new KeychainTokenStorage('llxprt-cli-mcp-oauth').getAllCredentials(),
-        diagnostics,
-        logger,
-        context.oauthControl,
-      );
-
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: diagnostics.join('\n'),
-      };
-    } catch (error) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to generate diagnostics: ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
-  },
-};
+    },
+  };
+}

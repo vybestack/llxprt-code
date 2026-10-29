@@ -67,6 +67,10 @@ describe('<HistoryItemDisplay /> contextState badge', () => {
     };
     const { lastFrame } = renderWithProviders(
       <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
         {...baseItem}
         config={composeFixtureRuntime(mockConfig)}
         item={item}

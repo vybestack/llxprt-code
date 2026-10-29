@@ -20,6 +20,10 @@ import { createRuntimeConfigStub } from './testSupport.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import { createProviderCallOptions } from './testSupport.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const googleGenAIState = {
   instances: [] as Array<{ options: Record<string, unknown> }>,
@@ -127,12 +131,11 @@ ${TEST_USER_MEMORY}`;
 
     // Create call options with runtime context
     const runtime = createProviderRuntimeContext({
-      settingsService,
-      config,
       runtimeId: 'test-runtime-api-key',
     });
 
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 
@@ -196,12 +199,11 @@ ${TEST_USER_MEMORY}`;
     );
 
     const runtime1 = createProviderRuntimeContext({
-      settingsService,
-      config,
       runtimeId: 'test-runtime-switch-1',
     });
 
     const invocation1 = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime1.runtimeId,
       runtimeMetadata: runtime1.metadata,
 
@@ -261,12 +263,12 @@ ${TEST_USER_MEMORY}`;
     );
 
     const runtime2 = createProviderRuntimeContext({
-      settingsService,
-      config, // Same config
+      // Same config
       runtimeId: 'test-runtime-switch-2',
     });
 
     const invocation2 = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime2.runtimeId,
       runtimeMetadata: runtime2.metadata,
 

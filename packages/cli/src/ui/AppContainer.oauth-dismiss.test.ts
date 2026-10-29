@@ -10,11 +10,12 @@ import React, { act, useState, useSyncExternalStore } from 'react';
 import { Text } from 'ink';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { KeyringTokenStore, oauthUIBridge } from '@vybestack/llxprt-code-auth';
+import { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
 import {
+  InteractiveAuthError,
   OAuthManager,
-  interactiveAuthCoordinator,
 } from '@vybestack/llxprt-code-providers/auth.js';
+import { assembleSessionAuthentication } from '@vybestack/llxprt-code-agents';
 import { AnthropicOAuthProvider } from '../../../providers/src/auth/anthropic-oauth-provider.js';
 import * as browser from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 import * as callbackModule from '../../../providers/src/auth/local-oauth-callback.js';
@@ -29,7 +30,6 @@ import {
   selectDialogOpen,
 } from './stores/dialog/dialogStore.js';
 import { createDialogOpeners } from './stores/dialog/dialogOpeners.js';
-import { getOAuthGlobalState } from './oauthGlobalState.js';
 import type { HistoryItemWithoutId } from './types.js';
 import { Colors } from './colors.js';
 
@@ -52,6 +52,7 @@ const fixtureRoot = resolve(
   '../../../../tmp/issue3931-lazy-auth',
 );
 const directories: string[] = [];
+const managers: OAuthManager[] = [];
 function harness(): {
   manager: OAuthManager;
   store: KeyringTokenStore;
@@ -90,8 +91,13 @@ function harness(): {
       },
     },
   });
-  const provider = new AnthropicOAuthProvider(store);
+  const provider = new AnthropicOAuthProvider(
+    (input, init) => globalThis.fetch(input, init),
+    store,
+  );
   const manager = new OAuthManager(store);
+  managers.push(manager);
+  const control = assembleSessionAuthentication(manager, () => undefined);
   manager.registerProvider(provider);
   const callback = deferred<{ code: string; state: string }>();
   const ready = deferred<void>();
@@ -141,10 +147,7 @@ function harness(): {
     useUpdateAndOAuthBridges({
       addItem,
       setUpdateInfo: () => {},
-      oauthControl: {
-        authenticate: manager.authenticate.bind(manager),
-        attachProviderMessages: manager.attachAddItemToProviders.bind(manager),
-      },
+      oauthControl: control,
     });
     useOAuthOrchestration({
       appDispatch: (action) => {
@@ -153,6 +156,7 @@ function harness(): {
       dialogs,
       isOAuthCodeDialogOpen: open,
       getActiveProviderName: () => 'claudecode',
+      oauth: control,
       setAuthError,
     });
     return React.createElement(
@@ -161,6 +165,7 @@ function harness(): {
       open
         ? React.createElement(OAuthCodeDialog, {
             provider: 'claudecode',
+            dialogState: control,
             onClose: () => dialogs.oauthCode.close(),
             onSubmit: (code: string) => provider.submitAuthCode(code),
           })
@@ -196,38 +201,30 @@ async function tick(): Promise<void> {
     await advanceTimersByTimeAsync(200);
   });
 }
-function request(): ReturnType<typeof interactiveAuthCoordinator.requestAuth> {
-  return interactiveAuthCoordinator.requestAuth({
-    provider: 'claudecode',
-    bucket: 'default',
-    requester: { runtimeKind: 'cli-interactive' },
-    reason: 'authentication-required',
-    correlationId: 'prompt-lazy-auth',
-  });
+async function request(manager: OAuthManager): Promise<{ kind: string }> {
+  try {
+    await manager.requestInteractiveAuth({
+      provider: 'claudecode',
+      bucket: 'default',
+      requester: { runtimeKind: 'cli-interactive' },
+      reason: 'authentication-required',
+    });
+    return { kind: 'succeeded' };
+  } catch (error) {
+    if (error instanceof InteractiveAuthError)
+      return { kind: error.outcomeKind };
+    throw error;
+  }
 }
 
 describe('prompt-triggered lazy authentication dialog', () => {
-  beforeEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    oauthUIBridge.clearPending();
+  beforeEach(() => {
     vi.useFakeTimers();
   });
   afterEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
-    oauthUIBridge.clearCallback();
-    oauthUIBridge.clearPending();
-    const attempt = oauthUIBridge.getDialog();
-    if (attempt) oauthUIBridge.dismissDialog(attempt.id);
+    for (const manager of managers.splice(0)) await manager.dispose();
     vi.restoreAllMocks();
     vi.useRealTimers();
-    Object.assign(getOAuthGlobalState(), {
-      __oauth_needs_code: undefined,
-      __oauth_provider: undefined,
-      __oauth_auth_complete: undefined,
-      __oauth_auth_error: undefined,
-      __oauth_browser_auth_complete: undefined,
-    });
     for (const dir of directories.splice(0))
       rmSync(dir, { recursive: true, force: true });
   });
@@ -243,7 +240,7 @@ describe('prompt-triggered lazy authentication dialog', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('Rejected', { status: 400 }),
     );
-    const first = request();
+    const first = request(h.manager);
     const nextCallback = deferred<{ code: string; state: string }>();
     let second: ReturnType<typeof request> | undefined;
     try {
@@ -279,7 +276,7 @@ describe('prompt-triggered lazy authentication dialog', () => {
             ),
         ),
       );
-      second = request();
+      second = request(h.manager);
       await nextReady.promise;
       await tick();
       expect(h.ui.lastFrame()).not.toContain(
@@ -313,7 +310,7 @@ describe('prompt-triggered lazy authentication dialog', () => {
 
   it('closes the actual host-challenge dialog only after callback credentials persist, without command completion', async () => {
     const h = harness();
-    const outcome = request();
+    const outcome = request(h.manager);
     try {
       await h.ready;
       await tick();
@@ -346,7 +343,7 @@ describe('prompt-triggered lazy authentication dialog', () => {
         vi.spyOn(globalThis, 'fetch').mockResolvedValue(
           new Response('Rejected', { status: 400 }),
         );
-      const outcome = request();
+      const outcome = request(h.manager);
       try {
         await h.ready;
         await tick();
@@ -392,7 +389,7 @@ describe('prompt-triggered lazy authentication dialog', () => {
 
   it('keeps the active lazy dialog open when an unrelated command flight fails', async () => {
     const h = harness();
-    const outcome = request();
+    const outcome = request(h.manager);
     try {
       await h.ready;
       await tick();
@@ -420,7 +417,7 @@ describe('prompt-triggered lazy authentication dialog', () => {
         vi.spyOn(globalThis, 'fetch').mockResolvedValue(
           new Response('Rejected', { status: 400 }),
         );
-      const outcome = request();
+      const outcome = request(h.manager);
       try {
         await h.ready;
         await tick();
@@ -456,7 +453,7 @@ describe('prompt-triggered lazy authentication dialog', () => {
         .authenticate('claudecode', undefined, { signal: controller.signal })
         .catch((error: unknown) => error);
       await h.ready;
-      const outcome = request();
+      const outcome = request(h.manager);
       try {
         await tick();
         const departed = new Error('Prompt participant detached');
@@ -504,7 +501,7 @@ describe('prompt-triggered lazy authentication dialog', () => {
       },
       'other',
     );
-    const outcome = request();
+    const outcome = request(h.manager);
     try {
       await h.ready;
       await tick();
@@ -525,7 +522,7 @@ describe('prompt-triggered lazy authentication dialog', () => {
   });
   it('keeps the newer bucket dialog open when an older persistence flight settles', async () => {
     const h = harness();
-    const first = request();
+    const first = request(h.manager);
     let second: Promise<void> = Promise.resolve();
     try {
       await h.ready;
@@ -569,7 +566,7 @@ describe('prompt-triggered lazy authentication dialog', () => {
   });
   it('lets Escape dismiss the pending view without reopening it when the existing flight finishes', async () => {
     const h = harness();
-    const outcome = request();
+    const outcome = request(h.manager);
     try {
       await h.ready;
       await tick();

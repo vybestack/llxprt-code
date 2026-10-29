@@ -28,7 +28,11 @@ describe('UI store architecture contracts', () => {
     expect(source).not.toMatch(
       /\b(?:bootstrap|layout)=\{(?:bootstrap|layout)\}/,
     );
-    expect(source).toContain('export function buildAppCommands(');
+    const commandBindings = readFileSync(
+      new URL('./appCommandBindings.ts', import.meta.url),
+      'utf8',
+    );
+    expect(commandBindings).toContain('export function buildAppCommands(');
   });
 
   it('documents the production regions and isolation coverage without outstanding deleted projections', () => {

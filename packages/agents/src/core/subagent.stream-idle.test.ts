@@ -88,17 +88,6 @@ void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
 void vi.mock('./nonInteractiveToolExecutor.js', () =>
   automock(realNonInteractiveToolExecutorModule),
 );
-const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual4,
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
 const actual5 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
@@ -124,13 +113,8 @@ function mockSession(
         getConfig: () => config,
         getStreamTimeoutPolicy: () =>
           runtimeBundle.runtimeContext.readStreamTimeoutPolicy(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getHistoryService: vi.fn().mockReturnValue({
-          clear: vi.fn(),
-          findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-          getCurated: vi.fn().mockReturnValue([]),
-          getTotalTokens: vi.fn().mockReturnValue(0),
-        }),
+        getHistory: () => runtimeBundle.history.streamRawHistory(),
+        getHistoryService: () => runtimeBundle.history,
       }) as unknown as ChatSession,
   );
   (

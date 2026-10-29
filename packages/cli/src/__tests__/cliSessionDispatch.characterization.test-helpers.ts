@@ -3,10 +3,12 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { vi } from 'bun:test';
+import { vi, beforeEach, beforeAll, afterAll } from 'bun:test';
+import { useCommandOwners as installCommandOwners } from './command-owner-fixture.js';
+import { createMockSettings } from './render.js';
+const makeDispatchAgent = installCommandOwners();
 import { __setWriteToStderrForTesting } from '../session/errorReporting.js';
 import { __setRenderForTesting } from '../session/interactiveUI.js';
-import { createUiSessionOwner } from './uiSessionOwner.js';
 import { createMinimalConfig } from './dispatch-settings-fixture.js';
 
 export { createMinimalConfig };
@@ -27,7 +29,7 @@ export const dispatchTrace: string[] = [];
 void vi.mock('../cliAgentBootstrap.js', () => ({
   createForegroundAgent: vi.fn(async () => {
     dispatchTrace.push('createForegroundAgent');
-    return { fake: true, workspace: createUiSessionOwner().workspace };
+    return makeDispatchAgent(crypto.randomUUID());
   }),
 }));
 
@@ -51,11 +53,10 @@ void vi.mock('../utils/userStartupWarnings.js', () => ({
   getUserStartupWarnings: vi.fn(async () => []),
 }));
 
-void vi.mock('../nonInteractiveCli.js', () => ({
-  runNonInteractive: vi.fn(async () => {
+void vi.mock('../nonInteractiveBindings.js', () => ({
+  createNonInteractiveRun: () => async () => {
     dispatchTrace.push('runNonInteractive');
-    return 0;
-  }),
+  },
 }));
 
 void vi.mock('../validateNonInteractiveAuth.js', () => ({
@@ -127,16 +128,14 @@ export function createMinimalSettings(options?: {
   hideWindowTitle?: boolean;
   enableMouseEvents?: boolean;
   useAlternateBuffer?: boolean;
-}): unknown {
-  return {
-    merged: {
-      ui: {
-        hideWindowTitle: options?.hideWindowTitle ?? false,
-        enableMouseEvents: options?.enableMouseEvents ?? false,
-        useAlternateBuffer: options?.useAlternateBuffer ?? false,
-      },
+}) {
+  return createMockSettings({
+    ui: {
+      hideWindowTitle: options?.hideWindowTitle ?? false,
+      enableMouseEvents: options?.enableMouseEvents ?? false,
+      useAlternateBuffer: options?.useAlternateBuffer ?? false,
     },
-  };
+  });
 }
 
 // #2378: dispatch no longer constructs the Agent — the composition root builds
@@ -149,16 +148,8 @@ export function createMinimalSettings(options?: {
 // returning an empty output object ({} — no systemMessage/additionalContext).
 // Without it the runner throws before reaching runNonInteractive and the
 // dispatch-branch traces would never record the runner.
-export function createFakeAgent(): unknown {
-  return {
-    workspace: createUiSessionOwner().workspace,
-    getMessageBus: () => ({}) as never,
-    hooks: {
-      triggerSessionStart: vi.fn(async () => ({})),
-    },
-    tools: { get: () => undefined },
-    dispose: vi.fn(async () => {}),
-  };
+export async function createFakeAgent() {
+  return makeDispatchAgent(crypto.randomUUID());
 }
 
 export const mockWriteToStderr = vi.fn<(chunk: string | Uint8Array) => boolean>(

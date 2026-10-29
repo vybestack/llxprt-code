@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { forwardPreconnect } from '../utils/fetchPreconnect.js';
 import { reportRequestSize } from '../logging/requestSizeReport.js';
 
@@ -8,9 +9,9 @@ import { reportRequestSize } from '../logging/requestSizeReport.js';
  * call that carries no string body (a GET) reports nothing.
  */
 export function withRequestSizeReport(
-  innerFetch: typeof fetch,
+  innerFetch: NetworkFetch,
   metadata: Record<string, unknown> | undefined,
-): typeof fetch {
+): NetworkFetch & ReturnType<typeof forwardPreconnect> {
   return Object.assign(
     (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       if (typeof init?.body === 'string') {

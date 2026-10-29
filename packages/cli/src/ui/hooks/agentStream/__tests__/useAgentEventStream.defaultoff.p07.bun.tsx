@@ -39,6 +39,7 @@ import {
   __setMonotonicClockForTesting,
 } from '../useAgentEventStream.js';
 import { createFakeAgent } from './helpers/createFakeAgent.js';
+import { agentStreamOperations } from './helpers/agentStreamOperations.js';
 
 describe('useAgentEventStream default-off P07 test lifecycle', () => {
   beforeEach(() => {
@@ -83,9 +84,10 @@ describe('useAgentEventStream default-off P07 test lifecycle', () => {
   } {
     const processAgentEventRef: React.MutableRefObject<AgentEventRouter | null> =
       { current: null };
+    const operations = agentStreamOperations(agent);
     const { result, unmount } = renderHook(() =>
       useAgentEventStream({
-        agent,
+        ...operations,
         addItem: vi.fn(),
         processAgentEventRef,
         flushPendingHistoryItem: vi.fn(),

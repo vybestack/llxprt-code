@@ -12,7 +12,7 @@ import {
   checkpointTool,
   gateJournalRowCommit,
 } from '../hooks/agentStream/checkpoint-disk-test-helpers.js';
-import { restoreCommand } from './restoreCommand.js';
+import { checkpointCommand } from '../../__tests__/checkpoint-command-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
 function gateDurableWrite(
@@ -34,7 +34,7 @@ async function pausedRestore(
     fixture.history.setTokenizerFactory(tokenizer);
     // A restore into an inactive chat builds a replacement history from the
     // client's bound tokenization, so the client must count the same way.
-    fixture.client.bindTokenization?.(tokenizer.getTokenizer, tokenizer);
+    fixture.client.bindTokenization(tokenizer.getTokenizer, tokenizer);
     fixture.history.setBaseTokenOffset(0);
     await fixture.history.recalculateTokens();
     const previousTokens = 2050;
@@ -55,7 +55,7 @@ async function pausedRestore(
       }),
     );
     const context = createMockCommandContext({
-      services: { agent: { agentClient: fixture.client } },
+      services: {},
     });
     context.signal = abort.signal;
     if (context.services.config === null)
@@ -73,7 +73,7 @@ async function pausedRestore(
     gateDurableWrite(gate, entered);
     let completed = false;
     const restoring = Promise.resolve(
-      restoreCommand(runtime)?.action?.(context, 'restore'),
+      checkpointCommand(fixture.client, runtime)?.action?.(context, 'restore'),
     ).then((result) => {
       completed = true;
       return result;

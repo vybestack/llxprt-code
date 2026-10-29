@@ -639,12 +639,12 @@ describe('runTestFileWithTimeoutRetry', () => {
     });
   });
 
-  it('retries after a reap failure and keeps the file failed when the retry reaps cleanly', async () => {
-    // The exact issue #3439 core-shard scenario: attempt 1 times out and
-    // taskkill loses the race, attempt 2 passes with a clean reap. The file
-    // stays red (it did time out) and carries the first attempt's reap
-    // error, but the returned reapFailed=false lets main() continue the
-    // shard instead of FATAL-aborting.
+  it('retries after a reap failure and keeps the first attempt reap failure when the retry reaps cleanly', async () => {
+    // The issue #3439 core-shard scenario: attempt 1 times out and taskkill
+    // loses the race, attempt 2 passes with a clean reap. The retry's clean
+    // reap says nothing about the first attempt's tree, so the file stays
+    // red and keeps reapFailed=true, which makes main() FATAL-abort instead
+    // of running on beside a tree that may still be alive.
     const attempts = createAttemptSequence<RetryOutcome>([
       {
         passed: false,
@@ -675,7 +675,7 @@ describe('runTestFileWithTimeoutRetry', () => {
       result: {
         passed: false,
         timedOut: true,
-        reapFailed: false,
+        reapFailed: true,
         reapError: 'taskkill reported failure and tree did not close',
         exitCode: 0,
         timeoutMs: 3000,
@@ -685,7 +685,7 @@ describe('runTestFileWithTimeoutRetry', () => {
     });
   });
 
-  it('returns the second attempt when both attempts fail to reap, so main() aborts', async () => {
+  it('reports both attempts when neither tree was reaped, so main() aborts', async () => {
     const attempts = createAttemptSequence<RetryOutcome>([
       {
         passed: false,
@@ -716,7 +716,7 @@ describe('runTestFileWithTimeoutRetry', () => {
         passed: false,
         timedOut: true,
         reapFailed: true,
-        reapError: 'second attempt reap error',
+        reapError: 'first attempt reap error; second attempt reap error',
         exitCode: null,
         timeoutMs: 3000,
       },
@@ -1301,102 +1301,159 @@ describe('core runner fixture module paths', () => {
   }, 25000);
 });
 
+interface BatchHarnessResult {
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly exitCode: number;
+  readonly root: string;
+  readonly marker: string;
+  readonly later: string;
+}
+
+// Fixed fixture sources for runBatchHarness. They sit in `<root>/src`, so they
+// derive the `<root>/attempts` and `<root>/later` paths themselves instead of
+// having those paths spliced into generated code.
+const TIMEOUT_FIRST_ATTEMPT_FIXTURE = [
+  "import { it } from 'bun:test';",
+  "import { appendFileSync, existsSync } from 'node:fs';",
+  "import { join } from 'node:path';",
+  "const marker = join(import.meta.dir, '..', 'attempts');",
+  'const retry = existsSync(marker);',
+  "appendFileSync(marker, 'attempt');",
+  "it('timeout then retry', async () => { if (!retry) await new Promise(() => {}); });",
+].join('\n');
+
+const TIMEOUT_EVERY_ATTEMPT_FIXTURE = [
+  "import { it } from 'bun:test';",
+  "import { appendFileSync } from 'node:fs';",
+  "import { join } from 'node:path';",
+  "const marker = join(import.meta.dir, '..', 'attempts');",
+  "appendFileSync(marker, 'attempt');",
+  "it('timeout then retry', async () => { await new Promise(() => {}); });",
+].join('\n');
+
+const LATER_BATCH_FIXTURE = [
+  "import { it } from 'bun:test';",
+  "import { writeFileSync } from 'node:fs';",
+  "import { join } from 'node:path';",
+  "it('later batch', () => writeFileSync(join(import.meta.dir, '..', 'later'), 'ran'));",
+].join('\n');
+
+/**
+ * Runs a relocated copy of the core runner over two fixture files. `a` times
+ * out on its first attempt (and on its retry too when `retryTimesOut`), and
+ * `reapSource` replaces the runner's timed-out-child reap.
+ */
+async function runBatchHarness(
+  retryTimesOut: boolean,
+  reapSource: string,
+): Promise<BatchHarnessResult> {
+  const root = mkdtempSync(join(tmpdir(), 'core-batch-reap-'));
+  tempDirs.push(root);
+  const sourceDir = join(root, 'src');
+  mkdirSync(sourceDir);
+  mkdirSync(join(root, 'test'));
+  const marker = join(root, 'attempts');
+  const later = join(root, 'later');
+  writeFileSync(
+    join(sourceDir, 'a.test.ts'),
+    retryTimesOut
+      ? TIMEOUT_EVERY_ATTEMPT_FIXTURE
+      : TIMEOUT_FIRST_ATTEMPT_FIXTURE,
+  );
+  writeFileSync(join(sourceDir, 'b.test.ts'), LATER_BATCH_FIXTURE);
+  const runnerPath = join(import.meta.dir, '..', 'run-bun-tests.ts');
+  const scriptsRoot = join(import.meta.dir, '..', '..', '..', 'scripts', 'lib');
+  const source = relocateCoreRunnerImports(
+    readFileSync(runnerPath, 'utf8'),
+    scriptsRoot,
+  )
+    .replace(
+      'const WORKSPACE_ROOT = import.meta.dir;',
+      `const WORKSPACE_ROOT = ${JSON.stringify(root)};`,
+    )
+    .replace(
+      "const PRELOAD = join(WORKSPACE_ROOT, 'bun-preload.ts');",
+      `const PRELOAD = ${JSON.stringify(join(import.meta.dir, '..', 'bun-preload.ts'))};`,
+    )
+    .replace(
+      'runTestFile(file, { env: isolation.sessionEnv })',
+      `runTestFile(file, { env: isolation.sessionEnv, timeoutMs: 3000, reapTimedOutChild: ${reapSource} })`,
+    );
+  const harness = join(root, 'runner.ts');
+  writeFileSync(harness, source);
+  // Output goes to files rather than pipes: a deliberately leaked test
+  // process inherits the runner's stdio, and a pipe reader would wait for it.
+  const stdoutPath = join(root, 'runner.stdout');
+  const stderrPath = join(root, 'runner.stderr');
+  const child = Bun.spawn([process.execPath, harness], {
+    cwd: root,
+    env: { ...process.env, LLXPRT_CORE_TEST_CONCURRENCY: '1' },
+    stdout: Bun.file(stdoutPath),
+    stderr: Bun.file(stderrPath),
+  });
+  const exitCode = await settleWithin(child.exited, 20000);
+  const stdout = readFileSync(stdoutPath, 'utf8');
+  const stderr = readFileSync(stderrPath, 'utf8');
+  return { stdout, stderr, exitCode, root, marker, later };
+}
+
 describe('core batch settlement after retry reaping', () => {
+  const killThenFail =
+    "async (child, closed) => { await killChildTreeAndWait(child, closed); throw new Error('fixture reap error'); }";
+
   it.each([false, true])(
-    'continues only when the final reap flag clears (persistent=%s)',
-    async (persistent) => {
-      const root = mkdtempSync(join(tmpdir(), 'core-batch-reap-'));
-      tempDirs.push(root);
-      const sourceDir = join(root, 'src');
-      const testDir = join(root, 'test');
-      mkdirSync(sourceDir);
-      mkdirSync(testDir);
-      const marker = join(root, 'attempts');
-      const later = join(root, 'later');
-      writeFileSync(
-        join(sourceDir, 'a.test.ts'),
-        [
-          "import { it } from 'bun:test';",
-          "import { appendFileSync, existsSync } from 'node:fs';",
-          `const marker = ${JSON.stringify(marker)};`,
-          'const retry = existsSync(marker);',
-          "appendFileSync(marker, 'attempt');",
-          `it('timeout then retry', async () => { if (${persistent} || !retry) await new Promise(() => {}); });`,
-        ].join('\n'),
-      );
-      writeFileSync(
-        join(sourceDir, 'b.test.ts'),
-        [
-          "import { it } from 'bun:test';",
-          "import { writeFileSync } from 'node:fs';",
-          `it('later batch', () => writeFileSync(${JSON.stringify(later)}, 'ran'));`,
-        ].join('\n'),
-      );
-      const runnerPath = join(import.meta.dir, '..', 'run-bun-tests.ts');
-      const scriptsRoot = join(
-        import.meta.dir,
-        '..',
-        '..',
-        '..',
-        'scripts',
-        'lib',
-      );
-      const source = relocateCoreRunnerImports(
-        readFileSync(runnerPath, 'utf8'),
-        scriptsRoot,
-      )
-        .replace(
-          'const WORKSPACE_ROOT = import.meta.dir;',
-          `const WORKSPACE_ROOT = ${JSON.stringify(root)};`,
-        )
-        .replace(
-          "const PRELOAD = join(WORKSPACE_ROOT, 'bun-preload.ts');",
-          `const PRELOAD = ${JSON.stringify(join(import.meta.dir, '..', 'bun-preload.ts'))};`,
-        )
-        .replace(
-          'runTestFile(file, { env: isolation.sessionEnv })',
-          `runTestFile(file, { env: isolation.sessionEnv, timeoutMs: 3000, reapTimedOutChild: async (child, closed) => { await killChildTreeAndWait(child, closed); throw new Error('fixture reap error'); } })`,
-        );
-      const harness = join(root, 'runner.ts');
-      writeFileSync(harness, source);
-      const child = Bun.spawn([process.execPath, harness], {
-        cwd: root,
-        env: {
-          ...process.env,
-          LLXPRT_CORE_TEST_CONCURRENCY: '1',
-          LLXPRT_CLI_TEST_PARTITION: '',
-        },
-        stdout: 'pipe',
-        stderr: 'pipe',
-      });
-      const [stdout, stderr, exitCode] = await settleWithin(
-        Promise.all([
-          new Response(child.stdout).text(),
-          new Response(child.stderr).text(),
-          child.exited,
-        ]),
-        20000,
-      );
+    'aborts the run once a reap failed, whether or not the retry then passes (retryTimesOut=%s)',
+    async (retryTimesOut) => {
+      const { stdout, stderr, exitCode, root, marker, later } =
+        await runBatchHarness(retryTimesOut, killThenFail);
+
       expect(exitCode, stderr).toBe(1);
-      expect(existsSync(marker), stderr).toBe(true);
       expect(readFileSync(marker, 'utf8').split('attempt').length - 1).toBe(2);
-      expect(existsSync(later)).toBe(!persistent);
-      expect(stderr.includes('FATAL: failed to reap')).toBe(persistent);
+      expect(existsSync(later)).toBe(false);
+      expect(stderr).toContain('FATAL: failed to reap');
+      expect(stderr).toContain('fixture reap error');
       expect(stdout).toContain(
         `RETRY (2/2): ${join('src', 'a.test.ts')} after per-file timeout`,
       );
       const xml = readFileSync(join(root, 'junit.xml'), 'utf8');
-      expect(xml).toContain(
-        `<testsuites tests="${persistent ? 1 : 2}" failures="1">`,
-      );
-      const laterClassName = process.platform === 'win32' ? 'src\\b' : 'b';
-      expect(xml.includes(`classname="${laterClassName}"`), xml).toBe(
-        !persistent,
-      );
-      expect(xml).toContain(
-        persistent ? 'TIMEOUT+REAP_FAILED' : '>TIMEOUT</failure>',
-      );
+      expect(xml).toContain('<testsuites tests="1" failures="1">');
+      expect(xml).toContain('TIMEOUT+REAP_FAILED');
       expect(xml.endsWith('</testsuites>')).toBe(true);
+    },
+    25000,
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'exits with failure and names the child when a timed-out file was never reaped',
+    async () => {
+      // The reap neither kills nor closes the child, so it stays tracked and
+      // would hold the runner's event loop open after the run ends.
+      const { stderr, exitCode, root } = await runBatchHarness(
+        true,
+        "async () => { throw new Error('fixture reap error'); }",
+      );
+      const leaked = /never closed[^\n]*\n {2}pid (\d+) \(([^)\n]*)\)/.exec(
+        stderr,
+      );
+      try {
+        expect(exitCode, stderr).toBe(1);
+        expect(leaked, stderr).not.toBeNull();
+        expect(leaked?.[2]).toBe(join('src', 'a.test.ts'));
+        expect(stderr).toContain('FATAL: failed to reap');
+        expect(readFileSync(join(root, 'junit.xml'), 'utf8')).toContain(
+          'TIMEOUT+REAP_FAILED',
+        );
+      } finally {
+        // The fixture deliberately leaves its detached test process running.
+        if (leaked !== null) {
+          try {
+            process.kill(-Number(leaked[1]), 'SIGKILL');
+          } catch {
+            // Already gone.
+          }
+        }
+      }
     },
     25000,
   );

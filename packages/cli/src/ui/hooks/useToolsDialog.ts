@@ -5,10 +5,8 @@
  */
 
 import { useCallback, useState } from 'react';
-import type { Agent, ToolInfo } from '@vybestack/llxprt-code-agents';
+import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import { MessageType } from '../types.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
-import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
 interface UseToolsDialogParams {
   addMessage: (msg: {
@@ -16,17 +14,16 @@ interface UseToolsDialogParams {
     content: string;
     timestamp: Date;
   }) => void;
-  dialogs: DialogOpeners;
-  config: CliUiRuntime;
-  agent: Agent | null;
+  listTools: (() => readonly ToolInfo[]) | null;
+  readDisabledTools: () => unknown;
+  writeDisabledTools: (names: string[]) => void;
+  openToolsDialog: (action: 'enable' | 'disable') => void;
+  closeToolsDialog: () => void;
 }
 
-function getDisabledToolsFromConfig(config: CliUiRuntime): string[] {
-  const ephemeralSettings = config.getEphemeralSettings();
-  const disabledToolsValue = ephemeralSettings['tools.disabled'];
-  return Array.isArray(disabledToolsValue)
-    ? (disabledToolsValue as string[])
-    : [];
+function getDisabledTools(readDisabledTools: () => unknown): string[] {
+  const disabledToolsValue = readDisabledTools();
+  return Array.isArray(disabledToolsValue) ? disabledToolsValue : [];
 }
 
 function filterToolsByAction(
@@ -49,16 +46,16 @@ function buildNoToolsMessage(action: 'enable' | 'disable'): string {
 }
 
 async function loadToolsForDialog(
-  agent: Agent | null,
-  config: CliUiRuntime,
+  listTools: (() => readonly ToolInfo[]) | null,
+  readDisabledTools: () => unknown,
   action: 'enable' | 'disable',
 ): Promise<ToolInfo[] | null> {
-  if (agent === null) {
+  if (listTools === null) {
     return null;
   }
 
-  const disabledTools = getDisabledToolsFromConfig(config);
-  const allTools = [...agent.tools.list()];
+  const disabledTools = getDisabledTools(readDisabledTools);
+  const allTools = [...listTools()];
   const agentTools = allTools.filter((tool: ToolInfo) => tool.source !== 'mcp');
 
   return filterToolsByAction(agentTools, disabledTools, action);
@@ -97,9 +94,11 @@ function updateDisabledToolsList(
 
 export const useToolsDialog = ({
   addMessage,
-  dialogs,
-  config,
-  agent,
+  listTools,
+  readDisabledTools,
+  writeDisabledTools,
+  openToolsDialog,
+  closeToolsDialog,
 }: UseToolsDialogParams) => {
   const [action, setAction] = useState<'enable' | 'disable'>('disable');
   const [availableTools, setAvailableTools] = useState<ToolInfo[]>([]);
@@ -108,7 +107,11 @@ export const useToolsDialog = ({
   const openDialog = useCallback(
     async (dialogAction: 'enable' | 'disable') => {
       try {
-        const tools = await loadToolsForDialog(agent, config, dialogAction);
+        const tools = await loadToolsForDialog(
+          listTools,
+          readDisabledTools,
+          dialogAction,
+        );
         if (tools === null) {
           addMessage({
             type: MessageType.ERROR,
@@ -122,11 +125,11 @@ export const useToolsDialog = ({
           return;
         }
 
-        const currentDisabledTools = getDisabledToolsFromConfig(config);
+        const currentDisabledTools = getDisabledTools(readDisabledTools);
         setAction(dialogAction);
         setAvailableTools(tools);
         setDisabledTools(currentDisabledTools);
-        dialogs.tools.open({ action: dialogAction });
+        openToolsDialog(dialogAction);
       } catch (e) {
         addMessage({
           type: MessageType.ERROR,
@@ -135,7 +138,7 @@ export const useToolsDialog = ({
         });
       }
     },
-    [addMessage, config, agent, dialogs],
+    [addMessage, listTools, readDisabledTools, openToolsDialog],
   );
 
   const handleSelect = useCallback(
@@ -150,7 +153,7 @@ export const useToolsDialog = ({
       );
 
       // Update ephemeral settings
-      config.setEphemeralSetting('tools.disabled', updatedDisabledTools);
+      writeDisabledTools(updatedDisabledTools);
 
       addMessage({
         type: MessageType.INFO,
@@ -158,9 +161,16 @@ export const useToolsDialog = ({
         timestamp: new Date(),
       });
 
-      dialogs.tools.close();
+      closeToolsDialog();
     },
-    [addMessage, config, action, availableTools, disabledTools, dialogs],
+    [
+      addMessage,
+      writeDisabledTools,
+      action,
+      availableTools,
+      disabledTools,
+      closeToolsDialog,
+    ],
   );
 
   return {

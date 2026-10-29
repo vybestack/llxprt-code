@@ -5,11 +5,13 @@
  */
 
 import type { Mock } from 'bun:test';
+import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import React, { act } from 'react';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import * as ReactDOM from 'react-dom';
-import { useAgentStream } from './agentStream/index.js';
+import { useTestAgentStream as useAgentStream } from './__tests__/use-stream-owner-inputs.js';
+import { createFakeAgentFromMockClient } from './__tests__/useAgentStream-test-helpers.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
   TrackedCompletedToolCall,
@@ -239,9 +241,7 @@ describe('useAgentStream subagent isolation', () => {
       },
       model: {
         getModel: () => 'gemini-2.5-pro',
-        getContentGeneratorConfig: () => contentGeneratorConfig,
       },
-      agentClientSource: { getAgentClient: mockGetAgentClient },
       checkpoint: { getCheckpointingEnabled: () => false },
     };
 
@@ -275,9 +275,7 @@ describe('useAgentStream subagent isolation', () => {
     readonly addHistory: ReturnType<typeof vi.fn>;
   }> => {
     const mockedClient = new MockedAgentClientClass(mockConfig);
-    const client = mockedClient as unknown as Parameters<
-      typeof useAgentStream
-    >[0];
+    const client = await createFakeAgentFromMockClient(mockedClient);
 
     let capturedOnComplete:
       | ((
@@ -304,20 +302,25 @@ describe('useAgentStream subagent isolation', () => {
     renderHook(() =>
       useAgentStream(
         client,
-        mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         createStreamRuntimeForTest(mockConfig, mockOverrides),
-        mockSettings,
-        mockOnDebugMessage,
-        mockHandleSlashCommand as unknown as (
-          cmd: AgentRequestInput,
-        ) => Promise<SlashCommandProcessorResult | false>,
-        false,
-        () => 'vscode' as EditorType,
-        () => {},
-        () => Promise.resolve(),
-        () => {},
-        () => {},
-        () => {},
+        {
+          addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
+          settings: mockSettings,
+          onDebugMessage: mockOnDebugMessage,
+          handleSlashCommand: mockHandleSlashCommand as unknown as (
+            cmd: AgentRequestInput,
+          ) => Promise<SlashCommandProcessorResult | false>,
+          shellModeActive: false,
+          getPreferredEditor: () => 'vscode' as EditorType,
+          onAuthError: () => {},
+          performMemoryRefresh: () => Promise.resolve(),
+          onEditorClose: () => {},
+          onCancelSubmit: () => {},
+          setShellInputFocused: () => {},
+        },
+        undefined,
+        undefined,
+        undefined,
       ),
     );
 
@@ -379,10 +382,10 @@ describe('useAgentStream subagent isolation', () => {
     expect(completion.addHistory).not.toHaveBeenCalled();
   });
 
-  it('marks a terminal subagent tool as outstanding until displayCleared transitions it out of Responding', () => {
-    const client = new MockedAgentClientClass(
-      mockConfig,
-    ) as unknown as Parameters<typeof useAgentStream>[0];
+  it('marks a terminal subagent tool as outstanding until displayCleared transitions it out of Responding', async () => {
+    const client = await createFakeAgentFromMockClient(
+      new MockedAgentClientClass(mockConfig),
+    );
 
     const unclearedSubagentTool: TrackedCompletedToolCall = {
       request: {
@@ -427,20 +430,25 @@ describe('useAgentStream subagent isolation', () => {
     const { result } = renderHook(() =>
       useAgentStream(
         client,
-        mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         createStreamRuntimeForTest(mockConfig, mockOverrides),
-        mockSettings,
-        mockOnDebugMessage,
-        mockHandleSlashCommand as unknown as (
-          cmd: AgentRequestInput,
-        ) => Promise<SlashCommandProcessorResult | false>,
-        false,
-        () => 'vscode' as EditorType,
-        () => {},
-        () => Promise.resolve(),
-        () => {},
-        () => {},
-        () => {},
+        {
+          addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
+          settings: mockSettings,
+          onDebugMessage: mockOnDebugMessage,
+          handleSlashCommand: mockHandleSlashCommand as unknown as (
+            cmd: AgentRequestInput,
+          ) => Promise<SlashCommandProcessorResult | false>,
+          shellModeActive: false,
+          getPreferredEditor: () => 'vscode' as EditorType,
+          onAuthError: () => {},
+          performMemoryRefresh: () => Promise.resolve(),
+          onEditorClose: () => {},
+          onCancelSubmit: () => {},
+          setShellInputFocused: () => {},
+        },
+        undefined,
+        undefined,
+        undefined,
       ),
     );
 
@@ -449,10 +457,10 @@ describe('useAgentStream subagent isolation', () => {
     expect(result.current.streamingState).toBe(StreamingState.Responding);
   });
 
-  it('transitions a terminal subagent tool out of Responding once displayCleared is true', () => {
-    const client = new MockedAgentClientClass(
-      mockConfig,
-    ) as unknown as Parameters<typeof useAgentStream>[0];
+  it('transitions a terminal subagent tool out of Responding once displayCleared is true', async () => {
+    const client = await createFakeAgentFromMockClient(
+      new MockedAgentClientClass(mockConfig),
+    );
 
     const clearedSubagentTool: TrackedCompletedToolCall = {
       request: {
@@ -497,20 +505,25 @@ describe('useAgentStream subagent isolation', () => {
     const { result } = renderHook(() =>
       useAgentStream(
         client,
-        mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         createStreamRuntimeForTest(mockConfig, mockOverrides),
-        mockSettings,
-        mockOnDebugMessage,
-        mockHandleSlashCommand as unknown as (
-          cmd: AgentRequestInput,
-        ) => Promise<SlashCommandProcessorResult | false>,
-        false,
-        () => 'vscode' as EditorType,
-        () => {},
-        () => Promise.resolve(),
-        () => {},
-        () => {},
-        () => {},
+        {
+          addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
+          settings: mockSettings,
+          onDebugMessage: mockOnDebugMessage,
+          handleSlashCommand: mockHandleSlashCommand as unknown as (
+            cmd: AgentRequestInput,
+          ) => Promise<SlashCommandProcessorResult | false>,
+          shellModeActive: false,
+          getPreferredEditor: () => 'vscode' as EditorType,
+          onAuthError: () => {},
+          performMemoryRefresh: () => Promise.resolve(),
+          onEditorClose: () => {},
+          onCancelSubmit: () => {},
+          setShellInputFocused: () => {},
+        },
+        undefined,
+        undefined,
+        undefined,
       ),
     );
 
@@ -518,5 +531,130 @@ describe('useAgentStream subagent isolation', () => {
     // so the streaming state settles to Idle without any model resubmission.
     expect(result.current.streamingState).toBe(StreamingState.Idle);
     expect(mockSendMessageStream).not.toHaveBeenCalled();
+  });
+
+  const observeClientInitiatedToolCompletion = async (): Promise<{
+    readonly items: ReturnType<typeof useAgentStream>['pendingHistoryItems'];
+    readonly sendMessageStream: ReturnType<typeof vi.fn>;
+    readonly markToolsAsDisplayCleared: ReturnType<typeof vi.fn>;
+  }> => {
+    const client = await createFakeAgentFromMockClient(
+      new MockedAgentClientClass(mockConfig),
+    );
+
+    let capturedOnComplete:
+      | ((
+          schedulerId: symbol,
+          completedTools: TrackedToolCall[],
+          options: { isPrimary: boolean },
+        ) => Promise<void>)
+      | null = null;
+
+    let displayedCalls: TrackedToolCall[] = [];
+    mockUseReactToolScheduler.mockImplementation((onComplete) => {
+      capturedOnComplete = onComplete as typeof capturedOnComplete;
+      return [
+        displayedCalls,
+        mockScheduleToolCalls,
+        mockMarkToolsAsDisplayCleared,
+        vi.fn(),
+        0,
+        true,
+        vi.fn(),
+        vi.fn(),
+      ] as const;
+    });
+
+    const hook = renderHook(() =>
+      useAgentStream(
+        client,
+        createStreamRuntimeForTest(mockConfig, mockOverrides),
+        {
+          addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
+          settings: mockSettings,
+          onDebugMessage: mockOnDebugMessage,
+          handleSlashCommand: mockHandleSlashCommand as unknown as (
+            cmd: AgentRequestInput,
+          ) => Promise<SlashCommandProcessorResult | false>,
+          shellModeActive: false,
+          getPreferredEditor: () => 'vscode' as EditorType,
+          onAuthError: () => {},
+          performMemoryRefresh: () => Promise.resolve(),
+          onEditorClose: () => {},
+          onCancelSubmit: () => {},
+          setShellInputFocused: () => {},
+        },
+        undefined,
+        undefined,
+        undefined,
+      ),
+    );
+
+    // A client-initiated tool completes through the MAIN scheduler: it has
+    // isClientInitiated: true and agentId: DEFAULT_AGENT_ID, and its completion
+    // callback is invoked with { isPrimary: true }.
+    const clientInitiatedTool: TrackedCompletedToolCall = {
+      request: {
+        callId: 'client-callId',
+        name: 'list_directory',
+        args: {},
+        isClientInitiated: true,
+        prompt_id: 'prompt-client',
+        agentId: DEFAULT_AGENT_ID,
+      },
+      status: 'success',
+      displayCleared: false,
+      response: {
+        callId: 'client-callId',
+        responseParts: [{ type: 'text', text: 'dir listing' }],
+        resultDisplay: undefined,
+        error: undefined,
+        errorType: undefined,
+      },
+      invocation: {
+        getDescription: () => `Mock description`,
+      } as unknown as AnyToolInvocation,
+      tool: {
+        name: 'list_directory',
+        displayName: 'List Directory',
+        description: 'List files',
+        build: vi.fn(),
+      } as unknown as AnyDeclarativeTool,
+    };
+
+    await act(async () => {
+      if (capturedOnComplete) {
+        await capturedOnComplete(Symbol('scheduler'), [clientInitiatedTool], {
+          isPrimary: true,
+        });
+      }
+    });
+
+    displayedCalls = [clientInitiatedTool];
+    hook.rerender();
+
+    return {
+      items: hook.result.current.pendingHistoryItems,
+      sendMessageStream: mockSendMessageStream,
+      markToolsAsDisplayCleared: mockMarkToolsAsDisplayCleared,
+    };
+  };
+
+  it('renders a completed client-initiated tool to display without resubmitting to the model or marking it display-cleared', async () => {
+    const completion = await observeClientInitiatedToolCompletion();
+    expect(completion.items).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_group',
+        tools: [
+          expect.objectContaining({
+            callId: 'client-callId',
+            name: 'List Directory',
+            status: 'Success',
+          }),
+        ],
+      }),
+    );
+    expect(completion.sendMessageStream).not.toHaveBeenCalled();
+    expect(completion.markToolsAsDisplayCleared).not.toHaveBeenCalled();
   });
 });

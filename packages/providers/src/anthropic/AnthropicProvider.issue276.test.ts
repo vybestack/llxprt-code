@@ -149,7 +149,6 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
 
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
-    runtimeContext.config ??= createRuntimeConfigStub(settingsService);
   });
   describe('getModels: OAuth and API-key tokens both dynamically list models', () => {
     registerAnthropicBehavior1();
@@ -194,7 +193,7 @@ const buildCallOptions = (
     contents,
     settings: settingsService,
     runtime: runtimeContext,
-    config: runtimeContext.config,
+    config: createRuntimeConfigStub(settingsService),
     ...overrides,
   });
 

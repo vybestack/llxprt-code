@@ -1,3 +1,4 @@
+import { chatSessionPorts } from '../../chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { randomUUID, createHash } from 'node:crypto';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -136,6 +137,10 @@ export async function processorFixture(
   );
 }
 
+function unavailableCredentialKeys(): never {
+  throw new Error('Source processor fixture does not own credential keys');
+}
+
 export function assembleProcessorFixture(
   config: Config,
   settings: SettingsService,
@@ -157,7 +162,17 @@ export function assembleProcessorFixture(
   };
   const runtime = createAgentRuntimeContext({
     prepareProviderInvocation: (name, parameters, signal) =>
-      captureProviderInvocation(providerRuntime, name, parameters, signal),
+      captureProviderInvocation(
+        {
+          runtimeId: providerRuntime.runtimeId,
+          fetch: globalThis.fetch,
+          globalSettings: settings.getAllGlobalSettings(),
+          providerSettings: settings.getProviderSettings(name),
+        },
+        name,
+        parameters,
+        signal,
+      ),
     promptEstimator,
     readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
     state: {
@@ -171,7 +186,11 @@ export function assembleProcessorFixture(
     history,
     settings: { contextLimit: 4_000_000 },
     providerRuntime,
-    provider: { getActiveProvider: () => provider, setActiveProvider() {} },
+    provider: {
+      getActiveProvider: () => provider,
+      setActiveProvider() {},
+      getProviderKeys: unavailableCredentialKeys,
+    },
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
     telemetry: {
       logApiRequest(event) {
@@ -181,24 +200,12 @@ export function assembleProcessorFixture(
       logApiError() {},
     },
   });
-  const generation: ChatSessionConfig = {
-    systemInstruction: projectionInstructions,
-  };
-  const compression = new CompressionHandler(
+  const { generation, compression, processor } = processorOwners(
+    config,
     runtime,
     history,
-    generation,
-    () => ({ provider, runtime: providerRuntime }),
-    async () => undefined,
-  );
-  const processor = new StreamProcessor(
-    runtime,
-    new ConversationManager(history, runtime),
-    compression,
-    () => provider,
-    (_source, metadata) => ({ ...providerRuntime, metadata }),
-    history,
-    generation,
+    provider,
+    providerRuntime,
   );
   return {
     config,
@@ -252,4 +259,48 @@ export function sourceWireOracle(
     `],"stream":true,"instructions":${JSON.stringify(projectionInstructions)}}`,
   );
   return { bytes, sha256: hash.digest('hex') };
+}
+
+function processorOwners(
+  config: Config,
+  runtime: ReturnType<typeof createAgentRuntimeContext>,
+  history: ObservedHistory,
+  provider: ObservedResponsesProvider,
+  providerRuntime: ReturnType<
+    typeof createAgentRuntimeContext
+  >['providerRuntime'],
+) {
+  const generation: ChatSessionConfig = {
+    systemInstruction: projectionInstructions,
+  };
+  const compression = new CompressionHandler(
+    chatSessionPorts(runtime).compression,
+    config,
+    history,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    generation,
+    () => ({ provider, runtime: providerRuntime }),
+    async () => undefined,
+  );
+  const processor = new StreamProcessor(
+    chatSessionPorts(runtime).stream,
+    config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new ConversationManager(history, runtime),
+    compression,
+    () => provider,
+    (_source, metadata) => ({ ...providerRuntime, metadata }),
+    history,
+    generation,
+  );
+
+  return { generation, compression, processor };
 }

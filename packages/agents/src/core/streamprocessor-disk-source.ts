@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { responseTransportSource } from './response-transport-source.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { StreamProcessorRuntime } from './chatSessionPorts.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -26,13 +26,11 @@ import {
   type PendingAwareRequestSelection,
 } from './source-pending-selection.js';
 
-export function assertSourceRuntimeConfig(runtime: AgentRuntimeContext): void {
-  if (runtime.providerRuntime.config === undefined)
-    throw new Error('Disk source requires live runtime config');
-}
-
 interface StreamDiskSourceInput {
-  readonly runtime: AgentRuntimeContext;
+  readonly runtime: Pick<
+    StreamProcessorRuntime,
+    'state' | 'provider' | 'promptEstimator'
+  >;
   readonly compression: CompressionHandler;
   readonly history: HistoryService;
   readonly userContent: IContent | IContent[];
@@ -117,7 +115,6 @@ async function submitSourcePrompt(
 export async function streamDiskSource(
   input: StreamDiskSourceInput,
 ): Promise<AsyncIterableIterator<IContent>> {
-  assertSourceRuntimeConfig(input.runtime);
   input.signal?.throwIfAborted();
   const hookOwner = input.hookOwner ?? input.recordingExecution?.hookOwner;
   const preparedPending = preparePendingContents(

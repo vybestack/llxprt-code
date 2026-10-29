@@ -1,10 +1,13 @@
+import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { adaptGenerator } from './__tests__/chatSession-thinking-toolcalls-helpers.js';
+import { buildMockContentGenerator } from './__tests__/chatSession-density-helpers.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 /// <reference lib="esnext.array" />
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
-import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
+
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -12,6 +15,7 @@ import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-provid
  */
 import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
 const modelTools = installModelToolFixture();
+const fixtureFile = `${process.cwd()}/package.json`;
 
 /**
  * History/tool-call behaviors for ChatSession runtime context.
@@ -25,14 +29,15 @@ import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
+
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
@@ -40,7 +45,10 @@ import {
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { createConfigParams } from './chatSession-runtime-helpers.js';
+import {
+  createConfigParams,
+  invocationData,
+} from './chatSession-runtime-helpers.js';
 
 let settingsService: SettingsService;
 let config: Config;
@@ -56,15 +64,13 @@ function setupHistoryRuntime(): void {
   settingsService.set('providers.stub.model', 'stub-model');
 
   providerRuntime = createProviderRuntimeContext({
-    settingsService,
-    config,
     runtimeId: 'test.runtime',
     metadata: { source: 'chatSession.runtime.history.test' },
   });
 
   manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
 }
 
 function createHistoryChat(
@@ -85,7 +91,12 @@ function createHistoryChat(
   });
   const view = createAgentRuntimeContext({
     prepareProviderInvocation: (name, parameters, signal) =>
-      captureProviderInvocation(providerRuntime, name, parameters, signal),
+      captureProviderInvocation(
+        invocationData(providerRuntime, name, settingsService),
+        name,
+        parameters,
+        signal,
+      ),
     state,
     history: historyService,
     settings: options.settings ?? {
@@ -103,24 +114,37 @@ function createHistoryChat(
     tools: createToolRegistryViewFromRegistry(modelTools()),
     providerRuntime: { ...providerRuntime },
   });
-  return new ChatSession(view, {} as unknown as ContentGenerator, {}, []);
+  return new ChatSession(
+    chatSessionPorts(view),
+    config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    buildMockContentGenerator(),
+    {},
+    [],
+  );
 }
 
 async function commitThinkingToolResults(): Promise<number> {
-  const generateChatCompletionMock = vi.fn(async function* () {
-    yield {
-      speaker: 'ai',
-      blocks: [{ type: 'thinking', thought: 'processing tool output' }],
-    };
-  });
+  const generateChatCompletionMock = vi.fn(
+    async function* (): AsyncGenerator<IContent> {
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'thinking', thought: 'processing tool output' }],
+      };
+    },
+  );
 
   const provider: IProvider = {
     name: 'stub',
     isDefault: true,
     getModels: vi.fn(async () => []),
     getDefaultModel: () => 'stub-model',
-    generateChatCompletion: generateChatCompletionMock,
-    getAuthToken: vi.fn(async () => 'stub-auth-token'),
+    generateChatCompletion: adaptGenerator(generateChatCompletionMock),
   };
 
   manager.registerProvider(provider);
@@ -190,21 +214,25 @@ async function commitThinkingToolResults(): Promise<number> {
   return toolResponseIndex - toolCallIndex;
 }
 
-function completedReadFileFixture() {
-  const completed = [
+function completedReadFileFixture(): CompletedToolCall[] {
+  const tool = modelTools().getTool('read_file');
+  if (tool === undefined) throw new Error('Missing read_file fixture tool');
+  const completed: CompletedToolCall[] = [
     {
       status: 'success' as const,
       request: {
         callId: 'toolu_456',
         name: 'read_file',
         args: {
-          absolute_path: '/test/package.json',
+          absolute_path: fixtureFile,
         },
         prompt_id: 'prompt-456',
         agentId: 'default_agent',
         isClientInitiated: false,
       },
       response: {
+        error: undefined,
+        errorType: undefined,
         callId: 'toolu_456',
         responseParts: [
           {
@@ -212,7 +240,7 @@ function completedReadFileFixture() {
             id: 'toolu_456',
             name: 'read_file',
             parameters: {
-              absolute_path: '/test/package.json',
+              absolute_path: fixtureFile,
             },
           },
           {
@@ -224,32 +252,37 @@ function completedReadFileFixture() {
         ],
         resultDisplay: '@vybestack/llxprt-code',
       },
-      invocation: { execute: vi.fn() },
+      tool,
+      invocation: tool.build({ absolute_path: fixtureFile }),
     },
   ];
   return completed;
 }
 
-function continuedReadFileFixture() {
-  const completed = [
+function continuedReadFileFixture(): CompletedToolCall[] {
+  const tool = modelTools().getTool('read_file');
+  if (tool === undefined) throw new Error('Missing read_file fixture tool');
+  const completed: CompletedToolCall[] = [
     {
       status: 'success' as const,
       request: {
         callId: 'toolu_continue_1',
         name: 'read_file',
-        args: { absolute_path: '/test/package.json' },
+        args: { absolute_path: fixtureFile },
         prompt_id: 'prompt-continue-1',
         agentId: 'default_agent',
         isClientInitiated: false,
       },
       response: {
+        error: undefined,
+        errorType: undefined,
         callId: 'toolu_continue_1',
         responseParts: [
           {
             type: 'tool_call',
             id: 'toolu_continue_1',
             name: 'read_file',
-            parameters: { absolute_path: '/test/package.json' },
+            parameters: { absolute_path: fixtureFile },
           },
           {
             type: 'tool_response',
@@ -264,7 +297,8 @@ function continuedReadFileFixture() {
         ],
         resultDisplay: 'package-json',
       },
-      invocation: { execute: vi.fn() },
+      tool,
+      invocation: tool.build({ absolute_path: fixtureFile }),
     },
   ];
   return completed;
@@ -324,20 +358,21 @@ async function recordCompletedToolCalls(): Promise<number> {
 }
 
 async function avoidDuplicateToolResponses(): Promise<number> {
-  const generateChatCompletionMock = vi.fn(async function* () {
-    yield {
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: 'Done.' }],
-    };
-  });
+  const generateChatCompletionMock = vi.fn(
+    async function* (): AsyncGenerator<IContent> {
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Done.' }],
+      };
+    },
+  );
 
   const provider: IProvider = {
     name: 'stub',
     isDefault: true,
     getModels: vi.fn(async () => []),
     getDefaultModel: () => 'stub-model',
-    generateChatCompletion: generateChatCompletionMock,
-    getAuthToken: vi.fn(async () => 'stub-auth-token'),
+    generateChatCompletion: adaptGenerator(generateChatCompletionMock),
   };
 
   manager.registerProvider(provider);
@@ -416,7 +451,7 @@ async function retainThinkingToolCalls(): Promise<boolean> {
 
   const generateChatCompletionMock = vi.fn(async function* (
     options: GenerateChatOptions,
-  ) {
+  ): AsyncGenerator<IContent> {
     calls.push(options);
     yield {
       speaker: 'ai',
@@ -441,8 +476,7 @@ async function retainThinkingToolCalls(): Promise<boolean> {
     isDefault: true,
     getModels: vi.fn(async () => []),
     getDefaultModel: () => 'stub-model',
-    generateChatCompletion: generateChatCompletionMock,
-    getAuthToken: vi.fn(async () => 'stub-auth-token'),
+    generateChatCompletion: adaptGenerator(generateChatCompletionMock),
   };
 
   manager.registerProvider(provider);
@@ -478,7 +512,7 @@ async function closePendingToolCalls(): Promise<number> {
 
   const generateChatCompletionMock = vi.fn(async function* (
     options: GenerateChatOptions,
-  ) {
+  ): AsyncGenerator<IContent> {
     const sent: IContent[] = [];
     for await (const content of options.contents) {
       expect(sent.length).toBeLessThan(3);
@@ -496,8 +530,7 @@ async function closePendingToolCalls(): Promise<number> {
     isDefault: true,
     getModels: vi.fn(async () => []),
     getDefaultModel: () => 'stub-model',
-    generateChatCompletion: generateChatCompletionMock,
-    getAuthToken: vi.fn(async () => 'stub-auth-token'),
+    generateChatCompletion: adaptGenerator(generateChatCompletionMock),
   };
 
   manager.registerProvider(provider);
@@ -559,32 +592,34 @@ async function retainActiveProvider(): Promise<void> {
     isDefault: true,
     getModels: vi.fn(async () => []),
     getDefaultModel: () => 'openai-model',
-    generateChatCompletion: vi.fn(async function* (
-      options: GenerateChatOptions,
-    ) {
-      openaiCalls.push(options);
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'openai' }],
-      };
-    }),
-    getAuthToken: vi.fn(async () => 'openai-auth-token'),
+    generateChatCompletion: adaptGenerator(
+      vi.fn(async function* (
+        options: GenerateChatOptions,
+      ): AsyncGenerator<IContent> {
+        openaiCalls.push(options);
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'openai' }],
+        };
+      }),
+    ),
   };
 
   const anthropicProvider: IProvider = {
     name: 'anthropic',
     getModels: vi.fn(async () => []),
     getDefaultModel: () => 'claude-test',
-    generateChatCompletion: vi.fn(async function* (
-      options: GenerateChatOptions,
-    ) {
-      anthropicCalls.push(options);
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'anthropic' }],
-      };
-    }),
-    getAuthToken: vi.fn(async () => 'anthropic-auth-token'),
+    generateChatCompletion: adaptGenerator(
+      vi.fn(async function* (
+        options: GenerateChatOptions,
+      ): AsyncGenerator<IContent> {
+        anthropicCalls.push(options);
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'anthropic' }],
+        };
+      }),
+    ),
   };
 
   manager.registerProvider(openaiProvider);
@@ -609,7 +644,7 @@ async function retainActiveProvider(): Promise<void> {
 }
 
 function registerTerminalProvider(metadata: {
-  finishReason: string;
+  finishReason: NonNullable<IContent['metadata']>['finishReason'];
   rawStopReason?: string;
 }): void {
   const provider: IProvider = {
@@ -617,20 +652,21 @@ function registerTerminalProvider(metadata: {
     isDefault: true,
     getModels: vi.fn(async () => []),
     getDefaultModel: () => 'stub-model',
-    generateChatCompletion: vi.fn(async function* (
-      _options: GenerateChatOptions,
-    ) {
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'first chunk' }],
-      };
-      yield {
-        speaker: 'ai',
-        blocks: [],
-        metadata,
-      };
-    }),
-    getAuthToken: vi.fn(async () => 'stub-auth-token'),
+    generateChatCompletion: adaptGenerator(
+      vi.fn(async function* (
+        _options: GenerateChatOptions,
+      ): AsyncGenerator<IContent> {
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'first chunk' }],
+        };
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata,
+        };
+      }),
+    ),
   };
   manager.registerProvider(provider);
 }

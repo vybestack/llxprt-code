@@ -32,10 +32,12 @@ export async function compressMiddleOutViaDisk(
   const candidate = new HistoryDensityRows();
   try {
     for (const row of context.history) source.append(row);
-    const result = await new MiddleOutStrategy().compressDisk(
-      { ...context, history: source },
-      candidate,
-    );
+    const result = await new MiddleOutStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ).compressDisk({ ...context, history: source }, candidate);
     if (result.kind === 'noop')
       return { kind: 'noop', candidateRows: candidate.length };
     const newHistory = [...candidate];

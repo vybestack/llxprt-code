@@ -7,7 +7,7 @@
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { createProviderKeyStorage } from '../auth/index.js';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import {
   isResolvedSubProfile,
   type LoadBalancerSubProfile,
@@ -46,6 +46,7 @@ export async function readMemberKeyfile(
 export async function resolveMemberAuthentication(
   subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   logger: AuthLogger,
+  storage?: Pick<ProviderKeyStorageLike, 'getKey'>,
 ): Promise<ResolvedSubProfile | LoadBalancerSubProfile> {
   if (!isResolvedSubProfile(subProfile) || subProfile.auth?.type === 'oauth') {
     return subProfile;
@@ -63,8 +64,12 @@ export async function resolveMemberAuthentication(
       authToken: await readMemberKeyfile(name, subProfile.authKeyfile, logger),
     };
   }
+  if (!storage)
+    throw new Error(
+      'Member key resolution requires an explicit credential owner',
+    );
   try {
-    const resolvedKey = await createProviderKeyStorage().getKey(authKeyName);
+    const resolvedKey = await storage.getKey(authKeyName);
     if (typeof resolvedKey === 'string' && resolvedKey.trim() !== '') {
       logger.debug(
         () => `Resolved auth-key-name '${authKeyName}' for sub-profile ${name}`,
@@ -91,6 +96,7 @@ export async function assertMemberAuthCurrent(
   selected: ResolvedSubProfile | LoadBalancerSubProfile,
   authenticated: ResolvedSubProfile | LoadBalancerSubProfile,
   logger: AuthLogger,
+  storage?: Pick<ProviderKeyStorageLike, 'getKey'>,
 ): Promise<void> {
   if (
     !isResolvedSubProfile(selected) ||
@@ -99,10 +105,41 @@ export async function assertMemberAuthCurrent(
   ) {
     return;
   }
-  const current = await resolveMemberAuthentication(selected, logger);
+  const current = await resolveMemberAuthentication(selected, logger, storage);
   if (current.authToken !== authenticated.authToken) {
     throw new Error(
       'Admitted load-balancer member credentials changed before request dispatch',
+    );
+  }
+}
+
+export class MemberAuthenticationOwner {
+  constructor(
+    private readonly logger: AuthLogger,
+    private readonly readStorage: () =>
+      | Pick<ProviderKeyStorageLike, 'getKey'>
+      | undefined,
+  ) {}
+
+  resolve(
+    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+  ): Promise<ResolvedSubProfile | LoadBalancerSubProfile> {
+    return resolveMemberAuthentication(
+      subProfile,
+      this.logger,
+      this.readStorage(),
+    );
+  }
+
+  assertCurrent(
+    selected: ResolvedSubProfile | LoadBalancerSubProfile,
+    authenticated: ResolvedSubProfile | LoadBalancerSubProfile,
+  ): Promise<void> {
+    return assertMemberAuthCurrent(
+      selected,
+      authenticated,
+      this.logger,
+      this.readStorage(),
     );
   }
 }

@@ -120,6 +120,7 @@ async function buildHarness(): Promise<Harness> {
         install,
         promptId,
         runtimeContext,
+        undefined,
         historyService,
         () => Promise.resolve({ provider: {} as never, runtime: {} as never }),
         undefined,

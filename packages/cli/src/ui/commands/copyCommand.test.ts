@@ -3,25 +3,28 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { createCopyCommand } from './copyCommand.js';
+import { bindCopyCommandHistoryRead } from './copyCommandHost.js';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import {
-  publicChat,
-  publicCommandContext,
-  PublicCursorHistory,
-} from '../../__tests__/public-history-cursor.js';
+import { PublicCursorHistory } from '../../__tests__/public-history-cursor.js';
 
 const writes: string[] = [];
 let clipboardError: unknown;
-void mock.module('../utils/commandUtils.js', () => ({
-  async copyToClipboard(text: string): Promise<void> {
-    if (clipboardError !== undefined) throw clipboardError;
-    writes.push(text);
-  },
-}));
-const { copyCommand } = await import('./copyCommand.js');
+async function copyToClipboard(text: string): Promise<void> {
+  if (clipboardError !== undefined) throw clipboardError;
+  writes.push(text);
+}
+function noChatCopy() {
+  return createCopyCommand(
+    bindCopyCommandHistoryRead(
+      () => false,
+      async function* () {},
+    ),
+    copyToClipboard,
+  ).action();
+}
 
 function resetClipboard(): void {
   writes.length = 0;
@@ -36,7 +39,13 @@ async function copyRows(rows: readonly IContent[]): Promise<unknown> {
   return withSuffixFixture(
     rows.length,
     async (history) =>
-      copyCommand.action?.(publicCommandContext(publicChat(history)), ''),
+      createCopyCommand(
+        bindCopyCommandHistoryRead(
+          () => true,
+          () => history.streamRawHistory(),
+        ),
+        copyToClipboard,
+      ).action(),
     0,
     (index) => rows[index],
     undefined,
@@ -47,13 +56,7 @@ async function copyRows(rows: readonly IContent[]): Promise<unknown> {
 describe('copyCommand absent output', () => {
   beforeEach(resetClipboard);
   it('returns info when no chat has been initialized', async () => {
-    const context = createMockCommandContext({
-      services: {
-        agent: { agentClient: { hasChatInitialized: () => false } },
-        config: {},
-      },
-    });
-    expect(await copyCommand.action?.(context, '')).toStrictEqual({
+    expect(await noChatCopy()).toStrictEqual({
       type: 'message',
       content: 'No chat history available yet',
       messageType: 'info',
@@ -80,12 +83,7 @@ describe('copyCommand absent output', () => {
   });
 
   it('returns info when the config service is unavailable', async () => {
-    expect(
-      await copyCommand.action?.(
-        createMockCommandContext({ services: { config: null } }),
-        '',
-      ),
-    ).toStrictEqual({
+    expect(await noChatCopy()).toStrictEqual({
       type: 'message',
       content: 'No chat history available yet',
       messageType: 'info',

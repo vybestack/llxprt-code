@@ -1,23 +1,35 @@
+import { collectResumeRows } from '../../../../__tests__/resumeRows.js';
+import { encodeJournalUiItem } from '../../../stores/turn/journal-ui-item.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { withRecordingLifetimeFixture } from '../../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { renderHook, waitFor } from '../../../../__tests__/render.js';
-import { buildUiRuntimeFromSource } from '../../../cliUiRuntime.js';
 import { NativeJournalCursor } from '../../../stores/turn/native-journal-cursor.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
 
 describe('SessionStart journal notice', () => {
   it('persists a pre-prompt hook message without a UI history item', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config }) => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.session.setRecording({ enabled: true });
       const hook = spyOn(agent.hooks, 'triggerSessionStart').mockResolvedValue({
         systemMessage: 'Session hook persisted',
       });
       const view = renderHook(() =>
         useSessionInitialization({
-          agent,
-          uiRuntime: buildUiRuntimeFromSource(config, agent),
-          recordingOwner: 'agent',
+          triggerSessionStart: agent.hooks.triggerSessionStart.bind(
+            agent.hooks,
+          ),
+          appendHookContext: async (text) => {
+            await agent.addHistory({
+              speaker: 'human',
+              blocks: [{ type: 'text', text }],
+            });
+          },
+          readEmojiFilterMode: () => 'auto',
+          readLlxprtMdFileCount: agent.memory.getFileCount.bind(agent.memory),
+          readCoreMemoryFileCount: agent.memory.getCoreFileCount.bind(
+            agent.memory,
+          ),
           resumedBoot: {
             async *streamRows() {
               yield await Promise.reject(
@@ -25,8 +37,12 @@ describe('SessionStart journal notice', () => {
               );
             },
           },
-          addItem: () => {
-            throw new Error('Ledger write forbidden');
+          addItem: (item) => {
+            void agent.session.appendDisplay(
+              { type: 'ui-item' },
+              encodeJournalUiItem(item),
+            );
+            return 0;
           },
         }),
       );
@@ -47,7 +63,9 @@ describe('SessionStart journal notice', () => {
             await cursor.close();
           }
         });
-        expect(await agent.session.getHistory()).toStrictEqual([]);
+        expect(await collectResumeRows(agent.streamHistory())).toStrictEqual(
+          [],
+        );
       } finally {
         view.unmount();
         hook.mockRestore();

@@ -1,18 +1,55 @@
+import { mkdtemp, realpath, rm, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import type { AgentConfig } from '../config-types.js';
+import { createAgent } from '../createAgent.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+
+import { buildAgent } from './helpers/agentHarness.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
-import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import { fromConfig } from '../fromConfig.js';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { buildAgent } from './helpers/agentHarness.js';
 
 describe('public Agent workspace filesystem lifetime', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  useFakeResponsesReplay('plain-text.jsonl');
+  const credentials = useOwnedCredentials();
+
+  const rootedConfig = (
+    directory: string,
+    root: WorkspaceFilesystemOwner,
+    ownership?: AgentConfig['filesystemOwnership'],
+  ): AgentConfig => ({
+    provider: 'fake',
+    model: 'fake-model',
+    workingDir: directory,
+    interactive: true,
+    filesystemOwner: root,
+    filesystemOwnership: ownership,
+    harness: { includeProcessCwd: false },
+    credentialAuthority: credentials().authority,
+  });
+
   it('rejects caller lifetime without an explicit filesystem root', async () => {
     await expect(
       buildAgent('plain-text.jsonl', { filesystemOwnership: 'caller' }),
@@ -42,19 +79,8 @@ describe('public Agent workspace filesystem lifetime', () => {
         isTrusted: () => true,
         fileSystem: { service, ownership: 'caller' },
       });
-      const built = await buildCliStyleConfig('plain-text.jsonl', {
-        workingDir: directory,
-        filesystemOwner: root,
-      });
-      const options = {
-        settingsService: built.settingsService,
-        config: built.config,
-        providerManager: built.providerManager,
-        agentClient: built.agentClient,
-        mcpRuntime: built.mcpRuntime,
-      };
-      const first = await fromConfig(options);
-      const second = await fromConfig(options);
+      const first = await createAgent(rootedConfig(directory, root));
+      const second = await createAgent(rootedConfig(directory, root));
       try {
         expect(await first.workspace.search(directory, '*.txt')).toStrictEqual(
           [],
@@ -93,17 +119,17 @@ describe('public Agent workspace filesystem lifetime', () => {
           await root.files.writeTextFile(file, 'next');
           expect(await root.files.readTextFile(file)).toBe('borrowed:NEXT');
         }
-        await built.cleanup();
         expect(await root.files.readTextFile(file)).toBe('borrowed:NEXT');
         await root.dispose();
         expect(await service.readTextFile(file)).toBe('borrowed:NEXT');
         await expect(root.files.readTextFile(file)).rejects.toThrow('disposed');
       } finally {
-        await first.dispose();
-        await second.dispose();
-        await built.cleanup();
-        await root.dispose();
-        await rm(directory, { recursive: true, force: true });
+        await runCleanupSteps([
+          () => first.dispose(),
+          () => second.dispose(),
+          () => root.dispose(),
+          () => rm(directory, { recursive: true, force: true }),
+        ]);
       }
     });
   }
@@ -133,13 +159,9 @@ describe('public Agent workspace filesystem lifetime', () => {
         },
       },
     });
-    const built = await buildCliStyleConfig('plain-text.jsonl', {
-      workingDir: directory,
-      filesystemOwner: root,
-      filesystemOwnership: 'agent',
-    });
+    const agent = await createAgent(rootedConfig(directory, root, 'agent'));
     const accepted = root.files.readTextFile(file);
-    const closing = built.mcpRuntime.dispose();
+    const closing = agent.dispose();
     const afterClosing = root.files.readTextFile(file);
     release();
     try {
@@ -147,8 +169,10 @@ describe('public Agent workspace filesystem lifetime', () => {
     } finally {
       expect(await accepted).toBe('accepted');
       await closing;
-      await built.cleanup();
-      await rm(directory, { recursive: true, force: true });
+      await runCleanupSteps([
+        () => agent.dispose(),
+        () => rm(directory, { recursive: true, force: true }),
+      ]);
     }
   });
 });

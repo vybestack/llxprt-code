@@ -8,7 +8,7 @@
  * Named API key management backed by SecureStore.
  *
  * Provides CRUD operations for named provider API keys with validation,
- * trimming, and singleton access. All storage is delegated to SecureStore.
+ * and trimming. All storage is delegated to SecureStore.
  *
  * @plan PLAN-20260211-SECURESTORE.P12
  * @requirement R9.1, R10.1
@@ -125,30 +125,4 @@ export class ProviderKeyStorage implements ProviderKeyStorageLike {
     validateKeyName(name);
     return this.secureStore.has(name);
   }
-}
-
-// ─── Singleton ───────────────────────────────────────────────────────────────
-
-/** @pseudocode line 68 */
-let providerKeyStorageInstance: ProviderKeyStorage | null = null;
-
-/**
- * Returns the singleton ProviderKeyStorage instance for direct host access.
- *
- * @internal **DO NOT call directly in consumer code.**
- * Use `createProviderKeyStorage()` from `credential-store-factory.ts` instead.
- * This ensures proper environment detection (sandbox vs. direct mode)
- * and consistent behavior across the application.
- *
- * @pseudocode lines 70-74
- * @plan PLAN-20250214-CREDPROXY.P36
- */
-export function getProviderKeyStorage(): ProviderKeyStorage {
-  providerKeyStorageInstance ??= new ProviderKeyStorage();
-  return providerKeyStorageInstance;
-}
-
-/** @pseudocode lines 77-79 */
-export function resetProviderKeyStorage(): void {
-  providerKeyStorageInstance = null;
 }

@@ -3,26 +3,35 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { SubscribeModelChanges } from '@vybestack/llxprt-code-core/utils/events.js';
 
-import {
-  CoreEvent,
-  coreEvents,
-} from '@vybestack/llxprt-code-core/utils/events.js';
-
-export function releaseClientModelSubscriptions(
+export function subscribe(
+  subscribeChanges: SubscribeModelChanges,
   modelChanged: () => void,
   profileChanged: () => void,
-): unknown[] {
-  const failures: unknown[] = [];
+  currentRelease: (() => void) | undefined,
+  onRelease: () => void,
+): () => void {
+  if (currentRelease !== undefined)
+    throw new Error('Client model notifications are already bound');
+  const unsubscribe = subscribeChanges((profile) => {
+    if (profile === undefined) modelChanged();
+    else profileChanged();
+  });
+  return () => {
+    try {
+      unsubscribe();
+    } finally {
+      onRelease();
+    }
+  };
+}
+
+export function release(unsubscribe: (() => void) | undefined): unknown[] {
   try {
-    coreEvents.off(CoreEvent.ModelChanged, modelChanged);
-  } catch (error: unknown) {
-    failures.push(error);
+    unsubscribe?.();
+    return [];
+  } catch (error) {
+    return [error];
   }
-  try {
-    coreEvents.off(CoreEvent.ModelProfileChanged, profileChanged);
-  } catch (error: unknown) {
-    failures.push(error);
-  }
-  return failures;
 }

@@ -127,7 +127,12 @@ describe('performResume rollback after the new recording was published', () => {
       currentProvider: 'test-provider',
       currentModel: 'test-model',
       workspaceDirs: [root],
-      historyService: history,
+      history: {
+        adoptResumeBoot: history.adoptResumeBoot.bind(history),
+        attachRecording: async (integration) => {
+          await integration.subscribeToJournal(history);
+        },
+      },
       recordingCallbacks: {
         getCurrentRecording: () => state.recording,
         getCurrentIntegration: () => state.integration,

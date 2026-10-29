@@ -8,6 +8,8 @@ import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/r
 import type { AgentRuntimeProviderAdapter } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { CompressionProfileNotFoundError } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { NoActiveProviderError } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { tryReadActiveProvider } from './chatSessionProviderRuntime.js';
 
 /**
  * Resolves which provider a chat session talks to. The adapter and the desired
@@ -21,11 +23,7 @@ export class ChatSessionProviderResolution {
   ) {}
 
   private getActiveProvider(): IProvider | undefined {
-    try {
-      return this.readAdapter().getActiveProvider();
-    } catch {
-      return undefined;
-    }
+    return tryReadActiveProvider(() => this.readAdapter().getActiveProvider());
   }
 
   private lookupProviderByName(
@@ -74,7 +72,7 @@ export class ChatSessionProviderResolution {
 
     let provider = this.getActiveProvider();
     if (!provider) {
-      throw new Error('No active provider configured');
+      throw new NoActiveProviderError('No active provider configured');
     }
 
     if (desiredProviderName && provider.name !== desiredProviderName) {

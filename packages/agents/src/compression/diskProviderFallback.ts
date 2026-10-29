@@ -44,7 +44,7 @@ export async function runDiskProviderFallback(
     });
     return { outcome: 'applied', summary };
   };
-  return args[2].detachedValues.withCheckpoint(async (snapshot) => {
+  return args[3].detachedValues.withCheckpoint(async (snapshot) => {
     if (
       'compressionInput' in snapshot &&
       snapshot.compressionInput !== undefined

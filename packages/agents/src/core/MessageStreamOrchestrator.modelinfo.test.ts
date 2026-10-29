@@ -17,12 +17,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import { buildCliStyleConfig } from '../api/__tests__/helpers/buildCliStyleConfig.js';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ServerAgentStreamEvent, ModelInfo } from './turn.js';
 import { AgentEventType } from './turn.js';
 import type { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
@@ -212,7 +215,9 @@ function buildOrchestrator(options: BuildOptions = {}): {
     getHistory: vi.fn().mockReturnValue([]),
     getTokenUsageLogger: () => tokenUsageLogger,
     estimatePendingTokens: options.estimatePendingTokens,
-    getContextLimit: vi.fn(() => state.contextLimit ?? tokenLimit()),
+    getContextLimit: vi.fn(
+      () => state.contextLimit ?? tokenLimit(state.identity.model),
+    ),
   };
 
   const config = {
@@ -236,7 +241,14 @@ function buildOrchestrator(options: BuildOptions = {}): {
       yield { type: AgentEventType.Content, value: 'hello' };
       yield {
         type: AgentEventType.Finished,
-        value: { outcome: { hadVisibleOutput: true } },
+        value: {
+          reason: 'stop',
+          outcome: {
+            hadVisibleOutput: true,
+            hadThinking: false,
+            hadToolCalls: false,
+          },
+        },
       };
     })();
 
@@ -273,10 +285,39 @@ function buildOrchestrator(options: BuildOptions = {}): {
   };
 }
 
+function routedProvider(name: string): RuntimeProvider {
+  return {
+    name,
+    getModels: async () => [],
+    generateChatCompletion: () => {
+      throw new Error('The model info tests never call the provider');
+    },
+  };
+}
+
+/** Admitted parameters whose route carries the profile admitted for the stream. */
+function admitted(
+  providerName: string,
+  model: string,
+  profileName: string | null,
+): AdmittedModelParameters {
+  return {
+    providerName,
+    modelParams: {},
+    route: {
+      provider: routedProvider(providerName),
+      model,
+      profileName,
+      hasInlineKey: false,
+    },
+  };
+}
+
 /** Run execute and collect all ModelInfo events. */
 async function collectModelInfos(
   orchestrator: InstanceType<typeof MessageStreamOrchestrator>,
   promptId: string,
+  modelParameters?: AdmittedModelParameters,
 ): Promise<ModelInfo[]> {
   const events: ServerAgentStreamEvent[] = [];
   for await (const event of orchestrator.execute(
@@ -285,6 +326,9 @@ async function collectModelInfos(
     promptId,
     1,
     false,
+    false,
+    undefined,
+    modelParameters,
   )) {
     events.push(event);
   }
@@ -374,14 +418,84 @@ describe('MessageStreamOrchestrator ModelInfo context and continuation (issue #1
 
     state.lastPromptId = 'prompt-1';
 
-    // Change profile only
-    state.profileName = 'profile-b';
-
-    const infos = await collectModelInfos(orchestrator, 'prompt-1');
+    const infos = await collectModelInfos(
+      orchestrator,
+      'prompt-1',
+      admitted('openai', 'gpt-4', 'profile-b'),
+    );
 
     expect(infos).toHaveLength(1);
     expect(infos[0]?.profileName).toBe('profile-b');
     expect(infos[0]?.displayLabel).toBe('profile-b:gpt-4');
+  });
+
+  it('names the admitted profile even when the current profile state changed', async () => {
+    const { orchestrator } = buildOrchestrator({
+      model: 'gpt-4',
+      providerName: 'openai',
+      profileName: 'other',
+    });
+
+    const infos = await collectModelInfos(
+      orchestrator,
+      'prompt-admitted-snapshot',
+      admitted('openai', 'gpt-4', 'myprofile'),
+    );
+
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.profileName).toBe('myprofile');
+    expect(infos[0]?.displayLabel).toBe('myprofile:gpt-4');
+  });
+
+  it('reports no profile for an admitted route without one, whatever the current profile state', async () => {
+    const { orchestrator } = buildOrchestrator({
+      model: 'gpt-4',
+      providerName: 'openai',
+      profileName: 'other',
+    });
+
+    const infos = await collectModelInfos(
+      orchestrator,
+      'prompt-admitted-no-profile',
+      admitted('openai', 'gpt-4', null),
+    );
+
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.profileName).toBeNull();
+    expect(infos[0]?.displayLabel).toBe('gpt-4');
+  });
+
+  it('restores all committed previous history when initializing the next chat', async () => {
+    const previousHistory: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'first user turn' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'first model response' }],
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'second user turn' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'second model response' }],
+      },
+    ];
+    const fixture = await buildCliStyleConfig('plain-text.jsonl');
+    try {
+      await fixture.agentClient.restoreHistory(previousHistory);
+      const previousClient = fixture.agentClient;
+      await fixture.sessionClient.clients.refreshAuth();
+      expect(fixture.agentClient).not.toBe(previousClient);
+      expect(
+        await Array.fromAsync(fixture.agentClient.getHistory()),
+      ).toMatchObject(previousHistory);
+    } finally {
+      await fixture.cleanup();
+    }
   });
 
   it('does not make a generic first-turn context decision before provider finalization', async () => {
@@ -408,7 +522,11 @@ describe('MessageStreamOrchestrator ModelInfo display labels (issue #1770)', () 
       profileName: 'glm',
     });
 
-    const infos = await collectModelInfos(orchestrator, 'prompt-lb-active');
+    const infos = await collectModelInfos(
+      orchestrator,
+      'prompt-lb-active',
+      admitted('load-balancer', 'glm-5.2', 'glm'),
+    );
 
     expect(infos).toHaveLength(1);
     expect(infos[0]?.model).toBe('glm-5.2');
@@ -424,7 +542,11 @@ describe('MessageStreamOrchestrator ModelInfo display labels (issue #1770)', () 
       profileName: 'gpt56solhigh',
     });
 
-    const infos = await collectModelInfos(orchestrator, 'prompt-2501');
+    const infos = await collectModelInfos(
+      orchestrator,
+      'prompt-2501',
+      admitted('codex', 'gpt-5.6-sol', 'gpt56solhigh'),
+    );
 
     expect(infos).toHaveLength(1);
     expect(infos[0]?.model).toBe('gpt-5.6-sol');
@@ -441,6 +563,7 @@ describe('MessageStreamOrchestrator ModelInfo display labels (issue #1770)', () 
     const infos = await collectModelInfos(
       orchestrator,
       'prompt-2501-noprofile',
+      admitted('codex', 'gpt-5.6-sol', null),
     );
 
     expect(infos).toHaveLength(1);

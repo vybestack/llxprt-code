@@ -14,6 +14,11 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
+
 const owners: SessionSettingsOwner[] = [];
 afterEach(async () => {
   for (const owner of owners.splice(0)) await owner.dispose();
@@ -50,7 +55,6 @@ export function makeRuntimeContext(
     },
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
     providerRuntime: createProviderRuntimeContext({
-      settingsService,
       runtimeId: state.runtimeId,
     }),
     prepareProviderInvocation: (name, parameters, signal) =>
@@ -59,6 +63,8 @@ export function makeRuntimeContext(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
   });
 }

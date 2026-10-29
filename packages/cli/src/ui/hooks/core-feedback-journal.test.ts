@@ -1,22 +1,27 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
+import { encodeJournalUiItem } from '../stores/turn/journal-ui-item.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { coreEvents } from '@vybestack/llxprt-code-core';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { renderHook, waitFor } from '../../__tests__/render.js';
-import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
 import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
 import { useCoreEventHandlers } from './useCoreEventHandlers.js';
 
 describe('core feedback journal presentation', () => {
   it('journals all severities rather than retaining a console-message copy', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config }) => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.session.setRecording({ enabled: true });
       const consoleMessages: string[] = [];
       const view = renderHook(() =>
         useCoreEventHandlers({
-          agent,
-          recordingOwner: 'agent',
-          uiRuntime: buildUiRuntimeFromSource(config, agent),
+          readDebugMode: () => false,
+          recordFeedback: async (severity, message) => {
+            await agent.session.appendDisplay(
+              { type: 'ui-item' },
+              encodeJournalUiItem({ type: severity, text: message }),
+            );
+          },
           handleNewMessage: (message) => {
             consoleMessages.push(message.content);
           },
@@ -47,7 +52,9 @@ describe('core feedback journal presentation', () => {
           }
         });
         expect(consoleMessages).toStrictEqual([]);
-        expect(await agent.session.getHistory()).toStrictEqual([]);
+        expect(await collectResumeRows(agent.streamHistory())).toStrictEqual(
+          [],
+        );
       } finally {
         view.unmount();
       }

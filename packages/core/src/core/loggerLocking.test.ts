@@ -325,10 +325,11 @@ describe('Logger inter-process locking', () => {
     // ENOENT — a persistent acquire-loop failure that must still respect the
     // deadline. Before the deadline was hoisted to the top of the loop this
     // hot-looped forever and wedged close().
-    await fs.symlink(
-      path.join(TEST_LLXPRT_DIR, 'nonexistent-lock-target'),
-      TEST_LOCK_FILE_PATH,
+    const danglingTarget = path.join(
+      TEST_LLXPRT_DIR,
+      'nonexistent-lock-target',
     );
+    await fs.symlink(danglingTarget, TEST_LOCK_FILE_PATH);
     process.env['LLXPRT_LOG_LOCK_TIMEOUT_MS'] = '250';
     try {
       const start = Date.now();
@@ -337,6 +338,10 @@ describe('Logger inter-process locking', () => {
       const elapsed = Date.now() - start;
       expect(logger['messageId']).toBe(0);
       expect(await readLogFile()).toHaveLength(0);
+      // Where open('wx') follows the link (Windows) it would create the target.
+      await expect(fs.lstat(danglingTarget)).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
       // Bounded by the deadline plus overhead, well under the suite budget.
       expect(elapsed).toBeLessThan(10_000);
     } finally {

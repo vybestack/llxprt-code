@@ -15,15 +15,12 @@
 
 // ─── ProviderManager construction & lifecycle ────────────────────────────────
 export {
-  configureProviderRuntimeFactories,
-  createProviderManager,
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+  populateProviderManager,
   refreshAliasProviders,
   bindOpenAIAliasIdentity,
 } from './providerManagerInstance.js';
-
-// ─── Headless construction ───────────────────────────────────────────────────
-export { createHeadlessProviderManager } from './headlessFactory.js';
-export type { HeadlessProviderManagerOptions } from './headlessFactory.js';
 
 // ─── Provider aliases ────────────────────────────────────────────────────────
 export {
@@ -55,6 +52,7 @@ export {
   createOpenAIVercelAliasProvider,
   createAnthropicAliasProvider,
   registerAliasProviders,
+  listProviderAliasNames,
 } from './aliasProviderFactory.js';
 export type {
   AliasAwareBaseProvider,
@@ -111,3 +109,13 @@ export type { IFileSystem } from './IFileSystem.js';
 
 // ─── Composition types ───────────────────────────────────────────────────────
 export { ContentGeneratorRole } from './types.js';
+
+export { extractProviderBaseUrl } from '../baseUrlResolver.js';
+
+export { createOwnedOAuthManager } from './providerManagerInstance.js';
+export { createOwnerOAuthManager } from './owner-oauth-construction.js';
+export { createSessionAuthPolicyReader } from '../auth/session-auth-policy.js';
+export { createOAuthProfileReads } from '../auth/oauth-profile-reads.js';
+export { createPreflightOAuthProfileReads } from '../auth/preflight-oauth-profile-reads.js';
+export { createOwnerAuthCacheInvalidator } from '../auth/owner-cache-invalidation.js';
+export { createOwnedTokenStoreClose } from '../auth/proxy/credential-store-factory.js';

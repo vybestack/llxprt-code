@@ -5,7 +5,6 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { z } from 'zod';
-import { withFetchPreconnect } from '@vybestack/llxprt-code-test-utils/fetch-test-helpers.js';
 import { withDisposalJoinFixture } from './helpers/async-child-disposal-join-fixture.js';
 
 function response(query: boolean): Response {
@@ -45,9 +44,9 @@ function response(query: boolean): Response {
 }
 
 describe('public async child query ownership', () => {
-  it('runs a child-issued query against its owner without exposing a borrowed-Config sibling', async () => {
+  it('runs a child-issued query against its owner without exposing a second agent task', async () => {
     await withDisposalJoinFixture(async (fixture) => {
-      const sibling = await fixture.adoptSibling();
+      const sibling = await fixture.openSibling();
       const siblingTool = sibling.tools.get('task');
       const task = fixture.agent.tools.get('task');
       if (!siblingTool || !task) throw new Error('Missing task');
@@ -65,20 +64,16 @@ describe('public async child query ownership', () => {
       ).toBeUndefined();
       await fixture.siblingWork.entered.promise;
       const siblingId = sibling.tasks.list()[0].id;
-      const original = globalThis.fetch;
       const toolResults: string[] = [];
       let requests = 0;
-      globalThis.fetch = withFetchPreconnect(async (input, init) => {
-        const url = input instanceof Request ? input.url : String(input);
-        if (!url.endsWith('/child/chat/completions'))
-          return original(input, init);
+      const clearScript = fixture.scriptChildRequests(async (request) => {
         const body = z
           .object({
             messages: z.array(
               z.object({ role: z.string(), content: z.unknown().optional() }),
             ),
           })
-          .parse(await new Request(input, init).json());
+          .parse(JSON.parse(request.body));
         for (const message of body.messages) {
           if (message.role === 'tool')
             toolResults.push(JSON.stringify(message.content));
@@ -107,7 +102,7 @@ describe('public async child query ownership', () => {
         expect(toolResults[0]).not.toContain(siblingId);
         expect(fixture.siblingWork.signal()?.aborted).toBe(false);
       } finally {
-        globalThis.fetch = original;
+        clearScript();
         fixture.siblingWork.releaseWork();
         await sibling.dispose();
       }

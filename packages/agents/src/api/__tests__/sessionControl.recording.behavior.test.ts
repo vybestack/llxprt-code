@@ -28,20 +28,19 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { EventEmitter } from 'node:events';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
-import { tmpdir, homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { z } from 'zod';
-import { isJournalFileName } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
-import { recordedRows } from './support/recorded-rows.js';
-import { createHash } from 'node:crypto';
+
+import { nativeRows, rowTexts } from './helpers/native-session-fixture.js';
+import { buildFactoryLessConfig } from './helpers/buildCliStyleConfig.js';
+import { fromConfig } from '../fromConfig.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
 import {
-  buildAgent,
-  internalConfig,
   drain,
-  captureHistoryServiceIdentity,
   respondToFirstConfirmation,
   ToolConfirmationOutcome,
 } from './helpers/agentHarness.js';
@@ -51,31 +50,7 @@ function textMessage(role: 'user' | 'model', text: string): AgentMessage {
   return {
     speaker: role === 'user' ? 'human' : 'ai',
     blocks: [{ type: 'text' as const, text }],
-  } as AgentMessage;
-}
-
-/**
- * Derives the core storage temp dir for a working directory, mirroring
- * Storage.getProjectTempDir (`~/.llxprt/tmp/<sha256(workingDir)>`). Used only
- * for test cleanup so recording artifacts never accumulate.
- */
-function storageTempDirFor(workingDir: string): string {
-  const hash = createHash('sha256').update(workingDir).digest('hex');
-  return join(homedir(), '.llxprt', 'tmp', hash);
-}
-
-/**
- * Reaches the Agent's live HistoryService as an EventEmitter via the same
- * documented internal probe the harness uses (captureHistoryServiceIdentity).
- * HistoryService extends EventEmitter, so listenerCount is a genuine public
- * observable for subscribe/unsubscribe assertions.
- */
-function historyEmitter(agent: Agent): EventEmitter {
-  const hs = captureHistoryServiceIdentity(agent);
-  if (!(hs instanceof EventEmitter)) {
-    throw new Error('HistoryService not reachable as EventEmitter');
-  }
-  return hs;
+  };
 }
 
 /**
@@ -96,16 +71,25 @@ async function withIsolatedAgent<T>(
   // error replaces fn()'s. That is the standard try/finally trade-off and
   // acceptable here — either failure fails the test loudly; the invariant this
   // helper guarantees is only that no temp dir survives.
+  const built = await buildFactoryLessConfig(fixture, {}, { workingDir });
   try {
-    const { agent, cleanup } = await buildAgent(fixture, { workingDir });
+    const agent = await fromConfig(
+      built.config,
+      built.settingsService,
+      {
+        activation: { provider: 'fake', model: 'fake-model' },
+      },
+      new CredentialAuthority(),
+    );
     try {
       return await fn(agent);
     } finally {
-      await cleanup();
+      await agent.dispose();
     }
   } finally {
     rmSync(workingDir, { recursive: true, force: true });
-    rmSync(storageTempDirFor(workingDir), { recursive: true, force: true });
+    await built.cleanup();
+    rmSync(built.config.projectTempDir, { recursive: true, force: true });
   }
 }
 
@@ -137,14 +121,7 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
         // Disable to flush + dispose the service so all queued writes land.
         await agent.session.setRecording({ enabled: false });
 
-        const raw = isJournalFileName(path)
-          ? JSON.stringify(
-              await recordedRows(
-                path,
-                basename(internalConfig(agent).projectTempDir),
-              ),
-            )
-          : readFileSync(path, 'utf8');
+        const raw = JSON.stringify(await nativeRows(path));
         // The SECOND turn's user prompt and assistant reply are both present.
 
         return { path, raw };
@@ -208,14 +185,7 @@ describe('SessionControl post-resume recording', () => {
       // Disable to flush the appended content.
       await agent.session.setRecording({ enabled: false });
 
-      const raw = isJournalFileName(path)
-        ? JSON.stringify(
-            await recordedRows(
-              path,
-              basename(internalConfig(agent).projectTempDir),
-            ),
-          )
-        : readFileSync(path, 'utf8');
+      const raw = JSON.stringify(await nativeRows(path));
 
       return { path, raw };
     });
@@ -263,14 +233,7 @@ describe('SessionControl completed tool recording', () => {
         // Disable to flush + dispose so all queued writes land.
         await agent.session.setRecording({ enabled: false });
 
-        const raw = isJournalFileName(path)
-          ? JSON.stringify(
-              await recordedRows(
-                path,
-                basename(internalConfig(agent).projectTempDir),
-              ),
-            )
-          : readFileSync(path, 'utf8');
+        const raw = JSON.stringify(await nativeRows(path));
         // The recorded transcript carries the tool CALL block for read_file …
 
         // … its RESPONSE block …
@@ -281,29 +244,9 @@ describe('SessionControl completed tool recording', () => {
         // recorded call's id (the runtime normalizes ids in history, so the
         // fixture's raw id is not asserted — the pairing invariant is what the
         // #1604 replay's tool_call/tool_call_update matching depends on).
-        const blocks = isJournalFileName(path)
-          ? (
-              await recordedRows(
-                path,
-                basename(internalConfig(agent).projectTempDir),
-              )
-            )
-              .flatMap((row) => row.blocks)
-              .map((block) => z.record(z.unknown()).parse(block))
-          : raw
-              .split('\n')
-              .filter((line) => line.trim().length > 0)
-              .map((line) => JSON.parse(line) as Record<string, unknown>)
-              .flatMap((entry) => {
-                const payload = entry['payload'] as
-                  | {
-                      content?: {
-                        blocks?: ReadonlyArray<Record<string, unknown>>;
-                      };
-                    }
-                  | undefined;
-                return payload?.content?.blocks ?? [];
-              });
+        const blocks = (await nativeRows(path))
+          .flatMap((row) => row.blocks)
+          .map((block) => z.record(z.unknown()).parse(block));
         const callBlock = blocks.find((b) => b['type'] === 'tool_call');
         const responseBlock = blocks.find((b) => b['type'] === 'tool_response');
 
@@ -312,22 +255,33 @@ describe('SessionControl completed tool recording', () => {
 });
 
 describe('SessionControl recording teardown', () => {
-  it('teardown unsubscribes the RecordingIntegration from the HistoryService (no leaked listener) @requirement:REQ-010', async () => {
+  it('teardown retires the recording subscription: content added after setRecording(false) never reaches the file @requirement:REQ-010', async () => {
     await withIsolatedAgent('plain-text.jsonl', async (agent) => {
-      // Warm up so the chat + reused HistoryService are materialized and the
-      // identity probe returns a stable EventEmitter.
+      // Warm up so the chat and its history are materialized.
       await drain(agent.stream('warm up the history service'));
-      const emitter = historyEmitter(agent);
-      const baseline = emitter.listenerCount('contentAdded');
 
       await agent.session.setRecording({ enabled: true });
-      // Journal ownership does not install a second content writer.
-      expect(emitter.listeners('contentAdded')).toHaveLength(baseline);
+      const path = agent.session.getRecording().path ?? '';
+      expect(path.length).toBeGreaterThan(0);
 
+      // While enabled, new history content is delivered to the file.
+      await agent.addHistory(
+        textMessage('user', 'added-while-recording-sentinel'),
+      );
       await agent.session.setRecording({ enabled: false });
-      // Disabling disposes the integration, returning the listener count to the
-      // pre-enable baseline (no leaked subscription).
-      expect(emitter.listenerCount('contentAdded')).toBe(baseline);
+      const afterDisable = readFileSync(path);
+      const recorded = rowTexts(await nativeRows(path));
+      expect(recorded).toContain('added-while-recording-sentinel');
+      expect(
+        recorded.filter((text) => text === 'added-while-recording-sentinel'),
+      ).toHaveLength(1);
+
+      // After the teardown the subscription is gone: later content is not
+      // delivered to the retired recording.
+      await agent.addHistory(
+        textMessage('user', 'added-after-teardown-sentinel'),
+      );
+      expect(readFileSync(path).equals(afterDisable)).toBe(true);
     });
   });
 });

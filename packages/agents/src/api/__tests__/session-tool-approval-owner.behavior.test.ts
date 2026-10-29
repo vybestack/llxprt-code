@@ -3,15 +3,18 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PolicyDecision } from '@vybestack/llxprt-code-policy';
+import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import { fromConfig } from '../fromConfig.js';
-import { CONFIRMATION_FORCING_SOURCE } from '../confirmationForcing.js';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
+import { createAgent } from '../createAgent.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { awaitMcpDiscoveryReady } from './helpers/mcp-discovery-ready.js';
 import { startCatalogFixture } from './helpers/workspace-catalog-http-fixture.js';
 
 async function approve(details: unknown): Promise<void> {
@@ -26,33 +29,34 @@ async function approve(details: unknown): Promise<void> {
 }
 
 describe('shared workspace session approval ownership', () => {
+  useFakeResponsesReplay('plain-text.jsonl');
+  const credentials = useOwnedCredentials();
+
   it('keeps peer confirmation required after a session grant and peer closure', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'session-approval-'));
     const server = await startCatalogFixture(directory);
-    const built = await buildCliStyleConfig('plain-text.jsonl', {
-      workingDir: directory,
-      folderTrust: true,
-      policy: { defaultDecision: PolicyDecision.ASK_USER },
-      telemetry: { enabled: false },
-      recording: { enabled: false },
-      mcpServers: { physical: { httpUrl: server.url, trust: false } },
-    });
-    built.mcpRuntime.policyOwner.session.confirmation.removeRulesBySource(
-      CONFIRMATION_FORCING_SOURCE,
-    );
+    const oauth = createTestOAuthBinding();
     const adopt = () =>
-      fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        config: built.config,
-        providerManager: built.providerManager,
-        mcpRuntime: built.mcpRuntime,
+      createAgent({
+        provider: 'fake',
+        model: 'fake-model',
+        workingDir: directory,
+        interactive: true,
+        folderTrust: true,
+        policy: { defaultDecision: PolicyDecision.ASK_USER },
+        telemetry: { enabled: false },
+        recording: { enabled: false },
+        mcpServers: { physical: { httpUrl: server.url, trust: false } },
+        mcpTokenStorage: oauth.tokenStorage,
+        credentialAuthority: credentials().authority,
+        harness: { forceConfirmations: false },
       });
     const first = await adopt();
     const second = await adopt();
     const signal = new AbortController().signal;
     try {
-      await built.mcpRuntime.awaitDiscovery();
+      await awaitMcpDiscoveryReady(first);
+      await awaitMcpDiscoveryReady(second);
       const declared = first.tools
         .list()
         .find((tool) => tool.serverToolName === 'multiply');
@@ -84,7 +88,6 @@ describe('shared workspace session approval ownership', () => {
     } finally {
       await first.dispose();
       await second.dispose();
-      await built.cleanup();
       await server.stop();
       await rm(directory, { recursive: true, force: true });
     }

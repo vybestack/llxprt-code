@@ -404,7 +404,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         headers['Authorization'] = `Bearer ${authToken}`;
       }
 
-      const res = await fetch(url, {
+      const res = await this.requestFetch(url, {
         headers,
         signal: AbortSignal.timeout(10_000),
       });

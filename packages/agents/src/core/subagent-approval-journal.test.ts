@@ -1,3 +1,6 @@
+import { executeToolCall } from './nonInteractiveToolExecutor.js';
+import { assembleSchedulerOwner } from '../session/assembleSchedulerOwner.js';
+import { persistApprovalLifecycle } from './agenticLoop/approvalLifecycleRecording.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -130,25 +133,36 @@ describe('non-interactive child dispatcher approval ownership', () => {
         new AbortController(),
         'child-submission',
         {
-          history,
-          config,
-          messageBus: bus,
+          imagePayloadBudgetBytes: 0,
+          executeToolCall: async (request, signal) => {
+            const completed = await executeToolCall(
+              (callbacks) =>
+                assembleSchedulerOwner('child', {
+                  config,
+                  telemetry: settingsOwner.telemetry,
+                  messageBus: bus,
+                  toolRegistry: registry,
+                  readApprovalMode: () => ApprovalMode.DEFAULT,
+                  readExecutionPolicy: () =>
+                    settingsOwner.readToolExecutionPolicy(),
+                  getToolGovernance: () => settingsOwner.readToolGovernance([]),
+                  toolContextInteractiveMode: false,
+                  ...callbacks,
+                  persistApproval: (record) =>
+                    persistApprovalLifecycle(record, history),
+                }),
+              request,
+              signal,
+            );
+            return { status: completed.status, response: completed.response };
+          },
+
           output: {
             emitted_vars: {},
             terminate_reason: SubagentTerminateMode.ERROR,
           },
           subagentId: 'child',
           logger: new DebugLogger('child-approval-test'),
-          toolExecutorContext: {
-            telemetry: settingsOwner.telemetry,
-            getToolRegistry: () => registry,
-            getExcludeTools: () => [],
-            getSessionId: () => 'child',
-            getTelemetryLogPromptsEnabled: () => false,
-            readApprovalMode: () => ApprovalMode.DEFAULT,
-            readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
-            readGovernance: () => settingsOwner.readToolGovernance([]),
-          },
         },
       );
       expect(stagesAtExecution).toStrictEqual([

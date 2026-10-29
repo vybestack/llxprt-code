@@ -31,6 +31,7 @@ function options(
     metadata: {},
     systemInstruction: 'system 雪',
     invocation: createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: 'native-chat-prepare',
       providerName: 'openai',
       ephemeralsSnapshot: {},
@@ -431,6 +432,7 @@ describe('native Chat preparation ownership and planning', () => {
           const input = {
             ...options(rows),
             invocation: createRuntimeInvocationContext({
+              fetch: (input, init) => globalThis.fetch(input, init),
               runtimeId: 'native-chat-reasoning-key',
               providerName: 'openai',
               ephemeralsSnapshot: {

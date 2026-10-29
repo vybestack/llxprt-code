@@ -1,3 +1,4 @@
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
@@ -19,10 +20,8 @@ import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/s
 import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  useRuntimeTestOwners,
-  type RuntimeTestOwners,
-} from '../runtime/__tests__/runtime-owner-test-helpers.js';
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+type RuntimeTestOwners = ReturnType<typeof installBorrowedConfigSettings>;
 import { ProviderManager } from '../ProviderManager.js';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
@@ -78,10 +77,10 @@ describe('relocated stream options', () => {
   it('reopens authored arrays and retains flat tool selections', async () => {
     const options = streamCallOptions({
       providerName: 'openai',
-      contents: [
+      contents: callerOwnedRawProviderSource([
         { speaker: 'human', blocks: [{ type: 'text', text: 'one' }] },
         { speaker: 'ai', blocks: [{ type: 'text', text: 'two' }] },
-      ],
+      ]),
       tools: [{ name: 'inspect', parametersJsonSchema: { type: 'object' } }],
     });
     const first = await textRows(options.contents);
@@ -186,7 +185,7 @@ async function withIngressFixture<T>(
   settings.set('retries', 2);
   settings.set('retrywait', 1);
   const config = createIngressConfig(logging, root);
-  const { settingsOwner } = fixtureOwners.adopt(config, settings);
+  const settingsOwner = fixtureOwners(config, settings);
   const snapshot = await openNativeRowFixture(
     root,
     Array.from({ length: 64 }, (_, index) => ingressRow(index)),
@@ -356,11 +355,17 @@ async function exerciseWrapperIngress(
       const rows = observeIngressRows(snapshot, observation);
       const base = createIngressProvider(observation);
       const redactor = new StreamingRedactionWitness();
-      const manager = new ProviderManager({
-        sessionSettings: settingsOwner,
+      const manager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        settings,
         config,
-        settingsService: settings,
-      });
+        undefined,
+        undefined,
+        settingsOwner,
+      );
       manager.registerProvider(base);
       const installed = manager.getProviderByName(base.name);
       if (
@@ -374,9 +379,10 @@ async function exerciseWrapperIngress(
         undefined,
         () => captureProviderRequestDiagnostics(config, settingsOwner),
       );
-      wrapper.setRuntimeContextResolver(() => ({
-        config,
-        settingsService: settings,
+      wrapper.setInvocationDataReader(() => ({
+        globalSettings: settings.getAllGlobalSettings(),
+        providerSettings: settings.getProviderSettings(base.name),
+        fetch: (input, init) => globalThis.fetch(input, init),
         runtimeId: 'ingress-runtime',
       }));
       wrapper.setOptionsNormalizer((options, providerName) => {
@@ -444,7 +450,7 @@ async function exerciseWrapperIngress(
 }
 
 describe('real provider wrapper disk ingress', () => {
-  const fixtureOwners = useRuntimeTestOwners();
+  const fixtureOwners = installBorrowedConfigSettings();
   it('reopens cold disk rows after one BODY read without disabled logging predrain', async () => {
     expect(await exerciseWrapperIngress(fixtureOwners, false)).toBe(
       ingressDigest(),
@@ -518,8 +524,9 @@ describe('real provider wrapper disk ingress', () => {
           },
           invocation: captureProviderInvocation(
             {
-              config,
-              settingsService: settings,
+              globalSettings: settings.getAllGlobalSettings(),
+              providerSettings: settings.getProviderSettings(base.name),
+              fetch: (input, init) => globalThis.fetch(input, init),
               runtimeId: 'cancel-runtime',
             },
             base.name,
@@ -549,7 +556,7 @@ describe('real provider wrapper disk ingress', () => {
 });
 
 describe('streamed conversation disk artifact', () => {
-  const fixtureOwners = useRuntimeTestOwners();
+  const fixtureOwners = installBorrowedConfigSettings();
   it('writes the complete redacted request to disk one row at a time', async () => {
     await withIngressFixture(
       fixtureOwners,

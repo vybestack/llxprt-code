@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { useOwnedCredentials as installOwnedCredentialFixture } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 
 /**
  * Behavioral tests for ACP session/load (loadSession) ORCHESTRATION in the Zed
@@ -35,7 +36,6 @@ import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
 import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createConnectionProviderManager } from './__tests__/connection-provider-fixture.js';
 import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
 import { unusedProfileApplication } from './test-profile-application.js';
 import type { ChatSessionFileLister } from './zed-session-loader.js';
@@ -51,6 +51,7 @@ import type { ZedAgent } from './zedIntegration.js';
  * uses the INJECTED lister below instead, so this path value is irrelevant to it.
  */
 const definitionFixture = installZedDefinitionFixture();
+const credentials = installOwnedCredentialFixture();
 
 const NONEXISTENT_CHATS_PARENT = path.join(
   os.tmpdir(),
@@ -86,7 +87,8 @@ export const mockFromConfig = vi.fn();
 export const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
 void vi.mock('@vybestack/llxprt-code-agents', () => ({
   ...actual,
-  fromConfig: (...args: unknown[]) => mockFromConfig(...args),
+  createAgentFromSettingsSnapshot: (...args: unknown[]) =>
+    mockFromConfig(...args),
 }));
 
 interface StubAgentHandle {
@@ -155,7 +157,25 @@ export function buildStubAgent(options: {
       getRecordingTitle: () => undefined,
       recordRecordingTitle: async () => undefined,
     },
-    tools: { respondToConfirmation: vi.fn() },
+    tools: {
+      respondToConfirmation: vi.fn(),
+      get: () => undefined,
+      list: () => [],
+    },
+    settings: {
+      subscribeModelChanges:
+        settingsOwner.subscribeModelChanges.bind(settingsOwner),
+    },
+    workspace: {
+      getProjectRoot: () => process.cwd(),
+      getWorkingDirectory: () => process.cwd(),
+      readTextFile: async () => '',
+      shouldIgnoreFile: () => false,
+      getCoreIgnorePatterns: () => [],
+    },
+    memory: { getFilePaths: () => [] },
+    profiles: { list: async () => [] },
+    tasks: { list: async () => [] },
   } as unknown as Agent;
   return { agent, resume, setRecording, dispose, getHistory };
 }
@@ -193,10 +213,11 @@ export async function makeUninitializedZedAgent(
     config,
     connection as unknown as acp.AgentSideConnection,
     unusedProfileApplication,
-    createConnectionProviderManager(config, settingsService),
     () => new SettingsService({ sessionSource: settingsService }),
     sessionFileLister,
     definitionFixture(),
+    undefined,
+    { credentialAuthority: credentials().authority },
   );
 }
 

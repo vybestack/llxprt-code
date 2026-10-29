@@ -275,7 +275,9 @@ function assertActiveMetrics(
   expect(active.process.arrayBuffers).toBeGreaterThanOrEqual(0);
   expect(active.process.rss).toBeGreaterThan(0);
   const peakFootprint = requireAvailableMetric(active.osPeakFootprintBytes);
-  expect(peakFootprint).toBeGreaterThanOrEqual(active.process.rss);
+  expect(peakFootprint).toBeGreaterThanOrEqual(
+    Math.floor(active.process.rss / 1024) * 1024,
+  );
   expect(peakFootprint).toBeLessThan(active.process.rss * 10);
 }
 

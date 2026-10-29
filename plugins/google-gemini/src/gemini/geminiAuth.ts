@@ -11,62 +11,35 @@ export interface VertexAIAuthConfig {
   location?: string;
 }
 
-function getNonEmptySetting(
-  settingsService: Readonly<Record<string, unknown>> | undefined,
+export function getNonEmptySetting(
+  settings: Readonly<Record<string, unknown>> | undefined,
   key: string,
 ): string | undefined {
-  const value = settingsService?.[key];
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-export function getSettingOrEnv(
-  settingsService: Readonly<Record<string, unknown>> | undefined,
-  key: string,
-): string | undefined {
-  const settingValue = getNonEmptySetting(settingsService, key);
-  if (settingValue !== undefined) {
-    return settingValue;
-  }
-  const envValue = process.env[key]?.trim();
-  return envValue && envValue.length > 0 ? envValue : undefined;
+  const value = settings?.[key];
+  if (typeof value !== 'string') return undefined;
+  return value.trim() || undefined;
 }
 
 export function getVertexAIAuthConfig(
-  settingsService?: Readonly<Record<string, unknown>>,
+  settings: Readonly<Record<string, unknown>>,
 ): VertexAIAuthConfig {
   return {
-    project: getSettingOrEnv(settingsService, 'GOOGLE_CLOUD_PROJECT'),
-    location: getSettingOrEnv(settingsService, 'GOOGLE_CLOUD_LOCATION'),
+    project: getNonEmptySetting(settings, 'GOOGLE_CLOUD_PROJECT'),
+    location: getNonEmptySetting(settings, 'GOOGLE_CLOUD_LOCATION'),
   };
 }
 
-/**
- * Checks if Vertex AI credentials are available via runtime settings or
- * environment variables.
- *
- * The `no-restricted-syntax` rule is intentionally not suppressed here:
- * environment-variable existence checks are the intended pattern at this
- * auth boundary. Callers must keep the eslint config allowing these reads
- * (see eslint.config.js completedDirectiveCleanupScopes / legacy overrides).
- */
 export function hasVertexAICredentials(
-  settingsService?: Readonly<Record<string, unknown>>,
+  settings: Readonly<Record<string, unknown>>,
 ): boolean {
-  const vertexConfig = getVertexAIAuthConfig(settingsService);
-  const hasProjectAndLocation =
-    !!vertexConfig.project && !!vertexConfig.location;
-  const hasApplicationCredentials = !!getSettingOrEnv(
-    settingsService,
-    'GOOGLE_APPLICATION_CREDENTIALS',
+  if (
+    settings['GOOGLE_GENAI_USE_VERTEXAI'] === false ||
+    settings['GOOGLE_GENAI_USE_VERTEXAI'] === 'false'
+  )
+    return false;
+  const vertex = getVertexAIAuthConfig(settings);
+  return Boolean(
+    (vertex.project && vertex.location) ||
+      getNonEmptySetting(settings, 'GOOGLE_APPLICATION_CREDENTIALS'),
   );
-  return hasProjectAndLocation || hasApplicationCredentials;
-}
-
-/** Set up the environment variable for Vertex AI authentication. */
-export function setupVertexAIAuth(): void {
-  process.env.GOOGLE_GENAI_USE_VERTEXAI = 'true';
 }

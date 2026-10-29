@@ -16,16 +16,6 @@ export interface FuzzyFilterOptions {
   enableFuzzy?: boolean;
 }
 
-type FuzzyFilteringSettingsBoundary = {
-  services: {
-    settings?: {
-      merged?: {
-        enableFuzzyFiltering?: boolean;
-      };
-    };
-  };
-};
-
 /**
  * Filters completions using either fuzzy matching or exact prefix matching.
  *
@@ -97,43 +87,22 @@ export function filterStrings(
   return items.filter((item) => item.toLowerCase().startsWith(lowerQuery));
 }
 
-/**
- * Gets the fuzzy filtering setting from a CommandContext.
- * Returns true by default if setting is not defined.
- */
-export function getFuzzyEnabled(ctx: CommandContext): boolean {
-  const settingsBoundary = ctx as FuzzyFilteringSettingsBoundary;
-  return (
-    settingsBoundary.services.settings?.merged?.enableFuzzyFiltering ?? true
-  );
+export function getFuzzyEnabled(setting: boolean | undefined): boolean {
+  return setting ?? true;
 }
 
-/**
- * Higher-order function that wraps a CompleterFn to add fuzzy filtering.
- *
- * The wrapped completer should return ALL items, and this wrapper will handle
- * the filtering based on the user's query and settings.
- *
- * @param baseCompleter - The base completer function that returns all items
- * @returns A wrapped completer that applies fuzzy filtering
- */
-export function withFuzzyFilter(baseCompleter: CompleterFn): CompleterFn {
+export function withFuzzyFilter(
+  baseCompleter: CompleterFn,
+  readFuzzyFiltering: () => boolean,
+): CompleterFn {
   return async (
     ctx: CommandContext,
     partial: string,
     tokens: TokenInfo,
   ): Promise<readonly Option[]> => {
-    // Get all items from the base completer
     const allItems = await baseCompleter(ctx, partial, tokens);
-
-    // Get the fuzzy filtering setting from context
-    // Default to true if setting is not defined
-    const settingsBoundary = ctx as FuzzyFilteringSettingsBoundary;
-    const settingValue =
-      settingsBoundary.services.settings?.merged?.enableFuzzyFiltering;
-    const enableFuzzy = settingValue ?? true;
-
-    // Apply filtering
-    return filterCompletions(allItems, partial, { enableFuzzy });
+    return filterCompletions(allItems, partial, {
+      enableFuzzy: readFuzzyFiltering(),
+    });
   };
 }

@@ -46,96 +46,6 @@
       "bun": "./src/composition/IFileSystem.ts",
       "import": "./dist/src/composition/IFileSystem.js"
     },
-    "./runtime.js": {
-      "types": "./dist/src/runtime/index.d.ts",
-      "bun": "./src/runtime/index.ts",
-      "import": "./dist/src/runtime/index.js"
-    },
-    "./runtime/admitModelParameters.js": {
-      "types": "./dist/src/runtime/admitModelParameters.d.ts",
-      "bun": "./src/runtime/admitModelParameters.ts",
-      "import": "./dist/src/runtime/admitModelParameters.js"
-    },
-    "./runtime/admitLoadBalancerModelParameters.js": {
-      "types": "./dist/src/runtime/admitLoadBalancerModelParameters.d.ts",
-      "bun": "./src/runtime/admitLoadBalancerModelParameters.ts",
-      "import": "./dist/src/runtime/admitLoadBalancerModelParameters.js"
-    },
-    "./runtime/runtimeLifecycle.js": {
-      "types": "./dist/src/runtime/runtimeLifecycle.d.ts",
-      "bun": "./src/runtime/runtimeLifecycle.ts",
-      "import": "./dist/src/runtime/runtimeLifecycle.js"
-    },
-    "./runtime/runtimeContextFactory.js": {
-      "types": "./dist/src/runtime/runtimeContextFactory.d.ts",
-      "bun": "./src/runtime/runtimeContextFactory.ts",
-      "import": "./dist/src/runtime/runtimeContextFactory.js"
-    },
-    "./runtime/runtimeActivationBindings.js": {
-      "types": "./dist/src/runtime/runtimeActivationBindings.d.ts",
-      "bun": "./src/runtime/runtimeActivationBindings.ts",
-      "import": "./dist/src/runtime/runtimeActivationBindings.js"
-    },
-    "./runtime/providerReadOperations.js": {
-      "types": "./dist/src/runtime/providerReadOperations.d.ts",
-      "bun": "./src/runtime/providerReadOperations.ts",
-      "import": "./dist/src/runtime/providerReadOperations.js"
-    },
-    "./runtime/assembleCliProviderRuntime.js": {
-      "types": "./dist/src/runtime/assembleCliProviderRuntime.d.ts",
-      "bun": "./src/runtime/assembleCliProviderRuntime.ts",
-      "import": "./dist/src/runtime/assembleCliProviderRuntime.js"
-    },
-    "./runtime/cliForegroundRuntime.js": {
-      "types": "./dist/src/runtime/cliForegroundRuntime.d.ts",
-      "bun": "./src/runtime/cliForegroundRuntime.ts",
-      "import": "./dist/src/runtime/cliForegroundRuntime.js"
-    },
-    "./runtime/settingsResolver.js": {
-      "types": "./dist/src/runtime/settingsResolver.d.ts",
-      "bun": "./src/runtime/settingsResolver.ts",
-      "import": "./dist/src/runtime/settingsResolver.js"
-    },
-    "./runtime/ownerSettingsOperations.js": {
-      "types": "./dist/src/runtime/ownerSettingsOperations.d.ts",
-      "bun": "./src/runtime/ownerSettingsOperations.ts",
-      "import": "./dist/src/runtime/ownerSettingsOperations.js"
-    },
-    "./runtime/providerModelParameters.js": {
-      "types": "./dist/src/runtime/providerModelParameters.d.ts",
-      "bun": "./src/runtime/providerModelParameters.ts",
-      "import": "./dist/src/runtime/providerModelParameters.js"
-    },
-    "./runtime/providerStatus.js": {
-      "types": "./dist/src/runtime/providerStatus.d.ts",
-      "bun": "./src/runtime/providerStatus.ts",
-      "import": "./dist/src/runtime/providerStatus.js"
-    },
-    "./runtime/providerSwitch.js": {
-      "types": "./dist/src/runtime/providerSwitch.d.ts",
-      "bun": "./src/runtime/providerSwitch.ts",
-      "import": "./dist/src/runtime/providerSwitch.js"
-    },
-    "./runtime/providerMutations.js": {
-      "types": "./dist/src/runtime/providerMutations.d.ts",
-      "bun": "./src/runtime/providerMutations.ts",
-      "import": "./dist/src/runtime/providerMutations.js"
-    },
-    "./runtime/providerConfigUtils.js": {
-      "types": "./dist/src/runtime/providerConfigUtils.d.ts",
-      "bun": "./src/runtime/providerConfigUtils.ts",
-      "import": "./dist/src/runtime/providerConfigUtils.js"
-    },
-    "./runtime/profileSnapshot.js": {
-      "types": "./dist/src/runtime/profileSnapshot.d.ts",
-      "bun": "./src/runtime/profileSnapshot.ts",
-      "import": "./dist/src/runtime/profileSnapshot.js"
-    },
-    "./runtime/profileApplication.js": {
-      "types": "./dist/src/runtime/profileApplication.d.ts",
-      "bun": "./src/runtime/profileApplication.ts",
-      "import": "./dist/src/runtime/profileApplication.js"
-    },
     "./runtime/statelessHardening.js": {
       "types": "./dist/src/runtime/statelessHardening.d.ts",
       "bun": "./src/runtime/statelessHardening.ts",
@@ -150,21 +60,6 @@
       "types": "./dist/src/runtime/messages.d.ts",
       "bun": "./src/runtime/messages.ts",
       "import": "./dist/src/runtime/messages.js"
-    },
-    "./runtime/cliEphemeralSettings.js": {
-      "types": "./dist/src/runtime/cliEphemeralSettings.d.ts",
-      "bun": "./src/runtime/cliEphemeralSettings.ts",
-      "import": "./dist/src/runtime/cliEphemeralSettings.js"
-    },
-    "./runtime/ephemeralSettings.js": {
-      "types": "./dist/src/runtime/ephemeralSettings.d.ts",
-      "bun": "./src/runtime/ephemeralSettings.ts",
-      "import": "./dist/src/runtime/ephemeralSettings.js"
-    },
-    "./runtime/modelParamParser.js": {
-      "types": "./dist/src/runtime/modelParamParser.d.ts",
-      "bun": "./src/runtime/modelParamParser.ts",
-      "import": "./dist/src/runtime/modelParamParser.js"
     },
     "./BaseProvider.js": {
       "bun": "./src/BaseProvider.ts",
@@ -311,6 +206,16 @@
       "types": "./dist/src/utils/toolResponsePayload.d.ts",
       "bun": "./src/utils/toolResponsePayload.ts",
       "import": "./dist/src/utils/toolResponsePayload.js"
+    },
+    "./model-parameter-data.js": {
+      "types": "./dist/src/model-parameter-data.d.ts",
+      "bun": "./src/model-parameter-data.ts",
+      "import": "./dist/src/model-parameter-data.js"
+    },
+    "./model-defaults.js": {
+      "types": "./dist/src/model-defaults.d.ts",
+      "bun": "./src/model-defaults.ts",
+      "import": "./dist/src/model-defaults.js"
     }
   },
   "scripts": {
@@ -344,7 +249,6 @@
     "@vybestack/llxprt-code-mcp": "file:../mcp",
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-storage": "file:../storage",
-    "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "ai": "^7.0.83",
     "comment-json": "^4.5.0",
@@ -359,6 +263,7 @@
     "@types/node": "^24.2.1",
     "@types/ws": "^8.18.1",
     "@vybestack/llxprt-code-test-utils": "file:../test-utils",
+    "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "fast-check": "^4.3.0",
     "typescript": "^5.3.3"
   },

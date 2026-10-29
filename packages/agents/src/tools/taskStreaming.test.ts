@@ -21,18 +21,20 @@ import {
   type TaskStreamingHandle,
 } from './taskStreaming.js';
 import { startTaskHeartbeat } from './taskHeartbeat.js';
-import type { SubAgentScope } from '../core/subagent.js';
+import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import type { ChildTaskRun } from '../core/subagentOrchestrator.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-tools';
 
-/** The part of {@link SubAgentScope} that task streaming manipulates. */
-interface TestSubAgentScope {
-  onMessage?: (message: string) => void;
-  onOutputReset?: () => void;
-}
-
-/** Narrow bridge from the minimal test scope to the full scope type. */
-function asSubAgentScope(scope: TestSubAgentScope): SubAgentScope {
-  return scope as unknown as SubAgentScope;
+function createTestScope(
+  handlers: Pick<ChildTaskRun, 'onMessage' | 'onOutputReset'>,
+): ChildTaskRun {
+  return {
+    output: { terminate_reason: SubagentTerminateMode.GOAL, emitted_vars: {} },
+    runInteractive: async () => {},
+    runNonInteractive: async () => {},
+    cancel: () => {},
+    ...handlers,
+  };
 }
 
 /** A message handler that records what it received, for chaining assertions. */
@@ -65,7 +67,7 @@ describe('taskStreaming', () => {
   });
 
   interface StreamingHarness {
-    scope: TestSubAgentScope;
+    scope: ChildTaskRun;
     updates: LiveOutputUpdate[];
     handle: TaskStreamingHandle;
   }
@@ -84,10 +86,10 @@ describe('taskStreaming', () => {
       updateOutput?: (update: LiveOutputUpdate) => void;
     } = {},
   ): StreamingHarness {
-    const scope: TestSubAgentScope = {
+    const scope = createTestScope({
       onMessage: options.existingHandler,
       onOutputReset: options.existingResetHandler,
-    };
+    });
     const updates: LiveOutputUpdate[] = [];
     const collect = (update: LiveOutputUpdate): void => {
       updates.push(update);
@@ -96,7 +98,7 @@ describe('taskStreaming', () => {
     const handle = setupTaskStreaming(
       subagentName,
       agentId,
-      asSubAgentScope(scope),
+      scope,
       collect,
       startTaskHeartbeat,
     );

@@ -304,15 +304,15 @@ describe('reader-based OpenAI fetch / cancellation, reader access and SDK integr
     expect(ownedIteratorConsumed).toBe(true);
   });
 
-  it('resolves global fetch lazily after wrapper construction', async () => {
-    const savedFetch = globalThis.fetch;
-    const wrapper = createReaderBasedStreamFetch();
+  it('resolves injected fetch lazily after wrapper construction', async () => {
+    let requestFetch = responseFetch(new Response(null, { status: 204 }));
+    const wrapper = createReaderBasedStreamFetch(
+      withFetchPreconnect((input, init) => requestFetch(input, init)),
+    );
     const response = new Response(null, { status: 204 });
-    try {
-      globalThis.fetch = withFetchPreconnect(responseFetch(response));
+    {
+      requestFetch = responseFetch(response);
       expect(await wrapper('http://localhost')).toBe(response);
-    } finally {
-      globalThis.fetch = savedFetch;
     }
   });
 });

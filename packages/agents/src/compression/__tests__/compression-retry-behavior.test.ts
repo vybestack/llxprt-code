@@ -56,7 +56,6 @@ function setupCompressionRuntime(): void {
   runtimeSetup = createChatSessionRuntime();
   providerRuntimeSnapshot = {
     ...runtimeSetup.runtime,
-    config: runtimeSetup.config,
   };
 }
 

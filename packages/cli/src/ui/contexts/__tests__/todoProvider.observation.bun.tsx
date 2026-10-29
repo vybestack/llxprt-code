@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
 
 /**
  * Provider-to-canonical-observation-seam integration tests for issue #3052.
@@ -18,7 +19,7 @@
  *   - The real `createTodoObservationSubscription` (the exact seam
  *     `JspProducer` subscribes through in jspWiring) is subscribed, so a
  *     passing assertion proves the observation channel is actually reached.
- *   - The real `todoCommand` subcommands are driven with a `CommandContext`
+ *   - The real `todoCommand` subcommands are driven with a `CommandOwnerFixture`
  *     whose `todoContext` is the LIVE provider context.
  *
  * The provider, React, the event emitter, and the observation seam stay real.
@@ -48,9 +49,8 @@ import { renderHook, waitFor } from '../../../__tests__/render.js';
 import { TodoProvider } from '../TodoProvider.js';
 import { useTodoContext } from '../TodoContext.js';
 import { createTodoObservationSubscription } from '../../../observation/jspWiring.js';
-import { todoCommand } from '../../commands/todoCommand.js';
+import { registerTodoCommand } from '../../../__tests__/todo-command-test-owner.js';
 import { shouldClearTodos } from '../../hooks/useTodoPausePreserver.js';
-import type { CommandContext } from '../../commands/types.js';
 
 interface ObservedEvent {
   agentId: string | undefined;
@@ -127,11 +127,14 @@ async function settleRefresh(refresh: () => void): Promise<void> {
 /**
  * Subscribe to the REAL observation seam and collect every published event.
  */
-function observeTodoChannel(): ObservedEvent[] {
+function observeTodoChannel(sessionId: string): ObservedEvent[] {
   const events: ObservedEvent[] = [];
-  const unsubscribe = createTodoObservationSubscription((agentId, todos) => {
-    events.push({ agentId, todos });
-  });
+  const unsubscribe = createTodoObservationSubscription(
+    sessionId,
+    (agentId, todos) => {
+      events.push({ agentId, todos });
+    },
+  );
   cleanups.push(unsubscribe);
   return events;
 }
@@ -148,32 +151,32 @@ function mountProvider(sessionId: string, agentId?: string): MountedProvider {
 }
 
 /**
- * Build a `CommandContext` whose `todoContext` is the LIVE provider context,
+ * Build a `CommandOwnerFixture` whose `todoContext` is the LIVE provider context,
  * so task subcommands read and mutate the real provider state. The remaining
  * fields are inert stubs; only `ui.addItem` is observable, to surface errors.
  */
 function commandContextFrom(
   live: TodoContextValue,
   errors: string[],
-): CommandContext {
+): CommandOwnerFixture {
   return {
     runtimeApi: createMockRuntimeApi(),
     refreshProviderAliases: async () => {},
-    oauthControl: {} as CommandContext['oauthControl'],
+    oauthControl: {} as CommandOwnerFixture['oauthControl'],
     signal: new AbortController().signal,
     services: {
       config: null,
       agent: null,
-      settings: {} as unknown as CommandContext['services']['settings'],
+      settings: {} as unknown as CommandOwnerFixture['services']['settings'],
       git: undefined,
       logger: {
         error: (m: string) => errors.push(m),
-      } as unknown as CommandContext['services']['logger'],
+      } as unknown as CommandOwnerFixture['services']['logger'],
     },
     ui: {
       addItem: ((item: { type?: string; text?: string }) => {
         if (item.type === 'error') errors.push(item.text ?? 'error');
-      }) as unknown as CommandContext['ui']['addItem'],
+      }) as unknown as CommandOwnerFixture['ui']['addItem'],
       clear: () => {},
       setDebugMessage: () => {},
       pendingItem: null,
@@ -186,12 +189,12 @@ function commandContextFrom(
       updateHistoryTokenCount: () => {},
       reloadCommands: () => {},
       extensionsUpdateState:
-        new Map() as CommandContext['ui']['extensionsUpdateState'],
+        new Map() as CommandOwnerFixture['ui']['extensionsUpdateState'],
       dispatchExtensionStateUpdate: () => {},
       addConfirmUpdateExtensionRequest: () => {},
     },
     session: {
-      stats: {} as CommandContext['session']['stats'],
+      stats: {} as CommandOwnerFixture['session']['stats'],
       sessionShellAllowlist: new Set<string>(),
     },
     todoContext: {
@@ -209,10 +212,13 @@ async function runSubcommand(
   name: string,
   args: string,
 ): Promise<string[]> {
-  const sub = todoCommand.subCommands?.find((c) => c.name === name);
+  const errors: string[] = [];
+  const context = commandContextFrom(live, errors);
+  const sub = registerTodoCommand(context).subCommands?.find(
+    (c) => c.name === name,
+  );
   const action = sub?.action;
   if (!action) throw new Error(`task subcommand "${name}" has no action`);
-  const errors: string[] = [];
   await act(async () => {
     // The action may be sync (most task operations) or async; normalize so a
     // sync return is awaited without an await-thenable lint violation.
@@ -247,7 +253,7 @@ async function seedObserveRun(
   args: string,
 ): Promise<ObservedEvent[]> {
   const mounted = await seedDiskAndMount(sessionId, seed);
-  const events = observeTodoChannel();
+  const events = observeTodoChannel(sessionId);
   const errors = await runSubcommand(mounted.result.current, name, args);
   expect(errors).toStrictEqual([]);
   return events;
@@ -325,7 +331,7 @@ describe('TodoProvider observation (issue #3052)', () => {
         todo('c2', 'Ship fix'),
       ]);
       expect(mounted.result.current.todos).toHaveLength(2);
-      const events = observeTodoChannel();
+      const events = observeTodoChannel(sessionId);
 
       const errors = await runSubcommand(mounted.result.current, 'clear', '');
       expect(errors).toStrictEqual([]);
@@ -523,7 +529,7 @@ describe('TodoProvider observation (issue #3052)', () => {
       const mounted = await seedDiskAndMount(sessionId, [
         todo('pre', 'Before load'),
       ]);
-      const events = observeTodoChannel();
+      const events = observeTodoChannel(sessionId);
       const errors = await runSubcommand(mounted.result.current, 'load', '1');
       expect(errors).toStrictEqual([]);
 
@@ -539,22 +545,24 @@ describe('TodoProvider observation (issue #3052)', () => {
   describe('published payload carries provider agent scoping (JSP seam)', () => {
     it('publishes the explicit agentId prop on the event', async () => {
       const agentId = 'agent-7';
+      const sessionId = 'obs-scope-explicit';
       const mounted = await seedDiskAndMount(
         'obs-scope-explicit',
         [todo('e1', 'Scoped')],
         agentId,
       );
-      const events = observeTodoChannel();
+      const events = observeTodoChannel(sessionId);
       await runSubcommand(mounted.result.current, 'clear', '');
       expect(events).toHaveLength(1);
       expect(events[0].agentId).toBe(agentId);
     });
 
     it('publishes undefined agentId under the default (no agentId prop)', async () => {
+      const sessionId = 'obs-scope-default';
       const mounted = await seedDiskAndMount('obs-scope-default', [
         todo('d1', 'Default'),
       ]);
-      const events = observeTodoChannel();
+      const events = observeTodoChannel(sessionId);
       await runSubcommand(mounted.result.current, 'clear', '');
       expect(events).toHaveLength(1);
       expect(events[0].agentId).toBeUndefined();
@@ -565,7 +573,7 @@ describe('TodoProvider observation (issue #3052)', () => {
     it('applies /todo add exactly once to provider state and emits one publication', async () => {
       const sessionId = 'obs-once';
       const mounted = await seedDiskAndMount(sessionId, [todo('o1', 'Seed')]);
-      const events = observeTodoChannel();
+      const events = observeTodoChannel(sessionId);
       const rendersBefore = mounted.result.all.length;
 
       await runSubcommand(mounted.result.current, 'add', '2 Added');
@@ -645,7 +653,7 @@ describe('TodoProvider observation (issue #3052)', () => {
         todo('ac1', 'Done one', 'completed'),
         todo('ac2', 'Done two', 'completed'),
       ]);
-      const events = observeTodoChannel();
+      const events = observeTodoChannel(sessionId);
 
       expect(shouldClearTodos(mounted.result.current.todos)).toBe(true);
       act(() => {
@@ -731,7 +739,7 @@ describe('TodoProvider observation (issue #3052)', () => {
       expect(origin.result.current.todos).toStrictEqual(seed);
       expect(peer.result.current.todos).toStrictEqual(seed);
 
-      const events = observeTodoChannel();
+      const events = observeTodoChannel(sessionId);
       const published: Todo[] = [todo('p1', 'From origin', 'in_progress')];
       act(() => {
         origin.result.current.updateTodos(published);

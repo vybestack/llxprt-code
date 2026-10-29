@@ -5,8 +5,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { oauthUIBridge, type OAuthUIEvent } from '@vybestack/llxprt-code-auth';
-import { interactiveAuthCoordinator } from '../interactive-auth-coordinator.js';
+import { OAuthUIBridge, type OAuthUIEvent } from '@vybestack/llxprt-code-auth';
+import { InteractiveAuthCoordinator } from '../interactive-auth-coordinator.js';
 
 interface Deferred {
   readonly promise: Promise<void>;
@@ -28,30 +28,36 @@ function createDeferred(): Deferred {
  * @requirement REQ-2562-4
  */
 describe('InteractiveAuthCoordinator OAuth UI events', () => {
+  let coordinator: InteractiveAuthCoordinator;
+  let uiBridge: OAuthUIBridge;
   beforeEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
-    oauthUIBridge.clearCallback();
-    oauthUIBridge.clearPending();
+    uiBridge = new OAuthUIBridge();
+    coordinator = new InteractiveAuthCoordinator((event) => {
+      uiBridge.emit(event);
+    });
+    await coordinator.dispose();
+    coordinator.unbindHost();
+    uiBridge.clearCallback();
+    uiBridge.clearPending();
   });
 
   afterEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
-    oauthUIBridge.clearCallback();
-    oauthUIBridge.clearPending();
+    await coordinator.dispose();
+    coordinator.unbindHost();
+    uiBridge.clearCallback();
+    uiBridge.clearPending();
   });
 
   it('emits credential-free waiting and settled events for the host UI', async () => {
     const hostCompletion = createDeferred();
     const events: OAuthUIEvent[] = [];
-    oauthUIBridge.setCallback((event) => {
+    uiBridge.setCallback((event) => {
       events.push(event);
       return events.length;
     });
-    interactiveAuthCoordinator.bindHost(() => hostCompletion.promise);
+    coordinator.bindHost(() => hostCompletion.promise);
 
-    const outcome = interactiveAuthCoordinator.requestAuth({
+    const outcome = coordinator.requestAuth({
       provider: 'codex',
       bucket: 'work',
       requester: { runtimeKind: 'subagent' },
@@ -89,20 +95,20 @@ describe('InteractiveAuthCoordinator OAuth UI events', () => {
   it('emits one succeeded settlement for each coalesced waiter correlation', async () => {
     const hostCompletion = createDeferred();
     const events: OAuthUIEvent[] = [];
-    oauthUIBridge.setCallback((event) => {
+    uiBridge.setCallback((event) => {
       events.push(event);
       return events.length;
     });
-    interactiveAuthCoordinator.bindHost(() => hostCompletion.promise);
+    coordinator.bindHost(() => hostCompletion.promise);
 
-    const first = interactiveAuthCoordinator.requestAuth({
+    const first = coordinator.requestAuth({
       provider: 'codex',
       bucket: 'work',
       requester: { runtimeKind: 'subagent' },
       reason: 'authentication-required',
       correlationId: 'coalesced-first',
     });
-    const second = interactiveAuthCoordinator.requestAuth({
+    const second = coordinator.requestAuth({
       provider: 'codex',
       bucket: 'work',
       requester: { runtimeKind: 'agent' },
@@ -138,13 +144,13 @@ describe('InteractiveAuthCoordinator OAuth UI events', () => {
     const hostCompletion = createDeferred();
     const requesterController = new AbortController();
     const events: OAuthUIEvent[] = [];
-    oauthUIBridge.setCallback((event) => {
+    uiBridge.setCallback((event) => {
       events.push(event);
       return events.length;
     });
-    interactiveAuthCoordinator.bindHost(() => hostCompletion.promise);
+    coordinator.bindHost(() => hostCompletion.promise);
 
-    const detached = interactiveAuthCoordinator.requestAuth(
+    const detached = coordinator.requestAuth(
       {
         provider: 'codex',
         bucket: 'work',
@@ -154,7 +160,7 @@ describe('InteractiveAuthCoordinator OAuth UI events', () => {
       },
       { signal: requesterController.signal },
     );
-    const remaining = interactiveAuthCoordinator.requestAuth({
+    const remaining = coordinator.requestAuth({
       provider: 'codex',
       bucket: 'work',
       requester: { runtimeKind: 'agent' },
@@ -179,12 +185,12 @@ describe('InteractiveAuthCoordinator OAuth UI events', () => {
   });
 
   it('settles authentication even when the UI callback throws', async () => {
-    oauthUIBridge.setCallback(() => {
+    uiBridge.setCallback(() => {
       throw new Error('UI unavailable');
     });
-    interactiveAuthCoordinator.bindHost(async () => undefined);
+    coordinator.bindHost(async () => undefined);
 
-    const outcome = interactiveAuthCoordinator.requestAuth({
+    const outcome = coordinator.requestAuth({
       provider: 'codex',
       bucket: 'default',
       requester: { runtimeKind: 'cli-interactive' },

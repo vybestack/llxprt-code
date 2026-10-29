@@ -33,13 +33,19 @@ describe('wrapped fetch connection preparation', () => {
     ]);
   });
 
-  it('resolves the global transport lazily for reader and reasoning wrappers', () => {
+  it('resolves a supplied mutable transport lazily for reader and reasoning wrappers', () => {
     const saved = globalThis.fetch;
     const endpoints: string[] = [];
-    const reader = createReaderBasedStreamFetch();
+    const dispatcher = Object.assign(
+      (input: RequestInfo | URL, init?: RequestInit) =>
+        globalThis.fetch(input, init),
+      { preconnect: (url: string | URL) => globalThis.fetch.preconnect(url) },
+    );
+    const reader = createReaderBasedStreamFetch(dispatcher);
     const reasoning = createReasoningCaptureFetch(
       createCaptureBuffer(),
       new DebugLogger('fetch-preconnect-test'),
+      dispatcher,
     );
     try {
       globalThis.fetch = transport(endpoints);

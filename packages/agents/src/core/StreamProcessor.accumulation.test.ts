@@ -81,7 +81,7 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
   beforeEach(() => {
     processor = Object.create(StreamProcessor.prototype);
     Object.assign(processor, {
-      runtimeContext: createMockRuntimeContext(),
+      ports: createMockRuntimeContext(),
       compressionHandler: createMockCompressionHandler(),
       conversationManager: createMockConversationManager(),
       historyService: createMockHistoryService(),
@@ -235,7 +235,7 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
   it('passes includeThoughts flag to finalize', async () => {
     processor = Object.create(StreamProcessor.prototype);
     Object.assign(processor, {
-      runtimeContext: {
+      ports: {
         state: { model: 'test' },
         ephemerals: {
           reasoning: {

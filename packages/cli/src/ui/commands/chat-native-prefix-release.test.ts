@@ -47,15 +47,14 @@ describe('actual CLI prefix release failure drains every held media reference', 
         const reservations = await reservationFiles(store.rootDirectory);
         const primary = new Error('client publication failed');
         const cleanupFailure = new Error('first media hold release failed');
-        const originalPublish = client.setHistoryFromSource.bind(client);
+        const originalPublish = client.resetChat.bind(client);
         const originalRelease = store.release.bind(store);
-        const publish = spyOn(
-          client,
-          'setHistoryFromSource',
-        ).mockImplementationOnce(async (...args) => {
-          await originalPublish(...args);
-          throw primary;
-        });
+        const publish = spyOn(client, 'resetChat').mockImplementationOnce(
+          async (...args) => {
+            await originalPublish(...args);
+            throw primary;
+          },
+        );
         let failed = false;
         const release = spyOn(store, 'release').mockImplementation(
           async (id, owner) => {

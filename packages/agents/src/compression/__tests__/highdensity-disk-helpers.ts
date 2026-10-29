@@ -68,6 +68,7 @@ export async function highdensityOracle(
   const metadata = await buildCompressionMetadata(
     'oracle',
     runtime,
+    undefined,
     history,
     async () => ({
       provider: transport,

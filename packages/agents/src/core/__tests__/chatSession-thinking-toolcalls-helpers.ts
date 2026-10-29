@@ -1,3 +1,8 @@
+import { chatSessionPorts } from '../chatSessionPorts.js';
+import { buildMockContentGenerator } from './chatSession-density-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -7,7 +12,7 @@
 import { vi } from 'bun:test';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { installModelToolFixture } from './model-tool-fixture.js';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -20,7 +25,6 @@ import {
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
@@ -44,7 +48,7 @@ type ChatGenerator = (
   options: GenerateChatOptions,
 ) => AsyncIterableIterator<IContent>;
 
-function adaptGenerator(
+export function adaptGenerator(
   generator: ChatGenerator,
 ): IProvider['generateChatCompletion'] {
   function generate(
@@ -80,15 +84,13 @@ export function createFixture(): {
   settingsService.set('reasoning.stripFromContext', 'none');
 
   const providerRuntime = createProviderRuntimeContext({
-    settingsService,
-    config,
     runtimeId: 'test.runtime.issue1150',
     metadata: { source: 'chatSession.thinking-toolcalls.test' },
   });
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
   return { config, manager, providerRuntime };
 }
 
@@ -118,7 +120,17 @@ export function createChat(
   const historyService = new HistoryService();
   const view = createAgentRuntimeContext({
     prepareProviderInvocation: (name, parameters, signal) =>
-      captureProviderInvocation(providerRuntime, name, parameters, signal),
+      captureProviderInvocation(
+        {
+          runtimeId: providerRuntime.runtimeId,
+          fetch: requestFetch,
+          globalSettings: config.getInitialSettings(),
+          providerSettings: {},
+        },
+        name,
+        parameters,
+        signal,
+      ),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -136,7 +148,19 @@ export function createChat(
     providerRuntime: { ...providerRuntime },
   });
 
-  const chat = new ChatSession(view, {} as unknown as ContentGenerator, {}, []);
+  const chat = new ChatSession(
+    chatSessionPorts(view),
+    config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    buildMockContentGenerator(),
+    {},
+    [],
+  );
   return { chat, historyService };
 }
 

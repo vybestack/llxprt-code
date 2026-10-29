@@ -22,8 +22,12 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { prepareRequestBody as prepareRequest } from './__tests__/support/prepareRequestBody.js';
 import { REASONING_WIRE_KEYS } from './openaiReasoningDialect.js';
-import { buildEphemeralsSnapshot } from '../runtimeNormalizer.js';
+import { buildProviderSettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/admit-model-parameters.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
@@ -47,10 +51,15 @@ function optionsFrom(
   baseURL: string | undefined,
 ): NormalizedGenerateChatOptions {
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: 'test-runtime',
 
     providerName: PROVIDER,
-    ephemeralsSnapshot: buildEphemeralsSnapshot(settings, PROVIDER),
+    ephemeralsSnapshot: buildProviderSettingsSnapshot(
+      settings.getAllGlobalSettings(),
+      settings.getProviderSettings(PROVIDER),
+      PROVIDER,
+    ),
   });
   return {
     contents: [],

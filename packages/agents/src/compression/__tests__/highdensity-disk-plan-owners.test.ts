@@ -20,6 +20,7 @@ function ownerMetadata(
   return buildCompressionMetadata(
     'owners',
     runtime,
+    undefined,
     history,
     async () => ({
       provider: transport,

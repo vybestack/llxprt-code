@@ -4,10 +4,18 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { dirname, relative, resolve, sep } from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { dirname, resolve, sep } from 'node:path';
+import { portableRelativePath as relative } from './compiler-source-path.js';
 import { parseArgs } from 'node:util';
 import ts from 'typescript';
+import { findAssemblyClosureViolations } from './assembly-closure-guard.js';
+import {
+  exportedSymbol,
+  declarationCandidates,
+  selectedSources,
+  retiredAmbientFindings,
+} from './runtime-audit-declarations.js';
 import { verifyJavascriptModuleIdentities } from './tests/runtime-javascript-module-identity.js';
 import {
   compilerConfiguration,
@@ -34,11 +42,7 @@ import {
   type RuntimeServiceShapeOptions,
 } from './tests/runtime-service-shape-guard.js';
 import { scanState, workspacePath } from './runtime-state-scan.js';
-import {
-  evaluateRatchet,
-  formatBlockedAudit,
-  parseRatchetBaseline,
-} from './runtime-boundary-ratchet.js';
+import { type StateRootDiscovery } from './runtime-state-roots.js';
 import {
   scanAmbientDelegation,
   type AmbientSource,
@@ -52,8 +56,14 @@ export interface AuditPolicy {
   readonly compilerProjects?: readonly string[];
   readonly sourceRoots: readonly string[];
   readonly entryManifest?: EntryManifest;
-  readonly mutableRoots: readonly string[];
-  readonly alsRoots: readonly string[];
+  /**
+   * Explicit runtime state roots. Fixtures declare these; production leaves
+   * them unset and lets `stateRootDiscovery` derive them from the workspace, so
+   * no hand-maintained list can go stale after a module moves.
+   */
+  readonly mutableRoots?: readonly string[];
+  readonly alsRoots?: readonly string[];
+  readonly stateRootDiscovery?: StateRootDiscovery;
   readonly services: readonly RuntimeDeclarationRoot[];
   readonly configs: readonly RuntimeDeclarationRoot[];
   readonly runtimeObjects?: readonly RuntimeDeclarationRoot[];
@@ -70,7 +80,7 @@ export interface AuditPolicy {
 const runtimeAccessors = 'packages/providers/src/runtime/runtimeAccessors.ts';
 const cliContext = 'packages/cli/src/ui/contexts/RuntimeContext.tsx';
 const deletionReason =
-  '#2616 migration removes ambient accessors; absence is recorded, present exports remain audited.';
+  '#2616 migration removes ambient accessors; absence is recorded, returning exports fail the audit.';
 export const productionPolicy: AuditPolicy = {
   compilerConfig: 'packages/cli/tsconfig.noemit.json',
   entryManifest: productionEntryManifest,
@@ -117,12 +127,10 @@ export const productionPolicy: AuditPolicy = {
     ].map((name) => `packages/${name}/src`),
     ...productionPlugins.map((pkg) => `${pkg}/src`),
   ],
-  mutableRoots: [
-    'packages/providers/src/runtime',
-    'packages/core/src/runtime',
-    cliContext,
-  ],
-  alsRoots: ['packages/providers/src', 'packages/core/src'],
+  stateRootDiscovery: {
+    directoryNames: ['runtime', 'api', 'settings'],
+    files: [cliContext, 'packages/a2a-server/src/http/request-cancellation.ts'],
+  },
   services: [
     {
       file: 'packages/settings/src/settings/SettingsService.ts',
@@ -188,6 +196,8 @@ export const productionPolicy: AuditPolicy = {
     'core/src/storage/local-media-store.ts': 'LocalMediaStore',
     'storage/src/services/fileDiscoveryService.ts': 'FileDiscoveryService',
     'storage/src/services/fileSystemService.ts': 'FileSystemService',
+    'storage/src/secure-store/provider-key-storage.ts':
+      'ProviderKeyStorageLike',
     'policy/src/policy-engine.ts': 'PolicyEngine',
     'tools/src/tools/github.ts': 'GitHubBrokerClient',
     'mcp/src/client/mcp-client-manager.ts': 'McpClientManager',
@@ -261,7 +271,7 @@ export const productionPolicy: AuditPolicy = {
       file: 'packages/providers/src/BaseProvider.ts',
       declaration: 'BaseProvider.activeCallContext',
       reason:
-        'Per-provider call-option scope carries NormalizedGenerateChatOptions during generation; it does not select an active runtime identity. No other provider ALS declaration is exempt.',
+        'Per-provider call-option scope carries NormalizedGenerateChatOptions during generation; it does not select an active runtime identity. No other provider ALS declaration is exempt. The derived ALS roots still include a2a-server request cancellation.',
     },
     {
       file: 'packages/core/src/storage/local-media-store-persistence.ts',
@@ -347,26 +357,6 @@ function diagnostic(
       : {}),
   };
 }
-function exportedSymbol(
-  program: ts.Program,
-  root: RuntimeDeclarationRoot,
-): ts.Symbol | undefined {
-  const source = program.getSourceFile(root.file);
-  const checker = program.getTypeChecker();
-  const module = source && checker.getSymbolAtLocation(source);
-  const symbol =
-    module &&
-    checker
-      .getExportsOfModule(module)
-      .find((entry) => entry.name === root.exportName);
-  return (
-    symbol &&
-    (symbol.flags & ts.SymbolFlags.Alias
-      ? checker.getAliasedSymbol(symbol)
-      : symbol)
-  );
-}
-
 function auditProgram(
   workspace: string,
   compilerConfig: string,
@@ -379,7 +369,7 @@ function auditProgram(
       ...new Set([
         ...configuration.fileNames.filter(
           (file) =>
-            files.includes(file) ||
+            files.includes(workspacePath(workspace, file)) ||
             file.endsWith('.json') ||
             (!isTestSource(file) && /\.d\.(?:ts|mts|cts)$/.test(file)),
         ),
@@ -397,28 +387,6 @@ function auditProgram(
   return { program, compilerDiagnostics };
 }
 
-function declarationCandidates(
-  workspace: string,
-  root: RuntimeDeclarationRoot,
-): readonly string[] {
-  const source = workspacePath(workspace, root.file);
-  const packagePath = root.file.split('/').slice(0, 2).join('/');
-  const buildConfig = `${packagePath}/tsconfig.build.json`;
-  const defaultConfig = `${packagePath}/tsconfig.json`;
-  const config = existsSync(workspacePath(workspace, buildConfig))
-    ? buildConfig
-    : defaultConfig;
-  if (!existsSync(workspacePath(workspace, config))) return [source];
-  const parsed = compilerConfiguration(workspace, config);
-  if (!parsed.fileNames.includes(source)) return [source];
-  return [
-    source,
-    ...ts
-      .getOutputFileNames(parsed, source, !ts.sys.useCaseSensitiveFileNames)
-      .filter((file) => /\.d\.(?:ts|mts|cts)$/.test(file)),
-  ];
-}
-
 function resolvePolicy(
   workspace: string,
   policy: AuditPolicy,
@@ -429,7 +397,7 @@ function resolvePolicy(
   services: readonly RuntimeDeclarationRoot[];
   configs: readonly RuntimeDeclarationRoot[];
   runtimeObjects: readonly RuntimeDeclarationRoot[];
-  ambientSources: readonly AmbientSource[];
+  ambientSources: readonly AmbientPolicySource[];
   unavailableRoots: ProgramAudit['unavailableRoots'];
   resolvedRoots: ProgramAudit['resolvedRoots'];
 } {
@@ -611,13 +579,13 @@ function scanPackage(
         selected,
       ),
     );
-  const sources = selected.map((file) => {
-    const source = program.getSourceFile(file);
-    if (!source) throw new Error(`Missing production source: ${file}`);
-    return source;
-  });
+  const sources = selectedSources(program, selected);
+  shapeFindings.push(...findAssemblyClosureViolations(program, sources));
   const ambient = roots.ambientSources;
-  const ambientFindings = scanAmbientDelegation(program, sources, ambient);
+  const ambientFindings = [
+    ...retiredAmbientFindings(program, ambient),
+    ...scanAmbientDelegation(program, sources, ambient),
+  ];
   onProgress?.({ ...progress, phase: 'scanners-complete' });
   return {
     shapeFindings,
@@ -758,12 +726,38 @@ export function auditRuntimeStateBoundary(
   };
 }
 
+/**
+ * Lists compiler diagnostics by program and identifies incomplete scanners.
+ * Returns an empty string when no compiler diagnostic blocks the audit.
+ */
+export function formatBlockedAudit(
+  result: Pick<AuditResult, 'programs' | 'scanners'>,
+): string {
+  const lines: string[] = [];
+  for (const program of result.programs) {
+    for (const problem of program.compilerDiagnostics) {
+      const location = problem.file
+        ? `${problem.file}:${problem.line ?? 0}:${problem.column ?? 0}`
+        : '(no file)';
+      lines.push(
+        `[${program.compilerConfig}] ${location} ${problem.category} TS${problem.code}: ${problem.message}`,
+      );
+    }
+  }
+  if (lines.length === 0) return '';
+  const { serviceShape, ambientDelegation } = result.scanners;
+  if (serviceShape !== 'complete')
+    lines.push(`scanner serviceShape: ${serviceShape}`);
+  if (ambientDelegation !== 'complete')
+    lines.push(`scanner ambientDelegation: ${ambientDelegation}`);
+  return `runtime-boundary audit blocked by compiler diagnostics:\n${lines.join('\n')}\n`;
+}
+
 if (import.meta.main) {
   const { values } = parseArgs({
     options: {
       workspace: { type: 'string', default: process.cwd() },
       output: { type: 'string' },
-      baseline: { type: 'string' },
     },
     strict: true,
   });
@@ -781,23 +775,9 @@ if (import.meta.main) {
       mkdirSync(dirname(output), { recursive: true });
       await Bun.write(output, json);
     }
-    if (values.baseline) {
-      const baseline = parseRatchetBaseline(
-        readFileSync(
-          workspacePath(resolve(values.workspace), values.baseline),
-          'utf8',
-        ),
-      );
-      const verdict = evaluateRatchet(result, baseline);
-      process.stderr.write(formatBlockedAudit(result));
-      process.stdout.write(
-        `${JSON.stringify({ ...verdict, scanners: result.scanners }, null, 2)}\n`,
-      );
-      process.exitCode = verdict.exitCode;
-    } else {
-      process.stdout.write(json);
-      process.exitCode = result.exitCode;
-    }
+    process.stderr.write(formatBlockedAudit(result));
+    process.stdout.write(json);
+    process.exitCode = result.exitCode;
   } catch (error) {
     process.stderr.write(
       `${JSON.stringify({ fatal: error instanceof Error ? error.message : String(error), exitCode: 2 })}\n`,

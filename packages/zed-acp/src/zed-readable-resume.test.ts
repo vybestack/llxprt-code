@@ -1,9 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { useOwnedCredentials as installOwnedCredentialFixture } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ZedAgent } from './zedIntegration.js';
-import { createConnectionProviderManager } from './__tests__/connection-provider-fixture.js';
 import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
 import { unusedProfileApplication } from './test-profile-application.js';
 import {
@@ -19,6 +19,7 @@ import {
 } from './zedIntegration.loadSession.test-helpers.js';
 
 const definitionFixture = installZedDefinitionFixture();
+const credentials = installOwnedCredentialFixture();
 const kinds: InputKind[] = ['node', 'web'];
 for (const kind of kinds) {
   describe(`${kind} readable live Zed session resume`, () => {
@@ -39,10 +40,11 @@ for (const kind of kinds) {
             config,
             connection,
             unusedProfileApplication,
-            createConnectionProviderManager(config, settingsService),
             () => new SettingsService({ sessionSource: settingsService }),
             emptyChatsLister,
             definitionFixture(),
+            undefined,
+            { credentialAuthority: credentials().authority },
           );
           agents.push(agent);
           return agent;

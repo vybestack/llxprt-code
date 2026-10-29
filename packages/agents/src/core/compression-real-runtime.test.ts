@@ -21,7 +21,7 @@ import {
   OpenAIProvider,
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition/index.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
@@ -147,15 +147,18 @@ describe('compression through the CLI runtime wiring on OpenAI chat', () => {
       telemetry: { enabled: false },
     });
     const { settingsOwner } = createSessionSettingsFixture(config, settings);
-    const manager = new ProviderManager({
-      settingsService: settings,
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
       config,
-      sessionSettings: settingsOwner,
-    });
-    const { tokenizerFactory: factory } = configureProviderRuntimeFactories(
-      config,
-      manager,
+      undefined,
+      undefined,
+      settingsOwner,
     );
+    const factory = configureProviderTokenizer(manager);
     manager.registerProvider(new OpenAIProvider('test-key', baseURL));
     manager.setActiveProvider('openai');
     const provider = manager.getActiveProvider();
@@ -165,13 +168,21 @@ describe('compression through the CLI runtime wiring on OpenAI chat', () => {
     history.setTokenizerFactory(factory);
     const runtimeId = randomUUID();
     const providerRuntime = createProviderRuntimeContext({
-      config,
-      settingsService: settings,
       runtimeId,
     });
     const runtime = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            runtimeId: providerRuntime.runtimeId,
+            fetch: globalThis.fetch,
+            globalSettings: settings.getAllGlobalSettings(),
+            providerSettings: settings.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
       promptEstimator: factory,
       readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
       state: {
@@ -185,7 +196,13 @@ describe('compression through the CLI runtime wiring on OpenAI chat', () => {
       history,
       settings: { contextLimit: CONTEXT_LIMIT },
       providerRuntime,
-      provider: { getActiveProvider: () => provider, setActiveProvider() {} },
+      provider: {
+        getProviderKeys: () => {
+          throw new Error('Fixture has no credential key authority');
+        },
+        getActiveProvider: () => provider,
+        setActiveProvider() {},
+      },
       tools: { listToolNames: () => [], getToolMetadata: () => undefined },
       telemetry: {
         logApiRequest() {},

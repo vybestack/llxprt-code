@@ -29,7 +29,18 @@ import {
   test,
   vi,
 } from 'bun:test';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { traceNativePreloadPhase } from './test-utils/native-preload-phase.js';
+import {
+  installStallReporter,
+  markStallStage,
+} from './test-utils/stall-report.js';
+
+traceNativePreloadPhase('cli.body-after-static-imports');
+// Lets the runner ask a file that finished its tests but will not exit what it
+// still holds. Inert unless the runner started this process.
+installStallReporter();
+traceNativePreloadPhase('cli.jsdom.entry');
 
 // ---------------------------------------------------------------------------
 // JSDOM globals for React DOM components
@@ -39,6 +50,15 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   runScripts: 'dangerously',
   url: 'http://localhost/',
 });
+traceNativePreloadPhase('cli.jsdom.exit');
+
+// A Bun test file is the whole process, so the window lives exactly as long as
+// the file. Closing it at the end stops its timers and event loops rather than
+// leaving them for process teardown to find.
+afterAll(() => {
+  dom.window.close();
+  markStallStage('preload-afterAll-finished');
+});
 
 Object.assign(globalThis, {
   window: dom.window,
@@ -47,6 +67,7 @@ Object.assign(globalThis, {
   HTMLElement: dom.window.HTMLElement,
   Node: dom.window.Node,
   Event: dom.window.Event,
+  EventTarget: dom.window.EventTarget,
   CustomEvent: dom.window.CustomEvent,
   MutationObserver: dom.window.MutationObserver,
   getComputedStyle: dom.window.getComputedStyle.bind(dom.window),
@@ -135,8 +156,10 @@ Bun.plugin({
 // path in argv, which is what this inspects.
 const SUITES_NEEDING_REAL_ALIASES = [
   'test/providers/providerAliases.test.ts',
+  'test/providers/providerModelResolver.aliasErrors.test.ts',
   'src/ui/commands/providerCommand.test.ts',
   'src/ui/contexts/runtime-owner-bridge.test.tsx',
+  'src/ui/contexts/runtime-owner-bridge-owner-2.test.tsx',
 ];
 // argv carries native separators, so on Windows the path arrives as
 // `test\providers\providerAliases.test.ts` and a raw endsWith against the
@@ -331,19 +354,27 @@ if (ReactInternals) {
 // ---------------------------------------------------------------------------
 // Storage isolation
 // ---------------------------------------------------------------------------
+traceNativePreloadPhase('cli.storage-import.entry');
 await import('./test-setup-storage-isolation.js');
+traceNativePreloadPhase('cli.storage-import.exit');
 
 // ---------------------------------------------------------------------------
 // Custom matchers
 // ---------------------------------------------------------------------------
+traceNativePreloadPhase('cli.matchers-import.entry');
 await import('./src/__tests__/customMatchers.js');
+traceNativePreloadPhase('cli.matchers-import.exit');
 
 // ---------------------------------------------------------------------------
 // afterEach cleanup (mirrors test-setup.ts)
 // ---------------------------------------------------------------------------
+traceNativePreloadPhase('cli.cleanup-core-import.entry');
+// Import the reset from the module that owns the state; utils/cleanup.js
+// re-exports it but also evaluates the whole core barrel.
 const { __resetCleanupStateForTesting } = await import(
-  './src/utils/cleanup.js'
+  './src/utils/cleanup-state.js'
 );
+traceNativePreloadPhase('cli.cleanup-core-import.exit');
 
 // Bun's mock.module patches a module namespace in place and shares it with
 // this preload, so a test that mocks '@vybestack/llxprt-code-core' would
@@ -396,9 +427,13 @@ function restoreProcessListeners(eventName: ManagedProcessEvent): void {
 // reset, so it is invoked at the top of the same hook rather than registered
 // separately. Without this, a component mounted in one test stays mounted for
 // the rest of the file, leaking effects, timers and the global active stdin.
+// The registry is imported instead of the renderer helper so files that never
+// render do not pay for loading the real Ink runtime.
+traceNativePreloadPhase('cli.ink-import.entry');
 const { cleanup: cleanupInkRenders } = await import(
-  './test-utils/ink-testing-library.js'
+  './test-utils/ink-render-registry.js'
 );
+traceNativePreloadPhase('cli.ink-import.exit');
 
 async function runCleanupPhases(
   phases: ReadonlyArray<() => void | Promise<void>>,
@@ -439,3 +474,4 @@ afterEach(async () => {
     () => __resetCleanupStateForTesting(),
   ]);
 });
+traceNativePreloadPhase('cli.complete');

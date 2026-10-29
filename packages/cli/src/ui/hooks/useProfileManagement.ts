@@ -3,10 +3,30 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  type DeleteProfileByNameOperation,
+  type GetDefaultProfileNameOperation,
+  type GetProfileByNameOperation,
+  type GetRuntimeDiagnosticsSnapshotOperation,
+  type ListSavedProfilesOperation,
+  type LoadProfileByNameOperation,
+  type ProviderStatusOperation,
+  type SaveProfileDefinitionOperation,
+  type SetDefaultProfileNameOperation,
+  useDeleteProfileByName,
+  useGetDefaultProfileName,
+  useGetProfileByName,
+  useGetRuntimeDiagnosticsSnapshot,
+  useListSavedProfiles,
+  useLoadProfileByName,
+  useProviderStatus,
+  useSaveProfileDefinition,
+  useSetDefaultProfileName,
+} from '../contexts/RuntimeContext.js';
 
 import { useCallback, useEffect, useState } from 'react';
 import { MessageType } from '../types.js';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import type { ProfileListItem } from '../components/ProfileListDialog.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -119,13 +139,13 @@ function useProfileDataStates() {
 }
 
 async function fetchProfileItems(
-  runtime: ReturnType<typeof useRuntimeApi>,
+  runtimeGetProfileByName: GetProfileByNameOperation,
   profileNames: string[],
 ): Promise<ProfileListItem[]> {
   return Promise.all(
     profileNames.map(async (name) => {
       try {
-        const profile = await runtime.getProfileByName(name);
+        const profile = await runtimeGetProfileByName(name);
         const isLB = profile.type === 'loadbalancer';
         return {
           name,
@@ -145,7 +165,10 @@ async function fetchProfileItems(
 }
 
 function useProfileLoader(
-  runtime: ReturnType<typeof useRuntimeApi>,
+  runtimeGetDefaultProfileName: GetDefaultProfileNameOperation,
+  runtimeGetProfileByName: GetProfileByNameOperation,
+  runtimeGetRuntimeDiagnosticsSnapshot: GetRuntimeDiagnosticsSnapshotOperation,
+  runtimeListSavedProfiles: ListSavedProfilesOperation,
   addMessage: AddMessageFn,
   setProfiles: React.Dispatch<React.SetStateAction<ProfileListItem[]>>,
   setIsLoading: React.Dispatch<React.SetStateAction<boolean>>,
@@ -162,18 +185,21 @@ function useProfileLoader(
       setProfileError(null);
 
       try {
-        const profileNames = await runtime.listSavedProfiles();
-        const profileItems = await fetchProfileItems(runtime, profileNames);
+        const profileNames = await runtimeListSavedProfiles();
+        const profileItems = await fetchProfileItems(
+          runtimeGetProfileByName,
+          profileNames,
+        );
         setProfiles(profileItems);
 
         try {
-          setDefaultProfileName(runtime.getDefaultProfileName());
+          setDefaultProfileName(runtimeGetDefaultProfileName());
         } catch {
           // Ignore errors getting default profile
         }
 
         try {
-          const diagnostics = runtime.getRuntimeDiagnosticsSnapshot();
+          const diagnostics = runtimeGetRuntimeDiagnosticsSnapshot();
           setActiveProfileName(diagnostics.profileName);
         } catch {
           // Ignore errors getting active profile
@@ -194,7 +220,10 @@ function useProfileLoader(
       }
     },
     [
-      runtime,
+      runtimeGetDefaultProfileName,
+      runtimeGetProfileByName,
+      runtimeGetRuntimeDiagnosticsSnapshot,
+      runtimeListSavedProfiles,
       addMessage,
       setProfiles,
       setIsLoading,
@@ -222,7 +251,7 @@ function useListDialogActions(
 
 function useDetailDialogActions(
   dialogs: DialogOpeners,
-  runtime: ReturnType<typeof useRuntimeApi>,
+  runtimeGetProfileByName: GetProfileByNameOperation,
   setSelectedProfileName: React.Dispatch<React.SetStateAction<string | null>>,
   setSelectedProfile: React.Dispatch<React.SetStateAction<Profile | null>>,
   setProfileError: React.Dispatch<React.SetStateAction<string | null>>,
@@ -243,7 +272,7 @@ function useDetailDialogActions(
       dialogs.profileDetail.open({ profileName });
 
       try {
-        const profile = await runtime.getProfileByName(profileName);
+        const profile = await runtimeGetProfileByName(profileName);
         setSelectedProfile(profile);
       } catch (error) {
         setProfileError(
@@ -255,7 +284,7 @@ function useDetailDialogActions(
     },
     [
       dialogs,
-      runtime,
+      runtimeGetProfileByName,
       setSelectedProfileName,
       setSelectedProfile,
       setProfileError,
@@ -291,14 +320,15 @@ function useDetailDialogActions(
 function useLoadProfileAction(
   addMessage: AddMessageFn,
   dialogs: DialogOpeners,
-  runtime: ReturnType<typeof useRuntimeApi>,
+  runtimeLoadProfileByName: LoadProfileByNameOperation,
+  runtimeProviderStatus: ProviderStatusOperation,
   setActiveProfileName: React.Dispatch<React.SetStateAction<string | null>>,
   recorder: ProviderSwitchRecorder | null,
 ) {
   return useCallback(
     async (profileName: string) => {
       try {
-        const result = await runtime.loadProfileByName(profileName);
+        const result = await runtimeLoadProfileByName(profileName);
         const extra = result.infoMessages
           .map((message: string) => `\n- ${message}`)
           .join('');
@@ -317,12 +347,15 @@ function useLoadProfileAction(
         setActiveProfileName(profileName);
         dialogs.profileDetail.close();
         dialogs.profileList.close();
-        await recordActiveProviderSwitch(recorder, runtime, (content) =>
-          addMessage({
-            type: MessageType.ERROR,
-            content,
-            timestamp: new Date(),
-          }),
+        await recordActiveProviderSwitch(
+          recorder,
+          { providerStatus: runtimeProviderStatus },
+          (content) =>
+            addMessage({
+              type: MessageType.ERROR,
+              content,
+              timestamp: new Date(),
+            }),
         );
       } catch (error) {
         addMessage({
@@ -332,14 +365,21 @@ function useLoadProfileAction(
         });
       }
     },
-    [addMessage, dialogs, runtime, setActiveProfileName, recorder],
+    [
+      addMessage,
+      dialogs,
+      runtimeLoadProfileByName,
+      runtimeProviderStatus,
+      setActiveProfileName,
+      recorder,
+    ],
   );
 }
 
 function useDeleteProfileAction(
   addMessage: AddMessageFn,
   dialogs: DialogOpeners,
-  runtime: ReturnType<typeof useRuntimeApi>,
+  runtimeDeleteProfileByName: DeleteProfileByNameOperation,
   loadProfiles: (options?: { showLoading?: boolean }) => Promise<void>,
   options?: { fromList?: boolean },
 ) {
@@ -347,7 +387,7 @@ function useDeleteProfileAction(
   return useCallback(
     async (profileName: string) => {
       try {
-        await runtime.deleteProfileByName(profileName);
+        await runtimeDeleteProfileByName(profileName);
         addMessage({
           type: MessageType.INFO,
           content: `Profile '${profileName}' deleted`,
@@ -369,19 +409,19 @@ function useDeleteProfileAction(
         });
       }
     },
-    [addMessage, dialogs, runtime, loadProfiles, fromList],
+    [addMessage, dialogs, runtimeDeleteProfileByName, loadProfiles, fromList],
   );
 }
 
 function useSetDefaultAction(
   addMessage: AddMessageFn,
-  runtime: ReturnType<typeof useRuntimeApi>,
+  runtimeSetDefaultProfileName: SetDefaultProfileNameOperation,
   setDefaultProfileName: React.Dispatch<React.SetStateAction<string | null>>,
 ) {
   return useCallback(
     async (profileName: string) => {
       try {
-        runtime.setDefaultProfileName(profileName);
+        runtimeSetDefaultProfileName(profileName);
         setDefaultProfileName(profileName);
         addMessage({
           type: MessageType.INFO,
@@ -396,13 +436,13 @@ function useSetDefaultAction(
         });
       }
     },
-    [addMessage, runtime, setDefaultProfileName],
+    [addMessage, runtimeSetDefaultProfileName, setDefaultProfileName],
   );
 }
 
 function useOpenEditorAction(
   dialogs: DialogOpeners,
-  runtime: ReturnType<typeof useRuntimeApi>,
+  runtimeGetProfileByName: GetProfileByNameOperation,
   setSelectedProfileName: React.Dispatch<React.SetStateAction<string | null>>,
   setSelectedProfile: React.Dispatch<React.SetStateAction<Profile | null>>,
   setProfileError: React.Dispatch<React.SetStateAction<string | null>>,
@@ -418,7 +458,7 @@ function useOpenEditorAction(
       if (openedDirectly) {
         setIsLoading(true);
         try {
-          const profile = await runtime.getProfileByName(profileName);
+          const profile = await runtimeGetProfileByName(profileName);
           setSelectedProfile(profile);
         } catch (error) {
           setProfileError(
@@ -434,7 +474,7 @@ function useOpenEditorAction(
     },
     [
       dialogs,
-      runtime,
+      runtimeGetProfileByName,
       setSelectedProfileName,
       setEditorOpenedDirectly,
       setProfileError,
@@ -480,7 +520,7 @@ function useCloseEditorAction(
 }
 
 function useSaveProfileAction(
-  runtime: ReturnType<typeof useRuntimeApi>,
+  runtimeSaveProfileDefinition: SaveProfileDefinitionOperation,
   addMessage: AddMessageFn,
   dialogs: DialogOpeners,
   editorOpenedDirectly: boolean,
@@ -496,7 +536,7 @@ function useSaveProfileAction(
           return;
         }
 
-        await runtime.saveProfileDefinition(profileName, updatedProfile);
+        await runtimeSaveProfileDefinition(profileName, updatedProfile);
         addMessage({
           type: MessageType.INFO,
           content: `Profile '${profileName}' saved`,
@@ -516,7 +556,7 @@ function useSaveProfileAction(
       viewProfileDetail,
       editorOpenedDirectly,
       setProfileError,
-      runtime,
+      runtimeSaveProfileDefinition,
     ],
   );
 }
@@ -524,7 +564,12 @@ function useSaveProfileAction(
 function useProfileDispatchActions(
   addMessage: AddMessageFn,
   dialogs: DialogOpeners,
-  runtime: ReturnType<typeof useRuntimeApi>,
+  runtimeDeleteProfileByName: DeleteProfileByNameOperation,
+  runtimeGetProfileByName: GetProfileByNameOperation,
+  runtimeLoadProfileByName: LoadProfileByNameOperation,
+  runtimeProviderStatus: ProviderStatusOperation,
+  runtimeSaveProfileDefinition: SaveProfileDefinitionOperation,
+  runtimeSetDefaultProfileName: SetDefaultProfileNameOperation,
   loadProfiles: (options?: { showLoading?: boolean }) => Promise<void>,
   dataStates: ReturnType<typeof useProfileDataStates>,
   viewProfileDetail: (name: string, direct: boolean) => Promise<void>,
@@ -533,31 +578,32 @@ function useProfileDispatchActions(
   const loadProfile = useLoadProfileAction(
     addMessage,
     dialogs,
-    runtime,
+    runtimeLoadProfileByName,
+    runtimeProviderStatus,
     dataStates.setActiveProfileName,
     recorder,
   );
   const deleteProfile = useDeleteProfileAction(
     addMessage,
     dialogs,
-    runtime,
+    runtimeDeleteProfileByName,
     loadProfiles,
   );
   const deleteProfileFromList = useDeleteProfileAction(
     addMessage,
     dialogs,
-    runtime,
+    runtimeDeleteProfileByName,
     loadProfiles,
     { fromList: true },
   );
   const setDefault = useSetDefaultAction(
     addMessage,
-    runtime,
+    runtimeSetDefaultProfileName,
     dataStates.setDefaultProfileName,
   );
   const openEditor = useOpenEditorAction(
     dialogs,
-    runtime,
+    runtimeGetProfileByName,
     dataStates.setSelectedProfileName,
     dataStates.setSelectedProfile,
     dataStates.setProfileError,
@@ -576,7 +622,7 @@ function useProfileDispatchActions(
     dataStates.setEditorOpenedDirectly,
   );
   const saveProfile = useSaveProfileAction(
-    runtime,
+    runtimeSaveProfileDefinition,
     addMessage,
     dialogs,
     dataStates.editorOpenedDirectly,
@@ -615,25 +661,30 @@ export const useProfileManagement = ({
   dialogs,
   recorder,
 }: UseProfileManagementParams) => {
-  const runtime = useRuntimeApi();
+  const runtimeDeleteProfileByName = useDeleteProfileByName();
+  const runtimeGetDefaultProfileName = useGetDefaultProfileName();
+  const runtimeGetProfileByName = useGetProfileByName();
+  const runtimeGetRuntimeDiagnosticsSnapshot =
+    useGetRuntimeDiagnosticsSnapshot();
+  const runtimeListSavedProfiles = useListSavedProfiles();
+  const runtimeLoadProfileByName = useLoadProfileByName();
+  const runtimeProviderStatus = useProviderStatus();
+  const runtimeSaveProfileDefinition = useSaveProfileDefinition();
+  const runtimeSetDefaultProfileName = useSetDefaultProfileName();
 
   const dataStates = useProfileDataStates();
   const { setActiveProfileName } = dataStates;
 
-  useEffect(() => {
-    try {
-      const diagnostics = runtime.getRuntimeDiagnosticsSnapshot();
-      const current = diagnostics.profileName;
-      if (current) {
-        setActiveProfileName(current);
-      }
-    } catch {
-      // Ignore errors getting active profile on mount
-    }
-  }, [runtime, setActiveProfileName]);
+  useInitialActiveProfile(
+    runtimeGetRuntimeDiagnosticsSnapshot,
+    setActiveProfileName,
+  );
 
   const loadProfiles = useProfileLoader(
-    runtime,
+    runtimeGetDefaultProfileName,
+    runtimeGetProfileByName,
+    runtimeGetRuntimeDiagnosticsSnapshot,
+    runtimeListSavedProfiles,
     addMessage,
     dataStates.setProfiles,
     dataStates.setIsLoading,
@@ -644,7 +695,7 @@ export const useProfileManagement = ({
   const { openListDialog } = useListDialogActions(dialogs, loadProfiles);
   const { viewProfileDetail, closeDetailDialog } = useDetailDialogActions(
     dialogs,
-    runtime,
+    runtimeGetProfileByName,
     dataStates.setSelectedProfileName,
     dataStates.setSelectedProfile,
     dataStates.setProfileError,
@@ -656,7 +707,12 @@ export const useProfileManagement = ({
   const dispatchActions = useProfileDispatchActions(
     addMessage,
     dialogs,
-    runtime,
+    runtimeDeleteProfileByName,
+    runtimeGetProfileByName,
+    runtimeLoadProfileByName,
+    runtimeProviderStatus,
+    runtimeSaveProfileDefinition,
+    runtimeSetDefaultProfileName,
     loadProfiles,
     dataStates,
     viewProfileDetail,
@@ -670,3 +726,20 @@ export const useProfileManagement = ({
     ...dispatchActions,
   });
 };
+
+function useInitialActiveProfile(
+  runtimeGetRuntimeDiagnosticsSnapshot: GetRuntimeDiagnosticsSnapshotOperation,
+  setActiveProfileName: (name: string) => void,
+) {
+  useEffect(() => {
+    try {
+      const diagnostics = runtimeGetRuntimeDiagnosticsSnapshot();
+      const current = diagnostics.profileName;
+      if (current) {
+        setActiveProfileName(current);
+      }
+    } catch {
+      // Ignore errors getting active profile on mount
+    }
+  }, [runtimeGetRuntimeDiagnosticsSnapshot, setActiveProfileName]);
+}

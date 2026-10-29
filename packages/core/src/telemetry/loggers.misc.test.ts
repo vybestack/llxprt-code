@@ -61,7 +61,6 @@ const {
   logExtensionEnable,
   logExtensionDisable,
 } = await import('@vybestack/llxprt-code-telemetry/telemetry/loggers.js');
-const uiTelemetry = await import('./uiTelemetry.js');
 
 describe('loggers', () => {
   let telemetry: RootTelemetry;
@@ -86,7 +85,7 @@ describe('loggers', () => {
         maxChars: 4000,
       }),
     });
-    uiTelemetry.uiTelemetryService.reset();
+    telemetry.localMetrics.reset();
     setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
   });
   afterEach(async () => {

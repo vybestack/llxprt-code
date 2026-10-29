@@ -11,7 +11,7 @@ import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
 import { useStoreSelector } from '../stores/useStoreSelector.js';
 import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
 import { StreamingState } from '../types.js';
-import type { SlashCommandRuntime } from '../cliUiRuntime.js';
+import type { JournalRowRendering } from './journal-row-rendering.js';
 import { SCROLLBACK_VIEWPORT_POLL_MS } from '../../constants/scrollbackLimits.js';
 
 import {
@@ -47,10 +47,11 @@ function useJournalEmission(
   useEffect(() => {
     printed.current = { transcriptId: -1n, keys: new Set<string>() };
     setFrame(store.getState());
-    const timer = setInterval(
-      () => setFrame(store.getState()),
-      SCROLLBACK_VIEWPORT_POLL_MS,
-    );
+    const timer = setInterval(() => {
+      const next = store.getState();
+      if (next.atFileEnd) setFrame(next);
+      else void store.pageForward().then(() => setFrame(store.getState()));
+    }, SCROLLBACK_VIEWPORT_POLL_MS);
     return () => clearInterval(timer);
   }, [store]);
   useEffect(() => {
@@ -80,11 +81,11 @@ function useJournalEmission(
 
 function PrintedBatch({
   emission,
-  config,
+  rendering,
   header,
 }: {
   emission: Emission;
-  config: SlashCommandRuntime;
+  rendering: JournalRowRendering;
   header: React.ReactNode;
 }) {
   return (
@@ -105,7 +106,7 @@ function PrintedBatch({
             item={row.item}
             terminalWidth={emission.width}
             isPending={false}
-            config={config}
+            {...rendering}
           />
         )),
       ]}
@@ -118,12 +119,12 @@ const MemoizedPrintedBatch = React.memo(PrintedBatch);
 
 export function JournalStandardTranscript({
   store,
-  config,
+  rendering,
   viewport,
   header,
 }: {
   store: ScrollbackPagerStore;
-  config: SlashCommandRuntime;
+  rendering: JournalRowRendering;
   viewport: ScrollbackViewportReporter;
   header?: React.ReactNode;
 }): React.JSX.Element {
@@ -147,16 +148,10 @@ export function JournalStandardTranscript({
     <>
       <MemoizedPrintedBatch
         emission={emission}
-        config={config}
+        rendering={rendering}
         header={header}
       />
-      <Box
-        flexDirection="column"
-        width={width}
-        maxHeight={Math.max(1, height)}
-        overflow="hidden"
-        justifyContent="flex-end"
-      >
+      <Box flexDirection="column" width={width} justifyContent="flex-end">
         <Box flexDirection="column" flexShrink={0}>
           {live.map((row) => (
             <HistoryItemDisplay
@@ -165,7 +160,7 @@ export function JournalStandardTranscript({
               terminalWidth={width}
               availableTerminalHeight={height}
               isPending={true}
-              config={config}
+              {...rendering}
             />
           ))}
           {pending.map((item, index) => (
@@ -177,7 +172,7 @@ export function JournalStandardTranscript({
                 item.type === 'tool_group' ? height : undefined
               }
               isPending={true}
-              config={config}
+              {...rendering}
             />
           ))}
         </Box>
@@ -189,9 +184,8 @@ export function JournalStandardTranscript({
 function useJournalLiveState() {
   const turn = useTurnStore();
   const terminal = useTerminalStore();
-  const width = useStoreSelector(
-    terminal.store,
-    (state) => state.mainAreaWidth,
+  const width = useStoreSelector(terminal.store, (state) =>
+    Math.floor(state.mainAreaWidth * 0.9),
   );
   const height = useStoreSelector(
     terminal.store,

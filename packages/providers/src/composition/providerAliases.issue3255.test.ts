@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { computeModelDefaults } from '../runtime/providerMutations.js';
+import { computeModelDefaults } from '../model-defaults.js';
 import {
   loadProviderAliasEntries,
   type ProviderAliasConfig,

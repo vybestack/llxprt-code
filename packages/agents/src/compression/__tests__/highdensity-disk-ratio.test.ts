@@ -51,6 +51,7 @@ async function ratio(size: number): Promise<number> {
       const metadata = await buildCompressionMetadata(
         'oracle',
         runtime,
+        undefined,
         history,
         resolveProvider,
         undefined,
@@ -75,7 +76,12 @@ async function ratio(size: number): Promise<number> {
       );
       const handler = new CompressionHandler(
         runtime,
+        undefined,
         history,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         {},
         resolveProvider,
         async () => {},

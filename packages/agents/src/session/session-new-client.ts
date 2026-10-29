@@ -1,9 +1,15 @@
+import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
+import { prepareProfileClient } from '@vybestack/llxprt-code-core/config/agentClientLifecycle.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type {
+  AgentClientContract,
+  DeferredHistorySourceOptions,
+} from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type {
   RuntimeTokenizerFactory,
@@ -11,6 +17,12 @@ import type {
   ContentGenerator,
 } from '@vybestack/llxprt-code-core';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+
+import {
+  extractExistingState,
+  prepareAgentClientReplacement,
+} from '@vybestack/llxprt-code-core/config/agentClientLifecycle.js';
 import { buildNewContentGeneratorConfig } from '@vybestack/llxprt-code-core/config/agentClientLifecycle.js';
 import type { OwnedClientLedger } from './session-client-cleanup.js';
 
@@ -27,7 +39,6 @@ export async function prepareNewSessionClient(
   factory: RuntimeContentGeneratorFactory<ContentGenerator>,
   settings: SessionSettingsOwner,
   previous: AgentClientContract,
-  borrowed: AgentClientContract | undefined,
   ledger: OwnedClientLedger,
   acquire: (state: AgentRuntimeState) => AgentClientContract,
   bind: (client: AgentClientContract, state: AgentRuntimeState) => void,
@@ -55,7 +66,7 @@ export async function prepareNewSessionClient(
     },
     retire: async () => {
       await telemetry.retire();
-      if (previous !== borrowed) await ledger.dispose(previous);
+      await ledger.dispose(previous);
     },
     discard: async () => {
       const results = await Promise.allSettled([
@@ -74,34 +85,98 @@ export async function prepareNewSessionClient(
   };
 }
 
-export async function prepareDetachedSessionClient(input: {
-  state: AgentRuntimeState;
-  tokenizer: RuntimeTokenizerFactory;
-  factory: RuntimeContentGeneratorFactory<ContentGenerator>;
-  create: (state: AgentRuntimeState) => AgentClientContract;
-  ledger: OwnedClientLedger;
-}): Promise<AgentClientContract> {
-  await input.tokenizer.prepareTokenizer?.(
-    input.state.provider,
-    input.state.model,
+export async function replaceSessionClient(
+  previous: AgentClientContract,
+  state: AgentRuntimeState,
+  factory: RuntimeContentGeneratorFactory<ContentGenerator>,
+  tokenizer: RuntimeTokenizerFactory,
+  ledger: OwnedClientLedger,
+  acquire: (state: AgentRuntimeState) => AgentClientContract,
+  bind: (client: AgentClientContract, state: AgentRuntimeState) => void,
+  publish: (client: AgentClientContract, state: AgentRuntimeState) => void,
+  options: DeferredHistorySourceOptions = {},
+): Promise<void> {
+  const logger = new DebugLogger('llxprt:session:refreshAuth');
+  const { history, historyService } = await extractExistingState(
+    logger,
+    previous,
   );
-  const client = input.create(input.state);
+  const prepared = buildNewContentGeneratorConfig(factory, state);
+  await tokenizer.prepareTokenizer?.(state.provider, state.model);
+  const next = acquire(state);
   try {
-    await client.initialize(
-      buildNewContentGeneratorConfig(input.factory, input.state)
-        .contentGeneratorConfig,
-    );
-    client.clearTools();
-    return client;
+    bind(next, state);
   } catch (error) {
-    try {
-      await input.ledger.dispose(client);
-    } catch (cleanupError) {
-      throw new AggregateError(
-        [error, cleanupError],
-        'Detached client setup and cleanup failed',
-      );
-    }
-    throw error;
+    await ledger.disposeAfterFailure(next, error);
   }
+  try {
+    await prepareAgentClientReplacement(
+      logger,
+      next,
+      undefined,
+      history,
+      historyService,
+      prepared.contentGeneratorConfig,
+      previous.getContentGeneratorConfig()?.vertexai,
+      options,
+    );
+  } catch (error) {
+    await ledger.releaseFailedReplacement(next, error);
+  }
+  publish(next, prepared.runtimeState);
+  next.getHistoryService()?.setTokenizerFactory({
+    getTokenizer: (provider, model) => tokenizer.getTokenizer(provider, model),
+  });
+  await ledger.dispose(previous);
+}
+
+export async function prepareBoundProfileClient(
+  config: Config,
+  previous: AgentClientContract,
+  selectedState: AgentRuntimeState,
+  tokenizer: RuntimeTokenizerFactory,
+  factory: RuntimeContentGeneratorFactory<ContentGenerator>,
+  acquire: (state: AgentRuntimeState) => AgentClientContract,
+  bind: (client: AgentClientContract, state: AgentRuntimeState) => void,
+  ledger: OwnedClientLedger,
+): ReturnType<typeof prepareProfileClient> {
+  await tokenizer.prepareTokenizer?.(
+    selectedState.provider,
+    selectedState.model,
+  );
+  let candidate: AgentClientContract | undefined;
+  let bound = false;
+  return prepareProfileClient(
+    config,
+    previous,
+    (_config, state) => {
+      candidate = acquire(state);
+      bind(candidate, state);
+      bound = true;
+      return candidate;
+    },
+    selectedState,
+    factory,
+    (client) => ledger.dispose(client),
+  ).catch(async (primary: unknown) => {
+    if (candidate !== undefined) {
+      if (!bound) await ledger.disposeAfterFailure(candidate, primary);
+      await ledger.releaseFailedReplacement(candidate, primary);
+    }
+    throw primary;
+  });
+}
+
+export interface PreparedProfileClient extends PreparedSessionClient {
+  prepareHistoryCommit: () => Promise<() => void>;
+}
+
+export interface PreparedRecordingSession {
+  publish(): void;
+  retire(): Promise<void>;
+  discard(): Promise<void>;
+  attachRecording(
+    recording: RecordingIntegration,
+    origin: object,
+  ): Promise<void>;
 }

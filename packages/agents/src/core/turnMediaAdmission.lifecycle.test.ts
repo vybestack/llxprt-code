@@ -1,6 +1,7 @@
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { afterEach as closeInvocationRoots } from 'bun:test';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
 
 /**
@@ -15,6 +16,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ChatSession } from './chatSession.js';
+
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import {
   createAgentRuntimeContext,
@@ -25,7 +27,6 @@ import {
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   IContent,
@@ -43,6 +44,14 @@ import type {
 import { createSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
 import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+
+import { chatSessionPorts } from './chatSessionPorts.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
+
 const INPUT_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
 const OUTPUT_JPEG =
@@ -232,9 +241,7 @@ function createFixtureProvider(behavior: ProviderBehavior): {
   return { provider, providerStarted };
 }
 
-function createFixtureContentGenerator(): ConstructorParameters<
-  typeof ChatSession
->[1] {
+function createFixtureContentGenerator(): ContentGenerator {
   return {
     generateContent: vi.fn(),
     generateContentStream: vi.fn(),
@@ -289,6 +296,8 @@ async function createFixture(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
     state: createAgentRuntimeState({
       runtimeId: `turn-media-${behavior}`,
@@ -315,14 +324,26 @@ async function createFixture(
       }),
     ),
     tools: createToolRegistryViewFromRegistry(),
-    providerRuntime: { ...setup.runtime, config: setup.config },
+    providerRuntime: { ...setup.runtime },
     mediaStore: store,
     mediaAdmission: new MediaAdmissionService(store),
   });
   await registerRuntimeMediaOwner(runtime);
   const contentGenerator = createFixtureContentGenerator();
   return {
-    chat: new ChatSession(runtime, contentGenerator, {}, []),
+    chat: new ChatSession(
+      chatSessionPorts(runtime),
+      setup.config,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      contentGenerator,
+      {},
+      [],
+    ),
     store,
     rootDirectory,
     providerStarted,

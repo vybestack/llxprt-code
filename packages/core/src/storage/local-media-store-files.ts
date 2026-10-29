@@ -18,6 +18,7 @@ import {
   utimes,
 } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { handleIsPathEntry, lstatPathEntry } from '../utils/fileIdentity.js';
 import type { LocalMediaStoreFileOperations } from './local-media-store-types.js';
 import {
   MediaObjectCorruptError,
@@ -302,6 +303,13 @@ export class LocalMediaStoreFiles {
     sourcePath: string,
     temporaryPath: string,
   ): Promise<FileCopyResult> {
+    const sourceEntry = await lstatPathEntry(sourcePath);
+    if (sourceEntry?.isSymbolicLink() === true) {
+      throw new Error('Source media object is a symbolic link');
+    }
+    // O_NOFOLLOW is undefined on Windows (the bitwise OR then contributes 0);
+    // the identity check below is the portable guarantee that the opened
+    // handle is the path's own entry.
     const source = await open(
       sourcePath,
       constants.O_RDONLY | constants.O_NOFOLLOW,
@@ -314,6 +322,9 @@ export class LocalMediaStoreFiles {
       const sourceMetadata = await source.stat();
       if (!sourceMetadata.isFile()) {
         throw new Error('Source media object is not a regular file');
+      }
+      if (!(await handleIsPathEntry(source, sourcePath))) {
+        throw new Error('Source media object is a symbolic link or changed');
       }
       destination = await open(temporaryPath, 'wx', FILE_MODE);
       const buffer = Buffer.allocUnsafe(COPY_BUFFER_BYTES);

@@ -19,29 +19,28 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import { denyDeletion } from '../test-utils/filesystem-denial.js';
 import {
   setupCredentialProxy,
   wireCleanupHandlers,
 } from './sandbox-containers.js';
 
 const authMocks = {
+  stop: vi.fn((): Promise<void> => Promise.resolve()),
   createAndStartProxy: vi.fn(
-    (_config: { socketPath: string; onSandboxHandshake?: () => void }) =>
-      Promise.resolve({ stop: () => {} }),
+    (config: { socketPath: string; onSandboxHandshake?: () => void }) =>
+      Promise.resolve({
+        socketPath: path.join(config.socketPath, 'credential-proxy.sock'),
+        capabilityToken: 'b'.repeat(64),
+        stop: authMocks.stop,
+      }),
   ),
-  getProxySocketPath: vi.fn((): string | undefined => undefined),
-  stopProxy: vi.fn((): Promise<void> => Promise.resolve()),
-  getProxyCapabilityToken: vi.fn((): string | undefined => undefined),
 };
 
 void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   createAndStartProxy: authMocks.createAndStartProxy,
-  getProxySocketPath: authMocks.getProxySocketPath,
-  stopProxy: authMocks.stopProxy,
-  getProxyCapabilityToken: authMocks.getProxyCapabilityToken,
 }));
 
-const CAPABILITY_TOKEN = 'b'.repeat(64);
 // Pinned to the production CAPABILITY_ENV_FILE_FALLBACK_MS so the fallback
 // tests drive time by the real bound the launch path arms.
 const FALLBACK_BOUND_MS = 10 * 60 * 1000;
@@ -50,6 +49,25 @@ const NO_SSH = {
   cleanup: undefined,
   entrypointPrefix: undefined,
 } as const;
+
+const ISOLATED_ENVIRONMENT_KEYS = ['HOME', 'USERPROFILE', 'XDG_RUNTIME_DIR'];
+
+/**
+ * Puts back only the keys a case mutated, in the live `process.env`. Swapping
+ * in a plain-object snapshot would drop Windows' case-insensitive lookup,
+ * which the filesystem-denial fixture needs to find SystemRoot.
+ */
+function restoreIsolatedEnvironment(
+  original: ReadonlyMap<string, string | undefined>,
+): void {
+  for (const [key, value] of original) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
 
 interface LaunchedCredentialProxy {
   readonly handshake: () => void;
@@ -80,7 +98,7 @@ function isTimer(value: unknown): value is NodeJS.Timeout {
 }
 
 describe('#3524 capability env-file early release', () => {
-  let environmentSnapshot: NodeJS.ProcessEnv;
+  let originalEnvironment: ReadonlyMap<string, string | undefined>;
   let tmpDir = '';
   let isolatedHome = '';
   let capabilityRuntimeRoot = '';
@@ -89,7 +107,9 @@ describe('#3524 capability env-file early release', () => {
   let activeLaunchCleanup: (() => void) | undefined;
 
   beforeEach(() => {
-    environmentSnapshot = { ...process.env };
+    originalEnvironment = new Map(
+      ISOLATED_ENVIRONMENT_KEYS.map((key) => [key, process.env[key]]),
+    );
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-envfile-3524-'));
     isolatedHome = path.join(tmpDir, 'home');
     capabilityRuntimeRoot = path.join(tmpDir, 'runtime');
@@ -106,12 +126,8 @@ describe('#3524 capability env-file early release', () => {
     // Linux skips the macOS SSH bridge entirely; the proxy env var and env
     // file are the only launch-path side effects under test.
     vi.spyOn(os, 'platform').mockReturnValue('linux');
-    authMocks.getProxySocketPath.mockReturnValue(
-      path.join(tmpDir, 'credential-proxy.sock'),
-    );
-    authMocks.getProxyCapabilityToken.mockReturnValue(CAPABILITY_TOKEN);
     authMocks.createAndStartProxy.mockClear();
-    authMocks.stopProxy.mockResolvedValue(undefined);
+    authMocks.stop.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -127,7 +143,7 @@ describe('#3524 capability env-file early release', () => {
     }
     sandboxStandin?.kill();
     vi.restoreAllMocks();
-    process.env = environmentSnapshot;
+    restoreIsolatedEnvironment(originalEnvironment);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -168,7 +184,10 @@ describe('#3524 capability env-file early release', () => {
     }
     // mock.calls[0] is the argument tuple of the first call; the single
     // config object is its first element.
-    const launched = authMocks.createAndStartProxy.mock.calls[0][0];
+    const launched =
+      authMocks.createAndStartProxy.mock.calls[
+        authMocks.createAndStartProxy.mock.calls.length - 1
+      ][0];
     const handshake = launched.onSandboxHandshake;
     if (typeof handshake !== 'function') {
       throw new Error(
@@ -269,19 +288,24 @@ describe('#3524 capability env-file early release', () => {
     }
   });
 
-  it('fails fast on a second launch while one capability env file launch is active', async () => {
+  it('keeps concurrent launch handshakes and cleanup isolated', async () => {
     const first = await launchCredentialProxy();
-    const artifactsAfterFirst = capabilityArtifacts(capabilityRuntimeRoot);
-    expect(artifactsAfterFirst).toHaveLength(1);
-
-    await expect(launchCredentialProxy()).rejects.toThrow(
-      /not supported by the capability transport/,
-    );
-
-    expect(capabilityArtifacts(capabilityRuntimeRoot)).toStrictEqual(
-      artifactsAfterFirst,
-    );
-    expect(fs.existsSync(first.envFilePath)).toBe(true);
+    const second = await launchCredentialProxy();
+    try {
+      expect(capabilityArtifacts(capabilityRuntimeRoot)).toHaveLength(2);
+      expect(first.envFilePath).not.toBe(second.envFilePath);
+      first.handshake();
+      expect(fs.existsSync(first.envFilePath)).toBe(false);
+      expect(fs.existsSync(second.envFilePath)).toBe(true);
+      first.exitCleanup();
+      expect(fs.existsSync(second.envFilePath)).toBe(true);
+      second.handshake();
+      expect(fs.existsSync(second.envFilePath)).toBe(false);
+    } finally {
+      first.exitCleanup();
+      second.exitCleanup();
+    }
+    expect(capabilityArtifacts(capabilityRuntimeRoot)).toStrictEqual([]);
   });
 
   it('arms no fallback timer during setup: time advanced before wiring deletes nothing', async () => {
@@ -335,25 +359,23 @@ describe('#3524 capability env-file early release', () => {
   });
 
   /**
-   * Drops write permission on the host-only directory so the REAL cleanup's
-   * unlink fails (EACCES/EPERM — non-idempotent, unlike ENOENT/EBADF). This
-   * is a genuine OS-level filesystem failure driven through the real fs
-   * calls, not a mocked throw; it relies on the runner being non-root (root
-   * bypasses directory DAC), which holds for this repo's dev machines and
-   * CI runners. Restores 0o700 so the shared afterEach teardown can delete
-   * the artifact.
+   * Makes the REAL cleanup's unlink fail with a permission error
+   * (EACCES/EPERM, non-idempotent, unlike ENOENT/EBADF). This is a genuine
+   * OS-level filesystem failure driven through the real fs calls, not a
+   * mocked throw. It relies on the runner not being root (root bypasses
+   * directory DAC); the fixture probes the denial and fails if it does not
+   * hold. Returns the function that lifts the denial so the shared afterEach
+   * teardown can delete the artifact.
    */
-  function forceRealCleanupFailure(envFileDir: string): void {
-    fs.chmodSync(envFileDir, 0o500);
-  }
-
-  function restoreCleanupFailureForcing(envFileDir: string): void {
-    fs.chmodSync(envFileDir, 0o700);
+  function forceRealCleanupFailure(
+    launched: LaunchedCredentialProxy,
+  ): () => void {
+    return denyDeletion(launched.envFilePath, launched.envFileDir);
   }
 
   it('does not throw when the handshake release fails on a real filesystem error', async () => {
     const launched = await launchCredentialProxy();
-    forceRealCleanupFailure(launched.envFileDir);
+    const restoreCleanup = forceRealCleanupFailure(launched);
     try {
       const errorSpy = vi.spyOn(debugLogger, 'error');
 
@@ -367,14 +389,14 @@ describe('#3524 capability env-file early release', () => {
         expect.any(Error),
       );
     } finally {
-      restoreCleanupFailureForcing(launched.envFileDir);
+      restoreCleanup();
     }
   });
 
   it('does not throw when the bounded fallback release fails on a real filesystem error', async () => {
     vi.useFakeTimers();
     const launched = await launchCredentialProxy();
-    forceRealCleanupFailure(launched.envFileDir);
+    const restoreCleanup = forceRealCleanupFailure(launched);
     try {
       wireCleanupHandlers(
         spawnSandboxStandin(),
@@ -392,13 +414,13 @@ describe('#3524 capability env-file early release', () => {
       expect(fs.existsSync(launched.envFilePath)).toBe(true);
     } finally {
       vi.useRealTimers();
-      restoreCleanupFailureForcing(launched.envFileDir);
+      restoreCleanup();
     }
   });
 
   it('still surfaces a cleanup failure from the exit-time teardown', async () => {
     const launched = await launchCredentialProxy();
-    forceRealCleanupFailure(launched.envFileDir);
+    const restoreCleanup = forceRealCleanupFailure(launched);
     try {
       expect(() => launched.exitCleanup()).toThrow(
         /Credential proxy cleanup failed/,
@@ -409,7 +431,7 @@ describe('#3524 capability env-file early release', () => {
       // weaken the exit path.
       expect(fs.existsSync(launched.envFilePath)).toBe(true);
     } finally {
-      restoreCleanupFailureForcing(launched.envFileDir);
+      restoreCleanup();
     }
   });
 });

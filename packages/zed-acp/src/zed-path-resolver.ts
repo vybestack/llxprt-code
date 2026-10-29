@@ -81,15 +81,12 @@ function resolverPartsToContentBlocks(parts: ResolverPart[]): ContentBlock[] {
 
 export class ZedPathResolver {
   constructor(
-    private readonly config: Pick<
-      Config,
-      | 'getFileFilteringOptions'
-      | 'getTargetDir'
-      | 'getEnableRecursiveFileSearch'
-    > &
-      Pick<WorkspaceTextOperations, 'readTextFile'> & {
-        readonly ignore: WorkspaceIgnoreOperations;
-      },
+    private readonly readFiltering: Config['getFileFilteringOptions'],
+    private readonly readTargetDir: Config['getTargetDir'],
+    private readonly readRecursiveSearch: Config['getEnableRecursiveFileSearch'],
+    private readonly readTextFile: WorkspaceTextOperations['readTextFile'],
+    private readonly shouldIgnoreFile: WorkspaceIgnoreOperations['shouldIgnoreFile'],
+    private readonly readIgnorePatterns: WorkspaceIgnoreOperations['getCoreIgnorePatterns'],
     private readonly debug: DebugFn,
   ) {}
 
@@ -112,9 +109,7 @@ export class ZedPathResolver {
 
     const atPathToResolvedSpecMap = new Map<string, string>();
 
-    const fileDiscovery = this.config.ignore;
-    const fileFilteringOptions: FilterFilesOptions =
-      this.config.getFileFilteringOptions();
+    const fileFilteringOptions: FilterFilesOptions = this.readFiltering();
 
     const pathSpecsToRead: string[] = [];
     const contentLabelsForDisplay: string[] = [];
@@ -123,7 +118,6 @@ export class ZedPathResolver {
     await this.resolvePathSpecs(
       atPathCommandParts,
       abortSignal,
-      fileDiscovery,
       fileFilteringOptions,
       pathSpecsToRead,
       contentLabelsForDisplay,
@@ -224,7 +218,6 @@ export class ZedPathResolver {
   private async resolvePathSpecs(
     atPathCommandParts: ResolverFilePart[],
     abortSignal: AbortSignal,
-    fileDiscovery: WorkspaceIgnoreOperations,
     fileFilteringOptions: FilterFilesOptions,
     pathSpecsToRead: string[],
     contentLabelsForDisplay: string[],
@@ -239,7 +232,6 @@ export class ZedPathResolver {
         this.appendResolvedPathSpec(
           currentPathSpec,
           pathName,
-          fileDiscovery,
           fileFilteringOptions,
           pathSpecsToRead,
           contentLabelsForDisplay,
@@ -253,14 +245,13 @@ export class ZedPathResolver {
   private appendResolvedPathSpec(
     currentPathSpec: string,
     pathName: string,
-    fileDiscovery: WorkspaceIgnoreOperations,
     fileFilteringOptions: FilterFilesOptions,
     pathSpecsToRead: string[],
     contentLabelsForDisplay: string[],
     ignoredPaths: string[],
     atPathToResolvedSpecMap: Map<string, string>,
   ): void {
-    if (fileDiscovery.shouldIgnoreFile(currentPathSpec, fileFilteringOptions)) {
+    if (this.shouldIgnoreFile(currentPathSpec, fileFilteringOptions)) {
       ignoredPaths.push(currentPathSpec);
       this.debug(`Path ${currentPathSpec} is ignored and will be skipped.`);
       return;
@@ -277,7 +268,7 @@ export class ZedPathResolver {
     let currentPathSpec = pathName;
     let resolvedSuccessfully = false;
     try {
-      const targetDir = this.config.getTargetDir();
+      const targetDir = this.readTargetDir();
       if (this.isGlobPath(pathName)) {
         const globBase = this.getGlobBasePath(pathName);
         const absoluteBase = path.resolve(targetDir, globBase);
@@ -353,7 +344,7 @@ export class ZedPathResolver {
       return { resolved: false };
     }
 
-    if (!this.config.getEnableRecursiveFileSearch()) {
+    if (!this.readRecursiveSearch()) {
       this.debug(
         `Recursive file search disabled. Path ${pathName} will be skipped.`,
       );
@@ -361,10 +352,12 @@ export class ZedPathResolver {
     }
 
     this.debug(`Path ${pathName} not found directly, attempting glob search.`);
+    const ignore = this.resolveGlobIgnore();
     try {
       const relativePath = await this.globSearchFirstMatch(
         pathName,
         abortSignal,
+        ignore,
       );
       if (relativePath !== undefined) {
         this.debug(
@@ -386,13 +379,14 @@ export class ZedPathResolver {
   private async globSearchFirstMatch(
     pathName: string,
     abortSignal: AbortSignal,
+    ignore: string[],
   ): Promise<string | undefined> {
-    const targetDir = this.config.getTargetDir();
+    const targetDir = this.readTargetDir();
     const entries = await glob(`**/*${pathName}*`, {
       cwd: targetDir,
       nodir: true,
       dot: true,
-      ignore: this.resolveGlobIgnore(),
+      ignore,
       signal: abortSignal,
     });
     return entries.find((entry) => !this.shouldSkipDiscoveredPath(entry));
@@ -400,9 +394,10 @@ export class ZedPathResolver {
 
   private resolveGlobIgnore(): string[] {
     try {
-      return this.config.ignore.getCoreIgnorePatterns();
-    } catch {
-      return [];
+      return this.readIgnorePatterns();
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') return [];
+      throw error;
     }
   }
 
@@ -487,8 +482,7 @@ export class ZedPathResolver {
     abortSignal: AbortSignal,
     processedQueryParts: ResolverPart[],
   ): Promise<void> {
-    const targetDir = this.config.getTargetDir();
-    const fileSystemService = this.config;
+    const targetDir = this.readTargetDir();
     processedQueryParts.push({
       type: 'text',
       text: '\n--- Content from referenced files ---',
@@ -504,7 +498,6 @@ export class ZedPathResolver {
         spec,
         label,
         targetDir,
-        fileSystemService,
         abortSignal,
         processedQueryParts,
       );
@@ -515,9 +508,6 @@ export class ZedPathResolver {
     spec: string,
     label: string,
     targetDir: string,
-    fileSystemService: Pick<WorkspaceTextOperations, 'readTextFile'> & {
-      readonly ignore: WorkspaceIgnoreOperations;
-    },
     abortSignal: AbortSignal,
     processedQueryParts: ResolverPart[],
   ): Promise<void> {
@@ -526,7 +516,6 @@ export class ZedPathResolver {
         spec,
         label,
         targetDir,
-        fileSystemService,
         abortSignal,
         processedQueryParts,
       );
@@ -536,7 +525,6 @@ export class ZedPathResolver {
       spec,
       label,
       targetDir,
-      fileSystemService,
       abortSignal,
       processedQueryParts,
     );
@@ -546,18 +534,16 @@ export class ZedPathResolver {
     spec: string,
     label: string,
     targetDir: string,
-    fileSystemService: Pick<WorkspaceTextOperations, 'readTextFile'> & {
-      readonly ignore: WorkspaceIgnoreOperations;
-    },
     abortSignal: AbortSignal,
     processedQueryParts: ResolverPart[],
   ): Promise<void> {
+    const ignore = this.resolveGlobIgnore();
     try {
       const matches = await glob(spec, {
         cwd: targetDir,
         nodir: true,
         dot: true,
-        ignore: this.resolveGlobIgnore(),
+        ignore,
         signal: abortSignal,
       });
       for (const match of matches) {
@@ -573,7 +559,6 @@ export class ZedPathResolver {
         const appended = await this.readAndAppendGlobMatch(
           match,
           absolute,
-          fileSystemService,
           abortSignal,
           processedQueryParts,
         );
@@ -595,13 +580,10 @@ export class ZedPathResolver {
   private async readAndAppendGlobMatch(
     match: string,
     absolute: string,
-    fileSystemService: Pick<WorkspaceTextOperations, 'readTextFile'> & {
-      readonly ignore: WorkspaceIgnoreOperations;
-    },
     abortSignal: AbortSignal,
     processedQueryParts: ResolverPart[],
   ): Promise<boolean> {
-    const content = await fileSystemService.readTextFile(absolute);
+    const content = await this.readTextFile(absolute);
     if (abortSignal.aborted) {
       return false;
     }
@@ -614,19 +596,13 @@ export class ZedPathResolver {
   }
 
   private shouldSkipDiscoveredPath(filePath: string): boolean {
-    return this.config.ignore.shouldIgnoreFile(
-      filePath,
-      this.config.getFileFilteringOptions(),
-    );
+    return this.shouldIgnoreFile(filePath, this.readFiltering());
   }
 
   private async appendSingleFile(
     spec: string,
     label: string,
     targetDir: string,
-    fileSystemService: Pick<WorkspaceTextOperations, 'readTextFile'> & {
-      readonly ignore: WorkspaceIgnoreOperations;
-    },
     abortSignal: AbortSignal,
     processedQueryParts: ResolverPart[],
   ): Promise<void> {
@@ -641,7 +617,7 @@ export class ZedPathResolver {
         });
         return;
       }
-      const content = await fileSystemService.readTextFile(absolute);
+      const content = await this.readTextFile(absolute);
       if (abortSignal.aborted) {
         return;
       }

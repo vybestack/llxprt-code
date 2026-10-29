@@ -24,6 +24,10 @@ import { rowsSelection } from '../__tests__/support/wireBodyCapture.js';
 import type { ChatRowInput } from './OpenAIRequestPreparation.js';
 import type { RowsMediaInput } from '../openai-responses/responses-row-media.js';
 import { prepareKimiProviderFiles } from './kimi-provider-file-preparation.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function createProvider(): OpenAIProvider {
   const provider = new OpenAIProvider(
@@ -171,6 +175,7 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
       contents: createContents(),
       settings,
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'kimi-media',
         providerName: 'kimi',
         ephemeralsSnapshot: { ...settings.getAllGlobalSettings() },
@@ -184,13 +189,7 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
           },
         },
       }),
-      runtime: {
-        settingsService: settings,
-        providerFileLifecycle: new ProviderFileLifecycle({
-          maxFiles: 10,
-          maxBytes: 1024,
-        }),
-      },
+      runtime: {},
       configOverrides: { getTargetDir: () => '/workspace/kimi-media' },
     });
 

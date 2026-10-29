@@ -13,11 +13,7 @@ const MAX_HANDLED_PRIMITIVE_ERRORS = 32;
 interface ProviderErrorObservationContext {
   readonly handledObjects: WeakSet<object>;
   readonly handledPrimitives: Set<unknown>;
-}
-
-interface DetachedProviderErrorObservationContext {
-  readonly context: ProviderErrorObservationContext;
-  readonly active: boolean;
+  leases: number;
 }
 
 export interface AttachedProviderErrorObservationContext {
@@ -25,47 +21,34 @@ export interface AttachedProviderErrorObservationContext {
   release(): void;
 }
 
-const detachedObservationContexts = new WeakMap<
-  GenerateChatOptions,
-  DetachedProviderErrorObservationContext
->();
+function isProviderErrorObservationContext(
+  value: unknown,
+): value is ProviderErrorObservationContext {
+  if (typeof value !== 'object' || value === null) return false;
+  if (!('handledObjects' in value) || !('handledPrimitives' in value))
+    return false;
+  if (
+    !(value.handledObjects instanceof WeakSet) ||
+    !(value.handledPrimitives instanceof Set)
+  )
+    return false;
+  return 'leases' in value && typeof value.leases === 'number';
+}
 
 function getProviderErrorObservationContext(
   options: GenerateChatOptions,
 ): ProviderErrorObservationContext | undefined {
   const context = options.metadata?.[PROVIDER_ERROR_OBSERVATION_CONTEXT_KEY];
-  if (typeof context !== 'object' || context === null) return undefined;
-  if (!('handledObjects' in context) || !('handledPrimitives' in context)) {
-    return undefined;
-  }
-  if (
-    !(context.handledObjects instanceof WeakSet) ||
-    !(context.handledPrimitives instanceof Set)
-  ) {
-    return undefined;
-  }
-  return {
-    handledObjects: context.handledObjects,
-    handledPrimitives: context.handledPrimitives,
-  };
+  return isProviderErrorObservationContext(context) ? context : undefined;
 }
 
-function createProviderErrorObservationContext(): ProviderErrorObservationContext {
-  return {
-    handledObjects: new WeakSet<object>(),
-    handledPrimitives: new Set<unknown>(),
-  };
-}
-
-function getOrCreateProviderErrorObservationContext(
+function requireProviderErrorObservationContext(
   options: GenerateChatOptions,
 ): ProviderErrorObservationContext {
-  const attached = getProviderErrorObservationContext(options);
-  if (attached !== undefined) return attached;
-  const detached = detachedObservationContexts.get(options);
-  if (detached !== undefined) return detached.context;
-  const context = createProviderErrorObservationContext();
-  detachedObservationContexts.set(options, { context, active: false });
+  const context = getProviderErrorObservationContext(options);
+  if (context === undefined || context.leases === 0) {
+    throw new TypeError('Provider error observation context was not attached');
+  }
   return context;
 }
 
@@ -102,31 +85,32 @@ function markHandledError(
 export function attachProviderErrorObservationContext(
   options: GenerateChatOptions,
 ): AttachedProviderErrorObservationContext {
-  if (getProviderErrorObservationContext(options) !== undefined) {
-    return { options, release: () => undefined };
-  }
-  const detached = detachedObservationContexts.get(options);
+  const existing = getProviderErrorObservationContext(options);
   const context =
-    detached === undefined || detached.active
-      ? createProviderErrorObservationContext()
-      : detached.context;
-  const lifecycle = { context, active: true };
-  detachedObservationContexts.set(options, lifecycle);
+    existing !== undefined && existing.leases > 0
+      ? existing
+      : {
+          handledObjects: new WeakSet<object>(),
+          handledPrimitives: new Set<unknown>(),
+          leases: 0,
+        };
+  context.leases += 1;
   let released = false;
   return {
-    options: {
-      ...options,
-      metadata: {
-        ...options.metadata,
-        [PROVIDER_ERROR_OBSERVATION_CONTEXT_KEY]: context,
-      },
-    },
+    options:
+      context === existing
+        ? options
+        : {
+            ...options,
+            metadata: {
+              ...options.metadata,
+              [PROVIDER_ERROR_OBSERVATION_CONTEXT_KEY]: context,
+            },
+          },
     release: () => {
       if (released) return;
       released = true;
-      if (detachedObservationContexts.get(options) === lifecycle) {
-        detachedObservationContexts.delete(options);
-      }
+      context.leases -= 1;
     },
   };
 }
@@ -148,7 +132,7 @@ export function claimProviderErrorObservation(
   error: unknown,
 ): boolean {
   if (options.onProviderError === undefined) return false;
-  const context = getOrCreateProviderErrorObservationContext(options);
+  const context = requireProviderErrorObservationContext(options);
   if (hasHandledError(context, error)) return false;
   markHandledError(context, error);
   return true;
@@ -159,7 +143,7 @@ export function markProviderErrorObservationHandled(
   error: unknown,
 ): void {
   if (options.onProviderError === undefined) return;
-  markHandledError(getOrCreateProviderErrorObservationContext(options), error);
+  markHandledError(requireProviderErrorObservationContext(options), error);
 }
 
 export function invokeProviderErrorObserver(

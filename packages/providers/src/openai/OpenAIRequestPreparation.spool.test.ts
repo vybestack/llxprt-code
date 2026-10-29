@@ -68,6 +68,7 @@ function optionsFor(
     tools: undefined,
     metadata: {},
     invocation: createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: 'spool-test',
       providerName: 'openai',
       ephemeralsSnapshot: { openai: modelParams, ...ephemerals },

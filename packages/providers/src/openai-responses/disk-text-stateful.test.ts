@@ -141,6 +141,7 @@ function withEphemerals(
   return {
     ...options,
     invocation: createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: options.invocation.runtimeId,
       runtimeMetadata: options.invocation.metadata,
       providerName: setup.provider.name,

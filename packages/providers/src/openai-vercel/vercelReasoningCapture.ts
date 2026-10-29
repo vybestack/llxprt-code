@@ -15,6 +15,7 @@
  */
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { forwardPreconnect } from '../utils/fetchPreconnect.js';
 import { resolveReasoningField } from '../utils/reasoningField.js';
 import {
@@ -192,10 +193,14 @@ export async function parseReasoningFromSseStream(
 export function createReasoningCaptureFetch(
   captureBuffer: CaptureBuffer,
   logger: DebugLogger,
-): typeof fetch {
+  requestFetch: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
+): NetworkFetch & ReturnType<typeof forwardPreconnect> {
   return Object.assign(
     async (input: RequestInfo | URL, init?: RequestInit) => {
-      const response = await fetch(input, init);
+      const response = await requestFetch(input, init);
 
       captureBuffer.headers = response.headers;
 
@@ -231,6 +236,6 @@ export function createReasoningCaptureFetch(
         headers: response.headers,
       });
     },
-    forwardPreconnect(() => globalThis.fetch),
+    forwardPreconnect(() => requestFetch),
   );
 }

@@ -6,6 +6,10 @@
  * Load Balancer Stats Display Component
  * Issue #489 Phase 8
  */
+import {
+  useGetLoadBalancerStats,
+  useProviderStatus,
+} from '../contexts/RuntimeContext.js';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -17,7 +21,7 @@ import type React from 'react';
 import { Box, Text } from 'ink';
 import type { ExtendedLoadBalancerStats } from '@vybestack/llxprt-code-providers';
 import { Colors } from '../colors.js';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+
 import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 /**
@@ -214,10 +218,11 @@ function renderBackendSection(
 }
 
 export const LBStatsDisplay: React.FC = () => {
-  const runtime = useRuntimeApi();
-  const name = runtime.providerStatus().providerName;
+  const runtimeGetLoadBalancerStats = useGetLoadBalancerStats();
+  const runtimeProviderStatus = useProviderStatus();
+  const name = runtimeProviderStatus().providerName;
   if (name !== 'load-balancer') return renderNoLoadBalancer();
-  const stats = runtime.getLoadBalancerStats();
+  const stats = runtimeGetLoadBalancerStats();
   if (stats === undefined) return renderNoStatsSupport(name);
   const backends = Object.keys(stats.backendMetrics);
 

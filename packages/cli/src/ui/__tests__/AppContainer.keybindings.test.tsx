@@ -3,6 +3,20 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  createCommandRegistrationFixture,
+  createCommandRegistryFixture,
+} from '../../__tests__/command-registry-fixture.js';
+const commandRegistry = {
+  ...createCommandRegistryFixture(null),
+  ...createCommandRegistrationFixture(),
+};
+
+import {
+  createUnconfiguredCredentialRegistry,
+  createUnconfiguredHistoryReaders,
+} from '../../__tests__/unconfigured-model-command.js';
+
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 /**
@@ -26,11 +40,9 @@ import {
   type KeyBinding,
 } from '../../config/keyBindings.js';
 import { createMockAgent } from '../../__tests__/mockAgent.js';
-import {
-  buildSlashCommandRuntime,
-  buildUiRuntimeFromSource,
-  type UiRuntimeBareSource,
-} from '../cliUiRuntime.js';
+import { appContainerTestAgentProps } from './app-bootstrap-owner-props.js';
+import { type UiRuntimeBareSource } from '../cliUiRuntime.js';
+import { buildAppContainerPortsForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 
 const keyBindingProperties: ReadonlyArray<keyof KeyBinding> = [
   'key',
@@ -60,9 +72,9 @@ interface MockConfig {
   getQuestion: () => string | undefined;
   getDebugMode: () => boolean;
   getSessionId: () => string;
+  getProjectTempDir: () => string;
 
   getWorkingDir: () => string;
-  getIdeClient: () => unknown;
   getIdeMode: () => boolean;
   getScreenReader: () => boolean;
   getTerminalBackground: () => string | undefined;
@@ -85,12 +97,9 @@ function createMockConfig(overrides: Partial<MockConfig> = {}): MockConfig {
     getQuestion: vi.fn(() => undefined),
     getDebugMode: vi.fn(() => false),
     getSessionId: vi.fn(() => 'test-session-id'),
+    getProjectTempDir: vi.fn(() => '/test/temp'),
 
     getWorkingDir: vi.fn(() => '/test/dir'),
-    getIdeClient: vi.fn(() => ({
-      getCurrentIde: vi.fn(),
-      disconnect: vi.fn(),
-    })),
     getIdeMode: vi.fn(() => true),
     getScreenReader: vi.fn(() => false),
     getTerminalBackground: vi.fn(() => undefined),
@@ -365,14 +374,30 @@ void vi.mock('../contexts/VimModeContext.js', () => ({
   })),
 }));
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: vi.fn(() => ({
-    oauthManager: vi.fn(),
-    getActiveModelName: vi.fn(() => 'test-model'),
-    getActiveProviderMetrics: vi.fn(() => ({})),
-    getSessionTokenUsage: vi.fn(() => ({ inputTokens: 0, outputTokens: 0 })),
-  })),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = vi.fn(() => ({
+      oauthManager: vi.fn(),
+      getActiveModelName: vi.fn(() => 'test-model'),
+      getActiveProviderMetrics: vi.fn(() => ({})),
+      getSessionTokenUsage: vi.fn(() => ({ inputTokens: 0, outputTokens: 0 })),
+    }));
+    return {
+      useGetActiveModelName: () => useSelectedTestRuntime().getActiveModelName,
+
+      useGetActiveProviderMetrics: () =>
+        useSelectedTestRuntime().getActiveProviderMetrics,
+      useGetSessionTokenUsage: () =>
+        useSelectedTestRuntime().getSessionTokenUsage,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 void vi.mock('../utils/mouse.js', () => ({
   isMouseEventsActive: vi.fn(() => false),
@@ -426,7 +451,6 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
     },
   ),
   debugLogger: { debug: vi.fn(), log: vi.fn() },
-  uiTelemetryService: { setTokenTrackingMetrics: vi.fn() },
   ideContext: {
     subscribeToIdeContext: vi.fn(() => vi.fn()),
     getIdeContext: vi.fn(() => undefined),
@@ -504,17 +528,20 @@ describe('AppContainer.keybindings', () => {
   });
 
   describe('keybinding behavior', () => {
-    it('should mount component with keybinding handlers active', () => {
+    it('should mount component with keybinding handlers active', async () => {
       const props = {
-        uiRuntime: buildUiRuntimeFromSource(
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
+        historyReads: createUnconfiguredHistoryReaders(),
+        ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntime(
-          mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+        ...appContainerTestAgentProps(
+          await createMockAgent(mockConfig as unknown as Config),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        readAgentRecordingPath: () => undefined,
+        generateSubagentPrompt: async () => '',
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -529,17 +556,20 @@ describe('AppContainer.keybindings', () => {
       unmount();
     });
 
-    it('should have copy mode toggle available when using alternate buffer', () => {
+    it('should have copy mode toggle available when using alternate buffer', async () => {
       const props = {
-        uiRuntime: buildUiRuntimeFromSource(
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
+        historyReads: createUnconfiguredHistoryReaders(),
+        ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntime(
-          mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+        ...appContainerTestAgentProps(
+          await createMockAgent(mockConfig as unknown as Config),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        readAgentRecordingPath: () => undefined,
+        generateSubagentPrompt: async () => '',
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -555,21 +585,24 @@ describe('AppContainer.keybindings', () => {
       unmount();
     });
 
-    it('should have shell focus toggle available when interactive shell is enabled', () => {
+    it('should have shell focus toggle available when interactive shell is enabled', async () => {
       mockConfig = createMockConfig({
         getEnableInteractiveShell: vi.fn(() => true),
       });
 
       const props = {
-        uiRuntime: buildUiRuntimeFromSource(
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
+        historyReads: createUnconfiguredHistoryReaders(),
+        ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntime(
-          mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+        ...appContainerTestAgentProps(
+          await createMockAgent(mockConfig as unknown as Config),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        readAgentRecordingPath: () => undefined,
+        generateSubagentPrompt: async () => '',
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

@@ -7,50 +7,52 @@ import { recordedRows } from './support/recorded-rows.js';
 for (const backend of ['journal']) {
   describe(`session control on ${backend}`, () => {
     it('can record again after attachment succeeds but the subscription fails', async () => {
-      await withRecordingLifetimeFixture(async ({ agent, config }) => {
-        await agent.setHistory([
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'before attachment failure' }],
-          },
-        ]);
-        const history = agent.agentClient.getHistoryService();
-        if (history === null) throw new Error('Missing history');
-        const attach = history.attachJournal.bind(history);
-        const fault = spyOn(history, 'attachJournal').mockImplementationOnce(
-          async (...args) => {
-            await attach(...args);
-            throw new Error('subscription interrupted after attachment');
-          },
-        );
-        try {
-          await expect(
-            agent.session.setRecording({ enabled: true }),
-          ).rejects.toThrow('subscription interrupted after attachment');
-        } finally {
-          fault.mockRestore();
-        }
-        await agent.session.setRecording({ enabled: true });
-        await agent.setHistory([
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'replacement recorder works' }],
-          },
-        ]);
-        await agent.session.flushRecording();
-        const path = agent.session.getRecording().path;
-        if (path === undefined) throw new Error('Missing recording');
-        const persisted = await recordedRows(
-          path,
-          basename(config.projectTempDir),
-        );
-        expect(persisted).toHaveLength(1);
-        expect(JSON.stringify(persisted)).toContain(
-          'replacement recorder works',
-        );
-        expect(await agent.session.getHistory()).toHaveLength(1);
-        await agent.session.setRecording({ enabled: false });
-      });
+      await withRecordingLifetimeFixture(
+        async ({ agent, config, clientFor }) => {
+          await agent.setHistory([
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'before attachment failure' }],
+            },
+          ]);
+          const history = clientFor(agent).getHistoryService();
+          if (history === null) throw new Error('Missing history');
+          const attach = history.attachJournal.bind(history);
+          const fault = spyOn(history, 'attachJournal').mockImplementationOnce(
+            async (...args) => {
+              await attach(...args);
+              throw new Error('subscription interrupted after attachment');
+            },
+          );
+          try {
+            await expect(
+              agent.session.setRecording({ enabled: true }),
+            ).rejects.toThrow('subscription interrupted after attachment');
+          } finally {
+            fault.mockRestore();
+          }
+          await agent.session.setRecording({ enabled: true });
+          await agent.setHistory([
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'replacement recorder works' }],
+            },
+          ]);
+          await agent.session.flushRecording();
+          const path = agent.session.getRecording().path;
+          if (path === undefined) throw new Error('Missing recording');
+          const persisted = await recordedRows(
+            path,
+            basename(config.projectTempDir),
+          );
+          expect(persisted).toHaveLength(1);
+          expect(JSON.stringify(persisted)).toContain(
+            'replacement recorder works',
+          );
+          expect(await agent.session.getHistory()).toHaveLength(1);
+          await agent.session.setRecording({ enabled: false });
+        },
+      );
     }, 30000);
 
     it('keeps mid-session recording, resume metadata and restart on one file', async () => {

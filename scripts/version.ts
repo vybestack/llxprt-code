@@ -6,6 +6,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import {
   NON_NPM_RELEASE_PACKAGES,
@@ -24,9 +25,14 @@ type PackageJson = Record<string, unknown> & {
   };
 };
 
-function npmBin(): string {
-  return process.platform === 'win32' ? 'npm.cmd' : 'npm';
-}
+const { npmInvocation } = createRequire(import.meta.url)(
+  './lib/npm-command.cjs',
+) as {
+  npmInvocation: (args: readonly string[]) => {
+    command: string;
+    args: string[];
+  };
+};
 
 type RunNpmOptions = {
   timeoutMs?: number;
@@ -41,7 +47,11 @@ function runNpm(args: readonly string[], opts?: RunNpmOptions): void {
     attempt += 1;
     console.log(`> npm ${args.join(' ')}`);
     try {
-      execFileSync(npmBin(), args, { stdio: 'inherit', timeout: timeoutMs });
+      const npm = npmInvocation(args);
+      execFileSync(npm.command, npm.args, {
+        stdio: 'inherit',
+        timeout: timeoutMs,
+      });
       return;
     } catch (error) {
       if (attempt <= retries && isEtimedout(error)) {

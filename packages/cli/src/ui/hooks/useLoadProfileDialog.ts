@@ -3,10 +3,15 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  useListSavedProfiles,
+  useLoadProfileByName,
+  useProviderStatus,
+} from '../contexts/RuntimeContext.js';
 
 import { useCallback, useState } from 'react';
 import { MessageType } from '../types.js';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import {
   recordActiveProviderSwitch,
@@ -77,7 +82,9 @@ export const useLoadProfileDialog = ({
   dialogs,
   recorder,
 }: UseLoadProfileDialogParams) => {
-  const runtime = useRuntimeApi();
+  const runtimeListSavedProfiles = useListSavedProfiles();
+  const runtimeLoadProfileByName = useLoadProfileByName();
+  const runtimeProviderStatus = useProviderStatus();
   const [profiles, setProfiles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -90,7 +97,7 @@ export const useLoadProfileDialog = ({
     dialogs.loadProfile.open({});
 
     try {
-      const availableProfiles = await runtime.listSavedProfiles();
+      const availableProfiles = await runtimeListSavedProfiles();
       setProfiles(availableProfiles);
     } catch (e) {
       addMessage({
@@ -103,38 +110,41 @@ export const useLoadProfileDialog = ({
     } finally {
       setIsLoading(false);
     }
-  }, [addMessage, dialogs, runtime]);
+  }, [addMessage, dialogs, runtimeListSavedProfiles]);
 
   const handleSelect = useCallback(
     async (profileName: string) => {
       try {
-        const result = await runtime.loadProfileByName(profileName);
+        const result = await runtimeLoadProfileByName(profileName);
         const extra = formatInfoMessages(result);
         addMessage({
           type: MessageType.INFO,
           content: `Profile '${profileName}' loaded${extra}`,
           timestamp: new Date(),
         });
-        for (const warning of result.warnings) {
-          addMessage({
-            type: MessageType.INFO,
-            content: `⚠ ${warning}`,
-            timestamp: new Date(),
-          });
-        }
-        await recordActiveProviderSwitch(recorder, runtime, (content) =>
-          addMessage({
-            type: MessageType.ERROR,
-            content,
-            timestamp: new Date(),
-          }),
+        reportProfileWarnings(result.warnings, addMessage);
+        await recordActiveProviderSwitch(
+          recorder,
+          { providerStatus: runtimeProviderStatus },
+          (content) =>
+            addMessage({
+              type: MessageType.ERROR,
+              content,
+              timestamp: new Date(),
+            }),
         );
       } catch (error) {
         handleProfileLoadError(error, profileName, addMessage);
       }
       dialogs.loadProfile.close();
     },
-    [addMessage, dialogs, runtime, recorder],
+    [
+      addMessage,
+      dialogs,
+      runtimeLoadProfileByName,
+      runtimeProviderStatus,
+      recorder,
+    ],
   );
 
   return {
@@ -144,3 +154,15 @@ export const useLoadProfileDialog = ({
     isLoading,
   };
 };
+
+function reportProfileWarnings(
+  warnings: readonly string[],
+  addMessage: UseLoadProfileDialogParams['addMessage'],
+) {
+  for (const warning of warnings)
+    addMessage({
+      type: MessageType.INFO,
+      content: `⚠ ${warning}`,
+      timestamp: new Date(),
+    });
+}

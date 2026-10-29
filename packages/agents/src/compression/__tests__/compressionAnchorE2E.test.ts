@@ -1,4 +1,6 @@
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -29,6 +31,10 @@ import {
   testProviderRuntime,
 } from './MiddleOutStrategy-test-helpers.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // ---------------------------------------------------------------------------
 // Test-local helpers: operational definition of a "cacheable prefix"
@@ -100,16 +106,29 @@ function buildHandler(opts: {
   const provider = createCaptureProvider(capturedRequests);
   const providerResult = {
     invocation: captureProviderInvocation(
-      testProviderRuntime as never,
+      {
+        fetch: requestFetch,
+        runtimeId: testProviderRuntime.runtimeId,
+        metadata: testProviderRuntime.metadata,
+        globalSettings: new SettingsService().getAllGlobalSettings(),
+        providerSettings: new SettingsService().getProviderSettings(
+          provider.name,
+        ),
+      },
       provider.name,
     ),
     provider,
-    runtime: testProviderRuntime as never,
+    runtime: runtimeContext.providerRuntime,
   };
 
   const handler = new CompressionHandler(
-    runtimeContext,
+    chatSessionPorts(runtimeContext).compression,
+    undefined,
     historyService,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {},
     () => Promise.resolve(providerResult),
     () => Promise.resolve(undefined),

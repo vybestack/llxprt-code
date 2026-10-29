@@ -4,17 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { afterEach, describe, it, expect } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../__tests__/render.js';
 import { useHookDisplayState } from './useHookDisplayState.js';
-import { MessageBus, MessageBusType } from '@vybestack/llxprt-code-core';
+import { type MessageBus, MessageBusType } from '@vybestack/llxprt-code-core';
+import { createHookControlDeps } from '../../__tests__/ui-consent-hook-owners.js';
 
-function createTestMessageBus(): MessageBus {
-  return new MessageBus(
-    { evaluate: vi.fn(), checkDecision: vi.fn() } as never,
-    false,
-  );
+const cleanups: Array<() => void> = [];
+function createTestMessageBus() {
+  const { control, messageBus } = createHookControlDeps();
+  cleanups.push(() => control.detach());
+  return {
+    bus: messageBus,
+    subscribeExecutionPhase: control.subscribeExecutionPhase.bind(control),
+  };
 }
 
 function publishRequest(
@@ -36,15 +40,22 @@ function publishResponse(bus: MessageBus, correlationId: string) {
 }
 
 describe('useHookDisplayState', () => {
+  afterEach(() => {
+    for (const cleanup of cleanups.splice(0)) cleanup();
+  });
   it('returns an empty array when no hooks are active', () => {
-    const bus = createTestMessageBus();
-    const { result } = renderHook(() => useHookDisplayState(bus));
+    const { subscribeExecutionPhase } = createTestMessageBus();
+    const { result } = renderHook(() =>
+      useHookDisplayState(subscribeExecutionPhase),
+    );
     expect(result.current).toStrictEqual([]);
   });
 
   it('adds an active hook on request event', () => {
-    const bus = createTestMessageBus();
-    const { result } = renderHook(() => useHookDisplayState(bus));
+    const { bus, subscribeExecutionPhase } = createTestMessageBus();
+    const { result } = renderHook(() =>
+      useHookDisplayState(subscribeExecutionPhase),
+    );
 
     act(() => publishRequest(bus, 'BeforeTool', 'req-1'));
 
@@ -53,8 +64,10 @@ describe('useHookDisplayState', () => {
   });
 
   it('removes the correct hook when response B arrives before response A', () => {
-    const bus = createTestMessageBus();
-    const { result } = renderHook(() => useHookDisplayState(bus));
+    const { bus, subscribeExecutionPhase } = createTestMessageBus();
+    const { result } = renderHook(() =>
+      useHookDisplayState(subscribeExecutionPhase),
+    );
 
     act(() => {
       publishRequest(bus, 'BeforeTool', 'req-A');
@@ -72,8 +85,10 @@ describe('useHookDisplayState', () => {
   });
 
   it('removes the correct instance when multiple hooks share an event name', () => {
-    const bus = createTestMessageBus();
-    const { result } = renderHook(() => useHookDisplayState(bus));
+    const { bus, subscribeExecutionPhase } = createTestMessageBus();
+    const { result } = renderHook(() =>
+      useHookDisplayState(subscribeExecutionPhase),
+    );
 
     act(() => {
       publishRequest(bus, 'BeforeTool', 'req-1');
@@ -91,8 +106,10 @@ describe('useHookDisplayState', () => {
   });
 
   it('leaves active hooks unchanged when response has unknown correlationId', () => {
-    const bus = createTestMessageBus();
-    const { result } = renderHook(() => useHookDisplayState(bus));
+    const { bus, subscribeExecutionPhase } = createTestMessageBus();
+    const { result } = renderHook(() =>
+      useHookDisplayState(subscribeExecutionPhase),
+    );
 
     act(() => publishRequest(bus, 'BeforeTool', 'req-1'));
 

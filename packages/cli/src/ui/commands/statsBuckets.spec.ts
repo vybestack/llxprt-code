@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import {
   vi,
@@ -13,16 +14,18 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { statsCommand } from './statsCommand.js';
-import type { CommandContext } from './types.js';
+import { registerStatsCommand } from '../../__tests__/stats-command-test-owner.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
-import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
+import { discoverProviderBuckets } from '@vybestack/llxprt-code-agents';
 
 const optionalOAuthManagerMock = vi.fn();
 
-function getBucketsSubCommand() {
-  const sub = statsCommand.subCommands?.find((sc) => sc.name === 'buckets');
+function getBucketsSubCommand(context: CommandOwnerFixture) {
+  const sub = registerStatsCommand(context).subCommands?.find(
+    (sc) => sc.name === 'buckets',
+  );
   if (!sub) {
     throw new Error('buckets subcommand not found');
   }
@@ -49,7 +52,7 @@ function makeTokenStore(
   };
 }
 
-function getBucketResultItem(context: CommandContext): {
+function getBucketResultItem(context: CommandOwnerFixture): {
   type: MessageType;
   text?: string;
 } {
@@ -105,7 +108,7 @@ async function getStatsWithCodexFailure(provider: string): Promise<{
 }
 
 describe('/stats buckets subcommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
 
   beforeEach(() => {
     mockContext = createMockCommandContext({
@@ -113,7 +116,7 @@ describe('/stats buckets subcommand', () => {
         isAvailable: () => Boolean(optionalOAuthManagerMock()),
         discoverBuckets: (
           logger: Parameters<
-            CommandContext['oauthControl']['discoverBuckets']
+            CommandOwnerFixture['oauthControl']['discoverBuckets']
           >[0],
         ) => discoverProviderBuckets(optionalOAuthManagerMock(), logger),
       },
@@ -144,7 +147,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -174,7 +177,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -214,7 +217,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -226,7 +229,7 @@ describe('/stats buckets subcommand', () => {
   it('shows the unavailable message when the runtime manager is genuinely absent', async () => {
     optionalOAuthManagerMock.mockReturnValue(null);
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -241,7 +244,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -265,7 +268,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -286,7 +289,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -324,7 +327,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -347,7 +350,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -376,7 +379,7 @@ describe('/stats buckets subcommand', () => {
       getSupportedProviders: () => ['codex'],
       getTokenStore: () => tokenStore,
     });
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 

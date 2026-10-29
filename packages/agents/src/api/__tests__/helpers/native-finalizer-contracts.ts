@@ -113,20 +113,17 @@ export async function joinNativePublicTurn(): Promise<void> {
 }
 
 async function pauseNativePersistence(
-  { agent, files }: NativeFixture,
+  { agent, files, readHistory }: NativeFixture,
   fault: 'none' | 'trailer' | 'flush',
 ): Promise<{
-  readonly history: NonNullable<
-    ReturnType<NativeFixture['agent']['agentClient']['getHistoryService']>
-  >;
+  readonly history: ReturnType<NativeFixture['readHistory']>;
   readonly path: string;
   readonly before: Awaited<ReturnType<typeof nativeRows>>;
   readonly failure: Error;
   readonly accepted: Promise<unknown>;
   readonly flushSettled: () => boolean;
 }> {
-  const history = agent.agentClient.getHistoryService();
-  if (!history) throw new Error('Missing real history');
+  const history = readHistory();
   await agent.setHistory([
     { speaker: 'human', blocks: [{ type: 'text', text: 'finalizer-seed' }] },
   ]);
@@ -226,7 +223,7 @@ async function finishNativePersistence(
         'accepted-history-before-finalizer',
       ]);
     else expect(committed).toStrictEqual(paused.before);
-    await expectClosedRecordingUnchanged(agent, chatsDir, paused);
+    await expectClosedRecordingUnchanged(agent, chatsDir, paused, terminal);
     expectReleasedReaders(files);
   } finally {
     files.release.release();
@@ -238,14 +235,20 @@ async function expectClosedRecordingUnchanged(
   agent: NativeFixture['agent'],
   chatsDir: string,
   { path, history }: Awaited<ReturnType<typeof pauseNativePersistence>>,
+  terminal: 'stop' | 'dispose',
 ): Promise<void> {
   const bytes = await readFile(path);
   const entries = (await readdir(chatsDir)).sort();
-  history.add({
+  const lateRow: Parameters<typeof history.add>[0] = {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'late-history-after-finalizer' }],
-  });
-  await history.waitForCommit();
+  };
+  if (terminal === 'dispose')
+    expect(() => history.add(lateRow)).toThrow('disposed');
+  else {
+    history.add(lateRow);
+    await history.waitForCommit();
+  }
   await agent.dispose();
   await expect(agent.session.setRecording({ enabled: true })).rejects.toThrow(
     /disposed|closed/,

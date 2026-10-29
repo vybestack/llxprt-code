@@ -13,6 +13,7 @@ import { useCallback, useState } from 'react';
 import {
   isBinary,
   type ShellExecutionResult,
+  type ShellExecutionConfig,
   ShellExecutionService,
   DEFAULT_AGENT_ID,
   type AnsiOutput,
@@ -35,19 +36,14 @@ import crypto from 'crypto';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import type { ShellState, SessionIdentity } from '../cliUiRuntime.js';
-
-/**
- * Focused runtime for shell command execution: shell capabilities (PTY,
- * terminal sizing, execution config) plus session directory resolution.
- */
-type ShellCommandRuntime = ShellState & SessionIdentity;
 
 // Throttle interval for PTY output updates to avoid excessive re-renders.
 // Using 100ms provides smooth visual updates without overwhelming React.
 export const OUTPUT_UPDATE_INTERVAL_MS = 100;
 const LIVE_DISPLAY_MAX_BYTES = 512 * 1024;
 const MAX_OUTPUT_LENGTH = 10000;
+
+type AppendShellHistory = Agent['addHistory'];
 
 interface ShellExecutionParams {
   commandToExecute: string;
@@ -56,8 +52,11 @@ interface ShellExecutionParams {
   initialToolDisplay: IndividualToolCallDisplay;
   userMessageTimestamp: number;
   pwdFilePath: string | undefined;
-  config: ShellCommandRuntime;
-  agent: Agent | undefined;
+  readUsePty: () => boolean;
+  readShellExecutionConfig: () => ShellExecutionConfig;
+  readPtyWidth: () => number | undefined;
+  readPtyHeight: () => number | undefined;
+  appendHistory: AppendShellHistory | undefined;
   rawQuery: string;
   abortSignal: AbortSignal;
   onDebugMessage: (message: string) => void;
@@ -86,7 +85,7 @@ interface ShellEventState {
 }
 
 function addShellCommandToAgentHistory(
-  agent: Agent | undefined,
+  appendHistory: AppendShellHistory | undefined,
   rawQuery: string,
   resultText: string,
 ) {
@@ -95,14 +94,13 @@ function addShellCommandToAgentHistory(
       ? resultText.substring(0, MAX_OUTPUT_LENGTH) + '\n... (truncated)'
       : resultText;
 
-  if (agent) {
-    void agent
-      .addHistory({
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'text',
-            text: `I ran the following shell command:
+  if (appendHistory) {
+    void appendHistory({
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'text',
+          text: `I ran the following shell command:
 \`\`\`sh
 ${rawQuery}
 \`\`\`
@@ -111,15 +109,11 @@ This produced the following result:
 \`\`\`
 ${modelContent}
 \`\`\``,
-          },
-        ],
-      })
-      .catch((error) => {
-        debugLogger.error(
-          'Failed to add shell command to agent history:',
-          error,
-        );
-      });
+        },
+      ],
+    }).catch((error) => {
+      debugLogger.error('Failed to add shell command to agent history:', error);
+    });
   }
 }
 
@@ -203,7 +197,7 @@ function applyResultDisplayUpdate(
 
 function processShellEvent(
   event: ShellOutputEvent,
-  config: ShellCommandRuntime,
+  readUsePty: () => boolean,
   state: ShellEventState,
 ): boolean {
   if (event.type === 'data' && state.isBinaryStream) return false;
@@ -211,7 +205,7 @@ function processShellEvent(
   let shouldUpdate = false;
   switch (event.type) {
     case 'data':
-      if (config.getShouldUseNodePtyShell()) {
+      if (readUsePty()) {
         state.cumulativeStdout = event.chunk;
         shouldUpdate = true;
       } else if (typeof event.chunk === 'string') {
@@ -237,7 +231,7 @@ function processShellEvent(
 
 function createShellEventHandler(
   callId: string,
-  config: ShellCommandRuntime,
+  readUsePty: () => boolean,
   pendingHistoryItemRef:
     | React.MutableRefObject<HistoryItemWithoutId | null>
     | undefined,
@@ -248,13 +242,12 @@ function createShellEventHandler(
   state: ShellEventState,
 ) {
   return (event: ShellOutputEvent) => {
-    const shouldUpdate = processShellEvent(event, config, state);
+    const shouldUpdate = processShellEvent(event, readUsePty, state);
     if (!shouldUpdate) return;
 
     const pastThrottle =
       Date.now() - state.lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS;
-    const isPtyData =
-      event.type === 'data' && config.getShouldUseNodePtyShell();
+    const isPtyData = event.type === 'data' && readUsePty();
     if (!isPtyData && !pastThrottle) return;
 
     if (
@@ -332,7 +325,7 @@ function handleShellResult(
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
-  agent: Agent | undefined,
+  appendHistory: AppendShellHistory | undefined,
   rawQuery: string,
 ) {
   setPendingHistoryItem(null);
@@ -372,7 +365,7 @@ function handleShellResult(
     userMessageTimestamp,
   );
 
-  addShellCommandToAgentHistory(agent, rawQuery, finalOutput);
+  addShellCommandToAgentHistory(appendHistory, rawQuery, finalOutput);
 }
 
 function handleShellError(
@@ -468,7 +461,7 @@ function handleExecutionResult(
         params.userMessageTimestamp,
         params.addItemToHistory,
         params.setPendingHistoryItem,
-        params.agent,
+        params.appendHistory,
         params.rawQuery,
       );
     })
@@ -493,7 +486,7 @@ function handleExecutionResult(
 }
 
 async function initiateShellExecution(params: ShellExecutionParams) {
-  const shellExecutionConfig = params.config.getShellExecutionConfig();
+  const shellExecutionConfig = params.readShellExecutionConfig();
   const outputBudget = resolveAcquisitionBudgetFromSetting(
     shellExecutionConfig.outputRetentionMaxBytes,
   );
@@ -513,24 +506,23 @@ async function initiateShellExecution(params: ShellExecutionParams) {
 
   const eventHandler = createShellEventHandler(
     params.callId,
-    params.config,
+    params.readUsePty,
     params.pendingHistoryItemRef,
     params.setPendingHistoryItem,
     params.setLastShellOutputTime,
     state,
   );
 
-  const effectiveTerminalWidth =
-    params.config.getPtyTerminalWidth() ?? params.terminalWidth;
+  const effectiveTerminalWidth = params.readPtyWidth() ?? params.terminalWidth;
   const effectiveTerminalHeight =
-    params.config.getPtyTerminalHeight() ?? params.terminalHeight;
+    params.readPtyHeight() ?? params.terminalHeight;
 
   return ShellExecutionService.execute(
     params.commandToExecute,
     params.targetDir,
     eventHandler,
     params.abortSignal,
-    params.config.getShouldUseNodePtyShell(),
+    params.readUsePty(),
     {
       ...shellExecutionConfig,
       terminalWidth: effectiveTerminalWidth,
@@ -612,6 +604,30 @@ function buildInitialToolDisplay(
   };
 }
 
+function prepareShellSubmission(
+  rawQuery: string,
+  readTargetDir: () => string,
+  addItemToHistory: UseHistoryManagerReturn['addItem'],
+  setShellInputFocused: (value: boolean) => void,
+) {
+  setShellInputFocused(true);
+  const userMessageTimestamp = Date.now();
+  const callId = `shell-${userMessageTimestamp}`;
+  addItemToHistory(
+    { type: 'user_shell', text: rawQuery },
+    userMessageTimestamp,
+  );
+  const targetDir = readTargetDir();
+  const command = prepareCommandWithPwd(rawQuery);
+  return {
+    ...command,
+    targetDir,
+    callId,
+    userMessageTimestamp,
+    initialToolDisplay: buildInitialToolDisplay(callId, rawQuery),
+  };
+}
+
 /**
  * Hook to process shell commands.
  * Orchestrates command execution and updates history and agent context.
@@ -623,8 +639,12 @@ export const useShellCommandProcessor = (
   >,
   onExec: (command: Promise<void>) => void | Promise<void>,
   onDebugMessage: (message: string) => void,
-  config: ShellCommandRuntime,
-  agent: Agent | undefined,
+  readTargetDir: () => string,
+  readUsePty: () => boolean,
+  readShellExecutionConfig: () => ShellExecutionConfig,
+  readPtyWidth: () => number | undefined,
+  readPtyHeight: () => number | undefined,
+  appendHistory: AppendShellHistory | undefined,
   setShellInputFocused: (value: boolean) => void,
   terminalWidth?: number,
   terminalHeight?: number,
@@ -640,30 +660,21 @@ export const useShellCommandProcessor = (
       if (typeof rawQuery !== 'string' || rawQuery.trim() === '') {
         return false;
       }
-      setShellInputFocused(true);
-
-      const userMessageTimestamp = Date.now();
-      const callId = `shell-${userMessageTimestamp}`;
-      addItemToHistory(
-        { type: 'user_shell', text: rawQuery },
-        userMessageTimestamp,
+      const submission = prepareShellSubmission(
+        rawQuery,
+        readTargetDir,
+        addItemToHistory,
+        setShellInputFocused,
       );
-
-      const targetDir = config.getTargetDir();
-      const { commandToExecute, pwdFilePath } = prepareCommandWithPwd(rawQuery);
-
-      const initialToolDisplay = buildInitialToolDisplay(callId, rawQuery);
 
       const execPromise = new Promise<void>((resolve) => {
         void runShellExecution({
-          commandToExecute,
-          targetDir,
-          callId,
-          initialToolDisplay,
-          userMessageTimestamp,
-          pwdFilePath,
-          config,
-          agent,
+          ...submission,
+          readUsePty,
+          readShellExecutionConfig,
+          readPtyWidth,
+          readPtyHeight,
+          appendHistory,
           rawQuery,
           abortSignal,
           onDebugMessage,
@@ -683,12 +694,16 @@ export const useShellCommandProcessor = (
       return true;
     },
     [
-      config,
+      readTargetDir,
+      readUsePty,
+      readShellExecutionConfig,
+      readPtyWidth,
+      readPtyHeight,
       onDebugMessage,
       addItemToHistory,
       setPendingHistoryItem,
       onExec,
-      agent,
+      appendHistory,
       setShellInputFocused,
       terminalWidth,
       terminalHeight,

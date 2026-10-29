@@ -13,6 +13,10 @@ async function* fromAsyncArray<T>(items: T[]): AsyncGenerator<T, void> {
   }
 }
 
+function missingContentGenerator(): never {
+  throw new Error('Fixture client has no content generator');
+}
+
 function emptyServerAgentStream(): AsyncGenerator<
   ServerAgentStreamEvent,
   unknown
@@ -43,6 +47,12 @@ export function createTestAgentClient(
     bindProviderInvocation: () => {},
     bindRuntimeSettings: () => {},
     bindTelemetry: () => {},
+    bindModelNotifications: () => {},
+    bindIdeContext: () => {},
+    bindWorkspaceDefinitions: () => {},
+    bindProviderFiles: () => {},
+    bindTokenization: () => {},
+    bindProviderSelection: () => {},
     bindToolSelection: (tools) => {
       selection = tools;
     },
@@ -81,7 +91,7 @@ export function createTestAgentClient(
     },
     restoreHistory: async () => {},
     addDirectoryContext: async () => {},
-    getContentGenerator: () => undefined as never,
+    getContentGenerator: missingContentGenerator,
     getContentGeneratorConfig: () => undefined,
     startChat: async () => chat,
     generateDirectMessage: async () => emptyModelOutput(),

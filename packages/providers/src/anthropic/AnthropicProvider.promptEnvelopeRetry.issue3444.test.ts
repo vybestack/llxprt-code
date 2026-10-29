@@ -140,7 +140,6 @@ function setupProvider(): {
     },
   );
   const { provider, runtime, settingsService: svc } = result;
-  runtime.config ??= createRuntimeConfigStub(svc);
 
   return { provider, runtimeContext: runtime, settingsService: svc };
 }
@@ -190,7 +189,7 @@ function registerAnthropicBehavior1(): void {
         contents: mediaMessages(png),
         settings: settingsService,
         runtime: runtimeContext,
-        config: runtimeContext.config,
+        config: createRuntimeConfigStub(settingsService),
         ephemerals: { retries: 2, retrywait: 0 },
         resolved: { streaming: true },
       });
@@ -254,7 +253,7 @@ function registerAnthropicBehavior2(): void {
         contents: mediaMessages(png),
         settings: settingsService,
         runtime: runtimeContext,
-        config: runtimeContext.config,
+        config: createRuntimeConfigStub(settingsService),
         ephemerals: { retries: 2, retrywait: 0 },
       });
 

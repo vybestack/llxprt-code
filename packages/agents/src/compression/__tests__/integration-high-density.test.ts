@@ -71,14 +71,26 @@ describe('Integration: Strategy Resolution Chain', () => {
   });
 
   it('factory returns HighDensityStrategy for high-density', () => {
-    const strategy = getCompressionStrategy('high-density');
+    const strategy = getCompressionStrategy(
+      'high-density',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     expect(strategy).toBeInstanceOf(HighDensityStrategy);
     expect(strategy.name).toBe('high-density');
   });
 
   it('all strategies in tuple are resolvable by factory', () => {
     for (const name of COMPRESSION_STRATEGIES) {
-      const strategy = getCompressionStrategy(name);
+      const strategy = getCompressionStrategy(
+        name,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.name).toBe(name);
       expect(typeof strategy.requiresLLM).toBe('boolean');
     }
@@ -144,7 +156,13 @@ describe('Integration: Density + Compression Pipeline', () => {
       'top-down-truncation',
       'one-shot',
     ] as const) {
-      const strategy = getCompressionStrategy(name);
+      const strategy = getCompressionStrategy(
+        name,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.name).toBe(name);
       expect(typeof strategy.requiresLLM).toBe('boolean');
     }

@@ -9,21 +9,29 @@ import { existsSync, readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { Config, type MCPServerConfig } from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  WorkspaceTrustLifecycle,
+  WorkspaceFilesystemOwner,
+  assembleWorkspaceMemory,
+  type MCPServerConfig,
+} from '@vybestack/llxprt-code-core';
 import {
   SessionSettingsOwner,
   type WorkspaceMcpSettings,
 } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import {
-  FakeProvider,
-  ProviderManager,
-} from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  prepareAgentPreflight,
+  type Agent,
+  type ProviderActivationIntent,
+} from '@vybestack/llxprt-code-agents';
 import { createForegroundAgent } from './cliAgentBootstrap.js';
 import { waitFor } from './__tests__/async.js';
 import {
   __resetCleanupStateForTesting,
+  registerCleanup,
   runExitCleanup,
 } from './utils/cleanup.js';
 
@@ -51,6 +59,16 @@ async function waitForExit(pid: number): Promise<void> {
   });
 }
 
+function settingsFor(
+  servers: Record<string, MCPServerConfig>,
+): WorkspaceMcpSettings {
+  return {
+    mcpServers: servers,
+    blockedMcpServers: [],
+    settingsMcpServers: servers,
+  };
+}
+
 describe('foreground /mcp reload (issue #3937)', () => {
   const directories: string[] = [];
   const configs: Config[] = [];
@@ -76,21 +94,14 @@ describe('foreground /mcp reload (issue #3937)', () => {
     await rm(configHome, { recursive: true, force: true });
   });
 
-  function settingsFor(
-    servers: Record<string, MCPServerConfig>,
-  ): WorkspaceMcpSettings {
-    return {
-      mcpServers: servers,
-      blockedMcpServers: [],
-      settingsMcpServers: servers,
-    };
+  interface ForegroundFixture {
+    readonly directory: string;
+    /** Stands in for the CLI's persisted-settings loader. */
+    readonly persisted: { current: WorkspaceMcpSettings };
+    readonly agent: Agent;
   }
 
-  async function buildForegroundWithEmptyMcpConfig(): Promise<{
-    directory: string;
-    persisted: { current: WorkspaceMcpSettings };
-    agent: Awaited<ReturnType<typeof createForegroundAgent>>;
-  }> {
+  async function buildForegroundWithEmptyMcpConfig(): Promise<ForegroundFixture> {
     const directory = await mkdtemp(join(tmpdir(), 'cli-mcp-reload-'));
     directories.push(directory);
     process.env.LLXPRT_CONFIG_HOME = configHome;
@@ -100,8 +111,7 @@ describe('foreground /mcp reload (issue #3937)', () => {
     );
     const settingsService = new SettingsService();
     const settingsOwner = new SessionSettingsOwner(settingsService);
-    // Stands in for the CLI's persisted-settings loader: every reload reads
-    // whatever the "disk" currently holds.
+    // Every reload re-reads whatever the "disk" currently holds.
     const persisted = { current: settingsFor({}) };
     settingsOwner.bindMcpSettings(
       settingsFor({}),
@@ -118,18 +128,43 @@ describe('foreground /mcp reload (issue #3937)', () => {
       mcpServers: {},
     });
     configs.push(config);
-    const providerManager = new ProviderManager({ settingsService, config });
-    providerManager.registerProvider(
-      new FakeProvider(process.env.LLXPRT_FAKE_RESPONSES, directory),
-    );
-    providerManager.setActiveProvider('fake');
-    configureProviderRuntimeFactories(config, providerManager);
-    const agent = await createForegroundAgent({
-      config,
-      providerManager,
+    const credentialAuthority = new CredentialAuthority();
+    const preflight = await prepareAgentPreflight(
+      { runtimeId: 'mcp-reload' },
+      credentialAuthority,
       settingsService,
       settingsOwner,
+    );
+    registerCleanup(() => preflight.dispose());
+    const trust = new WorkspaceTrustLifecycle({ localTrust: true });
+    const filesystem = new WorkspaceFilesystemOwner({
+      targetDir: directory,
+      isTrusted: () => trust.isTrustedFolder(),
     });
+    const memory = assembleWorkspaceMemory(config, filesystem, trust);
+    await preflight.preparePostConfiguration(
+      config,
+      filesystem,
+      memory,
+      trust,
+      () => trust.dispose(),
+      settingsOwner,
+    );
+    const intent: ProviderActivationIntent = {
+      provider: 'fake',
+      model: 'fake-model',
+      authMode: 'auto',
+    };
+    const result = await preflight.preflight(intent);
+    if (result.token === undefined)
+      throw new Error('Missing activation receipt');
+    const agent = await createForegroundAgent(
+      preflight,
+      result.token,
+      intent,
+      credentialAuthority,
+      {},
+    );
     return { directory, persisted, agent };
   }
 
@@ -148,9 +183,7 @@ describe('foreground /mcp reload (issue #3937)', () => {
     };
   }
 
-  function serverNames(
-    agent: Awaited<ReturnType<typeof createForegroundAgent>>,
-  ): string[] {
+  function serverNames(agent: Agent): string[] {
     return agent.mcp
       .listServers()
       .map((server) => server.name)
@@ -158,10 +191,7 @@ describe('foreground /mcp reload (issue #3937)', () => {
   }
 
   // Tools are grouped per server; a server with no live tools has no entry.
-  function toolNames(
-    agent: Awaited<ReturnType<typeof createForegroundAgent>>,
-    server: string,
-  ): string[] {
+  function toolNames(agent: Agent, server: string): string[] {
     return Object.entries(agent.mcp.toolsByServer()).flatMap(([name, tools]) =>
       name === server ? tools.map((tool) => tool.name) : [],
     );

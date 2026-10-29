@@ -46,7 +46,12 @@ async function charge(size: number): Promise<number> {
     size,
     async (history, sourceOwners) => {
       const { runtime, transport } = oneshotSetup(history);
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const source = new HistoryDensityRows();
       const candidate = new HistoryDensityRows(candidateOwners);
       const snapshot = await history.openDumpSnapshot();
@@ -56,6 +61,7 @@ async function charge(size: number): Promise<number> {
         const metadata = await buildCompressionMetadata(
           'owners',
           runtime,
+          undefined,
           history,
           async () => ({
             provider: transport,

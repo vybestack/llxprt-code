@@ -1,3 +1,6 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 import {
   captureResponsesTestRequest,
   executeResponsesTestRequest,
@@ -671,11 +674,10 @@ function registerCodexRemediationCase10(): void {
       ];
 
       const runtime = createProviderRuntimeContext({
-        settingsService: settings,
         runtimeId: TEST_RUNTIME_ID,
-        config: createRuntimeConfigStub(settings),
       });
       const invocation = createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: runtime.runtimeId,
         runtimeMetadata: runtime.metadata,
 
@@ -708,6 +710,7 @@ function registerCodexRemediationCase10(): void {
         },
       };
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         config: createRuntimeConfigStub(settings),

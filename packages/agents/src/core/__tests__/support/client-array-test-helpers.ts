@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { appendFileSync } from 'node:fs';
-import { buildAgent } from '../../../api/__tests__/helpers/agentHarness.js';
+import { buildCliStyleConfig } from '../../../api/__tests__/helpers/buildCliStyleConfig.js';
 import type { LocalMediaStore } from '../../../../../core/src/storage/local-media-store.js';
 import { MediaAdmissionService } from '../../../../../core/src/storage/media-admission-service.js';
 import { exactTokenizer } from '../../../../../core/src/services/history/chronology-rollback-test-helpers.js';
@@ -22,9 +22,9 @@ export async function withArrayClient<T>(
   fixture: DetachedFixture,
   action: (client: ClientArrayFixture) => Promise<T>,
 ): Promise<T> {
-  const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+  const { agentClient: client, cleanup } =
+    await buildCliStyleConfig('plain-text.jsonl');
   try {
-    const client = agent.agentClient;
     const store = client.mediaStore;
     if (store === undefined) throw new Error('Missing session media store');
     await client.getHistoryService()?.dispose();

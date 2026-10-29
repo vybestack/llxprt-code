@@ -29,6 +29,7 @@ function buildRetryOptions(
   return {
     ...options,
     invocation: createRuntimeInvocationContext({
+      fetch: globalThis.fetch,
       runtimeId: options.invocation.runtimeId,
       providerName: setup.provider.name,
       ephemeralsSnapshot: { retries: 1, retrywait: 0, 'prompt-caching': 'off' },

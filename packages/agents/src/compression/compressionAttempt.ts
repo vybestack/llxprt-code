@@ -27,7 +27,7 @@ export async function prepareCompressionAttempt(
   } finally {
     await context.history.return();
   }
-  for await (const row of args[2].streamCuratedHistory()) {
+  for await (const row of args[3].streamCuratedHistory()) {
     void row;
     return true;
   }

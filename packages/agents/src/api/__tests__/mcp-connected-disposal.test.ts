@@ -1,18 +1,28 @@
+import { withFetchPreconnect } from '@vybestack/llxprt-code-test-utils/fetch-test-helpers.js';
+import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import {
+  beforeAll,
+  afterAll,
+  describe,
+  expect,
+  it,
+  afterEach,
+  beforeEach,
+  spyOn,
+} from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
+import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { get } from 'node:http';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
-import { get } from 'node:http';
-import { buildAgent } from './helpers/agentHarness.js';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { fromConfig } from '../fromConfig.js';
-import { withFetchPreconnect } from '@vybestack/llxprt-code-test-utils/fetch-test-helpers.js';
 
 function gate(): { promise: Promise<void>; release: () => void } {
   let release = (): void => {};
@@ -57,6 +67,21 @@ function serverConfig(evidence: string) {
 }
 
 describe('connected MCP disposal', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  useFakeResponsesReplay('plain-text.jsonl');
+
   let directory = '';
   const evidence = (): string => directory;
   beforeEach(async () => {
@@ -66,23 +91,40 @@ describe('connected MCP disposal', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it('stops owned connected MCP before joining a manual authentication request', async () => {
-    const entered = gate();
-    const released = gate();
-    const built = await buildAgent('plain-text.jsonl', {
+  async function connectedAgent(): Promise<Agent> {
+    const workingDir = join(evidence(), 'work');
+    await mkdir(workingDir);
+    return createAgent({
+      provider: 'fake',
+      model: 'fake-model',
+      workingDir: await realpath(workingDir),
       folderTrust: true,
       mcpServers: { local: serverConfig(evidence()) },
       mcpHost: { openBrowser: authorize },
       telemetry: { enabled: false },
       recording: { enabled: false },
     });
+  }
+
+  function localTools(agent: Agent): number {
+    return agent.tools.list().filter((tool) => tool.server === 'local').length;
+  }
+
+  async function awaitReadiness(agent: Agent): Promise<void> {
     const readiness = [];
-    for await (const event of built.agent.stream('unused', {
+    for await (const event of agent.stream('unused', {
       signal: AbortSignal.abort(),
     })) {
       readiness.push(event);
     }
     expect(readiness).toStrictEqual([{ type: 'done', reason: 'aborted' }]);
+  }
+
+  it('stops owned connected MCP before joining a manual authentication request', async () => {
+    const entered = gate();
+    const released = gate();
+    const agent = await connectedAgent();
+    await awaitReadiness(agent);
     const network = spyOn(globalThis, 'fetch').mockImplementation(
       withFetchPreconnect(async () => {
         entered.release();
@@ -93,14 +135,8 @@ describe('connected MCP disposal', () => {
     let authentication: Promise<unknown> | undefined;
     let disposal: Promise<void> | undefined;
     try {
-      expect(
-        built.agent.agentClient.tools
-          .getAllTools()
-          .filter(
-            (tool) => 'serverName' in tool && tool.serverName === 'local',
-          ),
-      ).toHaveLength(1);
-      authentication = built.agent.mcp
+      expect(localTools(agent)).toBe(1);
+      authentication = agent.mcp
         .authenticate('local')
         .catch((error: unknown) => error);
       await Promise.race([
@@ -109,11 +145,9 @@ describe('connected MCP disposal', () => {
           throw new Error('Authentication did not reach token request');
         }),
       ]);
-      disposal = built.agent.dispose();
-      expect(built.agent.dispose()).toBe(disposal);
-      expect(() => built.agent.agentClient.tools.getAllTools()).toThrow(
-        'closed',
-      );
+      disposal = agent.dispose();
+      expect(agent.dispose()).toBe(disposal);
+      expect(() => agent.tools.list()).toThrow('closed');
       released.release();
       expect(await authentication).toHaveProperty('name', 'AbortError');
       await disposal;
@@ -121,57 +155,25 @@ describe('connected MCP disposal', () => {
       released.release();
       await authentication;
       await disposal;
-      await built.cleanup();
+      await agent.dispose();
       network.mockRestore();
     }
   }, 30000);
 
-  it('adopts one connected catalog and leaves its transport usable after facade disposal', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl', {
-      folderTrust: true,
-      mcpServers: { local: serverConfig(evidence()) },
-      telemetry: { enabled: false },
-      recording: { enabled: false },
-    });
-    await built.mcpRuntime.awaitDiscovery();
-    const catalog = built.mcpRuntime.toolSelection;
-    const prompt = built.mcpRuntime.listPrompts('local')[0];
-    const before = await readFile(join(evidence(), 'requests'), 'utf8');
-    const agent = await fromConfig({
-      settingsOwner: built.settingsOwner,
-      settingsService: built.settingsService,
-      agentClient: built.agentClient,
-      providerManager: built.providerManager,
-      config: built.config,
-      mcpRuntime: built.mcpRuntime,
-      messageBus: built.messageBus,
-    });
+  it('discovers one connected catalog at construction and leaves it unchanged by reads and disposal', async () => {
+    const agent = await connectedAgent();
     try {
-      expect(agent.getMessageBus()).toBe(built.messageBus);
-      expect(new Set([built.mcpRuntime.toolSelection, catalog]).size).toBe(1);
+      await awaitReadiness(agent);
+      const before = await readFile(join(evidence(), 'requests'), 'utf8');
       expect(
         before.split('\n').filter((line) => line === 'tools/list'),
       ).toHaveLength(1);
+      expect(localTools(agent)).toBe(1);
       expect(await readFile(join(evidence(), 'requests'), 'utf8')).toBe(before);
       await agent.dispose();
-      expect(
-        catalog
-          .getAllTools()
-          .filter(
-            (tool) => 'serverName' in tool && tool.serverName === 'local',
-          ),
-      ).toHaveLength(1);
-      const result = await prompt.invoke({ value: 'seven' });
-      expect(result.messages[0]?.content).toMatchObject({
-        text: 'Explain seven',
-      });
-      expect(await readFile(join(evidence(), 'requests'), 'utf8')).toBe(
-        `${before}prompts/get\n`,
-      );
+      expect(await readFile(join(evidence(), 'requests'), 'utf8')).toBe(before);
     } finally {
       await agent.dispose();
-      await built.config.dispose();
-      await built.cleanup();
     }
   }, 30000);
 });

@@ -70,7 +70,10 @@ async function* source(
     { preconnect() {} },
   );
   try {
-    const client = await createGeminiApiClient({ apiKey: 'test' });
+    const client = await createGeminiApiClient({
+      fetch: globalThis.fetch,
+      apiKey: 'test',
+    });
     const stream = await client.models.generateContentStream({
       model: 'gemini-3-flash-preview',
       contents: 'hi',
@@ -97,7 +100,10 @@ describe('Gemini tool argument disk arrival', () => {
     );
     await expect(
       runDiskArrival(async function* () {
-        const client = await createGeminiApiClient({ apiKey: 'test' });
+        const client = await createGeminiApiClient({
+          fetch: globalThis.fetch,
+          apiKey: 'test',
+        });
         const stream = await client.models.generateContentStream({
           model: 'gemini-3-flash-preview',
           contents: 'hi',
@@ -119,7 +125,10 @@ describe('Gemini tool argument disk arrival', () => {
       { preconnect() {} },
     );
     const result = await runDiskArrival(async function* () {
-      const client = await createGeminiApiClient({ apiKey: 'test' });
+      const client = await createGeminiApiClient({
+        fetch: globalThis.fetch,
+        apiKey: 'test',
+      });
       const stream = await client.models.generateContentStream({
         model: 'gemini-3-flash-preview',
         contents: 'hi',

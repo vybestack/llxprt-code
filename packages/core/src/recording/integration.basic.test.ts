@@ -1,3 +1,4 @@
+import { versionOf } from '../journal/version.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -81,7 +82,9 @@ describe('integration: full journal session lifecycle', () => {
     return history;
   }
 
-  function resume(ref = CONTINUE_LATEST): ReturnType<typeof resumeSession> {
+  function resume(
+    ref: string = CONTINUE_LATEST,
+  ): ReturnType<typeof resumeSession> {
     return resumeSession({
       continueRef: ref,
       projectHash: PROJECT_HASH,
@@ -92,7 +95,9 @@ describe('integration: full journal session lifecycle', () => {
     });
   }
 
-  async function resumeOk(ref = CONTINUE_LATEST): Promise<ResumeResult> {
+  async function resumeOk(
+    ref: string = CONTINUE_LATEST,
+  ): Promise<ResumeResult> {
     const result = await resume(ref);
     if (!result.ok) throw new Error(result.error);
     resumed.push(result);
@@ -171,8 +176,9 @@ describe('integration: full journal session lifecycle', () => {
     await result.recording.dispose();
     const reader = await openJournalReadOnly(file);
     try {
-      let current = reader.trailer;
-      if (current === undefined) throw new Error('Missing committed trailer');
+      const trailer = reader.trailer;
+      if (trailer === undefined) throw new Error('Missing committed trailer');
+      let current = versionOf(trailer);
       expect(current.commitSeq).toBeGreaterThan(before.commitSeq);
       while (current.parent !== 0) {
         const parent = await readVersionAt(reader, current.parent);

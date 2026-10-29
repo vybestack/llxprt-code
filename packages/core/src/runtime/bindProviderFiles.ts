@@ -6,10 +6,10 @@
 
 import type { ProviderFileBindingStore } from './providerRuntimeContext.js';
 
-export function bindProviderFiles<T extends object>(
+export function bindProviderFiles<T extends object, TLifecycle>(
   provider: T,
   bindings: ProviderFileBindingStore | undefined,
-  lifecycle: object | undefined,
+  lifecycle: TLifecycle | undefined,
   workspaceDirectory: string | undefined,
 ): T {
   if (

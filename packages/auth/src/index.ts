@@ -22,11 +22,13 @@ export type {
   OAuthUICallback,
   OAuthInteractiveAuthOutcomeKind,
 } from './oauth-ui-events.js';
-export {
-  OAuthUIBridge,
-  oauthUIBridge,
-  OAUTH_UI_MAX_PENDING,
+export type {
+  OAuthAuthOutcome,
+  OAuthCodeRequest,
+  OAuthDialogAttempt,
+  OAuthProviderUIPort,
 } from './oauth-ui-bridge.js';
+export { OAuthUIBridge, OAUTH_UI_MAX_PENDING } from './oauth-ui-bridge.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export type {

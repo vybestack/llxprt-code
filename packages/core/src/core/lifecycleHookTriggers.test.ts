@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { join } from 'node:path';
 import { usePhysicalHook } from '../hooks/__tests__/physical-hook-fixture.js';
 import {
   triggerSessionStartHook,
@@ -207,611 +208,608 @@ describe('Lifecycle Hook Triggers through an in-process execution owner (all pla
 });
 
 describe('lifecycle physical execution', () => {
-  describe.skipIf(process.platform === 'win32')(
-    'Lifecycle Hook Triggers with explicit subprocess ownership (POSIX shell command fixture)',
-    () => {
-      const physical = usePhysicalHook();
-      it('should return SessionStartHookOutput when hook executes successfully', async () => {
-        const fixture = await physical(
-          HookEventName.SessionStart,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerSessionStartHook(
-          SessionStartSource.Startup,
-          authority,
-        );
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.SessionStart);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result).toBeInstanceOf(SessionStartHookOutput);
-        expect(result?.getAdditionalContext()?.split(' ')).toHaveLength(2);
-        expect(input.source).toBe(SessionStartSource.Startup);
-      });
+  describe('Lifecycle Hook Triggers with explicit subprocess ownership (native Windows and POSIX shells)', () => {
+    const physical = usePhysicalHook();
+    it('should return SessionStartHookOutput when hook executes successfully', async () => {
+      const fixture = await physical(
+        HookEventName.SessionStart,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerSessionStartHook(
+        SessionStartSource.Startup,
+        authority,
+      );
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.SessionStart);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result).toBeInstanceOf(SessionStartHookOutput);
+      expect(result?.getAdditionalContext()?.split(' ')).toHaveLength(2);
+      expect(input.source).toBe(SessionStartSource.Startup);
+    });
 
-      it('should return undefined when hooks are disabled', async () => {
-        const fixture = await physical(
-          HookEventName.SessionStart,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          false,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerSessionStartHook(
-          SessionStartSource.Startup,
-          authority,
-        );
-        expect(result).toBeUndefined();
-        expect(fixture.ran()).toBe(false);
-      });
+    it('should return undefined when hooks are disabled', async () => {
+      const fixture = await physical(
+        HookEventName.SessionStart,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        false,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerSessionStartHook(
+        SessionStartSource.Startup,
+        authority,
+      );
+      expect(result).toBeUndefined();
+      expect(fixture.ran()).toBe(false);
+    });
 
-      it('should return undefined when hook system is not available', async () => {
-        const fixture = await physical(
-          HookEventName.SessionStart,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          0,
-        );
-        const authority = undefined;
-        const result = await triggerSessionStartHook(
-          SessionStartSource.Startup,
-          authority,
-        );
-        expect(result).toBeUndefined();
-        expect(fixture.ran()).toBe(false);
-      });
+    it('should return undefined when hook system is not available', async () => {
+      const fixture = await physical(
+        HookEventName.SessionStart,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        0,
+      );
+      const authority = undefined;
+      const result = await triggerSessionStartHook(
+        SessionStartSource.Startup,
+        authority,
+      );
+      expect(result).toBeUndefined();
+      expect(fixture.ran()).toBe(false);
+    });
 
-      it('should return undefined and not throw on hook error', async () => {
-        const fixture = await physical(
-          HookEventName.SessionStart,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          1,
-        );
-        const authority = fixture.execution;
-        const result = await triggerSessionStartHook(
-          SessionStartSource.Startup,
-          authority,
-        );
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.SessionStart);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result).toBeUndefined();
-      });
+    it('should return undefined and not throw on hook error', async () => {
+      const fixture = await physical(
+        HookEventName.SessionStart,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        1,
+      );
+      const authority = fixture.execution;
+      const result = await triggerSessionStartHook(
+        SessionStartSource.Startup,
+        authority,
+      );
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.SessionStart);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result).toBeUndefined();
+    });
 
-      it('should return SessionEndHookOutput when hook executes successfully', async () => {
-        const fixture = await physical(
-          HookEventName.SessionEnd,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerSessionEndHook(
-          SessionEndReason.Exit,
-          authority,
-        );
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.SessionEnd);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result).toBeInstanceOf(SessionEndHookOutput);
-        expect(result?.getAdditionalContext()?.split(' ')).toHaveLength(2);
-        expect(input.reason).toBe(SessionEndReason.Exit);
-      });
+    it('should return SessionEndHookOutput when hook executes successfully', async () => {
+      const fixture = await physical(
+        HookEventName.SessionEnd,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerSessionEndHook(
+        SessionEndReason.Exit,
+        authority,
+      );
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.SessionEnd);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result).toBeInstanceOf(SessionEndHookOutput);
+      expect(result?.getAdditionalContext()?.split(' ')).toHaveLength(2);
+      expect(input.reason).toBe(SessionEndReason.Exit);
+    });
 
-      it('should return undefined when hooks are disabled for SessionEnd 2', async () => {
-        const fixture = await physical(
-          HookEventName.SessionEnd,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          false,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerSessionEndHook(
-          SessionEndReason.Exit,
-          authority,
-        );
-        expect(result).toBeUndefined();
-        expect(fixture.ran()).toBe(false);
-      });
+    it('should return undefined when hooks are disabled for SessionEnd 2', async () => {
+      const fixture = await physical(
+        HookEventName.SessionEnd,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        false,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerSessionEndHook(
+        SessionEndReason.Exit,
+        authority,
+      );
+      expect(result).toBeUndefined();
+      expect(fixture.ran()).toBe(false);
+    });
 
-      it('should return undefined when hook system is not available for SessionEnd 2', async () => {
-        const fixture = await physical(
-          HookEventName.SessionEnd,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          0,
-        );
-        const authority = undefined;
-        const result = await triggerSessionEndHook(
-          SessionEndReason.Exit,
-          authority,
-        );
-        expect(result).toBeUndefined();
-        expect(fixture.ran()).toBe(false);
-      });
+    it('should return undefined when hook system is not available for SessionEnd 2', async () => {
+      const fixture = await physical(
+        HookEventName.SessionEnd,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        0,
+      );
+      const authority = undefined;
+      const result = await triggerSessionEndHook(
+        SessionEndReason.Exit,
+        authority,
+      );
+      expect(result).toBeUndefined();
+      expect(fixture.ran()).toBe(false);
+    });
 
-      it('should return undefined and not throw on hook error for SessionEnd 2', async () => {
-        const fixture = await physical(
-          HookEventName.SessionEnd,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          1,
-        );
-        const authority = fixture.execution;
-        const result = await triggerSessionEndHook(
-          SessionEndReason.Exit,
-          authority,
-        );
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.SessionEnd);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result).toBeUndefined();
-      });
+    it('should return undefined and not throw on hook error for SessionEnd 2', async () => {
+      const fixture = await physical(
+        HookEventName.SessionEnd,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        1,
+      );
+      const authority = fixture.execution;
+      const result = await triggerSessionEndHook(
+        SessionEndReason.Exit,
+        authority,
+      );
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.SessionEnd);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result).toBeUndefined();
+    });
 
-      it('should return BeforeAgentHookOutput when hook executes successfully', async () => {
-        const fixture = await physical(
-          HookEventName.BeforeAgent,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerBeforeAgentHook('User prompt', authority);
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.BeforeAgent);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result).toBeInstanceOf(BeforeAgentHookOutput);
-        expect(result?.getAdditionalContext()?.split(' ')).toHaveLength(2);
-        expect(input.prompt).toBe('User prompt');
-      });
+    it('should return BeforeAgentHookOutput when hook executes successfully', async () => {
+      const fixture = await physical(
+        HookEventName.BeforeAgent,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerBeforeAgentHook('User prompt', authority);
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.BeforeAgent);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result).toBeInstanceOf(BeforeAgentHookOutput);
+      expect(result?.getAdditionalContext()?.split(' ')).toHaveLength(2);
+      expect(input.prompt).toBe('User prompt');
+    });
 
-      it('should return undefined when hooks are disabled for BeforeAgent 3', async () => {
-        const fixture = await physical(
-          HookEventName.BeforeAgent,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          false,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerBeforeAgentHook('User prompt', authority);
-        expect(result).toBeUndefined();
-        expect(fixture.ran()).toBe(false);
-      });
+    it('should return undefined when hooks are disabled for BeforeAgent 3', async () => {
+      const fixture = await physical(
+        HookEventName.BeforeAgent,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        false,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerBeforeAgentHook('User prompt', authority);
+      expect(result).toBeUndefined();
+      expect(fixture.ran()).toBe(false);
+    });
 
-      it('should return undefined when hook system is not available for BeforeAgent 3', async () => {
-        const fixture = await physical(
-          HookEventName.BeforeAgent,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          0,
-        );
-        const authority = undefined;
-        const result = await triggerBeforeAgentHook('User prompt', authority);
-        expect(result).toBeUndefined();
-        expect(fixture.ran()).toBe(false);
-      });
+    it('should return undefined when hook system is not available for BeforeAgent 3', async () => {
+      const fixture = await physical(
+        HookEventName.BeforeAgent,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        0,
+      );
+      const authority = undefined;
+      const result = await triggerBeforeAgentHook('User prompt', authority);
+      expect(result).toBeUndefined();
+      expect(fixture.ran()).toBe(false);
+    });
 
-      it('should return undefined and not throw on hook error for BeforeAgent 3', async () => {
-        const fixture = await physical(
-          HookEventName.BeforeAgent,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          1,
-        );
-        const authority = fixture.execution;
-        const result = await triggerBeforeAgentHook('User prompt', authority);
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.BeforeAgent);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result).toBeUndefined();
-      });
+    it('should return undefined and not throw on hook error for BeforeAgent 3', async () => {
+      const fixture = await physical(
+        HookEventName.BeforeAgent,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        1,
+      );
+      const authority = fixture.execution;
+      const result = await triggerBeforeAgentHook('User prompt', authority);
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.BeforeAgent);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result).toBeUndefined();
+    });
 
-      it('should return AfterAgentHookOutput when hook executes successfully', async () => {
-        const fixture = await physical(
-          HookEventName.AfterAgent,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerAfterAgentHook(
-          'User prompt',
-          'Agent response',
-          false,
-          authority,
-        );
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.AfterAgent);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result).toBeInstanceOf(AfterAgentHookOutput);
-        expect(result?.getAdditionalContext()?.split(' ')).toHaveLength(2);
-        expect({
-          prompt: input.prompt,
-          response: input.prompt_response,
-          active: input.stop_hook_active,
-        }).toStrictEqual({
-          prompt: 'User prompt',
-          response: 'Agent response',
-          active: false,
-        });
+    it('should return AfterAgentHookOutput when hook executes successfully', async () => {
+      const fixture = await physical(
+        HookEventName.AfterAgent,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerAfterAgentHook(
+        'User prompt',
+        'Agent response',
+        false,
+        authority,
+      );
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.AfterAgent);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result).toBeInstanceOf(AfterAgentHookOutput);
+      expect(result?.getAdditionalContext()?.split(' ')).toHaveLength(2);
+      expect({
+        prompt: input.prompt,
+        response: input.prompt_response,
+        active: input.stop_hook_active,
+      }).toStrictEqual({
+        prompt: 'User prompt',
+        response: 'Agent response',
+        active: false,
       });
+    });
 
-      it('should return undefined when hooks are disabled for AfterAgent 4', async () => {
-        const fixture = await physical(
-          HookEventName.AfterAgent,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          false,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerAfterAgentHook(
-          'User prompt',
-          'Agent response',
-          false,
-          authority,
-        );
-        expect(result).toBeUndefined();
-        expect(fixture.ran()).toBe(false);
-      });
+    it('should return undefined when hooks are disabled for AfterAgent 4', async () => {
+      const fixture = await physical(
+        HookEventName.AfterAgent,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        false,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerAfterAgentHook(
+        'User prompt',
+        'Agent response',
+        false,
+        authority,
+      );
+      expect(result).toBeUndefined();
+      expect(fixture.ran()).toBe(false);
+    });
 
-      it('should return undefined when hook system is not available for AfterAgent 4', async () => {
-        const fixture = await physical(
-          HookEventName.AfterAgent,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          0,
-        );
-        const authority = undefined;
-        const result = await triggerAfterAgentHook(
-          'User prompt',
-          'Agent response',
-          false,
-          authority,
-        );
-        expect(result).toBeUndefined();
-        expect(fixture.ran()).toBe(false);
-      });
+    it('should return undefined when hook system is not available for AfterAgent 4', async () => {
+      const fixture = await physical(
+        HookEventName.AfterAgent,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        0,
+      );
+      const authority = undefined;
+      const result = await triggerAfterAgentHook(
+        'User prompt',
+        'Agent response',
+        false,
+        authority,
+      );
+      expect(result).toBeUndefined();
+      expect(fixture.ran()).toBe(false);
+    });
 
-      it('should return undefined and not throw on hook error for AfterAgent 4', async () => {
-        const fixture = await physical(
-          HookEventName.AfterAgent,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          1,
-        );
-        const authority = fixture.execution;
-        const result = await triggerAfterAgentHook(
-          'User prompt',
-          'Agent response',
-          false,
-          authority,
-        );
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.AfterAgent);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result).toBeUndefined();
-      });
+    it('should return undefined and not throw on hook error for AfterAgent 4', async () => {
+      const fixture = await physical(
+        HookEventName.AfterAgent,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        1,
+      );
+      const authority = fixture.execution;
+      const result = await triggerAfterAgentHook(
+        'User prompt',
+        'Agent response',
+        false,
+        authority,
+      );
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.AfterAgent);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result).toBeUndefined();
+    });
 
-      it('should support blocking decisions via shared hook output contract', async () => {
-        const fixture = await physical(
-          HookEventName.BeforeAgent,
-          { decision: 'block', reason: 'physical hook denial' },
-          true,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerBeforeAgentHook('User prompt', authority);
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.BeforeAgent);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result?.isBlockingDecision()).toBe(true);
-        expect(result?.getEffectiveReason()).toContain('denial');
-      });
+    it('should support blocking decisions via shared hook output contract', async () => {
+      const fixture = await physical(
+        HookEventName.BeforeAgent,
+        { decision: 'block', reason: 'physical hook denial' },
+        true,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerBeforeAgentHook('User prompt', authority);
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.BeforeAgent);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result?.isBlockingDecision()).toBe(true);
+      expect(result?.getEffectiveReason()).toContain('denial');
+    });
 
-      it('should support stop execution via shared hook output contract', async () => {
-        const fixture = await physical(
-          HookEventName.BeforeAgent,
-          { continue: false, stopReason: 'physical hook stopped' },
-          true,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerBeforeAgentHook('User prompt', authority);
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.BeforeAgent);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result?.shouldStopExecution()).toBe(true);
-        expect(result?.getEffectiveReason()).toContain('stopped');
-      });
+    it('should support stop execution via shared hook output contract', async () => {
+      const fixture = await physical(
+        HookEventName.BeforeAgent,
+        { continue: false, stopReason: 'physical hook stopped' },
+        true,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerBeforeAgentHook('User prompt', authority);
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.BeforeAgent);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result?.shouldStopExecution()).toBe(true);
+      expect(result?.getEffectiveReason()).toContain('stopped');
+    });
 
-      it('should support additional context via shared hook output contract', async () => {
-        const fixture = await physical(
-          HookEventName.BeforeAgent,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerBeforeAgentHook('User prompt', authority);
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.BeforeAgent);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result).toBeInstanceOf(BeforeAgentHookOutput);
-        expect(result?.getAdditionalContext()?.split(' ')).toHaveLength(2);
-        expect(input.prompt).toBe('User prompt');
-      });
+    it('should support additional context via shared hook output contract', async () => {
+      const fixture = await physical(
+        HookEventName.BeforeAgent,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerBeforeAgentHook('User prompt', authority);
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.BeforeAgent);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result).toBeInstanceOf(BeforeAgentHookOutput);
+      expect(result?.getAdditionalContext()?.split(' ')).toHaveLength(2);
+      expect(input.prompt).toBe('User prompt');
+    });
 
-      it('should support blocking decisions via shared hook output contract for AfterAgent 2', async () => {
-        const fixture = await physical(
-          HookEventName.AfterAgent,
-          { decision: 'block', reason: 'physical hook denial' },
-          true,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerAfterAgentHook(
-          'User prompt',
-          'Agent response',
-          false,
-          authority,
-        );
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.AfterAgent);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result?.isBlockingDecision()).toBe(true);
-        expect(result?.getEffectiveReason()).toContain('denial');
-      });
+    it('should support blocking decisions via shared hook output contract for AfterAgent 2', async () => {
+      const fixture = await physical(
+        HookEventName.AfterAgent,
+        { decision: 'block', reason: 'physical hook denial' },
+        true,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerAfterAgentHook(
+        'User prompt',
+        'Agent response',
+        false,
+        authority,
+      );
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.AfterAgent);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result?.isBlockingDecision()).toBe(true);
+      expect(result?.getEffectiveReason()).toContain('denial');
+    });
 
-      it('should support stop execution via shared hook output contract for AfterAgent 2', async () => {
-        const fixture = await physical(
-          HookEventName.AfterAgent,
-          { continue: false, stopReason: 'physical hook stopped' },
-          true,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerAfterAgentHook(
-          'User prompt',
-          'Agent response',
-          false,
-          authority,
-        );
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.AfterAgent);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result?.shouldStopExecution()).toBe(true);
-        expect(result?.getEffectiveReason()).toContain('stopped');
-      });
+    it('should support stop execution via shared hook output contract for AfterAgent 2', async () => {
+      const fixture = await physical(
+        HookEventName.AfterAgent,
+        { continue: false, stopReason: 'physical hook stopped' },
+        true,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerAfterAgentHook(
+        'User prompt',
+        'Agent response',
+        false,
+        authority,
+      );
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.AfterAgent);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result?.shouldStopExecution()).toBe(true);
+      expect(result?.getEffectiveReason()).toContain('stopped');
+    });
 
-      it('should support additional context via shared hook output contract for AfterAgent 2', async () => {
-        const fixture = await physical(
-          HookEventName.AfterAgent,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerAfterAgentHook(
-          'User prompt',
-          'Agent response',
-          false,
-          authority,
-        );
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.AfterAgent);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result).toBeInstanceOf(AfterAgentHookOutput);
-        expect(result?.getAdditionalContext()?.split(' ')).toHaveLength(2);
-        expect({
-          prompt: input.prompt,
-          response: input.prompt_response,
-          active: input.stop_hook_active,
-        }).toStrictEqual({
-          prompt: 'User prompt',
-          response: 'Agent response',
-          active: false,
-        });
+    it('should support additional context via shared hook output contract for AfterAgent 2', async () => {
+      const fixture = await physical(
+        HookEventName.AfterAgent,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerAfterAgentHook(
+        'User prompt',
+        'Agent response',
+        false,
+        authority,
+      );
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.AfterAgent);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result).toBeInstanceOf(AfterAgentHookOutput);
+      expect(result?.getAdditionalContext()?.split(' ')).toHaveLength(2);
+      expect({
+        prompt: input.prompt,
+        response: input.prompt_response,
+        active: input.stop_hook_active,
+      }).toStrictEqual({
+        prompt: 'User prompt',
+        response: 'Agent response',
+        active: false,
       });
+    });
 
-      it('forwards an explicit execution owner to the shared hook system', async () => {
-        const fixture = await physical(
-          HookEventName.PreCompress,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerPreCompressHook(
-          PreCompressTrigger.Manual,
-          authority,
-        );
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.PreCompress);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(input.trigger).toBe(PreCompressTrigger.Manual);
-        expect(result?.systemMessage?.split(' ')).toHaveLength(3);
-      });
+    it('forwards an explicit execution owner to the shared hook system', async () => {
+      const fixture = await physical(
+        HookEventName.PreCompress,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerPreCompressHook(
+        PreCompressTrigger.Manual,
+        authority,
+      );
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.PreCompress);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(input.trigger).toBe(PreCompressTrigger.Manual);
+      expect(result?.systemMessage?.split(' ')).toHaveLength(3);
+    });
 
-      it('should return undefined when hooks are disabled for PreCompress 5', async () => {
-        const fixture = await physical(
-          HookEventName.PreCompress,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          false,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerPreCompressHook(
-          PreCompressTrigger.Manual,
-          authority,
-        );
-        expect(result).toBeUndefined();
-        expect(fixture.ran()).toBe(false);
-      });
+    it('should return undefined when hooks are disabled for PreCompress 5', async () => {
+      const fixture = await physical(
+        HookEventName.PreCompress,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        false,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerPreCompressHook(
+        PreCompressTrigger.Manual,
+        authority,
+      );
+      expect(result).toBeUndefined();
+      expect(fixture.ran()).toBe(false);
+    });
 
-      it('should return undefined when hook system is not available for PreCompress 5', async () => {
-        const fixture = await physical(
-          HookEventName.PreCompress,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          0,
-        );
-        const authority = undefined;
-        const result = await triggerPreCompressHook(
-          PreCompressTrigger.Manual,
-          authority,
-        );
-        expect(result).toBeUndefined();
-        expect(fixture.ran()).toBe(false);
-      });
+    it('should return undefined when hook system is not available for PreCompress 5', async () => {
+      const fixture = await physical(
+        HookEventName.PreCompress,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        0,
+      );
+      const authority = undefined;
+      const result = await triggerPreCompressHook(
+        PreCompressTrigger.Manual,
+        authority,
+      );
+      expect(result).toBeUndefined();
+      expect(fixture.ran()).toBe(false);
+    });
 
-      it('should pass trigger value through to firePreCompressEvent', async () => {
-        const fixture = await physical(
-          HookEventName.PreCompress,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          0,
-        );
-        const authority = fixture.execution;
-        const result = await triggerPreCompressHook(
-          PreCompressTrigger.Manual,
-          authority,
-        );
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.PreCompress);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(input.trigger).toBe(PreCompressTrigger.Manual);
-        expect(result?.systemMessage?.split(' ')).toHaveLength(3);
-      });
+    it('should pass trigger value through to firePreCompressEvent', async () => {
+      const fixture = await physical(
+        HookEventName.PreCompress,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        0,
+      );
+      const authority = fixture.execution;
+      const result = await triggerPreCompressHook(
+        PreCompressTrigger.Manual,
+        authority,
+      );
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.PreCompress);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(input.trigger).toBe(PreCompressTrigger.Manual);
+      expect(result?.systemMessage?.split(' ')).toHaveLength(3);
+    });
 
-      it('should return undefined and not throw on hook error (fail-open)', async () => {
-        const fixture = await physical(
-          HookEventName.PreCompress,
-          {
-            continue: true,
-            systemMessage: 'physical hook feedback',
-            hookSpecificOutput: { additionalContext: 'workspace context' },
-          },
-          true,
-          1,
-        );
-        const authority = fixture.execution;
-        const result = await triggerPreCompressHook(
-          PreCompressTrigger.Manual,
-          authority,
-        );
-        const input = await fixture.input();
-        expect(input.hook_event_name).toBe(HookEventName.PreCompress);
-        expect(input.session_id).toBe('explicit-session');
-        expect(input.transcript_path).toBe(input.cwd + '/transcript.jsonl');
-        expect(result).toBeUndefined();
-      });
-    },
-  );
+    it('should return undefined and not throw on hook error (fail-open)', async () => {
+      const fixture = await physical(
+        HookEventName.PreCompress,
+        {
+          continue: true,
+          systemMessage: 'physical hook feedback',
+          hookSpecificOutput: { additionalContext: 'workspace context' },
+        },
+        true,
+        1,
+      );
+      const authority = fixture.execution;
+      const result = await triggerPreCompressHook(
+        PreCompressTrigger.Manual,
+        authority,
+      );
+      const input = await fixture.input();
+      expect(input.hook_event_name).toBe(HookEventName.PreCompress);
+      expect(input.session_id).toBe('explicit-session');
+      expect(input.transcript_path).toBe(join(input.cwd, 'transcript.jsonl'));
+      expect(result).toBeUndefined();
+    });
+  });
 });

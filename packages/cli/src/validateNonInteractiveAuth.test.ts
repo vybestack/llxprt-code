@@ -111,9 +111,7 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
       config,
       settings,
       cleanup,
-      {
-        hasActiveProvider: () => configuredState.get(config) ?? false,
-      },
+      () => configuredState.get(config) ?? false,
       (key, value) => settingsOwner.writeUserParameter(key, value),
     );
 

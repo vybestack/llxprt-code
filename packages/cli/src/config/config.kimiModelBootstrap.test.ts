@@ -1,18 +1,24 @@
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import type { AgentProfilePreflight } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import type { Settings } from './settings.js';
-import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 import { ExtensionStorage } from './extension.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { loadCliConfigWithPreflight } from '../__tests__/load-cli-config-fixture.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
 void vi.mock('@vybestack/llxprt-code-core', () => ({
@@ -34,16 +40,19 @@ describe('loadCliConfig provider alias model bootstrap', () => {
     process.argv = ['node', 'script.js', '--provider', 'kimi'];
     const argv = await parseArguments({} as Settings);
 
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
 
     expect(config.getProvider()).toBe('kimi');
     expect(config.getModel()).toBe('kimi-for-coding');
@@ -53,52 +62,43 @@ describe('loadCliConfig provider alias model bootstrap', () => {
     const argv = await parseArguments({} as Settings);
     const extensions = new ExtensionEnablementManager(
       ExtensionStorage.getUserExtensionsDir(),
-      argv.extensions,
+      { enabledOverride: argv.extensions },
     );
     const firstSettings = new SettingsService();
     const secondSettings = new SettingsService();
     const firstOwner = new SessionSettingsOwner(firstSettings);
     const secondOwner = new SessionSettingsOwner(secondSettings);
-    let firstFiles: object | undefined;
-    let secondFiles: object | undefined;
-    let firstManager: RuntimeProviderManager | undefined;
-    let secondManager: RuntimeProviderManager | undefined;
-    const first = await loadCliConfig(
-      {},
-      [],
-      extensions,
-      'first-session',
+    let firstRoot: AgentProfilePreflight | undefined;
+    let secondRoot: AgentProfilePreflight | undefined;
+
+    const first = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: extensions,
+      sessionId: 'first-session',
       argv,
-      process.cwd(),
-      {
-        settingsService: firstSettings,
-        sessionSettingsOwner: firstOwner,
-        onProviderFilesReady: (files) => {
-          firstFiles = files;
-        },
-        onProviderManagerReady: (manager) => {
-          firstManager = manager;
-        },
+      cwd: process.cwd(),
+      settingsService: firstSettings,
+      settingsOwner: firstOwner,
+      authority: new CredentialAuthority(),
+      onPreflightReady: (root) => {
+        firstRoot = root;
       },
-    );
-    const second = await loadCliConfig(
-      {},
-      [],
-      extensions,
-      'second-session',
+    });
+    const second = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: extensions,
+      sessionId: 'second-session',
       argv,
-      process.cwd(),
-      {
-        settingsService: secondSettings,
-        sessionSettingsOwner: secondOwner,
-        onProviderFilesReady: (files) => {
-          secondFiles = files;
-        },
-        onProviderManagerReady: (manager) => {
-          secondManager = manager;
-        },
+      cwd: process.cwd(),
+      settingsService: secondSettings,
+      settingsOwner: secondOwner,
+      authority: new CredentialAuthority(),
+      onPreflightReady: (root) => {
+        secondRoot = root;
       },
-    );
+    });
     try {
       expect(() =>
         firstOwner.assertSettingsIdentity(firstSettings),
@@ -106,12 +106,10 @@ describe('loadCliConfig provider alias model bootstrap', () => {
       expect(() =>
         secondOwner.assertSettingsIdentity(secondSettings),
       ).not.toThrow();
-      expect(firstManager).toBeDefined();
-      expect(secondManager).toBeDefined();
-      expect(firstManager).not.toBe(secondManager);
-      expect(firstFiles).toBeDefined();
-      expect(secondFiles).toBeDefined();
-      expect(firstFiles).not.toBe(secondFiles);
+      expect(firstRoot?.getActiveProviderName()).toBe('kimi');
+      expect(secondRoot?.getActiveProviderName()).toBe('kimi');
+      expect(firstRoot?.captureProviderFiles()).toBeDefined();
+      expect(secondRoot?.captureProviderFiles()).toBeDefined();
       expect(first.getProvider()).toBe('kimi');
       expect(second.getProvider()).toBe('kimi');
       firstOwner.chooseModel('kimi-first');
@@ -119,7 +117,7 @@ describe('loadCliConfig provider alias model bootstrap', () => {
       expect(firstOwner.readSelectedModel()).toBe('kimi-first');
       expect(secondOwner.readSelectedModel()).toBe('kimi-second');
       await first.dispose();
-      expect(secondManager?.getActiveProvider()?.name).toBe('kimi');
+      expect(secondRoot?.getActiveProviderName()).toBe('kimi');
       expect(secondOwner.readSelectedModel()).toBe('kimi-second');
     } finally {
       await firstOwner.dispose();

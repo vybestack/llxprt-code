@@ -50,6 +50,7 @@ function harnessFor(history: HistoryService, state: State): FallbackHarness {
       install,
       prompt,
       runtime,
+      undefined,
       history,
       async () => ({
         provider: transport,

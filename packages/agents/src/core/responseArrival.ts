@@ -7,7 +7,7 @@ import type {
 import type { ToolCallBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { StreamProcessorRuntime } from './chatSessionPorts.js';
 import { resolveGeneratingModel } from './generatingModelResolver.js';
 import { prependAsyncGenerator } from '@vybestack/llxprt-code-core/utils/asyncIterator.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
@@ -173,7 +173,7 @@ export function bindResponseArrival(
 }
 export function openResponseArrival(
   history: HistoryService,
-  runtime: AgentRuntimeContext,
+  runtime: Pick<StreamProcessorRuntime, 'state' | 'provider'>,
   submissionId: string,
   turnId: string,
   origin?: object,

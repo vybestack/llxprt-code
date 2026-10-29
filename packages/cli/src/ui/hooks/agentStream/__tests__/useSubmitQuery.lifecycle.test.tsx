@@ -1,8 +1,30 @@
+import { openRouteAAgent } from '../../../../../../agents/src/api/__tests__/helpers/route-a-agent.js';
+import { useFakeResponsesReplay } from '../../../../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { act } from 'react';
+import { renderHook, waitFor } from '../../../../__tests__/render.js';
+import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
+import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
+import { readFile } from 'node:fs/promises';
+import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
+import { Agent } from '@vybestack/llxprt-code-agents';
+import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
+import { createDeferred } from './createDeferred.js';
+import {
+  createLifecycleDeps,
+  createMockAgentClient,
+  createLifecyclePerfHarness,
+  buildLifecycleHookDeps,
+  type LifecycleDeps,
+} from './lifecyclePerfFixtures.js';
+import { submissionOperations } from './submission-operations.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 // Enable React's act() environment so hook state updates are flushed.
 (
@@ -17,25 +39,6 @@
  * (runStream, prepareQueryForAgent, event handlers) — the lifecycle, sink, and
  * retention are real.
  */
-
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { act } from 'react';
-import { renderHook, waitFor } from '../../../../__tests__/render.js';
-import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
-import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
-import { withRecordingLifetimeFixture } from '../../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
-import { readFile } from 'node:fs/promises';
-import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
-import { createDeferred } from './createDeferred.js';
-import {
-  createLifecycleDeps,
-  createMockAgentClient,
-  createLifecyclePerfHarness,
-  buildLifecycleHookDeps,
-  type LifecycleDeps,
-} from './lifecyclePerfFixtures.js';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
 
@@ -103,9 +106,8 @@ void vi.mock('../agentEventDispatcher.js', () => ({
 const harness = createLifecyclePerfHarness();
 
 function renderUseSubmitQuery(deps: LifecycleDeps) {
-  return renderHook(() =>
-    useSubmitQuery(buildLifecycleHookDeps(deps, harness.registry)),
-  );
+  const hookDeps = buildLifecycleHookDeps(deps, harness.registry);
+  return renderHook(() => useSubmitQuery(hookDeps));
 }
 
 function drainAndRead() {
@@ -115,6 +117,7 @@ function drainAndRead() {
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () => {
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   beforeEach(async () => {
     await harness.setup();
     // Reset preparation rejection controls between tests.
@@ -129,7 +132,9 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
     await harness.cleanup();
   });
   it('completes a submitted turn and flushes only its Agent owner recording', async () => {
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    const route = await openRouteAAgent({ config: { interactive: true } });
+    try {
+      const { agent } = route;
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
       ]);
@@ -148,9 +153,11 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
       const rawFlush = vi.fn();
       const hookDeps = {
         ...buildLifecycleHookDeps(deps, harness.registry),
-        agent,
-        recordingOwner: 'agent' as const,
-        recordingIntegration: { flushAtTurnBoundary: rawFlush } as never,
+        ...submissionOperations(
+          agent,
+          { flushAtTurnBoundary: rawFlush } as never,
+          'agent' as const,
+        ),
       };
       const { result, unmount } = renderHook(() => useSubmitQuery(hookDeps));
       await act(async () => {
@@ -160,7 +167,9 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
       expect(agent.session.getRecording().enabled).toBe(true);
       expect(rawFlush).not.toHaveBeenCalled();
       unmount();
-    });
+    } finally {
+      await route.close();
+    }
   }, 30000);
 
   it('writes one record with status "completed" when a turn succeeds', async () => {
@@ -335,8 +344,15 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
     });
 
     const hookDeps: UseSubmitQueryDeps = {
-      runtime: createStreamRuntimeForTest(),
-      agent: createMockAgentClient() as unknown as Agent,
+      ...{ runtime: createStreamRuntimeForTest() },
+      ...streamPolicyOperations(createStreamRuntimeForTest()),
+      ...submissionOperations(
+        createMockAgentClient() as unknown as Agent,
+        {
+          flushAtTurnBoundary: vi.fn(),
+        } as unknown as RecordingIntegration,
+        undefined,
+      ),
       addItem: vi.fn().mockReturnValue(1),
       settings: {} as never,
       onDebugMessage: vi.fn(),
@@ -378,9 +394,7 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
       submitQueryRef: { current: null },
       isResponding: false,
       streamingState: StreamingState.Idle,
-      recordingIntegration: {
-        flushAtTurnBoundary: vi.fn(),
-      } as unknown as RecordingIntegration,
+
       // operationLifecycle intentionally omitted — perf disabled.
     };
 

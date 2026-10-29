@@ -43,8 +43,8 @@ describe('runExitCleanup overlapping callers (issue #3517)', () => {
 
   it('does not settle a second caller until the first caller has finished PTY group teardown', async () => {
     const teardown = deferred();
-    vi.spyOn(ShellExecutionService, 'destroyAllPtys').mockReturnValue(
-      teardown.promise,
+    vi.spyOn(ShellExecutionService, 'destroyAllPtys').mockImplementation(
+      () => teardown.promise,
     );
 
     let secondSettled = false;
@@ -65,7 +65,7 @@ describe('runExitCleanup overlapping callers (issue #3517)', () => {
     const teardown = deferred();
     const destroyAll = vi
       .spyOn(ShellExecutionService, 'destroyAllPtys')
-      .mockReturnValue(teardown.promise);
+      .mockImplementation(() => teardown.promise);
     let cleanupRuns = 0;
     registerCleanup(() => {
       cleanupRuns++;
@@ -81,8 +81,8 @@ describe('runExitCleanup overlapping callers (issue #3517)', () => {
 
   it('does not run the exit callback of an overlapping SIGINT handler before PTY teardown completes', async () => {
     const teardown = deferred();
-    vi.spyOn(ShellExecutionService, 'destroyAllPtys').mockReturnValue(
-      teardown.promise,
+    vi.spyOn(ShellExecutionService, 'destroyAllPtys').mockImplementation(
+      () => teardown.promise,
     );
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     let sigintListener: (() => void) | undefined;

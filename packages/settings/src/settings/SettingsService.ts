@@ -115,10 +115,15 @@ function copyStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((name) => String(name)) : [];
 }
 
+export type SessionOverrideReads = Pick<
+  SessionSettingsOverlay,
+  'has' | 'get' | 'toObject'
+>;
+
 export class SettingsService extends EventEmitter {
   private settings: EphemeralSettings;
-  private readonly sessionOverlay: SessionSettingsOverlay;
-  private readonly isSessionOverlayOwner: boolean;
+  private sessionOverlay: SessionOverrideReads;
+  private isSessionOverlayOwner: boolean;
   private eventEmitter: EventEmitter;
 
   constructor(options: SettingsServiceInit = {}) {
@@ -132,6 +137,23 @@ export class SettingsService extends EventEmitter {
     this.sessionOverlay =
       options.sessionSource?.sessionOverlay ?? new SessionSettingsOverlay();
     this.eventEmitter = new EventEmitter();
+  }
+
+  static withReadOnlySessionOverrides(
+    reads: SessionOverrideReads,
+  ): SettingsService {
+    const settings = new SettingsService();
+    settings.sessionOverlay = reads;
+    settings.isSessionOverlayOwner = false;
+    return settings;
+  }
+
+  readSessionOverrides(): SessionOverrideReads {
+    return {
+      has: (key) => this.sessionOverlay.has(key),
+      get: (key) => this.sessionOverlay.get(key),
+      toObject: () => this.sessionOverlay.toObject(),
+    };
   }
 
   get(key: string): unknown {
@@ -189,10 +211,10 @@ export class SettingsService extends EventEmitter {
    * shared overlay.
    */
   setSessionScoped(key: string, value: unknown): void {
-    this.assertSessionOverlayOwner(key);
+    const overlay = this.requireSessionOverlayOwner(key);
     const canonicalKey = assertSessionScopedKey(key);
     const oldValue = this.get(key);
-    this.sessionOverlay.set(canonicalKey, value);
+    overlay.set(canonicalKey, value);
     const effectiveNewValue = this.get(key);
     if (oldValue === effectiveNewValue) {
       return;
@@ -225,10 +247,10 @@ export class SettingsService extends EventEmitter {
    * get a fail-fast error.
    */
   clearSessionScoped(key: string): void {
-    this.assertSessionOverlayOwner(key);
+    const overlay = this.requireSessionOverlayOwner(key);
     const canonicalKey = assertSessionScopedKey(key);
     const oldValue = this.get(key);
-    this.sessionOverlay.delete(canonicalKey);
+    overlay.delete(canonicalKey);
     const effectiveNewValue = this.get(key);
     if (oldValue === effectiveNewValue) {
       return;
@@ -240,14 +262,18 @@ export class SettingsService extends EventEmitter {
     });
   }
 
-  private assertSessionOverlayOwner(key: string): void {
-    if (!this.isSessionOverlayOwner) {
+  private requireSessionOverlayOwner(key: string): SessionSettingsOverlay {
+    if (
+      !this.isSessionOverlayOwner ||
+      !(this.sessionOverlay instanceof SessionSettingsOverlay)
+    ) {
       throw new Error(
         `Cannot mutate session-scoped setting "${key}": this SettingsService ` +
           'is a read-only consumer of a shared session overlay. Only the ' +
           'foreground owner may write or clear session-scoped settings.',
       );
     }
+    return this.sessionOverlay;
   }
 
   getProviderSettings(provider: string): Record<string, unknown> {

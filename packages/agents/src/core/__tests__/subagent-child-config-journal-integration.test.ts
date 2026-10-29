@@ -1,3 +1,5 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,11 +17,12 @@ import {
   coreEvents,
   CoreEvent,
 } from '@vybestack/llxprt-code-core/utils/events.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
 import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { buildAgentClientFactory } from '../../api/agentBootstrap.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { childJournalExtension } from './childaccept-fixture.js';
 import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
 import { SessionLockManager } from '@vybestack/llxprt-code-core/recording/SessionLockManager.js';
@@ -65,7 +68,7 @@ async function verifyJournalDisposal(chatsDir: string): Promise<void> {
 
 describe('child Config and journal ownership', () => {
   it.each([false, true])(
-    'disposes the isolated Config while the journal is still open (scope failure: %s)',
+    'disposes the isolated client and its subscriptions while the journal is still open (scope failure: %s)',
     async (scopeFails) => {
       const dir = await mkdtemp(join(tmpdir(), 'critical-child-journal-'));
       const profiles = new ProfileManager(join(dir, 'profiles'));
@@ -88,11 +91,16 @@ describe('child Config and journal ownership', () => {
       const failure = new Error('scope creation sentinel');
       const { factory } = createScopeFactory();
       if (scopeFails) factory.mockRejectedValue(failure);
-      let journalExistedDuringConfigDispose = false;
+      let journalExistedDuringClientDispose = false;
+      let activeSubscriptions = 0;
+      let activeClient: AgentClientContract | undefined;
+      let readChildSettings: (() => unknown) | undefined;
+      const buildClient = buildAgentClientFactory();
       const priorSubscriptions = coreEvents.listenerCount(
         CoreEvent.ModelChanged,
       );
-      const orchestrator = new SubagentOrchestrator({
+      const orchestrator = createTestChildOrchestrator({
+        credentialAuthority: new CredentialAuthority(),
         workspaceTrust: foregroundSettings.workspaceTrust,
         createChildSettings: () =>
           foregroundSettings.settingsOwner.createChildStore(),
@@ -107,26 +115,48 @@ describe('child Config and journal ownership', () => {
         foregroundConfig: foreground,
         messageBus: new MessageBus(),
         scopeFactory: factory,
+        agentClientFactory: (...args) => {
+          const client = buildClient(...args);
+          activeClient = client;
+          const bind = client.bindModelNotifications.bind(client);
+          client.bindModelNotifications = (subscribe) =>
+            bind((listener) => {
+              const release = subscribe(listener);
+              activeSubscriptions++;
+              return () => {
+                release();
+                activeSubscriptions--;
+              };
+            });
+          return client;
+        },
         runtimeLoader: async (options) => {
           const history = options.overrides?.historyService;
           if (!history)
             throw new Error('Child must use the real journal-backed history');
           const childConfig = options.profile.config;
+          readChildSettings = options.profile.readRuntimeSettings;
+          if (readChildSettings === undefined)
+            throw new Error('Child settings reader missing');
+          expect(readChildSettings()).toBeDefined();
           expect(childConfig).not.toBe(foreground);
           expect(options.profile.state.sessionId).not.toBe(
             foreground.getSessionId(),
           );
-          expect(
-            coreEvents.listenerCount(CoreEvent.ModelChanged),
-          ).toBeGreaterThan(priorSubscriptions);
-          const dispose = childConfig.dispose.bind(childConfig);
-          childConfig.dispose = async (): Promise<void> => {
-            childConfig.dispose = dispose;
+          expect(activeSubscriptions).toBe(1);
+          expect(coreEvents.listenerCount(CoreEvent.ModelChanged)).toBe(
+            priorSubscriptions,
+          );
+          const client = activeClient;
+          if (client === undefined) throw new Error('Child client missing');
+          const dispose = client.dispose.bind(client);
+          client.dispose = async (): Promise<void> => {
+            client.dispose = dispose;
             const paths = await readdir(chatsDir);
             const path = history.journalPath();
             if (path === null)
-              throw new Error('Child journal missing during Config disposal');
-            journalExistedDuringConfigDispose ||= paths.some(
+              throw new Error('Child journal missing during client disposal');
+            journalExistedDuringClientDispose ||= paths.some(
               (p) =>
                 p.endsWith(childJournalExtension()) &&
                 existsSync(join(chatsDir, p)),
@@ -144,13 +174,15 @@ describe('child Config and journal ownership', () => {
               foreground.getSessionId(),
             );
             await dispose();
+            expect(activeSubscriptions).toBe(0);
+            expect(existsSync(path)).toBe(true);
           };
           return loadAgentRuntime(options);
         },
       });
       try {
         const outcome = await orchestrator
-          .launch({ name: 'critical-child' })
+          .launch({ name: 'critical-child' }, new AbortController().signal)
           .then(
             async (result) => {
               await result.dispose();
@@ -160,7 +192,9 @@ describe('child Config and journal ownership', () => {
             (error: unknown) => error,
           );
         expect(outcome).toBe(scopeFails ? failure : undefined);
-        expect(journalExistedDuringConfigDispose).toBe(true);
+        expect(journalExistedDuringClientDispose).toBe(true);
+        expect(activeSubscriptions).toBe(0);
+        expect(readChildSettings).toThrow('closed');
         expect(coreEvents.listenerCount(CoreEvent.ModelChanged)).toBe(
           priorSubscriptions,
         );

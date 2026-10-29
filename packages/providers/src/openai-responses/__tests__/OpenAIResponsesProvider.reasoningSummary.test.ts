@@ -1,3 +1,6 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -51,7 +54,6 @@ function registerReasoningSummaryCase1(): void {
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-responses-reasoning-summary-runtime',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -86,6 +88,7 @@ function registerReasoningSummaryCase1(): void {
       );
 
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         runtime,
@@ -129,7 +132,6 @@ function registerReasoningSummaryCase2(): void {
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-responses-reasoning-summary-runtime-2',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -164,6 +166,7 @@ function registerReasoningSummaryCase2(): void {
       );
 
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         runtime,
@@ -205,7 +208,6 @@ function registerReasoningSummaryCase3(): void {
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-responses-reasoning-summary-runtime-3',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -240,6 +242,7 @@ function registerReasoningSummaryCase3(): void {
       );
 
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         runtime,
@@ -281,7 +284,6 @@ function registerReasoningSummaryCase4(): void {
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-responses-reasoning-summary-runtime-4',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -316,6 +318,7 @@ function registerReasoningSummaryCase4(): void {
       );
 
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         runtime,
@@ -359,7 +362,6 @@ function registerReasoningSummaryCase5(): void {
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'openai-responses-reasoning-summary-runtime-5',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -394,6 +396,7 @@ function registerReasoningSummaryCase5(): void {
       );
 
       const options = streamCallOptions({
+        fetch: requestFetch,
         providerName: provider.name,
         settings,
         runtime,

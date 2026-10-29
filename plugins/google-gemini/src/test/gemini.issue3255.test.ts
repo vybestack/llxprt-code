@@ -8,10 +8,13 @@ import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import { buildRequestConfig } from '../gemini/geminiRequestBuilding.js';
 import { extractReasoningConfig } from '../gemini/geminiReasoningConfig.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 interface WarningEntry {
   readonly message: string;
@@ -41,7 +44,6 @@ interface GeminiFixture {
 }
 
 function createOptions(fixture: GeminiFixture): NormalizedGenerateChatOptions {
-  const settings = new SettingsService();
   const ephemeralsSnapshot = {
     ...(fixture.legacyEphemerals ?? {}),
     ...(fixture.modelBehavior ?? {}),
@@ -49,9 +51,9 @@ function createOptions(fixture: GeminiFixture): NormalizedGenerateChatOptions {
   };
   const runtime = createProviderRuntimeContext({
     runtimeId: 'gemini-issue3255-test',
-    settingsService: settings,
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
 

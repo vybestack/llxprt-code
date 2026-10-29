@@ -26,7 +26,6 @@ import {
   isNetworkTransientError,
   isOverloadError,
 } from '../../utils/retry.js';
-import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
 import type { DebugLogger } from '../../debug/DebugLogger.js';
 import type { RuntimeProvider as IProvider } from '../../runtime/contracts/RuntimeProvider.js';
@@ -140,10 +139,29 @@ export interface CompressionProviderResult {
 // Core interfaces
 // ---------------------------------------------------------------------------
 
+/**
+ * What a compression strategy reads from the session runtime: the settings
+ * that bound the split, the headroom it may leave, and the provider runtime
+ * snapshot a verification call needs. Strategies resolve these through
+ * {@link CompressionContext.runtimeContext}; no strategy reads the wider
+ * agent runtime.
+ */
+export interface CompressionStrategyRuntime {
+  readonly ephemerals: {
+    compressionThreshold(): number;
+    contextLimit(): number;
+    preserveThreshold(): number;
+    topPreserveThreshold(): number;
+    compressionProfile(): string | undefined;
+    densityCompressHeadroom(): number;
+  };
+  readonly providerRuntime: ProviderRequestCollaborators;
+}
+
 export interface CompressionContext {
   readonly modelParameters?: AdmittedModelParameters;
   readonly history: readonly IContent[];
-  readonly runtimeContext: AgentRuntimeContext;
+  readonly runtimeContext: CompressionStrategyRuntime;
   readonly runtimeState: AgentRuntimeState;
   readonly estimateTokens: (contents: readonly IContent[]) => Promise<number>;
   readonly currentTokenCount: number;

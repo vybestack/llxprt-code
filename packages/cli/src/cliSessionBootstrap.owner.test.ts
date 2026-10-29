@@ -12,7 +12,7 @@ import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core';
 import { readRecordedFacts } from './__tests__/journal-recording.js';
 import {
-  setupOwnerSessionRecording,
+  setupOwnerSessionRecording as setupOwnerSessionRecordingCore,
   type OwnerResumedRows,
 } from './cliSessionBootstrap.js';
 import {
@@ -42,6 +42,23 @@ async function resumedRowsContain(
       return true;
   }
   return false;
+}
+
+function setupOwnerSessionRecording(
+  config: Parameters<typeof setupOwnerSessionRecordingCore>[0],
+  agent: Agent,
+  argv: Parameters<typeof setupOwnerSessionRecordingCore>[3],
+  selection: Parameters<typeof setupOwnerSessionRecordingCore>[4],
+  warnings?: Parameters<typeof setupOwnerSessionRecordingCore>[5],
+) {
+  return setupOwnerSessionRecordingCore(
+    config,
+    agent.session,
+    agent.session.listBrowserTargetsDetailed.bind(agent.session),
+    argv,
+    selection,
+    warnings,
+  ).then(({ resumedBoot }) => resumedBoot);
 }
 
 describe('foreground noninteractive recording owner', () => {

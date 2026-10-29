@@ -44,14 +44,14 @@ describe('isGitHubRepository', () => {
     ).mockImplementation((): string => {
       throw new Error('oops');
     });
-    expect(isGitHubRepository()).toBe(false);
+    expect(isGitHubRepository(process.cwd())).toBe(false);
   });
 
   it('returns false if the remote is not github.com', async () => {
     (
       child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockReturnValueOnce('https://gitlab.com');
-    expect(isGitHubRepository()).toBe(false);
+    expect(isGitHubRepository(process.cwd())).toBe(false);
   });
 
   it('returns true if the remote is github.com', async () => {
@@ -60,7 +60,7 @@ describe('isGitHubRepository', () => {
       origin  https://github.com/acoliver/llxprt-code (fetch)
       origin  https://github.com/acoliver/llxprt-code (push)
     `);
-    expect(isGitHubRepository()).toBe(true);
+    expect(isGitHubRepository(process.cwd())).toBe(true);
   });
 });
 
@@ -80,7 +80,7 @@ describe('getGitHubRepoInfo', () => {
       throw new Error('oops');
     });
     expect(() => {
-      getGitHubRepoInfo();
+      getGitHubRepoInfo(process.cwd());
     }).toThrowError(/oops/);
   });
 
@@ -89,7 +89,7 @@ describe('getGitHubRepoInfo', () => {
       child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockReturnValueOnce('');
     expect(() => {
-      getGitHubRepoInfo();
+      getGitHubRepoInfo(process.cwd());
     }).toThrowError(/Owner & repo could not be extracted from remote URL/);
   });
 
@@ -97,7 +97,10 @@ describe('getGitHubRepoInfo', () => {
     (
       child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockReturnValueOnce('https://github.com/owner/repo.git ');
-    expect(getGitHubRepoInfo()).toStrictEqual({ owner: 'owner', repo: 'repo' });
+    expect(getGitHubRepoInfo(process.cwd())).toStrictEqual({
+      owner: 'owner',
+      repo: 'repo',
+    });
   });
 });
 
@@ -117,7 +120,7 @@ describe('getGitRepoRoot', () => {
       throw new Error('oops');
     });
     expect(() => {
-      getGitRepoRoot();
+      getGitRepoRoot(process.cwd());
     }).toThrowError(/oops/);
   });
 
@@ -126,7 +129,7 @@ describe('getGitRepoRoot', () => {
       child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockReturnValueOnce('');
     expect(() => {
-      getGitRepoRoot();
+      getGitRepoRoot(process.cwd());
     }).toThrowError(/Git repo returned empty value/);
   });
 
@@ -134,7 +137,7 @@ describe('getGitRepoRoot', () => {
     (
       child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockReturnValueOnce('/path/to/git/repo');
-    expect(getGitRepoRoot()).toBe('/path/to/git/repo');
+    expect(getGitRepoRoot(process.cwd())).toBe('/path/to/git/repo');
   });
 });
 
@@ -149,9 +152,9 @@ describe('getLatestRelease', () => {
 
   it('throws an error if the fetch fails', async () => {
     global.fetch = withFetchPreconnect(vi.fn(() => Promise.reject('nope')));
-    await expect(getLatestGitHubRelease()).rejects.toThrowError(
-      /Unable to determine the latest/,
-    );
+    await expect(
+      getLatestGitHubRelease(undefined, new AbortController().signal),
+    ).rejects.toThrowError(/Unable to determine the latest/);
   });
 
   it('throws an error if the fetch does not return a json body', async () => {
@@ -163,9 +166,9 @@ describe('getLatestRelease', () => {
         } as Response),
       ),
     );
-    await expect(getLatestGitHubRelease()).rejects.toThrowError(
-      /Unable to determine the latest/,
-    );
+    await expect(
+      getLatestGitHubRelease(undefined, new AbortController().signal),
+    ).rejects.toThrowError(/Unable to determine the latest/);
   });
 
   it('returns the release version', async () => {
@@ -177,7 +180,9 @@ describe('getLatestRelease', () => {
         } as Response),
       ),
     );
-    await expect(getLatestGitHubRelease()).resolves.toBe('v1.2.3');
+    await expect(
+      getLatestGitHubRelease(undefined, new AbortController().signal),
+    ).resolves.toBe('v1.2.3');
   });
 });
 

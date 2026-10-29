@@ -245,7 +245,6 @@ function workloadRuntime(
 ): ReturnType<typeof createAgentRuntimeContext> {
   const {
     config,
-    settings,
     settingsOwner,
     tokenizerFactory,
     history,
@@ -255,8 +254,6 @@ function workloadRuntime(
   } = input;
   const runtimeId = randomUUID();
   const providerRuntime = createProviderRuntimeContext({
-    settingsService: settings,
-    config,
     runtimeId,
   });
   return createAgentRuntimeContext({
@@ -268,6 +265,8 @@ function workloadRuntime(
         name,
         parameters,
         signal,
+        undefined,
+        globalThis.fetch,
       ),
     state: {
       runtimeId,
@@ -280,7 +279,13 @@ function workloadRuntime(
     history,
     settings: { contextLimit },
     providerRuntime,
-    provider: { getActiveProvider: () => provider, setActiveProvider() {} },
+    provider: {
+      getProviderKeys: () => {
+        throw new Error('Fixture has no credential key authority');
+      },
+      getActiveProvider: () => provider,
+      setActiveProvider() {},
+    },
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
     telemetry: {
       logApiRequest() {},

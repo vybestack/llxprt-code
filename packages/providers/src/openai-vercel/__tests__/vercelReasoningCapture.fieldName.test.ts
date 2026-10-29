@@ -16,7 +16,6 @@
  * @issue #2488 — Configurable reasoning field name for Ollama (delta.reasoning)
  */
 
-import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
 import { describe, it, expect } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
@@ -320,7 +319,6 @@ describe('parseReasoningFromSseStream — configurable field name (#2488) / prot
 
 describe('parseReasoningFromSseStream — configurable field name (#2488) / large reasoning and cancellation', () => {
   it('stops the detached parser when the request signal aborts', async () => {
-    const originalFetch = globalThis.fetch;
     const encoder = new TextEncoder();
     const response = new Response(
       new ReadableStream<Uint8Array>({
@@ -334,11 +332,12 @@ describe('parseReasoningFromSseStream — configurable field name (#2488) / larg
       }),
       { headers: { 'content-type': 'text/event-stream' } },
     );
-    globalThis.fetch = withFetchPreconnect(
+    const captureBuffer = createCaptureBuffer();
+    const captureFetch = createReasoningCaptureFetch(
+      captureBuffer,
+      logger,
       async (): Promise<Response> => response,
     );
-    const captureBuffer = createCaptureBuffer();
-    const captureFetch = createReasoningCaptureFetch(captureBuffer, logger);
     const controller = new AbortController();
 
     let interceptedResponse: Response | undefined;
@@ -359,7 +358,6 @@ describe('parseReasoningFromSseStream — configurable field name (#2488) / larg
       expect(outcome).toBe('stopped');
     } finally {
       await interceptedResponse?.body?.cancel();
-      globalThis.fetch = originalFetch;
     }
   });
 });

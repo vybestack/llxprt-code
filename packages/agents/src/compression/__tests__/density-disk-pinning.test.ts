@@ -108,7 +108,12 @@ describe('pinned density membership and hard context window', () => {
         });
         const handler = new CompressionHandler(
           runtime,
+          undefined,
           history,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
           { maxOutputTokens: 1 },
           () => {
             throw new Error('No LLM during density');

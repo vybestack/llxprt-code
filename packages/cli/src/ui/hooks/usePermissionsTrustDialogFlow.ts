@@ -518,9 +518,15 @@ export interface PermissionsTrustDialogFlow {
 export function usePermissionsTrustDialogFlow(
   onExit: () => void,
   addItem: UseHistoryManagerReturn['addItem'],
-  config?: PermissionsTrustRuntime,
+  config: PermissionsTrustRuntime | undefined,
+  readIdeWorkspaceTrust: Parameters<typeof usePermissionsModifyTrust>[1],
+  subscribeIdeWorkspaceTrust: Parameters<typeof usePermissionsModifyTrust>[2],
 ): PermissionsTrustDialogFlow {
-  const trust = usePermissionsModifyTrust(config);
+  const trust = usePermissionsModifyTrust(
+    config,
+    readIdeWorkspaceTrust,
+    subscribeIdeWorkspaceTrust,
+  );
   const viewState = useViewState();
   const [isCommitting, setIsCommitting] = useState(false);
   const committingRef = useRef(false);

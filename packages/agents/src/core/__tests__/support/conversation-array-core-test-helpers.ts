@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { appendFileSync } from 'node:fs';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -37,16 +37,24 @@ export function conversationWithOwners(
   const settingsService = new SettingsService();
   const config = new Config(createConfigParams(settingsService));
   const providerRuntime = createProviderRuntimeContext({
-    settingsService,
-    config,
     runtimeId: 'conversation-array',
   });
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
   const runtime = createAgentRuntimeContext({
     prepareProviderInvocation: (name, parameters, signal) =>
-      captureProviderInvocation(providerRuntime, name, parameters, signal),
+      captureProviderInvocation(
+        {
+          runtimeId: providerRuntime.runtimeId,
+          fetch: globalThis.fetch,
+          globalSettings: settingsService.getAllGlobalSettings(),
+          providerSettings: settingsService.getProviderSettings(name),
+        },
+        name,
+        parameters,
+        signal,
+      ),
     state: createAgentRuntimeState({
       runtimeId: 'conversation-array',
       provider: 'test',

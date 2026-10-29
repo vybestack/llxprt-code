@@ -19,7 +19,7 @@ import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import { renderHook } from '../../__tests__/render.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createSessionModelCommand } from '../../runtime/session-model-command.js';
-import { modelCommand } from '../commands/modelCommand.js';
+import { createModelCommand } from '../commands/modelCommand.js';
 import { useModelRuntimeSync } from '../containers/AppContainer/hooks/useModelRuntimeSync.js';
 import {
   createCliModelIdentityRuntime,
@@ -34,6 +34,9 @@ function mountFooterLabel(agent: Agent): { readonly label: () => string } {
   const config = {
     getModel: (): string => agent.getModel(),
     getEphemeralSetting: (): undefined => undefined,
+    subscribeModelSelection: (
+      listener: Parameters<typeof agent.settings.subscribeModelChanges>[0],
+    ): (() => void) => agent.settings.subscribeModelChanges(listener),
   };
   const getActiveModelName = (): string => agent.getModel();
   const getActiveProviderName = (): string => agent.getProvider();
@@ -97,12 +100,14 @@ describe('footer label after the /model command (#3954)', () => {
   it('moves the mounted footer label from <profile>:<old model> to <profile>:<new model>', async () => {
     const footer = mountFooterLabel(agent);
     expect(footer.label()).toBe(`${PROFILE_NAME}:fake-model`);
-    const context = createMockCommandContext({
-      runtimeApi: { setActiveModel: createSessionModelCommand(agent) },
-    });
+    const context = createMockCommandContext();
+    const command = createModelCommand(
+      createSessionModelCommand(agent),
+      async () => {},
+    );
 
     const result = await act(async () =>
-      modelCommand.action?.(context, 'fake-model-next'),
+      command.action?.(context, 'fake-model-next'),
     );
 
     expect(result).toMatchObject({ type: 'message', messageType: 'info' });

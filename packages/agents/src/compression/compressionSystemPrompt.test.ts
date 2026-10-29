@@ -1,3 +1,4 @@
+import { serve } from 'bun';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -27,7 +28,7 @@ import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/r
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type { Logger } from '@vybestack/llxprt-code-core/core/logger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -41,6 +42,10 @@ import {
   CompressionLoadBalancingProvider,
   type CompressionLoadBalancerCandidate,
 } from '../core/CompressionLoadBalancingProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const COMPRESSION_SYSTEM_PROMPT = 'COMPRESSION_CORE_PROMPT';
 
@@ -82,13 +87,7 @@ function generateHistory(count: number): IContent[] {
   return messages;
 }
 
-const noopLogger = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  log: () => {},
-} as unknown as Logger;
+const noopLogger = new DebugLogger('llxprt:test:compression');
 
 /**
  * Fake provider that captures every `generateChatCompletion` call's options
@@ -120,18 +119,24 @@ function buildContext(
     compressionVerification: boolean;
     subagentName: string;
     config: Config;
+    fetch: NetworkFetch;
   }> = {},
 ): CompressionContext {
+  const invocationSettings = new SettingsService();
   const contextProviderRuntime = {
-    settingsService: new SettingsService(),
-    config: overrides.config,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
   };
 
   const resolveProvider = (): CompressionProviderResult => ({
     invocation: captureProviderInvocation(
-      contextProviderRuntime,
+      {
+        fetch: overrides.fetch ?? requestFetch,
+        runtimeId: contextProviderRuntime.runtimeId,
+        metadata: contextProviderRuntime.metadata,
+        globalSettings: invocationSettings.getAllGlobalSettings(),
+        providerSettings: invocationSettings.getProviderSettings(provider.name),
+      },
       provider.name,
     ),
     provider,
@@ -243,11 +248,15 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
     const provider = createCapturingProvider(captured, 'VERIFIED');
     const context = buildContext(provider);
 
-    const resolved = context.resolveProvider();
+    const resolved = await context.resolveProvider();
     await runVerificationPass(
       provider,
       'initial summary',
       context,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       resolved.runtime,
       undefined,
       undefined,
@@ -397,6 +406,8 @@ function createLoadBalancerCandidate(
   (provider as { name: string }).name = providerName;
   if (failure) {
     provider.generateChatCompletion = (options) => {
+      if (!('contents' in options))
+        throw new Error('Expected structured request options');
       captured.push(options);
       throw failure;
     };
@@ -404,10 +415,7 @@ function createLoadBalancerCandidate(
   return {
     profileName: `${providerName}-profile`,
     provider,
-    runtime: {
-      settingsService:
-        {} as CompressionLoadBalancerCandidate['runtime']['settingsService'],
-    },
+    runtime: {},
     config: undefined,
     resolved: { model },
     invocation: {} as CompressionLoadBalancerCandidate['invocation'],
@@ -426,10 +434,14 @@ describe('Load-balanced compression prompt assembly (issue #3176, D5+D8)', () =>
       ],
       1,
       'subagent',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
     );
 
     for await (const _chunk of provider.generateChatCompletion({
-      contents: [],
+      contents: (async function* (): AsyncGenerator<IContent> {})(),
     })) {
       // Drain the selected provider response.
     }
@@ -457,10 +469,14 @@ describe('Load-balanced compression prompt assembly (issue #3176, D5+D8)', () =>
       ],
       0,
       'interactive',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
     );
 
     for await (const _chunk of provider.generateChatCompletion({
-      contents: [],
+      contents: (async function* (): AsyncGenerator<IContent> {})(),
     })) {
       // Drain the successful failover response.
     }
@@ -483,6 +499,10 @@ describe('Load-balanced compression prompt assembly (issue #3176, D5+D8)', () =>
       [createLoadBalancerCandidate('provider-a', 'model-a', calls)],
       0,
       'subagent',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
     );
     const context = buildContext(provider, {
       history: generateHistory(20),
@@ -502,7 +522,7 @@ describe('verification native request rows', () => {
   it('preserves verification request bytes and returns an improved summary without scratch files', async () => {
     const bodies: string[] = [];
     const improved = '<state_snapshot>checked summary</state_snapshot>';
-    const server = Bun.serve({
+    const server = serve({
       hostname: '127.0.0.1',
       port: 0,
       async fetch(request) {
@@ -527,13 +547,19 @@ describe('verification native request rows', () => {
       'test-key',
       `http://127.0.0.1:${server.port}/v1`,
     );
-    const context = buildContext(provider);
-    const resolved = context.resolveProvider();
+    const context = buildContext(provider, {
+      fetch: (input, init) => globalThis.fetch(input, init),
+    });
+    const resolved = await context.resolveProvider();
     const verify = () =>
       runVerificationPass(
         provider,
         'initial summary',
         context,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         resolved.runtime,
         undefined,
         {

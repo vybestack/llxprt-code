@@ -5,14 +5,25 @@
  */
 
 import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { getCompletionBudget } from './compressionBudgeting.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { computeMarginAdjustedLimit } from './contextLimitPolicy.js';
 
+/**
+ * The runtime reads the enforcement path makes: the current model name for
+ * history stamps, and the two compression thresholds.
+ */
+export interface CompressionLimitsRuntime {
+  readonly state: { readonly model: string };
+  readonly ephemerals: {
+    compressionThreshold(): number;
+    contextLimit(): number;
+  };
+}
+
 export interface ProviderContentEnforcementDeps {
-  runtimeContext: AgentRuntimeContext;
+  runtimeContext: CompressionLimitsRuntime;
   generationConfig: ModelGenerationSettings;
   readCompletionBudgetSetting: () => unknown;
 }

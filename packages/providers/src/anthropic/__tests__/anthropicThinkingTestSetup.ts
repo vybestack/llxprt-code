@@ -53,6 +53,7 @@ void vi.mock('@anthropic-ai/sdk', () => ({
 export interface ThinkingTestSetup {
   provider: AnthropicProvider;
   runtimeContext: ProviderRuntimeContext;
+  config: ReturnType<typeof createRuntimeConfigStub>;
   settingsService: SettingsService;
   buildCallOptions: (
     contents: IContent[],
@@ -86,7 +87,7 @@ export function setupThinkingProvider(): ThinkingTestSetup {
 
   const { provider, runtime: runtimeContext, settingsService } = result;
 
-  runtimeContext.config ??= createRuntimeConfigStub(settingsService);
+  const config = createRuntimeConfigStub(settingsService);
 
   // Issue #2616: the runtime context is handed to the provider explicitly via
   // buildCallOptions; no ambient context is installed.
@@ -99,7 +100,7 @@ export function setupThinkingProvider(): ThinkingTestSetup {
       contents,
       settings: settingsService,
       runtime: runtimeContext,
-      config: runtimeContext.config,
+      config,
       ...overrides,
     });
     // Issue #854: the provider-facing contract is a history stream; the
@@ -107,5 +108,11 @@ export function setupThinkingProvider(): ThinkingTestSetup {
     return { ...options, contents: replayableContents(contents) };
   };
 
-  return { provider, runtimeContext, settingsService, buildCallOptions };
+  return {
+    provider,
+    runtimeContext,
+    config,
+    settingsService,
+    buildCallOptions,
+  };
 }

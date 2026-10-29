@@ -127,7 +127,7 @@ const buildCallOptions = (
     contents,
     settings: settingsService,
     runtime: runtimeContext,
-    config: runtimeContext.config,
+    config: createRuntimeConfigStub(settingsService),
     ...overrides,
   });
 const getToolUseIds = (content: AnthropicContentBlock[]): string[] =>
@@ -258,22 +258,14 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
 function facadeCallback0(): void {
   vi.clearAllMocks();
 
-  let ephemeralSettingsGetter: () => Record<string, unknown> = () => ({});
-
   const result = createProviderWithRuntime<AnthropicProvider>(
     ({ settingsService: svc }) => {
       svc.set('auth-key', 'test-api-key');
       svc.set('activeProvider', 'anthropic');
       svc.setProviderSetting('anthropic', 'streaming', 'disabled');
 
-      ephemeralSettingsGetter = () => ({
-        ...svc.getAllGlobalSettings(),
-        ...svc.getProviderSettings('anthropic'),
-      });
-
       return new AnthropicProvider('test-api-key', undefined, {
         ...TEST_PROVIDER_CONFIG,
-        getEphemeralSettings: ephemeralSettingsGetter,
       });
     },
     {
@@ -285,23 +277,6 @@ function facadeCallback0(): void {
   provider = result.provider;
   runtimeContext = result.runtime;
   settingsService = result.settingsService;
-
-  runtimeContext.config ??= createRuntimeConfigStub(settingsService);
-
-  runtimeContext.config.getEphemeralSettings = () => ({
-    ...settingsService.getAllGlobalSettings(),
-    ...settingsService.getProviderSettings(provider.name),
-  });
-
-  runtimeContext.config.getEphemeralSetting = (key: string) => {
-    const providerValue = settingsService.getProviderSettings(provider.name)[
-      key
-    ];
-    if (providerValue !== undefined) {
-      return providerValue;
-    }
-    return settingsService.get(key);
-  };
 
   // Enable extended thinking
   settingsService.set('reasoning.enabled', true);

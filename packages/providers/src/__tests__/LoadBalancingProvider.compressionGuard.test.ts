@@ -1,5 +1,6 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -110,6 +111,7 @@ async function consumeIterator(
 ): Promise<IContent[]> {
   const results: IContent[] = [];
   for await (const chunk of provider.generateChatCompletion({
+    invocation: makeLoadBalancerInvocation(),
     contents: replayableContents(contents),
   })) {
     results.push(chunk);
@@ -125,12 +127,17 @@ describe('LoadBalancingProvider - compression guard facts (issue #3499)', () => 
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      borrowedSettings(config, settingsService),
+    );
   });
 
   it('passes the guard estimate and context limit to the compression callback', async () => {

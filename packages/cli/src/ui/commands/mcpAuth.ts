@@ -5,70 +5,74 @@
  */
 
 import type {
+  SlashCommand,
   SlashCommandActionReturn,
-  CommandContext,
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
-import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 import { getErrorMessage } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
-import type { RuntimeMcpServers } from './mcpDisplay.js';
-import { writeCommandOutput } from '../hooks/command-journal-output.js';
+import type { HistoryItemWithoutId } from '../types.js';
 
-export const mcpAuthSchema: CommandArgumentSchema = [
-  {
-    kind: 'value',
-    name: 'server',
-    description: 'Select MCP server to authenticate',
-    /**
-     * @plan:PLAN-20251013-AUTOCOMPLETE.P11
-     * @requirement:REQ-004
-     * Schema completer replaces legacy server list.
-     */
-    completer: withFuzzyFilter(async (ctx) => {
-      const { config } = ctx.services;
-      if (!config) {
-        return [];
-      }
+export type McpAuthOutput = (
+  item: HistoryItemWithoutId,
+  timestamp?: number,
+) => void | number | Promise<void>;
 
-      const mcpServers: RuntimeMcpServers = Object.fromEntries(
-        (ctx.services.agent?.mcp.listServers() ?? []).map((server) => [
-          server.name,
-          server.config,
-        ]),
-      );
-      return Object.keys(mcpServers).map((name) => ({
-        value: name,
-        description: 'Configured MCP server',
-      }));
-    }),
-  },
-];
+export interface McpAuthCommandOperations {
+  readonly isConfigured: () => boolean;
+  readonly configuredServers: () => ReadonlyArray<{
+    readonly name: string;
+    readonly oauthEnabled: boolean;
+  }>;
+  readonly authenticationRequiredServers: () => Promise<readonly string[]>;
+  readonly authenticate: (
+    serverName: string,
+    displayListener: (message: string) => void | Promise<void>,
+  ) => Promise<void>;
+}
+
+function createMcpAuthSchema(
+  operations: McpAuthCommandOperations,
+  readFuzzyFiltering: () => boolean,
+): CommandArgumentSchema {
+  return [
+    {
+      kind: 'value',
+      name: 'server',
+      description: 'Select MCP server to authenticate',
+      /**
+       * @plan:PLAN-20251013-AUTOCOMPLETE.P11
+       * @requirement:REQ-004
+       * Schema completer replaces legacy server list.
+       */
+      completer: withFuzzyFilter(async () => {
+        if (!operations.isConfigured()) {
+          return [];
+        }
+        return operations.configuredServers().map(({ name }) => ({
+          value: name,
+          description: 'Configured MCP server',
+        }));
+      }, readFuzzyFiltering),
+    },
+  ];
+}
 
 export async function listOAuthServers(
-  agent: Agent | null,
-  mcpServers: RuntimeMcpServers,
+  operations: McpAuthCommandOperations,
 ): Promise<MessageActionReturn> {
-  const oauthServersFromConfig = Object.entries(mcpServers)
-    .filter(
-      ([_name, server]: [string, MCPServerConfig | undefined]) =>
-        server?.oauth?.enabled === true,
-    )
-    .map(([name, _server]) => name);
-
-  const discoveredOAuthServers =
-    agent === null
-      ? []
-      : (await agent.mcp.details()).servers
-          .filter(
-            (server) =>
-              server.requiresAuth && mcpServers[server.name] !== undefined,
-          )
-          .map((server) => server.name);
-
+  const configuredServers = operations.configuredServers();
+  const oauthServersFromConfig = configuredServers
+    .filter((server) => server.oauthEnabled)
+    .map((server) => server.name);
+  const configuredNames = new Set(
+    configuredServers.map((server) => server.name),
+  );
+  const discoveredOAuthServers = (
+    await operations.authenticationRequiredServers()
+  ).filter((name) => configuredNames.has(name));
   const allOAuthServers = [
     ...new Set([...oauthServersFromConfig, ...discoveredOAuthServers]),
   ];
@@ -84,30 +88,46 @@ export async function listOAuthServers(
   return {
     type: 'message',
     messageType: 'info',
-    content: `MCP servers with OAuth authentication:\n${allOAuthServers.map((s) => `  - ${s}`).join('\n')}\n\nUse /mcp auth <server-name> to authenticate.`,
+    content: `MCP servers with OAuth authentication:\n${allOAuthServers.map((server) => `  - ${server}`).join('\n')}\n\nUse /mcp auth <server-name> to authenticate.`,
   };
 }
 
-export async function performMcpOAuth(
-  context: CommandContext,
+async function performMcpOAuth(
+  operations: McpAuthCommandOperations,
+  writeOutput: McpAuthOutput,
+  reloadCommands: () => void,
   serverName: string,
 ): Promise<MessageActionReturn> {
   const displayListener = async (message: string): Promise<void> => {
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
-      { type: 'info', text: message },
-    );
+    await writeOutput({ type: 'info', text: message });
   };
-  await displayListener(
-    `Starting OAuth authentication for MCP server '${serverName}'...`,
-  );
+
   try {
-    const agent = context.services.agent;
-    if (!agent) throw new Error('Agent is not available.');
-    await agent.mcp.authenticate(serverName, displayListener);
+    await writeOutput(
+      {
+        type: 'info',
+        text: `Starting OAuth authentication for MCP server '${serverName}'...`,
+      },
+      Date.now(),
+    );
+
+    await operations.authenticate(serverName, displayListener);
+
+    await writeOutput(
+      {
+        type: 'info',
+        text: `✅ Successfully authenticated with MCP server '${serverName}'!`,
+      },
+      Date.now(),
+    );
+
+    reloadCommands();
+
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Successfully authenticated and refreshed tools for '${serverName}'.`,
+    };
   } catch (error) {
     return {
       type: 'message',
@@ -115,16 +135,56 @@ export async function performMcpOAuth(
       content: `Failed to authenticate with MCP server '${serverName}': ${getErrorMessage(error)}`,
     };
   }
-  await displayListener(
-    `\u2705 Successfully authenticated with MCP server '${serverName}'!`,
-  );
-  context.ui.reloadCommands();
-  return {
-    type: 'message',
-    messageType: 'info',
-    content: `Successfully authenticated and refreshed tools for '${serverName}'.`,
-  };
 }
 
-export { CommandKind };
-export type { SlashCommandActionReturn, CommandContext, MessageActionReturn };
+export function createMcpAuthCommand(
+  operations: McpAuthCommandOperations,
+  readFuzzyFiltering: () => boolean,
+  writeOutput: McpAuthOutput,
+  reloadCommands: () => void,
+): SlashCommand {
+  return {
+    name: 'auth',
+    description: 'Authenticate with an OAuth-enabled MCP server',
+    kind: CommandKind.BUILT_IN,
+    schema: createMcpAuthSchema(operations, readFuzzyFiltering),
+    autoExecute: true,
+    action: async (
+      _invocation,
+      args: string,
+    ): Promise<SlashCommandActionReturn> => {
+      const serverName = args.trim();
+
+      if (!operations.isConfigured()) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Configuration not loaded.',
+        };
+      }
+
+      if (!serverName) {
+        return listOAuthServers(operations);
+      }
+
+      if (
+        !operations
+          .configuredServers()
+          .some((server) => server.name === serverName)
+      ) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `MCP server '${serverName}' not found.`,
+        };
+      }
+
+      return performMcpOAuth(
+        operations,
+        writeOutput,
+        reloadCommands,
+        serverName,
+      );
+    },
+  };
+}

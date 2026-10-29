@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { forwardPreconnect } from '../utils/fetchPreconnect.js';
 
 /**
@@ -48,8 +49,8 @@ function isDeveloperRoleMessage(
  * we rewrite it back to "system" for compatibility.
  */
 export function createDeveloperRoleToSystemFetch(
-  innerFetch: typeof fetch,
-): typeof fetch {
+  innerFetch: NetworkFetch,
+): NetworkFetch & ReturnType<typeof forwardPreconnect> {
   return Object.assign(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       if (!init || typeof init.body !== 'string') {

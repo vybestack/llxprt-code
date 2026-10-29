@@ -173,7 +173,10 @@ export interface ProviderClientConfig {
 export async function createOpenAIClient(
   options: NormalizedGenerateChatOptions,
   clientConfig: ProviderClientConfig,
-  customFetch?: typeof fetch,
+  customFetch?: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
   logger: Pick<DebugLogger, 'debug'> = new DebugLogger(
     'llxprt:provider:openaivercel',
   ),
@@ -208,14 +211,14 @@ export async function createOpenAIClient(
   const headers = clientConfig.customHeaders;
   // Innermost, so the reported size is that of the body actually sent.
   const sizedFetch = withRequestSizeReport(
-    customFetch ?? fetch,
+    customFetch ?? options.invocation.fetch,
     options.metadata,
   );
   const bodyFetch =
     messages === undefined
       ? sizedFetch
       : createStreamedVercelFetch(
-          customFetch ?? fetch,
+          customFetch ?? options.invocation.fetch,
           messages,
           options.metadata,
         );
@@ -255,7 +258,11 @@ export async function createConfiguredModel(
 ): Promise<{ model: LanguageModel }> {
   const customFetch =
     streamingEnabled && rsEnabled
-      ? createReasoningCaptureFetch(captureBuffer, logger)
+      ? createReasoningCaptureFetch(
+          captureBuffer,
+          logger,
+          options.invocation.fetch,
+        )
       : undefined;
   const openaiProvider = await createOpenAIClient(
     options,

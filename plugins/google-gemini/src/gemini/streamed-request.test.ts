@@ -28,7 +28,10 @@ it('streams direct-client caller-owned contents through the same body builder', 
     },
     { preconnect() {} },
   );
-  const client = await createGeminiApiClient({ apiKey: 'test' });
+  const client = await createGeminiApiClient({
+    fetch: globalThis.fetch,
+    apiKey: 'test',
+  });
   const response = await client.models.generateContent({
     model: 'gemini-3.7-flash',
     contents: [{ role: 'user', parts: [{ text: 'direct caller' }] }],

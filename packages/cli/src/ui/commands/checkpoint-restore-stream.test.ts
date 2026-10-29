@@ -10,7 +10,7 @@ import {
   saveCheckpoint,
   savedCheckpoint,
 } from '../hooks/agentStream/checkpoint-disk-test-helpers.js';
-import { restoreCommand } from './restoreCommand.js';
+import { checkpointCommand } from '../../__tests__/checkpoint-command-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { cleanupBounds } from '../../utils/__tests__/support/cleanup-history-test-helpers.js';
 
@@ -77,7 +77,7 @@ async function boundedRestore(
       const { owners, external, release } = observeAdmission(client, retain);
       let invalidated = false;
       const context = createMockCommandContext({
-        services: { agent: { agentClient: client } },
+        services: {},
       });
       if (context.services.config === null)
         throw new Error('Missing fixture runtime');
@@ -91,7 +91,7 @@ async function boundedRestore(
         invalidated = true;
       };
       try {
-        const outcome = await restoreCommand(runtime)?.action?.(
+        const outcome = await checkpointCommand(client, runtime)?.action?.(
           context,
           basename(saved.path),
         );

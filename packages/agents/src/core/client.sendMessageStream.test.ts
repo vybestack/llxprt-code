@@ -153,6 +153,25 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
     getLastPromptTokenCount: vi.fn(),
   },
 }));
+const actual4 = {
+  ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
+};
+void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+  const tokenLimit = vi.fn();
+  return {
+    ...actual4,
+    tokenLimit,
+    resolveEffectiveContextLimit: vi.fn(
+      (model: string, userCtx?: number, provCtx?: number) => {
+        const ok = (v: unknown): v is number =>
+          typeof v === 'number' && Number.isFinite(v) && v > 0;
+        if (ok(userCtx)) return userCtx;
+        if (ok(provCtx)) return provCtx;
+        return tokenLimit(model);
+      },
+    ),
+  };
+});
 
 // --- Typed inspection helpers for the requests forwarded to Turn.run ---
 // After reminder injection the orchestrator forwards an `IContent[]` turn
@@ -330,7 +349,7 @@ describe('Agent Client (client.ts)', () => {
       useZeroTokenChat();
 
       const stream = client.sendMessageStream(
-        [{ text: 'Get started' }],
+        [{ type: 'text', text: 'Get started' }],
         new AbortController().signal,
         'prompt-no-tools',
       );
@@ -386,7 +405,7 @@ describe('Agent Client (client.ts): paused continuation', () => {
       useZeroTokenChat();
 
       const stream = client.sendMessageStream(
-        [{ text: 'Continue the task' }],
+        [{ type: 'text', text: 'Continue the task' }],
         new AbortController().signal,
         'prompt-paused-current',
       );
@@ -428,7 +447,7 @@ describe('Agent Client (client.ts): new prompt', () => {
       useZeroTokenChat();
 
       const stream = client.sendMessageStream(
-        [{ text: 'New request' }],
+        [{ type: 'text', text: 'New request' }],
         new AbortController().signal,
         'prompt-new-after-pause',
       );
@@ -501,7 +520,7 @@ describe('Agent Client (client.ts): todo_pause', () => {
       useZeroTokenChat();
 
       const stream = client.sendMessageStream(
-        [{ text: 'Work on the task' }],
+        [{ type: 'text', text: 'Work on the task' }],
         new AbortController().signal,
         'prompt-pause',
       );
@@ -547,9 +566,10 @@ describe('Agent Client (client.ts): IDE context', () => {
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
+      const addHistory = vi.fn<(content: IContent) => void>();
       const mockChat: Partial<ChatSession> = {
         ...createClientHistoryFixture(),
-        addHistory: vi.fn(),
+        addHistory,
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
@@ -564,7 +584,7 @@ describe('Agent Client (client.ts): IDE context', () => {
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
-      const initialRequest = [{ text: 'Hi' }];
+      const initialRequest: AgentMessageInput = [{ type: 'text', text: 'Hi' }];
 
       // Act
       const stream = client.sendMessageStream(
@@ -577,9 +597,7 @@ describe('Agent Client (client.ts): IDE context', () => {
       }
 
       // Verify that the IDE context was included correctly for files without active file
-      const addHistoryCalls = (
-        mockChat.addHistory as Mock<typeof mockChat.addHistory>
-      ).mock.calls;
+      const addHistoryCalls = addHistory.mock.calls;
       const contextCall = addHistoryCalls.find((call) =>
         JSON.stringify(call[0]).includes('editor context'),
       );
@@ -633,7 +651,7 @@ describe('Agent Client (client.ts): stream return', () => {
 
       // Act
       const stream = client.sendMessageStream(
-        [{ text: 'Hi' }],
+        [{ type: 'text', text: 'Hi' }],
         new AbortController().signal,
         'prompt-id-1',
       );
@@ -709,7 +727,7 @@ describe('Agent Client (client.ts): session limit', () => {
       // Run up to the limit
       for (let i = 0; i < MAX_SESSION_TURNS; i++) {
         const stream = client.sendMessageStream(
-          [{ text: 'Hi' }],
+          [{ type: 'text', text: 'Hi' }],
           new AbortController().signal,
           'prompt-id-4',
         );
@@ -721,7 +739,7 @@ describe('Agent Client (client.ts): session limit', () => {
 
       // This call should exceed the limit
       const stream = client.sendMessageStream(
-        [{ text: 'Hi' }],
+        [{ type: 'text', text: 'Hi' }],
         new AbortController().signal,
         'prompt-id-5',
       );

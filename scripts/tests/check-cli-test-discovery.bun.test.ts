@@ -48,7 +48,7 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
 const SCRIPT = join(REPO_ROOT, 'scripts', 'check-cli-test-discovery.ts');
 const CLI_ROOT = join(REPO_ROOT, 'packages', 'cli');
-const RUNTIME = process.env.BUN_EXECUTABLE || 'bun';
+const RUNTIME = process.env.BUN_EXECUTABLE || process.execPath;
 
 // Paths used by the temp-git-repo negative tests; the expected guard message
 // is derived from them so the assertion stays in sync if a path changes.

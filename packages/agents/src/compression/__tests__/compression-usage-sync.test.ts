@@ -1,3 +1,6 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('Unexpected fixture network request'));
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -25,10 +28,8 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/PromptResolver.js';
-import type { Logger } from '@vybestack/llxprt-code-core/utils/logger.js';
+import { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import {
   compressMiddleOutViaDisk,
   requireMiddleOutApplied,
@@ -147,60 +148,48 @@ function buildContext(
         compressionThreshold: () => 0.85,
         contextLimit: () => 128000,
         compressionProfile: () => undefined,
-        compressionStrategy: () => 'middle-out',
-        toolFormatOverride: () => undefined,
         densityCompressHeadroom: () => 0.6,
-        reasoning: {
-          enabled: () => false,
-          includeInContext: () => false,
-          includeInResponse: () => false,
-          format: () => 'native' as const,
-          stripFromContext: () => 'none' as const,
-          effort: () => undefined,
-          maxTokens: () => undefined,
-          adaptiveThinking: () => undefined,
-        },
       },
       providerRuntime: {
-        settingsService: new SettingsService(),
-        config: undefined,
         runtimeId: 'test-provider-runtime',
         metadata: { source: 'test' },
       },
-    } as unknown as AgentRuntimeContext,
+    },
     runtimeState: {
       runtimeId: 'test',
       provider: 'test',
       model: 'test-model',
       sessionId: 'test',
       updatedAt: Date.now(),
-    } as unknown as AgentRuntimeState,
+    },
     estimateTokens: async (contents: readonly IContent[]) =>
       contents.length * 100,
     currentTokenCount: history.length * 100,
-    logger: {
-      debug: () => {},
-      info: () => {},
-      warn: () => {},
-      error: () => {},
-      log: () => {},
-    } as unknown as Logger,
+    logger: new DebugLogger('compression-usage-test'),
     resolveProvider: () => {
+      const invocationSettings = new SettingsService();
       const runtime = {
-        settingsService: new SettingsService(),
-        config: undefined,
         runtimeId: 'test-provider-runtime',
         metadata: { source: 'test' },
       };
       return {
-        invocation: captureProviderInvocation(runtime, provider.name),
+        invocation: captureProviderInvocation(
+          {
+            fetch: requestFetch,
+            runtimeId: runtime.runtimeId,
+            metadata: runtime.metadata,
+            globalSettings: invocationSettings.getAllGlobalSettings(),
+            providerSettings: invocationSettings.getProviderSettings(
+              provider.name,
+            ),
+          },
+          provider.name,
+        ),
         provider,
         runtime,
       };
     },
-    promptResolver: {
-      resolveFile: () => ({ found: false, path: null, source: null }),
-    } as unknown as PromptResolver,
+    promptResolver: new PromptResolver(),
     promptBaseDir: '/tmp/test',
     promptContext: { provider: 'test', model: 'test-model' },
     promptId: 'test-prompt',

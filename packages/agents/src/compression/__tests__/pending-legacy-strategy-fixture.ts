@@ -26,7 +26,13 @@ export function installPendingLegacyStrategyFixture(
     this: TopDownTruncationStrategy,
     context,
   ) {
-    const strategy = getCompressionStrategy('top-down-truncation');
+    const strategy = getCompressionStrategy(
+      'top-down-truncation',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     if (primary || strategy instanceof TopDownTruncationStrategy)
       return realDiskCompression.call(this, context);
     if (!isArrayStrategyDouble(strategy))

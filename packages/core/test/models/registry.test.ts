@@ -41,7 +41,7 @@ describe('ModelRegistry', () => {
 
   beforeEach(() => {
     // Create fresh registry for each test
-    registry = new ModelRegistry();
+    registry = new ModelRegistry(globalThis.fetch);
     vi.clearAllMocks();
 
     // Default: no cache, no bundled fallback

@@ -8,8 +8,8 @@
  * @pseudocode main-entry.md lines 05-102
  */
 
-import { createReadStream, createWriteStream } from 'node:fs';
 import { stderr } from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 import {
   createMessageConnection,
@@ -19,6 +19,7 @@ import {
 } from 'vscode-jsonrpc/node.js';
 
 import { createMcpChannel } from './channels/mcp-channel.js';
+import { createMcpTunnel } from './channels/mcp-tunnel.js';
 import { setupRpcChannel } from './channels/rpc-channel.js';
 import { createOrchestrator } from './service/orchestrator.js';
 import {
@@ -247,14 +248,6 @@ const createRpcConnection = (): MessageConnection =>
     new StreamMessageWriter(process.stdout),
   );
 
-function createReadStreamFromFd(fd: number) {
-  return createReadStream('', { fd, autoClose: false });
-}
-
-function createWriteStreamFromFd(fd: number) {
-  return createWriteStream('', { fd, autoClose: false });
-}
-
 type MainDependencies = {
   createOrchestrator: typeof createOrchestrator;
   createRpcConnection: typeof createRpcConnection;
@@ -364,18 +357,13 @@ export async function main(
 
   try {
     if (bootstrap.config.navigationTools !== false) {
-      try {
-        const mcpInput = createReadStreamFromFd(3);
-        const mcpOutput = createWriteStreamFromFd(4);
-        mcpServer = await dependencies.createMcpChannel(
-          orchestrator,
-          bootstrap.workspaceRoot,
-          mcpInput,
-          mcpOutput,
-        );
-      } catch (error) {
-        stderr.write(`MCP channel disabled: ${String(error)}\n`);
-      }
+      const tunnel = createMcpTunnel(rpcConnection);
+      mcpServer = await dependencies.createMcpChannel(
+        orchestrator,
+        bootstrap.workspaceRoot,
+        tunnel.input,
+        tunnel.output,
+      );
     }
 
     rpcConnection.sendNotification('lsp/ready');
@@ -394,7 +382,7 @@ const isMainModule = (): boolean => {
   }
 
   try {
-    return import.meta.url === new URL(argvEntry, 'file://').href;
+    return import.meta.url === pathToFileURL(argvEntry).href;
   } catch {
     return false;
   }

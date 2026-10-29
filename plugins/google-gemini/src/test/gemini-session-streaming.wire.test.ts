@@ -9,6 +9,10 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import { createProviderCallOptions } from './testSupport.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 it('uses the admitted session streaming policy rather than provider configuration', async () => {
   const routes: string[] = [];
@@ -57,11 +61,25 @@ it('uses the admitted session streaming policy rather than provider configuratio
     const leftInvocation = leftOwner.prepareProviderInvocation(
       'same-label',
       'gemini',
+      undefined,
+      undefined,
+      undefined,
+      requestFetch,
     );
     left.set('streaming', 'enabled');
     for (const [store, invocation] of [
       [left, leftInvocation],
-      [right, rightOwner.prepareProviderInvocation('same-label', 'gemini')],
+      [
+        right,
+        rightOwner.prepareProviderInvocation(
+          'same-label',
+          'gemini',
+          undefined,
+          undefined,
+          undefined,
+          requestFetch,
+        ),
+      ],
     ] as const) {
       const output = [];
       for await (const content of provider.generateChatCompletion(

@@ -13,7 +13,7 @@ import type {
 } from '../../types.js';
 import { ToolCallStatus } from '../../types.js';
 import type { TextEmphasis } from './ToolShared.js';
-import { ToolMessage } from './ToolMessage.js';
+import { ToolMessage, type ShellSessionRuntime } from './ToolMessage.js';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
 import { Colors } from '../../colors.js';
 import { theme } from '../../semantic-colors.js';
@@ -25,17 +25,28 @@ import {
 import { canonicalizeToolName } from '@vybestack/llxprt-code-tools';
 import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
 import { useTodoContext } from '../../contexts/TodoContext.js';
-import type { CliUiRuntime } from '../../cliUiRuntime.js';
 import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
+/** Runtime reads the tool group makes: the embedded shell and folder trust. */
+export type ToolGroupRuntime = ShellSessionRuntime & {
+  isTrustedFolder(): boolean;
+};
+
 interface ToolGroupMessageProps {
+  readIdeMode: () => boolean;
+  readIdeDiffingEnabled: () => boolean | null;
+  subscribeIdeDiffing: (listener: () => void) => () => void;
+  resolveIdeDiff: (
+    filePath: string,
+    outcome: 'accepted' | 'rejected',
+  ) => Promise<void>;
   groupId: number;
   toolCalls: IndividualToolCallDisplay[];
   toolPage?: HistoryItemToolGroup['toolPage'];
   agentId?: string;
   availableTerminalHeight?: number;
   terminalWidth: number;
-  config: CliUiRuntime;
+  config: ToolGroupRuntime;
   isFocused?: boolean;
   showTodoPanel?: boolean;
   activeShellPtyId?: number | null;
@@ -191,7 +202,14 @@ function renderToolCallItem(
   isFocused: boolean,
   activeShellPtyId: number | null | undefined,
   embeddedShellFocused: boolean | undefined,
-  config: CliUiRuntime,
+  readIdeMode: () => boolean,
+  readIdeDiffingEnabled: () => boolean | null,
+  subscribeIdeDiffing: (listener: () => void) => () => void,
+  resolveIdeDiff: (
+    filePath: string,
+    outcome: 'accepted' | 'rejected',
+  ) => Promise<void>,
+  config: ToolGroupRuntime,
   borderColor: string,
   borderDimColor: boolean,
 ): React.ReactNode {
@@ -228,7 +246,11 @@ function renderToolCallItem(
       {showMessageConfirmation && tool.confirmationDetails && (
         <ToolConfirmationMessage
           confirmationDetails={tool.confirmationDetails}
-          config={config}
+          isTrustedFolder={config.isTrustedFolder()}
+          readIdeMode={readIdeMode}
+          readIdeDiffingEnabled={readIdeDiffingEnabled}
+          subscribeIdeDiffing={subscribeIdeDiffing}
+          resolveIdeDiff={resolveIdeDiff}
           isFocused={isFocused}
           availableTerminalHeight={availableTerminalHeightPerToolMessage}
           terminalWidth={innerWidth}
@@ -272,6 +294,10 @@ function useToolGroupState(
 
 // Main component renders the border and maps the tools using ToolMessage
 export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
+  readIdeMode,
+  readIdeDiffingEnabled,
+  subscribeIdeDiffing,
+  resolveIdeDiff,
   toolCalls,
   toolPage,
   agentId,
@@ -284,7 +310,6 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   embeddedShellFocused,
 }) => {
   const { todos } = useTodoContext();
-  const isTodoPanelEnabled = showTodoPanel;
 
   const textualTodoOutput = useMemo(
     () => formatTodoListForDisplay(todos),
@@ -293,7 +318,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
 
   const { toolAwaitingApproval, filteredToolCalls } = useToolGroupState(
     toolCalls,
-    isTodoPanelEnabled,
+    showTodoPanel,
     todos.length,
     textualTodoOutput,
   );
@@ -342,6 +367,10 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
           isFocused,
           activeShellPtyId,
           embeddedShellFocused,
+          readIdeMode,
+          readIdeDiffingEnabled,
+          subscribeIdeDiffing,
+          resolveIdeDiff,
           config,
           borderColor,
           borderDimColor,

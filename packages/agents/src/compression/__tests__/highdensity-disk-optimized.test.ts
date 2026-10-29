@@ -38,6 +38,7 @@ async function optimized(size: number): Promise<number> {
       const metadata = await buildCompressionMetadata(
         'oracle',
         runtime,
+        undefined,
         history,
         async () => ({
           provider: transport,

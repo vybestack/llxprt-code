@@ -116,7 +116,15 @@ function runtime(baseURL: string, retries = 2) {
   const tokenizerFactory = createRuntimeTokenizerFactory();
   const provider = new OpenAIResponsesProvider('test-key', baseURL);
   const context = { config, settingsService: settings, runtimeId: root() };
-  const invocation = captureProviderInvocation(context, provider.name);
+  const invocation = captureProviderInvocation(
+    {
+      runtimeId: context.runtimeId,
+      fetch: globalThis.fetch,
+      globalSettings: settings.getAllGlobalSettings(),
+      providerSettings: settings.getProviderSettings(provider.name),
+    },
+    provider.name,
+  );
   return { config, provider, context, invocation, tokenizerFactory };
 }
 

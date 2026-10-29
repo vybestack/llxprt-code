@@ -1,11 +1,13 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 import { describe, it, expect, vi } from 'bun:test';
-import React, { act, useState } from 'react';
+import React, { act, useMemo, useState } from 'react';
 import { renderHook, waitFor } from '../../../../__tests__/render.js';
 import {
   useSubmitQuery,
@@ -38,6 +40,7 @@ import {
   createMockOverrides,
   createQueueOperations,
 } from './submitQueryTestFixtures.js';
+import { agentStreamOperations } from './helpers/agentStreamOperations.js';
 
 void vi.mock('../turnPreparation.js', () => ({
   prepareTurnForQuery: vi.fn().mockResolvedValue(undefined),
@@ -76,19 +79,19 @@ function initialErrorEvents(callIndex: number): AgentEvent[] {
   return [];
 }
 
-function createControlledAgent(
+async function createControlledAgent(
   eventsForCall: (callIndex: number) => AgentEvent[],
   beforeEventsForCall?: (callIndex: number) => Promise<void> | undefined,
-): {
+): Promise<{
   agent: Agent;
   streamCallCount: () => number;
   streamInputs: () => AgentInput[];
   getDeferred: (callIndex: number) => Deferred<void> | undefined;
-} {
+}> {
   let callCount = 0;
   const inputs: AgentInput[] = [];
   const deferreds: Array<Deferred<void>> = [];
-  const base = createFakeAgentFromMockClient({
+  const base = await createFakeAgentFromMockClient({
     getCurrentSequenceModel: () => 'test-model',
   });
   const agent: Agent = {
@@ -185,9 +188,14 @@ function useOrchestration(
     [commandEffect],
   );
 
+  const policyOps = useMemo(() => streamPolicyOperations(runtime), [runtime]);
+  const submissionOps = useMemo(
+    () => submissionOperations(agent, undefined, undefined),
+    [agent],
+  );
   const submitDeps: UseSubmitQueryDeps = {
-    runtime,
-    agent,
+    ...policyOps,
+    ...submissionOps,
     addItem,
     settings: createLoadedSettings(),
     onDebugMessage: vi.fn(),
@@ -234,14 +242,14 @@ function useOrchestration(
     isResponding,
     streamingState,
     subagentManager: undefined,
-    recordingIntegration: undefined,
   };
 
   const submitResult = useSubmitQuery(submitDeps);
   state.processAgentEventRef.current = submitResult.processAgentEvent;
 
+  const operations = useMemo(() => agentStreamOperations(agent), [agent]);
   const eventStream = useAgentEventStream({
-    agent,
+    ...operations,
     addItem,
     processAgentEventRef: state.processAgentEventRef,
     flushPendingHistoryItem: vi.fn(),
@@ -305,9 +313,8 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
   it.each(TERMINAL_EVENTS)(
     'accepts a slash command after $type without queuing or model streaming',
     async (event) => {
-      const { agent, streamCallCount, getDeferred } = createControlledAgent(
-        () => [event],
-      );
+      const { agent, streamCallCount, getDeferred } =
+        await createControlledAgent(() => [event]);
 
       const state = makeOrchState();
       const { result } = renderOrchestration(state, agent);
@@ -332,9 +339,8 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
   it.each(TERMINAL_EVENTS)(
     'accepts an ordinary prompt after $type; second stream waits for first to settle',
     async (event) => {
-      const { agent, streamCallCount, getDeferred } = createControlledAgent(
-        () => [event],
-      );
+      const { agent, streamCallCount, getDeferred } =
+        await createControlledAgent(() => [event]);
 
       const state = makeOrchState();
       const { result } = renderOrchestration(state, agent);
@@ -371,7 +377,7 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
   it('drains an idle-timeout queue in FIFO order without stale cleanup duplicating work', async () => {
     const eventGate = createDeferred<void>();
     const { agent, streamCallCount, streamInputs, getDeferred } =
-      createControlledAgent(idleTimeoutEvents, (callIndex) =>
+      await createControlledAgent(idleTimeoutEvents, (callIndex) =>
         waitBeforeIdleTimeoutEvents(callIndex, eventGate),
       );
 
@@ -441,7 +447,8 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
   });
 
   it('stale old-turn events and cleanup cannot mutate or release a newer active turn', async () => {
-    const { agent, getDeferred } = createControlledAgent(initialErrorEvents);
+    const { agent, getDeferred } =
+      await createControlledAgent(initialErrorEvents);
 
     const state = makeOrchState();
     const { result } = renderOrchestration(state, agent);

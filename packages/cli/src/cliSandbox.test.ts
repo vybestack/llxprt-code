@@ -1,3 +1,7 @@
+import {
+  prepareAgentPreflight,
+  captureAgentPreflightHostInput,
+} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -34,6 +38,7 @@ import { start_sandbox } from './utils/sandbox.js';
 import {
   auditLog,
   resetAuditLogStateForTesting,
+  CredentialAuthority,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import { initializeOutputListenersAndFlush } from './session/outputListeners.js';
 import {
@@ -250,7 +255,11 @@ describe('CLI sandbox', () => {
       } as SandboxHopOptions['settings'],
       argv,
       workspaceRoot: '/tmp/ws',
-      runtimeSettingsService: {} as SandboxHopOptions['runtimeSettingsService'],
+      prepareSandboxPreflight: () =>
+        prepareAgentPreflight(
+          captureAgentPreflightHostInput({ runtimeId: 'sandbox-hop-fixture' }),
+          new CredentialAuthority(),
+        ),
       initialAuthFailed: false,
       readStdin: async () => '',
       hasPipedInput: false,

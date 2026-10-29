@@ -15,7 +15,7 @@ import {
 } from 'bun:test';
 import { handleAtCommand } from './atCommandProcessor.js';
 import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { FixtureCommandRuntime } from '../../__tests__/slash-command-runtime-fixture.js';
 import * as path from 'path';
 import * as fsPromises from 'fs/promises';
 import {
@@ -29,7 +29,7 @@ import {
 describe('handleAtCommand (filtering)', () => {
   let setup: AtCommandTestSetup;
   let testRootDir: string;
-  let mockConfig: CliUiRuntime;
+  let mockConfig: FixtureCommandRuntime;
   let mockAddItem: ReturnType<typeof vi.fn>;
   let mockOnDebugMessage: ReturnType<typeof vi.fn>;
   let abortController: AbortController;

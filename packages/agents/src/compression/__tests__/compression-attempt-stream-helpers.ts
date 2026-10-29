@@ -9,7 +9,7 @@ import {
   fixtureIncluded,
 } from '../../../../core/src/services/history/__tests__/support/curated-stream-test-helpers.js';
 
-export type AttemptHook = ConstructorParameters<typeof CompressionHandler>[4];
+export type AttemptHook = ConstructorParameters<typeof CompressionHandler>[9];
 
 export class AttemptHistory extends HistoryService {
   private strategiesStarted = false;
@@ -42,7 +42,12 @@ export function attemptHandler(
   });
   return new CompressionHandler(
     runtime,
+    undefined,
     service,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {},
     () => {
       throw new Error('No-op truncation must not resolve a provider');

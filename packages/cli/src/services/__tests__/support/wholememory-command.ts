@@ -107,7 +107,12 @@ export class MemoryCommand {
       currentProvider: 'test',
       currentModel: 'test',
       workspaceDirs: [],
-      historyService: this.history,
+      history: {
+        adoptResumeBoot: this.history.adoptResumeBoot.bind(this.history),
+        attachRecording: async (integration) => {
+          await integration.subscribeToJournal(this.history);
+        },
+      },
       counters: this.counters.counters,
       recordingCallbacks: {
         getCurrentRecording: () => this.recording,

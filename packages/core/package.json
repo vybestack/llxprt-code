@@ -11,6 +11,11 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
+    "./lifecycle/acquisition-release.js": {
+      "types": "./dist/src/lifecycle/acquisition-release.d.ts",
+      "bun": "./src/lifecycle/acquisition-release.ts",
+      "import": "./dist/src/lifecycle/acquisition-release.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "bun": "./index.ts",
@@ -934,6 +939,11 @@
       "bun": "./src/policy/policy-owner.ts",
       "import": "./dist/src/policy/policy-owner.js"
     },
+    "./policy/owner-policy-evaluation.js": {
+      "types": "./dist/src/policy/owner-policy-evaluation.d.ts",
+      "bun": "./src/policy/owner-policy-evaluation.ts",
+      "import": "./dist/src/policy/owner-policy-evaluation.js"
+    },
     "./lsp/workspace-lsp-owner.js": {
       "types": "./dist/src/lsp/workspace-lsp-owner.d.ts",
       "bun": "./src/lsp/workspace-lsp-owner.ts",
@@ -1108,6 +1118,11 @@
       "types": "./dist/src/journal/tool-ranking-tree.d.ts",
       "bun": "./src/journal/tool-ranking-tree.ts",
       "import": "./dist/src/journal/tool-ranking-tree.js"
+    },
+    "./runtime/admit-model-parameters.js": {
+      "types": "./dist/src/runtime/admit-model-parameters.d.ts",
+      "bun": "./src/runtime/admit-model-parameters.ts",
+      "import": "./dist/src/runtime/admit-model-parameters.js"
     }
   },
   "scripts": {

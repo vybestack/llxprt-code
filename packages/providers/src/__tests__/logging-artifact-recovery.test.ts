@@ -131,8 +131,9 @@ async function invoke(
     contents,
     invocation: captureProviderInvocation(
       {
-        config,
-        settingsService: config.settings,
+        globalSettings: config.settings.getAllGlobalSettings(),
+        providerSettings: config.settings.getProviderSettings('recovery'),
+        fetch: (input, init) => globalThis.fetch(input, init),
         runtimeId: 'recovery',
       },
       'recovery',

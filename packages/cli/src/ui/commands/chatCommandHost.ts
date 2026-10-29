@@ -1,0 +1,105 @@
+import type { CliSessionPersistencePort } from '../../cliSessionPersistence.js';
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import type { ChatOwnerOperations } from './chatOwnerCommand.js';
+import type { ChatRecordingOperations } from './chatCommand.js';
+
+export function bindChatOwnerOperations(
+  listCheckpoints: ChatOwnerOperations['listCheckpoints'],
+  createCheckpoint: ChatOwnerOperations['createCheckpoint'],
+  resume: ChatOwnerOperations['resume'],
+  deleteCheckpoint: ChatOwnerOperations['deleteCheckpoint'],
+  renameCheckpoint: ChatOwnerOperations['renameCheckpoint'],
+  getHistoryCount: ChatOwnerOperations['getHistoryCount'],
+  clearHistory: ChatOwnerOperations['clearHistory'],
+  restoreTurns: ChatOwnerOperations['restoreTurns'],
+  nameCurrentSession: ChatOwnerOperations['nameCurrentSession'],
+  getRecordingPath: ChatOwnerOperations['getRecordingPath'],
+  getModel: ChatOwnerOperations['getModel'],
+): ChatOwnerOperations {
+  return {
+    listCheckpoints,
+    createCheckpoint,
+    resume,
+    deleteCheckpoint,
+    renameCheckpoint,
+    getHistoryCount,
+    clearHistory,
+    restoreTurns,
+    nameCurrentSession,
+    getRecordingPath,
+    getModel,
+  };
+}
+
+export function bindChatRecordingOperations(
+  getRecording: ChatRecordingOperations['getRecording'],
+  readProjectHash: ChatRecordingOperations['getProjectHash'],
+  readChatsDir: ChatRecordingOperations['getChatsDir'],
+  listTargets: ChatRecordingOperations['listTargets'],
+  saveCheckpoint: ChatRecordingOperations['saveCheckpoint'],
+  deleteCheckpoint: ChatRecordingOperations['deleteCheckpoint'],
+  renameCheckpoint: ChatRecordingOperations['renameCheckpoint'],
+  nameSession: ChatRecordingOperations['nameSession'],
+  getChatHistory: ChatRecordingOperations['getChatHistory'],
+  clearHistory: ChatRecordingOperations['clearHistory'],
+  restoreTurns: ChatRecordingOperations['restoreTurns'],
+  getModel: ChatRecordingOperations['getModel'],
+): ChatRecordingOperations {
+  return {
+    getRecording,
+    getProjectHash: () => getRecording()?.getProjectHash() ?? readProjectHash(),
+    getChatsDir: () => getRecording()?.getChatsDir() ?? readChatsDir(),
+    listTargets,
+    saveCheckpoint,
+    deleteCheckpoint,
+    renameCheckpoint,
+    nameSession,
+    getChatHistory,
+    clearHistory,
+    restoreTurns,
+    getModel,
+  };
+}
+
+export function bindPersistedChatRecording(
+  readPersistence: () => CliSessionPersistencePort,
+  readRecording: ChatRecordingOperations['getRecording'],
+  readHash: ChatRecordingOperations['getProjectHash'],
+  readDirectory: ChatRecordingOperations['getChatsDir'],
+  readHistory: ChatRecordingOperations['getChatHistory'],
+  clearHistory: ChatRecordingOperations['clearHistory'],
+  restoreTurns: ChatRecordingOperations['restoreTurns'],
+  readModel: ChatRecordingOperations['getModel'],
+): ChatRecordingOperations {
+  const requireRecording = () => {
+    const recording = readRecording();
+    if (recording === null) throw new Error('No recording available');
+    return recording;
+  };
+  return bindChatRecordingOperations(
+    readRecording,
+    readHash,
+    readDirectory,
+    () => readPersistence().listBrowserTargetsDetailed(),
+    (name, overwrite) =>
+      readPersistence().createCheckpoint(requireRecording(), name, overwrite),
+    (target) => readPersistence().deleteBrowserTarget(target, readRecording()),
+    (target, name, overwrite) =>
+      readPersistence().renameCheckpoint(
+        readRecording(),
+        target,
+        name,
+        overwrite,
+      ),
+    (name, overwrite) =>
+      readPersistence().nameSession(requireRecording(), name, overwrite),
+    readHistory,
+    clearHistory,
+    restoreTurns,
+    readModel,
+  );
+}

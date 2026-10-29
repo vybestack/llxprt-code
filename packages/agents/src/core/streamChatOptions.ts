@@ -5,7 +5,6 @@
  */
 import type { PrepareProviderInvocation } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 
-import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
@@ -26,7 +25,6 @@ export function buildStreamChatOptions(
     tools: ToolDeclaration[] | undefined;
   },
   metadata: Readonly<Record<string, unknown>> | undefined,
-  retry: ProviderRetryOperations,
   params: SendMessageParams,
   generationConfig: ChatSessionConfig,
   rawTokenDeltaBridge: RawTokenDeltaBridge | null,
@@ -40,14 +38,6 @@ export function buildStreamChatOptions(
         }
       },
     },
-    readRetryAuthToken: retry.readRetryAuthToken,
-    handleAuthError: retry.handleAuthError,
-    tryBucketFailover: retry.tryBucketFailover,
-    readFailoverBuckets: retry.readFailoverBuckets,
-    readCurrentBucket: retry.readCurrentBucket,
-    readFailoverReasons: retry.readFailoverReasons,
-    resetBucketSession: retry.resetBucketSession,
-
     invocation: prepareInvocation(
       params.modelParameters?.providerName ?? providerName,
       params.modelParameters,

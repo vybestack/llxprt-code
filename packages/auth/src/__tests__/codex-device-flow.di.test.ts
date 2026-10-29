@@ -142,18 +142,18 @@ describe('CodexDeviceFlow DI behavioral tests / construction and authorization U
 
   it('constructs with injected IDebugLogger without error', () => {
     const logger = createCollectingLogger();
-    const flow = new CodexDeviceFlow({ logger });
+    const flow = new CodexDeviceFlow(globalThis.fetch, { logger });
     expect(flow).toBeInstanceOf(CodexDeviceFlow);
   });
 
   it('constructs without logger (uses fallback) without error', () => {
-    const flow = new CodexDeviceFlow();
+    const flow = new CodexDeviceFlow(globalThis.fetch);
     expect(flow).toBeInstanceOf(CodexDeviceFlow);
   });
 
   it('buildAuthorizationUrl returns valid URL with PKCE parameters when logger injected', () => {
     const logger = createCollectingLogger();
-    const flow = new CodexDeviceFlow({ logger });
+    const flow = new CodexDeviceFlow(globalThis.fetch, { logger });
     const redirectUri = 'http://127.0.0.1:1455/callback';
     const state = 'test-state-di';
 
@@ -174,7 +174,9 @@ describe('CodexDeviceFlow DI behavioral tests / construction and authorization U
   });
 
   it('buildAuthorizationUrl includes correct scopes', () => {
-    const flow = new CodexDeviceFlow({ logger: createCollectingLogger() });
+    const flow = new CodexDeviceFlow(globalThis.fetch, {
+      logger: createCollectingLogger(),
+    });
     const url = flow.buildAuthorizationUrl(
       'http://127.0.0.1:1455/callback',
       'state',
@@ -190,7 +192,9 @@ describe('CodexDeviceFlow DI behavioral tests / construction and authorization U
   });
 
   it('buildAuthorizationUrl generates unique code challenges per call', () => {
-    const flow = new CodexDeviceFlow({ logger: createCollectingLogger() });
+    const flow = new CodexDeviceFlow(globalThis.fetch, {
+      logger: createCollectingLogger(),
+    });
 
     const url1 = flow.buildAuthorizationUrl(
       'http://127.0.0.1:1455/callback',
@@ -210,7 +214,9 @@ describe('CodexDeviceFlow DI behavioral tests / construction and authorization U
   });
 
   it('exchangeCodeForToken throws when state not found', async () => {
-    const flow = new CodexDeviceFlow({ logger: createCollectingLogger() });
+    const flow = new CodexDeviceFlow(globalThis.fetch, {
+      logger: createCollectingLogger(),
+    });
 
     await expect(
       flow.exchangeCodeForToken(
@@ -230,7 +236,7 @@ describe('CodexDeviceFlow DI behavioral tests / PKCE state and device-code deadl
     globalThis.fetch = withFetchPreconnect(createHungDeviceCodeFetch());
 
     try {
-      const flow = new CodexDeviceFlow({
+      const flow = new CodexDeviceFlow(globalThis.fetch, {
         logger: createCollectingLogger(),
         networkTimeoutMs: 50,
       });
@@ -251,7 +257,9 @@ describe('CodexDeviceFlow DI behavioral tests / PKCE state and device-code deadl
     controller.abort(new Error('overall auth timed out'));
 
     try {
-      const flow = new CodexDeviceFlow({ logger: createCollectingLogger() });
+      const flow = new CodexDeviceFlow(globalThis.fetch, {
+        logger: createCollectingLogger(),
+      });
 
       await expect(flow.requestDeviceCode(controller.signal)).rejects.toThrow(
         'overall auth timed out',
@@ -283,7 +291,7 @@ describe('CodexDeviceFlow DI behavioral tests / PKCE state and device-code deadl
     );
 
     try {
-      const flow = new CodexDeviceFlow({
+      const flow = new CodexDeviceFlow(globalThis.fetch, {
         logger: createCollectingLogger(),
         networkTimeoutMs: 50,
       });
@@ -325,7 +333,7 @@ describe('CodexDeviceFlow DI behavioral tests / stalled body and parent cancella
     const controller = new AbortController();
 
     try {
-      const flow = new CodexDeviceFlow({
+      const flow = new CodexDeviceFlow(globalThis.fetch, {
         logger: createCollectingLogger(),
         networkTimeoutMs: 1_000,
       });
@@ -375,7 +383,7 @@ describe('CodexDeviceFlow DI behavioral tests / cancellation completion and inva
     );
 
     try {
-      const flow = new CodexDeviceFlow({
+      const flow = new CodexDeviceFlow(globalThis.fetch, {
         logger: createCollectingLogger(),
         networkTimeoutMs: 50,
       });
@@ -408,7 +416,9 @@ describe('CodexDeviceFlow DI behavioral tests / cancellation completion and inva
     );
 
     try {
-      const flow = new CodexDeviceFlow({ logger: createCollectingLogger() });
+      const flow = new CodexDeviceFlow(globalThis.fetch, {
+        logger: createCollectingLogger(),
+      });
       const redirectUri = 'http://127.0.0.1:1455/callback';
       const state = 'invalid-response-state';
       flow.buildAuthorizationUrl(redirectUri, state);
@@ -432,7 +442,9 @@ describe('CodexDeviceFlow DI behavioral tests / malformed and empty responses', 
     globalThis.fetch = withFetchPreconnect(
       vi.fn().mockResolvedValue(new Response('not-json', { status: 200 })),
     );
-    const flow = new CodexDeviceFlow({ logger: createCollectingLogger() });
+    const flow = new CodexDeviceFlow(globalThis.fetch, {
+      logger: createCollectingLogger(),
+    });
 
     await expect(flow.requestDeviceCode()).rejects.toThrow(
       'Device code request failed: invalid JSON response (status 200)',
@@ -443,7 +455,9 @@ describe('CodexDeviceFlow DI behavioral tests / malformed and empty responses', 
     globalThis.fetch = withFetchPreconnect(
       vi.fn().mockResolvedValue(new Response('', { status: 200 })),
     );
-    const flow = new CodexDeviceFlow({ logger: createCollectingLogger() });
+    const flow = new CodexDeviceFlow(globalThis.fetch, {
+      logger: createCollectingLogger(),
+    });
 
     await expect(flow.refreshToken('old-refresh-token')).rejects.toThrow(
       'Token refresh failed: invalid JSON response (status 200)',
@@ -463,7 +477,9 @@ describe('CodexDeviceFlow DI behavioral tests / HTTP token exchange', () => {
 
     it('exchangeCodeForToken returns CodexOAuthToken with account_id', async () => {
       const logger = createCollectingLogger();
-      const flow = new CodexDeviceFlow({ logger });
+      const flow = new CodexDeviceFlow(createRedirectingFetch(serverPort), {
+        logger,
+      });
 
       const mockTokenResponse = {
         access_token: 'test-access-token',
@@ -505,7 +521,9 @@ describe('CodexDeviceFlow DI behavioral tests / HTTP token exchange', () => {
 
     it('refreshToken returns new token via server', async () => {
       const logger = createCollectingLogger();
-      const flow = new CodexDeviceFlow({ logger });
+      const flow = new CodexDeviceFlow(createRedirectingFetch(serverPort), {
+        logger,
+      });
 
       const mockRefreshResponse = {
         access_token: 'refreshed-access-token',
@@ -541,7 +559,7 @@ describe('CodexDeviceFlow DI behavioral tests / logger entries', () => {
 
   it('logger receives debug messages during buildAuthorizationUrl', () => {
     const logger = createCollectingLogger();
-    const flow = new CodexDeviceFlow({ logger });
+    const flow = new CodexDeviceFlow(globalThis.fetch, { logger });
 
     flow.buildAuthorizationUrl('http://127.0.0.1:1455/callback', 'state');
 

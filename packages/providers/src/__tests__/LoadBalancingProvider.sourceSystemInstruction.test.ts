@@ -1,5 +1,6 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -133,12 +134,17 @@ describe('LoadBalancingProvider member system instruction on the source route', 
   beforeEach(() => {
     const settingsService = new SettingsService();
     const config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      fixtureSettings(config, settingsService),
+    );
     providerManager.setTokenizerFactory(tokenizerFactory);
   });
 
@@ -158,6 +164,7 @@ describe('LoadBalancingProvider member system instruction on the source route', 
       );
       const rows = trackedRequestRows([textRow('hello')]);
       const request: GenerateChatOptions = {
+        invocation: makeLoadBalancerInvocation(),
         contents: { [Symbol.asyncIterator]: () => rows.openReader() },
         requestRows: rows,
         contentCount: rows.count,
@@ -194,6 +201,7 @@ describe('LoadBalancingProvider member system instruction on the source route', 
     const rows = trackedRequestRows([textRow('hello')]);
 
     for await (const _chunk of lb.generateChatCompletion({
+      invocation: makeLoadBalancerInvocation(),
       contents: { [Symbol.asyncIterator]: () => rows.openReader() },
       requestRows: rows,
       contentCount: rows.count,

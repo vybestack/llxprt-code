@@ -27,6 +27,7 @@ async function publishFixture(
     },
     'fixture-contract',
     runtime,
+    undefined,
     history,
     async () => {
       throw new Error('Truncation must not resolve an LLM');

@@ -1,5 +1,6 @@
-import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
 
 /**
@@ -8,19 +9,10 @@ const retainedInvocationOwners: SessionSettingsOwner[] = [];
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
 import {
   StreamEventType,
   type StreamEvent,
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import { ChatSession } from './chatSession.js';
-import {
-  TokenUsageLogger,
-  type SerializedTokenUsageRecord,
-} from './TokenUsageLogger.js';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
@@ -32,8 +24,22 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { RAW_TOKEN_DELTA_SINK_KEY } from '@vybestack/llxprt-code-providers';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
 import { waitForCondition } from '../test-utils/eventLoop.js';
+import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
+import {
+  TokenUsageLogger,
+  type SerializedTokenUsageRecord,
+} from './TokenUsageLogger.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function makeTempLogPath(): string {
   return path.join(
@@ -159,6 +165,8 @@ function buildTokenSyncView(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
     state: runtimeState,
     history: historyService,
@@ -373,7 +381,19 @@ describe('TokenUsageLogger raw token-delta timing (#3493): internal sink metadat
       'sink-channel-session',
     );
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      chatSessionPorts(view),
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -411,7 +431,19 @@ async function runTurnReadRecords(
 ): Promise<SerializedTokenUsageRecord[]> {
   const fixture = createTokenSyncTestFixture();
   const view = buildTokenSyncView(fixture, mockProvider, sessionId);
-  const chat = new ChatSession(view, fixture.mockContentGenerator, {}, []);
+  const chat = new ChatSession(
+    chatSessionPorts(view),
+    fixture.mockConfig,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    fixture.mockContentGenerator,
+    {},
+    [],
+  );
 
   const realLogger = new TokenUsageLogger(true, logFile);
   chat.setTokenUsageLoggerForTesting(realLogger);

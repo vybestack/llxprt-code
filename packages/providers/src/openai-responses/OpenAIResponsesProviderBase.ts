@@ -155,7 +155,7 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
     if (!apiKey) return this.buildFallbackModels();
 
     try {
-      const response = await fetch(`${baseURL}/models`, {
+      const response = await this.requestFetch(`${baseURL}/models`, {
         method: 'GET',
         headers: { Authorization: `Bearer ${apiKey}` },
       });

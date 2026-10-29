@@ -105,6 +105,9 @@ function buildScriptedChat(state: ScriptedClientState): AgentChatContract {
       promptId,
       turnId: 'unused',
     }),
+    appendGeneration: async () => {
+      throw new Error('Scripted loop does not publish detached generation');
+    },
     sendMessageStream: async () => {
       async function* emptyStream() {}
       return emptyStream();
@@ -144,6 +147,12 @@ function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
   const chat = buildScriptedChat(state);
   let tools = emptyScriptedTools();
   return {
+    bindModelNotifications: () => {},
+    bindIdeContext: () => {},
+    bindWorkspaceDefinitions: () => {},
+    bindProviderFiles: () => {},
+    bindTokenization: () => {},
+    bindProviderSelection: () => {},
     get tools() {
       return tools;
     },

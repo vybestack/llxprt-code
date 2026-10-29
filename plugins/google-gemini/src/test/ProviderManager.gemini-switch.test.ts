@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -23,11 +24,20 @@ describe('ProviderManager - Gemini switching', () => {
 
   beforeEach(() => {
     // Set up runtime context for ProviderManager
+    const settings = new SettingsService();
     const runtime = createProviderRuntimeContext({
-      settingsService: new SettingsService(),
       runtimeId: 'test-runtime',
     });
-    manager = new ProviderManager(runtime);
+    manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      undefined,
+      runtime,
+      new CredentialAuthority(),
+    );
     mockProvider = {
       name: 'openai',
       getDefaultModel: () => 'test-model',
@@ -111,10 +121,18 @@ describe('ProviderManager - Gemini switching', () => {
     try {
       const settings = new SettingsService();
       const runtime = createProviderRuntimeContext({
-        settingsService: settings,
         runtimeId: 'gemini-roundtrip',
       });
-      const roundtripManager = new ProviderManager(runtime);
+      const roundtripManager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        settings,
+        undefined,
+        runtime,
+        new CredentialAuthority(),
+      );
       // Config first so registerProvider applies the full production
       // wrapping (RetryOrchestrator + LoggingProviderWrapper).
       roundtripManager.setConfig(makeFakeConfig());

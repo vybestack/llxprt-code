@@ -27,7 +27,10 @@ for (const size of [512, 8192]) {
           actual.update('[');
           try {
             await deliverHistoryUpdates(
-              readAgentHistoryForReplay(client, 'replay-cursor'),
+              readAgentHistoryForReplay(
+                client.streamHistory.bind(client),
+                'replay-cursor',
+              ),
               new SessionTitleTracker(),
               'replay-cursor',
               async (update) => {
@@ -70,7 +73,10 @@ for (const size of [512, 8192]) {
           try {
             await expect(
               deliverHistoryUpdates(
-                readAgentHistoryForReplay(client, 'replay-cursor'),
+                readAgentHistoryForReplay(
+                  client.streamHistory.bind(client),
+                  'replay-cursor',
+                ),
                 new SessionTitleTracker(),
                 'replay-cursor',
                 async () => {

@@ -108,6 +108,7 @@ function prepassOptions(
       contents: [],
       settings,
       invocation: createRuntimeInvocationContext({
+        fetch: (input, init) => globalThis.fetch(input, init),
         runtimeId: 'kimi-prepass',
         providerName: 'kimi',
         ephemeralsSnapshot: { ...settings.getAllGlobalSettings() },

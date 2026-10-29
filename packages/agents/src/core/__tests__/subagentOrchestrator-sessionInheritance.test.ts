@@ -1,4 +1,6 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -20,23 +22,25 @@ const fixturePaths = installTestWorkspacePaths({
  * Most exercise the real `SubagentOrchestrator` assembly boundary: real
  * `createIsolatedRuntimeContext`, real settings population, and a stubbed
  * runtime loader/scope factory so the populated settings service can be
- * inspected without a full agent runtime. The load-balancer test spies on the
- * runtime activation seams to keep LB provider activation deterministic.
+ * inspected without a full agent runtime. The load-balancer test also reads
+ * the live policy and provider invocation through the loader boundary.
  */
 
-import { describe, expect, it, vi } from 'bun:test';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import * as runtimeModule from '@vybestack/llxprt-code-providers/runtime.js';
+import type { AgentRuntimeLoaderOptions } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { describe, expect, it, vi } from 'bun:test';
+import type { SubAgentScopeFactory } from '../subagent.js';
+import {
+  createRuntimeBundle,
+  fakeChildScope,
+} from './subagentOrchestrator-test-helpers.js';
 
-import * as profileApplicationModule from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
-import type { SubAgentScope } from '../subagent.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
-import { createRuntimeBundle } from './subagentOrchestrator-test-helpers.js';
+const parentSignal = new AbortController().signal;
 
 const subagentConfig: SubagentConfig = {
   name: 'helper',
@@ -73,13 +77,6 @@ const memberProfile: Profile = {
   ephemeralSettings: { 'auth-key': 'member-key' },
 };
 
-function loadBalancerScope(): SubAgentScope {
-  return {
-    runtimeContext: createRuntimeBundle('lb').runtimeContext,
-    getAgentId: () => 'lb-helper-1',
-  } as unknown as SubAgentScope;
-}
-
 function makeForegroundConfig(): Config {
   return new Config({
     sessionId: 'primary-session',
@@ -101,24 +98,25 @@ async function launchSubagent(
 }> {
   const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
   const loadProfile = vi.fn().mockResolvedValue(profile);
-  const runtimeLoader = vi.fn(async () => createRuntimeBundle('sess'));
-  const scope = {
-    runtimeContext: createRuntimeBundle('sess').runtimeContext,
+  const runtimeLoader = vi.fn(async (_options: AgentRuntimeLoaderOptions) =>
+    createRuntimeBundle('sess'),
+  );
+  const scope = fakeChildScope({
     getAgentId: () => 'helper-1',
-  } as unknown as SubAgentScope;
-  const scopeFactory = vi
-    .fn<typeof SubAgentScope.create>()
-    .mockResolvedValue(scope);
+    dispose: async () => {},
+  });
+  const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
   const foregroundRoot1 = makeForegroundConfig();
   const foregroundSettings1 = createSessionSettingsFixture(
     foregroundRoot1,
     foregroundSettings,
   );
-  const orchestrator = new SubagentOrchestrator({
+  const isolatedSettings = foregroundSettings1.settingsOwner.createChildStore();
+  const orchestrator = createTestChildOrchestrator({
+    credentialAuthority: new CredentialAuthority(),
     workspaceTrust: foregroundSettings1.workspaceTrust,
-    createChildSettings: () =>
-      foregroundSettings1.settingsOwner.createChildStore(),
+    createChildSettings: () => isolatedSettings,
     readRunPolicy: () =>
       foregroundSettings1.settingsOwner.readSubagentRunPolicy(),
     toolRegistry: fixtureToolSelection(),
@@ -133,15 +131,15 @@ async function launchSubagent(
     messageBus: new MessageBus(),
   });
 
-  const result = await orchestrator.launch({ name: subagentConfig.name });
-  const isolatedSettings = runtimeLoader.mock.calls[0][0].profile
-    .providerRuntime.settingsService as SettingsService;
+  const result = await orchestrator.launch(
+    { name: subagentConfig.name },
+    parentSignal,
+  );
 
   return {
     isolatedSettings,
     dispose: result.dispose,
-    childRuntimeId:
-      runtimeLoader.mock.calls[0][0].profile.providerRuntime.runtimeId,
+    childRuntimeId: runtimeLoader.mock.calls[0][0].profile.state.runtimeId,
   };
 }
 
@@ -329,41 +327,29 @@ describe('SubagentOrchestrator — load-balancer dumpcontext inheritance (#3151)
       }
       throw new Error(`unexpected profile ${profileName}`);
     });
-    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle('lb'));
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(loadBalancerScope());
-
-    let capturedSettings: SettingsService | undefined;
-    const createIsolatedRuntime = runtimeModule.createIsolatedRuntimeContext;
-    const isolatedSpy = vi
-      .spyOn(runtimeModule, 'createIsolatedRuntimeContext')
-      .mockImplementation(
-        (
-          options: Parameters<
-            typeof runtimeModule.createIsolatedRuntimeContext
-          >[0],
-          settingsService: SettingsService,
-        ) => {
-          capturedSettings = settingsService;
-          return createIsolatedRuntime(options, settingsService);
-        },
-      );
-    const applyProfileSpy = vi.spyOn(
-      profileApplicationModule,
-      'applyProfileCascade',
+    const runtimeLoader = vi.fn(async (_options: AgentRuntimeLoaderOptions) =>
+      createRuntimeBundle('lb'),
     );
+    const lbScope = fakeChildScope({
+      getAgentId: () => 'lb-helper-1',
+      dispose: async () => {},
+    });
+    const scopeFactory = vi
+      .fn<SubAgentScopeFactory>()
+      .mockResolvedValue(lbScope);
 
+    const foregroundRoot2 = makeForegroundConfig();
     try {
-      const foregroundRoot2 = makeForegroundConfig();
       const foregroundSettings2 = createSessionSettingsFixture(
         foregroundRoot2,
         foreground,
       );
-      const orchestrator = new SubagentOrchestrator({
+      const isolatedSettings =
+        foregroundSettings2.settingsOwner.createChildStore();
+      const orchestrator = createTestChildOrchestrator({
+        credentialAuthority: new CredentialAuthority(),
         workspaceTrust: foregroundSettings2.workspaceTrust,
-        createChildSettings: () =>
-          foregroundSettings2.settingsOwner.createChildStore(),
+        createChildSettings: () => isolatedSettings,
         readRunPolicy: () =>
           foregroundSettings2.settingsOwner.readSubagentRunPolicy(),
         toolRegistry: fixtureToolSelection(),
@@ -378,37 +364,46 @@ describe('SubagentOrchestrator — load-balancer dumpcontext inheritance (#3151)
         messageBus: new MessageBus(),
       });
 
-      const result = await orchestrator.launch({
-        name: subagentConfig.name,
-      });
-
-      expect(applyProfileSpy).toHaveBeenCalledTimes(1);
-      expect(applyProfileSpy.mock.calls[0][0]).toStrictEqual(
-        loadBalancerProfile,
+      const result = await orchestrator.launch(
+        {
+          name: subagentConfig.name,
+        },
+        parentSignal,
       );
 
-      // The runtime loader receives the foreground on mode through the
-      // production-constructed isolated settings service.
-      const isolatedSettings = runtimeLoader.mock.calls[0][0].profile
-        .providerRuntime.settingsService as SettingsService;
-      expect(isolatedSettings).toBe(capturedSettings);
-      expect(isolatedSettings).not.toBe(foreground);
-      expect(isolatedSettings.get('dumpcontext')).toBe('on');
-      expect(isolatedSettings.getAllGlobalSettings().dumpcontext).toBe('on');
+      try {
+        const loaderProfile = runtimeLoader.mock.calls[0][0].profile;
+        const invocation = () =>
+          loaderProfile.prepareProviderInvocation('load-balancer');
+        expect(loaderProfile.providerManager?.getActiveProvider()?.name).toBe(
+          'load-balancer',
+        );
+        expect(loaderProfile.state.provider).toBe('load-balancer');
+        expect(isolatedSettings.getCurrentProfileName()).toBe(
+          subagentConfig.profile,
+        );
+        expect(isolatedSettings).not.toBe(foreground);
+        expect(isolatedSettings.get('dumpcontext')).toBe('on');
+        expect(isolatedSettings.getAllGlobalSettings().dumpcontext).toBe('on');
+        expect(invocation().getEphemeral('dumpcontext')).toBe('on');
 
-      // The same already-created isolated service observes later live
-      // foreground changes through the shared session overlay.
-      foreground.setSessionScoped('dumpcontext', 'error');
-      expect(isolatedSettings.get('dumpcontext')).toBe('error');
+        isolatedSettings.set('context-limit', 12345);
+        expect(loaderProfile.readRuntimeSettings?.().contextLimit).toBe(12345);
+        expect(foreground.get('context-limit')).toBeUndefined();
 
-      foreground.setSessionScoped('dumpcontext', 'off');
-      expect(isolatedSettings.get('dumpcontext')).toBe('off');
-      expect(isolatedSettings.getAllGlobalSettings().dumpcontext).toBe('off');
+        foreground.setSessionScoped('dumpcontext', 'error');
+        expect(isolatedSettings.get('dumpcontext')).toBe('error');
+        expect(invocation().getEphemeral('dumpcontext')).toBe('error');
 
-      await result.dispose();
+        foreground.setSessionScoped('dumpcontext', 'off');
+        expect(isolatedSettings.get('dumpcontext')).toBe('off');
+        expect(isolatedSettings.getAllGlobalSettings().dumpcontext).toBe('off');
+        expect(invocation().getEphemeral('dumpcontext')).toBe('off');
+      } finally {
+        await result.dispose();
+      }
     } finally {
-      isolatedSpy.mockRestore();
-      applyProfileSpy.mockRestore();
+      await foregroundRoot2.dispose();
     }
   });
 });

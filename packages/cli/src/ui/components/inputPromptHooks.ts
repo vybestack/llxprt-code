@@ -38,7 +38,6 @@ import type { TextBuffer } from './shared/text-buffer.js';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import clipboardy from 'clipboardy';
-import type { SessionIdentity } from '../cliUiRuntime.js';
 import {
   getMouseEventsGeneration,
   isMouseEventsActive,
@@ -156,7 +155,7 @@ const useSubmitHandlers = (
 
 const useClipboardPasteHandler = (
   buffer: TextBuffer,
-  session: SessionIdentity,
+  session: { getTargetDir(): string },
   pasteText: (text: string) => void,
   reportError: ((message: string | null) => void) | undefined,
   captureOwnership: () => () => boolean,
@@ -202,6 +201,8 @@ type InputPromptState = Pick<
   | 'config'
   | 'slashCommands'
   | 'commandContext'
+  | 'generatePromptContent'
+  | 'enableFuzzyFiltering'
   | 'shellModeActive'
   | 'setShellModeActive'
   | 'onEscapePromptChange'
@@ -253,14 +254,23 @@ const useCompletionState = ({
   config,
   slashCommands,
   commandContext,
+  generatePromptContent,
+  enableFuzzyFiltering,
   shellModeActive,
 }: Pick<
   InputPromptState,
-  'buffer' | 'config' | 'slashCommands' | 'commandContext' | 'shellModeActive'
+  | 'buffer'
+  | 'config'
+  | 'slashCommands'
+  | 'commandContext'
+  | 'generatePromptContent'
+  | 'shellModeActive'
+  | 'enableFuzzyFiltering'
 >): CompletionState => {
   const [reverseSearchActive, setReverseSearchActive] = useState(false);
   const shellHistory = useShellHistory(config.historyFilePath);
   const completion = useCommandCompletion(
+    enableFuzzyFiltering,
     buffer,
     config.getTargetDir(),
     slashCommands,
@@ -268,6 +278,7 @@ const useCompletionState = ({
     reverseSearchActive,
     shellModeActive,
     config,
+    generatePromptContent,
   );
   const reverseSearchCompletion = useReverseSearchCompletion(
     buffer,
@@ -483,7 +494,7 @@ const usePasteOwnership = (active: boolean): (() => () => boolean) => {
 
 const useDesktopPaste = (
   buffer: TextBuffer,
-  session: SessionIdentity,
+  session: { getTargetDir(): string },
   nextPlaceholderIdRef: React.MutableRefObject<number>,
   pendingLargePastesRef: React.MutableRefObject<Map<string, string>>,
   reportError: ((message: string | null) => void) | undefined,

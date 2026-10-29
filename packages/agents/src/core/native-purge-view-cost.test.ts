@@ -80,6 +80,7 @@ describe('native purge warm selected-view planning', () => {
                 contentCount: selection.count,
                 metadata: {},
                 invocation: createRuntimeInvocationContext({
+                  fetch: globalThis.fetch,
                   runtimeId: 'purge-cost',
                   providerName: 'openai',
                   ephemeralsSnapshot: { streaming: 'disabled' },

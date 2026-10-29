@@ -46,6 +46,27 @@ async function begin(recorder: JournalArrivalRecorder) {
 
 describe('bounded text delta admission', () => {
   const directory = useTempDir('arrival-text-buffer-');
+  it('publishes valid empty text before the first buffered delta reaches disk', async () => {
+    const path = join(directory(), 'initial-text.llxj');
+    const store = await JournalStore.create(path, storeDeps());
+    const recorder = new JournalArrivalRecorder(store);
+    try {
+      const block = await begin(recorder);
+      expect((await observe(path)).value).toStrictEqual({
+        type: 'text',
+        text: '',
+      });
+      await recorder.appendTextDelta(block, 'final answer');
+      await recorder.endBlock(block);
+      expect((await observe(path)).value).toStrictEqual({
+        type: 'text',
+        text: 'final answer',
+      });
+    } finally {
+      await recorder.close();
+      await store.close();
+    }
+  });
   it('admits 1000 deltas without per-chunk suspension and writes byte-sized pieces', async () => {
     const path = join(directory(), 'buffer.llxj');
     const store = await JournalStore.create(path, storeDeps());

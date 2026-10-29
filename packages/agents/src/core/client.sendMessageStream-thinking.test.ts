@@ -137,8 +137,8 @@ void vi.mock('@vybestack/llxprt-code-tools', () => ({
   ...actual,
   LocalTodoStore: mockTodoStoreConstructor,
 }));
-const __actual = { ...(await import('./turn')) };
-void vi.mock('./turn', () => {
+const __actual = { ...(await import('./turn.js')) };
+void vi.mock('./turn.js', () => {
   const result = __actual as
     | typeof import('./turn.js')
     | Promise<typeof import('./turn.js')>;
@@ -196,6 +196,25 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
     getLastPromptTokenCount: vi.fn(),
   },
 }));
+const actual4 = {
+  ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
+};
+void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+  const tokenLimit = vi.fn();
+  return {
+    ...actual4,
+    tokenLimit,
+    resolveEffectiveContextLimit: vi.fn(
+      (model: string, userCtx?: number, provCtx?: number) => {
+        const ok = (v: unknown): v is number =>
+          typeof v === 'number' && Number.isFinite(v) && v > 0;
+        if (ok(userCtx)) return userCtx;
+        if (ok(provCtx)) return provCtx;
+        return tokenLimit(model);
+      },
+    ),
+  };
+});
 
 let client: AgentClient;
 
@@ -449,7 +468,7 @@ describe('AgentClient (client.ts)', () => {
       '@vybestack/llxprt-code-core/utils/retry.js',
       () => realRetryModule,
     );
-    void vi.mock('./turn', () => __actual);
+    void vi.mock('./turn.js', () => __actual);
     void vi.mock('@vybestack/llxprt-code-tools', () => actual);
     void vi.mock(
       '@vybestack/llxprt-code-core/services/todo-reminder-service.js',

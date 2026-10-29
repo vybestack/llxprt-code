@@ -23,7 +23,7 @@ export class TruncationStreamHistory extends HistoryService {
 
 export function truncationHandler(
   history: HistoryService,
-  hook: ConstructorParameters<typeof CompressionHandler>[4] = async () => {},
+  hook: ConstructorParameters<typeof CompressionHandler>[9] = async () => {},
 ): CompressionHandler {
   history.setTokenizerFactory(exactTokenizer());
   return new CompressionHandler(
@@ -32,7 +32,12 @@ export function truncationHandler(
       contextLimit: 100,
       compressionThreshold: 0.5,
     }),
+    undefined,
     history,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {},
     () => {
       throw new Error('Truncation cannot use a summarizing provider');

@@ -7,8 +7,9 @@ import { parseOutputLimits, type IContent } from '@vybestack/llxprt-code-core';
 
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import { bindDumpManager } from './__tests__/dumpcontext-owner-fixture.js';
-import { dumpcontextCommand } from './dumpcontextCommand.js';
-import { type CommandContext } from './types.js';
+import { createDumpcontextCommand } from './dumpcontextCommand.js';
+import { bindDumpcontextCommand } from './dumpcontextCommandHost.js';
+import type { CommandOwnerFixture as CommandContext } from '../../__tests__/mockCommandContext.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import {
   snapshotFixture,
@@ -58,15 +59,24 @@ function createOwnedCommandContext(
   return context;
 }
 
-function requireDumpcontextAction(): NonNullable<
-  typeof dumpcontextCommand.action
-> {
-  const action = dumpcontextCommand.action;
-  assertDefined(action);
-  return action;
+async function dumpcontextAction(context: CommandContext, args: string) {
+  const command = createDumpcontextCommand(
+    bindDumpcontextCommand({
+      readMode: () => context.runtimeApi.getSessionSetting('dumpcontext'),
+      writeMode: (mode) =>
+        context.runtimeApi.setSessionSetting('dumpcontext', mode),
+      readHistory: async () =>
+        context.services.agent === null
+          ? null
+          : context.services.agent.session.openDumpSnapshot(),
+      readProvider: () => context.runtimeApi.getProviderDumpMetadata(),
+      readOutputSettings: () =>
+        context.services.config?.getEphemeralSettings() ?? {},
+    }),
+  );
+  assertDefined(command.action);
+  return command.action(context, args);
 }
-
-const dumpcontextAction = requireDumpcontextAction();
 
 describe('dumpcontextCommand now subcommand', () => {
   beforeEach(() => {
@@ -165,8 +175,14 @@ async function dumpsWithoutSettingSession(): Promise<void> {
   const ctxWithHistory = createOwnedCommandContext({
     services: {
       agent: {
-        agentClient: {
-          getHistoryService: mockGetHistoryService,
+        session: {
+          openDumpSnapshot: async () => {
+            const read = mockGetHistoryService;
+            const selectedHistory = read();
+            return selectedHistory === null
+              ? null
+              : selectedHistory.openDumpSnapshot();
+          },
         },
       } as unknown as CommandContext['services']['agent'],
       config: {} as unknown as CommandContext['services']['config'],
@@ -215,8 +231,11 @@ async function preservesAgentClientReceiver(): Promise<void> {
   };
 
   const agentWithReceiverDependentMethod = {
-    agentClient: {
-      getHistoryService: () => historyService,
+    session: {
+      historyService,
+      async openDumpSnapshot() {
+        return this.historyService.openDumpSnapshot();
+      },
     },
   };
 
@@ -254,12 +273,18 @@ async function shapesOpenAIHistory(): Promise<void> {
   const ctxWithHistory = createOwnedCommandContext({
     services: {
       agent: {
-        agentClient: {
-          getHistoryService: vi.fn().mockReturnValue({
-            streamRawHistory: () => fixtureRows(createOpenAIDumpHistory()),
-            getChronologyTrace: vi.fn(async function* () {}),
-            openDumpSnapshot: snapshotFixture,
-          }),
+        session: {
+          openDumpSnapshot: async () => {
+            const read = vi.fn().mockReturnValue({
+              streamRawHistory: () => fixtureRows(createOpenAIDumpHistory()),
+              getChronologyTrace: vi.fn(async function* () {}),
+              openDumpSnapshot: snapshotFixture,
+            });
+            const selectedHistory = read();
+            return selectedHistory === null
+              ? null
+              : selectedHistory.openDumpSnapshot();
+          },
         },
       } as unknown as CommandContext['services']['agent'],
       config: {
@@ -322,12 +347,18 @@ async function shapesOpenAIAliasHistory(): Promise<void> {
   const ctxWithHistory = createOwnedCommandContext({
     services: {
       agent: {
-        agentClient: {
-          getHistoryService: vi.fn().mockReturnValue({
-            streamRawHistory: () => fixtureRows(history),
-            getChronologyTrace: vi.fn(async function* () {}),
-            openDumpSnapshot: snapshotFixture,
-          }),
+        session: {
+          openDumpSnapshot: async () => {
+            const read = vi.fn().mockReturnValue({
+              streamRawHistory: () => fixtureRows(history),
+              getChronologyTrace: vi.fn(async function* () {}),
+              openDumpSnapshot: snapshotFixture,
+            });
+            const selectedHistory = read();
+            return selectedHistory === null
+              ? null
+              : selectedHistory.openDumpSnapshot();
+          },
         },
       } as unknown as CommandContext['services']['agent'],
       config: {
@@ -365,12 +396,18 @@ async function shapesAnthropicHistory(): Promise<void> {
   const ctxWithHistory = createOwnedCommandContext({
     services: {
       agent: {
-        agentClient: {
-          getHistoryService: vi.fn().mockReturnValue({
-            streamRawHistory: () => fixtureRows(createAnthropicDumpHistory()),
-            getChronologyTrace: vi.fn(async function* () {}),
-            openDumpSnapshot: snapshotFixture,
-          }),
+        session: {
+          openDumpSnapshot: async () => {
+            const read = vi.fn().mockReturnValue({
+              streamRawHistory: () => fixtureRows(createAnthropicDumpHistory()),
+              getChronologyTrace: vi.fn(async function* () {}),
+              openDumpSnapshot: snapshotFixture,
+            });
+            const selectedHistory = read();
+            return selectedHistory === null
+              ? null
+              : selectedHistory.openDumpSnapshot();
+          },
         },
       } as unknown as CommandContext['services']['agent'],
       config: {
@@ -459,18 +496,24 @@ async function preservesGeminiPluginBody(): Promise<void> {
   const ctxWithHistory = createOwnedCommandContext({
     services: {
       agent: {
-        agentClient: {
-          getHistoryService: vi.fn().mockReturnValue({
-            streamRawHistory: () =>
-              fixtureRows([
-                {
-                  speaker: 'human',
-                  blocks: [{ type: 'text', text: 'Ping' }],
-                },
-              ]),
-            getChronologyTrace: vi.fn(async function* () {}),
-            openDumpSnapshot: snapshotFixture,
-          }),
+        session: {
+          openDumpSnapshot: async () => {
+            const read = vi.fn().mockReturnValue({
+              streamRawHistory: () =>
+                fixtureRows([
+                  {
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'Ping' }],
+                  },
+                ]),
+              getChronologyTrace: vi.fn(async function* () {}),
+              openDumpSnapshot: snapshotFixture,
+            });
+            const selectedHistory = read();
+            return selectedHistory === null
+              ? null
+              : selectedHistory.openDumpSnapshot();
+          },
         },
       } as unknown as CommandContext['services']['agent'],
       config: {} as unknown as CommandContext['services']['config'],
@@ -510,12 +553,18 @@ async function passesGeminiActiveConfigAndModel(): Promise<void> {
     services: {
       config,
       agent: {
-        agentClient: {
-          getHistoryService: vi.fn().mockReturnValue({
-            streamRawHistory: () => fixtureRows(history),
-            getChronologyTrace: vi.fn(async function* () {}),
-            openDumpSnapshot: snapshotFixture,
-          }),
+        session: {
+          openDumpSnapshot: async () => {
+            const read = vi.fn().mockReturnValue({
+              streamRawHistory: () => fixtureRows(history),
+              getChronologyTrace: vi.fn(async function* () {}),
+              openDumpSnapshot: snapshotFixture,
+            });
+            const selectedHistory = read();
+            return selectedHistory === null
+              ? null
+              : selectedHistory.openDumpSnapshot();
+          },
         },
       } as unknown as CommandContext['services']['agent'],
     },
@@ -567,18 +616,24 @@ async function reportsMissingGeminiPlugin(): Promise<void> {
   const ctxWithoutPlugin = createOwnedCommandContext({
     services: {
       agent: {
-        agentClient: {
-          getHistoryService: vi.fn().mockReturnValue({
-            streamRawHistory: () =>
-              fixtureRows([
-                {
-                  speaker: 'human',
-                  blocks: [{ type: 'text', text: 'Hi' }],
-                },
-              ]),
-            getChronologyTrace: vi.fn(async function* () {}),
-            openDumpSnapshot: snapshotFixture,
-          }),
+        session: {
+          openDumpSnapshot: async () => {
+            const read = vi.fn().mockReturnValue({
+              streamRawHistory: () =>
+                fixtureRows([
+                  {
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'Hi' }],
+                  },
+                ]),
+              getChronologyTrace: vi.fn(async function* () {}),
+              openDumpSnapshot: snapshotFixture,
+            });
+            const selectedHistory = read();
+            return selectedHistory === null
+              ? null
+              : selectedHistory.openDumpSnapshot();
+          },
         },
       } as unknown as CommandContext['services']['agent'],
       config: {} as unknown as CommandContext['services']['config'],
@@ -617,12 +672,18 @@ async function preservesUnknownProviderHistory(): Promise<void> {
   const ctxWithHistory = createOwnedCommandContext({
     services: {
       agent: {
-        agentClient: {
-          getHistoryService: vi.fn().mockReturnValue({
-            streamRawHistory: () => fixtureRows(history),
-            getChronologyTrace: vi.fn(async function* () {}),
-            openDumpSnapshot: snapshotFixture,
-          }),
+        session: {
+          openDumpSnapshot: async () => {
+            const read = vi.fn().mockReturnValue({
+              streamRawHistory: () => fixtureRows(history),
+              getChronologyTrace: vi.fn(async function* () {}),
+              openDumpSnapshot: snapshotFixture,
+            });
+            const selectedHistory = read();
+            return selectedHistory === null
+              ? null
+              : selectedHistory.openDumpSnapshot();
+          },
         },
       } as unknown as CommandContext['services']['agent'],
       config: {
@@ -711,8 +772,14 @@ async function defaultsToBackendProvider(): Promise<void> {
   const ctxNoProviderManager = createOwnedCommandContext({
     services: {
       agent: {
-        agentClient: {
-          getHistoryService: mockGetHistoryService,
+        session: {
+          openDumpSnapshot: async () => {
+            const read = mockGetHistoryService;
+            const selectedHistory = read();
+            return selectedHistory === null
+              ? null
+              : selectedHistory.openDumpSnapshot();
+          },
         },
       } as unknown as CommandContext['services']['agent'],
       config: {} as unknown as CommandContext['services']['config'],
@@ -746,8 +813,14 @@ async function reportsNullHistory(): Promise<void> {
   const ctxWithNullHistory = createOwnedCommandContext({
     services: {
       agent: {
-        agentClient: {
-          getHistoryService: vi.fn().mockReturnValue(null),
+        session: {
+          openDumpSnapshot: async () => {
+            const read = vi.fn().mockReturnValue(null);
+            const selectedHistory = read();
+            return selectedHistory === null
+              ? null
+              : selectedHistory.openDumpSnapshot();
+          },
         },
       } as unknown as CommandContext['services']['agent'],
       config: {} as unknown as CommandContext['services']['config'],

@@ -35,6 +35,7 @@ function optionsFor(
 ): NormalizedGenerateChatOptions {
   return {
     invocation: createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: 'request-size',
       providerName: 'openaivercel',
       ephemeralsSnapshot: {},

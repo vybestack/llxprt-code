@@ -60,6 +60,7 @@ interface Harness {
   readonly provider: AnthropicProvider;
   readonly settings: ReturnType<typeof setup>['settings'];
   readonly runtime: ReturnType<typeof setup>['runtime'];
+  readonly config: ReturnType<typeof setup>['config'];
 }
 
 function setup(oauth: boolean, cache: boolean, streaming: boolean) {
@@ -86,8 +87,8 @@ function setup(oauth: boolean, cache: boolean, streaming: boolean) {
     { runtimeId: 'anthropic.wp07', metadata: { source: 'wp07' } },
   );
   const { provider, runtime, settingsService } = result;
-  runtime.config ??= createRuntimeConfigStub(settingsService);
-  return { provider, settings: settingsService, runtime };
+  const config = createRuntimeConfigStub(settingsService);
+  return { provider, settings: settingsService, runtime, config };
 }
 
 interface RowProbe {
@@ -144,6 +145,7 @@ function arrayOptions(
   signal?: AbortSignal,
 ): GenerateChatOptions {
   const invocation = createRuntimeInvocationContext({
+    fetch: (input, init) => globalThis.fetch(input, init),
     runtimeId: harness.runtime.runtimeId,
     runtimeMetadata: harness.runtime.metadata,
     providerName: 'anthropic',
@@ -159,7 +161,7 @@ function arrayOptions(
     tools: scenario.tools,
     settings: harness.settings,
     runtime: harness.runtime,
-    config: harness.runtime.config,
+    config: harness.config,
     invocation,
   });
 }
@@ -193,6 +195,7 @@ function makeHarness(scenario: Scenario): Harness {
     provider: built.provider,
     settings: built.settings,
     runtime: built.runtime,
+    config: built.config,
   };
 }
 

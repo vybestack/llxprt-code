@@ -39,38 +39,54 @@ const realLlxprtCodeCoreModule = {
   ...(await import('@vybestack/llxprt-code-core')),
 };
 
-void vi.mock('../contexts/RuntimeContext.js', () => {
-  // resolveModelIdentity formats from status.providerName + status.modelName.
-  // Without modelName the identity collapses to the bare provider name, which
-  // is why this mock has to carry both.
-  const status = {
-    providerName: 'test-provider',
-    modelName: 'test-model',
-    isPaidMode: false,
-  };
-  // Exposed so tests can drive a provider/model change: the component reads
-  // identity from the runtime, not from config.getModel().
-  const setStatus = (next: {
-    providerName?: string;
-    modelName?: string;
-    isPaidMode?: boolean;
-  }) => {
-    if (next.providerName !== undefined)
-      status.providerName = next.providerName;
-    if (next.modelName !== undefined) status.modelName = next.modelName;
-    if (next.isPaidMode !== undefined) status.isPaidMode = next.isPaidMode;
-  };
-  const api = {
-    __setStatusForTesting: setStatus,
-    providerStatus: () => status,
-    getActiveProfileName: () => undefined,
-    providerManager: () => undefined,
-  };
-  return {
-    useRuntimeApi: () => api,
-    getRuntimeApi: () => api,
-  };
-});
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => api;
+
+    // resolveModelIdentity formats from status.providerName + status.modelName.
+    // Without modelName the identity collapses to the bare provider name, which
+    // is why this mock has to carry both.
+    const status = {
+      providerName: 'test-provider',
+      modelName: 'test-model',
+      isPaidMode: false,
+    };
+    // Exposed so tests can drive a provider/model change: the component reads
+    // identity from the runtime, not from config.getModel().
+    const setStatus = (next: {
+      providerName?: string;
+      modelName?: string;
+      isPaidMode?: boolean;
+    }) => {
+      if (next.providerName !== undefined)
+        status.providerName = next.providerName;
+      if (next.modelName !== undefined) status.modelName = next.modelName;
+      if (next.isPaidMode !== undefined) status.isPaidMode = next.isPaidMode;
+    };
+    const api = {
+      __setStatusForTesting: setStatus,
+      providerStatus: () => status,
+      getLoadBalancerStats: () => undefined,
+      getActiveProfileName: () => undefined,
+      providerManager: () => undefined,
+    };
+    return {
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+      useGetLoadBalancerStats: () =>
+        useSelectedTestRuntime().getLoadBalancerStats,
+
+      useGetActiveProfileName: () =>
+        useSelectedTestRuntime().getActiveProfileName,
+
+      useRuntimeApi: useSelectedTestRuntime,
+      getRuntimeApi: () => api,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 void vi.mock('../hooks/useHistoryManager.js', () => ({
   useHistory: vi.fn(() => ({
@@ -83,6 +99,8 @@ void vi.mock('../hooks/useHistoryManager.js', () => ({
 // Don't mock AppDispatchContext - use the real implementation
 
 import React from 'react';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { Text } from 'ink';
 import { render } from 'ink-testing-library';
 import {
@@ -131,6 +149,7 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
 
 describe('SessionController', () => {
   let mockConfig: Partial<Config>;
+  let modelOwner: SessionSettingsOwner;
   let mockAddItem: ReturnType<typeof vi.fn>;
 
   let mockClearItems: ReturnType<typeof vi.fn>;
@@ -138,7 +157,9 @@ describe('SessionController', () => {
   beforeEach(async () => {
     // The runtime status mock is mutable so tests can drive provider, model and
     // paid-mode changes; reset it so those changes do not leak between tests.
-    const runtimeModuleForReset = await import('../contexts/RuntimeContext.js');
+    const runtimeModuleForReset = await import(
+      '../../__tests__/runtime-context-fixture.js'
+    );
     (
       runtimeModuleForReset.useRuntimeApi() as unknown as {
         __setStatusForTesting: (next: {
@@ -189,10 +210,16 @@ describe('SessionController', () => {
 
       getFileFilteringOptions: vi.fn(() => ({})),
     } as unknown as Partial<Config>;
-    memoryRuntime = composeFixtureRuntime(mockConfig as Config);
+    modelOwner = new SessionSettingsOwner(new SettingsService());
+    memoryRuntime = {
+      ...composeFixtureRuntime(mockConfig as Config),
+      subscribeModelSelection: (listener) =>
+        modelOwner.subscribeModelChanges(listener),
+    };
   });
 
   afterEach(async () => {
+    await modelOwner.dispose();
     await composeFixtureRuntime.dispose();
     await rm(fixtureDirectory, { recursive: true, force: true });
     if (priorConfigHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
@@ -310,7 +337,9 @@ describe('SessionController', () => {
     // SessionController reads isPaidMode from the runtime status snapshot, so
     // the change has to be driven there rather than through the provider
     // manager.
-    const paidRuntimeModule = await import('../contexts/RuntimeContext.js');
+    const paidRuntimeModule = await import(
+      '../../__tests__/runtime-context-fixture.js'
+    );
     (
       paidRuntimeModule.useRuntimeApi() as unknown as {
         __setStatusForTesting: (next: {
@@ -484,8 +513,6 @@ describe('SessionController', () => {
   });
 
   it('should handle model changes via events (not polling)', async () => {
-    const { coreEvents } = await import('@vybestack/llxprt-code-core');
-
     let contextValue: SessionContextType | undefined;
 
     const TestComponent = () => {
@@ -507,7 +534,9 @@ describe('SessionController', () => {
     (mockConfig.getModel as ReturnType<typeof vi.fn>).mockReturnValue(
       'new-model',
     );
-    const runtimeModule = await import('../contexts/RuntimeContext.js');
+    const runtimeModule = await import(
+      '../../__tests__/runtime-context-fixture.js'
+    );
     (
       runtimeModule.useRuntimeApi() as unknown as {
         __setStatusForTesting: (next: {
@@ -522,7 +551,13 @@ describe('SessionController', () => {
     });
 
     // Emit event instead of advancing timer
-    coreEvents.emitModelChanged('new-model');
+    React.act(() => {
+      modelOwner.publishModelProfile({
+        model: 'new-model',
+        providerName: 'new-provider',
+        displayLabel: 'new-model',
+      });
+    });
 
     // Re-render to get updated state
     rerender(

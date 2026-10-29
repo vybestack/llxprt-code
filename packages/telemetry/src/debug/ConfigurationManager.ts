@@ -47,6 +47,10 @@ export class ConfigurationManager {
    */
   private configVersion: number = 0;
 
+  static create(): ConfigurationManager {
+    return new ConfigurationManager();
+  }
+
   // Line 21-26: Singleton getInstance()
   static getInstance(): ConfigurationManager {
     ConfigurationManager.instance ??= new ConfigurationManager();

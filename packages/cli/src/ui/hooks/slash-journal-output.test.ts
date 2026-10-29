@@ -4,21 +4,21 @@ import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
 import { writeSlashOutput } from './slash-journal-output.js';
-import type { CommandContext } from '../commands/types.js';
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 describe('owner slash output', () => {
   it('persists output before completion without adding a ledger item or model row', async () => {
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    await withRecordingLifetimeFixture(async ({ agent, clientFor }) => {
       await agent.session.setRecording({ enabled: true });
       const base = createMockCommandContext();
-      const context: CommandContext = {
+      const context: CommandOwnerFixture = {
         ...base,
         recordingOwner: 'agent',
         services: { ...base.services, agent },
       };
       const before = await agent.session.getHistory();
       await writeSlashOutput(
-        context.services.agent?.agentClient.getHistoryService() ?? null,
+        clientFor(agent).getHistoryService(),
         context.services.agent?.session,
         context.recordingOwner,
         'user',
@@ -28,7 +28,7 @@ describe('owner slash output', () => {
         },
       );
       await writeSlashOutput(
-        context.services.agent?.agentClient.getHistoryService() ?? null,
+        clientFor(agent).getHistoryService(),
         context.services.agent?.session,
         context.recordingOwner,
         'info',
@@ -38,7 +38,7 @@ describe('owner slash output', () => {
         },
       );
       await writeSlashOutput(
-        context.services.agent?.agentClient.getHistoryService() ?? null,
+        clientFor(agent).getHistoryService(),
         context.services.agent?.session,
         context.recordingOwner,
         'error',
@@ -71,12 +71,12 @@ describe('owner slash output', () => {
   }, 30000);
 
   it('keeps output after existing model history and retracts only the selected display handle', async () => {
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    await withRecordingLifetimeFixture(async ({ agent, clientFor }) => {
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'model prompt' }] },
       ]);
       await agent.session.setRecording({ enabled: true });
-      const history = agent.agentClient.getHistoryService();
+      const history = clientFor(agent).getHistoryService();
       if (!history) throw new Error('Missing history owner');
       const transient = await history.appendDisplay(
         { type: 'warning' },

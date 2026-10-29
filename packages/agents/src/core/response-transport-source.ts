@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponseArrival } from '@vybestack/llxprt-code-core/services/history/history-response-arrival.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { StreamProcessorRuntime } from './chatSessionPorts.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { openResponseArrival } from './responseArrival.js';
 
@@ -32,7 +32,7 @@ export function responseTransportAttempts(
 }
 export async function responseTransportSource(
   input: {
-    readonly runtime: AgentRuntimeContext;
+    readonly runtime: Pick<StreamProcessorRuntime, 'state' | 'provider'>;
     readonly history: HistoryService;
     readonly promptId: string;
     readonly userContent: IContent | IContent[];

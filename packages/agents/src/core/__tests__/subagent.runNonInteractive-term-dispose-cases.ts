@@ -1,3 +1,6 @@
+import { createTerminationConfig } from './helpers/termination-config-fixture.js';
+import { createSubagentScope } from './helpers/create-subagent-scope.js';
+import { scopeInputs } from './subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,7 +11,7 @@ import { describe, it, expect, vi, type Mock } from 'bun:test';
 
 type StreamMock = Mock<(...args: never[]) => unknown>;
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { SubAgentScope } from '../subagent.js';
+import type { ChildAgentScope } from '../subagentOrchestrator.js';
 import {
   ContextState,
   SubagentTerminateMode,
@@ -18,7 +21,6 @@ import {
 import { ChatSession, StreamEventType } from '../chatSession.js';
 import { mockChunk } from './turn-test-helpers.js';
 import {
-  createMockConfig,
   createMockStream,
   defaultModelConfig,
   defaultRunConfig,
@@ -46,12 +48,13 @@ export function registerInteractiveBestEffortTest(
 async function runInteractiveBestEffort(
   getMockSendMessageStream: () => StreamMock,
 ): Promise<{
-  scope: SubAgentScope;
+  scope: ChildAgentScope;
   recordCompletedToolCalls: Mock<() => never>;
   completedCalls: ReturnType<typeof makeCompletedCalls>;
 }> {
   const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
-  const { config, mcpRuntime, settingsService } = await createMockConfig();
+  const { config, mcpRuntime, settingsService } =
+    await createTerminationConfig();
   const runConfig: RunConfig = { ...defaultRunConfig, max_turns: 1 };
   const recordCompletedToolCalls = vi.fn(() => {
     throw new Error('history write failed');
@@ -77,15 +80,16 @@ async function runInteractiveBestEffort(
     { settings: settingsService, runtimeBundle },
   );
 
-  const scope = await SubAgentScope.create(
-    'interactive-best-effort-agent',
-    config,
-    promptConfig,
-    defaultModelConfig,
-    runConfig,
-    { tools: ['external_tool'] },
-    undefined,
-    overrides,
+  const scope = await createSubagentScope(
+    {
+      name: 'interactive-best-effort-agent',
+      prompt: promptConfig,
+      model: defaultModelConfig,
+      run: runConfig,
+      toolConfig: { tools: ['external_tool'] },
+      outputConfig: undefined,
+    },
+    ...scopeInputs(config, overrides),
   );
 
   getMockSendMessageStream().mockImplementation(
@@ -130,7 +134,8 @@ function registerDisposeActive(
   getMockSendMessageStream: () => StreamMock,
 ): void {
   it('should abort active operations when dispose is called', async () => {
-    const { config, mcpRuntime, settingsService } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } =
+      await createTerminationConfig();
 
     const runtimeBundle = createStatelessRuntimeBundle({
       settings: settingsService,
@@ -140,15 +145,16 @@ function registerDisposeActive(
       { settings: settingsService, runtimeBundle },
     );
 
-    const scope = await SubAgentScope.create(
-      'test-agent',
-      config,
-      { systemPrompt: 'Test agent' },
-      defaultModelConfig,
-      defaultRunConfig,
-      undefined,
-      undefined,
-      overrides,
+    const scope = await createSubagentScope(
+      {
+        name: 'test-agent',
+        prompt: { systemPrompt: 'Test agent' },
+        model: defaultModelConfig,
+        run: defaultRunConfig,
+        toolConfig: undefined,
+        outputConfig: undefined,
+      },
+      ...scopeInputs(config, overrides),
     );
 
     // Model returns stop immediately to complete normally
@@ -156,7 +162,7 @@ function registerDisposeActive(
     await scope.runNonInteractive(new ContextState());
 
     // Now call dispose - it should clean up
-    scope.dispose();
+    await scope.dispose();
 
     // Verify disposal was successful by checking cancel is safe
     expect(() => scope.cancel('test')).not.toThrow();
@@ -167,7 +173,8 @@ function registerDisposeParentListener(
   getMockSendMessageStream: () => StreamMock,
 ): void {
   it('should clean up parent abort signal listener when dispose is called', async () => {
-    const { config, mcpRuntime, settingsService } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } =
+      await createTerminationConfig();
 
     const parentAbortController = new AbortController();
     const removeEventListenerSpy = vi.spyOn(
@@ -183,16 +190,17 @@ function registerDisposeParentListener(
       { settings: settingsService, runtimeBundle },
     );
 
-    const scope = await SubAgentScope.create(
-      'test-agent',
-      config,
-      { systemPrompt: 'Test agent' },
-      defaultModelConfig,
-      defaultRunConfig,
-      undefined,
-      undefined,
-      overrides,
-      parentAbortController.signal,
+    const scope = await createSubagentScope(
+      {
+        name: 'test-agent',
+        prompt: { systemPrompt: 'Test agent' },
+        model: defaultModelConfig,
+        run: defaultRunConfig,
+        toolConfig: undefined,
+        outputConfig: undefined,
+        parentSignal: parentAbortController.signal,
+      },
+      ...scopeInputs(config, overrides),
     );
 
     // Run the agent to bind the parent signal
@@ -200,7 +208,7 @@ function registerDisposeParentListener(
     await scope.runNonInteractive(new ContextState());
 
     // Now dispose should clean up listeners
-    scope.dispose();
+    await scope.dispose();
 
     // Verify removeEventListener was called
     expect(removeEventListenerSpy).toHaveBeenCalled();
@@ -209,7 +217,8 @@ function registerDisposeParentListener(
 
 function registerDisposeMultiple(): void {
   it('should be safe to call dispose multiple times', async () => {
-    const { config, mcpRuntime, settingsService } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } =
+      await createTerminationConfig();
 
     const runtimeBundle = createStatelessRuntimeBundle({
       settings: settingsService,
@@ -219,23 +228,24 @@ function registerDisposeMultiple(): void {
       { settings: settingsService, runtimeBundle },
     );
 
-    const scope = await SubAgentScope.create(
-      'test-agent',
-      config,
-      { systemPrompt: 'Test agent' },
-      defaultModelConfig,
-      defaultRunConfig,
-      undefined,
-      undefined,
-      overrides,
+    const scope = await createSubagentScope(
+      {
+        name: 'test-agent',
+        prompt: { systemPrompt: 'Test agent' },
+        model: defaultModelConfig,
+        run: defaultRunConfig,
+        toolConfig: undefined,
+        outputConfig: undefined,
+      },
+      ...scopeInputs(config, overrides),
     );
 
     // Should not throw
+    const closing: Array<Promise<void>> = [];
     expect(() => {
-      scope.dispose();
-      scope.dispose();
-      scope.dispose();
+      closing.push(scope.dispose(), scope.dispose(), scope.dispose());
     }).not.toThrow();
+    await Promise.all(closing);
   });
 }
 
@@ -243,7 +253,8 @@ function registerDisposeAbortReference(
   getMockSendMessageStream: () => StreamMock,
 ): void {
   it('should nullify active abort controller reference', async () => {
-    const { config, mcpRuntime, settingsService } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } =
+      await createTerminationConfig();
 
     const runtimeBundle = createStatelessRuntimeBundle({
       settings: settingsService,
@@ -253,15 +264,16 @@ function registerDisposeAbortReference(
       { settings: settingsService, runtimeBundle },
     );
 
-    const scope = await SubAgentScope.create(
-      'test-agent',
-      config,
-      { systemPrompt: 'Test agent' },
-      defaultModelConfig,
-      defaultRunConfig,
-      undefined,
-      undefined,
-      overrides,
+    const scope = await createSubagentScope(
+      {
+        name: 'test-agent',
+        prompt: { systemPrompt: 'Test agent' },
+        model: defaultModelConfig,
+        run: defaultRunConfig,
+        toolConfig: undefined,
+        outputConfig: undefined,
+      },
+      ...scopeInputs(config, overrides),
     );
 
     // Start an operation to create an abort controller
@@ -269,7 +281,7 @@ function registerDisposeAbortReference(
     await scope.runNonInteractive(new ContextState());
 
     // Dispose
-    scope.dispose();
+    await scope.dispose();
 
     // Try to access the private activeAbortController through cancel method
     // If it's null, cancel should be safe
@@ -292,7 +304,7 @@ async function verifyDisposeUnblocksStalledRun(
   getMockSendMessageStream: () => StreamMock,
 ): Promise<unknown> {
   const { config, mcpRuntime, settingsOwner, settingsService } =
-    await createMockConfig();
+    await createTerminationConfig();
   // Install fake timers after config creation so config/auth setup runs on
   // real timers; fake timers freeze Date.now/performance.now/hrtime and
   // stop Bun's per-test timeout from firing.
@@ -306,7 +318,7 @@ async function verifyDisposeUnblocksStalledRun(
   );
 
   const runConfig: RunConfig = { max_time_minutes: 5, max_turns: 100 };
-  let scope: SubAgentScope | undefined;
+  let scope: ChildAgentScope | undefined;
   let runPromise: Promise<void> | undefined;
   let runRejection: Promise<unknown> | undefined;
   try {
@@ -318,15 +330,16 @@ async function verifyDisposeUnblocksStalledRun(
       { settings: settingsService, runtimeBundle },
     );
 
-    scope = await SubAgentScope.create(
-      'test-agent',
-      config,
-      { systemPrompt: 'Test agent' },
-      defaultModelConfig,
-      runConfig,
-      undefined,
-      undefined,
-      overrides,
+    scope = await createSubagentScope(
+      {
+        name: 'test-agent',
+        prompt: { systemPrompt: 'Test agent' },
+        model: defaultModelConfig,
+        run: runConfig,
+        toolConfig: undefined,
+        outputConfig: undefined,
+      },
+      ...scopeInputs(config, overrides),
     );
 
     runPromise = scope.runNonInteractive(new ContextState());
@@ -348,7 +361,7 @@ async function verifyDisposeUnblocksStalledRun(
 
     const didSettle = trackSettlement(runRejection);
 
-    scope.dispose();
+    await scope.dispose();
 
     // The stream is stalled after its first chunk and the idle watchdog is
     // too far out to fire; dispose must abort so the run settles within a
@@ -365,7 +378,7 @@ async function verifyDisposeUnblocksStalledRun(
     // Do not await — a stalled chain under fake timers must not hang cleanup.
     runPromise?.catch(() => {});
     runRejection?.catch(() => {});
-    scope?.dispose();
+    await scope?.dispose();
   }
 }
 

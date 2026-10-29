@@ -4,20 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  SlashCommand,
-  CommandContext,
-  MessageActionReturn,
-} from './types.js';
+import type { SlashCommand, MessageActionReturn } from './types.js';
 import { CommandKind } from './types.js';
 import { coreEvents } from '@vybestack/llxprt-code-core';
 import {
   ephemeralSettingHelp,
   parseEphemeralSettingValue,
-} from '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js';
+} from '@vybestack/llxprt-code-settings/settings/ephemeral-settings.js';
 import {
   isStrictNumericString,
-  LEGACY_SETTING_KEY_MIGRATIONS,
+  legacySettingCanonicalKey,
   validateSetting,
 } from '@vybestack/llxprt-code-settings';
 import { buildSetSchema } from './setCommandSchema.js';
@@ -30,14 +26,21 @@ import { buildSetSchema } from './setCommandSchema.js';
  * - /set <ephemeral-key> <value>
  */
 
-const setSchema = buildSetSchema();
+export interface SetCommandOperations {
+  getEphemeralSettings: () => Readonly<Record<string, unknown>>;
+  setEphemeralSetting: (key: string, value: unknown) => void;
+  getActiveModelParams: () => Readonly<Record<string, unknown>>;
+  setActiveModelParam: (key: string, value: unknown) => void;
+  clearActiveModelParam: (key: string) => void;
+  isFuzzyFilteringEnabled: () => boolean;
+}
 
 /**
  * Legacy key spellings are migrated once at settings load; /set must not
  * silently accept them, so reject with the canonical spelling instead.
  */
 function rejectLegacySettingKey(key: string): MessageActionReturn | null {
-  const canonicalKey = LEGACY_SETTING_KEY_MIGRATIONS.get(key);
+  const canonicalKey = legacySettingCanonicalKey(key);
   if (canonicalKey === undefined) {
     return null;
   }
@@ -63,7 +66,7 @@ function formatParsedValue(value: unknown): string {
 }
 
 function handleSetModelParam(
-  context: CommandContext,
+  operations: SetCommandOperations,
   parts: string[],
 ): MessageActionReturn {
   if (parts.length < 3) {
@@ -75,7 +78,6 @@ function handleSetModelParam(
     };
   }
 
-  const runtime = context.runtimeApi;
   const paramName = parts[1];
   const legacyParamRejection = rejectLegacySettingKey(paramName);
   if (legacyParamRejection) {
@@ -102,7 +104,7 @@ function handleSetModelParam(
   const parsedParamValue = validation.value ?? parsed;
 
   try {
-    runtime.setActiveModelParam(paramName, parsedParamValue);
+    operations.setActiveModelParam(paramName, parsedParamValue);
   } catch (error) {
     return {
       type: 'message',
@@ -121,7 +123,7 @@ function handleSetModelParam(
 }
 
 function handleUnsetModelParam(
-  context: CommandContext,
+  operations: SetCommandOperations,
   subKey: string,
 ): MessageActionReturn {
   if (!subKey) {
@@ -133,9 +135,8 @@ function handleUnsetModelParam(
     };
   }
 
-  const runtime = context.runtimeApi;
   try {
-    runtime.clearActiveModelParam(subKey);
+    operations.clearActiveModelParam(subKey);
   } catch (error) {
     return {
       type: 'message',
@@ -145,7 +146,7 @@ function handleUnsetModelParam(
   }
 
   try {
-    runtime.setEphemeralSetting(subKey, undefined);
+    operations.setEphemeralSetting(subKey, undefined);
   } catch (error) {
     return {
       type: 'message',
@@ -162,18 +163,17 @@ function handleUnsetModelParam(
 }
 
 function handleUnsetCustomHeader(
-  context: CommandContext,
+  operations: SetCommandOperations,
   targetKey: string,
   subKey: string,
 ): MessageActionReturn {
-  const runtime = context.runtimeApi;
-  const currentHeaders = runtime.getEphemeralSettings()['custom-headers'] as
+  const currentHeaders = operations.getEphemeralSettings()['custom-headers'] as
     | Record<string, unknown>
     | undefined;
   if (currentHeaders && subKey in currentHeaders) {
     const nextHeaders = { ...currentHeaders };
     delete nextHeaders[subKey];
-    runtime.setEphemeralSetting(
+    operations.setEphemeralSetting(
       targetKey,
       Object.keys(nextHeaders).length > 0 ? nextHeaders : undefined,
     );
@@ -191,7 +191,7 @@ function handleUnsetCustomHeader(
 }
 
 function handleSetUnset(
-  context: CommandContext,
+  operations: SetCommandOperations,
   parts: string[],
 ): MessageActionReturn {
   if (parts.length < 2) {
@@ -203,7 +203,6 @@ function handleSetUnset(
     };
   }
 
-  const runtime = context.runtimeApi;
   const targetKey = parts[1];
   const subKey = parts[2];
 
@@ -212,7 +211,7 @@ function handleSetUnset(
     if (legacyParamRejection) {
       return legacyParamRejection;
     }
-    return handleUnsetModelParam(context, subKey);
+    return handleUnsetModelParam(operations, subKey);
   }
 
   const legacyUnsetRejection = rejectLegacySettingKey(targetKey);
@@ -230,10 +229,10 @@ function handleSetUnset(
   }
 
   if (targetKey === 'custom-headers' && subKey) {
-    return handleUnsetCustomHeader(context, targetKey, subKey);
+    return handleUnsetCustomHeader(operations, targetKey, subKey);
   }
 
-  runtime.setEphemeralSetting(targetKey, undefined);
+  operations.setEphemeralSetting(targetKey, undefined);
   return {
     type: 'message',
     messageType: 'info',
@@ -242,7 +241,7 @@ function handleSetUnset(
 }
 
 function handleSetEphemeral(
-  context: CommandContext,
+  operations: SetCommandOperations,
   key: string,
   parts: string[],
 ): MessageActionReturn {
@@ -271,7 +270,6 @@ function handleSetEphemeral(
     };
   }
 
-  const runtime = context.runtimeApi;
   const value = parts.slice(1).join(' ');
 
   const parseResult = parseEphemeralSettingValue(key, value);
@@ -284,15 +282,6 @@ function handleSetEphemeral(
   }
   const parsedValue = parseResult.value;
 
-  const config = context.services.config;
-  if (!config) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: 'No configuration available',
-    };
-  }
-
   // Store compression settings as ephemeral settings
   // They will be read by chatSession.ts when compression is needed
   if (key === 'context-limit' || key === 'compression-threshold') {
@@ -303,11 +292,9 @@ function handleSetEphemeral(
   // Store emojifilter in ephemeral settings like everything else
   // No special handling needed - it will be stored below with other settings
 
-  // Store ephemeral settings in memory only
-  // They will be saved only when user explicitly saves a profile
-  // Note: SettingsService doesn't currently support ephemeral settings,
-  // so we continue to use the config directly for these session-only settings
-  runtime.setEphemeralSetting(key, parsedValue);
+  // Store ephemeral settings in memory only. They are saved only when the user
+  // explicitly saves a profile.
+  operations.setEphemeralSetting(key, parsedValue);
   coreEvents.emitSettingsChanged();
 
   return {
@@ -317,39 +304,43 @@ function handleSetEphemeral(
   };
 }
 
-export const setCommand: SlashCommand = {
-  name: 'set',
-  description: 'set model parameters or ephemeral settings',
-  kind: CommandKind.BUILT_IN,
-  schema: setSchema,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn> => {
-    const trimmedArgs = args.trim();
-    if (!trimmedArgs) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content:
-          'Usage: /set <ephemeral-key> <value>\nExample: /set context-limit 100000\n\nFor model parameters use: /set modelparam <key> <value>',
-      };
-    }
+export function createSetCommand(
+  operations: SetCommandOperations,
+): SlashCommand {
+  return {
+    name: 'set',
+    description: 'set model parameters or ephemeral settings',
+    kind: CommandKind.BUILT_IN,
+    schema: buildSetSchema(operations),
+    action: async (
+      _invocation: Readonly<{ signal: AbortSignal }>,
+      args: string,
+    ): Promise<MessageActionReturn> => {
+      const trimmedArgs = args.trim();
+      if (!trimmedArgs) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content:
+            'Usage: /set <ephemeral-key> <value>\nExample: /set context-limit 100000\n\nFor model parameters use: /set modelparam <key> <value>',
+        };
+      }
 
-    const parts = trimmedArgs.split(/\s+/);
-    const key = parts[0];
+      const parts = trimmedArgs.split(/\s+/);
+      const key = parts[0];
 
-    if (key === 'modelparam') {
-      return handleSetModelParam(context, parts);
-    }
+      if (key === 'modelparam') {
+        return handleSetModelParam(operations, parts);
+      }
 
-    if (key === 'unset') {
-      return handleSetUnset(context, parts);
-    }
+      if (key === 'unset') {
+        return handleSetUnset(operations, parts);
+      }
 
-    return handleSetEphemeral(context, key, parts);
-  },
-};
+      return handleSetEphemeral(operations, key, parts);
+    },
+  };
+}
 
 // Stryker disable all -- Parsing is covered by higher-level integration tests and mutating this
 // helper introduces hundreds of equivalent mutants unrelated to autocomplete behaviour.

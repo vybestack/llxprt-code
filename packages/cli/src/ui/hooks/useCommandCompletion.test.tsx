@@ -138,7 +138,7 @@ const setupMocks = ({
   );
 
   // Mock for /-completions with proper state management
-  slashCompletionMock.mockImplementation((buffer) => {
+  slashCompletionMock.mockImplementation((_enableFuzzyFiltering, buffer) => {
     const [suggestions, setSuggestions] =
       useState<Suggestion[]>(slashSuggestions);
     const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number>(
@@ -211,7 +211,10 @@ const setupMocks = ({
 };
 
 describe('useCommandCompletion', () => {
-  const mockCommandContext = createMockCommandContext();
+  let mockCommandContext: ReturnType<typeof createMockCommandContext>;
+  beforeEach(() => {
+    mockCommandContext = createMockCommandContext();
+  });
   const mockConfig = new Config({
     sessionId: crypto.randomUUID(),
     cwd: process.cwd(),
@@ -250,6 +253,7 @@ describe('useCommandCompletion', () => {
       it('should initialize with default state', () => {
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest(''),
             testRootDir,
             [],
@@ -257,6 +261,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -275,6 +280,7 @@ describe('useCommandCompletion', () => {
         const { result } = renderHook(() => {
           const textBuffer = useTextBufferForTest('@file');
           const completion = useCommandCompletion(
+            true,
             textBuffer,
             testRootDir,
             [],
@@ -282,6 +288,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           );
           return { completion, textBuffer };
         });
@@ -308,6 +315,7 @@ describe('useCommandCompletion', () => {
       it('should reset all state to default values', () => {
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest('@files'),
             testRootDir,
             [],
@@ -315,6 +323,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -336,6 +345,7 @@ describe('useCommandCompletion', () => {
         const text = '@src/a\\ file.txt';
         renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest(text),
             testRootDir,
             [],
@@ -343,6 +353,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -362,6 +373,7 @@ describe('useCommandCompletion', () => {
 
         renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest(text, cursorOffset),
             testRootDir,
             [],
@@ -369,6 +381,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -411,6 +424,7 @@ describe('useCommandCompletion', () => {
           const { result } = renderHook(() => {
             const textBuffer = useTextBufferForTest('/');
             const completion = useCommandCompletion(
+              true,
               textBuffer,
               testRootDir,
               [],
@@ -418,6 +432,7 @@ describe('useCommandCompletion', () => {
               false,
               shellModeActive, // Parameterized shellModeActive
               composeFixtureRuntime(mockConfig),
+              null,
             );
             return { ...completion, textBuffer };
           });
@@ -454,6 +469,7 @@ describe('useCommandCompletion', () => {
 
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest('/'),
             testRootDir,
             [],
@@ -461,6 +477,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -475,6 +492,7 @@ describe('useCommandCompletion', () => {
         setupMocks({ slashSuggestions: [] });
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest('/'),
             testRootDir,
             [],
@@ -482,6 +500,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -495,6 +514,7 @@ describe('useCommandCompletion', () => {
       it('should navigate up through suggestions with wrap-around', async () => {
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest('/'),
             testRootDir,
             [],
@@ -502,6 +522,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -521,6 +542,7 @@ describe('useCommandCompletion', () => {
       it('should navigate down through suggestions with wrap-around', async () => {
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest('/'),
             testRootDir,
             [],
@@ -528,6 +550,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -550,6 +573,7 @@ describe('useCommandCompletion', () => {
       it('should handle navigation with multiple suggestions', async () => {
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest('/'),
             testRootDir,
             [],
@@ -557,6 +581,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -587,6 +612,7 @@ describe('useCommandCompletion', () => {
 
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest('/'),
             testRootDir,
             [],
@@ -594,6 +620,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 

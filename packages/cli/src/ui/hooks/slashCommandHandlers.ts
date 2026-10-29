@@ -3,38 +3,17 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { writeSlashOutput } from './slash-journal-output.js';
-import { appendJournalUiItem } from './command-journal-output.js';
-import {
-  stringifyPrompt,
-  addUserCommandToHistory,
-  handleMessageResult,
-  addSubcommandHelp,
-  addUnknownCommandMessage,
-} from './slash-command-messages.js';
 
-import { requireSessionAgent } from '../commands/historyServiceAccess.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type {
   RecordingIntegration,
   ToolCallConfirmationDetails,
   AgentRequestInput,
-  LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import {
-  getProjectHash,
-  importSessionMediaPackage,
-  ToolConfirmationOutcome,
-} from '@vybestack/llxprt-code-core';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
 import { SlashCommandEvent } from '@vybestack/llxprt-code-telemetry';
-import { join } from 'node:path';
 import { parseSlashCommand } from '../../utils/commands.js';
-import {
-  createEmojiFilter,
-  filterHistoryItems,
-  resolveEmojiFilterMode,
-} from '../utils/iContentToHistoryItems.js';
+import { secureInputHandler } from '../utils/secureInputHandler.js';
 import type {
   CommandContext,
   ModelsDialogData,
@@ -42,16 +21,8 @@ import type {
   SlashCommand,
   SubagentDialogData,
 } from '../commands/types.js';
-import { performResume } from '../../services/performResume.js';
-import type {
-  PerformResumeResult,
-  RecordingSwapCallbacks,
-  ResumeContext,
-} from '../../services/performResume.js';
-import {
-  importOwnerSession,
-  resumeOwnerSession,
-} from '../utils/ownerSessionUi.js';
+import type { PerformResumeResult } from '../../services/performResume.js';
+
 import type {
   HistoryItemWithoutId,
   IndividualToolCallDisplay,
@@ -59,26 +30,39 @@ import type {
   SlashCommandProcessorResult,
 } from '../types.js';
 import { MessageType, ToolCallStatus } from '../types.js';
-import { addResumeWarnings } from '../utils/resumeWarnings.js';
+import { stringifyPrompt } from './slash-command-messages.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
+import { SubagentView } from '../components/SubagentManagement/types.js';
 import type { DialogRequest } from '../stores/dialog/dialogStore.js';
 
+/**
+ * Slash-command telemetry sink. The handlers only ever log a command event and
+ * use the port's presence to decide whether logging is available.
+ */
+export interface CommandLoggingPort {
+  logSlashCommand(event: SlashCommandEvent): void;
+}
+
 export interface SlashCommandHandlerDeps {
+  writeOutput: (item: HistoryItemWithoutId) => Promise<void>;
   commands: readonly SlashCommand[] | undefined;
-  config: CliUiRuntime | null;
+  config: CommandLoggingPort | null;
   commandContext: CommandContext;
+  resumeOwnedSession:
+    | ((action: PerformResumeActionReturn) => Promise<readonly string[]>)
+    | null;
+  resumeRawSession:
+    | ((action: PerformResumeActionReturn) => Promise<PerformResumeResult>)
+    | null;
+  refreshResumedHistory: () => void;
+  recordCommandError: (message: string) => Promise<void>;
+  isMcpDiscoveryPending: () => boolean;
   actions: SlashCommandProcessorActions;
   addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
   addMessage: (message: Message) => void;
   setIsProcessing: (isProcessing: boolean) => void;
   setLocalIsProcessing: (isProcessing: boolean) => void;
   setPendingItem: (item: HistoryItemWithoutId | null) => void;
-  /**
-   * Test seam for performSessionResume: bun's vi.mock is not scoped per
-   * test file, so tests inject a stub here instead of mocking the module
-   * (which would leak into unrelated suites).
-   */
-  performResumeFn?: typeof performResume;
   setSessionShellAllowlist: (
     updater: (prev: Set<string>) => Set<string>,
   ) => void;
@@ -86,8 +70,6 @@ export interface SlashCommandHandlerDeps {
     request: Extract<DialogRequest, { kind: 'confirmation' }> | null,
   ) => void;
   recordingIntegration?: RecordingIntegration;
-  recordingSwapCallbacks?: RecordingSwapCallbacks;
-  sessionMediaStore?: LocalMediaStore;
   confirmationLogger: DebugLogger;
   slashCommandLogger: DebugLogger;
   /** Registers the action about to be awaited and returns its controller. */
@@ -121,15 +103,7 @@ export async function processSlashCommand(
   deps.setIsProcessing(true);
   deps.setLocalIsProcessing(true);
   if (addToHistory) {
-    const admission = addUserCommandToHistory(
-      deps.addItem,
-      deps.commandContext.services.agent?.agentClient.getHistoryService() ??
-        null,
-      deps.commandContext.services.agent?.session,
-      deps.commandContext.recordingOwner,
-      trimmed,
-    );
-    if (admission !== undefined) await admission;
+    await addUserCommandToHistory(deps, trimmed);
   }
 
   const parsed = parseCommand(trimmed, deps.commands);
@@ -148,6 +122,16 @@ export async function processSlashCommand(
   } finally {
     finalizeCommand(deps, parsed, hasError);
   }
+}
+
+async function addUserCommandToHistory(
+  deps: SlashCommandHandlerDeps,
+  trimmed: string,
+): Promise<void> {
+  const sanitizedCommand = secureInputHandler.shouldUseSecureMode(trimmed)
+    ? secureInputHandler.sanitizeForHistory(trimmed)
+    : trimmed;
+  await deps.writeOutput({ type: MessageType.USER, text: sanitizedCommand });
 }
 
 function parseCommand(
@@ -194,24 +178,10 @@ async function executeParsedCommand(
       : { type: 'handled' };
   }
   if (commandToExecute?.subCommands) {
-    await addSubcommandHelp(
-      deps.addMessage,
-      deps.commandContext.services.agent?.agentClient.getHistoryService() ??
-        null,
-      deps.commandContext.services.agent?.session,
-      deps.commandContext.recordingOwner,
-      commandToExecute,
-    );
+    await addSubcommandHelp(deps, commandToExecute);
     return { type: 'handled' };
   }
-  await addUnknownCommandMessage(
-    deps.addMessage,
-    deps.commandContext.services.agent?.agentClient.getHistoryService() ?? null,
-    deps.commandContext.services.agent?.session,
-    deps.commandContext.recordingOwner,
-    parsed.trimmed,
-    deps.commandContext.services.agent?.mcp.discoveryState() === 'pending',
-  );
+  await addUnknownCommandMessage(deps, parsed.trimmed);
   return { type: 'handled' };
 }
 
@@ -277,8 +247,10 @@ function logDiscarded(
 }
 
 function describeError(error: unknown): string {
-  if (error instanceof AggregateError)
-    return `${error.message}: ${error.errors.map(describeError).join('; ')}`;
+  if (error instanceof AggregateError) {
+    const failures: readonly unknown[] = error.errors;
+    return `${error.message}: ${failures.map(describeError).join('; ')}`;
+  }
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -329,37 +301,42 @@ async function handleActionResult(
         toolArgs: result.toolArgs,
       };
     case 'message':
-      return handleMessageResult(
-        deps.addItem,
-        deps.recordingIntegration,
-        context.services.agent?.agentClient.getHistoryService() ?? null,
-        context.services.agent?.session,
-        context.recordingOwner,
-        result,
-      );
+      return handleMessageResult(deps, result);
     case 'dialog':
       return handleDialogResult(deps, result);
-    case 'load_history':
-      return handleLoadHistoryResult(context, result);
     case 'quit':
       deps.actions.quit(result.messages);
       return { type: 'handled' };
     case 'submit_prompt':
       return {
         type: 'submit_prompt',
-        content: stringifyPrompt(result.content as AgentRequestInput),
+        content: stringifyPrompt(result.content),
       };
     case 'confirm_shell_commands':
       return confirmShellCommands(deps, result);
     case 'confirm_action':
       return confirmAction(deps, result);
     case 'perform_resume':
-      return performSessionResume(deps, context, result);
+      return performSessionResume(deps, result);
     default: {
       const unhandled: never = result;
       throw new Error(`Unhandled slash command result: ${unhandled}`);
     }
   }
+}
+
+async function handleMessageResult(
+  deps: SlashCommandHandlerDeps,
+  result: Extract<ActionResult, { type: 'message' }>,
+): Promise<SlashCommandProcessorResult> {
+  await deps.writeOutput({
+    type: result.messageType === 'error' ? MessageType.ERROR : MessageType.INFO,
+    text: result.content,
+  });
+  if (result.messageType === 'error') {
+    await deps.recordCommandError(result.content);
+  }
+  return { type: 'handled' };
 }
 
 function handleDialogResult(
@@ -403,8 +380,7 @@ function buildSimpleDialogActions(
     profileEditor: (data) => openProfileEditor(deps, data),
     saveProfile: () => undefined,
     subagent: (data) => openSubagentDialog(actions, data),
-    models: (data) =>
-      actions.openModelsDialog(data as ModelsDialogData | undefined),
+    models: (data) => actions.openModelsDialog(readModelsDialogData(data)),
     welcome: () => actions.openWelcomeDialog(),
     sessionBrowser: () => actions.openSessionBrowserDialog(),
   };
@@ -419,7 +395,9 @@ function openLoggingDialog(
     typeof dialogData === 'object' &&
     'entries' in dialogData
   ) {
-    actions.openLoggingDialog(dialogData as { entries: unknown[] });
+    actions.openLoggingDialog({
+      entries: Array.isArray(dialogData.entries) ? dialogData.entries : [],
+    });
   } else {
     actions.openLoggingDialog();
   }
@@ -430,9 +408,9 @@ function readProfileName(dialogData: unknown): string | undefined {
     dialogData != null &&
     typeof dialogData === 'object' &&
     'profileName' in dialogData &&
-    typeof (dialogData as { profileName: unknown }).profileName === 'string'
+    typeof dialogData.profileName === 'string'
   ) {
-    return (dialogData as { profileName: string }).profileName;
+    return dialogData.profileName;
   }
   return undefined;
 }
@@ -465,30 +443,11 @@ function openSubagentDialog(
   actions: SlashCommandProcessorActions,
   dialogData: unknown,
 ): void {
-  const subagentData = dialogData as SubagentDialogData | undefined;
+  const subagentData = readSubagentDialogData(dialogData);
   actions.openSubagentDialog(
     subagentData?.initialView,
     subagentData?.initialSubagentName,
   );
-}
-
-async function handleLoadHistoryResult(
-  context: CommandContext,
-  result: Extract<ActionResult, { type: 'load_history' }>,
-): Promise<SlashCommandProcessorResult> {
-  const agent = context.services.agent;
-  if (!agent) throw new Error('Session agent is unavailable');
-  await agent.setHistory(result.clientHistory);
-  // Display-only: replayed model text passes the same emoji filter as live
-  // output (issue #2888); clientHistory keeps the recorded text verbatim.
-  const emojiFilter = createEmojiFilter(
-    resolveEmojiFilterMode(context.services.config),
-  );
-  context.ui.clear();
-  filterHistoryItems(result.history, emojiFilter).forEach((item, index) => {
-    context.ui.addItem(item, index);
-  });
-  return { type: 'handled' };
 }
 
 async function confirmShellCommands(
@@ -624,26 +583,16 @@ async function confirmAction(
 
 async function performOwnerSessionResume(
   deps: SlashCommandHandlerDeps,
-  context: CommandContext,
   action: PerformResumeActionReturn,
+  resume: NonNullable<SlashCommandHandlerDeps['resumeOwnedSession']>,
 ): Promise<SlashCommandProcessorResult> {
-  const agent = context.services.agent;
-  if (agent === null) throw new Error('Session agent is unavailable');
+  const replay = resume(action);
   try {
-    const replay =
-      action.sessionPackage === undefined
-        ? await resumeOwnerSession(agent, action.sessionRef)
-        : await importOwnerSession(
-            agent,
-            action.sessionPackage.packageDirectory,
-          );
-    for (const warning of replay.warnings) {
-      await appendJournalUiItem(
-        agent.agentClient.getHistoryService(),
-        agent.session,
-        { type: MessageType.INFO, text: `Warning: ${warning}` },
-      );
-    }
+    for (const warning of await replay)
+      await deps.writeOutput({
+        type: MessageType.INFO,
+        text: `Warning: ${warning}`,
+      });
   } catch (error) {
     deps.addMessage({
       type: MessageType.ERROR,
@@ -656,7 +605,6 @@ async function performOwnerSessionResume(
 
 async function performSessionResume(
   deps: SlashCommandHandlerDeps,
-  context: CommandContext,
   action: PerformResumeActionReturn,
 ): Promise<SlashCommandProcessorResult> {
   if (!deps.config) {
@@ -667,10 +615,10 @@ async function performSessionResume(
     });
     return { type: 'handled' };
   }
-  if (context.recordingOwner === 'agent') {
-    return performOwnerSessionResume(deps, context, action);
+  if (deps.resumeOwnedSession !== null) {
+    return performOwnerSessionResume(deps, action, deps.resumeOwnedSession);
   }
-  if (!deps.recordingSwapCallbacks) {
+  if (deps.resumeRawSession === null) {
     deps.addMessage({
       type: MessageType.ERROR,
       content: 'Cannot resume session: recording infrastructure not available.',
@@ -679,28 +627,14 @@ async function performSessionResume(
     return { type: 'handled' };
   }
 
-  const { mediaStore, resumeContext } = rawResumeContext(deps, deps.config);
-  const resume = deps.performResumeFn ?? performResume;
+  const pendingResume = deps.resumeRawSession(action);
   let resumeResult: PerformResumeResult;
   try {
-    resumeResult =
-      action.sessionPackage === undefined
-        ? await resume(action.sessionRef, resumeContext)
-        : await importSessionMediaPackage(
-            action.sessionPackage,
-            resumeContext.chatsDir,
-            resumeContext.projectHash,
-            mediaStore,
-            async (imported) => {
-              const result = await resume(imported.sessionId, resumeContext);
-              if (!result.ok) throw new Error(result.error);
-              return result;
-            },
-          );
+    resumeResult = await pendingResume;
   } catch (error: unknown) {
     deps.addMessage({
       type: MessageType.ERROR,
-      content: error instanceof Error ? error.message : String(error),
+      content: describeError(error),
       timestamp: new Date(),
     });
     return { type: 'handled' };
@@ -714,44 +648,36 @@ async function performSessionResume(
     return { type: 'handled' };
   }
 
-  context.ui.clear();
-  addResumeWarnings(deps.addMessage, resumeResult.warnings);
+  deps.refreshResumedHistory();
+  for (const warning of resumeResult.warnings)
+    await deps.writeOutput({
+      type: MessageType.INFO,
+      text: `Warning: ${warning}`,
+    });
   return { type: 'handled' };
 }
 
-function rawResumeContext(
+async function addSubcommandHelp(
   deps: SlashCommandHandlerDeps,
-  config: CliUiRuntime,
-): { mediaStore: LocalMediaStore; resumeContext: ResumeContext } {
-  const mediaStore = deps.sessionMediaStore;
-  if (!mediaStore) throw new Error('CLI session media store is unavailable');
-  return {
-    mediaStore,
-    resumeContext: buildResumeContext(deps, config, mediaStore),
-  };
+  command: SlashCommand,
+): Promise<void> {
+  const helpText = `Command '/${command.name}' requires a subcommand. Available:\n${command.subCommands
+    ?.map((sc) => `  - ${sc.name}: ${sc.description || ''}`)
+    .join('\n')}`;
+  await deps.writeOutput({ type: MessageType.INFO, text: helpText });
 }
 
-function buildResumeContext(
+async function addUnknownCommandMessage(
   deps: SlashCommandHandlerDeps,
-  config: CliUiRuntime,
-  mediaStore: LocalMediaStore,
-): ResumeContext {
-  return {
-    chatsDir: join(config.projectTempDir, 'chats'),
-    projectHash: getProjectHash(config.getProjectRoot()),
-    currentSessionId: config.getSessionId(),
-    currentProvider: config.getProvider() ?? 'unknown',
-    currentModel: config.getModel(),
-    workspaceDirs: [...config.directories()],
-    mediaStore,
-    maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
-    recordingCallbacks: deps.recordingSwapCallbacks!,
-    historyService: requireSessionAgent(
-      deps.commandContext,
-    ).agentClient.getHistoryService(),
-    adoptSessionId: (sessionId) => config.adoptSessionId(sessionId),
-    logger: deps.slashCommandLogger,
-  };
+  trimmed: string,
+): Promise<void> {
+  const isMcpLoading = deps.isMcpDiscoveryPending();
+  await deps.writeOutput({
+    type: MessageType.ERROR,
+    text: isMcpLoading
+      ? `Unknown command: ${trimmed}. Command might have been from an MCP server but MCP servers are not done loading.`
+      : `Unknown command: ${trimmed}`,
+  });
 }
 
 async function handleCommandError(
@@ -763,30 +689,8 @@ async function handleCommandError(
     logParsedCommand(deps, parsed);
   }
   const errorText = error instanceof Error ? error.message : String(error);
-  await writeSlashOutput(
-    deps.commandContext.services.agent?.agentClient.getHistoryService() ?? null,
-    deps.commandContext.services.agent?.session,
-    deps.commandContext.recordingOwner,
-    'error',
-    errorText,
-    () => {
-      deps.addItem({ type: MessageType.ERROR, text: errorText }, Date.now());
-    },
-  );
-  if (
-    Object.getOwnPropertyDescriptor(deps.commandContext, 'recordingOwner')
-      ?.value === 'agent'
-  ) {
-    const agent = deps.commandContext.services.agent;
-    if (!agent) throw new Error('Session agent is unavailable');
-    await agent.session.recordRecordingEvent({
-      type: 'session_event',
-      severity: 'error',
-      message: errorText,
-    });
-  } else {
-    deps.recordingIntegration?.recordSessionEvent('error', errorText);
-  }
+  await deps.writeOutput({ type: MessageType.ERROR, text: errorText });
+  await deps.recordCommandError(errorText);
 }
 
 function finalizeCommand(
@@ -810,4 +714,67 @@ function logParsedCommand(
     parsed.subcommand,
   );
   deps.config!.logSlashCommand(event);
+}
+
+function optionalString(value: unknown): string | undefined {
+  if (value === undefined || typeof value === 'string') return value;
+  throw new Error('Expected a string');
+}
+function optionalBoolean(value: unknown): boolean | undefined {
+  if (value === undefined || typeof value === 'boolean') return value;
+  throw new Error('Expected a boolean');
+}
+function readModelsFilters(value: unknown): ModelsDialogData['initialFilters'] {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'object' || value === null)
+    throw new Error('Invalid model filters');
+  return {
+    tools: optionalBoolean('tools' in value ? value.tools : undefined),
+    vision: optionalBoolean('vision' in value ? value.vision : undefined),
+    reasoning: optionalBoolean(
+      'reasoning' in value ? value.reasoning : undefined,
+    ),
+    audio: optionalBoolean('audio' in value ? value.audio : undefined),
+  };
+}
+function readModelsDialogData(data: unknown): ModelsDialogData | undefined {
+  if (data === undefined) return undefined;
+  if (typeof data !== 'object' || data === null)
+    throw new Error('Invalid models dialog data');
+  const provider =
+    'providerOverride' in data ? data.providerOverride : undefined;
+  return {
+    initialSearch: optionalString(
+      'initialSearch' in data ? data.initialSearch : undefined,
+    ),
+    includeDeprecated: optionalBoolean(
+      'includeDeprecated' in data ? data.includeDeprecated : undefined,
+    ),
+    providerOverride: provider === null ? null : optionalString(provider),
+    showAllProviders: optionalBoolean(
+      'showAllProviders' in data ? data.showAllProviders : undefined,
+    ),
+    initialFilters: readModelsFilters(
+      'initialFilters' in data ? data.initialFilters : undefined,
+    ),
+  };
+}
+function readSubagentDialogData(data: unknown): SubagentDialogData | undefined {
+  if (data === undefined) return undefined;
+  if (typeof data !== 'object' || data === null)
+    throw new Error('Invalid subagent dialog data');
+  const initialView = 'initialView' in data ? data.initialView : undefined;
+  const initialSubagentName =
+    'initialSubagentName' in data ? data.initialSubagentName : undefined;
+  if (
+    initialSubagentName !== undefined &&
+    typeof initialSubagentName !== 'string'
+  )
+    throw new Error('Invalid subagent name');
+  if (initialView !== undefined && !isSubagentView(initialView))
+    throw new Error('Invalid subagent view');
+  return { initialView, initialSubagentName };
+}
+function isSubagentView(value: unknown): value is SubagentView {
+  return Object.values(SubagentView).some((view) => view === value);
 }

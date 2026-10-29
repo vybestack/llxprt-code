@@ -13,11 +13,10 @@ import { join } from 'node:path';
 import { json } from 'node:stream/consumers';
 import { z } from 'zod';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { fromConfig, type Agent } from '../index.js';
+import { type Agent } from '../index.js';
+import { fromConfig } from '../fromConfig.js';
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { collect, successful } from './turn-revision-capture.fixture.js';
 
@@ -116,34 +115,6 @@ async function modelWire() {
   };
 }
 
-async function createWorkspace(config: Config): Promise<McpRuntimeOwner> {
-  const policy = new RuntimePolicyOwner(config);
-  return McpRuntimeOwner.create(
-    {
-      openBrowser: async () => {
-        throw new Error('Unexpected browser');
-      },
-      tokenStorage: new MCPOAuthTokenStorage({
-        getCredentials: async () => null,
-        setCredentials: async () => {
-          throw new Error('Unexpected credential write');
-        },
-        deleteCredentials: async () => {},
-        listServers: async () => [],
-        getAllCredentials: async () => new Map(),
-        clearAll: async () => {},
-      }),
-    },
-    config,
-    policy.session.messageBus,
-    undefined,
-    undefined,
-    undefined,
-    policy,
-    'runtime',
-  );
-}
-
 async function withSharedConfig(
   run: (
     config: Config,
@@ -197,21 +168,22 @@ async function withSharedConfig(
       },
     }),
   );
-  const workspace = await createWorkspace(config);
+  const authority = new CredentialAuthority();
   let agents: readonly Agent[] = [];
   const adopt = async (settings: SettingsService): Promise<Agent> => {
-    const options = {
+    const agent = await fromConfig(
       config,
-      mcpRuntime: workspace,
-      settingsService: settings,
-      sessionId: 'same-settings-owner-label',
-      activation: {
-        provider: 'openai',
-        model: 'settings-model',
-        cliOverrides: { key: 'loopback-only', baseUrl: endpoint.url },
+      settings,
+      {
+        sessionId: 'same-settings-owner-label',
+        activation: {
+          provider: 'openai',
+          model: 'settings-model',
+          cliOverrides: { key: 'loopback-only', baseUrl: endpoint.url },
+        },
       },
-    };
-    const agent = await fromConfig(options);
+      authority,
+    );
     agents = [...agents, agent];
     return agent;
   };
@@ -219,7 +191,6 @@ async function withSharedConfig(
     await run(config, endpoint, adopt);
   } finally {
     await Promise.all(agents.map((agent) => agent.dispose()));
-    await workspace.dispose();
     await config.dispose();
     await endpoint.close();
     loopbackOnly.mockRestore();
@@ -438,12 +409,8 @@ describe('explicit adopted session settings on a shared Config', () => {
       expect(await second.generate('Detached second')).toContain(
         'Request completed.',
       );
-      expect(first.agentClient.getContentGeneratorConfig()?.model).toBe(
-        'detached-first-model',
-      );
-      expect(second.agentClient.getContentGeneratorConfig()?.model).toBe(
-        'detached-second-model',
-      );
+      expect(first.getModel()).toBe('detached-first-model');
+      expect(second.getModel()).toBe('detached-second-model');
       expect(
         endpoint
           .requests()

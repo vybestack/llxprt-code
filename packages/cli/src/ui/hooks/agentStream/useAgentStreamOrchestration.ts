@@ -5,11 +5,10 @@
  */
 
 import { useCallback, useMemo, useRef } from 'react';
+
 import {
   type EditorType,
   type LiveOutputUpdate,
-  type MessageBus,
-  type RecordingIntegration,
   type ToolCall,
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
@@ -38,13 +37,51 @@ import {
   useToolSchedulerSetup,
 } from './useAgentStreamLifecycle.js';
 import type { QueuedSubmission } from './types.js';
-import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
+import type { UiSubagentManager } from '../../cliUiRuntime.js';
 import type { OperationLifecycleRegistry } from './operationLifecycle.js';
 
 export interface AgentStreamOrchestrationDeps {
-  agent: Agent;
+  stream: Agent['stream'];
+  setDisplayCallbacks: Agent['tools']['setDisplayCallbacks'];
+  setEditorCallbacks: Agent['tools']['setEditorCallbacks'];
+  openClientChannel: Agent['tools']['openClientChannel'];
+  subscribeChildTools: Agent['tools']['subscribeChildTools'];
+  appendShellHistory: Agent['addHistory'];
+  injectSteer: Agent['injectSteer'];
+  cancelRunningAsyncTasks: () => void;
+  getProviderContextLimit: UseSubmitQueryDeps['getProviderContextLimit'];
+  getContentPrefixIdentity: UseSubmitQueryDeps['getContentPrefixIdentity'];
+  getToolHandle: UseSubmitQueryDeps['getToolHandle'];
+  findResource: UseSubmitQueryDeps['findResource'];
+  readResource: UseSubmitQueryDeps['readResource'];
+  setLastPromptTokenCount: UseSubmitQueryDeps['setLastPromptTokenCount'];
+  subscribeTaskNotifications: UseSubmitQueryDeps['subscribeTaskNotifications'];
+  flushRecording: UseSubmitQueryDeps['flushRecording'];
   addItem: UseHistoryManagerReturn['addItem'];
-  runtime: StreamRuntime;
+  readSessionId: UseSubmitQueryDeps['readSessionId'];
+  subscribeMcpUpdates: UseSubmitQueryDeps['subscribeMcpUpdates'];
+  resetBuckets: UseSubmitQueryDeps['resetBuckets'];
+  resetBucketSession: UseSubmitQueryDeps['resetBucketSession'];
+  ensureBucketsAuthenticated: UseSubmitQueryDeps['ensureBucketsAuthenticated'];
+  atCommandConfig: UseSubmitQueryDeps['atCommandConfig'];
+  logUserPrompt: UseSubmitQueryDeps['logUserPrompt'];
+  getModel: UseSubmitQueryDeps['getModel'];
+  getProvider: UseSubmitQueryDeps['getProvider'];
+  readSelectedProvider: UseSubmitQueryDeps['readSelectedProvider'];
+  readCitations: UseSubmitQueryDeps['readCitations'];
+  readProfileName: UseSubmitQueryDeps['readProfileName'];
+  readContextLimit: UseSubmitQueryDeps['readContextLimit'];
+  getMaxSessionTurns: UseSubmitQueryDeps['getMaxSessionTurns'];
+  readEmojiFilterMode: Parameters<typeof useStreamState>[1];
+  projectTempDir: string;
+  checkpointOperations: Parameters<typeof useStreamState>[3];
+  readTargetDir: Parameters<typeof useShellCommandSetup>[0]['readTargetDir'];
+  readUsePty: Parameters<typeof useShellCommandSetup>[0]['readUsePty'];
+  readShellExecutionConfig: Parameters<
+    typeof useShellCommandSetup
+  >[0]['readShellExecutionConfig'];
+  readPtyWidth: Parameters<typeof useShellCommandSetup>[0]['readPtyWidth'];
+  readPtyHeight: Parameters<typeof useShellCommandSetup>[0]['readPtyHeight'];
   settings: LoadedSettings;
   onDebugMessage: (message: string) => void;
   handleSlashCommand: (
@@ -60,9 +97,6 @@ export interface AgentStreamOrchestrationDeps {
   terminalWidth?: number;
   terminalHeight?: number;
   onEditorOpen: () => void;
-  recordingIntegration?: RecordingIntegration;
-  recordingOwner?: 'agent' | 'raw';
-  runtimeMessageBus?: MessageBus;
   subagentManager?: UiSubagentManager;
   /**
    * Optional perf operation lifecycle registry (P06/P07). When undefined
@@ -109,7 +143,12 @@ interface ToolSchedulerState {
 export function useAgentStreamOrchestration(
   args: AgentStreamOrchestrationDeps,
 ): AgentStreamOrchestrationResult {
-  const st = useStreamState(args.addItem, args.runtime);
+  const st = useStreamState(
+    args.addItem,
+    args.readEmojiFilterMode,
+    args.projectTempDir,
+    args.checkpointOperations,
+  );
   const loopDetectedRef = useRef(false);
   const scheduler = useToolSchedulerState(args, st);
   const pendingToolCallGroupDisplay = usePendingToolGroupDisplay(
@@ -122,11 +161,6 @@ export function useAgentStreamOrchestration(
     scheduler.toolCalls,
     st.turnCancelled,
   );
-  const cancelRunningAsyncTasks = useCallback(() => {
-    for (const task of args.agent.tasks.listRunning()) {
-      if (task.kind === 'subagent') void args.agent.tasks.cancel(task.id);
-    }
-  }, [args.agent]);
   const { cancelOngoingRequest } = useCancellation(
     streamingState,
     st.turnCancelledRef,
@@ -141,15 +175,13 @@ export function useAgentStreamOrchestration(
     st.setIsResponding,
     args.setShellInputFocused,
     st.drainSuppressedRef,
-    cancelRunningAsyncTasks,
+    args.cancelRunningAsyncTasks,
     args.cancelActiveSlashCommand,
   );
   // Refs to break the circular dependency between useSubmitQuery (which
   // creates useStreamEventHandlers → processAgentEvent) and useAgentEventStream
   // (which provides runStream). Each is populated synchronously during render.
-  const processAgentEventRef = useRef<AgentEventRouter | null>(null);
-  const runStreamRef =
-    useRef<UseSubmitQueryDeps['runStreamRef']['current']>(null);
+  const { processAgentEventRef, runStreamRef } = useStreamRouterRefs();
 
   const submitQueryResult = useSubmitForStream(
     args,
@@ -164,7 +196,7 @@ export function useAgentStreamOrchestration(
   const scheduleNextQueuedSubmission =
     submitQueryResult.scheduleNextQueuedSubmission;
   const { sendAllQueuedSubmissions, steerAllQueuedSubmissions } =
-    useQueuedActions(st, args.agent, scheduleNextQueuedSubmission);
+    useQueuedActions(st, args.injectSteer, scheduleNextQueuedSubmission);
   // Populate the ref synchronously so the first render already has the real
   // function available for any synchronous consumer.
   processAgentEventRef.current = submitQueryResult.processAgentEvent;
@@ -191,6 +223,13 @@ export function useAgentStreamOrchestration(
   );
 }
 
+function useStreamRouterRefs() {
+  const processAgentEventRef = useRef<AgentEventRouter | null>(null);
+  const runStreamRef =
+    useRef<UseSubmitQueryDeps['runStreamRef']['current']>(null);
+  return { processAgentEventRef, runStreamRef };
+}
+
 function useToolSchedulerState(
   args: AgentStreamOrchestrationDeps,
   st: ReturnType<typeof useStreamState>,
@@ -201,8 +240,8 @@ function useToolSchedulerState(
     args.onEditorClose,
     args.onEditorOpen,
     args.addItem,
-    args.agent,
-    true,
+    args.openClientChannel,
+    args.subscribeChildTools,
   );
   const [
     toolCalls,
@@ -236,8 +275,12 @@ function useShell(
     setPendingHistoryItem: st.setPendingHistoryItem,
     setIsResponding: st.setIsResponding,
     onDebugMessage: args.onDebugMessage,
-    runtime: args.runtime,
-    agent: args.agent,
+    readTargetDir: args.readTargetDir,
+    readUsePty: args.readUsePty,
+    readShellExecutionConfig: args.readShellExecutionConfig,
+    readPtyWidth: args.readPtyWidth,
+    readPtyHeight: args.readPtyHeight,
+    appendShellHistory: args.appendShellHistory,
     setShellInputFocused: args.setShellInputFocused,
     terminalWidth: args.terminalWidth,
     terminalHeight: args.terminalHeight,
@@ -255,7 +298,7 @@ function useSubmitForStream(
   runStreamRef: UseSubmitQueryDeps['runStreamRef'],
 ) {
   const result = useSubmitQuery(
-    buildSubmitQueryDeps({
+    useBuildSubmitQueryDeps({
       args,
       st,
       scheduleToolCalls,
@@ -276,7 +319,9 @@ function useEventStreamForAgent(
 ) {
   const lifecycle = args.operationLifecycle;
   return useAgentEventStream({
-    agent: args.agent,
+    stream: args.stream,
+    setDisplayCallbacks: args.setDisplayCallbacks,
+    setEditorCallbacks: args.setEditorCallbacks,
     addItem: args.addItem,
     processAgentEventRef,
     flushPendingHistoryItem: st.flushPendingHistoryItem,
@@ -316,7 +361,7 @@ function usePendingToolGroupDisplay(
 
 function useQueuedActions(
   st: ReturnType<typeof useStreamState>,
-  agent: Agent,
+  injectSteer: Agent['injectSteer'],
   scheduleNextQueuedSubmission: () => void,
 ) {
   const { drainSuppressedRef, queuedSubmissionsRef, clearSubmissions } = st;
@@ -329,9 +374,9 @@ function useQueuedActions(
     if (items.length === 0) return;
     const newline = String.fromCharCode(10);
     const text = items.map((s) => s.query).join(newline);
-    agent.injectSteer(text);
+    injectSteer(text);
     clearSubmissions();
-  }, [agent, queuedSubmissionsRef, clearSubmissions]);
+  }, [injectSteer, queuedSubmissionsRef, clearSubmissions]);
   return { sendAllQueuedSubmissions, steerAllQueuedSubmissions };
 }
 
@@ -373,7 +418,7 @@ interface BuildSubmitQueryDepsArgs {
   runStreamRef: UseSubmitQueryDeps['runStreamRef'];
 }
 
-function buildSubmitQueryDeps({
+function useBuildSubmitQueryDeps({
   args,
   st,
   scheduleToolCalls,
@@ -383,15 +428,48 @@ function buildSubmitQueryDeps({
   runStreamRef,
 }: BuildSubmitQueryDepsArgs): UseSubmitQueryDeps {
   return {
-    runtime: args.runtime,
-    agent: args.agent,
+    ...submissionState(st),
+    readSessionId: args.readSessionId,
+    subscribeMcpUpdates: args.subscribeMcpUpdates,
+    resetBuckets: args.resetBuckets,
+    resetBucketSession: args.resetBucketSession,
+    ensureBucketsAuthenticated: args.ensureBucketsAuthenticated,
+    atCommandConfig: args.atCommandConfig,
+    logUserPrompt: args.logUserPrompt,
+    getModel: args.getModel,
+    getProvider: args.getProvider,
+    readSelectedProvider: args.readSelectedProvider,
+    readCitations: args.readCitations,
+    readProfileName: args.readProfileName,
+    readContextLimit: args.readContextLimit,
+    getMaxSessionTurns: args.getMaxSessionTurns,
+    getProviderContextLimit: args.getProviderContextLimit,
+    getContentPrefixIdentity: args.getContentPrefixIdentity,
+    getToolHandle: args.getToolHandle,
+    findResource: args.findResource,
+    readResource: args.readResource,
+    setLastPromptTokenCount: args.setLastPromptTokenCount,
+    subscribeTaskNotifications: args.subscribeTaskNotifications,
+    flushRecording: args.flushRecording,
     addItem: args.addItem,
     settings: args.settings,
     onDebugMessage: args.onDebugMessage,
     onCancelSubmit: args.onCancelSubmit,
     onAuthError: args.onAuthError,
-    recordingIntegration: args.recordingIntegration,
-    recordingOwner: args.recordingOwner,
+    scheduleToolCalls,
+    handleShellCommand,
+    handleSlashCommand: args.handleSlashCommand,
+    shellModeActive: args.shellModeActive,
+    loopDetectedRef,
+    streamingState,
+    runStreamRef,
+    subagentManager: args.subagentManager,
+    operationLifecycle: args.operationLifecycle,
+  };
+}
+
+function submissionState(st: BuildSubmitQueryDepsArgs['st']) {
+  return {
     sanitizeContent: st.sanitizeContent,
     flushPendingHistoryItem: st.flushPendingHistoryItem,
     pendingHistoryItemRef: st.pendingHistoryItemRef,
@@ -411,22 +489,13 @@ function buildSubmitQueryDeps({
     setInitError: st.setInitError,
     setThought: st.setThought,
     setLastAgentActivityTime: st.setLastAgentActivityTime,
-    scheduleToolCalls,
     abortActiveStream: st.abortActiveStream,
-    handleShellCommand,
-    handleSlashCommand: args.handleSlashCommand,
     logger: st.logger,
-    shellModeActive: args.shellModeActive,
-    loopDetectedRef,
     lastProfileNameRef: st.lastProfileNameRef,
     lastModelInfoRef: st.lastModelInfoRef,
     lastModelIdentityRef: st.lastModelIdentityRef,
     abortControllerRef: st.abortControllerRef,
     submitQueryRef: st.submitQueryRef,
     isResponding: st.isResponding,
-    streamingState,
-    runStreamRef,
-    subagentManager: args.subagentManager,
-    operationLifecycle: args.operationLifecycle,
   };
 }

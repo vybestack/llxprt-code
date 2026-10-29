@@ -1,3 +1,6 @@
+import { chatSessionPorts } from './chatSessionPorts.js';
+import { createHistoryProviderFileBindingStore } from '@vybestack/llxprt-code-core/services/history/provider-file-binding.js';
+import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -141,10 +144,13 @@ describe('StreamProcessor journal attempt lifetime', () => {
       quotaBytes: 1024 * 1024,
     });
     const admission = new ObservedAdmission(store);
-    setup.processor.rebindHistory({
-      ...setup.runtime,
-      mediaAdmission: admission,
-    });
+    setup.processor.rebindHistory(
+      {
+        ...chatSessionPorts(setup.runtime).stream,
+        mediaAdmission: admission,
+      },
+      createHistoryProviderFileBindingStore(setup.history),
+    );
     try {
       const left = setup.processor.processStreamResponse(
         textStream('left'),
@@ -183,5 +189,24 @@ describe('StreamProcessor journal attempt lifetime', () => {
       await setup.history.dispose();
       await setup.config.dispose();
     }
+  });
+});
+
+describe('stream output accumulation', () => {
+  it('appends blocks in place instead of copying them per chunk', () => {
+    const accumulator = new StreamOutputAccumulator();
+    for (let index = 0; index < 5000; index++)
+      accumulator.add({
+        content: {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'chunk-' + index }],
+        },
+      });
+    const first = accumulator.materialize();
+    const second = accumulator.materialize();
+    expect({
+      sameBlockArray: first.content.blocks === second.content.blocks,
+      blockCount: first.content.blocks.length,
+    }).toStrictEqual({ sameBlockArray: true, blockCount: 5000 });
   });
 });

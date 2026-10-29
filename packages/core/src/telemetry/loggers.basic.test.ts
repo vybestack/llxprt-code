@@ -32,7 +32,6 @@ import {
 } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
 import { vi, describe, beforeEach, it, expect, setSystemTime } from 'bun:test';
 import type { RuntimeUsageMetadata } from '../runtime/AgentRuntimeContext.js';
-import * as uiTelemetry from '@vybestack/llxprt-code-telemetry/telemetry/uiTelemetry.js';
 
 describe('loggers', () => {
   let telemetry: RootTelemetry;
@@ -64,7 +63,7 @@ describe('loggers', () => {
       maxFiles: 2,
       readPrivacySettings: () => privacy,
     });
-    uiTelemetry.uiTelemetryService.reset();
+    telemetry.localMetrics.reset();
     setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
   });
   afterEach(async () => {
@@ -328,7 +327,7 @@ describe('loggers', () => {
         }),
       );
       expect(
-        uiTelemetry.uiTelemetryService.getMetrics().models['test-model'],
+        telemetry.localMetrics.getMetrics().models['test-model'],
       ).toStrictEqual({
         api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
         tokens: {
@@ -388,7 +387,7 @@ describe('loggers', () => {
       });
 
       expect(
-        uiTelemetry.uiTelemetryService.getMetrics().models['test-model'],
+        telemetry.localMetrics.getMetrics().models['test-model'],
       ).toStrictEqual({
         api: { totalRequests: 1, totalErrors: 1, totalLatencyMs: 100 },
         tokens: {

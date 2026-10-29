@@ -89,7 +89,8 @@ async function turnOptions(
     'commit-regression',
   );
   return {
-    runtimeContext,
+    mediaRuntime: runtimeContext,
+    reasoningInclusion: runtimeContext.ephemerals.reasoning,
     historyService: history,
     compressionHandler,
     preparedUserTurn,

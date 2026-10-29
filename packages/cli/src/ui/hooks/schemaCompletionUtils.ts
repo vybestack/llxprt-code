@@ -16,6 +16,7 @@ type RuntimeCompletionResult = {
  * Handles schema-based completion for a command.
  */
 export async function handleSchemaCompletion(
+  enableFuzzyFiltering: boolean,
   leafCommand: SlashCommand,
   commandContext: CommandContext,
   argString: string,
@@ -27,7 +28,10 @@ export async function handleSchemaCompletion(
   suggestions: Suggestion[];
   hint: string;
 }> {
-  const schemaHandler = createCompletionHandler(leafCommand.schema!);
+  const schemaHandler = createCompletionHandler(
+    leafCommand.schema!,
+    enableFuzzyFiltering,
+  );
 
   const completionResult = await schemaHandler(
     commandContext,

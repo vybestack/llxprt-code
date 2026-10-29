@@ -32,7 +32,7 @@ import type {
 } from '@vybestack/llxprt-code-auth';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { SecureStore, type KeyringAdapter } from './storage/secure-store.js';
-import { getProviderKeyStorage } from './storage/provider-key-storage.js';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import { DebugLogger } from './debug/DebugLogger.js';
 
 /** Service name for the OAuth token SecureStore instance. */
@@ -75,16 +75,16 @@ export function createKeyringTokenStore(
  * Creates a fully-configured AuthPrecedenceResolver with core
  * ProviderKeyStorage and DebugLogger injected.
  *
- * @param config - Auth precedence configuration (API key, env vars, OAuth flags)
- * @param settingsService - Core SettingsService satisfying ISettingsService
- * @param oauthManager - Optional OAuthManager instance (caller-supplied, forwarded)
  */
 export function createAuthPrecedenceResolver(
   config: AuthPrecedenceConfig,
-  settingsService: AuthISettingsService,
-  oauthManager?: OAuthManager,
+  ports: {
+    readonly settingsService: AuthISettingsService;
+    readonly oauthManager: OAuthManager | undefined;
+    readonly providerKeyStorage: Pick<ProviderKeyStorageLike, 'getKey'>;
+  },
 ): AuthPrecedenceResolver {
-  const providerKeyStorage = getProviderKeyStorage();
+  const { settingsService, oauthManager, providerKeyStorage } = ports;
   const logger = new DebugLogger('llxprt:auth:precedence');
   return new AuthPrecedenceResolver(config, {
     oauthManager,

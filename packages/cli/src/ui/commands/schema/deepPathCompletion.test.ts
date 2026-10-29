@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { beforeEach, describe, it, expect } from 'bun:test';
 import { createCompletionHandler } from './index.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import type {
@@ -12,9 +12,6 @@ import type {
   LiteralArgument,
   ValueArgument,
 } from './types.js';
-
-// Mock command context for tests
-const mockContext = createMockCommandContext();
 
 // Helper functions to create test arguments
 const literal = (
@@ -59,6 +56,10 @@ function atLeastOneMatch(first: boolean, second: boolean): boolean {
 }
 
 describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
+  let mockContext: ReturnType<typeof createMockCommandContext>;
+  beforeEach(() => {
+    mockContext = createMockCommandContext();
+  });
   describe('Flattened path search', () => {
     it('finds single-level matches and prioritizes them first @requirement:REQ-001', async () => {
       // Schema simulating /set with both direct options and nested paths
@@ -72,7 +73,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
         ]),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(mockContext, '', '/set tea');
 
       // Should find 'teatime' as a direct match
@@ -108,7 +109,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
         literal('emojifilter', 'Emoji filter option'),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(mockContext, '', '/set tem');
 
       // Should find nested path 'modelparam temperature'
@@ -133,7 +134,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
         ]),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(mockContext, '', '/set te');
 
       // Extract positions
@@ -168,7 +169,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
         ]),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(mockContext, '', '/set tem');
 
       // Should suggest a completion that represents the full path
@@ -195,7 +196,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
         ]),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       // Fuzzy match: 'tmp' should match 'temperature'
       const result = await handler(fuzzyContext, '', '/set tmp');
 
@@ -220,7 +221,10 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
         ]),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(
+        schema,
+        prefixContext.services.settings.merged.enableFuzzyFiltering ?? true,
+      );
 
       // Prefix match: 'model' should match 'modelparam' and 'modelparam temperature'
       const prefixResult = await handler(prefixContext, '', '/set model');
@@ -251,7 +255,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
         ]),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(mockContext, '', '/set ');
 
       // Empty query should return at least the single-level options
@@ -282,7 +286,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
         ]),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(mockContext, '', '/cmd time');
 
       // Should find deeply nested 'timeout'
@@ -303,7 +307,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
         ]),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(mockContext, '', '/set tem');
 
       // Should not have duplicate temperature suggestions
@@ -324,7 +328,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
         literal('delete', 'Delete resource'),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       // Full match
       const result1 = await handler(mockContext, '', '/cmd create');
@@ -361,7 +365,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
         literal('streaming', 'Streaming option'),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       // Test: /set tem should find both 'temperature' and potentially other matches
       const result = await handler(mockContext, '', '/set tem');

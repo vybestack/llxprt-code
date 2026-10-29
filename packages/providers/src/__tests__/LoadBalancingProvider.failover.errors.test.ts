@@ -1,5 +1,6 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -19,7 +20,7 @@ import { LoadBalancerFailoverError, RetriesExhaustedError } from '../errors.js';
 import { MAX_PUBLIC_PROVIDER_MESSAGE_LENGTH } from '../providerErrorObservation.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '../GenerateChatOptions.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 import { replayableContents } from '../utils/collectContents.js';
 
 const requestContents = replayableContents([
@@ -90,7 +91,7 @@ async function* generateCapturedFailoverResponse(
     error.status = 429;
     throw error;
   }
-  yield { role: 'model', parts: [{ text: 'response' }] };
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] };
 }
 
 function createNestedPartialFailure(): LoadBalancerFailoverError {
@@ -166,7 +167,8 @@ function registerAggregatedCase1(getContext: () => TestContext): void {
       const chunks: IContent[] = [];
 
       for await (const chunk of provider.generateChatCompletion({
-        contents: [],
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([]),
       })) {
         chunks.push(chunk);
       }
@@ -242,7 +244,8 @@ function registerAggregatedCase2(getContext: () => TestContext): void {
 
       try {
         for await (const chunk of provider.generateChatCompletion({
-          contents: [],
+          invocation: makeLoadBalancerInvocation(),
+          contents: replayableContents([]),
         })) {
           chunks.push(chunk);
         }
@@ -306,7 +309,8 @@ function registerAggregatedCase3(getContext: () => TestContext): void {
       await expect(
         (async () => {
           for await (const _chunk of provider.generateChatCompletion({
-            contents: [],
+            invocation: makeLoadBalancerInvocation(),
+            contents: replayableContents([]),
           })) {
             await Promise.resolve();
           }
@@ -358,7 +362,8 @@ function registerAggregatedCase4(getContext: () => TestContext): void {
       );
       const observed: unknown[] = [];
       const options: GenerateChatOptions = {
-        contents: [],
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([]),
         onProviderError: (error) => observed.push(error),
       };
 
@@ -418,8 +423,8 @@ function registerAggregatedCase5(getContext: () => TestContext): void {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
         contents: requestContents,
       };
 
@@ -474,8 +479,8 @@ function registerAggregatedCase6(getContext: () => TestContext): void {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
         contents: requestContents,
       };
 
@@ -530,8 +535,8 @@ function registerAggregatedCase7(getContext: () => TestContext): void {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
         contents: requestContents,
       };
 
@@ -586,8 +591,8 @@ function registerAggregatedCase8(getContext: () => TestContext): void {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
         contents: requestContents,
       };
 
@@ -644,8 +649,8 @@ function registerAggregatedCase9(getContext: () => TestContext): void {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
         contents: requestContents,
       };
 
@@ -750,16 +755,18 @@ function createSettingsFailoverProvider(
 function registerSettingsCase1(getContext: () => TestContext): void {
   describe('sub-profile propagation', () => {
     it('applies sub-profile ephemerals and modelParams on the failover path', async () => {
-      const { providerManager, settingsService, config } = getContext();
+      const { providerManager } = getContext();
       const provider = createSettingsFailoverProvider(providerManager);
 
       let capturedOptions: GenerateChatOptions | undefined;
       let invocationCount = 0;
       const mockProvider = {
         name: 'gemini',
-        generateChatCompletion: (options: GenerateChatOptions) =>
+        generateChatCompletion: (
+          options: GenerateChatOptions | AsyncIterable<IContent>,
+        ) =>
           generateCapturedFailoverResponse(
-            options,
+            optionsOnly(options),
             () => ++invocationCount,
             (receivedOptions) => {
               capturedOptions = receivedOptions;
@@ -771,16 +778,14 @@ function registerSettingsCase1(getContext: () => TestContext): void {
 
       const originalGetProvider =
         providerManager.getProviderByName.bind(providerManager);
-      providerManager.getProviderByName = () => mockProvider as IProvider;
+      providerManager.getProviderByName = () => mockProvider;
 
       try {
         const iterator = provider.generateChatCompletion({
-          contents: [
+          invocation: makeLoadBalancerInvocation(),
+          contents: replayableContents([
             { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
-          ],
-          settings: settingsService,
-          config,
-          runtime: { settingsService, config },
+          ]),
         });
         for await (const _chunk of iterator) {
           // Consume
@@ -823,12 +828,17 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      borrowedSettings(config, settingsService),
+    );
   });
 
   describe('Aggregated Error When All Backends Fail', () => {
@@ -849,3 +859,11 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
     registerSettingsCase1(getContext);
   });
 });
+
+function optionsOnly(
+  options: GenerateChatOptions | AsyncIterable<IContent>,
+): GenerateChatOptions {
+  if (Symbol.asyncIterator in options)
+    throw new Error('Expected request options');
+  return options;
+}

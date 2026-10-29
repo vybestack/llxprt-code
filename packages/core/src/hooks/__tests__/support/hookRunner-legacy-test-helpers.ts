@@ -1,6 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { vi, expect, describe, it, type Mock } from 'bun:test';
-import { spawn } from 'node:child_process';
+import {
+  spawn,
+  ChildProcess,
+  type ChildProcessWithoutNullStreams,
+  type SpawnOptions,
+} from 'node:child_process';
+import { PassThrough } from 'node:stream';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import {
@@ -18,13 +24,19 @@ import {
 } from '../../hookRunner-test-helpers.js';
 let hookRunner: HookRunner;
 let mockSpawn: MockChildProcessWithoutNullStreams;
-let spawner: Mock<typeof spawn>;
+let spawner: Mock<
+  (
+    command: string,
+    args: readonly string[],
+    options?: SpawnOptions,
+  ) => ChildProcess
+>;
 let mockDebugLogger: Pick<DebugLogger, 'warn'>;
 export function configureRunnerTests(
   runner: HookRunner,
   child: MockChildProcessWithoutNullStreams,
   logger: Pick<DebugLogger, 'warn'>,
-  spawnFunction: Mock<typeof spawn>,
+  spawnFunction: typeof spawner,
 ): void {
   hookRunner = runner;
   spawner = spawnFunction;
@@ -103,6 +115,39 @@ const configureProcessGroup = (
       if (event === 'exit') exitCallback = callback;
     },
   );
+  if (process.platform === 'win32') {
+    spawner.mockImplementation((command, args) => {
+      if (command !== 'taskkill') return mockSpawn;
+      if (
+        JSON.stringify(args) !== JSON.stringify(['/pid', '424242', '/f', '/t'])
+      ) {
+        throw new Error('Unexpected native hook tree target');
+      }
+      const helper = new ChildProcess();
+      const stdin = new PassThrough();
+      const stdout = new PassThrough();
+      const stderr = new PassThrough();
+      const stdio: ChildProcessWithoutNullStreams['stdio'] = [
+        stdin,
+        stdout,
+        stderr,
+        undefined,
+        undefined,
+      ];
+      const native = Object.assign(helper, { stdin, stdout, stderr, stdio });
+      signals.push('taskkill');
+      killed = true;
+      Object.assign(mockSpawn, { killed: true });
+      queueMicrotask(() => {
+        exitCallback?.(137);
+        closeCallback?.(137);
+        helper.emit('exit', 0, null);
+        helper.emit('close', 0, null);
+      });
+      return native;
+    });
+    return { wasKilled: () => killed };
+  }
   vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
     if (pid !== -424242)
       throw new Error('Unexpected hook process group target');
@@ -134,6 +179,19 @@ export const configureTimeoutProcess = (): {
 
 export const configureSigkillEscalation = (signals: string[]): void => {
   configureProcessGroup(true, signals);
+};
+
+const expectNativeTreeTermination = (): void => {
+  if (process.platform === 'win32') {
+    expect(spawner).toHaveBeenCalledWith('taskkill', [
+      '/pid',
+      '424242',
+      '/f',
+      '/t',
+    ]);
+  } else {
+    expect(process.kill).toHaveBeenCalledWith(-424242, 'SIGTERM');
+  }
 };
 
 export const expandedProjectCommand = (): string =>
@@ -302,12 +360,16 @@ export async function escalatesSigkill(): Promise<void> {
 
     // Advance timers to trigger SIGTERM (timeout=50ms)
     vi.advanceTimersByTime(50);
-    expect(signals).toStrictEqual(['SIGTERM']);
+    expect(signals).toStrictEqual(
+      process.platform === 'win32' ? ['taskkill'] : ['SIGTERM'],
+    );
     expect(mockSpawn.killed).toBe(true);
 
     // Advance timers to trigger SIGKILL escalation (5000ms after SIGTERM)
     await advanceTimersByTimeAsync(5000);
-    expect(signals).toStrictEqual(['SIGTERM', 'SIGKILL']);
+    expect(signals).toStrictEqual(
+      process.platform === 'win32' ? ['taskkill'] : ['SIGTERM', 'SIGKILL'],
+    );
 
     const result = await resultPromise;
     expect(result.success).toBe(false);
@@ -522,7 +584,7 @@ export function registerExecuteHookTests(): void {
         expect(result.success).toBe(false);
         expect(timeoutProcess.wasKilled()).toBe(true);
         expect(result.error?.message).toContain('timed out');
-        expect(process.kill).toHaveBeenCalledWith(-424242, 'SIGTERM');
+        expectNativeTreeTermination();
       });
       it(
         'should escalate to SIGKILL when the process ignores SIGTERM',

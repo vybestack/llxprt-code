@@ -1,3 +1,9 @@
+import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
+import {
+  performResume,
+  type RecordingSwapCallbacks,
+} from '../../services/performResume.js';
+import type { SlashCommandHandlerDeps } from './slashCommandHandlers.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import { dirname } from 'node:path';
@@ -43,7 +49,7 @@ describe('native CLI recording swap callbacks', () => {
         const targetPath = await recording(target);
         await target.dispose();
         const chatsDir = dirname(targetPath);
-        const mediaStore = fixture.live.agentClient.mediaStore;
+        const mediaStore = fixture.clientFor(fixture.live).mediaStore;
         if (mediaStore === undefined)
           throw new Error('Missing actual media owner');
         const original = await createLockedSessionRecorder({
@@ -55,7 +61,7 @@ describe('native CLI recording swap callbacks', () => {
           model: 'fake-model',
           mediaStore,
         });
-        const history = fixture.live.agentClient.getHistoryService();
+        const history = fixture.clientFor(fixture.live).getHistoryService();
         if (history === null)
           throw new Error('Missing actual CLI Agent history');
         const integration = new RecordingIntegration(original);
@@ -98,35 +104,57 @@ describe('native CLI recording swap callbacks', () => {
             },
           },
         });
-        const deps = {
+        const callbacks: RecordingSwapCallbacks = {
+          getCurrentRecording: (): SessionRecordingPort | null =>
+            state?.recording ?? null,
+          getCurrentIntegration: (): RecordingIntegration | null =>
+            state?.integration ?? null,
+          getCurrentLockHandle: (): LockHandle | null => state?.lock ?? null,
+          getCurrentMetadata: (): SessionMetadata | null =>
+            state?.metadata ?? null,
+          setRecording: (
+            recorder: SessionRecordingPort | null,
+            nextIntegration: RecordingIntegration | null,
+            lock: LockHandle | null,
+            metadata: SessionMetadata | null,
+          ): void => {
+            state = {
+              recording: recorder,
+              integration: nextIntegration,
+              lock,
+              metadata,
+            };
+            if (stage === 'prior-cleanup') return;
+            if (recorder !== original)
+              throw new Error('swap callback failed after publication');
+            if (stage === 'restore-callback')
+              throw new Error('restore callback failed');
+          },
+        };
+        const deps: SlashCommandHandlerDeps = {
           ...commandDeps(context, messages),
-          sessionMediaStore: mediaStore,
-          recordingSwapCallbacks: {
-            getCurrentRecording: (): SessionRecordingPort | null =>
-              state?.recording ?? null,
-            getCurrentIntegration: (): RecordingIntegration | null =>
-              state?.integration ?? null,
-            getCurrentLockHandle: (): LockHandle | null => state?.lock ?? null,
-            getCurrentMetadata: (): SessionMetadata | null =>
-              state?.metadata ?? null,
-            setRecording: (
-              recorder: SessionRecordingPort | null,
-              nextIntegration: RecordingIntegration | null,
-              lock: LockHandle | null,
-              metadata: SessionMetadata | null,
-            ): void => {
-              state = {
-                recording: recorder,
-                integration: nextIntegration,
-                lock,
-                metadata,
-              };
-              if (stage === 'prior-cleanup') return;
-              if (recorder !== original)
-                throw new Error('swap callback failed after publication');
-              if (stage === 'restore-callback')
-                throw new Error('restore callback failed');
-            },
+          resumeOwnedSession: null,
+          resumeRawSession: (action) => {
+            if (action.sessionRef === undefined)
+              throw new Error('Missing raw resume target');
+            return performResume(action.sessionRef, {
+              chatsDir,
+              projectHash: getProjectHash(fixture.root),
+              currentSessionId: id,
+              currentProvider: 'fake',
+              currentModel: 'fake-model',
+              workspaceDirs: [fixture.root],
+              mediaStore,
+              recordingCallbacks: callbacks,
+              history: {
+                adoptResumeBoot: history.adoptResumeBoot.bind(history),
+                attachRecording: (next) =>
+                  next.subscribeToJournal(history, fixture.live.session),
+              },
+              adoptSessionId: (next) => {
+                id = next;
+              },
+            });
           },
         };
         const before = {
@@ -209,7 +237,22 @@ async function verifySwap(
     .map((message) => ('content' in message ? message.content : message.type))
     .join('; ');
   if (stage === 'prior-cleanup') {
-    expect(details).toContain(
+    const noticePath = state.recording?.getFilePath();
+    if (!noticePath) throw new Error('Missing resumed journal');
+    const cursor = await NativeJournalCursor.open(noticePath, {}, 20);
+    let notices: string;
+    try {
+      notices = (await cursor.pageBack(20)).entries
+        .flatMap((entry) =>
+          entry.kind === 'projected' && typeof entry.item.text === 'string'
+            ? [entry.item.text]
+            : [],
+        )
+        .join('; ');
+    } finally {
+      await cursor.close();
+    }
+    expect(notices).toContain(
       'Session transition committed but prior-session cleanup failed: old recorder cleanup failed',
     );
     expect(messages.every((message) => message.type !== 'error')).toBe(true);

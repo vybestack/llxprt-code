@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { Task } from '../agent/task.js';
 import { InMemoryTaskStore } from '@a2a-js/sdk/server';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import { getProjectHash, SessionDiscovery } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import { describe, expect, it } from 'bun:test';
@@ -16,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { collectJournalFileRowsForAssertions } from '../../../test-utils/src/core/collect-rows-for-assertions.js';
 import { CoderAgentExecutor } from '../agent/executor.js';
-import { createTaskAgent } from '../config/config.js';
+import { createTaskAgentConfig } from '../config/config.js';
 import { createConfirmationMessageRequest } from '../utils/__tests__/testing_utils.js';
 import { createApp } from './app.js';
 
@@ -151,17 +152,39 @@ describe('native A2A task protocol', () => {
     process.chdir(root);
     const agents: Agent[] = [];
     const store = new InMemoryTaskStore();
-    const executor = new CoderAgentExecutor(store, {
-      loadEnvironment: () => {},
-      loadSettings: () => ({ folderTrust: true, coreTools: ['write_file'] }),
-      loadExtensions: () => [],
-      createTaskAgent: async (...args) => {
-        const agent = await createTaskAgent(...args);
+    const executor = new CoderAgentExecutor(
+      store,
+      async (taskId, contextId, _settings, eventBus) => {
+        const agent = await createAgent(
+          createTaskAgentConfig(
+            { folderTrust: true, coreTools: ['write_file'] },
+            [],
+            taskId,
+          ),
+        );
         agents.push(agent);
         await agent.session.setRecording({ enabled: true });
-        return agent;
+        return new Task(
+          taskId,
+          contextId,
+          (input, options) => agent.stream(input, options),
+          (text) => agent.injectSteer(text),
+          () => agent.getModel(),
+          () => agent.getProvider(),
+          () => agent.listTools(),
+          () => agent.mcp.listServers(),
+          (id, decision, payload, confirmation) =>
+            agent.tools.respondToConfirmation(
+              id,
+              decision,
+              payload,
+              confirmation,
+            ),
+          () => agent.dispose(),
+          eventBus,
+        );
       },
-    });
+    );
     const app = await createApp({
       createStartupContext: async () => ({
         extensions: [],

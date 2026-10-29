@@ -5,6 +5,7 @@
  */
 import { readJournalItems } from '../stores/turn/journal-turn-test-helpers.js';
 
+import type { IContent } from '@vybestack/llxprt-code-core';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { readJournalCheckpoints } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
@@ -14,23 +15,51 @@ import {
 } from '../../__tests__/journal-recording.js';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { chatOwnerCommand } from './chatOwnerCommand.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { bindChatOwnerOperations } from './chatCommandHost.js';
+import { createChatOwnerCommand } from './chatOwnerCommand.js';
 
-const human = (text: string) => ({
-  speaker: 'human' as const,
-  blocks: [{ type: 'text' as const, text }],
+const human = (text: string): IContent => ({
+  speaker: 'human',
+  blocks: [{ type: 'text', text }],
 });
-const ai = (text: string) => ({
-  speaker: 'ai' as const,
-  blocks: [{ type: 'text' as const, text }],
+const ai = (text: string): IContent => ({
+  speaker: 'ai',
+  blocks: [{ type: 'text', text }],
 });
 
-function action(name: string) {
-  const handler = chatOwnerCommand.subCommands?.find(
-    (cmd) => cmd.name === name,
-  )?.action;
-  if (!handler) throw new Error(`Missing /chat ${name}`);
-  return handler;
+type RestoreTurns = Agent['session']['restoreTurns'];
+
+// Registers /chat the way the session host does: bound to this one owner.
+// `restoreTurns` replaces only the restore operation handed to the production
+// binding, so a failure can be injected at the command's collaborator boundary.
+function ownerActions(
+  agent: Agent,
+  restoreTurns: RestoreTurns = (turns, options) =>
+    agent.session.restoreTurns(turns, options),
+) {
+  const chat = createChatOwnerCommand(
+    bindChatOwnerOperations(
+      () => agent.session.listCheckpoints(),
+      (name, options) => agent.session.createCheckpoint(name, options),
+      (tag) => agent.session.resume(tag),
+      (checkpointId) => agent.session.deleteCheckpoint(checkpointId),
+      (checkpointId, name, options) =>
+        agent.session.renameCheckpoint(checkpointId, name, options),
+      () => agent.session.getJournalLength(),
+      (options) => agent.session.clearHistory(options),
+      restoreTurns,
+      (name, options) => agent.session.nameCurrentSession(name, options),
+      () => agent.session.getRecording().path,
+      () => agent.getModel(),
+    ),
+    () => true,
+  );
+  return (name: string) => {
+    const handler = chat.subCommands?.find((cmd) => cmd.name === name)?.action;
+    if (!handler) throw new Error(`Missing /chat ${name}`);
+    return handler;
+  };
 }
 
 describe('owner-backed /chat command route', () => {
@@ -38,6 +67,7 @@ describe('owner-backed /chat command route', () => {
     await withRecordingLifetimeFixture(async ({ agent, chatsDir }) => {
       await agent.setHistory([human('seed'), ai('reply')]);
       await agent.session.setRecording({ enabled: true });
+      const action = ownerActions(agent);
       const context = createMockCommandContext({ services: { agent } });
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('No owner recording');
@@ -70,6 +100,7 @@ describe('owner-backed /chat command route', () => {
     await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.setHistory([human('seed')]);
       await agent.session.setRecording({ enabled: true });
+      const action = ownerActions(agent);
       const context = createMockCommandContext({ services: { agent } });
       await action('save')(context, 'occupied');
       expect(await action('save')(context, 'occupied')).toMatchObject({
@@ -104,7 +135,7 @@ describe('owner-backed /chat command route', () => {
     });
   }, 30000);
 
-  it('restores and clears owner history with UI-only replay and no duplicate client history write', async () => {
+  it('restores and clears owner history with journal projection and no duplicate client history write', async () => {
     await withRecordingLifetimeFixture(async ({ agent, chatsDir }) => {
       await agent.setHistory([
         human('first'),
@@ -113,9 +144,9 @@ describe('owner-backed /chat command route', () => {
         ai('two'),
       ]);
       await agent.session.setRecording({ enabled: true });
+      const action = ownerActions(agent);
       const context = createMockCommandContext({ services: { agent } });
-      const client = agent.agentClient;
-      const setHistory = spyOn(client, 'setHistory');
+      const setHistory = spyOn(agent.session, 'replaceHistory');
       try {
         const restored = await action('restore')(context, '1');
         expect(restored).toBeUndefined();
@@ -151,24 +182,22 @@ describe('owner-backed /chat command route', () => {
     await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.setHistory([human('first'), ai('one'), human('second')]);
       await agent.session.setRecording({ enabled: true });
-      const context = createMockCommandContext({ services: { agent } });
-      const client = agent.agentClient;
-      const original = client.resetChat.bind(client);
-      const fault = spyOn(client, 'resetChat').mockImplementationOnce(
-        async (...args) => {
-          await original(...args);
-          throw new Error('restore interrupted');
-        },
-      );
-      try {
-        expect(await action('restore')(context, '1')).toMatchObject({
-          messageType: 'error',
-        });
-      } finally {
-        fault.mockRestore();
-      }
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('No owner recording');
+      const action = ownerActions(agent, async () => {
+        throw new Error('restore interrupted');
+      });
+      const context = createMockCommandContext({ services: { agent } });
+
+      const result = await action('restore')(context, '1');
+
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content: 'Failed to restore history: restore interrupted',
+      });
+      expect(context.ui.clear).not.toHaveBeenCalled();
+      expect(context.ui.addItem).not.toHaveBeenCalled();
       await agent.session.flushRecording();
       expect(JSON.stringify(await readRecordedRows(path))).toContain('second');
       expect(JSON.stringify(await agent.session.getHistory())).toContain(
@@ -177,6 +206,39 @@ describe('owner-backed /chat command route', () => {
       expect(context.ui.clear).not.toHaveBeenCalled();
     });
   }, 30000);
+
+  for (const name of ['clear', 'restore']) {
+    it(`rolls back the registered owner's ${name} when UI publication fails`, async () => {
+      await withRecordingLifetimeFixture(async ({ agent }) => {
+        await agent.setHistory([human('first'), ai('one'), human('second')]);
+        await agent.session.setRecording({ enabled: true });
+        const path = agent.session.getRecording().path;
+        if (!path) throw new Error('No owner recording');
+        const context = createMockCommandContext({ services: { agent } });
+        const failure = new Error('UI invalidation failed');
+        context.ui.clear = () => {
+          throw failure;
+        };
+
+        expect(await ownerActions(agent)(name)(context, '1')).toStrictEqual({
+          type: 'message',
+          messageType: 'error',
+          content: `Failed to ${name} history: ${failure.message}`,
+        });
+        expect(await agent.session.getHistory()).toMatchObject([
+          human('first'),
+          ai('one'),
+          human('second'),
+        ]);
+        await agent.session.flushRecording();
+        expect(await readRecordedRows(path)).toMatchObject([
+          human('first'),
+          ai('one'),
+          human('second'),
+        ]);
+      });
+    });
+  }
 
   it('isolates borrowed sibling and resolves closed checkpoints by ID', async () => {
     await withRecordingLifetimeFixture(async ({ agent, borrow, chatsDir }) => {
@@ -188,6 +250,7 @@ describe('owner-backed /chat command route', () => {
       const saved = await sibling.session.createCheckpoint('foreign');
       const siblingPath = sibling.session.getRecording().path;
       await sibling.session.setRecording({ enabled: false });
+      const action = ownerActions(agent);
       const context = createMockCommandContext({ services: { agent } });
       expect(
         await action('rename')(context, 'foreign new-foreign'),
@@ -205,7 +268,7 @@ describe('owner-backed /chat command route', () => {
       ).toHaveLength(1);
     });
   }, 30000);
-  it('resumes a checkpoint through the same owner with UI history replay', async () => {
+  it('resumes a checkpoint through the same owner with journal projection', async () => {
     await withRecordingLifetimeFixture(async ({ agent, chatsDir }) => {
       await agent.setHistory([human('branch-point'), ai('first')]);
       await agent.session.setRecording({ enabled: true });
@@ -215,6 +278,7 @@ describe('owner-backed /chat command route', () => {
         ai('first'),
         human('later'),
       ]);
+      const action = ownerActions(agent);
       const context = createMockCommandContext({ services: { agent } });
       expect(await action('resume')(context, 'branch')).toBeUndefined();
       expect(await readJournalItems(agent, 64, true)).toMatchObject([
@@ -233,6 +297,7 @@ describe('owner-backed /chat command route', () => {
   it('reads empty history from the owner without opening a second recorder', async () => {
     await withRecordingLifetimeFixture(async ({ agent, chatsDir }) => {
       await agent.session.setRecording({ enabled: true });
+      const action = ownerActions(agent);
       const context = createMockCommandContext({ services: { agent } });
       expect(await action('clear')(context, '')).toMatchObject({
         content: 'No conversation to clear.',
@@ -248,8 +313,9 @@ describe('owner-backed /chat command route', () => {
     await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.session.setRecording({ enabled: true });
       const context = createMockCommandContext({ services: { agent } });
+      const action = ownerActions(agent);
       const materialized = spyOn(agent.session, 'getHistory');
-      const clientScan = spyOn(agent.agentClient, 'getHistory');
+      const clientScan = spyOn(agent.session, 'readInitializedHistory');
       const publicScan = spyOn(agent, 'streamHistory');
       try {
         expect(await action('clear')(context, '')).toMatchObject({
@@ -271,8 +337,9 @@ describe('owner-backed /chat command route', () => {
       await agent.setHistory([human('first'), ai('one'), human('second')]);
       await agent.session.setRecording({ enabled: true });
       const context = createMockCommandContext({ services: { agent } });
+      const action = ownerActions(agent);
       const materialized = spyOn(agent.session, 'getHistory');
-      const clientScan = spyOn(agent.agentClient, 'getHistory');
+      const clientScan = spyOn(agent.session, 'readInitializedHistory');
       const publicScan = spyOn(agent, 'streamHistory');
       try {
         const debug = await action('debug')(context, '');
@@ -308,6 +375,7 @@ describe('owner-backed /chat command route', () => {
         },
       });
 
+      const action = ownerActions(agent);
       expect(await action('restore')(context, '1')).toBeUndefined();
 
       let restoredRows = 0;

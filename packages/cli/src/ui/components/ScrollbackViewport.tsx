@@ -50,7 +50,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import { Colors, SemanticColors } from '../colors.js';
 import { ESC } from '../utils/input.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { JournalRowRendering } from '../layouts/journal-row-rendering.js';
 import { HistoryItemDisplay } from './HistoryItemDisplay.js';
 import type { HistoryItemWithoutId } from '../types.js';
 import {
@@ -83,7 +83,7 @@ export interface ScrollbackViewportProps {
    */
   range?: ContextRange;
   /** CLI runtime handed to wired rows' HistoryItemDisplay. */
-  config?: CliUiRuntime;
+  rendering?: JournalRowRendering;
   pendingToolControls?: readonly HistoryItemWithoutId[];
   onPageUp?: () => void;
   onPageDown?: () => void;
@@ -240,7 +240,7 @@ function RawScrollbackRow({ row }: { row: ScrollbackRow }): React.JSX.Element {
 
 function WiredScrollbackRow({
   row,
-  config,
+  rendering,
   range,
   terminalWidth,
   pendingToolControls,
@@ -248,7 +248,7 @@ function WiredScrollbackRow({
   availableTerminalHeight,
 }: {
   row: ScrollbackRow;
-  config: CliUiRuntime;
+  rendering: JournalRowRendering;
   range: ContextRange | undefined;
   terminalWidth: number;
   pendingToolControls: readonly HistoryItemWithoutId[];
@@ -262,7 +262,7 @@ function WiredScrollbackRow({
       terminalWidth={terminalWidth}
       isPending={false}
       isFocused={isFocused}
-      config={config}
+      {...rendering}
       contextState={row.contextState ?? contextStateForRow(row.seq, range)}
     />
   );
@@ -421,7 +421,7 @@ interface FrameWiring {
   readonly header: React.ReactNode;
   readonly showClearNotice: boolean;
   readonly range: ContextRange | undefined;
-  readonly config: CliUiRuntime | undefined;
+  readonly rendering: JournalRowRendering | undefined;
   readonly pendingToolControls: readonly HistoryItemWithoutId[];
   readonly terminalWidth: number;
   readonly availableTerminalHeight: number;
@@ -459,13 +459,13 @@ function ViewportFrame({
       }
     }
     lines.push(
-      wiring.config === undefined ? (
+      wiring.rendering === undefined ? (
         <RawScrollbackRow key={row.key} row={row} />
       ) : (
         <WiredScrollbackRow
           key={row.key}
           row={row}
-          config={wiring.config}
+          rendering={wiring.rendering}
           range={wiring.range}
           terminalWidth={wiring.terminalWidth}
           availableTerminalHeight={wiring.availableTerminalHeight}
@@ -476,11 +476,11 @@ function ViewportFrame({
     );
     if (row.seq !== null) olderSeq = row.seq;
   }
-  const config = wiring.config;
+  const rendering = wiring.rendering;
   return (
     <ViewportWindow state={state} frame={frame} wiring={wiring}>
       {lines}
-      {config !== undefined &&
+      {rendering !== undefined &&
         approvals
           .slice()
           .reverse()
@@ -495,7 +495,7 @@ function ViewportFrame({
               availableTerminalHeight={wiring.availableTerminalHeight}
               isPending={true}
               isFocused={index === approvals.length - 1}
-              config={config}
+              {...rendering}
             />
           ))}
     </ViewportWindow>
@@ -515,7 +515,7 @@ function ViewportWindow({
   return (
     <Box
       height={
-        wiring.config === undefined
+        wiring.rendering === undefined
           ? wiring.availableTerminalHeight + 2
           : wiring.availableTerminalHeight
       }
@@ -652,7 +652,7 @@ export function ScrollbackViewport({
   header,
   showClearNotice = false,
   range,
-  config,
+  rendering,
   pendingToolControls = [],
   onPageUp,
   onPageDown,
@@ -715,7 +715,7 @@ export function ScrollbackViewport({
         header,
         showClearNotice,
         range,
-        config,
+        rendering,
         pendingToolControls,
         terminalWidth: terminalWidth ?? stdout.columns,
         availableTerminalHeight: viewportLines,

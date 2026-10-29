@@ -51,6 +51,7 @@ async function prepare(
       requestRows: selection,
       contentCount: selection.count,
       invocation: createRuntimeInvocationContext({
+        fetch: (input, init) => globalThis.fetch(input, init),
         runtimeId: 'native-dump',
         providerName: 'openai-responses',
         ephemeralsSnapshot: { 'responses-stateful': false },

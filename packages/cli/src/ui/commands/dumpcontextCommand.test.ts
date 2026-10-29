@@ -3,9 +3,10 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
-import { dumpcontextCommand } from './dumpcontextCommand.js';
+import { createDumpcontextCommand } from './dumpcontextCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { captureStreamingDump } from './dumpcontext-test-helpers.js';
@@ -25,7 +26,12 @@ void vi.mock('@vybestack/llxprt-code-providers', () => ({
 
 import { dumpRequestContext } from '@vybestack/llxprt-code-providers';
 
-const getRuntimeApi = vi.fn<() => Record<string, unknown>>(() => ({
+const getRuntimeApi = vi.fn<
+  () => Pick<
+    CommandOwnerFixture['runtimeApi'],
+    'getSessionSetting' | 'setSessionSetting'
+  >
+>(() => ({
   getSessionSetting: vi.fn((key: string) => {
     if (key === 'dumpcontext') {
       return 'off';
@@ -38,7 +44,7 @@ import { assertDefined } from '../../__tests__/assertions.js';
 
 function createOwnedCommandContext(
   ...args: Parameters<typeof createMockCommandContext>
-): CommandContext {
+): CommandOwnerFixture {
   const context = createMockCommandContext(...args);
   Object.defineProperty(context, 'runtimeApi', {
     configurable: true,
@@ -48,6 +54,14 @@ function createOwnedCommandContext(
 }
 
 let mockContext: CommandContext;
+const dumpcontextCommand = createDumpcontextCommand({
+  dumpDirectory: '',
+  readMode: () => getRuntimeApi().getSessionSetting('dumpcontext'),
+  writeMode: (mode) => getRuntimeApi().setSessionSetting('dumpcontext', mode),
+  dumpNow: async () => {
+    throw new Error('Immediate dump has its own suite');
+  },
+});
 
 describe('dumpcontextCommand', () => {
   beforeEach(() => {
@@ -84,7 +98,6 @@ function registerStatusTests(): void {
         content: expect.stringContaining('Context dumping: off'),
       });
     });
-
     it('should show current dumpcontext status when mode is on', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
         getSessionSetting: vi.fn(() => 'on'),
@@ -101,7 +114,6 @@ function registerStatusTests(): void {
         content: expect.stringContaining('Context dumping: on'),
       });
     });
-
     it('should default to status when no args provided', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
         getSessionSetting: vi.fn(() => 'error'),

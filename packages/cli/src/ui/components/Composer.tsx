@@ -16,7 +16,7 @@ import { useTurnStore } from '../stores/turn/TurnContext.js';
 import { useStoreSelector } from '../stores/useStoreSelector.js';
 import { InputPrompt } from './InputPrompt.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { InputPromptRuntime } from './inputPromptTypes.js';
 
 /**
  * Determines the placeholder text based on editor mode.
@@ -39,7 +39,7 @@ function getComposerPlaceholder(
 }
 
 interface ComposerProps {
-  config: CliUiRuntime;
+  config: InputPromptRuntime;
   settings: LoadedSettings;
   onSuggestionsVisibilityChange?: (visible: boolean) => void;
 }
@@ -92,7 +92,7 @@ function useComposerSelectors() {
  */
 export const Composer = ({
   config,
-  settings: _settings,
+  settings,
   onSuggestionsVisibilityChange,
 }: ComposerProps) => {
   const commands = useAppCommands();
@@ -114,6 +114,7 @@ export const Composer = ({
 
   return (
     <InputPrompt
+      enableFuzzyFiltering={settings.merged.enableFuzzyFiltering ?? true}
       buffer={data.buffer}
       inputWidth={inputWidth}
       suggestionsWidth={suggestionsWidth}
@@ -124,6 +125,7 @@ export const Composer = ({
       config={config}
       slashCommands={slashCommands ?? []}
       commandContext={data.commandContext}
+      generatePromptContent={data.generatePromptContent}
       shellModeActive={shellModeActive}
       setShellModeActive={commands.setShellModeActive}
       onEscapePromptChange={commands.handleEscapePromptChange}

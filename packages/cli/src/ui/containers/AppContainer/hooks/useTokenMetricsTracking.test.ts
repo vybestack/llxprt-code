@@ -4,21 +4,111 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { act } from 'react';
+import { act, useMemo } from 'react';
+import {
+  bindHistoryTokenSubscription,
+  bindRecordingHistorySubscription,
+} from './historyTokenSubscriptions.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '../../../../__tests__/render.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
+import { bindBootstrapRecordingHistory } from './useBootstrapRuntime.js';
 
 const realLlxprtCodeTelemetryModule = {
   ...(await import('@vybestack/llxprt-code-telemetry')),
 };
 
 const useRuntimeApiMock = vi.fn();
-const setTokenTrackingMetricsMock = vi.fn();
+let metricSource = new realLlxprtCodeTelemetryModule.UiTelemetryService();
 
-void vi.mock('../../../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: useRuntimeApiMock,
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = useRuntimeApiMock;
+    return {
+      useGetActiveProviderDetails: () =>
+        useSelectedTestRuntime().getActiveProviderDetails,
+      useGetProviderDumpMetadata: () =>
+        useSelectedTestRuntime().getProviderDumpMetadata,
+      useGetActiveProviderAliasConfig: () =>
+        useSelectedTestRuntime().getActiveProviderAliasConfig,
+      useDetectProviderQuota: () =>
+        useSelectedTestRuntime().detectProviderQuota,
+      useGetLoadBalancerStats: () =>
+        useSelectedTestRuntime().getLoadBalancerStats,
+      useGetLoadBalancerTokenAccounting: () =>
+        useSelectedTestRuntime().getLoadBalancerTokenAccounting,
+      useListSavedProfiles: () => useSelectedTestRuntime().listSavedProfiles,
+      useGetProfileByName: () => useSelectedTestRuntime().getProfileByName,
+      useSaveProfileDefinition: () =>
+        useSelectedTestRuntime().saveProfileDefinition,
+      useSaveLoadBalancerProfile: () =>
+        useSelectedTestRuntime().saveLoadBalancerProfile,
+      useListProviders: () => useSelectedTestRuntime().listProviders,
+      useGetActiveProviderName: () =>
+        useSelectedTestRuntime().getActiveProviderName,
+      useListAvailableModels: () =>
+        useSelectedTestRuntime().listAvailableModels,
+      useGetActiveModelName: () => useSelectedTestRuntime().getActiveModelName,
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+      useGetUnallowedParametersForActiveModel: () =>
+        useSelectedTestRuntime().getUnallowedParametersForActiveModel,
+      useGetActiveProviderMetrics: () =>
+        useSelectedTestRuntime().getActiveProviderMetrics,
+      useGetSessionTokenUsage: () =>
+        useSelectedTestRuntime().getSessionTokenUsage,
+      useGetEphemeralSettings: () =>
+        useSelectedTestRuntime().getEphemeralSettings,
+      useSetEphemeralSetting: () =>
+        useSelectedTestRuntime().setEphemeralSetting,
+      useGetActiveToolFormatState: () =>
+        useSelectedTestRuntime().getActiveToolFormatState,
+      useSetActiveToolFormatOverride: () =>
+        useSelectedTestRuntime().setActiveToolFormatOverride,
+      useGetEphemeralSetting: () =>
+        useSelectedTestRuntime().getEphemeralSetting,
+      useGetSessionSetting: () => useSelectedTestRuntime().getSessionSetting,
+      useSetSessionSetting: () => useSelectedTestRuntime().setSessionSetting,
+      useClearSessionSetting: () =>
+        useSelectedTestRuntime().clearSessionSetting,
+      useSetActiveModel: () => useSelectedTestRuntime().setActiveModel,
+      useGetActiveModelParams: () =>
+        useSelectedTestRuntime().getActiveModelParams,
+      useSetActiveModelParam: () =>
+        useSelectedTestRuntime().setActiveModelParam,
+      useClearActiveModelParam: () =>
+        useSelectedTestRuntime().clearActiveModelParam,
+      useUpdateActiveProviderApiKey: () =>
+        useSelectedTestRuntime().updateActiveProviderApiKey,
+      useGetWorkspaceDirectories: () =>
+        useSelectedTestRuntime().getWorkspaceDirectories,
+      useGetDefaultProfileName: () =>
+        useSelectedTestRuntime().getDefaultProfileName,
+      useGetOpenAIProviderInfo: () =>
+        useSelectedTestRuntime().getOpenAIProviderInfo,
+      useGetActiveProfileName: () =>
+        useSelectedTestRuntime().getActiveProfileName,
+      useSetDefaultProfileName: () =>
+        useSelectedTestRuntime().setDefaultProfileName,
+      useGetRuntimeDiagnosticsSnapshot: () =>
+        useSelectedTestRuntime().getRuntimeDiagnosticsSnapshot,
+      useSaveProfileSnapshot: () =>
+        useSelectedTestRuntime().saveProfileSnapshot,
+      useDeleteProfileByName: () =>
+        useSelectedTestRuntime().deleteProfileByName,
+      useFetch: () => useSelectedTestRuntime().fetch,
+      useSetProvider: () => useSelectedTestRuntime().setProvider,
+      useLoadProfileByName: () => useSelectedTestRuntime().loadProfileByName,
+      useUpdateActiveProviderBaseUrl: () =>
+        useSelectedTestRuntime().updateActiveProviderBaseUrl,
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../../../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   const actual = realLlxprtCodeTelemetryModule;
@@ -32,9 +122,6 @@ void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   return {
     ...actual,
     DebugLogger: DebugLoggerStub,
-    uiTelemetryService: {
-      setTokenTrackingMetrics: setTokenTrackingMetricsMock,
-    },
   };
 });
 
@@ -103,267 +190,9 @@ const makeRuntimeApi = (
   getSessionTokenUsage: vi.fn().mockReturnValue(usage),
 });
 
-function registerMountTests(): void {
-  describe('mount', () => {
-    it('publishes initial token metrics and telemetry on mount', () => {
-      const historyService = makeHistoryService(13);
-      const agentClient = makeAgentClient(historyService);
-      const config = makeConfig(agentClient);
-
-      const usage: TokenUsage = {
-        input: 1,
-        output: 2,
-        cache: 3,
-        tool: 4,
-        thought: 5,
-        total: 15,
-      };
-
-      const runtimeApi = makeRuntimeApi(
-        { tokensPerMinute: 42, throttleWaitTimeMs: 75 },
-        usage,
-      );
-
-      useRuntimeApiMock.mockReturnValue(runtimeApi);
-
-      const updateHistoryTokenCount = vi.fn();
-      const recordingIntegrationRef = { current: null };
-
-      const { result } = renderHook(() =>
-        useTokenMetricsTracking({
-          uiRuntime: config as never,
-          updateHistoryTokenCount,
-          recordingIntegrationRef: recordingIntegrationRef as never,
-        }),
-      );
-
-      expect(result.current.tokenMetrics).toStrictEqual({
-        tokensPerMinute: 42,
-        throttleWaitTimeMs: 75,
-        sessionTokenTotal: 15,
-        timeToFirstToken: null,
-        tokensPerSecond: 0,
-      });
-
-      expect(setTokenTrackingMetricsMock).toHaveBeenCalledWith({
-        tokensPerMinute: 42,
-        throttleWaitTimeMs: 75,
-        timeToFirstToken: null,
-        tokensPerSecond: 0,
-        sessionTokenUsage: usage,
-      });
-    });
-  });
-}
-
-function registerHistoryUpdatesTests(): void {
-  describe('history updates', () => {
-    it('subscribes to history service updates and updates history token count', () => {
-      const historyService = makeHistoryService(88);
-      const agentClient = makeAgentClient(historyService);
-      const config = makeConfig(agentClient);
-
-      const runtimeApi = makeRuntimeApi(
-        { tokensPerMinute: 10, throttleWaitTimeMs: 20 },
-        { input: 1, output: 1, cache: 0, tool: 0, thought: 0, total: 2 },
-      );
-
-      useRuntimeApiMock.mockReturnValue(runtimeApi);
-
-      const updateHistoryTokenCount = vi.fn();
-      const recordingIntegrationRef = { current: null };
-
-      renderHook(() =>
-        useTokenMetricsTracking({
-          uiRuntime: config as never,
-          updateHistoryTokenCount,
-          recordingIntegrationRef: recordingIntegrationRef as never,
-        }),
-      );
-
-      act(() => {
-        vi.advanceTimersByTime(100);
-      });
-
-      expect(historyService.on).toHaveBeenCalledWith(
-        'tokensUpdated',
-        expect.any(Function),
-      );
-      expect(updateHistoryTokenCount).toHaveBeenCalledWith(88);
-
-      const handler = historyService.on.mock.calls[0]?.[1] as
-        | ((event: { totalTokens: number }) => void)
-        | undefined;
-
-      expect(handler).toBeTypeOf('function');
-
-      act(() => {
-        handler?.({ totalTokens: 144 });
-      });
-
-      expect(updateHistoryTokenCount).toHaveBeenCalledWith(144);
-    });
-  });
-}
-
-function registerSubscriptionReplacementTests(): void {
-  describe('subscription replacement', () => {
-    it('replaces history-service subscription when history service instance changes', () => {
-      const historyServiceA = makeHistoryService(5);
-      const historyServiceB = makeHistoryService(9);
-
-      let activeHistoryService: HistoryServiceStub = historyServiceA;
-      const agentClient: AgentClientStub = {
-        hasChatInitialized: vi.fn().mockReturnValue(true),
-        getHistoryService: vi
-          .fn()
-          .mockImplementation(() => activeHistoryService),
-      };
-      const config = makeConfig(agentClient);
-
-      const runtimeApi = makeRuntimeApi(
-        { tokensPerMinute: 3, throttleWaitTimeMs: 4 },
-        { input: 0, output: 0, cache: 0, tool: 0, thought: 0, total: 0 },
-      );
-
-      useRuntimeApiMock.mockReturnValue(runtimeApi);
-
-      const updateHistoryTokenCount = vi.fn();
-      const recordingIntegrationRef = { current: null };
-
-      const { unmount } = renderHook(() =>
-        useTokenMetricsTracking({
-          uiRuntime: config as never,
-          updateHistoryTokenCount,
-          recordingIntegrationRef: recordingIntegrationRef as never,
-        }),
-      );
-
-      act(() => {
-        vi.advanceTimersByTime(100);
-      });
-
-      const originalHandler = historyServiceA.on.mock.calls[0]?.[1];
-      expect(historyServiceA.on).toHaveBeenCalledTimes(1);
-
-      activeHistoryService = historyServiceB;
-
-      act(() => {
-        vi.advanceTimersByTime(100);
-      });
-
-      expect(historyServiceA.off).toHaveBeenCalledWith(
-        'tokensUpdated',
-        originalHandler,
-      );
-      expect(historyServiceB.on).toHaveBeenCalledWith(
-        'tokensUpdated',
-        expect.any(Function),
-      );
-
-      unmount();
-
-      const latestHandler = historyServiceB.on.mock.calls[0]?.[1];
-      expect(historyServiceB.off).toHaveBeenCalledWith(
-        'tokensUpdated',
-        latestHandler,
-      );
-    });
-  });
-}
-
-function registerUnchangedSnapshotTests(): void {
-  describe('unchanged snapshot', () => {
-    it('does not republish token metrics when snapshot is unchanged across polling', () => {
-      const historyService = makeHistoryService(5);
-      const agentClient = makeAgentClient(historyService);
-      const config = makeConfig(agentClient);
-
-      const runtimeApi = makeRuntimeApi(
-        { tokensPerMinute: 12, throttleWaitTimeMs: 34 },
-        { input: 2, output: 3, cache: 0, tool: 0, thought: 0, total: 5 },
-      );
-
-      useRuntimeApiMock.mockReturnValue(runtimeApi);
-
-      const updateHistoryTokenCount = vi.fn();
-      const recordingIntegrationRef = { current: null };
-
-      renderHook(() =>
-        useTokenMetricsTracking({
-          uiRuntime: config as never,
-          updateHistoryTokenCount,
-          recordingIntegrationRef: recordingIntegrationRef as never,
-        }),
-      );
-
-      expect(setTokenTrackingMetricsMock).toHaveBeenCalledTimes(1);
-
-      act(() => {
-        vi.advanceTimersByTime(5000);
-      });
-
-      expect(setTokenTrackingMetricsMock).toHaveBeenCalledTimes(1);
-    });
-  });
-}
-
-function registerRecordingIntegrationTests(): void {
-  describe('recording integration', () => {
-    it('notifies recording integration when history service appears and changes', () => {
-      const historyServiceA = makeHistoryService(10);
-      const historyServiceB = makeHistoryService(20);
-
-      let activeHistoryService: HistoryServiceStub = historyServiceA;
-      const agentClient: AgentClientStub = {
-        hasChatInitialized: vi.fn().mockReturnValue(true),
-        getHistoryService: vi
-          .fn()
-          .mockImplementation(() => activeHistoryService),
-      };
-      const config = makeConfig(agentClient);
-
-      const runtimeApi = makeRuntimeApi(
-        { tokensPerMinute: 1, throttleWaitTimeMs: 2 },
-        { input: 0, output: 0, cache: 0, tool: 0, thought: 0, total: 0 },
-      );
-      useRuntimeApiMock.mockReturnValue(runtimeApi);
-
-      const updateHistoryTokenCount = vi.fn();
-      const subscribeToJournal = vi.fn(async () => undefined);
-      const recordingIntegrationRef = {
-        current: {
-          subscribeToJournal,
-        },
-      };
-
-      renderHook(() =>
-        useTokenMetricsTracking({
-          uiRuntime: config as never,
-          updateHistoryTokenCount,
-          recordingIntegrationRef: recordingIntegrationRef as never,
-        }),
-      );
-
-      act(() => {
-        vi.advanceTimersByTime(100);
-      });
-
-      expect(subscribeToJournal).toHaveBeenCalledWith(historyServiceA);
-
-      activeHistoryService = historyServiceB;
-
-      act(() => {
-        vi.advanceTimersByTime(100);
-      });
-
-      expect(subscribeToJournal).toHaveBeenCalledWith(historyServiceB);
-    });
-  });
-}
-
 describe('useTokenMetricsTracking', () => {
   beforeEach(() => {
+    metricSource = new realLlxprtCodeTelemetryModule.UiTelemetryService();
     vi.useFakeTimers();
     vi.clearAllMocks();
   });
@@ -372,12 +201,250 @@ describe('useTokenMetricsTracking', () => {
     vi.useRealTimers();
   });
 
-  registerMountTests();
-  registerHistoryUpdatesTests();
-  registerSubscriptionReplacementTests();
-  registerUnchangedSnapshotTests();
-  registerRecordingIntegrationTests();
+  it('publishes initial token metrics and telemetry on mount', () => {
+    const historyService = makeHistoryService(13);
+    const agentClient = makeAgentClient(historyService);
+    const config = makeConfig(agentClient);
 
+    const usage: TokenUsage = {
+      input: 1,
+      output: 2,
+      cache: 3,
+      tool: 4,
+      thought: 5,
+      total: 15,
+    };
+
+    const runtimeApi = makeRuntimeApi(
+      { tokensPerMinute: 42, throttleWaitTimeMs: 75 },
+      usage,
+    );
+
+    useRuntimeApiMock.mockReturnValue(runtimeApi);
+
+    const updateHistoryTokenCount = vi.fn();
+    const recordingIntegrationRef = { current: null };
+
+    const { result } = renderHook(() =>
+      useTokenMetricsTracking({
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
+        updateHistoryTokenCount,
+      }),
+    );
+
+    expect(result.current.tokenMetrics).toStrictEqual({
+      tokensPerMinute: 42,
+      throttleWaitTimeMs: 75,
+      sessionTokenTotal: 15,
+      timeToFirstToken: null,
+      tokensPerSecond: 0,
+    });
+
+    expect(metricSource.getMetrics().tokenTracking).toStrictEqual({
+      tokensPerMinute: 0,
+      throttleWaitTimeMs: 75,
+      timeToFirstToken: null,
+      tokensPerSecond: 0,
+      sessionTokenUsage: usage,
+    });
+  });
+
+  it('subscribes to history service updates and updates history token count', () => {
+    const historyService = makeHistoryService(88);
+    const agentClient = makeAgentClient(historyService);
+    const config = makeConfig(agentClient);
+
+    const runtimeApi = makeRuntimeApi(
+      { tokensPerMinute: 10, throttleWaitTimeMs: 20 },
+      { input: 1, output: 1, cache: 0, tool: 0, thought: 0, total: 2 },
+    );
+
+    useRuntimeApiMock.mockReturnValue(runtimeApi);
+
+    const updateHistoryTokenCount = vi.fn();
+    const recordingIntegrationRef = { current: null };
+
+    renderHook(() =>
+      useTokenMetricsTracking({
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
+        updateHistoryTokenCount,
+      }),
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(historyService.on).toHaveBeenCalledWith(
+      'tokensUpdated',
+      expect.any(Function),
+    );
+    expect(updateHistoryTokenCount).toHaveBeenCalledWith(88);
+
+    const handler = historyService.on.mock.calls[0]?.[1] as
+      | ((event: { totalTokens: number }) => void)
+      | undefined;
+
+    expect(handler).toBeTypeOf('function');
+
+    act(() => {
+      handler?.({ totalTokens: 144 });
+    });
+
+    expect(updateHistoryTokenCount).toHaveBeenCalledWith(144);
+  });
+
+  it('replaces history-service subscription when history service instance changes', () => {
+    const historyServiceA = makeHistoryService(5);
+    const historyServiceB = makeHistoryService(9);
+
+    let activeHistoryService: HistoryServiceStub = historyServiceA;
+    const agentClient: AgentClientStub = {
+      hasChatInitialized: vi.fn().mockReturnValue(true),
+      getHistoryService: vi.fn().mockImplementation(() => activeHistoryService),
+    };
+    const config = makeConfig(agentClient);
+
+    const runtimeApi = makeRuntimeApi(
+      { tokensPerMinute: 3, throttleWaitTimeMs: 4 },
+      { input: 0, output: 0, cache: 0, tool: 0, thought: 0, total: 0 },
+    );
+
+    useRuntimeApiMock.mockReturnValue(runtimeApi);
+
+    const updateHistoryTokenCount = vi.fn();
+    const recordingIntegrationRef = { current: null };
+
+    const { unmount } = renderHook(() =>
+      useTokenMetricsTracking({
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
+        updateHistoryTokenCount,
+      }),
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+
+    const originalHandler = historyServiceA.on.mock.calls[0]?.[1];
+    expect(historyServiceA.on).toHaveBeenCalledTimes(1);
+
+    activeHistoryService = historyServiceB;
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(historyServiceA.off).toHaveBeenCalledWith(
+      'tokensUpdated',
+      originalHandler,
+    );
+    expect(historyServiceB.on).toHaveBeenCalledWith(
+      'tokensUpdated',
+      expect.any(Function),
+    );
+
+    unmount();
+
+    const latestHandler = historyServiceB.on.mock.calls[0]?.[1];
+    expect(historyServiceB.off).toHaveBeenCalledWith(
+      'tokensUpdated',
+      latestHandler,
+    );
+  });
+
+  it('does not republish token metrics when snapshot is unchanged across polling', () => {
+    const historyService = makeHistoryService(5);
+    const agentClient = makeAgentClient(historyService);
+    const config = makeConfig(agentClient);
+
+    const runtimeApi = makeRuntimeApi(
+      { tokensPerMinute: 12, throttleWaitTimeMs: 34 },
+      { input: 2, output: 3, cache: 0, tool: 0, thought: 0, total: 5 },
+    );
+
+    useRuntimeApiMock.mockReturnValue(runtimeApi);
+
+    const updateHistoryTokenCount = vi.fn();
+    const recordingIntegrationRef = { current: null };
+
+    const updates: number[] = [];
+    const unsubscribe = metricSource.subscribe((update) => {
+      updates.push(update.metrics.tokenTracking.sessionTokenUsage.total);
+    });
+    renderHook(() =>
+      useTokenMetricsTracking({
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
+        updateHistoryTokenCount,
+      }),
+    );
+
+    expect(updates).toStrictEqual([5]);
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    expect(updates).toStrictEqual([5]);
+    unsubscribe();
+  });
+
+  it('notifies recording integration when history service appears and changes', () => {
+    const historyServiceA = makeHistoryService(10);
+    const historyServiceB = makeHistoryService(20);
+
+    let activeHistoryService: HistoryServiceStub = historyServiceA;
+    const agentClient: AgentClientStub = {
+      hasChatInitialized: vi.fn().mockReturnValue(true),
+      getHistoryService: vi.fn().mockImplementation(() => activeHistoryService),
+    };
+    const config = makeConfig(agentClient);
+
+    const runtimeApi = makeRuntimeApi(
+      { tokensPerMinute: 1, throttleWaitTimeMs: 2 },
+      { input: 0, output: 0, cache: 0, tool: 0, thought: 0, total: 0 },
+    );
+    useRuntimeApiMock.mockReturnValue(runtimeApi);
+
+    const updateHistoryTokenCount = vi.fn();
+    const subscribeToJournal = vi.fn();
+    const recordingIntegrationRef = {
+      current: {
+        subscribeToJournal,
+      },
+    };
+
+    renderHook(() =>
+      useTokenMetricsTracking({
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
+        updateHistoryTokenCount,
+      }),
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(subscribeToJournal).toHaveBeenCalledWith(historyServiceA);
+
+    activeHistoryService = historyServiceB;
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(subscribeToJournal).toHaveBeenCalledWith(historyServiceB);
+  });
   it('keeps the UI token listener on owner changes without subscribing the raw recorder', () => {
     const first = makeHistoryService(11);
     const second = makeHistoryService(22);
@@ -392,17 +459,17 @@ describe('useTokenMetricsTracking', () => {
     const published: number[] = [];
     const rawSubscribe = vi.fn();
     const recordingIntegrationRef = {
-      current: { onHistoryServiceReplaced: rawSubscribe },
+      current: { subscribeToJournal: rawSubscribe },
     };
     const { rerender, unmount } = renderHook(
       ({ uiRuntime }) =>
         useTokenMetricsTracking({
-          uiRuntime: uiRuntime as never,
-          recordingOwner: 'agent',
+          setTokenTrackingMetrics:
+            metricSource.setTokenTrackingMetrics.bind(metricSource),
+          ...useBindings(uiRuntime, recordingIntegrationRef as never, 'agent'),
           updateHistoryTokenCount: (value) => {
             published.push(value);
           },
-          recordingIntegrationRef: recordingIntegrationRef as never,
         }),
       { initialProps: { uiRuntime: firstRuntime } },
     );
@@ -426,3 +493,38 @@ describe('useTokenMetricsTracking', () => {
     );
   });
 });
+
+function useBindings(
+  config: ConfigStub,
+  recordingIntegrationRef?: Parameters<typeof bindBootstrapRecordingHistory>[2],
+  recordingOwner?: 'agent' | 'raw',
+) {
+  const runtime: RuntimeApiStub = useRuntimeApiMock();
+  const logger = useMemo(() => new DebugLogger('tokens-test'), []);
+  const readHistory = useMemo(
+    () => () => {
+      const client = config.agentClientSource.getAgentClient();
+      return client?.hasChatInitialized() === true
+        ? (client.getHistoryService() ?? null)
+        : null;
+    },
+    [config],
+  );
+  return {
+    subscribeHistoryTokens: useMemo(
+      () => bindHistoryTokenSubscription(readHistory, logger),
+      [readHistory, logger],
+    ),
+    subscribeRecordingHistory: useMemo(
+      () =>
+        bindBootstrapRecordingHistory(
+          bindRecordingHistorySubscription(readHistory, logger),
+          recordingOwner,
+          recordingIntegrationRef,
+        ),
+      [readHistory, logger, recordingOwner, recordingIntegrationRef],
+    ),
+    readProviderMetrics: runtime.getActiveProviderMetrics,
+    readSessionTokenUsage: runtime.getSessionTokenUsage,
+  };
+}

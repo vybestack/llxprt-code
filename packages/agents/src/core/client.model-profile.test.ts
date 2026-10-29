@@ -19,6 +19,7 @@ import {
   configHistoryRows,
   readConfigHistory,
 } from '@vybestack/llxprt-code-core/config/config-stream-test-helpers.js';
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 import type { BaseLLMClient } from './baseLlmClient.js';
 import type { Turn } from './turn.js';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
@@ -31,7 +32,6 @@ import {
   type ServerAgentStreamEvent,
   type ModelInfo,
 } from './turn.js';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 import {
   fromAsync,
   setupAgentClient,
@@ -130,7 +130,7 @@ void vi.mock('@vybestack/llxprt-code-tools', () => ({
   ...actual,
   LocalTodoStore: mockTodoStoreConstructor,
 }));
-const __actual = { ...(await import('./turn')) };
+const __actual = { ...(await import('./turn.js')) };
 void vi.mock('./turn', () => {
   const result = __actual as
     | typeof import('./turn.js')
@@ -210,6 +210,7 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
 }));
 
 let client: AgentClient;
+let notifications: ReturnType<typeof createSessionPolicyFixture>;
 
 let getModelSpy: ReturnType<typeof vi.spyOn>;
 
@@ -223,7 +224,8 @@ let mediaRoot: string;
 async function collectModelInfos(
   stream: AsyncIterable<ServerAgentStreamEvent>,
 ): Promise<ModelInfo[]> {
-  const events = await fromAsync(stream);
+  const events: ServerAgentStreamEvent[] = [];
+  for await (const event of stream) events.push(event);
   return events
     .filter(
       (
@@ -253,6 +255,11 @@ async function setupClientFixture(): Promise<void> {
     { useInjectedConfig: true },
   );
   client = ctx.client;
+  notifications = createSessionPolicyFixture();
+  notifications.owner.initializeProviderSelection('gemini', 'initial-model');
+  client.bindModelNotifications((listener) =>
+    notifications.owner.subscribeModelChanges(listener),
+  );
   mediaRoot = mkdtempSync(join(tmpdir(), 'model-profile-media-'));
   const mediaStore = new LocalMediaStore({
     rootDirectory: mediaRoot,
@@ -277,7 +284,7 @@ function verifyProfileSequenceReset(): void {
   expect(client.getCurrentSequenceModel()).toBe('sticky-model');
 
   // Emit ModelProfileChanged — should reset the sticky model
-  coreEvents.emitModelProfileChanged({
+  notifications.owner.publishModelProfile({
     model: 'new-model',
     providerName: 'anthropic',
     profileName: null,
@@ -286,7 +293,7 @@ function verifyProfileSequenceReset(): void {
 }
 
 function verifyProfileInvalidation(): {
-  historyService: unknown;
+  historyService: HistoryService;
   contentGenerator: ContentGenerator;
 } {
   const historyService = new HistoryService();
@@ -303,7 +310,7 @@ function verifyProfileInvalidation(): {
 
   client['_baseLlmClient'] = {} as BaseLLMClient;
 
-  client['_pendingConfig'] = {
+  client['sessionContentGeneratorConfig'] = {
     model: 'test-model',
     apiKey: 'old-key',
     vertexai: false,
@@ -311,7 +318,7 @@ function verifyProfileInvalidation(): {
 
   expect(client.hasChatInitialized()).toBe(true);
 
-  coreEvents.emitModelProfileChanged({
+  notifications.owner.publishModelProfile({
     model: 'claude-opus-4-8',
     providerName: 'anthropic',
     profileName: 'opusthinking',
@@ -322,7 +329,7 @@ function verifyProfileInvalidation(): {
 
 async function verifyDeferredInvalidation(): Promise<{
   executeSpy: unknown;
-  historyService: unknown;
+  historyService: HistoryService;
 }> {
   const historyService = new HistoryService();
 
@@ -337,7 +344,7 @@ async function verifyDeferredInvalidation(): Promise<{
   const executeSpy = vi
     .spyOn(client['messageStreamOrchestrator'], 'execute')
     .mockImplementation(async function* () {
-      coreEvents.emitModelProfileChanged({
+      notifications.owner.publishModelProfile({
         model: 'claude-opus-4-8',
         providerName: 'anthropic',
         profileName: 'opusthinking',
@@ -475,7 +482,9 @@ async function verifyStoredHistoryOnToolsRefresh(): Promise<{
 function verifyModelChangedSequenceReset(): void {
   client['currentSequenceModel'] = 'sticky-model';
 
-  coreEvents.emitModelChanged('other-model');
+  const publication = notifications.owner.beginModelPublication();
+  notifications.owner.chooseModel('other-model');
+  publication.commit();
 }
 
 async function verifyContinuationModelChange(): Promise<{
@@ -503,7 +512,7 @@ async function verifyContinuationModelChange(): Promise<{
         yield { type: AgentEventType.InvalidStream };
       })();
       // Simulate model change before continuation
-      coreEvents.emitModelProfileChanged({
+      notifications.owner.publishModelProfile({
         model: 'changed-model',
         providerName: 'anthropic',
         profileName: null,
@@ -603,7 +612,7 @@ async function verifyContinuationStableProvider(): Promise<{
         },
       } as unknown as ContentGeneratorConfig);
       // Reset sequence model so orchestrator re-reads
-      coreEvents.emitModelProfileChanged({
+      notifications.owner.publishModelProfile({
         model: 'test-model',
         providerName: 'anthropic',
         profileName: null,
@@ -671,7 +680,7 @@ describe('AgentClient (client.ts)', () => {
       expect(client.hasChatInitialized()).toBe(false);
       expect(client['contentGenerator']).toBe(contentGenerator);
       expect(client['_baseLlmClient']).toBeUndefined();
-      expect(client['_pendingConfig']).toStrictEqual({
+      expect(client['sessionContentGeneratorConfig']).toStrictEqual({
         model: 'test-model',
         apiKey: 'old-key',
         vertexai: false,

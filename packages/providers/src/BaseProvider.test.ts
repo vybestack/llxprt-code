@@ -35,6 +35,10 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Issue #2616: the settings singleton is gone. Each test refreshes this
@@ -79,20 +83,25 @@ const getContentText = (content: IContent | undefined): string => {
 function createOptionsWithRuntime(
   contents: IContent[],
   settingsService?: SettingsService,
-  config?: Config,
 ) {
   const settings = settingsService ?? testSettingsService;
-  const runtimeConfig =
-    config ?? createRuntimeConfigStub(settings, { getModel: () => '' });
+
   const runtime = createProviderRuntimeContext({
     runtimeId: `base-provider.${Math.random().toString(36).slice(2, 10)}`,
-    settingsService: settings,
-    config: runtimeConfig,
   });
 
   return {
     contents,
-    invocation: captureProviderInvocation(runtime, 'test'),
+    invocation: captureProviderInvocation(
+      {
+        fetch: requestFetch,
+        runtimeId: runtime.runtimeId,
+        metadata: runtime.metadata,
+        globalSettings: settings.getAllGlobalSettings(),
+        providerSettings: settings.getProviderSettings('test'),
+      },
+      'test',
+    ),
   };
 }
 
@@ -385,7 +394,12 @@ describe('BaseProvider', () => {
       const options = {
         contents: [userMessage('options signature test')],
         invocation: captureProviderInvocation(
-          { settingsService: customSettings, runtimeId: 'req-123' },
+          {
+            fetch: requestFetch,
+            runtimeId: 'req-123',
+            globalSettings: customSettings.getAllGlobalSettings(),
+            providerSettings: customSettings.getProviderSettings('test'),
+          },
           'test',
         ),
         metadata: { requestId: 'req-123' },
@@ -529,8 +543,6 @@ describe('BaseProvider', () => {
       const runtimeConfig = createRuntimeConfigStub(settings);
       const runtime = createProviderRuntimeContext({
         runtimeId: 'oauth-cache',
-        settingsService: settings,
-        config: runtimeConfig,
       });
 
       // When: Make multiple API calls

@@ -1,3 +1,5 @@
+import { captureSessionOwner } from '../../../../../../agents/src/api/__tests__/helpers/capture-session-owner.js';
+import { rawClientChatCommand } from '../../../../__tests__/raw-chat-command.fixture.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -21,11 +23,12 @@ import { buildAgent } from '../../../../../../agents/src/api/__tests__/helpers/a
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { createMockCommandContext } from '../../../../__tests__/mockCommandContext.js';
-import type { CommandContext } from '../../types.js';
+import type { CommandContext, SlashCommand } from '../../types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
 export interface ChatMutationFixture {
   readonly context: CommandContext;
+  readonly chatCommand: SlashCommand;
   readonly history: HistoryService;
   readonly client: AgentClientContract;
   readonly recording: SessionRecordingPort;
@@ -77,8 +80,11 @@ export async function withChatMutationFixture<T>(
     return await withSuffixFixture(
       size,
       async (history, reader) => {
-        const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-        const client = agent.agentClient;
+        const {
+          value: { cleanup },
+          owner,
+        } = await captureSessionOwner(() => buildAgent('plain-text.jsonl'));
+        const client = owner.clients.getAgentClient();
         const priorHistory = client.getHistoryService();
         client.storeHistoryServiceForReuse(history);
         try {
@@ -86,7 +92,7 @@ export async function withChatMutationFixture<T>(
           const context = createMockCommandContext({
             services: {
               config: { getEphemeralSetting: () => undefined },
-              agent: { agentClient: client },
+              agent: null,
             },
           });
           context.recordingIntegration = undefined;
@@ -98,7 +104,19 @@ export async function withChatMutationFixture<T>(
             setRecording: () => {},
           };
           await history.attachJournal(recording);
-          return await execute({ context, history, client, recording, reader });
+          const chatCommand = rawClientChatCommand(
+            client,
+            () => recording,
+            () => 'fake-model',
+          );
+          return await execute({
+            context,
+            chatCommand,
+            history,
+            client,
+            recording,
+            reader,
+          });
         } finally {
           await cleanup();
           if (priorHistory !== history) await priorHistory?.dispose();

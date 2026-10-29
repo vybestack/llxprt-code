@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { seedSessionRows } from './journal-recording.js';
+import type { CommandOwnerFixture } from './mockCommandContext.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P30
@@ -30,7 +31,7 @@ import type {
   ResumeContext,
   RecordingSwapCallbacks,
 } from '../services/performResume.js';
-import type { CommandContext } from '../ui/commands/types.js';
+
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import { MessageType } from '../ui/types.js';
 
@@ -236,32 +237,32 @@ export function makeResumeContext(
 /**
  * Create a mock logger that satisfies the Logger interface minimally.
  */
-export function makeMockLogger(): CommandContext['services']['logger'] {
+export function makeMockLogger(): CommandOwnerFixture['services']['logger'] {
   return {
     debug: () => {},
     info: () => {},
     warn: () => {},
     error: () => {},
-  } as unknown as CommandContext['services']['logger'];
+  } as unknown as CommandOwnerFixture['services']['logger'];
 }
 
 /**
- * Create a minimal CommandContext for testing continueCommand.
+ * Create a minimal CommandOwnerFixture for testing continueCommand.
  */
 export function makeCommandContext(
-  overrides: Partial<CommandContext> = {},
-): CommandContext {
+  overrides: Partial<CommandOwnerFixture> = {},
+): CommandOwnerFixture {
   return {
     ...overrides,
     services: {
       agent: null,
-      settings: {} as CommandContext['services']['settings'],
+      settings: {} as CommandOwnerFixture['services']['settings'],
       git: undefined,
       logger: makeMockLogger(),
       config: {
         isInteractive: () =>
           overrides.services?.config?.isInteractive() ?? true,
-      } as CommandContext['services']['config'],
+      } as CommandOwnerFixture['services']['config'],
       ...overrides.services,
     },
     ui: {
@@ -283,11 +284,11 @@ export function makeCommandContext(
       ...overrides.ui,
     },
     session: {
-      stats: {} as CommandContext['session']['stats'],
+      stats: {} as CommandOwnerFixture['session']['stats'],
       sessionShellAllowlist: new Set(),
       ...overrides.session,
     },
-  } as CommandContext;
+  } as CommandOwnerFixture;
 }
 
 /**

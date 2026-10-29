@@ -1,3 +1,4 @@
+import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
@@ -32,12 +33,18 @@ import {
  */
 
 import { describe, it, expect } from 'bun:test';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import fc from 'fast-check';
-import { buildAgent, internalConfig } from './helpers/agentHarness.js';
+import { buildAgent, drain } from './helpers/agentHarness.js';
+import { physicalHookCommand } from './helpers/physicalHookCommand.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   HookEventName,
+  HookType,
   SessionStartSource,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { HookControl } from '../control/hooks.js';
@@ -81,14 +88,43 @@ describe('agent.hooks hooks-administration control @plan:PLAN-20260622-COREAPIGA
   });
 
   it('T12a undefined-safe listHooks: a plain agent (hooks disabled) -> agent.hooks.listHooks() === [] and does not throw @requirement:REQ-004 @scenario:undefined-safe-listHooks @given:a real agent via buildAgent with hooks disabled (getHookSystem() returns undefined) @when:agent.hooks.listHooks() is called @then:the result is an empty array []', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const directory = mkdtempSync(join(tmpdir(), 'hook-admin-disabled-'));
+    const marker = join(directory, 'hook-fired');
+    const script = join(directory, 'hook.ts');
+    writeFileSync(
+      script,
+      `import { writeFileSync } from 'node:fs';
+writeFileSync(${JSON.stringify(marker)}, 'fired');
+`,
+    );
     try {
-      // The harness agent has enableHooks=false -> getHookSystem() is undefined.
-      expect(internalConfig(agent).getEnableHooks()).toBe(false);
-      const list = agent.hooks.listHooks();
-      expect(list).toStrictEqual([]);
+      // The configured command works: running it directly writes the marker.
+      const direct = spawnSync(process.execPath, [script]);
+      expect(direct.status).toBe(0);
+      expect(existsSync(marker)).toBe(true);
+      rmSync(marker);
+
+      const command = physicalHookCommand(script);
+      const definitions = [{ hooks: [{ type: HookType.Command, command }] }];
+      const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+        workingDir: directory,
+        hooks: {
+          [HookEventName.SessionStart]: definitions,
+          [HookEventName.BeforeModel]: definitions,
+        },
+      });
+      try {
+        // The harness agent has hooks disabled: configured hooks never fire,
+        // not at session start and not before the model request of a turn.
+        await drain(agent.stream('does a disabled hook fire'));
+        expect(existsSync(marker)).toBe(false);
+        const list = agent.hooks.listHooks();
+        expect(list).toStrictEqual([]);
+      } finally {
+        await cleanup();
+      }
     } finally {
-      await cleanup();
+      rmSync(directory, { recursive: true, force: true });
     }
   });
 
@@ -145,7 +181,10 @@ describe('agent.hooks hooks-administration control @plan:PLAN-20260622-COREAPIGA
       .sessionStart?.(SessionStartSource.Startup);
     const control = new HookControl({
       hookOperations: system,
-      messageBus: bus,
+      observeRequests: (listener) =>
+        bus.subscribe(MessageBusType.HOOK_EXECUTION_REQUEST, listener),
+      observeResponses: (listener) =>
+        bus.subscribe(MessageBusType.HOOK_EXECUTION_RESPONSE, listener),
       sessionId: () => 'hooks-admin-test',
       cwd: () => '/tmp',
     });

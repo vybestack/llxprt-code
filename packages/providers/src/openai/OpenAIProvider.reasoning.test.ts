@@ -17,6 +17,10 @@ import type {
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type OpenAI from 'openai';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', () => {
   let _provider: OpenAIProvider;
@@ -167,6 +171,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
     ): NormalizedGenerateChatOptions =>
       ({
         invocation: createRuntimeInvocationContext({
+          fetch: requestFetch,
           runtimeId: 'test-request',
           providerName: 'openai',
           ephemeralsSnapshot: settingsMap,

@@ -11,6 +11,29 @@
 
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  createRuntimeInvocationContext,
+  type RuntimeInvocationContext,
+} from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const rejectingFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
+
+/**
+ * The invocation a load-balancer call receives from the manager's wrapper. A
+ * load-balancer call without one throws, so tests that call the provider
+ * directly hand it this parent invocation; its fetch rejects because these
+ * suites never reach a network.
+ */
+export function makeLoadBalancerInvocation(): RuntimeInvocationContext {
+  return createRuntimeInvocationContext({
+    fetch: rejectingFetch,
+    providerName: 'load-balancer',
+    ephemeralsSnapshot: {},
+    fallbackRuntimeId: 'load-balancer-test',
+  });
+}
 
 /** A minimal mock delegate provider that yields a single content chunk. */
 export function makeMockProvider(name: string): IProvider {

@@ -61,11 +61,7 @@ export {
   buildToolInfos,
   AgentBootstrapError,
 };
-export type {
-  ResolvedAuth,
-  OwnershipRecord,
-  SessionLock,
-} from '../../agentBootstrap.js';
+export type { ResolvedAuth, OwnershipRecord } from '../../agentBootstrap.js';
 
 /**
  * Observable outcome of exercising the production wrapSchedulerFactory. The

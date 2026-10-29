@@ -4,48 +4,48 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type {
-  TaskLaunchOwner,
   TaskLaunch,
+  TaskLaunchOwner,
 } from '../session/task-launch-owner.js';
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type {
-  SubagentOrchestrator,
-  SubagentLaunchRequest,
-} from '../core/subagentOrchestrator.js';
-import type { SubAgentScope } from '../core/subagent.js';
 import { type ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
-import type { AgentDisplayCallbacks } from '../api/agent.js';
+import {
+  type LiveOutputUpdate,
+  type ToolResult,
+} from '@vybestack/llxprt-code-tools';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { createStreamNormalizer } from '@vybestack/llxprt-code-tools/utils/textDelta.js';
 import { installTaskOutputResetRelay } from './taskStreaming.js';
 import {
-  type ToolResult,
-  type LiveOutputUpdate,
-} from '@vybestack/llxprt-code-tools';
-import { type TaskToolInvocationParams } from './taskToolGovernance.js';
+  describeTimeoutTermination,
+  requireEffectiveTimeoutSeconds,
+  type TimeoutResolution,
+} from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
+import type { AgentDisplayCallbacks } from '../api/agent.js';
+import type { ChildTaskRun } from '../core/subagentOrchestrator.js';
+import type {
+  SubagentLaunchRequest,
+  SubagentOrchestrator,
+} from '../core/subagentOrchestrator.js';
 import {
+  TASK_TIMEOUT_DEFAULT_SETTING,
+  TASK_TIMEOUT_MAX_SETTING,
   handleBackgroundAbort,
   setupAsyncTimeout,
   setupForegroundRelay,
-  TASK_TIMEOUT_DEFAULT_SETTING,
-  TASK_TIMEOUT_MAX_SETTING,
 } from './taskAbortHelpers.js';
 import {
   attachTimeoutMetadata,
   createErrorResult,
   createTimeoutResult,
 } from './taskResultHelpers.js';
-import {
-  describeTimeoutTermination,
-  requireEffectiveTimeoutSeconds,
-  type TimeoutResolution,
-} from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
+import { type TaskToolInvocationParams } from './taskToolGovernance.js';
 
 export interface AsyncSetupResult {
   agentId: string;
-  scope: SubAgentScope;
+  scope: ChildTaskRun;
   contextState: ContextState;
   dispose: () => Promise<void>;
   asyncAbortController: AbortController;
@@ -67,7 +67,7 @@ export interface AsyncTaskCollaborators {
   }>;
   normalized: TaskToolInvocationParams;
   params: { timeout_seconds?: number; grace_period_seconds?: number };
-  createOrchestrator: () => SubagentOrchestrator;
+  launchChild: SubagentOrchestrator['launch'];
   isInteractiveEnvironment?: () => boolean;
   openChildDisplay?: () => AgentDisplayCallbacks;
   buildLaunchRequest: (timeoutMs?: number) => SubagentLaunchRequest;
@@ -163,7 +163,7 @@ export function resolveAsyncContext(
   | ToolResult
   | {
       asyncTaskManager: AsyncTaskManager;
-      orchestrator: SubagentOrchestrator;
+      launchChild: SubagentOrchestrator['launch'];
       bookingId: string;
     } {
   const settingsCheck = checkAsyncSettings(collaborators.readTaskPolicy());
@@ -171,22 +171,16 @@ export function resolveAsyncContext(
     return settingsCheck;
   }
 
-  let orchestrator: SubagentOrchestrator;
-  try {
-    orchestrator = collaborators.createOrchestrator();
-  } catch (error) {
-    return createErrorResult(
-      error,
-      'Failed to create orchestrator for async task.',
-    );
-  }
-
   const bookingId = asyncTaskManager.tryReserveAsyncSlot();
   if (!bookingId) {
     return createAsyncSlotResult(asyncTaskManager);
   }
 
-  return { asyncTaskManager, orchestrator, bookingId };
+  return {
+    asyncTaskManager,
+    launchChild: collaborators.launchChild,
+    bookingId,
+  };
 }
 
 /**
@@ -274,7 +268,7 @@ function registerLaunchedTask(
 export async function setupAsyncInfrastructure(
   collaborators: AsyncTaskCollaborators,
   foregroundSignal: AbortSignal,
-  orchestrator: SubagentOrchestrator,
+  launchChild: SubagentOrchestrator['launch'],
   asyncTaskManager: AsyncTaskManager,
   bookingId: string | undefined,
   launch: TaskLaunch,
@@ -309,7 +303,7 @@ export async function setupAsyncInfrastructure(
     const timeoutMs = effectiveTimeoutMs(resolution);
 
     const launchRequest = collaborators.buildLaunchRequest(timeoutMs);
-    const launchResult = await orchestrator.launch(
+    const launchResult = await launchChild(
       launchRequest,
       asyncAbortController.signal,
     );
@@ -364,7 +358,7 @@ export async function setupAsyncInfrastructure(
  */
 export function setupAsyncStreaming(
   subagentName: string,
-  scope: SubAgentScope,
+  scope: ChildTaskRun,
   agentId: string,
   updateOutput?: (update: LiveOutputUpdate) => void,
 ): { emitAsyncClosingSubagentTag: () => void } | undefined {
@@ -424,7 +418,7 @@ export function setupAsyncStreaming(
  */
 export function executeInBackground(
   collaborators: AsyncTaskCollaborators,
-  scope: SubAgentScope,
+  scope: ChildTaskRun,
   contextState: ContextState,
   agentId: string,
   asyncTaskManager: AsyncTaskManager,
@@ -592,11 +586,11 @@ export function executeAsyncTask(
       publish(ctx);
       return;
     }
-    const { asyncTaskManager, orchestrator, bookingId } = ctx;
+    const { asyncTaskManager, launchChild, bookingId } = ctx;
     const setup = await setupAsyncInfrastructure(
       collaborators,
       signal,
-      orchestrator,
+      launchChild,
       asyncTaskManager,
       bookingId,
       launch,

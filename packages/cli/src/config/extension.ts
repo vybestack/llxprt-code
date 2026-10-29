@@ -909,7 +909,7 @@ export async function uninstallExtension(
   if (!isUpdate) {
     const manager = new ExtensionEnablementManager(
       ExtensionStorage.getUserExtensionsDir(),
-      [loaded.name],
+      { enabledOverride: [loaded.name] },
     );
     manager.remove(loaded.name);
   }

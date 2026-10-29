@@ -5,7 +5,7 @@ import type { useStreamEventHandlers } from './useStreamEventHandlers.js';
 import type { AgentEventRouter } from './useAgentEventStream.js';
 import { dispatchAgentEvent } from './agentEventDispatcher.js';
 import { isCurrentTurn } from './submitQueryTurnLifecycle.js';
-import { observeAgentEvent } from '../../../observation/jspWiring.js';
+import type { ObservationCallbacks } from '../../../observation/jspWiring.js';
 
 export function useProcessAgentEvent(
   deps: UseSubmitQueryDeps,
@@ -21,11 +21,12 @@ export function useProcessAgentEvent(
     | 'handleCitationEvent'
   >,
   activeTurnRef: React.MutableRefObject<boolean>,
+  observation: ObservationCallbacks,
 ) {
   // Latest-ref pattern: store deps+handlers in a ref so the useCallback
   // never needs to change identity (avoids recreating every render).
-  const latestDeps = useRef(deps);
-  latestDeps.current = deps;
+  const latestDeps = useRef({ ...deps, observation });
+  latestDeps.current = { ...deps, observation };
   const latestHandlers = useRef(handlers);
   latestHandlers.current = handlers;
   return useCallback<AgentEventRouter>(
@@ -52,11 +53,12 @@ export function useProcessAgentEvent(
         activeTurnRef.current = false;
         latestDeps.current.setIsResponding(false);
       }
-      observeAgentEvent(event);
+      latestDeps.current.observation.observeAgentEvent(event);
       dispatchAgentEvent(
         event,
         {
           addItem: latestDeps.current.addItem,
+          setLastPromptTokenCount: latestDeps.current.setLastPromptTokenCount,
           flushPendingHistoryItem: latestDeps.current.flushPendingHistoryItem,
           pendingHistoryItemRef: latestDeps.current.pendingHistoryItemRef,
           loopDetectedRef: latestDeps.current.loopDetectedRef,

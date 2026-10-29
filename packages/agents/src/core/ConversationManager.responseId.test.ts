@@ -1,6 +1,6 @@
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -38,6 +38,10 @@ import { ConversationManager } from './ConversationManager.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const GENERATING_MODEL = 'gpt-5.2';
 
@@ -53,15 +57,13 @@ function buildConversationManager(model: string): {
   settingsService.set('providers.stub.model', 'stub-model');
 
   const providerRuntime: ProviderRuntimeContext = createProviderRuntimeContext({
-    settingsService,
-    config,
     runtimeId: 'test.runtime.conversationManager.responseId',
     metadata: { source: 'ConversationManager.responseId.test' },
   });
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
 
   const provider: IProvider = {
     name: 'stub',
@@ -84,7 +86,18 @@ function buildConversationManager(model: string): {
   const historyService = new HistoryService();
   const view = createAgentRuntimeContext({
     prepareProviderInvocation: (name, parameters, signal) =>
-      captureProviderInvocation(providerRuntime, name, parameters, signal),
+      captureProviderInvocation(
+        {
+          fetch: requestFetch,
+          runtimeId: providerRuntime.runtimeId,
+          metadata: providerRuntime.metadata,
+          globalSettings: settingsService.getAllGlobalSettings(),
+          providerSettings: settingsService.getProviderSettings(name),
+        },
+        name,
+        parameters,
+        signal,
+      ),
     state: runtimeState,
     history: historyService,
     settings: {

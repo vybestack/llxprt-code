@@ -18,6 +18,10 @@ import { type ProviderCallOptionsInit } from '@vybestack/llxprt-code-test-utils/
 import { createOpenAIRawPostTestAdapter } from '../../__tests__/rawPostTestAdapters.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../../IProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 void vi.mock('openai', () => {
   class FakeOpenAI {
@@ -220,8 +224,6 @@ describe('OpenAI provider stateless contract: model parameters', () => {
     });
     const runtimeOverride = createProviderRuntimeContext({
       runtimeId: 'runtime-config',
-      settingsService: settingsOverride,
-      config: configOverride,
     });
 
     await provider
@@ -269,10 +271,9 @@ describe('OpenAI provider stateless contract: ephemeral overrides', () => {
     });
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-invocation',
-      settingsService: settings,
-      config,
     });
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 

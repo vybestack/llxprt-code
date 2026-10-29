@@ -1,3 +1,5 @@
+import { CompressionHandler } from '../CompressionHandler.js';
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -29,10 +31,12 @@ import type {
   CompressionProviderResult,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
 import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
-import { CompressionHandler } from '../CompressionHandler.js';
 import { ChatSession } from '../../core/chatSession.js';
 import { OneShotStrategy } from '../OneShotStrategy.js';
 import { SummaryTransport } from './middleout-disk-helpers.js';
@@ -68,8 +72,13 @@ function makeHandler(historyService: HistoryService): CompressionHandler {
     runtime: runtimeContext.providerRuntime,
   };
   const result = new CompressionHandler(
-    runtimeContext,
+    chatSessionPorts(runtimeContext).compression,
+    undefined,
     historyService,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {},
     vi.fn().mockResolvedValue(providerResult),
     async (context) => {
@@ -257,7 +266,14 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
       transport,
     );
     const chat = new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],
@@ -289,7 +305,14 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
     const transport = new SummaryTransport();
     vi.spyOn(runtime.provider, 'getActiveProvider').mockReturnValue(transport);
     const chat = new ChatSession(
-      runtime,
+      chatSessionPorts(runtime),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],

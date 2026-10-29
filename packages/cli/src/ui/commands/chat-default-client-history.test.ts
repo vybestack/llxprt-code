@@ -1,19 +1,23 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { describe, expect, it } from 'bun:test';
-import { chatCommand } from './chatCommand.js';
+import { rawClientChatCommand } from '../../__tests__/raw-chat-command.fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import {
   withCleanupHistory,
   cleanupBounds,
 } from '../../utils/__tests__/support/cleanup-history-test-helpers.js';
 import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { assembleSessionControl } from '../../../../agents/src/api/session-control-assembly.js';
 
 for (const size of [65]) {
   describe(`contextual default client history ${size}`, () => {
     it('reports the actual transcript count through the public default without eager history', async () => {
       await withCleanupHistory(size, true, async (fixture) => {
+        const chatCommand = rawClientChatCommand(
+          fixture.client,
+          () => null,
+          () => fixture.config.getModel(),
+        );
         const debug = chatCommand.subCommands?.find(
           (command) => command.name === 'debug',
         );
@@ -21,7 +25,7 @@ for (const size of [65]) {
           createMockCommandContext({
             services: {
               config: { getModel: () => fixture.config.getModel() },
-              agent: { agentClient: fixture.client },
+              agent: null,
             },
           }),
           '',
@@ -44,20 +48,17 @@ describe('default clear rollback media lifetime', () => {
     await withCleanupHistory(6, true, async (fixture) => {
       const client = fixture.client;
       const store = requireMediaStore(client);
-      const control = assembleSessionControl(fixture.config, store, {
-        readRecordingQueueLimit: () => 1024 * 1024,
-        directories: () => [fixture.config.getTargetDir()],
-        sessionIdentityOwnership: 'config',
-        sessionId: () => 'default-clear-media',
-        withSessionTransition: (operation) => operation(),
-        closeSessionAdmission: () => {},
-        prepareNewSessionClient: () => {
+      const control = fixture.sessionClient.createSessionControl(
+        'config',
+        () => 'default-clear-media',
+        (operation) => operation(),
+        () => {},
+        () => {
           throw new Error('Clearing history must not start a new session');
         },
-        resolveClient: () => client,
-        getProvider: () => 'fake',
-        getModel: () => fixture.config.getModel(),
-      });
+        () => 'fake',
+        () => fixture.config.getModel(),
+      );
       await control.setRecording({ enabled: true });
       const reset = client.resetChat.bind(client);
       client.resetChat = async (source) => {

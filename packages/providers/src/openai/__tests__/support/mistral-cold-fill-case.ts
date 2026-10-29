@@ -202,6 +202,7 @@ function prepareCold(
       metadata: {},
       systemInstruction: 'system 雪',
       invocation: createRuntimeInvocationContext({
+        fetch: (input, init) => globalThis.fetch(input, init),
         runtimeId: 'cold-fill',
         providerName: 'openai',
         ephemeralsSnapshot: {

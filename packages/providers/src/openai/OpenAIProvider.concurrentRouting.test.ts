@@ -138,11 +138,9 @@ describe('OpenAIProvider concurrent call-scoped routing isolation @issue:2483', 
 
     const canonicalRuntime = createProviderRuntimeContext({
       runtimeId: 'canonical-runtime-id',
-      settingsService: canonicalSettings,
     });
     const proxyRuntime = createProviderRuntimeContext({
       runtimeId: 'proxy-runtime-id',
-      settingsService: proxySettings,
     });
 
     const canonicalOptions = streamCallOptions({

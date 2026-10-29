@@ -52,6 +52,7 @@ export function executeTruncation(
   return runDiskTruncation(
     'truncation-values',
     buildRuntimeContext(history),
+    undefined,
     history,
     async () => {
       throw new Error('Truncation cannot request an LLM');

@@ -44,7 +44,7 @@ describe('native CLI resume failure branches', () => {
         const prior = await durable(path);
         const targetBefore = await durable(targetPath);
         const files = (await readdir(dirname(path))).sort();
-        const history = fixture.live.agentClient.getHistoryService();
+        const history = fixture.clientFor(fixture.live).getHistoryService();
         if (history === null) throw new Error('Missing actual CLI history');
         const before = {
           tokens: history.getTotalTokens(),

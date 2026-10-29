@@ -1,3 +1,6 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -145,13 +148,10 @@ async function runRequest(
   settings.setProviderSetting(provider.name, 'model', 'gpt-5.6');
   const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
-    config,
     runtimeId: 'responses-media-stateful',
-    mediaResolver: resolver,
-    requestMediaBudgetBytes: budget,
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
 
@@ -159,6 +159,7 @@ async function runRequest(
     ephemeralsSnapshot: { 'responses-stateful': stateful },
   });
   const options = streamCallOptions({
+    fetch: requestFetch,
     providerName: provider.name,
     contents,
     settings,
@@ -170,8 +171,8 @@ async function runRequest(
 
   for await (const _content of bindProviderMedia(
     provider,
-    runtime.mediaResolver,
-    runtime.requestMediaBudgetBytes,
+    resolver,
+    budget,
   ).generateChatCompletion(options)) {
     // Drain the real transport parser.
   }

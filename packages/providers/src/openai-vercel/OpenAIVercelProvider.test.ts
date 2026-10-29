@@ -209,12 +209,6 @@ describe('OpenAIVercelProvider', () => {
         const settingsService = new SettingsService();
         settingsService.set('activeProvider', 'openaivercel');
 
-        const provider = new OpenAIVercelProvider(
-          'live-key',
-          'https://api.example.com/v1',
-          undefined,
-        );
-
         const fetchMock = vi.fn().mockResolvedValue({
           ok: true,
           status: 200,
@@ -229,7 +223,10 @@ describe('OpenAIVercelProvider', () => {
             ],
           }),
         });
-        setGlobal('fetch', fetchMock);
+        const provider = new OpenAIVercelProvider(
+          'live-key',
+          'https://api.example.com/v1',
+        ).bindOwnerAuthentication(settingsService, () => fetchMock);
 
         const models = await provider.getModels();
 
@@ -258,14 +255,11 @@ describe('OpenAIVercelProvider', () => {
         const settingsService = new SettingsService();
         settingsService.set('activeProvider', 'openaivercel');
 
+        const fetchMock = vi.fn().mockRejectedValue(new Error('network'));
         const provider = new OpenAIVercelProvider(
           'live-key',
           'https://api.example.com/v1',
-          undefined,
-        );
-
-        const fetchMock = vi.fn().mockRejectedValue(new Error('network'));
-        setGlobal('fetch', fetchMock);
+        ).bindOwnerAuthentication(settingsService, () => fetchMock);
 
         const models = await provider.getModels();
 

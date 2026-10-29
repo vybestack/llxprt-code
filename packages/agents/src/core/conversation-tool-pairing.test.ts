@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
 import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, expect, it } from 'bun:test';
@@ -32,13 +32,11 @@ function managerFor(history: HistoryService): ConversationManager {
   const settingsService = new SettingsService();
   const config = new Config(createConfigParams(settingsService));
   const providerRuntime = createProviderRuntimeContext({
-    settingsService,
-    config,
     runtimeId: 'pairing',
   });
   const providers = new TestRuntimeProviderManager(providerRuntime);
   providers.setConfig(config);
-  configureProviderRuntimeFactories(config, providers);
+  configureProviderTokenizer(providers);
   providers.registerProvider({
     name: 'pairing',
     isDefault: true,
@@ -50,7 +48,17 @@ function managerFor(history: HistoryService): ConversationManager {
     history,
     createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            runtimeId: providerRuntime.runtimeId,
+            fetch: globalThis.fetch,
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
       state: createAgentRuntimeState({
         runtimeId: 'pairing',
         provider: 'pairing',

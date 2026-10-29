@@ -33,6 +33,7 @@ interface FlattenedPath {
 export type { CompletionInput } from './schemaHelpers.js';
 
 async function suggestForValue(
+  enableFuzzyFiltering: boolean,
   ctx: CommandContext,
   node: ValueArgument,
   partialArg: string,
@@ -51,10 +52,7 @@ async function suggestForValue(
     }
 
     if (node.options !== undefined && node.options.length > 0) {
-      // Get the fuzzy filtering setting from context
-      // Default to true if setting is not defined
-      const settingValue = ctx.services.settings.merged.enableFuzzyFiltering;
-      const enableFuzzy = settingValue ?? true;
+      const enableFuzzy = enableFuzzyFiltering;
 
       // Use filterCompletions for both fuzzy and exact prefix matching
       return filterCompletions(node.options, partialArg, { enableFuzzy });
@@ -127,7 +125,7 @@ function collectNestedPaths(
 }
 
 function suggestForLiterals(
-  ctx: CommandContext,
+  enableFuzzyFiltering: boolean,
   nodes: LiteralArgument[],
   partialArg: string,
 ): readonly Option[] {
@@ -138,10 +136,7 @@ function suggestForLiterals(
     depth: 1,
   }));
 
-  // Get the fuzzy filtering setting from context
-  // Default to true if setting is not defined
-  const settingValue = ctx.services.settings.merged.enableFuzzyFiltering;
-  const enableFuzzy = settingValue ?? true;
+  const enableFuzzy = enableFuzzyFiltering;
 
   // Filter single-level options
   const filteredSingleLevel = filterCompletions(
@@ -345,7 +340,10 @@ export function tokenize(fullLine: string): TokenInfo {
   };
 }
 
-export function createCompletionHandler(schema: CommandArgumentSchema) {
+export function createCompletionHandler(
+  schema: CommandArgumentSchema,
+  enableFuzzyFiltering: boolean,
+) {
   return async (
     ctx: CommandContext,
     input: CompletionInput | undefined,
@@ -365,6 +363,7 @@ export function createCompletionHandler(schema: CommandArgumentSchema) {
     let hint = '';
     if (active.kind === 'value') {
       suggestions = await suggestForValue(
+        enableFuzzyFiltering,
         ctx,
         active.node,
         normalized.partialArg,
@@ -373,7 +372,7 @@ export function createCompletionHandler(schema: CommandArgumentSchema) {
       hint = await computeHintForValue(ctx, active.node, argumentTokenInfo);
     } else if (active.kind === 'literal') {
       suggestions = suggestForLiterals(
-        ctx,
+        enableFuzzyFiltering,
         active.nodes,
         normalized.partialArg,
       );

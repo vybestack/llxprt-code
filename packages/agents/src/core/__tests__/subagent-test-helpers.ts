@@ -1,6 +1,17 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { defaultEnvironmentContextLoader } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import type {
+  SubAgentOperationPorts,
+  SubAgentRuntimeInput,
+} from '../subagent.js';
 import { createSessionPolicyFixture } from './session-policy-fixture.js';
-import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -21,48 +32,60 @@ import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/servic
  * be imported.
  */
 
-import type { Mock } from 'bun:test';
-import { afterEach, vi } from 'bun:test';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
-import { StreamEventType } from '../chatSession.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type {
+  ModelConfig,
+  RunConfig,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type {
   AgentRuntimeContext,
   AgentRuntimeProviderAdapter,
   AgentRuntimeTelemetryAdapter,
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import type { ToolSelectedRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { initializeTestMcpRuntime } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import type { ToolSelection } from '@vybestack/llxprt-code-tools';
-import type { ToolErrorType } from '@vybestack/llxprt-code-tools';
-import type {
-  ModelConfig,
-  RunConfig,
-  SubAgentRuntimeOverrides,
-} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import type {
+  ToolErrorType,
+  ToolSelection,
+} from '@vybestack/llxprt-code-tools';
+import type { Mock } from 'bun:test';
+import { afterEach, vi } from 'bun:test';
+import type { McpRuntimeOwner } from '../../api/mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from '../../api/__tests__/helpers/create-mcp-runtime.js';
+import { StreamEventType } from '../chatSession.js';
 
-const mockConfigs = new Map<
-  Config,
-  Awaited<ReturnType<typeof initializeTestMcpRuntime>>
->();
+type RetainSubagentCleanup = (close: () => void | Promise<void>) => () => void;
 
-afterEach(async () => {
-  const configs = Array.from(mockConfigs.keys());
-  await Promise.all(configs.map((config) => disposeMockConfig(config)));
-});
-
-export async function disposeMockConfig(config: Config): Promise<void> {
-  await mockConfigs.get(config)?.dispose();
-  mockConfigs.delete(config);
-  await config.dispose();
+export function installSubagentCleanup(): RetainSubagentCleanup {
+  const releases: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    const failures: unknown[] = [];
+    for (const release of releases.splice(0).reverse()) {
+      try {
+        await release();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'Subagent fixture cleanup failed');
+  });
+  return (close) => {
+    releases.push(close);
+    return () => {
+      const index = releases.indexOf(close);
+      if (index >= 0) releases.splice(index, 1);
+    };
+  };
 }
 
 export function createCompletedToolCallResponse(params: {
@@ -104,63 +127,104 @@ type ToolSelectionMethodOverrides = Partial<
   >
 >;
 
-export async function createMockConfig(
-  toolRegistryMethods: ToolSelectionMethodOverrides = {},
-  initialSettings: Readonly<Record<string, unknown>> = {},
-): Promise<{
-  config: Config;
-  settingsService: SettingsService;
-  settingsOwner: ReturnType<
-    typeof createSessionSettingsFixture
-  >['settingsOwner'];
-  toolRegistry: ToolSelection;
-  mcpRuntime: Awaited<ReturnType<typeof initializeTestMcpRuntime>>;
-}> {
-  // The settings service flows explicitly through ConfigParameters (issue
-  // #2616: no ambient runtime context install).
-  const settingsService = new SettingsService();
-  for (const [key, value] of Object.entries(initialSettings))
-    settingsService.set(key, value);
-  const configParams: ConfigParameters = {
-    initialSettings,
+export function seedSubagentSettings(
+  initial: Readonly<Record<string, unknown>> = {},
+): SettingsService {
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(initial)) settings.set(key, value);
+  return settings;
+}
+
+export function createSubagentConfig(
+  settings: SettingsService,
+  retain: RetainSubagentCleanup,
+  declarations: Partial<
+    Pick<ConfigParameters, 'mcpServers' | 'targetDir' | 'cwd' | 'trustedFolder'>
+  > = {},
+): Config {
+  const config = new Config({
+    initialSettings: settings.getAllGlobalSettings(),
     sessionId: 'test-session',
     model: 'gemini-2.5-pro',
     targetDir: '.',
     debugMode: false,
     cwd: process.cwd(),
-  };
-  const config = new Config(configParams);
-  const settingsRoot = createSessionSettingsFixture(config, settingsService);
-  const mcpRuntime = await initializeTestMcpRuntime(config);
-  mockConfigs.set(config, mcpRuntime);
-
+    ...declarations,
+  });
+  retain(() => config.dispose());
   vi.spyOn(config, 'getContentGeneratorConfig').mockReturnValue({
     model: 'gemini-2.5-pro',
   });
+  return config;
+}
 
-  const toolRegistry = mcpRuntime.toolSelection;
-  vi.spyOn(toolRegistry, 'getTool').mockImplementation(
-    toolRegistryMethods.getTool ?? (() => undefined),
-  );
-  vi.spyOn(toolRegistry, 'getFunctionDeclarationsFiltered').mockImplementation(
-    toolRegistryMethods.getFunctionDeclarationsFiltered ?? (() => []),
-  );
+export async function acquireSubagentSettings(
+  config: Config,
+  settings: SettingsService,
+  retain: RetainSubagentCleanup,
+): Promise<SessionSettingsOwner> {
+  const owner = new SessionSettingsOwner(settings);
+  try {
+    owner.bindTelemetry(config);
+    owner.initializeProviderSelection(config.getProvider(), config.getModel());
+  } catch (primary) {
+    const cleanup = await Promise.allSettled([owner.dispose()]);
+    const failures = cleanup.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(
+        [primary, ...failures],
+        'Subagent settings acquisition cleanup failed',
+      );
+    throw primary;
+  }
+  retain(() => owner.dispose());
+  return owner;
+}
 
-  if (toolRegistryMethods.getEnabledTools)
-    vi.spyOn(toolRegistry, 'getEnabledTools').mockImplementation(
-      toolRegistryMethods.getEnabledTools,
+export async function acquireSubagentWorkspace(
+  config: Config,
+  retain: RetainSubagentCleanup,
+  toolRegistryMethods: ToolSelectionMethodOverrides = {},
+): Promise<McpRuntimeOwner> {
+  const owner = await createTestMcpRuntime(
+    { oauth: createTestOAuthBinding(), config },
+    {},
+  );
+  const close = (): Promise<void> => owner.dispose();
+  const remove = retain(close);
+  try {
+    await owner.initialize();
+    const tools = owner.toolSelection;
+    vi.spyOn(tools, 'getTool').mockImplementation(
+      toolRegistryMethods.getTool ?? (() => undefined),
     );
-  if (toolRegistryMethods.getAllTools)
-    vi.spyOn(toolRegistry, 'getAllTools').mockImplementation(
-      toolRegistryMethods.getAllTools,
+    vi.spyOn(tools, 'getFunctionDeclarationsFiltered').mockImplementation(
+      toolRegistryMethods.getFunctionDeclarationsFiltered ?? (() => []),
     );
-  return {
-    config,
-    settingsService,
-    settingsOwner: settingsRoot.settingsOwner,
-    toolRegistry,
-    mcpRuntime,
-  };
+    if (toolRegistryMethods.getEnabledTools)
+      vi.spyOn(tools, 'getEnabledTools').mockImplementation(
+        toolRegistryMethods.getEnabledTools,
+      );
+    if (toolRegistryMethods.getAllTools)
+      vi.spyOn(tools, 'getAllTools').mockImplementation(
+        toolRegistryMethods.getAllTools,
+      );
+    return owner;
+  } catch (primary) {
+    remove();
+    const cleanup = await Promise.allSettled([close()]);
+    const failures = cleanup.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(
+        [primary, ...failures],
+        'Subagent workspace acquisition cleanup failed',
+      );
+    throw primary;
+  }
 }
 
 export function createMockStream(
@@ -222,7 +286,7 @@ export function createStatelessRuntimeBundle(
     history?: HistoryService;
     settings?: SettingsService;
   } = {},
-): AgentRuntimeLoaderResult {
+): ToolSelectedRuntimeLoaderResult {
   const toolsView = options.toolsView ?? createDefaultToolsView();
   const providerAdapter =
     options.providerAdapter ?? createDefaultProviderAdapter();
@@ -254,6 +318,7 @@ export function createStatelessRuntimeBundle(
     toolsView,
     contentGenerator,
     toolRegistry,
+    settingsSnapshot: {},
   };
 }
 
@@ -277,7 +342,10 @@ function createDefaultProviderAdapter(): AgentRuntimeProviderAdapter {
         }) as unknown as IProvider,
     ),
     setActiveProvider: vi.fn(),
-  } as AgentRuntimeProviderAdapter;
+    getProviderKeys: () => {
+      throw new Error('Test provider adapter has no key storage');
+    },
+  };
 }
 
 function createDefaultTelemetryAdapter(): AgentRuntimeTelemetryAdapter {
@@ -366,7 +434,6 @@ function createRuntimeContext(
     providerRuntime: {
       runtimeId: 'runtime-123',
       metadata: {},
-      settingsService: policies.settings,
     } as unknown as ProviderRuntimeContext,
   } as unknown as AgentRuntimeContext;
 }
@@ -392,14 +459,14 @@ export function defaultEnvironmentLoader(): EnvironmentLoader {
 export function createRuntimeOverrides(
   workspacePaths: WorkspacePathOperations,
   options: {
-    runtimeBundle?: AgentRuntimeLoaderResult;
+    runtimeBundle?: ToolSelectedRuntimeLoaderResult;
     environmentLoader?: EnvironmentLoader;
     toolRegistry?: ToolSelection;
     settings?: SettingsService;
   } = {},
 ): {
-  overrides: SubAgentRuntimeOverrides;
-  runtimeBundle: AgentRuntimeLoaderResult;
+  overrides: SubagentTestInputs;
+  runtimeBundle: ToolSelectedRuntimeLoaderResult;
   environmentLoader: EnvironmentLoader;
 } {
   const runtimeBundle =
@@ -412,7 +479,7 @@ export function createRuntimeOverrides(
   const environmentLoader =
     options.environmentLoader ?? defaultEnvironmentLoader();
 
-  const overrides: SubAgentRuntimeOverrides = {
+  const overrides: SubagentTestInputs = {
     instructions: emptyInstructionReads,
     workspacePaths,
     readMcpInstructions: () => undefined,
@@ -428,3 +495,61 @@ export function createRuntimeOverrides(
 }
 
 export type { ContentGenerator, Mock, ToolRegistryView };
+
+export interface SubagentTestInputs {
+  readonly readApprovalMode?: () => ApprovalMode;
+  readonly hookOwner?: HookExecutionOwner;
+  instructions: InstructionReadOperations;
+  workspacePaths: WorkspacePathOperations;
+  readMcpInstructions: () => string | undefined;
+  admitModelParameters?: () => AdmittedModelParameters;
+  settingsSnapshot?: ReadonlySettingsSnapshot;
+  toolRegistry?: ToolSelection;
+  environmentContextLoader?: (
+    runtime: AgentRuntimeContext,
+  ) => Promise<Array<{ text?: string }>>;
+  runtimeBundle?: ToolSelectedRuntimeLoaderResult;
+  messageBus?: MessageBus;
+}
+
+export function scopeInputs(
+  foregroundConfig: Config,
+  inputs: SubagentTestInputs,
+): [SubAgentRuntimeInput, SubAgentOperationPorts] {
+  const runtime = inputs.runtimeBundle;
+  if (runtime === undefined)
+    throw new Error('scopeInputs requires a runtimeBundle.');
+  const toolRegistry = inputs.toolRegistry ?? runtime.toolRegistry;
+  const { state, tools } = runtime.runtimeContext;
+  return [
+    {
+      foregroundConfig,
+      admittedRuntime: runtime.runtimeContext,
+      contentGenerator: runtime.contentGenerator,
+      telemetry: runtime.telemetryRoot,
+      toolRegistry,
+      toolsView: tools,
+      settingsSnapshot: inputs.settingsSnapshot ?? runtime.settingsSnapshot,
+    },
+    {
+      instructions: inputs.instructions,
+      workspacePaths: inputs.workspacePaths,
+      readMcpInstructions: inputs.readMcpInstructions,
+      messageBus: inputs.messageBus ?? new MessageBus(),
+      loadEnvironmentContext:
+        inputs.environmentContextLoader ?? defaultEnvironmentContextLoader,
+      readApprovalMode: inputs.readApprovalMode ?? (() => ApprovalMode.DEFAULT),
+      admitModelParameters:
+        inputs.admitModelParameters ??
+        (() => ({ providerName: state.provider, modelParams: {} })),
+      providerFiles: undefined,
+      hooks: inputs.hookOwner ?? {
+        sessionId: () => state.sessionId,
+        transcriptPath: () => undefined,
+      },
+      tryBucketFailover: undefined,
+      readCurrentBucket: undefined,
+      dependencies: {},
+    },
+  ];
+}

@@ -21,9 +21,9 @@ import {
   collectContents,
   isAsyncIterableContents,
 } from '../utils/collectContents.js';
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
 
-const fixtureOwners = installRuntimeTestOwners();
+const fixtureSettings = installBorrowedConfigSettings();
 
 function backend(name: string, providerName: string): LoadBalancerSubProfile {
   return {
@@ -39,12 +39,17 @@ describe('LoadBalancingProvider positional cancellation', () => {
   it('cancels a failover request without retrying or changing its contents', async () => {
     const settingsService = new SettingsService();
     const config = createRuntimeConfigStub(settingsService);
-    const providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    const providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      fixtureSettings(config, settingsService),
+    );
     const controller = new AbortController();
     const request: IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'first' }] },

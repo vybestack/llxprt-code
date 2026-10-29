@@ -1,3 +1,30 @@
+import {
+  beforeAll,
+  afterAll,
+  describe,
+  expect,
+  it,
+  beforeEach,
+  afterEach,
+} from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { type Agent, type AgentEvent } from '@vybestack/llxprt-code-agents';
+import {
+  buildAgent,
+  drain,
+  countType,
+  respondToFirstConfirmation,
+  isDoneEvent,
+  isToolCallEvent,
+  isToolResultEvent,
+  ToolConfirmationOutcome,
+} from './helpers/agentHarness.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -31,24 +58,6 @@
  * theater.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import {
-  fromConfig,
-  type Agent,
-  type AgentEvent,
-} from '@vybestack/llxprt-code-agents';
-import {
-  buildAgent,
-  drain,
-  countType,
-  respondToFirstConfirmation,
-  isDoneEvent,
-  isToolCallEvent,
-  isToolResultEvent,
-  ToolConfirmationOutcome,
-} from './helpers/agentHarness.js';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-
 /**
  * Re-throw a captured teardown error (e.g. from agent.dispose()) so a real
  * teardown bug still fails the test, while keeping the capture/rethrow
@@ -65,6 +74,21 @@ function rethrowCapturedError(err: unknown): void {
 }
 
 describe('Replaceable alternate-client smoke (issue #2204) @plan:PLAN-20260629-ISSUE2204 @requirement:REQ-2204-1', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  useFakeResponsesReplay('plain-text.jsonl');
+
   // ── Cleanup strategy (intentional split) ─────────────────────────────────
   //
   // Two cleanup patterns coexist by design:
@@ -75,11 +99,11 @@ describe('Replaceable alternate-client smoke (issue #2204) @plan:PLAN-20260629-I
   //      the SINGLE teardown step. These tests do NOT push onto `cleanupFns`
   //      to avoid a redundant double-dispose via afterEach.
   //
-  //  (B) fromConfig test (adopt): uses buildCliStyleConfig, whose `cleanup`
-  //      restores the env var but does NOT dispose the caller-owned Config or
-  //      the adopted Agent. So the Agent is disposed explicitly in a finally
-  //      block (capturing errors so the ownership assertions still run), and
-  //      the Config-env cleanup is pushed onto `cleanupFns` for afterEach.
+  //  (B) fromConfig test (adopt): openRouteAAgent's `close` disposes the
+  //      Agent, then the caller-owned Config, then removes the working
+  //      directory. It is pushed onto `cleanupFns` for afterEach; the Agent is
+  //      also disposed explicitly in a finally block (capturing errors so the
+  //      ownership assertions still run) because the Config must outlive it.
   //
   //  (C) dispose-idempotency test: intentionally double-disposes the Agent in
   //      the test body (the assertion), then pushes the harness `cleanup` onto
@@ -146,23 +170,16 @@ describe('Replaceable alternate-client smoke (issue #2204) @plan:PLAN-20260629-I
   });
 
   it('fromConfig adopts a caller-owned Config and the caller retains ownership after dispose @requirement:REQ-2204-1 @scenario:adopt', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    cleanupFns.push(built.cleanup);
-    const config = built.config;
+    const route = await openRouteAAgent();
+    cleanupFns.push(route.close);
+    const config = route.config;
 
     // Pre-adoption baseline: the caller-owned Config's runtime is queryable
-    // through its own public surface before the Agent is even built.
+    // through its own public surface.
     expect(config.getProvider()).toBe('fake');
     expect(config.getModel()).toBe('fake-model');
 
-    const agent: Agent = await fromConfig({
-      settingsOwner: built.settingsOwner,
-      settingsService: built.settingsService,
-      agentClient: built.agentClient,
-      providerManager: built.providerManager,
-      config,
-      mcpRuntime: built.mcpRuntime,
-    });
+    const agent: Agent = route.agent;
 
     // Adoption (public surface only): the Agent reports the SAME provider/model
     // the caller-owned Config was built with, proving the adopted runtime —

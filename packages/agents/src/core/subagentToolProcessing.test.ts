@@ -4,33 +4,32 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { ToolCallBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  toSnakeCase,
-  isFatalToolError,
-  extractToolDetail,
-  buildToolUnavailableMessage,
-  resolveToolName,
-  finalizeOutput,
-  handleEmitValueCall,
-  buildPartsFromCompletedCalls,
-  processFunctionCalls,
-  recordFatalToolError,
-  recordSuccessfulToolExecution,
-  type EmitValueContext,
-  type BuildPartsContext,
-  type ProcessFunctionCallsContext,
-} from './subagentToolProcessing.js';
+import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import {
   SubagentTerminateMode,
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { ToolCallBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
+import { describe, expect, it, vi } from 'bun:test';
 import { dispatch } from './__tests__/subagent-tool-processing-test-helpers.js';
-import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import {
+  buildPartsFromCompletedCalls,
+  buildToolUnavailableMessage,
+  extractToolDetail,
+  finalizeOutput,
+  handleEmitValueCall,
+  isFatalToolError,
+  processFunctionCalls,
+  recordFatalToolError,
+  recordSuccessfulToolExecution,
+  resolveToolName,
+  toSnakeCase,
+  type BuildPartsContext,
+  type EmitValueContext,
+  type ProcessFunctionCallsContext,
+} from './subagentToolProcessing.js';
 
 describe('fatal tool flag transitions', () => {
   function makeOutput(): OutputObject {
@@ -242,33 +241,35 @@ describe('subagentToolProcessing', () => {
             }
           : undefined,
     };
+    const hasTool = (name: string) =>
+      toolsView.getToolMetadata(name) !== undefined;
 
     it('should match exact tool name', () => {
-      expect(resolveToolName('read_file', toolsView)).toBe('read_file');
+      expect(resolveToolName('read_file', hasTool)).toBe('read_file');
     });
 
     it('should match lowercased tool name', () => {
-      expect(resolveToolName('READ_FILE', toolsView)).toBe('read_file');
+      expect(resolveToolName('READ_FILE', hasTool)).toBe('read_file');
     });
 
     it('should convert camelCase to snake_case and match', () => {
-      expect(resolveToolName('runShellCommand', toolsView)).toBe(
+      expect(resolveToolName('runShellCommand', hasTool)).toBe(
         'run_shell_command',
       );
     });
 
     it('should strip Tool suffix and match', () => {
-      expect(resolveToolName('run_shell_commandTool', toolsView)).toBe(
+      expect(resolveToolName('run_shell_commandTool', hasTool)).toBe(
         'run_shell_command',
       );
     });
 
     it('should return null for unknown tool', () => {
-      expect(resolveToolName('unknown_tool', toolsView)).toBeNull();
+      expect(resolveToolName('unknown_tool', hasTool)).toBeNull();
     });
 
     it('should return null for undefined input', () => {
-      expect(resolveToolName(undefined, toolsView)).toBeNull();
+      expect(resolveToolName(undefined, hasTool)).toBeNull();
     });
   });
 
@@ -429,20 +430,10 @@ describe('subagentToolProcessing', () => {
         },
         subagentId: 'emit-agent',
         logger: new DebugLogger('issue3540-test'),
-        toolExecutorContext: {
-          getToolRegistry: () => {
-            throw new Error('Restricted calls must not access execution tools');
-          },
-          getEphemeralSettings: () => ({}),
-          getEphemeralSetting: () => undefined,
-          getExcludeTools: () => [],
-          getSessionId: () => 'test-session',
-          getTelemetryLogPromptsEnabled: () => false,
+        imagePayloadBudgetBytes: DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+        executeToolCall: async () => {
+          throw new Error('Restricted calls must not access execution tools');
         },
-        // Test-only partial stub; the emit branch only reads the budget.
-        config: {
-          getImagePayloadBudgetBytes: () => DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
-        } as unknown as Config,
       };
     }
 
@@ -827,19 +818,10 @@ describe('subagentToolProcessing', () => {
         },
         subagentId: 'test-agent',
         logger: new DebugLogger('test'),
-        toolExecutorContext: {
-          getToolRegistry: () => {
-            throw new Error('Restricted calls must not access execution tools');
-          },
-          getEphemeralSettings: () => ({}),
-          getEphemeralSetting: () => undefined,
-          getExcludeTools: () => [],
-          getSessionId: () => 'test-session',
-          getTelemetryLogPromptsEnabled: () => false,
+        imagePayloadBudgetBytes: DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+        executeToolCall: async () => {
+          throw new Error('Restricted calls must not access execution tools');
         },
-        config: {
-          getImagePayloadBudgetBytes: () => DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
-        } as never,
       };
     }
 

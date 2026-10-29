@@ -1,3 +1,4 @@
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { DirectMessageProcessor } from '../../core/DirectMessageProcessor.js';
@@ -81,6 +82,9 @@ async function pendingBatch(size: number): Promise<number> {
       provider: {
         getActiveProvider: () => setup.transport,
         setActiveProvider: () => {},
+        getProviderKeys: () => {
+          throw new Error('Fixture has no credential key authority');
+        },
       },
       telemetry: {
         logApiRequest: () => {},
@@ -91,7 +95,12 @@ async function pendingBatch(size: number): Promise<number> {
       providerRuntime: setup.runtime.providerRuntime,
     });
     const processor = new DirectMessageProcessor(
-      runtime,
+      chatSessionPorts(runtime).direct,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       () => setup.transport,
       () => setup.runtime.providerRuntime,
       {},

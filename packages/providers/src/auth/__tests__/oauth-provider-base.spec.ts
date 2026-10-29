@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import { describe, it, expect, vi } from 'bun:test';
 import {
   InitializationState,
@@ -199,7 +200,7 @@ describe('InitializationGuard (rethrow mode)', () => {
 
 describe('AuthCodeDialog', () => {
   it('resolves when submitAuthCode is called', async () => {
-    const dialog = new AuthCodeDialog();
+    const dialog = new AuthCodeDialog(() => {});
     const promise = dialog.waitForAuthCode();
     dialog.submitAuthCode('auth-code-123');
     const result = await promise;
@@ -207,47 +208,47 @@ describe('AuthCodeDialog', () => {
   });
 
   it('rejects with OAuthError when cancelAuth is called', async () => {
-    const dialog = new AuthCodeDialog();
+    const dialog = new AuthCodeDialog(() => {});
     const promise = dialog.waitForAuthCode();
     dialog.cancelAuth('test-provider');
     await expect(promise).rejects.toBeInstanceOf(OAuthError);
   });
 
-  it('cancelAuth sets __oauth_needs_code to false', async () => {
-    const dialog = new AuthCodeDialog();
-    (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code =
-      true;
+  it('cancelAuth clears the owner code request', async () => {
+    const ui = new OAuthUIBridge();
+    const dialog = new AuthCodeDialog(() => ui.clearCodeRequest());
+    ui.requestCode('test-provider');
     const pendingPromise = dialog.waitForAuthCode();
     dialog.cancelAuth('test-provider');
     await expect(pendingPromise).rejects.toBeInstanceOf(OAuthError);
-    expect(
-      (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code,
-    ).toBe(false);
+    expect(ui.getCodeRequest().needsCode).toBe(false);
   });
 
   it('hasPendingPromise returns true while waiting', () => {
-    const dialog = new AuthCodeDialog();
+    const dialog = new AuthCodeDialog(() => {});
     expect(dialog.hasPendingPromise()).toBe(false);
     void dialog.waitForAuthCode();
     expect(dialog.hasPendingPromise()).toBe(true);
   });
 
   it('hasPendingPromise returns false after submitAuthCode', () => {
-    const dialog = new AuthCodeDialog();
+    const dialog = new AuthCodeDialog(() => {});
     void dialog.waitForAuthCode();
     dialog.submitAuthCode('code');
     expect(dialog.hasPendingPromise()).toBe(false);
   });
 
   it('hasPendingPromise returns false after cancelAuth', () => {
-    const dialog = new AuthCodeDialog();
+    const dialog = new AuthCodeDialog(() => {});
     dialog.waitForAuthCode().catch(() => {});
     dialog.cancelAuth('provider');
     expect(dialog.hasPendingPromise()).toBe(false);
   });
 
   it('rejectWithError clears pending dialog state and propagates the error', async () => {
-    const dialog = new AuthCodeDialog();
+    const ui = new OAuthUIBridge();
+    const dialog = new AuthCodeDialog(() => ui.clearCodeRequest());
+    ui.requestCode('test-provider');
     const promise = dialog.waitForAuthCode();
     const timeoutError = OAuthErrorFactory.fromUnknown(
       'test-provider',
@@ -259,23 +260,21 @@ describe('AuthCodeDialog', () => {
 
     await expect(promise).rejects.toBe(timeoutError);
     expect(dialog.hasPendingPromise()).toBe(false);
-    expect(
-      (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code,
-    ).toBe(false);
+    expect(ui.getCodeRequest().needsCode).toBe(false);
   });
 
   it('submitAuthCode is a no-op when no promise is pending', () => {
-    const dialog = new AuthCodeDialog();
+    const dialog = new AuthCodeDialog(() => {});
     expect(() => dialog.submitAuthCode('code')).not.toThrow();
   });
 
   it('cancelAuth is a no-op when no promise is pending', () => {
-    const dialog = new AuthCodeDialog();
+    const dialog = new AuthCodeDialog(() => {});
     expect(() => dialog.cancelAuth('provider')).not.toThrow();
   });
 
   it('subsequent waitForAuthCode calls create independent promises', async () => {
-    const dialog = new AuthCodeDialog();
+    const dialog = new AuthCodeDialog(() => {});
     const p1 = dialog.waitForAuthCode();
     dialog.submitAuthCode('first');
     const p2 = dialog.waitForAuthCode();

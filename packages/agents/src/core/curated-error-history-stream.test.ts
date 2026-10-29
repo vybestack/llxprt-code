@@ -1,3 +1,4 @@
+import { chatSessionPorts } from './chatSessionPorts.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
@@ -26,7 +27,17 @@ for (const size of [65]) {
         async (service, ownership, counters) => {
           const runtime = buildRuntimeContext(service);
           const manager = new ConversationManager(service, runtime);
-          const chat = new ChatSession(runtime, buildMockContentGenerator());
+          const chat = new ChatSession(
+            chatSessionPorts(runtime),
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            buildMockContentGenerator(),
+          );
           const restoreMaterialization = forbidHistoryMaterializationForTest(
             service,
             'eager curated read',

@@ -11,6 +11,8 @@ import type {
   AuditPolicy,
 } from './check-runtime-state-boundary.js';
 import { scanRuntimeStateStructure } from './tests/runtime-state-structure-guard.js';
+import { compilerHostWithWorkspaceModules } from './runtime-state-workspace-modules.js';
+import { resolveStateRoots } from './runtime-state-roots.js';
 
 export function workspacePath(workspace: string, file: string): string {
   const path = resolve(workspace, file);
@@ -34,6 +36,7 @@ export function scanState(
   policy: AuditPolicy,
   files: readonly string[],
 ): Array<Omit<AuditFinding, 'owner'>> {
+  const { mutableRoots, alsRoots } = resolveStateRoots(workspace, policy);
   const allowances = policy.alsAllowances.map((allowance) => ({
     ...allowance,
     file: workspacePath(workspace, allowance.file),
@@ -43,20 +46,22 @@ export function scanState(
     file: workspacePath(workspace, entry.file),
   }));
   const stateFiles = files.filter((file) =>
-    inRoots(workspace, file, [...policy.mutableRoots, ...policy.alsRoots]),
+    inRoots(workspace, file, [...mutableRoots, ...alsRoots]),
   );
+  const options: ts.CompilerOptions = {
+    allowJs: true,
+    noEmit: true,
+    noLib: true,
+    types: [],
+    skipLibCheck: true,
+    target: ts.ScriptTarget.ESNext,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+  };
   const program = ts.createProgram({
     rootNames: [...stateFiles],
-    options: {
-      allowJs: true,
-      noEmit: true,
-      noLib: true,
-      types: [],
-      skipLibCheck: true,
-      target: ts.ScriptTarget.ESNext,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.Bundler,
-    },
+    options,
+    host: compilerHostWithWorkspaceModules(workspace, options),
   });
   const stateFindings = stateFiles.flatMap((file) =>
     scanRuntimeStateStructure(
@@ -64,7 +69,7 @@ export function scanState(
       readFileSync(file, 'utf8'),
       allowances,
       program,
-      inRoots(workspace, file, policy.mutableRoots)
+      inRoots(workspace, file, mutableRoots)
         ? { allowlist: immutableTables }
         : undefined,
     )
@@ -72,9 +77,7 @@ export function scanState(
         inRoots(
           workspace,
           file,
-          finding.kind === 'async-local-storage'
-            ? policy.alsRoots
-            : policy.mutableRoots,
+          finding.kind === 'async-local-storage' ? alsRoots : mutableRoots,
         ),
       )
       .map((finding) => ({ ...finding, rule: finding.kind })),
@@ -83,7 +86,7 @@ export function scanState(
     .filter(
       (entry) =>
         !stateFiles.includes(entry.file) ||
-        !inRoots(workspace, entry.file, policy.mutableRoots),
+        !inRoots(workspace, entry.file, mutableRoots),
     )
     .map((entry) => ({
       file: entry.file,

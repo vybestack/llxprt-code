@@ -1,3 +1,6 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -159,7 +162,6 @@ const noopLogger = {
 
 function createStubProviderRuntime(): ProviderRuntimeContext {
   return {
-    settingsService: new SettingsService(),
     config: undefined,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
@@ -175,9 +177,16 @@ function buildCompressionContext(
 ): CompressionContext {
   const provider =
     overrides.provider ?? createOptionsCapturingProvider([], VALID_SNAPSHOT);
+  const settingsService = new SettingsService();
   const resolveProvider = (): CompressionProviderResult => ({
     invocation: captureProviderInvocation(
-      createStubProviderRuntime(),
+      {
+        fetch: requestFetch,
+        runtimeId: createStubProviderRuntime().runtimeId,
+        metadata: createStubProviderRuntime().metadata,
+        globalSettings: settingsService.getAllGlobalSettings(),
+        providerSettings: settingsService.getProviderSettings(provider.name),
+      },
       provider.name,
     ),
     provider,

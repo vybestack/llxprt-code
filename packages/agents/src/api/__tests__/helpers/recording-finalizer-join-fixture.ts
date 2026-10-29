@@ -1,3 +1,7 @@
+import { spyOn } from 'bun:test';
+import { SessionClientOwner } from '../../../session/session-client-owner.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -59,6 +63,7 @@ export async function withRecordingFinalizerFixture(
     config: BuiltCliConfig['config'];
     chatsDir: string;
     sessionId: string;
+    readHistory: () => HistoryService;
   }) => Promise<void>,
 ): Promise<void> {
   const workingDir = await mkdtemp(join(tmpdir(), 'recording-finalizer-join-'));
@@ -67,22 +72,36 @@ export async function withRecordingFinalizerFixture(
   try {
     built = await buildCliStyleConfig('multi-turn-text.jsonl', { workingDir });
     const sessionId = `recording-finalizer-${randomUUID()}`;
-    agent = await fromConfig({
-      settingsOwner: built.settingsOwner,
-      settingsService: built.settingsService,
-      agentClient: built.agentClient,
-      providerManager: built.providerManager,
-      runtimeFactoryBindings: built.runtimeFactoryBindings,
-      config: built.config,
-      messageBus: built.messageBus,
-      mcpRuntime: built.mcpRuntime,
-      sessionId,
-    });
+    let owner: SessionClientOwner | undefined;
+    const create = SessionClientOwner.create;
+    const capture = spyOn(SessionClientOwner, 'create').mockImplementation(
+      async (...args) => {
+        owner = await create(...args);
+        return owner;
+      },
+    );
+    try {
+      agent = await fromConfig(
+        built.config,
+        built.settingsService,
+        { sessionId, activation: { provider: 'fake', model: 'fake-model' } },
+        new CredentialAuthority(),
+      );
+    } finally {
+      capture.mockRestore();
+    }
+    const readHistory = (): HistoryService => {
+      const history = owner?.clients.getAgentClient().getHistoryService();
+      if (history === undefined || history === null)
+        throw new Error('Missing finalizer owner history');
+      return history;
+    };
     await scenario({
       agent,
       config: built.config,
       chatsDir: built.config.projectChatsDir,
       sessionId,
+      readHistory,
     });
   } finally {
     await cleanupFixture(agent, built, workingDir);

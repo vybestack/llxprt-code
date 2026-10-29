@@ -42,6 +42,7 @@ function singleUserTurn(): IContent[] {
 interface Harness {
   readonly settings: SettingsService;
   readonly runtime: ReturnType<typeof createProviderRuntimeContext>;
+  readonly config: ReturnType<typeof createRuntimeConfigStub>;
 }
 
 function makeHarness(
@@ -50,12 +51,11 @@ function makeHarness(
 ): Harness {
   const settings = new SettingsService();
   settings.setProviderSetting(providerName, 'model', 'gpt-4o');
+  const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId,
-    config: createRuntimeConfigStub(settings),
   });
-  return { settings, runtime };
+  return { settings, runtime, config };
 }
 
 function makeOptions(
@@ -65,6 +65,7 @@ function makeOptions(
   ephemerals: Record<string, unknown>,
 ): GenerateChatOptions {
   const invocation = createRuntimeInvocationContext({
+    fetch: (input, init) => globalThis.fetch(input, init),
     runtimeId: harness.runtime.runtimeId,
     runtimeMetadata: harness.runtime.metadata,
     providerName,
@@ -75,7 +76,7 @@ function makeOptions(
     ...createProviderCallOptions({
       providerName,
       settings: harness.settings,
-      config: harness.runtime.config,
+      config: harness.config,
       runtime: harness.runtime,
       invocation,
       contents: stream,

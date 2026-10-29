@@ -37,6 +37,7 @@ describe('actual disk provider restored row values', () => {
             install,
             prompt,
             runtime,
+            undefined,
             history,
             async () => ({
               provider: transport,

@@ -25,7 +25,11 @@ describe('contextLimit helper (cli wrapper)', () => {
     };
 
     return getTokenLimitForConfiguredContext(
-      createStreamRuntimeForTest(configWithContextLimit),
+      () => createStreamRuntimeForTest(configWithContextLimit).model.getModel(),
+      () =>
+        createStreamRuntimeForTest(
+          configWithContextLimit,
+        ).ephemeral.getEphemeralSetting('context-limit'),
       undefined,
     );
   };
@@ -46,7 +50,11 @@ describe('contextLimit helper (cli wrapper)', () => {
     };
 
     const limit = getTokenLimitForConfiguredContext(
-      createStreamRuntimeForTest(configWithoutLimit),
+      () => createStreamRuntimeForTest(configWithoutLimit).model.getModel(),
+      () =>
+        createStreamRuntimeForTest(
+          configWithoutLimit,
+        ).ephemeral.getEphemeralSetting('context-limit'),
       undefined,
     );
 
@@ -57,6 +65,12 @@ describe('contextLimit helper (cli wrapper)', () => {
       getModel: () => 'gpt-4o',
       getEphemeralSetting: () => undefined,
     });
-    expect(getTokenLimitForConfiguredContext(runtime, 350_000)).toBe(350_000);
+    expect(
+      getTokenLimitForConfiguredContext(
+        () => runtime.model.getModel(),
+        () => runtime.ephemeral.getEphemeralSetting('context-limit'),
+        350_000,
+      ),
+    ).toBe(350_000);
   });
 });

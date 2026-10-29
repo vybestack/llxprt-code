@@ -11,6 +11,7 @@ import { isToolBlocked } from '@vybestack/llxprt-code-tools';
 import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import {
   configureProfileContextLimit,
+  chatSessionConstructor,
   environmentContextMock,
   fixturePaths,
   observeReusedHistory,
@@ -305,19 +306,26 @@ describe('buildSystemInstruction context', () => {
   });
 });
 
+function chatSessionGenerationConfig(): unknown {
+  return chatSessionConstructor.mock.calls[0][9];
+}
+
 function resetCreateChatSessionMocks(): void {
   vi.clearAllMocks();
   (
     getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
   ).mockResolvedValue('system prompt');
   environmentContextMock.mockResolvedValue([]);
+  const runtimeContext = makeRuntimeContext(true);
   (loadAgentRuntime as Mock<typeof loadAgentRuntime>).mockResolvedValue({
-    runtimeContext: makeRuntimeContext(true),
-    contentGenerator: {},
-    toolsView: { listToolNames: () => [], getToolMetadata: () => undefined },
-    history: {},
-    providerAdapter: {},
-    telemetryAdapter: {},
+    runtimeContext,
+    contentGenerator: makeGenerationDeps('factory-fixture').contentGenerator,
+    toolsView: runtimeContext.tools,
+    history: runtimeContext.history,
+    providerAdapter: runtimeContext.provider,
+    telemetryAdapter: runtimeContext.telemetry,
+    telemetryRoot:
+      createSessionSettingsFixture(makeConfig()).settingsOwner.telemetry,
   });
 }
 
@@ -338,6 +346,7 @@ describe('createChatSession stored history', () => {
       ),
       ...makeGenerationDeps(runtimeState.runtimeId),
       config,
+      telemetry: createSessionSettingsFixture(config).settingsOwner.telemetry,
       mediaStore: createFactoryFixtureMediaStore(config),
       runtimeState,
       storedHistoryService: existingHistoryService,
@@ -384,6 +393,7 @@ describe('createChatSession stored history', () => {
       ),
       ...makeGenerationDeps(runtimeState.runtimeId),
       config,
+      telemetry: createSessionSettingsFixture(config).settingsOwner.telemetry,
       mediaStore: createFactoryFixtureMediaStore(config),
       runtimeState,
       storedHistoryService,
@@ -452,6 +462,7 @@ describe('createChatSession new history', () => {
       ),
       ...makeGenerationDeps(runtimeState.runtimeId),
       config,
+      telemetry: createSessionSettingsFixture(config).settingsOwner.telemetry,
       mediaStore: createFactoryFixtureMediaStore(config),
       runtimeState,
       storedHistoryService: undefined,
@@ -487,8 +498,8 @@ describe('createChatSession new history', () => {
       () => mockHistoryInstance as unknown as HistoryService,
     );
 
-    const extraHistory = [
-      { speaker: 'human' as const, blocks: [{ type: 'text', text: 'hello' }] },
+    const extraHistory: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
     ];
 
     await createChatSession({
@@ -498,6 +509,7 @@ describe('createChatSession new history', () => {
       ),
       ...makeGenerationDeps(runtimeState.runtimeId),
       config,
+      telemetry: createSessionSettingsFixture(config).settingsOwner.telemetry,
       mediaStore: createFactoryFixtureMediaStore(config),
       runtimeState,
       storedHistoryService: undefined,
@@ -530,6 +542,7 @@ describe('createChatSession thinking and todos', () => {
       ),
       ...makeGenerationDeps(runtimeState.runtimeId),
       config,
+      telemetry: createSessionSettingsFixture(config).settingsOwner.telemetry,
       mediaStore: createFactoryFixtureMediaStore(config),
       runtimeState,
       storedHistoryService: undefined,
@@ -537,16 +550,9 @@ describe('createChatSession thinking and todos', () => {
       todoContinuationService,
     });
 
-    expect(ChatSession).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      expect.objectContaining({
-        reasoning: { includeInOutput: true },
-      }),
-      [],
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(chatSessionGenerationConfig()).toMatchObject({
+      reasoning: { includeInOutput: true },
+    });
   });
 
   it('disables thinking config for gemini-2.0 models', async () => {
@@ -561,6 +567,7 @@ describe('createChatSession thinking and todos', () => {
       ),
       ...makeGenerationDeps(runtimeState.runtimeId),
       config,
+      telemetry: createSessionSettingsFixture(config).settingsOwner.telemetry,
       mediaStore: createFactoryFixtureMediaStore(config),
       runtimeState,
       storedHistoryService: undefined,
@@ -568,14 +575,7 @@ describe('createChatSession thinking and todos', () => {
       todoContinuationService,
     });
 
-    expect(ChatSession).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      expect.not.objectContaining({ reasoning: expect.anything() }),
-      [],
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(chatSessionGenerationConfig()).not.toHaveProperty('reasoning');
   });
 
   it('sets active todos provider on the created chat', async () => {
@@ -598,6 +598,7 @@ describe('createChatSession thinking and todos', () => {
       ),
       ...makeGenerationDeps(runtimeState.runtimeId),
       config,
+      telemetry: createSessionSettingsFixture(config).settingsOwner.telemetry,
       mediaStore: createFactoryFixtureMediaStore(config),
       runtimeState,
       storedHistoryService: undefined,
@@ -636,6 +637,7 @@ describe('createChatSession tool availability', () => {
       ),
       ...makeGenerationDeps(runtimeState.runtimeId),
       config,
+      telemetry: createSessionSettingsFixture(config).settingsOwner.telemetry,
       mediaStore: createFactoryFixtureMediaStore(config),
       runtimeState,
       storedHistoryService: undefined,
@@ -675,6 +677,7 @@ describe('createChatSessionSafe', () => {
         ),
         ...makeGenerationDeps(runtimeState.runtimeId),
         config,
+        telemetry: createSessionSettingsFixture(config).settingsOwner.telemetry,
         mediaStore: createFactoryFixtureMediaStore(config),
         runtimeState,
         storedHistoryService: undefined,

@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { StreamProcessorRuntime } from './chatSessionPorts.js';
 import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
@@ -24,10 +24,10 @@ import type { SourceAfterModelRequest } from './source-after-model-hook.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
 import { bindResponseArrival, responseArrivalFor } from './responseArrival.js';
-import { logApiError } from './turnLogging.js';
+import { logApiError, turnTelemetryPorts } from './turnLogging.js';
 
 export interface StreamRequestInput {
-  readonly runtime: AgentRuntimeContext;
+  readonly runtime: StreamProcessorRuntime;
   readonly compression: CompressionHandler;
   readonly history: HistoryService;
   readonly provider: RuntimeProvider;
@@ -183,8 +183,7 @@ async function diskRequest(
     input.setEstimate(null);
     if (progress.requestLogged) {
       logApiError(
-        input.runtime,
-        input.runtime.state,
+        turnTelemetryPorts(input.runtime.state, input.runtime.telemetry),
         input.runtime.state.model,
         input.promptId,
         Date.now() - startTime,

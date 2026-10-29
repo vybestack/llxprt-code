@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
@@ -38,6 +39,7 @@ async function drain(
 }
 
 describe('caller-owned public entry paths', () => {
+  const settingsOwnerFor = installBorrowedConfigSettings();
   const entries: ReadonlyArray<
     'base' | 'load-balancer' | 'logging' | 'retry' | 'copied-selection'
   > = ['base', 'load-balancer', 'logging', 'retry', 'copied-selection'];
@@ -63,7 +65,8 @@ describe('caller-owned public entry paths', () => {
       const baseURL = `http://127.0.0.1:${server.port}/v1`;
       const settings = new SettingsService();
       const config = createConfigStub(false);
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
+      const settingsOwner = settingsOwnerFor(config, settings);
       const base = new OpenAIProvider('test-key', baseURL);
       let provider:
         | OpenAIProvider
@@ -74,15 +77,21 @@ describe('caller-owned public entry paths', () => {
         provider = new RetryOrchestrator(base, { initialDelayMs: 0 });
       if (entry === 'logging') {
         provider = new LoggingProviderWrapper(base, null, undefined, () =>
-          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+          captureProviderRequestDiagnostics(config, settingsOwner),
         );
       }
       if (entry === 'load-balancer') {
-        const manager = new ProviderManager({
-          sessionSettings: runtime.sessionSettings,
-          settingsService: settings,
+        const manager = new ProviderManager(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          settings,
           config,
-        });
+          undefined,
+          undefined,
+          settingsOwner,
+        );
         manager.registerProvider(base);
         provider = new LoadBalancingProvider(
           {

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { awaitOAuthOperation } from '../auth/index.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
@@ -153,17 +154,20 @@ export function createJoiningTransport<T extends Transport>(
     closed = true;
     closing ??= (async () => {
       const cancellations = await Promise.allSettled(cancellationSends);
+      // Send DELETE before aborting the lifetime. Its owner signal also
+      // carries close-deadline cancellation, and the pending work is joined.
+      const termination = await terminateSession(transport);
       controller.abort();
       try {
         await close();
-        const failures = cancellations.flatMap((result) =>
-          result.status === 'rejected' ? [result.reason] : [],
-        );
+        const failures = [
+          ...cancellations.flatMap((result) =>
+            result.status === 'rejected' ? [result.reason] : [],
+          ),
+          ...termination,
+        ];
         if (failures.length > 0)
-          throw new AggregateError(
-            failures,
-            'MCP cancellation publication failed',
-          );
+          throw new AggregateError(failures, 'MCP transport retirement failed');
       } finally {
         while (pending.size > 0) await Promise.allSettled([...pending]);
         await Promise.allSettled([...streams].map((cancel) => cancel()));
@@ -172,6 +176,21 @@ export function createJoiningTransport<T extends Transport>(
     return closing;
   };
   return transport;
+}
+
+async function terminateSession(transport: Transport): Promise<unknown[]> {
+  if (!(transport instanceof StreamableHTTPClientTransport)) return [];
+  const sessionId = transport.sessionId;
+  try {
+    await transport.terminateSession();
+    return [];
+  } catch (error) {
+    return [
+      new Error(`MCP session ${String(sessionId)} termination failed`, {
+        cause: error,
+      }),
+    ];
+  }
 }
 
 function awaitTransportStart(

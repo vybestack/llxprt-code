@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
   Config,
   getProjectHash,
   SessionDiscovery,
 } from '@vybestack/llxprt-code-core';
 import { journalFileRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
@@ -35,6 +35,7 @@ async function transcript(
 }
 
 describe('native ACP session protocol', () => {
+  const credentials = useOwnedCredentials();
   it('records a real tool turn, closes, loads over ACP, and continues without duplicating durable rows', async () => {
     const saved = { ...process.env };
     const root = await mkdtemp(join(tmpdir(), 'w23-zed-native-protocol-'));
@@ -92,7 +93,6 @@ describe('native ACP session protocol', () => {
       coreTools: ['read_file'],
     });
     const settings = new SettingsService();
-    const manager = new ProviderManager({ config, settingsService: settings });
     let completedTool = false;
     let replayedHumans = 0;
     let replayedTools = 0;
@@ -104,10 +104,11 @@ describe('native ACP session protocol', () => {
           config,
           connection,
           unusedProfileApplication,
-          manager,
           () => new SettingsService({ sessionSource: settings }),
           undefined,
           { listProfiles: async () => [] },
+          undefined,
+          { credentialAuthority: credentials().authority },
         );
         return zed;
       },
@@ -202,7 +203,6 @@ describe('native ACP session protocol', () => {
     } finally {
       await zed?.disposeAll();
       await peer.finish();
-      manager.dispose();
       await config.dispose();
       for (const key of ['LLXPRT_FAKE_RESPONSES', 'LLXPRT_LOG_HOME']) {
         if (saved[key] === undefined) delete process.env[key];

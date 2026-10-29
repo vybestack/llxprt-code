@@ -1,0 +1,8 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call-read-1","name":"read_file","parameters":{"path":"{{CWD}}/package.json"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"first read finished"}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call-write-1","name":"write_file","parameters":{"file_path":"{{CWD}}/preflight-release-confirmed.txt","content":"confirmed after preflight disposal"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"confirmed write finished"}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call-read-2","name":"read_file","parameters":{"path":"{{CWD}}/package.json"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"second read finished"}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call-write-2","name":"write_file","parameters":{"file_path":"{{CWD}}/preflight-release-pending.txt","content":"must not be written"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"pending write finished"}]}]}

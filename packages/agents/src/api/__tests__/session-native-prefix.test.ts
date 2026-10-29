@@ -1,3 +1,4 @@
+import { capturedAgentClient } from './helpers/agent-client-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { describe, expect, it } from 'bun:test';
@@ -6,11 +7,7 @@ import {
   exactTokenizer,
 } from './helpers/journal-fixture-support.js';
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
-import {
-  buildAgent,
-  drain,
-  internalAgentClient,
-} from './helpers/agentHarness.js';
+import { buildAgent, drain } from './helpers/agentHarness.js';
 import { collectAgentHistory } from './helpers/collect-agent-history.js';
 
 function fixtureRow(index: number): IContent {
@@ -87,7 +84,7 @@ async function prefixStates(
     });
     try {
       await drain(agent.stream('initialize session'));
-      const history = internalAgentClient(agent).getHistoryService();
+      const history = capturedAgentClient(agent).getHistoryService();
       if (history === null) throw new Error('Missing prefix history');
       history.setTokenizerFactory(exactTokenizer());
       await agent.setHistory(

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
 interface PreconnectOptions {
   readonly dns?: boolean;
   readonly tcp?: boolean;
@@ -20,13 +22,17 @@ type Preconnect = (url: string | URL, options?: PreconnectOptions) => void;
  * fetches runtime-complete without importing Bun's ambient globals, which
  * would widen every type graph that reaches the global object.
  */
-export function forwardPreconnect(resolveTransport: () => typeof fetch): {
+export function forwardPreconnect(resolveTransport: () => NetworkFetch): {
   readonly preconnect: Preconnect;
 } {
   return {
-    preconnect: (url, options) =>
-      (
-        resolveTransport() as typeof fetch & { preconnect: Preconnect }
-      ).preconnect(url, options),
+    preconnect: (url, options) => {
+      const transport = resolveTransport();
+      if (
+        'preconnect' in transport &&
+        typeof transport.preconnect === 'function'
+      )
+        transport.preconnect(url, options);
+    },
   };
 }

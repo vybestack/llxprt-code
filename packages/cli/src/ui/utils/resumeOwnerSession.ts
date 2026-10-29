@@ -15,18 +15,18 @@ import {
  * resume does), and a failed resume names the unreadable file it matched.
  */
 export async function resumeOwnerSession(
-  agent: Agent,
+  resume: Agent['session']['resume'],
   ref: string,
+  listBrowserTargetsDetailed: Agent['session']['listBrowserTargetsDetailed'],
 ): Promise<{
   readonly warnings: readonly string[];
 }> {
   try {
-    await agent.session.resume(ref);
+    await resume(ref);
   } catch (error) {
-    throw await nameUnreadableRecording(agent, ref, error);
+    throw await nameUnreadableRecording(listBrowserTargetsDetailed, ref, error);
   }
-  const { unreadableRecordings } =
-    await agent.session.listBrowserTargetsDetailed();
+  const { unreadableRecordings } = await listBrowserTargetsDetailed();
   return {
     warnings: unreadableRecordings.map(
       (recording) =>
@@ -36,13 +36,12 @@ export async function resumeOwnerSession(
 }
 
 async function nameUnreadableRecording(
-  agent: Agent,
+  listBrowserTargetsDetailed: Agent['session']['listBrowserTargetsDetailed'],
   ref: string,
   error: unknown,
 ): Promise<unknown> {
   if (!(error instanceof Error)) return error;
-  const { unreadableRecordings } =
-    await agent.session.listBrowserTargetsDetailed();
+  const { unreadableRecordings } = await listBrowserTargetsDetailed();
   const named = matchUnreadableRecordings(
     ref,
     error.message.replace(/^Failed to resume session: /, ''),

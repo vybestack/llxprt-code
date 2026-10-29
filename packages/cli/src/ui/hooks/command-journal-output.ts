@@ -9,7 +9,7 @@ import type { HistoryItemWithoutId } from '../types.js';
 import { encodeJournalUiItem } from '../stores/turn/journal-ui-item.js';
 
 export async function appendJournalUiItem(
-  history: HistoryService | null,
+  history: Pick<HistoryService, 'appendDisplay'> | null,
   origin: Parameters<HistoryService['appendDisplay']>[2],
   item: HistoryItemWithoutId,
 ): Promise<JournalDisplayHandle> {
@@ -19,7 +19,7 @@ export async function appendJournalUiItem(
 }
 
 export async function writeCommandOutput(
-  readHistory: () => HistoryService | null,
+  readHistory: () => Pick<HistoryService, 'appendDisplay'> | null,
   origin: Parameters<HistoryService['appendDisplay']>[2],
   recordingOwner: 'agent' | undefined,
   addItem: CommandContext['ui']['addItem'],

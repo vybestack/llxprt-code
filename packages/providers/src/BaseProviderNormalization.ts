@@ -1,3 +1,6 @@
+import { AuthPrecedenceResolver } from '@vybestack/llxprt-code-auth/precedence.js';
+import type { IProviderKeyStorage } from '@vybestack/llxprt-code-auth';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -16,6 +19,7 @@ import type {
   ProviderToolset,
 } from './IProvider.js';
 import type {
+  BaseProviderConfig,
   BaseProvider,
   NormalizedGenerateChatOptions,
 } from './BaseProvider.js';
@@ -33,6 +37,7 @@ import { providerRowsOf } from './utils/providerRows.js';
 import { copyProviderRequestOptions } from './requestAdmission.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from './IProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 interface RuntimeGuardInput {
   providerKey: string;
@@ -68,6 +73,7 @@ interface NormalizationDependencies {
   ephemeralsSnapshot: Readonly<Record<string, unknown>>;
   providerDefaults: Readonly<Record<string, unknown>>;
   configuredHeaders: Readonly<Record<string, string>>;
+  requestFetch: NetworkFetch;
 }
 
 function findResolvedRuntimeGaps(
@@ -360,6 +366,7 @@ function extractLegacySignal(invocation: unknown): AbortSignal | undefined {
 
 interface InvocationNormalizationInput {
   invocation?: RuntimeInvocationContext;
+  requestFetch: NetworkFetch;
   runtimeId?: string;
   runtimeMetadata?: Record<string, unknown>;
   modelParams?: Readonly<Record<string, unknown>>;
@@ -386,6 +393,7 @@ function createNormalizedInvocation(
     const providedSignal = extractLegacySignal(providedInvocation);
     return createRuntimeInvocationContext({
       runtimeId: providedInvocation.runtimeId,
+      fetch: providedInvocation.fetch,
       sessionId: providedInvocation.sessionId,
       runtimeMetadata: input.runtimeMetadata,
       modelParams: input.modelParams,
@@ -413,6 +421,7 @@ function createNormalizedInvocation(
 
   return createRuntimeInvocationContext({
     runtimeId: input.runtimeId,
+    fetch: input.requestFetch,
     runtimeMetadata: input.runtimeMetadata,
     modelParams: input.modelParams,
     modelParamsProviderName: input.modelParamsProviderName,
@@ -443,6 +452,7 @@ export function normalizeProviderGenerateChatOptions(
   });
   const invocation = createNormalizedInvocation({
     invocation: providedOptions.invocation,
+    requestFetch: deps.requestFetch,
     runtimeId:
       providedOptions.invocation?.runtimeId ??
       (typeof guard.metadata.runtimeId === 'string'
@@ -492,4 +502,27 @@ export function readProviderSettings(
     streaming:
       typeof snapshot.streaming === 'boolean' ? snapshot.streaming : undefined,
   };
+}
+
+export function createProviderAuthResolver(
+  config: BaseProviderConfig,
+  supportsOAuth: boolean,
+  settings: SettingsService,
+  storage?: IProviderKeyStorage,
+): AuthPrecedenceResolver {
+  return new AuthPrecedenceResolver(
+    {
+      apiKey: config.apiKey,
+      envKeyNames: config.envKeyNames ?? [],
+      isOAuthEnabled: config.isOAuthEnabled ?? false,
+      supportsOAuth: config.supportsOAuth ?? supportsOAuth,
+      oauthProvider: config.oauthProvider,
+      providerId: config.name,
+    },
+    {
+      oauthManager: config.oauthManager,
+      settingsService: settings,
+      providerKeyStorage: storage,
+    },
+  );
 }

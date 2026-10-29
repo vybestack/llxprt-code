@@ -19,7 +19,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildAgent } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
-import { bindClientTokenization } from '../../../agents/src/session/session-client-binding.js';
+import { captureSessionOwner } from '../../../agents/src/api/__tests__/helpers/capture-session-owner.js';
 import { restoreResumeBoot } from './restoreResumeBoot.js';
 
 function phase(
@@ -90,12 +90,13 @@ async function withDiskResume(
   });
   if (!result.ok) throw new Error(result.error);
   phase(size, 'opened');
-  const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-  const client = await agent.sessionClient.createDetachedAgentClient();
-  bindClientTokenization(
-    client,
-    accountingFactory((text) => text.length),
-  );
+  const {
+    value: { cleanup },
+    owner,
+  } = await captureSessionOwner(() => buildAgent('plain-text.jsonl'));
+  const client = owner.clients.getAgentClient();
+  const tokenizer = accountingFactory((text) => text.length);
+  client.bindTokenization(tokenizer.getTokenizer, tokenizer);
   try {
     await run(client, result, owners);
   } finally {

@@ -5,13 +5,10 @@
  */
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 
-import { createTestFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { WorkspaceFilesystemOwner } from '../services/workspace-filesystem-owner.js';
 import { afterEach as disposeOwnedPolicies } from 'bun:test';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 import { summarizeToolOutput } from '../utils/summarizer.js';
-import { testConfigInitialization } from '@vybestack/llxprt-code-test-utils/core/config.js';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import os from 'node:os';
@@ -154,8 +151,6 @@ describe('inactivity termination passthrough @plan:issue3589', () => {
     );
   });
 });
-
-const ownedPolicies: Array<{ dispose(): void }> = [];
 
 describe('CoreShellToolHostAdapter', () => {
   it('rejects background launches without an Agent owner', () => {
@@ -404,9 +399,7 @@ describe('CoreShellToolHostAdapter', () => {
    * itself (no network), which reports the prompt it received.
    */
   describe('CoreShellToolHostAdapter.trySummarizeOutput (issue #2626: uniform summarization)', () => {
-    disposeOwnedPolicies(() => {
-      for (const owner of ownedPolicies.splice(0)) owner.dispose();
-    });
+    disposeOwnedPolicies(() => {});
     async function makeSummarizingAdapter(providerManager?: {
       getActiveProvider(): { name: string } | undefined;
     }): Promise<{
@@ -447,18 +440,6 @@ describe('CoreShellToolHostAdapter', () => {
         cwd: os.tmpdir(),
         initialSettings: settingsService.getAllGlobalSettings(),
       });
-      const configPolicy = new RuntimePolicyOwner(config);
-      ownedPolicies.push(configPolicy);
-
-      const messageBus = configPolicy.session.messageBus;
-      await config.initialize(
-        testConfigInitialization(
-          config,
-          messageBus,
-          configPolicy,
-          createTestFilesystem(config),
-        ),
-      );
       if (providerManager !== undefined) {
         const target = config as unknown as {
           contentGeneratorConfig: ContentGeneratorConfig;

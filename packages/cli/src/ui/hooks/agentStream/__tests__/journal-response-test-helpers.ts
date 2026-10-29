@@ -1,16 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createSessionRecorder } from '@vybestack/llxprt-code-core';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   ContentMetadata,
   EmojiFilterMode,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../../../types.js';
 import { NativeJournalCursor } from '../../../stores/turn/native-journal-cursor.js';
-import { withJournalTurn } from '../../../stores/turn/journal-turn-test-helpers.js';
 
-type History = NonNullable<
-  ReturnType<Agent['agentClient']['getHistoryService']>
->;
+type History = HistoryService;
 export type Arrival = Awaited<ReturnType<History['openResponseArrival']>>;
 
 export interface JournalResponseFixture {
@@ -22,12 +23,23 @@ export interface JournalResponseFixture {
 export async function withJournalResponse(
   run: (fixture: JournalResponseFixture) => Promise<void>,
 ): Promise<void> {
-  await withJournalTurn(async (_turn, agent) => {
-    const history = agent.agentClient.getHistoryService();
-    if (history === null) throw new Error('Missing response journal');
+  const directory = await mkdtemp(join(tmpdir(), 'journal-response-test-'));
+  const recording = createSessionRecorder({
+    chatsDir: directory,
+    projectHash: 'journal-response-test',
+    sessionId: crypto.randomUUID(),
+    workspaceDirs: [directory],
+    provider: 'test',
+    model: 'test',
+  });
+  const history = new HistoryService();
+  const origin = {};
+  await history.attachJournal(recording, true, undefined, origin);
+  try {
     await run({
       history,
-      open: (id) => history.openResponseArrival({ id, submissionId: 'prompt' }),
+      open: (id) =>
+        history.openResponseArrival({ id, submissionId: 'prompt' }, {}, origin),
       items: async (mode = 'allowed') => {
         await history.waitForCommit();
         const path = history.journalPath();
@@ -48,7 +60,11 @@ export async function withJournalResponse(
         }
       },
     });
-  });
+  } finally {
+    await history.dispose();
+    await recording.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
 }
 
 export async function sealText(

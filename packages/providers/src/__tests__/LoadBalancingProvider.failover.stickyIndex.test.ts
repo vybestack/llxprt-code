@@ -1,5 +1,6 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -173,11 +174,17 @@ function makeMultiRequestConfig(): LoadBalancingProviderConfig {
 function makeProviderManager(): ProviderManager {
   const settingsService = new SettingsService();
   const config = createRuntimeConfigStub(settingsService);
-  return new ProviderManager({
-    sessionSettings: fixtureOwners.adopt(config, settingsService).settingsOwner,
+  return new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
     config,
-  });
+    undefined,
+    undefined,
+    borrowedSettings(config, settingsService),
+  );
 }
 
 describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 1]', () => {
@@ -204,6 +211,7 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 1]',
 
     const provider = new LoadBalancingProvider(lbConfig, providerManager);
     const options: GenerateChatOptions = {
+      invocation: makeLoadBalancerInvocation(),
       contents: requestContents,
     };
 
@@ -258,6 +266,7 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 2]',
 
     const provider = new LoadBalancingProvider(lbConfig, providerManager);
     const options: GenerateChatOptions = {
+      invocation: makeLoadBalancerInvocation(),
       contents: requestContents,
     };
 
@@ -308,6 +317,7 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 3]',
 
     const provider = new LoadBalancingProvider(lbConfig, providerManager);
     const options: GenerateChatOptions = {
+      invocation: makeLoadBalancerInvocation(),
       contents: requestContents,
     };
 
@@ -357,6 +367,7 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 4]',
 
     const provider = new LoadBalancingProvider(lbConfig, providerManager);
     const options: GenerateChatOptions = {
+      invocation: makeLoadBalancerInvocation(),
       contents: requestContents,
     };
 

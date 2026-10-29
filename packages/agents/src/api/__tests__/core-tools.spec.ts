@@ -37,7 +37,6 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 import {
   buildAgent,
-  buildAgentFromContent,
   scriptToolCallFixture,
   drain,
   typesOf,
@@ -50,8 +49,9 @@ import {
   respondToFirstConfirmation,
   ToolConfirmationOutcome,
   ASYNC_PROPERTY_TIMEOUT_MS,
+  buildPropertyAgentFromContent,
 } from './helpers/agentHarness.js';
-import { ToolControl, ToolControlError } from '../control/toolControl.js';
+import { ToolControlError } from '../control/toolControl.js';
 import {
   createToolControlDeps,
   type FakeRegistryToolEntry,
@@ -388,7 +388,7 @@ describe('Core tools @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-006 @requi
             // (fixture parameters → FakeProvider → turn → eventAdapter.projectToolCall
             // echoes request args before validation), mirroring the inject-then-assert
             // shape of the switch-context property tests (T4dp/T5p).
-            const { agent, cleanup } = await buildAgentFromContent(
+            const { agent, cleanup } = await buildPropertyAgentFromContent(
               scriptToolCallFixture('read_file', args),
             );
             try {
@@ -439,7 +439,7 @@ describe('ToolControl unit @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006 
 
   it('list() projects builtin vs mcp source, server tag, and enabled flag, frozen @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', () => {
     const handle = createToolControlDeps(sampleTools);
-    const control = new ToolControl(handle.deps);
+    const control = handle.control;
     const tools = control.list();
 
     expect(Object.isFrozen(tools)).toBe(true);
@@ -461,7 +461,7 @@ describe('ToolControl unit @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006 
 
   it('setEnabled(names) writes exactly the requested allow-list to tools.allowed @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', async () => {
     const handle = createToolControlDeps(sampleTools);
-    const control = new ToolControl(handle.deps);
+    const control = handle.control;
 
     await control.setEnabled(['read_file', 'remote_search']);
     expect(handle.lastAllowed()).toStrictEqual(['read_file', 'remote_search']);
@@ -473,7 +473,7 @@ describe('ToolControl unit @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006 
 
   it('respondToConfirmation publishes the outcome on the bus once the id has been surfaced @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', () => {
     const handle = createToolControlDeps(sampleTools);
-    const control = new ToolControl(handle.deps);
+    const control = handle.control;
     const confirmation: ToolConfirmation = {
       confirmationId: 'corr-1',
       toolCallId: 'call-1',
@@ -495,7 +495,7 @@ describe('ToolControl unit @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006 
 
   it('T12 respondToConfirmation forwards payload overrides and user-confirmation requests through the shared bus @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', () => {
     const handle = createToolControlDeps(sampleTools);
-    const control = new ToolControl(handle.deps);
+    const control = handle.control;
     control.notifyConfirmation({
       confirmationId: 'corr-payload',
       toolCallId: 'call-payload',
@@ -522,7 +522,7 @@ describe('ToolControl unit @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006 
 
   it('respondToConfirmation throws ToolControlError for an id that was never surfaced and does not publish @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', () => {
     const handle = createToolControlDeps(sampleTools);
-    const control = new ToolControl(handle.deps);
+    const control = handle.control;
 
     let caught: unknown;
     try {
@@ -544,7 +544,7 @@ describe('ToolControl unit @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006 
 
   it('ModifyWithEditor retires the id so a second response for it is rejected @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', () => {
     const handle = createToolControlDeps(sampleTools);
-    const control = new ToolControl(handle.deps);
+    const control = handle.control;
     control.notifyConfirmation({
       confirmationId: 'corr-edit',
       toolCallId: 'call-edit',
@@ -571,7 +571,7 @@ describe('ToolControl unit @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006 
 
   it('a non-editor outcome keeps the id usable for repeat responses @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', () => {
     const handle = createToolControlDeps(sampleTools);
-    const control = new ToolControl(handle.deps);
+    const control = handle.control;
     control.notifyConfirmation({
       confirmationId: 'corr-keep',
       toolCallId: 'call-keep',
@@ -596,7 +596,7 @@ describe('ToolControl unit @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006 
 
   it('notifyConfirmation dedups by confirmationId and fans out to every registered callback @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', () => {
     const handle = createToolControlDeps(sampleTools);
-    const control = new ToolControl(handle.deps);
+    const control = handle.control;
     const a: ToolConfirmation[] = [];
     const b: ToolConfirmation[] = [];
     control.onConfirmationRequest((req) => a.push(req));
@@ -620,7 +620,7 @@ describe('ToolControl unit @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006 
 
   it('unsubscribing a confirmation callback stops further deliveries to it @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', () => {
     const handle = createToolControlDeps(sampleTools);
-    const control = new ToolControl(handle.deps);
+    const control = handle.control;
     const received: ToolConfirmation[] = [];
     const unsub = control.onConfirmationRequest((req) => received.push(req));
 
@@ -643,7 +643,7 @@ describe('ToolControl unit @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006 
 
   it('a throwing confirmation callback is isolated; sibling callbacks still receive the event @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', () => {
     const handle = createToolControlDeps(sampleTools);
-    const control = new ToolControl(handle.deps);
+    const control = handle.control;
     const survivor: ToolConfirmation[] = [];
     control.onConfirmationRequest(() => {
       throw new Error('callback boom');
@@ -664,7 +664,7 @@ describe('ToolControl unit @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006 
 
   it('notifyToolUpdate fans out to update callbacks, respects unsubscribe, and isolates crashes @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', () => {
     const handle = createToolControlDeps(sampleTools);
-    const control = new ToolControl(handle.deps);
+    const control = handle.control;
     const updates: ToolUpdate[] = [];
     control.onToolUpdate(() => {
       throw new Error('update boom');
@@ -689,7 +689,7 @@ describe('ToolControl unit @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006 
 
   it('setEditorCallbacks publishes the callbacks onto the shared holder for the next turn @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', () => {
     const handle = createToolControlDeps(sampleTools);
-    const control = new ToolControl(handle.deps);
+    const control = handle.control;
     const cbs = {
       getPreferredEditor: (): string => 'vscode',
       onEditorClose: (): void => {},

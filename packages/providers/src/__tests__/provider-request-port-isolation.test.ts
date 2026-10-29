@@ -16,6 +16,10 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import { replayableContents } from '../utils/collectContents.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 describe('call-bound provider ports', () => {
   const directories: string[] = [];
@@ -66,11 +70,12 @@ describe('call-bound provider ports', () => {
     settings.setProviderSetting('openai', 'model', 'gpt-4o');
     settings.setProviderSetting('openai', 'base-url', baseURL);
     const provider = bindProviderMedia(
-      shared.bindOwnerAuthentication(settings),
+      shared.bindOwnerAuthentication(settings, () => requestFetch),
       resolver,
       1024,
     );
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'same-label',
       providerName: provider.name,
       ephemeralsSnapshot: {
@@ -197,6 +202,7 @@ describe('call-bound provider ports', () => {
     left.options = {
       ...left.options,
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'same-label',
         providerName: 'openai',
         ephemeralsSnapshot: left.options.invocation?.ephemerals,

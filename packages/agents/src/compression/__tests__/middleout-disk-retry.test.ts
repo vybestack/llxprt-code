@@ -76,6 +76,7 @@ async function fallback(size: number): Promise<number> {
       const metadata = await buildCompressionMetadata(
         'oracle',
         runtime,
+        undefined,
         history,
         async () => ({
           provider: transport,

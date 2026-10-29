@@ -11,14 +11,16 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { extensionsCommand } from '../commands/extensionsCommand.js';
-import { memoryCommand } from '../commands/memoryCommand.js';
+import { createExtensionsCommand } from '../commands/extensionsCommand.js';
+import { createMemoryCommand } from '../commands/memoryCommand.js';
 import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
 import { writeCommandOutput } from './command-journal-output.js';
 import { ToolCallStatus, type HistoryItemWithoutId } from '../types.js';
-import type { CommandContext } from '../commands/types.js';
-import { helpCommand } from '../commands/helpCommand.js';
-import { hooksCommand } from '../commands/hooksCommand.js';
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
+import { journalCommandOutput } from '../../__tests__/journal-command-output-fixture.js';
+import { bindExtensionsCommand } from '../commands/extensionsCommandHost.js';
+import { createHelpCommand } from '../commands/helpCommand.js';
+import { createHooksCommand } from '../commands/hooksCommand.js';
 
 const notices: HistoryItemWithoutId[] = [
   { type: 'info', text: 'hook started', icon: '!', color: 'green' },
@@ -108,7 +110,7 @@ describe('journal command presentation', () => {
     await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.session.setRecording({ enabled: true });
       const base = createMockCommandContext();
-      const context: CommandContext = {
+      const context: CommandOwnerFixture = {
         ...base,
         recordingOwner: 'agent',
         services: { ...base.services, agent },
@@ -119,11 +121,46 @@ describe('journal command presentation', () => {
           },
         },
       };
+      const output = journalCommandOutput(agent.session);
+      const helpCommand = createHelpCommand(output.addItem);
+      const hooksCommand = createHooksCommand(
+        {
+          isConfigured: true,
+          isAvailable: true,
+          listHooks: () => agent.hooks.listHooks(),
+          enable: (name) => agent.hooks.enable(name),
+          disable: (name) => agent.hooks.disable(name),
+          setDisabledHooks: (names) => agent.hooks.setDisabledHooks(names),
+        },
+        output.addItem,
+      );
+      const extensionsCommand = createExtensionsCommand(
+        bindExtensionsCommand(
+          null,
+          output.addItem,
+          () => {},
+          () => {},
+        ),
+      );
+      const unavailable = (): never => {
+        throw new Error('Unconfigured memory operation');
+      };
+      const memoryCommand = createMemoryCommand({
+        isConfigured: false,
+        getUserMemory: () => '',
+        getLlxprtMdFileCount: () => 0,
+        getLlxprtMdFilePaths: () => [],
+        refreshMemory: unavailable,
+        updateSystemInstruction: unavailable,
+        addItem: output.addItem,
+        setMemoryFileCount: unavailable,
+        saveCoreMemory: unavailable,
+      });
       if (!helpCommand.action || !hooksCommand.action)
         throw new Error('Missing command action');
       await helpCommand.action(context, '');
       await hooksCommand.action(context, '');
-      const noConfig: CommandContext = {
+      const noConfig: CommandOwnerFixture = {
         ...context,
         services: { ...context.services, config: null },
       };
@@ -134,6 +171,7 @@ describe('journal command presentation', () => {
         throw new Error('Missing command action');
       await extensionsCommand.action(noConfig, '');
       await showMemory(noConfig, '');
+      await output.settle();
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('Missing journal');
       const cursor = await NativeJournalCursor.open(path, {}, 10);
@@ -152,7 +190,7 @@ describe('journal command presentation', () => {
     await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.session.setRecording({ enabled: true });
       const base = createMockCommandContext();
-      const context: CommandContext = {
+      const context: CommandOwnerFixture = {
         ...base,
         recordingOwner: 'agent',
         services: { ...base.services, agent },
@@ -165,8 +203,8 @@ describe('journal command presentation', () => {
       };
       for (const notice of notices)
         await writeCommandOutput(
-          () => context.services.agent?.agentClient.getHistoryService() ?? null,
-          context.services.agent?.session,
+          () => agent.session,
+          agent.session,
           context.recordingOwner,
           context.ui.addItem,
           notice,

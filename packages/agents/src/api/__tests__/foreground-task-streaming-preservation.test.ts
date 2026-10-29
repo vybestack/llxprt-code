@@ -4,9 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
-import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
+import { fromConfig } from '../fromConfig.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 import { describe, expect, it, spyOn } from 'bun:test';
 import { SubagentOrchestrator } from '../../core/subagentOrchestrator.js';
@@ -19,20 +18,22 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
   ApprovalMode,
-  fromConfig,
   toConfigParameters,
   type Agent,
 } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import {
+  ProfileManager,
+  SettingsService,
+} from '@vybestack/llxprt-code-settings';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-tools';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { escapeShellArg } from '@vybestack/llxprt-code-core/utils/shell-utils.js';
+import { physicalHookCommand } from './helpers/physicalHookCommand.js';
 
 function gate(): { promise: Promise<void>; release: () => void } {
   let release = (): void => {};
@@ -69,6 +70,7 @@ async function waitForDescendant(path: string): Promise<void> {
 }
 
 async function exercise(
+  authority: CredentialAuthority,
   deltas: readonly string[],
   expected: string,
   withHooks = false,
@@ -108,7 +110,6 @@ async function exercise(
     handlers.push(work);
   });
   let config: Config | undefined;
-  let mcp: McpRuntimeOwner | undefined;
   let agent: Agent | undefined;
   let channel: ReturnType<Agent['tools']['openClientChannel']> | undefined;
   let unsubscribe: (() => void) | undefined;
@@ -140,9 +141,10 @@ console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...
     if (retirement !== undefined)
       await writeFile(
         join(directory, 'hook-descendant.ts'),
-        `import { writeFileSync } from 'node:fs';
+        `import { renameSync, writeFileSync } from 'node:fs';
 process.on('SIGTERM', () => {});
-writeFileSync('task-hook-child.pid', String(process.pid));
+writeFileSync('task-hook-child.pid.tmp', String(process.pid));
+renameSync('task-hook-child.pid.tmp', 'task-hook-child.pid');
 await Bun.sleep(1500);
 writeFileSync('task-hook-late', 'privileged');
 `,
@@ -157,9 +159,7 @@ writeFileSync('task-hook-late', 'privileged');
         ...args: Parameters<SubagentOrchestrator['launch']>
       ) {
         const launched = await actualLaunch.apply(this, args);
-        launchedSessionIds.push(
-          launched.runtime.runtimeContext.state.sessionId,
-        );
+        launchedSessionIds.push(launched.identity.sessionId);
         return launched;
       });
       restoreLaunchObservation = () => observation.mockRestore();
@@ -189,7 +189,6 @@ writeFileSync('task-hook-late', 'privileged');
       'stream-child',
       'Return the requested text.',
     );
-    const factories = createAgentRuntimeFactoryBindings();
     config = new Config({
       ...toConfigParameters({
         provider: 'openai',
@@ -213,7 +212,7 @@ writeFileSync('task-hook-late', 'privileged');
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(hookScript, 'bash')}`,
+                    command: physicalHookCommand(hookScript),
                   },
                 ],
               },
@@ -221,19 +220,21 @@ writeFileSync('task-hook-late', 'privileged');
           }
         : undefined,
     });
-    mcp = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
-    agent = await fromConfig({
-      ...createSessionSettingsFixture(config),
-      runtimeFactoryBindings: factories,
+    const settings = new SettingsService();
+    for (const [key, value] of Object.entries(config.getInitialSettings()))
+      settings.set(key, value);
+    agent = await fromConfig(
       config,
-      mcpRuntime: mcp,
-      mcpOwnership: 'caller',
-      activation: {
-        provider: 'openai',
-        model: 'parent-model',
-        cliOverrides: { key: 'local-test-key', baseUrl },
+      settings,
+      {
+        activation: {
+          provider: 'openai',
+          model: 'parent-model',
+          cliOverrides: { key: 'local-test-key', baseUrl },
+        },
       },
-    });
+      authority,
+    );
     const completed = gate();
     let completedCalls: Parameters<
       NonNullable<Parameters<Agent['tools']['openClientChannel']>[0]>
@@ -402,7 +403,6 @@ writeFileSync('task-hook-late', 'privileged');
       async (): Promise<void> => {
         await acceptedScheduling;
       },
-      async (): Promise<void> => mcp?.dispose(),
       async (): Promise<void> => config?.dispose(),
       async (): Promise<void> => {
         restoreLaunchObservation?.();
@@ -428,6 +428,7 @@ writeFileSync('task-hook-late', 'privileged');
 }
 
 describe('public Agent foreground TaskTool streaming preservation', () => {
+  const credentials = useOwnedCredentials();
   it.skipIf(process.platform === 'win32').each([
     { retirement: 'cancel', interactive: true },
     { retirement: 'dispose', interactive: true },
@@ -441,28 +442,37 @@ describe('public Agent foreground TaskTool streaming preservation', () => {
     async ({ retirement, interactive }) => {
       expect.hasAssertions();
       expect(
-        await exercise([], '', true, retirement, interactive),
+        await exercise(
+          credentials().authority,
+          [],
+          '',
+          true,
+          retirement,
+          interactive,
+        ),
       ).toStrictEqual(['cancelled']);
     },
   );
   it('keeps standalone whitespace between empty wire deltas', async () => {
     expect.hasAssertions();
     await exercise(
+      credentials().authority,
       ['a', '', ' ', '', 'b', '\t', '', 'c', '\n', '', 'd'],
       'a b\tc\nd',
     );
   });
   it('normalizes a CRLF split across wire deltas to one LF', async () => {
     expect.hasAssertions();
-    await exercise(['a\r', '\nb'], 'a\nb');
+    await exercise(credentials().authority, ['a\r', '\nb'], 'a\nb');
   });
   it('flushes a final lone CR', async () => {
     expect.hasAssertions();
-    await exercise(['hello', '\r'], 'hello\n');
+    await exercise(credentials().authority, ['hello', '\r'], 'hello\n');
   });
   it('retains wrapper-looking model content literally', async () => {
     expect.hasAssertions();
     await exercise(
+      credentials().authority,
       [
         '<subagent name="not-wrapper">begin',
         '</subagent name="not-wrapper">end',
@@ -471,8 +481,13 @@ describe('public Agent foreground TaskTool streaming preservation', () => {
     );
   });
   it('executes the inherited physical BeforeModel hook for the actual task child session', async () => {
-    expect(await exercise(['owned-child'], 'owned-child', true)).toStrictEqual([
-      'success',
-    ]);
+    expect(
+      await exercise(
+        credentials().authority,
+        ['owned-child'],
+        'owned-child',
+        true,
+      ),
+    ).toStrictEqual(['success']);
   });
 });

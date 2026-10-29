@@ -8,7 +8,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import type { SubagentLaunchResult } from '../subagentOrchestrator.js';
+import type { AcceptanceChild } from './childaccept-fixture.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 async function readBody(request: IncomingMessage): Promise<Buffer> {
@@ -90,13 +90,14 @@ export async function localTransport(directory: string): Promise<{
 }
 
 export async function sendChildHistory(
-  child: SubagentLaunchResult,
+  child: AcceptanceChild,
   contents: AsyncIterable<IContent> = child.runtime.history.getCuratedForProviderStream(),
 ): Promise<void> {
   const provider = child.runtime.providerAdapter.getActiveProvider();
   const admitted =
     child.runtime.runtimeContext.prepareProviderInvocation('openai-responses');
   const invocation = createRuntimeInvocationContext({
+    fetch: globalThis.fetch,
     runtimeId: admitted.runtimeId,
     providerName: 'openai-responses',
     ephemeralsSnapshot: {

@@ -34,6 +34,7 @@ function options(
     requestRows: selection,
     systemInstruction: 'system',
     invocation: createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: 'continuation-transport',
       providerName: 'openai',
       ephemeralsSnapshot: { streaming: 'enabled' },

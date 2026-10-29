@@ -18,10 +18,8 @@ import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { SendMessageParams } from './chatSession.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { buildRuntimeContext } from './streamRequestHelpers.js';
 
@@ -69,7 +67,7 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
 
   describe('runtime config handoff', () => {
     it(
-      'preserves the Config instance when GenAI request config carries abort state',
+      'keeps GenAI abort state in runtime metadata without publishing Config',
       facadeCallback1,
     );
   });
@@ -265,7 +263,7 @@ function facadeCallback0(): void {
   });
 
   Object.assign(processor, {
-    runtimeContext: mockRuntimeContext,
+    ports: mockRuntimeContext,
     compressionHandler: mockCompressionHandler,
     conversationManager: mockConversationManager,
     historyService: mockHistoryService,
@@ -283,31 +281,18 @@ function facadeCallback0(): void {
 }
 
 function facadeCallback1(): void {
-  const configInstance = {
-    getEnableHooks: () => false,
-    getHookSystem: () => null,
-    getUserMemory: () => undefined,
-    getConversationLoggingEnabled: () => false,
-  };
   const abortController = new AbortController();
-  const tools: ToolDeclaration[] = [];
   const baseRuntimeContext = {
-    config: configInstance,
-    settingsService: new SettingsService(),
     runtimeId: 'test-runtime',
     metadata: { source: 'test' },
   };
-
-  const runtimeContext = buildRuntimeContext(
-    baseRuntimeContext as unknown as ProviderRuntimeContext,
-    {
-      config: { abortSignal: abortController.signal, tools },
-    } as unknown as SendMessageParams,
-  );
-
-  expect(runtimeContext.config).toBe(configInstance);
-  expect(runtimeContext.config).not.toHaveProperty('abortSignal');
-  expect(runtimeContext.config).not.toHaveProperty('tools');
+  const runtimeContext = buildRuntimeContext(baseRuntimeContext, {
+    message: 'handoff',
+    config: { abortSignal: abortController.signal, tools: [] },
+  });
+  expect(runtimeContext).not.toHaveProperty('config');
+  expect(runtimeContext).not.toHaveProperty('abortSignal');
+  expect(runtimeContext).not.toHaveProperty('tools');
   expect(runtimeContext.metadata?.['abortSignal']).toBe(abortController.signal);
 }
 
@@ -696,7 +681,7 @@ async function facadeCallback9(): Promise<void> {
   const history = new HistoryService();
   const processor = Object.create(StreamProcessor.prototype) as StreamProcessor;
   Object.assign(processor, {
-    runtimeContext: {
+    ports: {
       ...createSessionPolicyFixture(),
       history,
       state: {

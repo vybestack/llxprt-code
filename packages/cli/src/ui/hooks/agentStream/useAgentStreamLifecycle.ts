@@ -9,13 +9,12 @@ import {
   type EditorType,
   type ToolCallRequestInfo,
 } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   MessageType,
   StreamingState,
   type HistoryItemWithoutId,
 } from '../../types.js';
-import { observeTurnCancelled } from '../../../observation/jspWiring.js';
+import { useObservationCallbacks } from '../../../observation/ObservationContext.js';
 import { useShellCommandProcessor } from '../shellCommandProcessor.js';
 import {
   type TrackedCancelledToolCall,
@@ -27,7 +26,6 @@ import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js'
 import { classifyCompletedTools } from './toolCompletionHandler.js';
 import { useKeypress, type Key } from '../useKeypress.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
-import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 /**
  * History text used when Esc aborts an in-flight slash command. Distinct from
@@ -85,13 +83,10 @@ export function useToolSchedulerSetup(
   onEditorClose: () => void,
   onEditorOpen: () => void,
   addItem: UseHistoryManagerReturn['addItem'],
-  agent: Agent,
-  journalControls = false,
+  openClientChannel: Parameters<typeof useReactToolScheduler>[1],
+  subscribeChildTools: Parameters<typeof useReactToolScheduler>[2],
 ) {
-  const schedulerRuntime = useMemo(
-    () => ({ agent, journalControls }),
-    [agent, journalControls],
-  );
+  const journalControls = true;
   const toolSchedulerResult = useReactToolScheduler(
     async (_schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
       if (completedToolCallsFromScheduler.length === 0) return;
@@ -111,7 +106,8 @@ export function useToolSchedulerSetup(
         journalControls,
       );
     },
-    schedulerRuntime,
+    openClientChannel,
+    subscribeChildTools,
     setPendingHistoryItem,
     getPreferredEditor,
     onEditorClose,
@@ -164,8 +160,12 @@ export function useShellCommandSetup({
   setPendingHistoryItem,
   setIsResponding,
   onDebugMessage,
-  runtime,
-  agent,
+  readTargetDir,
+  readUsePty,
+  readShellExecutionConfig,
+  readPtyWidth,
+  readPtyHeight,
+  appendShellHistory,
   setShellInputFocused,
   terminalWidth,
   terminalHeight,
@@ -177,17 +177,17 @@ export function useShellCommandSetup({
   >;
   setIsResponding: React.Dispatch<React.SetStateAction<boolean>>;
   onDebugMessage: (message: string) => void;
-  runtime: StreamRuntime;
-  agent: Agent;
+  readTargetDir: Parameters<typeof useShellCommandProcessor>[4];
+  readUsePty: Parameters<typeof useShellCommandProcessor>[5];
+  readShellExecutionConfig: Parameters<typeof useShellCommandProcessor>[6];
+  readPtyWidth: Parameters<typeof useShellCommandProcessor>[7];
+  readPtyHeight: Parameters<typeof useShellCommandProcessor>[8];
+  appendShellHistory: Parameters<typeof useShellCommandProcessor>[9];
   setShellInputFocused: (value: boolean) => void;
   terminalWidth?: number;
   terminalHeight?: number;
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
 }) {
-  const shellRuntime = useMemo(
-    () => ({ ...runtime.shell, ...runtime.session }),
-    [runtime],
-  );
   const onExec = useCallback(
     async (done: Promise<void>) => {
       setIsResponding(true);
@@ -201,8 +201,12 @@ export function useShellCommandSetup({
     setPendingHistoryItem,
     onExec,
     onDebugMessage,
-    shellRuntime,
-    agent,
+    readTargetDir,
+    readUsePty,
+    readShellExecutionConfig,
+    readPtyWidth,
+    readPtyHeight,
+    appendShellHistory,
     setShellInputFocused,
     terminalWidth,
     terminalHeight,
@@ -229,6 +233,7 @@ export function useCancellation(
   cancelRunningAsyncTasks: () => void = () => {},
   cancelActiveSlashCommand: () => boolean = () => false,
 ) {
+  const { observeTurnCancelled } = useObservationCallbacks();
   const cancelOngoingRequest = useCallback(() => {
     // Slash commands run outside the streaming lifecycle: they set neither
     // isResponding nor toolCalls, so streamingState is Idle while one is in
@@ -267,6 +272,7 @@ export function useCancellation(
     setShellInputFocused(false);
   }, [
     streamingState,
+    observeTurnCancelled,
     cancelActiveSlashCommand,
     turnCancelledRef,
     setTurnCancelled,

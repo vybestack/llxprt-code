@@ -3,12 +3,13 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, spyOn } from 'bun:test';
+import { beforeEach, afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import type { ConsoleMessageItem } from '../types.js';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { renderHook, waitFor } from '../../__tests__/render.js';
-import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { appendJournalUiItem } from './command-journal-output.js';
 import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
 import { useCoreEventHandlers } from './useCoreEventHandlers.js';
 
@@ -27,9 +28,44 @@ async function notices(path: string): Promise<string[]> {
   }
 }
 
+function feedbackInputs(owner: Agent) {
+  return {
+    readDebugMode: () => false,
+    recordFeedback: async (
+      severity: 'warning' | 'error' | 'info',
+      message: string,
+    ): Promise<void> => {
+      await appendJournalUiItem(owner.session, undefined, {
+        type: severity,
+        text: message,
+      });
+      if (severity !== 'info')
+        await owner.session.recordRecordingEvent({
+          type: 'session_event',
+          severity,
+          message,
+        });
+    },
+  };
+}
+
 describe('owner-backed UI feedback listener', () => {
+  const priorActEnvironment = Reflect.get(
+    globalThis,
+    'IS_REACT_ACT_ENVIRONMENT',
+  );
+  beforeEach(() => {
+    Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
+  });
+  afterEach(() => {
+    if (priorActEnvironment === undefined) {
+      Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT');
+    } else {
+      Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', priorActEnvironment);
+    }
+  });
   it('removes the old listener and journals each feedback once after owner replacement', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow, config }) => {
+    await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'first' }] },
       ]);
@@ -40,9 +76,7 @@ describe('owner-backed UI feedback listener', () => {
       const { rerender, unmount } = renderHook(
         ({ owner }) =>
           useCoreEventHandlers({
-            agent: owner,
-            recordingOwner: 'agent',
-            uiRuntime: buildUiRuntimeFromSource(config, owner),
+            ...feedbackInputs(owner),
             handleNewMessage: (message) => displayed.push(message.content),
           }),
         { initialProps: { owner: agent } },
@@ -88,19 +122,15 @@ describe('owner-backed UI feedback listener', () => {
   }, 30000);
 
   it('surfaces a recording writer failure as a UI error instead of dropping the flush promise', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config }) => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.session.setRecording({ enabled: true });
-      const history = agent.agentClient.getHistoryService();
-      if (!history) throw new Error('Missing history service');
-      const failure = spyOn(history, 'appendDisplay').mockRejectedValue(
+      const failure = spyOn(agent.session, 'appendDisplay').mockRejectedValue(
         new Error('disk full'),
       );
       const displayed: ConsoleMessageItem[] = [];
       const { unmount } = renderHook(() =>
         useCoreEventHandlers({
-          agent,
-          recordingOwner: 'agent',
-          uiRuntime: buildUiRuntimeFromSource(config, agent),
+          ...feedbackInputs(agent),
           handleNewMessage: (message) => displayed.push(message),
         }),
       );

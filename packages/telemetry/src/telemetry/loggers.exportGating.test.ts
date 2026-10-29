@@ -12,7 +12,6 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { logApiRequest, logApiResponse } from './loggers.js';
 import { ApiRequestEvent, ApiResponseEvent } from './events/api-events.js';
-import * as uiTelemetry from './uiTelemetry.js';
 import type { TelemetryConfig } from '../internal/interfaces.js';
 
 function makeConfig(overrides: Partial<TelemetryConfig> = {}): TelemetryConfig {
@@ -75,7 +74,6 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
       mkdtempSync(join(tmpdir(), 'native-export-gating-')),
       'events.jsonl',
     );
-    uiTelemetry.uiTelemetryService.reset();
   });
   afterEach(async () => {
     const results = await Promise.allSettled(

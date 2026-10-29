@@ -220,7 +220,9 @@ export async function runChild(
     expect(await SessionLockManager.isLocked(dirname(parent), child.id)).toBe(
       false,
     );
-    expect(await activePath(fixture.live)).toBe(parent);
+    expect(
+      await activePath(fixture.live, fixture.clientFor(fixture.live)),
+    ).toBe(parent);
     await recordingArtifacts(parent);
     await writeFile(
       join(fixture.root, 'child-proof.json'),

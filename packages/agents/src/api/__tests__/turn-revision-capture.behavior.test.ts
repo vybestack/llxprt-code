@@ -9,10 +9,15 @@ import { AgentBusyError } from '@vybestack/llxprt-code-agents';
 import {
   ProfileManager,
   type LoadBalancerProfile,
+  type Profile,
 } from '@vybestack/llxprt-code-settings';
 import { successful, withOwners } from './turn-revision-capture.fixture.js';
 
+import { usePromptFixture } from './helpers/prompt-fixture.js';
+
 describe('Public admitted-turn request capture (#2616 C/S2)', () => {
+  usePromptFixture();
+
   it.each(['unchanged', 'temperature'])(
     'keeps admitted request values through a steered continuation: %s',
     async (mutation) => {
@@ -69,6 +74,7 @@ describe('Public admitted-turn request capture (#2616 C/S2)', () => {
 });
 
 describe('Foreground admitted model parameter ownership on the HTTP wire', () => {
+  usePromptFixture();
   it('keeps added and cleared keys out of an admitted continuation and reads them next turn', async () => {
     await withOwners(async (a, _b, endpoint, _other, start) => {
       a.setModelParam('top_p', 0.4);
@@ -180,6 +186,7 @@ describe('Foreground admitted model parameter ownership on the HTTP wire', () =>
 });
 
 describe('Foreground admitted provider and model binding on the HTTP wire', () => {
+  usePromptFixture();
   it('keeps the admitted direct endpoint and model during profile replacement, without changing a sibling or the next admission', async () => {
     await withOwners(async (a, b, original, replacement, start) => {
       const admitted = start(a, 'Admit original direct provider');
@@ -188,7 +195,7 @@ describe('Foreground admitted provider and model binding on the HTTP wire', () =
         model: 'capture-a',
         temperature: 0.2,
       });
-      await a.profiles.applySnapshot({
+      const replacementProfile: Profile = {
         version: 1,
         provider: 'openai',
         model: 'capture-replacement',
@@ -197,11 +204,15 @@ describe('Foreground admitted provider and model binding on the HTTP wire', () =
           'base-url': replacement.url,
           'auth-key': 'turn-capture-local-only',
         },
-      });
+      };
+      await expect(
+        a.profiles.applySnapshot(replacementProfile),
+      ).rejects.toBeInstanceOf(AgentBusyError);
       a.injectSteer('Continue on the admitted direct binding');
       successful(await start(b, 'Sibling keeps its provider'));
       original.release();
       const completed = await admitted;
+      await a.profiles.applySnapshot(replacementProfile);
       successful(
         await start(a, 'New admission uses the committed replacement'),
       );
@@ -232,21 +243,27 @@ describe('Foreground admitted provider and model binding on the HTTP wire', () =
     await withOwners(async (a, b, original, sibling, start) => {
       const admitted = start(a, 'Direct request before failed replacement');
       await original.entered;
+      const invalidProfile: Profile = {
+        version: 1,
+        provider: 'unregistered-provider',
+        model: 'unregistered-model',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
       await expect(
-        a.profiles.applySnapshot({
-          version: 1,
-          provider: 'unregistered-provider',
-          model: 'unregistered-model',
-          modelParams: {},
-          ephemeralSettings: {},
-        }),
-      ).rejects.toThrow("Provider 'unregistered-provider' is not available");
+        a.profiles.applySnapshot(invalidProfile),
+      ).rejects.toBeInstanceOf(AgentBusyError);
       expect(a.getProvider()).toBe('openai');
       expect(a.getModel()).toBe('capture-a');
       a.injectSteer('Still using the original provider after rollback');
       successful(await start(b, 'Sibling after failed replacement'));
       original.release();
       successful(await admitted);
+      await expect(a.profiles.applySnapshot(invalidProfile)).rejects.toThrow(
+        "Provider 'unregistered-provider' is not available",
+      );
+      expect(a.getProvider()).toBe('openai');
+      expect(a.getModel()).toBe('capture-a');
       successful(await start(a, 'Fresh admission after rollback'));
       expect(
         original
@@ -305,16 +322,20 @@ describe('Foreground admitted provider and model binding on the HTTP wire', () =
         temperature: 0.3,
       });
       await expect(
+        a.profiles.applySnapshot(lb(['binding-replacement'])),
+      ).rejects.toBeInstanceOf(AgentBusyError);
+      expect(a.getProvider()).toBe('load-balancer');
+      a.injectSteer('Continue on the original LB instance');
+      successful(await start(b, 'Independent sibling after LB replacement'));
+      original.release();
+      const completed = await admitted;
+      await expect(
         a.profiles.applySnapshot(lb(['nonexistent-binding-member'])),
       ).rejects.toThrow(
         'references profile "nonexistent-binding-member" which does not exist',
       );
       expect(a.getProvider()).toBe('load-balancer');
       await a.profiles.applySnapshot(lb(['binding-replacement']));
-      a.injectSteer('Continue on the original LB instance');
-      successful(await start(b, 'Independent sibling after LB replacement'));
-      original.release();
-      const completed = await admitted;
       successful(await start(a, 'New admission uses replacement LB member'));
       expect(replacement.requests()).toMatchObject([
         { model: 'capture-b', temperature: 0.7 },
@@ -348,6 +369,7 @@ describe('Foreground admitted provider and model binding on the HTTP wire', () =
 });
 
 describe('Public load-balanced foreground admission on the HTTP wire', () => {
+  usePromptFixture();
   it('retains member-specific and LB overrides across a steered rotation', async () => {
     await withOwners(async (a, b, firstEndpoint, secondEndpoint, start) => {
       const profiles = new ProfileManager();

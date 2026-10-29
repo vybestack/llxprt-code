@@ -61,9 +61,13 @@ function iterable(value: unknown): value is AsyncIterable<unknown> {
 }
 describe('Gemini runtime bounded dump contract', () => {
   it('preserves conversion through runtime registration and logging wrappers', async () => {
-    const manager = new ProviderManager({
-      settingsService: new SettingsService(),
-    });
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      new SettingsService(),
+    );
     manager.registerProvider(new GeminiProvider());
     manager.setActiveProvider('gemini');
     const active = manager.getActiveProvider();

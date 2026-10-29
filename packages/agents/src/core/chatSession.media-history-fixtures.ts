@@ -63,3 +63,13 @@ export function mediaHistoryShape(
     ),
   );
 }
+
+export function mediaEncodings(
+  history: readonly IContent[],
+): readonly string[] {
+  return history.flatMap((content) =>
+    content.blocks.flatMap((block) =>
+      block.type === 'media' ? [block.encoding] : [],
+    ),
+  );
+}

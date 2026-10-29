@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 /**
  * @plan PLAN-20260206-TOOLKEY.P07
@@ -12,11 +13,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { toolkeyfileCommand } from './toolkeyfileCommand.js';
+import { createToolkeyfileCommand } from './toolkeyfileCommand.js';
+import { ToolKeyStorage } from '@vybestack/llxprt-code-core';
 import { createCompletionHandler } from './schema/index.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { CommandKind } from './types.js';
-import type { CommandContext, MessageActionReturn } from './types.js';
+import type { MessageActionReturn } from './types.js';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -49,7 +51,8 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
 }));
 
 describe('toolkeyfileCommand', () => {
-  let context: CommandContext;
+  const toolkeyfileCommand = createToolkeyfileCommand(new ToolKeyStorage());
+  let context: CommandOwnerFixture;
   let tmpDir: string;
 
   beforeEach(async () => {
@@ -86,7 +89,7 @@ describe('toolkeyfileCommand', () => {
       const schema = toolkeyfileCommand.schema;
       assertDefined(schema);
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(
         context,
         {
@@ -108,7 +111,7 @@ describe('toolkeyfileCommand', () => {
       const schema = toolkeyfileCommand.schema;
       assertDefined(schema);
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(
         context,
         {

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { oauthUIBridge, type OAuthUIEvent } from '@vybestack/llxprt-code-auth';
+import { type OAuthUIEvent } from '@vybestack/llxprt-code-auth';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
@@ -107,6 +107,16 @@ export class InteractiveAuthHostUnavailableError extends InteractiveAuthError {
   }
 }
 
+export class InteractiveAuthClosedError extends InteractiveAuthError {
+  constructor(challenge: InteractiveAuthChallenge) {
+    super(
+      `Interactive authentication for ${challenge.provider}/${challenge.bucket} was refused: the interactive coordinator is disposed.`,
+      'cancelled',
+      challenge.correlationId,
+    );
+  }
+}
+
 export class InteractiveAuthCancelledError extends InteractiveAuthError {
   constructor(message: string, correlationId: string) {
     super(message, 'cancelled', correlationId);
@@ -171,10 +181,24 @@ function createAbortReason(message: string): DOMException {
  * @plan PLAN-20260827-ISSUE2562.P01
  * @requirement REQ-2562-1
  */
+export type InteractiveAuthRequestPort = Pick<
+  InteractiveAuthCoordinator,
+  'requestAuth' | 'hasHost'
+>;
+
 export class InteractiveAuthCoordinator {
   private hostHandler: InteractiveAuthHostHandler | undefined;
   private readonly sessions = new Map<string, InteractiveAuthSession>();
+  // Every started host handler until it physically settles. The session map
+  // forgets a session as soon as it is cancelled or times out, while a handler
+  // that ignores its signal keeps running; disposal must still wait for it.
+  private readonly handlers = new Set<Promise<void>>();
+  private admissionClosed = false;
   private readonly listeners = new Set<InteractiveAuthStateChangeListener>();
+
+  constructor(
+    private readonly publishUIEvent: (event: OAuthUIEvent) => void = () => {},
+  ) {}
 
   bindHost(handler: InteractiveAuthHostHandler): void {
     this.hostHandler = handler;
@@ -192,6 +216,9 @@ export class InteractiveAuthCoordinator {
     challenge: InteractiveAuthChallenge,
     opts: InteractiveAuthRequestOptions = {},
   ): Promise<InteractiveAuthOutcome> {
+    if (this.admissionClosed) {
+      return Promise.reject(new InteractiveAuthClosedError(challenge));
+    }
     const handler = this.hostHandler;
     if (!handler) {
       return Promise.reject(new InteractiveAuthUnavailableError(challenge));
@@ -259,10 +286,22 @@ export class InteractiveAuthCoordinator {
     return activeSessions.length;
   }
 
+  /** Rejects every later request; sessions already running are untouched. */
+  closeAdmission(): void {
+    this.admissionClosed = true;
+  }
+
+  /**
+   * Cancels active sessions, unbinds the host and waits for every started host
+   * handler to settle. The handlers' outcomes belong to the host and are not
+   * reported. The owner closes admission first.
+   */
   async dispose(): Promise<void> {
     this.cancelActiveSessions(
       'Interactive authentication coordinator disposed',
     );
+    this.unbindHost();
+    await Promise.allSettled([...this.handlers]);
   }
 
   getActiveSessions(): readonly InteractiveAuthSessionStatus[] {
@@ -364,8 +403,7 @@ export class InteractiveAuthCoordinator {
     const handlerPromise = Promise.resolve().then(() =>
       handler(session.challenge, session.controller.signal),
     );
-    void handlerPromise.catch(() => undefined);
-    void handlerPromise
+    const tracked: Promise<void> = handlerPromise
       .then(
         () => {
           this.settleSession(session, 'succeeded');
@@ -383,7 +421,10 @@ export class InteractiveAuthCoordinator {
           this.settleSession(session, 'failed', toError(error));
         },
       )
-      .catch(() => undefined);
+      .finally(() => {
+        this.handlers.delete(tracked);
+      });
+    this.handlers.add(tracked);
   }
 
   private detachWaiter(
@@ -498,7 +539,7 @@ export class InteractiveAuthCoordinator {
    */
   private emitOAuthUIEvent(event: OAuthUIEvent): void {
     try {
-      oauthUIBridge.emit(event);
+      this.publishUIEvent(event);
     } catch (error) {
       logger.debug(
         () =>
@@ -517,5 +558,3 @@ export class InteractiveAuthCoordinator {
     }
   }
 }
-
-export const interactiveAuthCoordinator = new InteractiveAuthCoordinator();

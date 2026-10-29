@@ -1,3 +1,6 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -99,12 +102,11 @@ async function generateAndCaptureBody(
 
   const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: 'test-runtime-id-3218',
-    config,
   });
 
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
 
@@ -113,6 +115,7 @@ async function generateAndCaptureBody(
   });
 
   const options = streamCallOptions({
+    fetch: requestFetch,
     settings,
     config,
     runtime,

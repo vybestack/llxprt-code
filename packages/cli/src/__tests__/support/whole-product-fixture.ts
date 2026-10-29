@@ -1,3 +1,5 @@
+import { captureSessionOwner } from '../../../../agents/src/api/__tests__/helpers/capture-session-owner.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   createAgent,
@@ -20,6 +22,7 @@ const environmentKeys = ['LLXPRT_FAKE_RESPONSES', 'LLXPRT_LOG_HOME'] as const;
 export interface WholeProductFixture {
   readonly root: string;
   readonly live: Agent;
+  clientFor(agent: Agent): AgentClientContract;
   readonly errors: Message[];
   agent(id: string): Promise<Agent>;
   command(text: string): Promise<void>;
@@ -150,27 +153,36 @@ export async function wholeProductFixture(transport?: {
   }
   process.env.LLXPRT_LOG_HOME = join(root, 'logs');
   const agents: Agent[] = [];
+  const clients = new Map<Agent, () => AgentClientContract>();
+  const clientFor = (selected: Agent): AgentClientContract => {
+    const read = clients.get(selected);
+    if (read === undefined) throw new Error('Unknown whole-product client');
+    return read();
+  };
   const agent = async (sessionId: string): Promise<Agent> => {
-    const created = await createAgent({
-      provider: transport === undefined ? 'fake' : 'openai',
-      model: transport === undefined ? 'fake-model' : 'w24-heap-model',
-      ...(transport === undefined
-        ? {}
-        : { auth: { apiKey: 'local-test-key', baseUrl: transport.url } }),
-      sessionId,
-      workingDir: root,
-      interactive: true,
-      folderTrust: true,
-      coreTools: ['write_file', 'task'],
-      approvalMode: ApprovalMode.YOLO,
-      harness: { forceConfirmations: false, includeProcessCwd: false },
-      telemetry: { enabled: false },
-      compression: { strategy: 'one-shot' },
-      settings: {
-        profileDirectory: join(root, 'profiles'),
-        subagentDirectory: join(root, 'subagents'),
-      },
-    });
+    const { value: created, owner } = await captureSessionOwner(() =>
+      createAgent({
+        provider: transport === undefined ? 'fake' : 'openai',
+        model: transport === undefined ? 'fake-model' : 'w24-heap-model',
+        ...(transport === undefined
+          ? {}
+          : { auth: { apiKey: 'local-test-key', baseUrl: transport.url } }),
+        sessionId,
+        workingDir: root,
+        interactive: true,
+        folderTrust: true,
+        coreTools: ['write_file', 'task'],
+        approvalMode: ApprovalMode.YOLO,
+        harness: { forceConfirmations: false, includeProcessCwd: false },
+        telemetry: { enabled: false },
+        compression: { strategy: 'one-shot' },
+        settings: {
+          profileDirectory: join(root, 'profiles'),
+          subagentDirectory: join(root, 'subagents'),
+        },
+      }),
+    );
+    clients.set(created, () => owner.clients.getAgentClient());
     agents.push(created);
     return created;
   };
@@ -178,6 +190,7 @@ export async function wholeProductFixture(transport?: {
   return {
     root,
     live,
+    clientFor,
     agent,
     ...dispatcher(live),
     close: async (): Promise<void> => {

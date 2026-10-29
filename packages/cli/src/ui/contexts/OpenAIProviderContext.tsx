@@ -20,10 +20,7 @@ import {
   useMemo,
   useRef,
 } from 'react';
-import type {
-  ProviderMessage as Message,
-  ConversationCache,
-} from '@vybestack/llxprt-code-providers';
+import type { ProviderMessage as Message } from '@vybestack/llxprt-code-providers';
 import { useOpenAIProviderInfo } from '../hooks/useOpenAIProviderInfo.js';
 
 interface RemoteTokenStats {
@@ -37,7 +34,6 @@ interface OpenAIProviderContextValue {
   isOpenAIActive: boolean;
   isResponsesAPI: boolean;
   currentModel: string | null;
-  conversationCache: ConversationCache | null;
   remoteTokenStats: RemoteTokenStats;
   updateRemoteTokenStats: (stats: Partial<RemoteTokenStats>) => void;
   getCachedConversation: (
@@ -77,10 +73,10 @@ export const OpenAIProviderContextProvider: React.FC<{
   // Reset stats whenever the provider identity changes, so stale counts from a
   // previous provider (which may use a different tokenizer and context window)
   // are not carried over into the new provider's display.
-  const previousProviderRef = useRef(providerInfo.provider);
+  const previousProviderRef = useRef(providerInfo.providerIdentity);
   useEffect(() => {
-    if (previousProviderRef.current !== providerInfo.provider) {
-      previousProviderRef.current = providerInfo.provider;
+    if (previousProviderRef.current !== providerInfo.providerIdentity) {
+      previousProviderRef.current = providerInfo.providerIdentity;
       setRemoteTokenStats({
         inputTokenCount: 0,
         outputTokenCount: 0,
@@ -88,23 +84,21 @@ export const OpenAIProviderContextProvider: React.FC<{
         lastUpdated: null,
       });
     }
-  }, [providerInfo.provider]);
+  }, [providerInfo.providerIdentity]);
 
   const value: OpenAIProviderContextValue = useMemo(
     () => ({
-      isOpenAIActive: providerInfo.provider !== null,
+      isOpenAIActive: providerInfo.providerIdentity !== null,
       isResponsesAPI: providerInfo.isResponsesAPI,
       currentModel: providerInfo.currentModel,
-      conversationCache: providerInfo.conversationCache,
       remoteTokenStats,
       updateRemoteTokenStats,
       getCachedConversation: providerInfo.getCachedConversation,
     }),
     [
-      providerInfo.provider,
+      providerInfo.providerIdentity,
       providerInfo.isResponsesAPI,
       providerInfo.currentModel,
-      providerInfo.conversationCache,
       remoteTokenStats,
       updateRemoteTokenStats,
       providerInfo.getCachedConversation,

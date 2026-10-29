@@ -1,5 +1,6 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -75,6 +76,7 @@ function overloadError(type: string): Error {
 
 function makeOptions(): GenerateChatOptions {
   return {
+    invocation: makeLoadBalancerInvocation(),
     contents: replayableContents([
       { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
       { speaker: 'human', blocks: [{ type: 'text', text: 'test prompt' }] },
@@ -207,11 +209,17 @@ async function captureFailoverError(
 function makeProviderManager(): ProviderManager {
   const settingsService = new SettingsService();
   const config = createRuntimeConfigStub(settingsService);
-  return new ProviderManager({
-    sessionSettings: fixtureOwners.adopt(config, settingsService).settingsOwner,
+  return new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
     config,
-  });
+    undefined,
+    undefined,
+    borrowedSettings(config, settingsService),
+  );
 }
 
 describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) [part 1]', () => {

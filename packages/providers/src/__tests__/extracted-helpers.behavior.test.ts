@@ -8,7 +8,6 @@ import { afterEach } from 'bun:test';
 import { describe, expect, it, vi } from 'bun:test';
 import { replayableContents } from '../utils/collectContents.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { CircuitBreakerState } from '../LoadBalancingProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -37,6 +36,7 @@ import {
 import { getBaseUrlFromProvider } from '../baseUrlResolver.js';
 import { ProviderCapabilitiesService } from '../providerCapabilitiesService.js';
 import { normalizeRuntimeInputs } from './helper-request-admission.js';
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import { ProviderRuntimeNormalizationError } from '../errors.js';
 import { buildRoundRobinResolvedOptions } from '../loadBalancing/resolvedOptionsBuilder.js';
 import { BackendMetricsCollector } from '../loadBalancing/backendMetrics.js';
@@ -59,6 +59,10 @@ import {
   runtimeConfig,
   statusError,
 } from './support/extracted-helpers-fixtures.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('extracted provider helper behavior: group 1', () => {
   afterEach(disposeConfigRoots);
@@ -277,30 +281,6 @@ describe('extracted provider helper behavior: group 4', () => {
 describe('extracted provider helper behavior: group 5', () => {
   it('preserves logging option normalization and missing-config fail-fast behavior', () => {
     const settingsService = new SettingsService();
-    const config = Object.assign(
-      new Config({
-        sessionId: 'logging-policy',
-        targetDir: process.cwd(),
-        cwd: process.cwd(),
-        model: 'logging-model',
-        debugMode: false,
-      }),
-      {
-        getModel: () => '',
-        getUserMemory: () => '',
-        getTargetDir: () => process.cwd(),
-        getConversationLogPath: () => '',
-        getRedactionConfig: () => ({
-          redactApiKeys: false,
-          redactCredentials: false,
-          redactFilePaths: false,
-          redactUrls: false,
-          redactEmails: false,
-          redactPersonalInfo: false,
-        }),
-        getConversationLoggingEnabled: () => false,
-      },
-    );
     const normalized = normalizeChatCompletionOptions(
       {
         contents: replayableContents([
@@ -311,9 +291,9 @@ describe('extracted provider helper behavior: group 5', () => {
       {
         providerName: 'provider-a',
         statelessRuntimeMetadata: { inherited: true },
-        runtimeContextResolver: () => ({
-          settingsService,
-          config,
+        readInvocationData: () => ({
+          globalSettings: settingsService.getAllGlobalSettings(),
+          providerSettings: settingsService.getProviderSettings('provider-a'),
           runtimeId: 'runtime-a',
           metadata: { runtime: true },
         }),
@@ -335,7 +315,7 @@ describe('extracted provider helper behavior: group 5', () => {
 
     expect(() =>
       ensureRuntimeContext(
-        { contents: replayableContents([]), runtime: { settingsService } },
+        { contents: replayableContents([]), runtime: {} },
         'provider-a',
         debugLoggerStub(),
       ),
@@ -476,21 +456,16 @@ describe('extracted provider helper behavior: group 8', () => {
       'https://settings.example.test',
     );
     settingsService.set('auth-key', 'global-token');
-    const config = runtimeConfig('config-model', {
-      'base-url': 'https://config.example.test',
-    });
     const rawOptions: GenerateChatOptions = {
       contents: [],
       userMemory: 'remember this',
       runtime: {
-        settingsService,
-        config,
         runtimeId: 'runtime-a',
         metadata: { existing: true },
       },
     };
 
-    const normalized = normalizeRuntimeInputs(rawOptions, {
+    const normalized = normalizeRuntimeInputs(rawOptions, settingsService, {
       getActiveProviderName: () => 'provider-a',
       getProvider: () => providerStub(),
     });
@@ -524,7 +499,6 @@ describe('extracted provider helper behavior: group 9', () => {
       'https://provider-a.example.test',
     );
     settingsService.setProviderSetting('provider-a', 'auth-key', 'test-token');
-    const config = runtimeConfig();
     const controller = new AbortController();
     const rawOptions = createProviderCallOptions({
       providerName: 'provider-a',
@@ -536,12 +510,11 @@ describe('extracted provider helper behavior: group 9', () => {
       {
         ...rawOptions,
         runtime: {
-          settingsService,
-          config,
           runtimeId: 'runtime-signal',
         },
         metadata: { abortSignal: controller.signal },
       },
+      settingsService,
       {
         getActiveProviderName: () => 'provider-a',
         getProvider: () => providerStub(),
@@ -572,24 +545,22 @@ describe('extracted provider helper behavior: group 10', () => {
       'auth-key',
       'provider-scoped-token',
     );
-    const config = runtimeConfig('config-model', {
-      'auth-key': 'global-token',
-      'base-url': 'https://config.example.test',
-    });
     const rawOptions: GenerateChatOptions = {
       contents: [],
       runtime: {
-        settingsService: invocationSettingsService,
-        config,
         runtimeId: 'runtime-a',
         metadata: {},
       },
     };
 
-    const normalized = normalizeRuntimeInputs(rawOptions, {
-      getActiveProviderName: () => 'provider-a',
-      getProvider: () => providerStub(),
-    });
+    const normalized = normalizeRuntimeInputs(
+      rawOptions,
+      invocationSettingsService,
+      {
+        getActiveProviderName: () => 'provider-a',
+        getProvider: () => providerStub(),
+      },
+    );
 
     expect(normalized.resolved.model).toBe('settings-model');
     expect(normalized.resolved.baseURL).toBe('https://settings.example.test');
@@ -610,7 +581,6 @@ describe('extracted provider helper behavior: group 11', () => {
       'base-url',
       'https://settings.example.test',
     );
-    const config = runtimeConfig();
     const cyclicProvider = providerStub({ name: 'wrapper' }) as IProvider & {
       wrappedProvider?: IProvider;
     };
@@ -621,12 +591,11 @@ describe('extracted provider helper behavior: group 11', () => {
         {
           contents: [],
           runtime: {
-            settingsService,
-            config,
             runtimeId: 'runtime-a',
             metadata: {},
           },
         },
+        settingsService,
         {
           getActiveProviderName: () => 'provider-a',
           getProvider: () => cyclicProvider,
@@ -639,40 +608,15 @@ describe('extracted provider helper behavior: group 11', () => {
 describe('extracted provider helper behavior: group 12', () => {
   it('preserves load-balancer resolved delegate option construction', () => {
     const settingsService = new SettingsService();
-    const config = Object.assign(
-      new Config({
-        sessionId: 'logging-policy',
-        targetDir: process.cwd(),
-        cwd: process.cwd(),
-        model: 'logging-model',
-        debugMode: false,
-      }),
-      {
-        getModel: () => '',
-        getUserMemory: () => '',
-        getTargetDir: () => process.cwd(),
-        getConversationLogPath: () => '',
-        getRedactionConfig: () => ({
-          redactApiKeys: false,
-          redactCredentials: false,
-          redactFilePaths: false,
-          redactUrls: false,
-          redactEmails: false,
-          redactPersonalInfo: false,
-        }),
-        getConversationLoggingEnabled: () => false,
-      },
-    );
     const options: GenerateChatOptions = {
       contents: [],
       settings: settingsService,
       runtime: {
-        settingsService,
-        config,
         runtimeId: 'lb-runtime',
         metadata: { parent: true },
       },
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'lb-runtime',
         runtimeMetadata: { parent: true },
         providerName: 'load-balancer',
@@ -727,36 +671,11 @@ describe('extracted provider helper behavior: group 12', () => {
 describe('extracted provider helper behavior: group 13', () => {
   it('carries the member profileId on delegate metadata alongside loadBalancerDelegate (#2643)', () => {
     const settingsService = new SettingsService();
-    const config = Object.assign(
-      new Config({
-        sessionId: 'logging-policy',
-        targetDir: process.cwd(),
-        cwd: process.cwd(),
-        model: 'logging-model',
-        debugMode: false,
-      }),
-      {
-        getModel: () => '',
-        getUserMemory: () => '',
-        getTargetDir: () => process.cwd(),
-        getConversationLogPath: () => '',
-        getRedactionConfig: () => ({
-          redactApiKeys: false,
-          redactCredentials: false,
-          redactFilePaths: false,
-          redactUrls: false,
-          redactEmails: false,
-          redactPersonalInfo: false,
-        }),
-        getConversationLoggingEnabled: () => false,
-      },
-    );
     const options: GenerateChatOptions = {
+      invocation: makeLoadBalancerInvocation(),
       contents: [],
       settings: settingsService,
       runtime: {
-        settingsService,
-        config,
         runtimeId: 'lb-runtime',
         metadata: { parent: true },
       },
@@ -801,6 +720,7 @@ describe('normalizeRuntimeInputs: fail-closed when no provider (#2481)', () => {
     const rawOptions: GenerateChatOptions = {
       contents: [],
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'runtime-no-provider',
         providerName: 'openai',
         ephemeralsSnapshot: {},
@@ -808,7 +728,7 @@ describe('normalizeRuntimeInputs: fail-closed when no provider (#2481)', () => {
     };
 
     expect(() =>
-      normalizeRuntimeInputs(rawOptions, {
+      normalizeRuntimeInputs(rawOptions, new SettingsService(), {
         getActiveProviderName: () => undefined,
         getProvider: () => undefined,
       }),
@@ -819,6 +739,7 @@ describe('normalizeRuntimeInputs: fail-closed when no provider (#2481)', () => {
     const rawOptions: GenerateChatOptions = {
       contents: [],
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'runtime-no-provider-2',
         providerName: 'openai',
         ephemeralsSnapshot: {},
@@ -826,7 +747,7 @@ describe('normalizeRuntimeInputs: fail-closed when no provider (#2481)', () => {
     };
 
     const captured = captureThrown(() =>
-      normalizeRuntimeInputs(rawOptions, {
+      normalizeRuntimeInputs(rawOptions, new SettingsService(), {
         getActiveProviderName: () => undefined,
         getProvider: () => undefined,
       }),

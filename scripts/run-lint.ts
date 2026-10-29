@@ -342,13 +342,18 @@ export function stripRunnerArgs(rawArgs: readonly string[]): string[] {
  *
  * A lint failure in one group must not hide findings in the others, so every
  * group runs and the first failure is re-thrown at the end, preserving its
- * exit code. An interruption (Ctrl-C, watchdog, OOM kill) is not a lint result
- * and aborts the remaining groups immediately.
+ * exit code. An interruption is not a lint result and aborts the remaining
+ * groups immediately. POSIX reports an externally killed child (watchdog, OOM
+ * kill) as a signal. Windows has no signals: a terminated child is only an
+ * exit code, indistinguishable from a lint failure, so the runner owns the
+ * cancellation itself. Aborting `cancelSignal` terminates the running child
+ * and execa marks that error as canceled on every platform.
  *
  * Exported so this behavior can be tested against real child processes.
  */
 export async function executeLintCommands(
   commands: readonly LintCommand[],
+  cancelSignal?: AbortSignal,
 ): Promise<void> {
   let firstFailure: unknown;
   for (const [index, command] of commands.entries()) {
@@ -358,13 +363,14 @@ export async function executeLintCommands(
     try {
       await execa(command.cmd, [...command.args], {
         stdio: 'inherit',
+        cancelSignal,
         env: {
           ...process.env,
           NODE_OPTIONS: command.nodeOptions,
         },
       });
     } catch (error) {
-      if (terminationSignal(error) !== undefined) {
+      if (isInterruption(error)) {
         throw error;
       }
       firstFailure ??= error;
@@ -386,6 +392,13 @@ async function runLint(): Promise<void> {
   const cache = isCacheEnabled(rawArgs);
   const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
+  // Ctrl-C, a terminate request or Windows Ctrl-Break cancels the running
+  // group through the runner, which is the only interruption Windows can name.
+  const cancellation = new AbortController();
+  for (const name of ['SIGINT', 'SIGTERM', 'SIGBREAK'] as const) {
+    process.once(name, () => cancellation.abort());
+  }
+
   await executeLintCommands(
     buildLintCommands({
       targets,
@@ -394,6 +407,7 @@ async function runLint(): Promise<void> {
       packageDirs: targets === null ? readPackageDirs(repoRoot) : [],
       emittedSiblings: compilerEmittedSiblings(repoRoot),
     }),
+    cancellation.signal,
   );
 }
 
@@ -419,6 +433,16 @@ function terminationSignal(error: unknown): string | undefined {
   return signalNumber(signal) === undefined ? undefined : String(signal);
 }
 
+/** True when the runner itself canceled the child (see executeLintCommands). */
+function wasCanceled(error: unknown): boolean {
+  return propertyValue(error, 'isCanceled') === true;
+}
+
+/** A child terminated by a signal or canceled by the runner, not by linting. */
+function isInterruption(error: unknown): boolean {
+  return wasCanceled(error) || terminationSignal(error) !== undefined;
+}
+
 /** A classified runner termination: an exit code and optional diagnostic. */
 export interface RunnerFailure {
   readonly exitCode: number;
@@ -439,6 +463,14 @@ function buildSignalDiagnostic(signal: string, signum: number): string {
  * (issue #2994 / AC4) is testable without spawning ESLint.
  */
 export function classifyRunnerFailure(error: unknown): RunnerFailure {
+  if (wasCanceled(error)) {
+    const sigterm = osConstants.signals.SIGTERM;
+    return {
+      exitCode: 128 + sigterm,
+      message:
+        'Lint runner: the run was canceled and the remaining groups were not run. This is an interruption, not a lint failure.',
+    };
+  }
   const exitCode = propertyValue(error, 'exitCode');
   if (typeof exitCode === 'number') {
     return { exitCode };

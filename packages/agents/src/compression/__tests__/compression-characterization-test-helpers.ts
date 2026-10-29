@@ -51,7 +51,19 @@ export function buildRuntimeContext(
   };
   return createAgentRuntimeContext({
     prepareProviderInvocation: (name, parameters, signal) =>
-      captureProviderInvocation(providerRuntime, name, parameters, signal),
+      captureProviderInvocation(
+        {
+          runtimeId: providerRuntime.runtimeId,
+          globalSettings:
+            providerRuntime.settingsService.getAllGlobalSettings(),
+          providerSettings:
+            providerRuntime.settingsService.getProviderSettings(name),
+          fetch: () => Promise.reject(new Error('Unexpected network request')),
+        },
+        name,
+        parameters,
+        signal,
+      ),
     state,
     history: historyService,
     settings: {

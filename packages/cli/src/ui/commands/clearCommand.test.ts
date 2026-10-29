@@ -1,38 +1,89 @@
+import { createTurnStore } from '../stores/turn/turnStore.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { z } from 'zod';
 import {
+  Config,
+  WorkspaceFilesystemOwner,
+  WorkspaceTrustLifecycle,
+  assembleWorkspaceMemory,
   HookEventName,
   HookType,
-  escapeShellArg,
   CONTINUE_LATEST,
 } from '@vybestack/llxprt-code-core';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
-import { buildCliStyleConfig } from '../../../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { toConfigParameters } from '../../../../agents/src/api/agentConfig.adapter.js';
+import { mkdtemp, realpath, rm, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../../../agents/src/core/subagent-cleanup.js';
+import {
+  AgentProfilePreflight,
+  prepareAgentPreflight,
+} from '../../../../agents/src/api/profile-preflight.js';
+import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { useFakeResponsesReplay } from '../../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
+import {
+  beforeAll,
+  afterAll,
+  describe,
+  expect,
+  it,
+  afterEach,
+  beforeEach,
+} from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { z } from 'zod';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import { drain } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
+import { physicalHookCommand } from '../../../../agents/src/api/__tests__/helpers/physicalHookCommand.js';
 import { setupOwnerSessionRecording } from '../../cliSessionBootstrap.js';
-import { TaskLaunchOwner } from '../../../../agents/src/session/task-launch-owner.js';
+import { launchHeldNotificationTask } from '../../__tests__/task-notification-agent-fixture.js';
+import { waitFor } from '../../__tests__/render.js';
 import { setImmediate } from 'node:timers/promises';
-import { clearCommand } from './clearCommand.js';
-import { continueCommand } from './continueCommand.js';
-import type { HistoryItemWithoutId } from '../types.js';
-import type { CommandContext } from './types.js';
+import { createClearCommand } from './clearCommand.js';
+import { bindClearSession } from './simpleCommandHost.js';
+import { createContinueCommandForTest } from './__tests__/continue-command-test-owner.js';
+import type { AgentHooks } from '../../../../agents/src/api/config-types.js';
+
 import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 
-const clearAction = clearCommand.action;
-assertDefined(clearAction);
-const continueAction = continueCommand.action;
-assertDefined(continueAction);
+async function clearAction(context: CommandOwnerFixture, args: string) {
+  const agent = context.services.agent;
+  const session =
+    agent === null
+      ? null
+      : bindClearSession(
+          (reason) => agent.hooks.triggerSessionEnd(reason),
+          () => agent.session.startNewSession(),
+          (reason) => agent.hooks.triggerSessionStart(reason),
+        );
+  const action = createClearCommand(
+    session,
+    context.ui.setDebugMessage,
+    context.ui.addItem,
+    context.ui.updateHistoryTokenCount,
+    context.ui.clear,
+  ).action;
+  assertDefined(action);
+  return action(context, args);
+}
+async function runContinue(context: CommandOwnerFixture, args: string) {
+  const action = createContinueCommandForTest(() => context).action;
+  assertDefined(action);
+  return action(context, args);
+}
 const hookInput = z.object({
   hook_event_name: z.string(),
   session_id: z.string(),
@@ -41,17 +92,112 @@ const hookInput = z.object({
   source: z.string().optional(),
 });
 
+/**
+ * The foreground route the CLI takes (`prepareAgentPreflight`, then
+ * `preparePostConfiguration`, `preflight` and `createForegroundAgent`) over a
+ * `Config` with command hooks enabled; `AgentConfig` carries no `enableHooks`,
+ * so the test builds the `Config` itself.
+ */
+async function openClearRoute(
+  authority: CredentialAuthority,
+  workingDir: string,
+  hooks: AgentHooks,
+): Promise<{
+  readonly agent: Agent;
+  readonly config: Config;
+  readonly close: () => Promise<void>;
+}> {
+  const config = new Config({
+    ...toConfigParameters({
+      provider: 'fake',
+      model: 'fake-model',
+      sessionId: randomUUID(),
+      workingDir,
+      hooks,
+    }),
+    interactive: true,
+    enableHooks: true,
+  });
+  const trust = new WorkspaceTrustLifecycle({
+    localTrust: config.initialWorkspaceTrust,
+  });
+  const filesystem = new WorkspaceFilesystemOwner({
+    targetDir: config.getTargetDir(),
+    isTrusted: () => trust.isTrustedFolder(),
+  });
+  const memory = assembleWorkspaceMemory(config, filesystem, trust);
+  let preflight: AgentProfilePreflight | undefined;
+  const close = (): Promise<void> =>
+    runCleanupSteps([
+      () => preflight?.dispose(),
+      () => memory.dispose(),
+      () => filesystem.dispose(),
+      () => trust.dispose(),
+      () => config.dispose(),
+    ]);
+  try {
+    preflight = await prepareAgentPreflight(
+      { runtimeId: `clear-command-${randomUUID()}` },
+      authority,
+      new SettingsService(),
+      undefined,
+      undefined,
+    );
+    await preflight.preparePostConfiguration(
+      config,
+      filesystem,
+      memory,
+      trust,
+      () => trust.dispose(),
+      undefined,
+    );
+    const intent = { provider: 'fake', model: 'fake-model' };
+    const result = await preflight.preflight(intent);
+    if (result.token === undefined)
+      throw new Error('Preflight did not accept the activation');
+    const agent = await AgentProfilePreflight.createForegroundAgent(
+      preflight,
+      result.token,
+      intent,
+      {},
+    );
+    return { agent, config, close };
+  } catch (primary) {
+    return cleanupAfterFailure(primary, close);
+  }
+}
+
 describe('clearCommand new session', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  useFakeResponsesReplay('multi-turn-text.jsonl');
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  const credentials = useOwnedCredentials();
+
   let directory: string;
-  let built: Awaited<ReturnType<typeof buildCliStyleConfig>>;
+  let previousConfigHome: string | undefined;
+  let closeRoute: () => Promise<void>;
+  let config: Config;
   let agent: Agent;
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
   let uiEvents: string[];
   let oldId: string;
   let oldPath: string;
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'clear-hook-'));
+    directory = await realpath(await mkdtemp(join(tmpdir(), 'clear-hook-')));
+    previousConfigHome = process.env.LLXPRT_CONFIG_HOME;
+    process.env.LLXPRT_CONFIG_HOME = directory;
     const script = join(directory, 'hook.ts');
     await writeFile(
       script,
@@ -63,30 +209,18 @@ if (existsSync(failure) && readFileSync(failure, 'utf8') === input.hook_event_na
 console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'}));
 `,
     );
-    const command = `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(script, 'bash')}`;
-    built = await buildCliStyleConfig('multi-turn-text.jsonl', {
-      workingDir: directory,
-      hooks: {
-        [HookEventName.SessionEnd]: [
-          { hooks: [{ type: HookType.Command, command }] },
-        ],
-        [HookEventName.SessionStart]: [
-          { hooks: [{ type: HookType.Command, command }] },
-        ],
-      },
+    const command = physicalHookCommand(script);
+    const route = await openClearRoute(credentials().authority, directory, {
+      [HookEventName.SessionEnd]: [
+        { hooks: [{ type: HookType.Command, command }] },
+      ],
+      [HookEventName.SessionStart]: [
+        { hooks: [{ type: HookType.Command, command }] },
+      ],
     });
-    built.config.adoptSessionId(crypto.randomUUID());
-    agent = await fromConfig({
-      config: built.config,
-      agentClient: built.agentClient,
-      providerManager: built.providerManager,
-      messageBus: built.messageBus,
-      mcpRuntime: built.mcpRuntime,
-      settingsService: built.settingsService,
-      providerFileLifecycle: built.runtime.providerFileLifecycle,
-      sessionId: built.config.getSessionId(),
-      sessionIdentityOwnership: 'config',
-    });
+    agent = route.agent;
+    config = route.config;
+    closeRoute = route.close;
     await agent.setHistory([
       { speaker: 'human', blocks: [{ type: 'text', text: 'old question' }] },
       { speaker: 'ai', blocks: [{ type: 'text', text: 'old answer' }] },
@@ -97,9 +231,14 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     if (path === undefined) throw new Error('Expected old recording');
     oldPath = path;
     uiEvents = [];
+    const turn = createTurnStore();
+    turn.commands.bindJournal(() => ({
+      appendDisplay: agent.session.appendDisplay.bind(agent.session),
+      length: () => agent.session.getJournalLength(),
+    }));
     context = createMockCommandContext({
       recordingOwner: 'agent',
-      services: { config: built.config, agent },
+      services: { config, agent },
       ui: {
         setDebugMessage: (text: string) => {
           uiEvents.push(text);
@@ -110,20 +249,26 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
         clear: () => {
           uiEvents.push('clear');
         },
-        addItem: (item: HistoryItemWithoutId) => {
-          if ('text' in item && item.text !== undefined)
-            uiEvents.push(item.text);
-        },
+        addItem: turn.commands.addItem,
       },
     });
   });
 
   afterEach(async () => {
-    await agent.dispose();
-    await built.cleanup();
-    await rm(directory, { recursive: true, force: true });
+    try {
+      await runCleanupSteps([
+        () => agent.dispose(),
+        () => closeRoute(),
+        () => rm(directory, { recursive: true, force: true }),
+      ]);
+    } finally {
+      if (previousConfigHome === undefined)
+        delete process.env.LLXPRT_CONFIG_HOME;
+      else process.env.LLXPRT_CONFIG_HOME = previousConfigHome;
+    }
   });
   async function expectJournaledStartNotice(): Promise<void> {
+    await agent.session.flushRecording();
     const path = agent.session.getRecording().path;
     if (!path) throw new Error('Missing new session journal');
     const cursor = await NativeJournalCursor.open(path, {}, 10);
@@ -147,64 +292,56 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
   }
 
   it('reports pending background work without clearing the conversation or terminal', async () => {
-    if (
-      !('deps' in agent) ||
-      typeof agent.deps !== 'object' ||
-      agent.deps === null
-    )
-      throw new Error('Expected agent dependencies');
-    if (
-      !('taskLaunchOwner' in agent.deps) ||
-      !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
-    )
-      throw new Error('Expected task owner');
-    const owner = agent.deps.taskLaunchOwner;
-    await owner.start(async (launch, publish) => {
-      owner.manager.registerTask({
-        id: 'clear-blocker',
-        subagentName: 'worker',
-        goalPrompt: 'work',
-        abortController: launch.controller,
-      });
-      launch.register('clear-blocker');
-      publish({ llmContent: '', returnDisplay: '' });
-    });
-    await setImmediate();
-    const running = await clearAction(context, '');
-    expect(running).toMatchObject({ type: 'message', messageType: 'error' });
-    if (running?.type !== 'message') throw new Error('Expected error message');
-    expect(running.content).toContain('background tasks');
-    expect(running.content).toContain('finish or cancel');
-    owner.manager.failTask('clear-blocker', 'completion notice');
-    const pending = await clearAction(context, '');
-    expect(pending).toMatchObject({ type: 'message', messageType: 'error' });
-    if (pending?.type !== 'message') throw new Error('Expected notice blocker');
-    expect(pending.content).toContain('completion notices');
-    expect(pending.content).not.toContain('cancel');
-    expect(agent.session.getSessionId()).toBe(oldId);
-    expect(
-      (await agent.session.getHistory()).flatMap((item) => item.blocks),
-    ).toContainEqual({ type: 'text', text: 'old question' });
-    expect(uiEvents).not.toContain('clear');
-    expect(uiEvents).not.toContain('tokens:0');
-    const messages: string[] = [];
-    const unsubscribe = agent.tasks.subscribeNotifications(
-      () => false,
-      async (text) => {
-        messages.push(text);
-      },
-    );
+    const child = await launchHeldNotificationTask(agent);
     try {
       await setImmediate();
-      await unsubscribe.drain();
-      expect(messages).toHaveLength(1);
-      await clearAction(context, '');
-      expect(agent.session.getSessionId()).not.toBe(oldId);
-      expect(await agent.session.getHistory()).toStrictEqual([]);
-      expect(uiEvents.slice(-2)).toStrictEqual(['tokens:0', 'clear']);
+      const running = await clearAction(context, '');
+      expect(running).toMatchObject({ type: 'message', messageType: 'error' });
+      if (running?.type !== 'message')
+        throw new Error('Expected error message');
+      expect(running.content).toContain('background tasks');
+      expect(running.content).toContain('finish or cancel');
+      child.release(true);
+      await waitFor(async () => {
+        await expect(agent.session.startNewSession()).rejects.toThrow(
+          'completion notices',
+        );
+      });
+      const pending = await clearAction(context, '');
+      expect(pending).toMatchObject({ type: 'message', messageType: 'error' });
+      if (pending?.type !== 'message')
+        throw new Error('Expected notice blocker');
+      expect(pending.content).toContain('completion notices');
+      expect(pending.content).not.toContain('cancel');
+      expect(agent.session.getSessionId()).toBe(oldId);
+      expect(
+        (await Array.fromAsync(agent.streamHistory())).flatMap(
+          (item) => item.blocks,
+        ),
+      ).toContainEqual({ type: 'text', text: 'old question' });
+      expect(uiEvents).not.toContain('clear');
+      expect(uiEvents).not.toContain('tokens:0');
+      const messages: string[] = [];
+      const unsubscribe = agent.tasks.subscribeNotifications(
+        () => false,
+        async (text) => {
+          messages.push(text);
+        },
+      );
+      try {
+        await setImmediate();
+        await unsubscribe.drain();
+        expect(messages).toHaveLength(1);
+        await clearAction(context, '');
+        expect(agent.session.getSessionId()).not.toBe(oldId);
+        expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
+        expect(uiEvents.slice(-2)).toStrictEqual(['tokens:0', 'clear']);
+      } finally {
+        unsubscribe();
+        await unsubscribe.drain();
+      }
     } finally {
-      unsubscribe();
-      await unsubscribe.drain();
+      await child.close();
     }
   });
 
@@ -221,8 +358,8 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     expect(hooks[1].source).toBe('clear');
     expect(hooks[1].session_id).not.toBe(oldId);
     expect(hooks[1].session_id).toBe(agent.session.getSessionId());
-    expect(built.config.getSessionId()).toBe(hooks[1].session_id);
-    expect(await agent.session.getHistory()).toStrictEqual([]);
+    expect(config.getSessionId()).toBe(hooks[1].session_id);
+    expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
     await expectJournaledStartNotice();
     expect(uiEvents.slice(-2)).toStrictEqual(['tokens:0', 'clear']);
   });
@@ -241,13 +378,17 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
           target.kind === 'session' && target.session.sessionId === oldId,
       ),
     ).toBe(true);
-    const result = await continueAction(context, oldId);
-    if (result?.type !== 'perform_resume' || result.sessionRef === undefined)
+    const result = await runContinue(context, oldId);
+    if (result?.type !== 'perform_resume')
       throw new Error('Expected resume action');
+    if (result.sessionRef === undefined)
+      throw new Error('Expected saved session reference');
     const history = await agent.session.resumeSession(result.sessionRef);
     expect(history.id).toBe(oldId);
     expect(
-      (await agent.session.getHistory()).flatMap((item) => item.blocks),
+      (await Array.fromAsync(agent.streamHistory())).flatMap(
+        (item) => item.blocks,
+      ),
     ).toStrictEqual([
       { type: 'text', text: 'old question' },
       { type: 'text', text: 'old answer' },
@@ -259,7 +400,6 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     await expectJournaledStartNotice();
     const displayOnlySessionId = agent.session.getSessionId();
     await agent.session.setRecording({ enabled: false });
-    const config = built.config;
     const request = new Proxy(config, {
       get(target, property, receiver) {
         if (property === 'getContinueSessionRef') return () => CONTINUE_LATEST;
@@ -268,10 +408,11 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     });
     const resumed = await setupOwnerSessionRecording(
       request,
-      agent,
+      agent.session,
+      () => agent.session.listBrowserTargetsDetailed(),
       { listSessions: false, deleteSession: undefined },
       null,
-    );
+    ).then(({ resumedBoot }) => resumedBoot);
     if (resumed === null) throw new Error('Expected resumed rows');
     const resumedRows = await Array.fromAsync(resumed.streamRows());
     expect(resumedRows.flatMap((item) => item.blocks)).toStrictEqual([
@@ -289,7 +430,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
       await writeFile(join(directory, 'failure'), event);
       await clearAction(context, '');
       expect(agent.session.getSessionId()).not.toBe(oldId);
-      expect(await agent.session.getHistory()).toStrictEqual([]);
+      expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
       expect(
         (await inputs()).map((input) => input.hook_event_name),
       ).toStrictEqual(['SessionEnd', 'SessionStart']);
@@ -315,7 +456,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     });
     await clearAction(explicit, '');
     expect(agent.session.getSessionId()).not.toBe(oldId);
-    expect(await agent.session.getHistory()).toStrictEqual([]);
+    expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
     await expectJournaledStartNotice();
   });
 });

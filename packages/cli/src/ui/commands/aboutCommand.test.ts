@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { restoreEnv } from '@vybestack/llxprt-code-test-utils';
 import {
@@ -14,13 +15,13 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { aboutCommand } from './aboutCommand.js';
-import { type CommandContext } from './types.js';
+import { createAboutCommand } from './aboutCommand.js';
+import { bindAboutDetails } from './aboutCommandHost.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import * as versionUtils from '../../utils/version.js';
 import { MessageType } from '../types.js';
 
-import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { assertDefined } from '../../__tests__/assertions.js';
 
 const runtimeMocks = {
@@ -31,9 +32,11 @@ void vi.mock('../../utils/version.js', () => ({
   getCliVersion: vi.fn(),
 }));
 
+let ideDisplayName: string | undefined;
 describe('aboutCommand', () => {
   const getRuntimeApiMock = runtimeMocks.getRuntimeApiMock;
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
+  let aboutCommand: ReturnType<typeof createAboutCommand>;
   const originalPlatform = process.platform;
   const originalEnv = { ...process.env };
 
@@ -56,8 +59,6 @@ describe('aboutCommand', () => {
       services: {
         config: {
           getModel: vi.fn(),
-          getIdeClient: vi.fn(),
-          getIdeMode: vi.fn().mockReturnValue(true),
         },
         settings: {
           merged: {},
@@ -66,7 +67,7 @@ describe('aboutCommand', () => {
       ui: {
         addItem: vi.fn(),
       },
-    } as unknown as CommandContext);
+    } as unknown as CommandOwnerFixture);
 
     (
       versionUtils.getCliVersion as Mock<typeof versionUtils.getCliVersion>
@@ -74,13 +75,27 @@ describe('aboutCommand', () => {
     vi.spyOn(mockContext.services.config!, 'getModel').mockReturnValue(
       'test-model',
     );
+    aboutCommand = createAboutCommand(
+      bindAboutDetails(
+        () => mockContext.runtimeApi.getRuntimeDiagnosticsSnapshot(),
+        () => mockContext.runtimeApi.getActiveProviderName(),
+        () => mockContext.runtimeApi.getActiveProviderDetails(),
+        (key) => mockContext.runtimeApi.getEphemeralSetting(key),
+        () => mockContext.services.config?.getModel(),
+        (key) => mockContext.services.config?.getEphemeralSetting(key),
+        () => mockContext.services.config?.getProvider(),
+        () => ideDisplayName ?? '',
+        () => mockContext.runtimeApi.providerStatus(),
+        (provider) =>
+          mockContext.services.settings.getProviderKeyfile(provider),
+      ),
+      mockContext.ui.addItem,
+    );
     process.env.GOOGLE_CLOUD_PROJECT = 'test-gcp-project';
     Object.defineProperty(process, 'platform', {
       value: 'test-os',
     });
-    vi.spyOn(mockContext.services.config!, 'getIdeClient').mockReturnValue({
-      getDetectedIdeDisplayName: vi.fn().mockReturnValue('test-ide'),
-    } as Partial<IdeClient> as IdeClient);
+    ideDisplayName = 'test-ide';
   });
 
   afterEach(() => {
@@ -146,9 +161,7 @@ describe('aboutCommand', () => {
   });
 
   it('should not show ide client when it is not detected', async () => {
-    vi.spyOn(mockContext.services.config!, 'getIdeClient').mockReturnValue({
-      getDetectedIdeDisplayName: vi.fn().mockReturnValue(undefined),
-    } as Partial<IdeClient> as IdeClient);
+    ideDisplayName = undefined;
 
     process.env.SANDBOX = '';
     assertDefined(aboutCommand.action);

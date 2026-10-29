@@ -46,6 +46,10 @@ import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.
 import type { IContent } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
 import { MediaAdmissionService } from '../storage/media-admission-service.js';
+import type { NetworkFetch } from '../utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function createTestConfig(): Config {
   return new Config({
@@ -155,6 +159,9 @@ describe('AgentRuntimeLoader', () => {
       async *generateChatCompletion() {},
     })),
     setActiveProvider: vi.fn(),
+    getProviderKeys: () => {
+      throw new Error('Test fake provider adapter has no key storage');
+    },
   };
   const toolsView: ToolRegistryView = {
     listToolNames: vi.fn(() => ['test-tool']),
@@ -183,7 +190,6 @@ describe('AgentRuntimeLoader', () => {
     settingsOwner = new SessionSettingsOwner(settingsService);
     settingsOwner.bindTelemetry(config);
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
       metadata: { source: 'AgentRuntimeLoader.test' },
     });
   });
@@ -215,6 +221,8 @@ describe('AgentRuntimeLoader', () => {
             provider,
             parameters,
             signal,
+            undefined,
+            requestFetch,
           ),
         readToolGovernance: () =>
           settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -303,6 +311,8 @@ describe('AgentRuntimeLoader', () => {
             provider,
             parameters,
             signal,
+            undefined,
+            requestFetch,
           ),
         readToolGovernance: () =>
           settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -368,6 +378,8 @@ describe('AgentRuntimeLoader', () => {
             provider,
             parameters,
             signal,
+            undefined,
+            requestFetch,
           ),
         readToolGovernance: () =>
           settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -443,6 +455,8 @@ describe('AgentRuntimeLoader', () => {
               provider,
               parameters,
               signal,
+              undefined,
+              requestFetch,
             ),
           readToolGovernance: () =>
             settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -497,6 +511,8 @@ describe('AgentRuntimeLoader', () => {
             provider,
             parameters,
             signal,
+            undefined,
+            requestFetch,
           ),
         readToolGovernance: () =>
           settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -562,6 +578,8 @@ describe('AgentRuntimeLoader', () => {
             provider,
             parameters,
             signal,
+            undefined,
+            requestFetch,
           ),
         readToolGovernance: () =>
           settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -639,6 +657,8 @@ describe('AgentRuntimeLoader', () => {
             provider,
             parameters,
             signal,
+            undefined,
+            requestFetch,
           ),
         readToolGovernance: () =>
           settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -681,6 +701,8 @@ describe('AgentRuntimeLoader', () => {
                 provider,
                 parameters,
                 signal,
+                undefined,
+                requestFetch,
               ),
             readToolGovernance: () =>
               settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -703,9 +725,14 @@ describe('AgentRuntimeLoader', () => {
     histories.add(callerHistory);
 
     const fakeManager: RuntimeProviderManager = {
+      fetchNetwork: requestFetch,
+      bindModelRegistry: () => {},
       getActiveProvider: vi.fn(),
       getActiveProviderName: vi.fn(),
       setActiveProvider: vi.fn(),
+      getProviderKeys: () => {
+        throw new Error('Test fake provider adapter has no key storage');
+      },
       setRuntimeContext: vi.fn(),
       getAvailableModels: vi.fn(async () => []),
       getProviderNames: () => [],
@@ -762,6 +789,8 @@ describe('AgentRuntimeLoader', () => {
               provider,
               parameters,
               signal,
+              undefined,
+              requestFetch,
             ),
           readToolGovernance: () =>
             settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),

@@ -1,31 +1,13 @@
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import {
-  SessionSettingsOwner,
-  type RuntimePolicyOwner,
-  type RuntimeProviderManager,
-  type Config,
-  type AgentClientContract,
-  createLockedSessionRecorder,
-  type SessionRecordingPort,
-  RecordingIntegration,
-  SessionDiscovery,
-  SessionTransitionService,
-  resumeSession,
-  withRecordingFailureReport,
-  listSessions,
-  deleteSession,
-  writeToStdout,
-  writeToStderr,
-  getProjectHash,
   CONTINUE_LATEST,
-  type ContinueTarget,
-  type ResumeBootHandle,
+  type Config,
   type IContent,
-  type LockHandle,
-  clientMediaStore,
-  type LocalMediaStore,
+  type ResumeBootHandle,
+  deleteSession,
+  getProjectHash,
+  listSessions,
+  writeToStderr,
+  writeToStdout,
 } from '@vybestack/llxprt-code-core';
 /**
  * @license
@@ -33,40 +15,34 @@ import {
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  Agent,
-  AgentActivationOperation,
-  AgentProfileApplication,
-} from '@vybestack/llxprt-code-agents';
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 
-import {
-  buildMcpAuthFactoryRegistry,
-  type McpAuthProviderFactory,
-} from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
-import { restoreResumeBoot } from './services/restoreResumeBoot.js';
-import { loadCliConfig } from './config/config.js';
+import { buildMcpAuthFactoryRegistry } from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
+import { sessionId } from '@vybestack/llxprt-code-telemetry';
 import chalk from 'chalk';
+import type { ConfigBuildPreflight } from './config/config.js';
+import { ignoreReady, loadCliConfig } from './config/config.js';
 import type { LoadedSettings } from './config/settings.js';
-import { sessionId, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   classifyContinueRef,
   describeUnreadableRecordings,
   recordStartupWarning,
   warnSkippedRecordings,
 } from './startupResumeWarnings.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { ExtensionStorage, loadExtensions } from './config/extension.js';
-import { registerCleanup, runExitCleanup } from './utils/cleanup.js';
+
 import { promises as fsPromises } from 'fs';
-import { basename, join } from 'path';
-import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
+import { basename } from 'path';
 import type { ParsedCliArgs } from './cliBootstrap.js';
+import { ExtensionStorage, loadExtensions } from './config/extension.js';
 import {
-  initializeObservationProducer,
-  stopObservationProducer,
+  ExtensionEnablementManager,
+  type ExtensionSelection,
+} from './config/extensions/extensionEnablement.js';
+import {
   type BootstrapSelection,
+  createSessionObservation,
 } from './observation/jspWiring.js';
+import { registerCleanup, runExitCleanup } from './utils/cleanup.js';
 
 /** Format a single recorded-session summary line for --list-sessions output. */
 export function formatSessionSummaryLine(
@@ -83,7 +59,7 @@ export async function handleSessionListAndDelete(
   argv: Pick<ParsedCliArgs, 'listSessions' | 'deleteSession'>,
   chatsDir: string,
   projectHash: string,
-  config: Config,
+  config: Pick<Config, 'dispose'>,
 ): Promise<void> {
   const deleteRef = argv.deleteSession;
   const shouldDelete = typeof deleteRef === 'string' && deleteRef.length > 0;
@@ -120,53 +96,6 @@ export async function handleSessionListAndDelete(
   process.exit(exitCode);
 }
 
-type RecordingClientOwner = {
-  getAgentClient(): AgentClientContract;
-  workspaceDirectories(): readonly string[];
-};
-
-/** Restored-prefix stream handed from owner-route resume to the UI. */
-export type OwnerResumedRows = Pick<ResumeBootHandle, 'streamRows'>;
-
-export interface ResolvedRecording {
-  recordingService: SessionRecordingPort;
-  resumedBoot: ResumeBootHandle | null;
-  resumedLockHandle: LockHandle | null;
-  /** The resumed session's ID, or null for new/fallback sessions. */
-  resumedSessionId: string | null;
-  discardOnFailure?: true;
-  /**
-   * Plain-text warnings raised while resuming (unreadable recordings skipped,
-   * resume failures, history-restore fallback). The caller surfaces them to the
-   * user; they must not depend on debug logging being enabled.
-   */
-  startupWarnings: string[];
-}
-
-export interface SessionRecordingSetup extends ResolvedRecording {
-  recordingIntegration: RecordingIntegration;
-  sessionMediaStore: LocalMediaStore | undefined;
-}
-
-export interface RuntimeConfigBootstrap {
-  readonly oauthManager?: OAuthManager;
-  readonly providerFileLifecycle: ProviderFileLifecycle;
-  readonly policyOwner?: RuntimePolicyOwner;
-  readonly providerManager: RuntimeProviderManager;
-  /** The installed provider contributions loaded once for this CLI process. */
-  readonly providerContributions: ProviderContributionRegistry;
-  getMcpAuthProviderFactory: (
-    type: string,
-  ) => McpAuthProviderFactory | undefined;
-  activationOperation: AgentActivationOperation;
-  switchProvider: ProviderSwitcher;
-  profileApplication: AgentProfileApplication;
-  config: Config;
-  extensions: ReturnType<typeof loadExtensions>;
-  runtimeSettingsService: SettingsService;
-  runtimeSettingsOwner: SessionSettingsOwner;
-}
-
 /**
  * @plan:PLAN-20250218-STATELESSPROVIDER.P06
  * @requirement:REQ-SP-005
@@ -180,21 +109,13 @@ export interface RuntimeConfigBootstrap {
  * agent.getMessageBus(); Config.initialize() likewise runs behind agent
  * construction rather than here.
  */
-function requireCliProviderFiles(
-  files: ProviderFileLifecycle | undefined,
-): ProviderFileLifecycle {
-  if (files === undefined)
-    throw new Error('CLI provider files were not assembled');
-  return files;
-}
-
 function loadBootstrapExtensions(
-  selected: ConstructorParameters<typeof ExtensionEnablementManager>[1],
+  selection: ExtensionSelection,
   workspaceRoot: string,
 ) {
   const extensionEnablementManager = new ExtensionEnablementManager(
     ExtensionStorage.getUserExtensionsDir(),
-    selected,
+    selection,
   );
   return {
     extensionEnablementManager,
@@ -202,129 +123,43 @@ function loadBootstrapExtensions(
   };
 }
 
-function requireAssembled<T>(value: T | undefined, what: string): T {
-  if (value === undefined) throw new Error(`CLI ${what} was not assembled.`);
-  return value;
-}
-
 export async function bootstrapRuntimeAndConfig(
   settings: LoadedSettings,
   argv: ParsedCliArgs,
   workspaceRoot: string,
-): Promise<RuntimeConfigBootstrap> {
-  const runtimeSettingsService = new SettingsService();
-  const runtimeSettingsOwner = new SessionSettingsOwner(runtimeSettingsService);
-
-  const { extensionEnablementManager, extensions } = loadBootstrapExtensions(
-    argv.extensions,
-    workspaceRoot,
-  );
-
-  // Discover installed provider plugins once, before any provider manager is
-  // constructed, so alias construction can dispatch through the resulting
-  // registry (issue #2758). Installing a package is what makes a provider
-  // available; there is nothing to configure. A broken plugin fails startup
-  // here rather than being skipped.
-  const { providerContributions, authFactories } =
-    await discoverCliProviderContributions();
-
-  let oauthManager: OAuthManager | undefined;
-  let providerFileLifecycle: ProviderFileLifecycle | undefined;
-  let policyOwner: RuntimePolicyOwner | undefined;
-  let providerManager: RuntimeProviderManager | undefined;
-  let activationOperation: AgentActivationOperation | undefined;
-  let profileApplication: AgentProfileApplication | undefined;
-  let switchProvider: ProviderSwitcher | undefined;
+  preflight: ConfigBuildPreflight,
+): Promise<Config> {
+  registerCleanup(() => preflight.dispose());
   try {
-    const config = await loadCliConfig(
-      settings.merged,
-      extensions,
-      extensionEnablementManager,
-      sessionId,
-      argv,
-      workspaceRoot,
+    const { extensionEnablementManager, extensions } = loadBootstrapExtensions(
       {
-        settingsService: runtimeSettingsService,
-        sessionSettingsOwner: runtimeSettingsOwner,
-        providerContributions,
-        onRuntimeRegistrationReady: (registration) => {
-          registerCleanup(() => registration.dispose());
-        },
-        onPolicyOwnerReady: (owner) => (policyOwner = ownCliPolicy(owner)),
-        onOAuthManagerReady: (manager) => (oauthManager = manager),
-        onProviderFilesReady: (lifecycle) =>
-          (providerFileLifecycle = lifecycle),
-        onProviderManagerReady: (manager) => (providerManager = manager),
-        onActivationBootstrapReady: (operation) => {
-          activationOperation = operation;
-          registerCleanup(() => operation.dispose());
-        },
-        onProfileApplicationReady: (operation) => {
-          profileApplication = operation;
-        },
-        onProviderSwitchReady: (operation) => {
-          switchProvider = operation;
-        },
+        enabledOverride: argv.extensions,
+        disabled: settings.merged.extensions.disabled,
       },
+      workspaceRoot,
     );
-    return {
-      oauthManager,
-      providerFileLifecycle: requireCliProviderFiles(providerFileLifecycle),
-      providerManager: requireAssembled(providerManager, 'provider manager'),
-      providerContributions,
-      policyOwner,
-      getMcpAuthProviderFactory: (type) =>
-        authFactories.getAuthProviderFactory(type),
-      config,
-      extensions,
-      runtimeSettingsService,
-      runtimeSettingsOwner,
-      switchProvider: requireAssembled(switchProvider, 'provider switch'),
-      profileApplication: requireAssembled(
-        profileApplication,
-        'profile application',
-      ),
-      activationOperation: requireAssembled(
-        activationOperation,
-        'activation bootstrap',
-      ),
-    };
-  } catch (error) {
-    await activationOperation?.dispose();
-    throw error;
-  }
-}
-
-/**
- * Release resumed recording and lock after a failed restoreHistory. Each
- * step is independently caught so cleanup failures never prevent the
- * fresh-session fallback (issue #1873).
- */
-async function releaseResumedResources(
-  recordingService: SessionRecordingPort,
-  lockHandle: LockHandle | null,
-): Promise<void> {
-  try {
-    await recordingService.dispose();
-  } catch (err) {
-    debugLogger.warn(
-      chalk.yellow(
-        `Failed to dispose resumed recording during fallback: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      ),
+    return await loadCliConfig(
+      {
+        settings: settings.merged,
+        extensions,
+        extensionEnablementManager,
+        sessionId,
+        argv,
+        cwd: workspaceRoot,
+        preflight,
+      },
+      ignoreReady,
     );
-  }
-  try {
-    await lockHandle?.release();
-  } catch (err) {
-    debugLogger.warn(
-      chalk.yellow(
-        `Failed to release session lock during fallback: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      ),
-    );
+  } catch (primary) {
+    try {
+      await preflight.dispose();
+    } catch (cleanup) {
+      throw new AggregateError(
+        [primary, cleanup],
+        'CLI bootstrap cleanup failed',
+      );
+    }
+    throw primary;
   }
 }
 
@@ -340,213 +175,38 @@ async function releaseResumedResources(
  * recording-suite weight.
  */
 export function setupObservation(
-  config: Config,
+  config: Pick<Config, 'getProjectRoot' | 'getSessionId'>,
   selection: BootstrapSelection | null,
-): void {
+): ReturnType<typeof createSessionObservation> {
   const projectRoot = config.getProjectRoot();
   // loadBootstrap disables observation (one stderr warning, startup continues)
   // when the bootstrap file cannot be read, but still fails fast
   // (FatalConfigError, exit 52) on a file that reads but is malformed,
   // insecure, or version-mismatched. Recording cleanup is registered above,
   // so the process exits cleanly on either path.
-  initializeObservationProducer(
-    {
+  return createSessionObservation({
+    context: {
       repository: basename(projectRoot),
       path: projectRoot,
       agentKind: 'llxprt',
       displayName: basename(projectRoot),
     },
     selection,
-  );
-}
-
-function registerRecordingCleanup(
-  recordingIntegration: RecordingIntegration,
-  recordingService: SessionRecordingPort,
-  lockHandle: LockHandle | null,
-): void {
-  registerCleanup(async () => {
-    const failures: unknown[] = [];
-    for (const operation of [
-      () => stopObservationProducer(),
-      () => withRecordingFailureReport(recordingIntegration.dispose()),
-      () => recordingService.dispose(),
-      () => lockHandle?.release() ?? Promise.resolve(),
-    ]) {
-      try {
-        await operation();
-      } catch (error: unknown) {
-        failures.push(error);
-      }
-    }
-    if (failures.length === 1) throw failures[0];
-    if (failures.length > 1) {
-      throw new AggregateError(failures, 'Session recording cleanup failed');
-    }
+    sessionId: config.getSessionId(),
   });
 }
 
-function activateRecording(
-  config: Config,
-  recordingService: SessionRecordingPort,
-  lockHandle: LockHandle | null,
-  bootstrapSelection: BootstrapSelection | null,
-): RecordingIntegration {
-  const integration = new RecordingIntegration(recordingService);
-  registerRecordingCleanup(integration, recordingService, lockHandle);
-  setupObservation(config, bootstrapSelection);
-  return integration;
-}
-
-async function resetAfterFailedResume(
-  agentClient: AgentClientContract,
-): Promise<void> {
-  try {
-    await agentClient.resetChat();
-  } catch (resetErr) {
-    debugLogger.warn(
-      chalk.yellow(
-        `Failed to reset chat after restoreHistory failure: ${
-          resetErr instanceof Error ? resetErr.message : String(resetErr)
-        }`,
-      ),
-    );
-  }
-}
-
-async function prepareLegacyRecording(
-  config: Config,
-  argv: Pick<ParsedCliArgs, 'listSessions' | 'deleteSession'>,
-  sessionClient: RecordingClientOwner,
-): Promise<
-  ResolvedRecording & {
-    projectHash: string;
-    chatsDir: string;
-    sessionMediaStore: LocalMediaStore | undefined;
-  }
-> {
-  const projectHash = getProjectHash(config.getProjectRoot());
-  const chatsDir = join(config.getProjectTempDir(), 'chats');
-  // --list-sessions / --delete-session: handle early exits.
-  await handleSessionListAndDelete(argv, chatsDir, projectHash, config);
-  await fsPromises.mkdir(chatsDir, { recursive: true });
-  const sessionMediaStore = clientMediaStore(sessionClient.getAgentClient());
-  const recording = await createOrResumeRecording(
-    config,
-    projectHash,
-    chatsDir,
-    sessionClient,
-  );
-  return { ...recording, projectHash, chatsDir, sessionMediaStore };
-}
-
-export async function setupSessionRecording(
-  config: Config,
-  argv: Pick<ParsedCliArgs, 'listSessions' | 'deleteSession'>,
-  bootstrapSelection: BootstrapSelection | null,
-  sessionClient: RecordingClientOwner,
-): Promise<SessionRecordingSetup> {
-  const {
-    projectHash,
-    chatsDir,
-    sessionMediaStore,
-    recordingService,
-    resumedBoot,
-    resumedLockHandle,
-    resumedSessionId,
-    discardOnFailure,
-    startupWarnings,
-  } = await prepareLegacyRecording(config, argv, sessionClient);
-
-  if (resumedBoot !== null) registerCleanup(() => resumedBoot.close());
-  let activeRecordingService = recordingService;
-  let activeLockHandle = resumedLockHandle;
-  let didFallback = false;
-
-  if (resumedBoot !== null) {
-    const agentClient = sessionClient.getAgentClient();
-    try {
-      await restoreResumeBoot(
-        agentClient,
-        recordingService,
-        resumedBoot,
-        () => {
-          if (resumedSessionId !== null)
-            config.adoptSessionId(resumedSessionId);
-        },
-      );
-    } catch (err) {
-      const messageText = err instanceof Error ? err.message : String(err);
-      recordStartupWarning(
-        startupWarnings,
-        `Could not restore conversation history (session ${resumedSessionId ?? 'unknown'}): ${messageText}. ` +
-          'Falling back to a new session.',
-      );
-      // Release resources FIRST so cleanup runs even if resetChat or
-      // buildNewRecordingService throw (issue #1873).
-      await releaseResumedResources(recordingService, resumedLockHandle);
-      const failedChild = discardOnFailure
-        ? recordingService.getFilePath()
-        : null;
-      if (failedChild !== null)
-        await fsPromises.rm(failedChild, { force: true });
-      // restoreHistory is not atomic — it may have partially populated the
-      // AgentClient's history before throwing. Reset so no half-restored
-      // items persist into the fresh session.
-      await resetAfterFailedResume(agentClient);
-      // Rebuild the configured session recording after the failed resume.
-      // Lock acquisition and file materialization remain fail-fast.
-      activeRecordingService = await buildFallbackRecording(
-        config,
-        projectHash,
-        chatsDir,
-        sessionClient,
-      );
-      activeLockHandle = null;
-      didFallback = true;
-    }
-  } else if (resumedSessionId !== null) {
-    // Resume succeeded with no restorable content — still adopt the session ID
-    // so future events append to the resumed session's file.
-    config.adoptSessionId(resumedSessionId);
-  }
-
-  // Register cleanup before observation setup. An explicitly invalid bootstrap
-  // is meant to fail startup, but it must not strand the recording service or
-  // the already-acquired lock handle on the way out.
-  const recordingIntegration = activateRecording(
-    config,
-    activeRecordingService,
-    activeLockHandle,
-    bootstrapSelection,
-  );
-
-  return {
-    recordingService: activeRecordingService,
-    recordingIntegration,
-    sessionMediaStore,
-    resumedBoot: didFallback ? null : resumedBoot,
-    resumedLockHandle: activeLockHandle,
-    resumedSessionId: didFallback ? null : resumedSessionId,
-    startupWarnings,
-  };
-}
+export type OwnerResumedRows = Pick<ResumeBootHandle, 'streamRows'>;
 
 async function resumeOwnerRecording(
-  session: Agent['session'],
-  mediaStore: ReturnType<typeof clientMediaStore>,
+  session: Pick<Agent['session'], 'resume' | 'setRecording'>,
+  listTargets: Agent['session']['listBrowserTargetsDetailed'],
   continueRef: string,
-  location: { chatsDir: string; projectHash: string },
   startupWarnings: string[],
 ): Promise<OwnerResumedRows | null> {
   // Discovery here only classifies the reference against unreadable recordings
   // so they can be reported to the user; the owner performs the actual resume.
-  const { targets, unreadableRecordings } =
-    await SessionDiscovery.listContinueTargetsDetailed(
-      location.chatsDir,
-      location.projectHash,
-      mediaStore,
-    );
+  const { targets, unreadableRecordings } = await listTargets();
   const { resumeRef, namedUnreadable } = classifyContinueRef(
     continueRef,
     targets,
@@ -568,28 +228,36 @@ async function resumeOwnerRecording(
     return null;
   }
   let resumed: AsyncIterable<IContent>;
+  let restoreWarning: string | undefined;
   try {
     resumed = await session.resume(
       resumeRef === CONTINUE_LATEST ? 'latest' : resumeRef,
+      {
+        startup: true,
+        onStartupRestoreFailure: (sessionId, reason) => {
+          restoreWarning = `Could not restore conversation history (session ${sessionId}): ${reason}. Falling back to a new session.`;
+        },
+      },
     );
   } catch (error: unknown) {
     if (
-      error instanceof Error &&
-      (error.message.includes('Ambiguous continue target name') ||
-        error.message.startsWith('Cannot adopt recording session '))
+      error instanceof AggregateError ||
+      (error instanceof Error &&
+        (error.message.includes('Ambiguous continue target name') ||
+          error.message.startsWith('Cannot adopt recording session ')))
     ) {
       throw error;
     }
     recordStartupWarning(
       startupWarnings,
-      `Could not resume session (ref: ${continueRef}): ${
-        error instanceof Error ? error.message : String(error)
-      }. Falling back to a new session.`,
+      restoreWarning ??
+        `Could not resume session (ref: ${continueRef}): ${
+          error instanceof Error ? error.message : String(error)
+        }. Falling back to a new session.`,
     );
     await session.setRecording({ enabled: true });
     return null;
   }
-  // The restored prefix is streamed to the UI; it is never collected here.
   return {
     async *streamRows() {
       yield* resumed;
@@ -598,12 +266,23 @@ async function resumeOwnerRecording(
 }
 
 export async function setupOwnerSessionRecording(
-  config: Config,
-  agent: Agent,
+  config: Pick<
+    Config,
+    | 'getProjectRoot'
+    | 'getSessionId'
+    | 'projectChatsDir'
+    | 'getContinueSessionRef'
+    | 'dispose'
+  >,
+  session: Pick<Agent['session'], 'getRecording' | 'setRecording' | 'resume'>,
+  listTargets: Agent['session']['listBrowserTargetsDetailed'],
   argv: Pick<ParsedCliArgs, 'listSessions' | 'deleteSession'>,
   bootstrapSelection: BootstrapSelection | null,
   startupWarnings: string[] = [],
-): Promise<OwnerResumedRows | null> {
+): Promise<{
+  resumedBoot: OwnerResumedRows | null;
+  observation: ReturnType<typeof setupObservation>;
+}> {
   const projectHash = getProjectHash(config.getProjectRoot());
   const chatsDir = config.projectChatsDir;
   await handleSessionListAndDelete(argv, chatsDir, projectHash, config);
@@ -611,27 +290,26 @@ export async function setupOwnerSessionRecording(
 
   try {
     const continueRef = config.getContinueSessionRef();
-    let resumedRows: OwnerResumedRows | null;
+    let resumedBoot: OwnerResumedRows | null;
     if (continueRef) {
-      resumedRows = await resumeOwnerRecording(
-        agent.session,
-        clientMediaStore(agent.agentClient),
+      resumedBoot = await resumeOwnerRecording(
+        session,
+        listTargets,
         continueRef,
-        { chatsDir, projectHash },
         startupWarnings,
       );
     } else {
-      await agent.session.setRecording({ enabled: true });
-      resumedRows = null;
+      await session.setRecording({ enabled: true });
+      resumedBoot = null;
     }
 
-    registerCleanup(() => stopObservationProducer());
-    setupObservation(config, bootstrapSelection);
-    return resumedRows;
+    const observation = setupObservation(config, bootstrapSelection);
+    registerCleanup(() => observation.cleanup());
+    return { resumedBoot, observation };
   } catch (error: unknown) {
-    if (agent.session.getRecording().enabled) {
+    if (session.getRecording().enabled) {
       try {
-        await agent.session.setRecording({ enabled: false });
+        await session.setRecording({ enabled: false });
       } catch (cleanupError: unknown) {
         throw new AggregateError(
           [error, cleanupError],
@@ -643,173 +321,7 @@ export async function setupOwnerSessionRecording(
   }
 }
 
-/** Build and lock a fresh session recorder (the backend's own kind) for the current run. */
-export function buildNewRecordingService(
-  config: Config,
-  projectHash: string,
-  chatsDir: string,
-  sessionClient: RecordingClientOwner,
-): Promise<SessionRecordingPort> {
-  return createLockedSessionRecorder({
-    sessionId: config.getSessionId(),
-    projectHash,
-    chatsDir,
-    workspaceDirs: [...sessionClient.workspaceDirectories()],
-    provider: config.getProvider() ?? 'unknown',
-    model: config.getModel(),
-    // The provider can change (profile load, model picker) before the first
-    // message materializes the file, so the header reads the live Config then.
-    resolveProviderModel: () => ({
-      provider: config.getProvider() ?? 'unknown',
-      model: config.getModel(),
-    }),
-    mediaStore: clientMediaStore(sessionClient.getAgentClient()),
-  });
-}
-
-function startupCheckpointTarget(
-  continueRef: string,
-  targets: readonly ContinueTarget[],
-): Extract<ContinueTarget, { kind: 'checkpoint' }> | null {
-  const resolved = SessionDiscovery.resolveContinueRef(continueRef, targets);
-  if ('error' in resolved) {
-    const matchesCheckpoint = targets.some(
-      (target) =>
-        target.kind === 'checkpoint' &&
-        (target.checkpointId === continueRef ||
-          target.checkpointName === continueRef),
-    );
-    if (matchesCheckpoint) throw new Error(resolved.error);
-    return null;
-  }
-  if (resolved.target.kind !== 'checkpoint') return null;
-  return resolved.target;
-}
-
-async function forkStartupCheckpoint(
-  target: Extract<ContinueTarget, { kind: 'checkpoint' }>,
-  config: Config,
-  projectHash: string,
-  chatsDir: string,
-  sessionClient: RecordingClientOwner,
-): Promise<ResolvedRecording> {
-  const result = await new SessionTransitionService({
-    mediaStore: clientMediaStore(sessionClient.getAgentClient()),
-    maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
-  }).forkFromCheckpoint(
-    target,
-    chatsDir,
-    projectHash,
-    config.getProvider() ?? 'unknown',
-    config.getModel(),
-    [...sessionClient.workspaceDirectories()],
-  );
-  if (!result.ok) {
-    throw new Error(`Failed to fork checkpoint: ${result.error}`);
-  }
-  return {
-    recordingService: result.recording,
-    resumedBoot: result.boot,
-    discardOnFailure: true,
-    resumedLockHandle: result.lockHandle,
-    resumedSessionId: result.metadata.sessionId,
-    startupWarnings: [],
-  };
-}
-
-async function freshSessionRecording(
-  config: Config,
-  projectHash: string,
-  chatsDir: string,
-  sessionClient: RecordingClientOwner,
-  startupWarnings: string[],
-): Promise<ResolvedRecording> {
-  return {
-    recordingService: await buildNewRecordingService(
-      config,
-      projectHash,
-      chatsDir,
-      sessionClient,
-    ),
-    resumedBoot: null,
-    resumedLockHandle: null,
-    resumedSessionId: null,
-    startupWarnings,
-  };
-}
-
-/** Resume the readable session a startup --continue reference resolved to. */
-async function resumeReadableSession(
-  config: Config,
-  projectHash: string,
-  chatsDir: string,
-  sessionClient: RecordingClientOwner,
-  refs: { continueRef: string; resumeRef: string },
-  startupWarnings: string[],
-): Promise<ResolvedRecording> {
-  const resumeResult = await resumeSession({
-    continueRef: refs.resumeRef,
-    projectHash,
-    chatsDir,
-    currentProvider: config.getProvider() ?? 'unknown',
-    currentModel: config.getModel(),
-    workspaceDirs: [...sessionClient.workspaceDirectories()],
-    mediaStore: clientMediaStore(sessionClient.getAgentClient()),
-    maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
-  });
-
-  if (!resumeResult.ok) {
-    recordStartupWarning(
-      startupWarnings,
-      `Could not resume session (ref: ${refs.continueRef}): ${resumeResult.error}`,
-    );
-    return freshSessionRecording(
-      config,
-      projectHash,
-      chatsDir,
-      sessionClient,
-      startupWarnings,
-    );
-  }
-
-  for (const warning of resumeResult.warnings) {
-    recordStartupWarning(startupWarnings, warning);
-  }
-  return {
-    recordingService: resumeResult.recording,
-    resumedBoot: resumeResult.boot,
-    resumedLockHandle: resumeResult.lockHandle,
-    resumedSessionId: resumeResult.metadata.sessionId,
-    startupWarnings,
-  };
-}
-
-async function buildFallbackRecording(
-  config: Config,
-  projectHash: string,
-  chatsDir: string,
-  sessionClient: RecordingClientOwner,
-): Promise<SessionRecordingPort> {
-  try {
-    return await buildNewRecordingService(
-      config,
-      projectHash,
-      chatsDir,
-      sessionClient,
-    );
-  } catch (error) {
-    throw new Error(
-      `Failed to create fallback recording service: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
-function ownCliPolicy(owner: RuntimePolicyOwner): RuntimePolicyOwner {
-  registerCleanup(() => owner.dispose());
-  return owner;
-}
-
-async function discoverCliProviderContributions() {
+export async function discoverCliProviderContributions() {
   const { loadInstalledRuntimePlugins } = await import(
     '@vybestack/llxprt-code-providers/composition.js'
   );
@@ -821,82 +333,4 @@ async function discoverCliProviderContributions() {
   );
 
   return { providerContributions, authFactories };
-}
-
-/**
- * Resume a recording session if --continue was supplied, otherwise create a
- * new one. Falls back to a new session when resume fails. Recordings that
- * cannot be replayed never block healthy sessions; they are reported in one
- * warning (or, when the reference names one, in the resume failure warning).
- */
-export async function createOrResumeRecording(
-  config: Config,
-  projectHash: string,
-  chatsDir: string,
-  sessionClient: RecordingClientOwner,
-): Promise<ResolvedRecording> {
-  const continueRef = config.getContinueSessionRef();
-  if (!continueRef) {
-    return freshSessionRecording(
-      config,
-      projectHash,
-      chatsDir,
-      sessionClient,
-      [],
-    );
-  }
-  const startupWarnings: string[] = [];
-
-  const { targets, unreadableRecordings } =
-    await SessionDiscovery.listContinueTargetsDetailed(
-      chatsDir,
-      projectHash,
-      clientMediaStore(sessionClient.getAgentClient()),
-    );
-  const { resumeRef, namedUnreadable } = classifyContinueRef(
-    continueRef,
-    targets,
-    unreadableRecordings,
-  );
-  warnSkippedRecordings(
-    unreadableRecordings.filter(
-      (recording) => !namedUnreadable.includes(recording),
-    ),
-    startupWarnings,
-  );
-  if (namedUnreadable.length > 0) {
-    recordStartupWarning(
-      startupWarnings,
-      `Could not resume session (ref: ${continueRef}): the recording is unreadable:\n` +
-        describeUnreadableRecordings(namedUnreadable),
-    );
-    return freshSessionRecording(
-      config,
-      projectHash,
-      chatsDir,
-      sessionClient,
-      startupWarnings,
-    );
-  }
-
-  const checkpointTarget = startupCheckpointTarget(continueRef, targets);
-  if (checkpointTarget !== null) {
-    const forked = await forkStartupCheckpoint(
-      checkpointTarget,
-      config,
-      projectHash,
-      chatsDir,
-      sessionClient,
-    );
-    return { ...forked, startupWarnings };
-  }
-
-  return resumeReadableSession(
-    config,
-    projectHash,
-    chatsDir,
-    sessionClient,
-    { continueRef, resumeRef },
-    startupWarnings,
-  );
 }

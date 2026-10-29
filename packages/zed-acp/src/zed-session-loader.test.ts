@@ -69,7 +69,7 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
     };
 
     const exists = await hasRecordedSessionFile(
-      buildConfig(),
+      buildConfig().projectChatsDir,
       sessionId,
       lister,
     );
@@ -86,7 +86,7 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
     ];
 
     const exists = await hasRecordedSessionFile(
-      buildConfig(),
+      buildConfig().projectChatsDir,
       'sess-1234567890ab',
       lister,
     );
@@ -97,7 +97,7 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
   it('reports false when the chats dir is empty (fresh project, no recordings yet)', async () => {
     const lister: ChatSessionFileLister = async () => [];
     const exists = await hasRecordedSessionFile(
-      buildConfig(),
+      buildConfig().projectChatsDir,
       'sess-1234567890ab',
       lister,
     );
@@ -119,7 +119,11 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
 
     // Must resolve false (not reject): a missing directory routes to re-attach.
     await expect(
-      hasRecordedSessionFile(buildConfig(), 'sess-1234567890ab', lister),
+      hasRecordedSessionFile(
+        buildConfig().projectChatsDir,
+        'sess-1234567890ab',
+        lister,
+      ),
     ).resolves.toBe(false);
     // ENOENT is expected → logged at debug only, NOT warn.
     expect(warnSpy).not.toHaveBeenCalled();
@@ -131,7 +135,11 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
     };
 
     await expect(
-      hasRecordedSessionFile(buildConfig(), 'sess-1234567890ab', lister),
+      hasRecordedSessionFile(
+        buildConfig().projectChatsDir,
+        'sess-1234567890ab',
+        lister,
+      ),
     ).rejects.toThrow('EACCES');
   });
 
@@ -143,7 +151,7 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
     ];
 
     const exists = await hasRecordedSessionFile(
-      buildConfig(),
+      buildConfig().projectChatsDir,
       sessionId,
       lister,
     );
@@ -159,7 +167,9 @@ describe('readAgentHistoryAsIContent (issue #1604 re-attach replay bridge)', () 
         const client = replayClient(history);
         let index = 0;
         try {
-          for await (const row of readAgentHistoryAsIContent(client)) {
+          for await (const row of readAgentHistoryAsIContent((signal) =>
+            client.streamHistory(signal),
+          )) {
             expect(row).toStrictEqual(accountingRow(index++));
           }
           expect(index).toBe(2);
@@ -176,9 +186,13 @@ describe('readAgentHistoryAsIContent (issue #1604 re-attach replay bridge)', () 
     await withSuffixFixture(0, async (history) => {
       const client = replayClient(history);
       try {
-        expect((await readAgentHistoryAsIContent(client).next()).done).toBe(
-          true,
-        );
+        expect(
+          (
+            await readAgentHistoryAsIContent((signal) =>
+              client.streamHistory(signal),
+            ).next()
+          ).done,
+        ).toBe(true);
       } finally {
         await client.dispose();
       }

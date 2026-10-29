@@ -16,18 +16,19 @@
  */
 
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { describe, it } from 'bun:test';
 import * as fc from 'fast-check';
 import { ChatSession } from '../chatSession.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
 import {
-  resetCallIds,
-  makeUserMessage,
-  makeAiText,
   addPrunableReadWritePair,
-  buildRuntimeContext,
   buildMockContentGenerator,
+  buildRuntimeContext,
   getInternals,
+  makeAiText,
+  makeUserMessage,
+  resetCallIds,
 } from './chatSession-density-helpers.js';
 
 type RawHistoryEntry =
@@ -74,7 +75,19 @@ const densityFixture1_observeEmptyResultProducesNoHistoryChanges = async () => {
         compressionStrategy: 'high-density',
       });
       const gen = buildMockContentGenerator();
-      const chat = new ChatSession(ctx, gen, {}, []);
+      const chat = new ChatSession(
+        chatSessionPorts(ctx),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        gen,
+        {},
+        [],
+      );
       const internals = getInternals(chat);
       internals.densityDirty = true;
 
@@ -115,7 +128,19 @@ const densityFixture2_observeOptimizationOnlyRemovesEntriesNeverFabricatesNewOne
           compressionStrategy: 'high-density',
         });
         const gen = buildMockContentGenerator();
-        const chat = new ChatSession(ctx, gen, {}, []);
+        const chat = new ChatSession(
+          chatSessionPorts(ctx),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          gen,
+          {},
+          [],
+        );
         const internals = getInternals(chat);
         internals.densityDirty = true;
 
@@ -151,7 +176,19 @@ const densityFixture3_observeConsecutiveCleanOptimizationsAreNoOps =
           compressionStrategy: 'high-density',
         });
         const gen = buildMockContentGenerator();
-        const chat = new ChatSession(ctx, gen, {}, []);
+        const chat = new ChatSession(
+          chatSessionPorts(ctx),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          gen,
+          {},
+          [],
+        );
         const internals = getInternals(chat);
 
         // First optimization
@@ -318,7 +355,19 @@ async function observeDensityCase4() {
           compressionStrategy: strategyName,
         });
         const gen = buildMockContentGenerator();
-        const chat = new ChatSession(ctx, gen, {}, []);
+        const chat = new ChatSession(
+          chatSessionPorts(ctx),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          gen,
+          {},
+          [],
+        );
         const internals = getInternals(chat);
         internals.densityDirty = true;
 
@@ -348,7 +397,19 @@ async function observeDensityCase5() {
           compressionStrategy: 'middle-out',
         });
         const gen = buildMockContentGenerator();
-        const chat = new ChatSession(ctx, gen, {}, []);
+        const chat = new ChatSession(
+          chatSessionPorts(ctx),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          gen,
+          {},
+          [],
+        );
         const internals = getInternals(chat);
         internals.densityDirty = true;
 
@@ -387,7 +448,19 @@ async function observeDensityCase6() {
           'compression.density.optimizeThreshold': 0, // Always run for test
         });
         const gen = buildMockContentGenerator();
-        const chat = new ChatSession(ctx, gen, {}, []);
+        const chat = new ChatSession(
+          chatSessionPorts(ctx),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          gen,
+          {},
+          [],
+        );
         const internals = getInternals(chat);
         internals.densityDirty = true;
 
@@ -426,7 +499,19 @@ async function observeDensityCase7() {
           compressionStrategy: 'high-density',
         });
         const gen = buildMockContentGenerator();
-        const chat = new ChatSession(ctx, gen, {}, []);
+        const chat = new ChatSession(
+          chatSessionPorts(ctx),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          gen,
+          {},
+          [],
+        );
         const internals = getInternals(chat);
         internals.densityDirty = true;
 
@@ -459,7 +544,19 @@ async function observeDensityCase8() {
           compressionStrategy: strategyName,
         });
         const gen = buildMockContentGenerator();
-        const chat = new ChatSession(ctx, gen, {}, []);
+        const chat = new ChatSession(
+          chatSessionPorts(ctx),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          gen,
+          {},
+          [],
+        );
         const internals = getInternals(chat);
         internals.densityDirty = false;
 

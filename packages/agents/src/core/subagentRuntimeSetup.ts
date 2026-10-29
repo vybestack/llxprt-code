@@ -1,3 +1,7 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
+import { createHistoryProviderFileBindingStore } from '@vybestack/llxprt-code-core/services/history/provider-file-binding.js';
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { buildToolGovernance } from '@vybestack/llxprt-code-tools';
 /**
  * @license
@@ -15,57 +19,56 @@ import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/serv
  * Extracted from subagent.ts as part of Issue #1581 (Phase 2).
  */
 
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
+import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
+import type { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import {
+  templateString,
+  type EnvironmentContextLoader,
+  type ModelConfig,
+  type OutputConfig,
+  type PromptConfig,
+  type ToolConfig,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import {
+  EmojiFilter,
+  type EmojiFilterMode,
+} from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type {
+  AgentRuntimeContext,
+  ReadonlySettingsSnapshot,
+  ToolMetadata,
+  ToolRegistryView,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
-import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
-import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import {
-  ChatSession,
-  type ChatSessionConfig,
-  type SystemPromptAssembler,
-} from './chatSession.js';
-import type {
-  AgentRuntimeContext,
-  ReadonlySettingsSnapshot,
-  ToolRegistryView,
-  ToolMetadata,
-} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import {
   canonicalizeToolName,
   INVALID_TOOL_NAME,
 } from '@vybestack/llxprt-code-tools/formatters/toolNameUtils.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import {
+  ChatSession,
+  type ChatSessionConfig,
+  type SystemPromptAssembler,
+} from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
+import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
+import { resolvePromptMemory } from './promptMemoryPolicy.js';
 import {
   getToolNameCandidates,
   isSubagentExcludedToolName,
   SUBAGENT_EXCLUDED_TOOL_NAMES,
 } from './toolGovernance.js';
-import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { resolvePromptMemory } from './promptMemoryPolicy.js';
-import {
-  EmojiFilter,
-  type EmojiFilterMode,
-} from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
-import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
-import type { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import {
-  templateString,
-  type ToolConfig,
-  type OutputConfig,
-  type ModelConfig,
-  type PromptConfig,
-  type EnvironmentContextLoader,
-} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 
 // ---------------------------------------------------------------------------
 // Simple utilities
@@ -247,7 +250,9 @@ export function buildEphemeralSettings(
  *
  */
 export function createToolExecutionConfig(
-  runtimeBundle: AgentRuntimeLoaderResult,
+  telemetry: RootTelemetry,
+  readExecutionPolicy: ToolExecutionConfig['readExecutionPolicy'],
+  getSessionId: () => string,
   toolRegistry: ToolSelection,
   settingsSnapshot?: ReadonlySettingsSnapshot,
   toolConfig?: ToolConfig,
@@ -260,11 +265,10 @@ export function createToolExecutionConfig(
   }
 
   return {
-    telemetry: runtimeBundle.telemetryRoot,
+    telemetry,
     readApprovalMode,
     getToolRegistry: () => toolRegistry,
-    readExecutionPolicy: () =>
-      runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+    readExecutionPolicy,
     readGovernance: () =>
       buildToolGovernance({
         getEphemeralSettings: () => ({
@@ -277,7 +281,7 @@ export function createToolExecutionConfig(
     // tools (task/list_subagents) so they can never be executed by a subagent
     // runtime, regardless of registry resolution or ephemeral whitelist state.
     getExcludeTools: () => Array.from(SUBAGENT_EXCLUDED_TOOL_NAMES),
-    getSessionId: () => runtimeBundle.runtimeContext.state.sessionId,
+    getSessionId,
     getTelemetryLogPromptsEnabled: () =>
       Boolean(settingsSnapshot?.telemetry?.enabled),
   };
@@ -602,6 +606,9 @@ export interface CreateChatObjectParams {
 
 export async function createChatObject(
   params: CreateChatObjectParams,
+  providerFileLifecycle: ProviderFileLifecycle | undefined,
+  tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
+  readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
 ): Promise<ChatSession | null> {
   const { promptConfig, modelConfig, outputConfig, toolConfig } = params;
   const { runtimeContext, contentGenerator, environmentContextLoader } = params;
@@ -669,9 +676,14 @@ export async function createChatObject(
     combinedDeclarations,
     startHistory,
     runtimeContext,
+    config,
     contentGenerator,
     logger,
     systemPromptAssembler,
+    providerFileLifecycle,
+    config.getImagePayloadBudgetBytes(),
+    tryBucketFailover,
+    readCurrentBucket,
   );
 }
 
@@ -752,9 +764,14 @@ function instantiateChat(
   combinedDeclarations: ToolDeclaration[],
   startHistory: IContent[],
   runtimeContext: AgentRuntimeContext,
+  config: Config,
   contentGenerator: ContentGenerator,
   _logger: { debug: (fn: () => string) => void },
-  systemPromptAssembler?: SystemPromptAssembler,
+  systemPromptAssembler: SystemPromptAssembler | undefined,
+  providerFileLifecycle: ProviderFileLifecycle | undefined,
+  requestMediaBudgetBytes: number,
+  tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
+  readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
 ): ChatSession | null {
   try {
     const generationConfig: ChatSessionConfig = {
@@ -765,7 +782,14 @@ function instantiateChat(
     };
 
     return new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
+      config,
+      runtimeContext.mediaResolver,
+      requestMediaBudgetBytes,
+      createHistoryProviderFileBindingStore(runtimeContext.history),
+      providerFileLifecycle,
+      tryBucketFailover,
+      readCurrentBucket,
       contentGenerator,
       generationConfig,
       startHistory,
@@ -785,17 +809,11 @@ function instantiateChat(
 }
 
 export function createSubagentProviderRuntime(
-  handle: IsolatedRuntimeContextHandle,
-  provider: string,
+  runtimeId: string,
   subagent: string,
 ): ProviderRuntimeContext {
-  const profileId = handle.settingsService.getCurrentProfileName() ?? undefined;
   return createProviderRuntimeContext({
-    ...handle.oauthManager.composeRetryOperations(provider, { profileId }),
-    settingsService: handle.settingsService,
-    config: handle.config,
-    providerFileLifecycle: handle.providerFileLifecycle,
-    runtimeId: handle.runtimeId,
+    runtimeId,
     metadata: { source: 'SubagentOrchestrator', subagent },
   });
 }

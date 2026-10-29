@@ -9,6 +9,8 @@ import { scryptSync } from 'node:crypto';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
+import type * as undici from 'undici';
+import { createRequire } from 'node:module';
 import { z } from 'zod';
 
 const dir = process.env.PROFILE_PARITY_DIR;
@@ -16,6 +18,8 @@ if (!dir) throw new Error('PROFILE_PARITY_DIR is required');
 const keyringPath = join(dir, 'keyring.json');
 const eventsPath = join(dir, 'boundary-events.jsonl');
 const requestsPath = join(dir, 'requests.jsonl');
+// Lets the parent date the end of Bun boot and preload when a launch hangs.
+writeFileSync(join(dir, 'preload-loaded'), '');
 const keyringSchema = z.record(z.string());
 const requestSchema = z.object({ model: z.string() }).passthrough();
 const localFetch = globalThis.fetch;
@@ -331,3 +335,64 @@ async function interceptedFetch(
 globalThis.fetch = Object.assign(interceptedFetch, {
   preconnect: (): void => undefined,
 });
+
+function isAsyncBody(body: unknown): body is AsyncIterable<unknown> {
+  return (
+    typeof body === 'object' && body !== null && Symbol.asyncIterator in body
+  );
+}
+
+async function readDispatchBody(body: unknown): Promise<string> {
+  if (typeof body === 'string') return body;
+  if (body instanceof Uint8Array) return Buffer.from(body).toString('utf8');
+  if (!isAsyncBody(body)) throw new Error('Unexpected fixture upload body');
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of body) {
+    if (typeof chunk === 'string') chunks.push(Buffer.from(chunk));
+    else if (chunk instanceof Uint8Array) chunks.push(chunk);
+    else throw new Error('Unexpected fixture upload chunk');
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+const packageRequire = createRequire(
+  createRequire(import.meta.url).resolve('undici/package.json'),
+);
+const nativeUndici: typeof undici = packageRequire('./');
+const nativeDispatch = nativeUndici.Agent.prototype.dispatch;
+const mockTransport = new nativeUndici.Agent();
+mockTransport.dispatch = nativeDispatch;
+const network = new nativeUndici.MockAgent({ agent: mockTransport });
+network.disableNetConnect();
+for (const endpoint of httpEndpoints) {
+  const url = new URL(endpoint);
+  network
+    .get(url.origin)
+    .intercept({ path: url.pathname, method: 'POST' })
+    .reply(
+      200,
+      async (options) => {
+        const response = await interceptedFetch(endpoint, {
+          method: 'POST',
+          headers:
+            options.headers === undefined
+              ? undefined
+              : Object.fromEntries(new nativeUndici.Headers(options.headers)),
+          body: await readDispatchBody(options.body),
+        });
+        return response.text();
+      },
+      { headers: { 'content-type': 'text/event-stream' } },
+    )
+    .persist();
+}
+nativeUndici.Agent.prototype.dispatch = function (options, handler): boolean {
+  const url = new URL(options.path, options.origin);
+  if (options.method !== 'POST' || !httpEndpoints.includes(url.href)) {
+    observeUnexpectedNetwork(url, 'http', options.method);
+    throw new Error(
+      `Unexpected network endpoint: ${url.hostname}${url.pathname}`,
+    );
+  }
+  return network.dispatch(options, handler);
+};

@@ -217,6 +217,7 @@
         "@vybestack/llxprt-code-policy": "file:../policy",
         "@vybestack/llxprt-code-providers": "file:../providers",
         "@vybestack/llxprt-code-settings": "file:../settings",
+        "@vybestack/llxprt-code-telemetry": "file:../telemetry",
         "@vybestack/llxprt-code-tools": "file:../tools",
         "diff": "^8.0.3",
         "fast-levenshtein": "^2.0.6",
@@ -485,7 +486,6 @@
         "@vybestack/llxprt-code-mcp": "file:../mcp",
         "@vybestack/llxprt-code-settings": "file:../settings",
         "@vybestack/llxprt-code-storage": "file:../storage",
-        "@vybestack/llxprt-code-telemetry": "file:../telemetry",
         "@vybestack/llxprt-code-tools": "file:../tools",
         "ai": "^7.0.83",
         "comment-json": "^4.5.0",
@@ -499,6 +499,7 @@
         "@ai-sdk/provider-utils": "^5.0.32",
         "@types/node": "^24.2.1",
         "@types/ws": "^8.18.1",
+        "@vybestack/llxprt-code-telemetry": "file:../telemetry",
         "@vybestack/llxprt-code-test-utils": "file:../test-utils",
         "fast-check": "^4.3.0",
         "typescript": "^5.3.3",
@@ -2843,6 +2844,8 @@
 
     "@vue/compiler-core/entities": ["entities@7.0.1", "", {}, "sha512-TWrgLOFUQTH994YUyl1yT4uyavY5nNB5muff+RtWaqNVCAK408b5ZnnbNAUEWLTCpum9w6arT70i1XdQ4UeOPA=="],
 
+    "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-telemetry": ["@vybestack/llxprt-code-telemetry@file:packages/telemetry", { "dependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/api-logs": "^0.219.0", "@opentelemetry/context-async-hooks": "^2.8.0", "@opentelemetry/core": "^2.8.0", "@opentelemetry/instrumentation-http": "^0.219.0", "@opentelemetry/resources": "^2.8.0", "@opentelemetry/sdk-logs": "^0.219.0", "@opentelemetry/sdk-metrics": "^2.8.0", "@opentelemetry/sdk-trace-base": "^2.8.0", "@opentelemetry/sdk-trace-node": "^2.8.0", "@opentelemetry/semantic-conventions": "^1.29.0", "@vybestack/llxprt-code-storage": "file:../storage", "debug": "^4.3.4", "zod": "^3.25.76" }, "devDependencies": { "@types/debug": "^4.1.12", "@types/node": "^24.2.1", "fast-check": "^4.2.0", "typescript": "^5.3.3" } }],
+
     "@x70102/ink/string-width": ["string-width@7.2.0", "", { "dependencies": { "emoji-regex": "^10.3.0", "get-east-asian-width": "^1.0.0", "strip-ansi": "^7.1.0" } }, "sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ=="],
 
     "ansi-align/string-width": ["string-width@4.2.3", "", { "dependencies": { "emoji-regex": "^8.0.0", "is-fullwidth-code-point": "^3.0.0", "strip-ansi": "^6.0.1" } }, "sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g=="],
@@ -3080,6 +3083,8 @@
     "@ts-morph/common/minimatch/brace-expansion": ["brace-expansion@1.1.21", "", { "dependencies": { "balanced-match": "^1.0.0", "concat-map": "0.0.1" } }, "sha512-9zeA+KLZNNzglF2TPKRQEDyx6Yby7daAkuy8MiPzpXPsYDWi/DRM8jmwUDxokQjYqBpv5DgPiwD4h4ZZSy1Ujw=="],
 
     "@types/request/form-data/mime-types": ["mime-types@2.1.35", "", { "dependencies": { "mime-db": "1.52.0" } }, "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw=="],
+
+    "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-telemetry/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
 
     "ansi-align/string-width/emoji-regex": ["emoji-regex@8.0.0", "", {}, "sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A=="],
 

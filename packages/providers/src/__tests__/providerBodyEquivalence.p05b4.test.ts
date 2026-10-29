@@ -513,12 +513,12 @@ async function captureAnthropicBody(
   rows: readonly IContent[],
 ): Promise<string> {
   const settings = makeAnthropicSettings();
+  const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: 'p05b4-equivalence-anthropic',
-    config: createRuntimeConfigStub(settings),
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: (input, init) => globalThis.fetch(input, init),
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
     providerName: 'anthropic',
@@ -529,7 +529,7 @@ async function captureAnthropicBody(
     ...createProviderCallOptions({
       providerName: 'anthropic',
       settings,
-      config: runtime.config,
+      config,
       runtime,
       invocation,
       contents,
@@ -609,12 +609,12 @@ async function captureResponsesBodies(
   ephemerals: Record<string, unknown> = { 'prompt-caching': 'off' },
 ): Promise<FetchCall[]> {
   const settings = makeResponsesSettings();
+  const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: 'p05b4-equivalence-responses',
-    config: createRuntimeConfigStub(settings),
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: (input, init) => globalThis.fetch(input, init),
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
     providerName: 'openai-responses',
@@ -625,7 +625,7 @@ async function captureResponsesBodies(
     ...createProviderCallOptions({
       providerName: 'openai-responses',
       settings,
-      config: runtime.config,
+      config,
       runtime,
       invocation,
       contents,
@@ -832,12 +832,12 @@ describe('P05b4 openai-responses retry body stability @plan:PLAN-20260917-ISSUE8
     const bodies: string[] = [];
     const failingFetch = retryingFetch();
     const settings = makeResponsesSettings();
+    const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'p05b4-retry-stability',
-      config: createRuntimeConfigStub(settings),
     });
     const invocation = createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
       providerName: 'openai-responses',
@@ -853,7 +853,7 @@ describe('P05b4 openai-responses retry body stability @plan:PLAN-20260917-ISSUE8
       ...createProviderCallOptions({
         providerName: 'openai-responses',
         settings,
-        config: runtime.config,
+        config,
         runtime,
         invocation,
         contents,

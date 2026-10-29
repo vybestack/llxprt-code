@@ -56,8 +56,6 @@ export {
 export {
   ProviderKeyStorage,
   KEY_NAME_REGEX,
-  getProviderKeyStorage,
-  resetProviderKeyStorage,
   validateKeyName,
 } from './secure-store/provider-key-storage.js';
 export type { ProviderKeyStorageLike } from './secure-store/provider-key-storage.js';

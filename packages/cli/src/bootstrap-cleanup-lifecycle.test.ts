@@ -3,8 +3,27 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { SessionClientOwner } from '../../agents/src/session/session-client-owner.js';
-import { seedSessionRows } from './__tests__/journal-recording.js';
+import {
+  StartupExit,
+  expectClosed,
+  expectPreflightRetired,
+  transferActivation,
+  type StartupReceipt,
+} from './__tests__/startup-activation-fixture.js';
+import {
+  SessionSettingsOwner,
+  getProjectHash,
+  ApprovalMode,
+  Config,
+  ExitCodes,
+} from '@vybestack/llxprt-code-core';
+import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
+import {
+  parseBootstrapArgs,
+  prepareRuntimeForProfile,
+} from './config/profileBootstrap.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { recordStartupSession } from './__tests__/startup-recording-fixture.js';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import {
@@ -20,63 +39,39 @@ import { join, resolve } from 'node:path';
 import * as agents from '@vybestack/llxprt-code-agents';
 import * as stdio from '@vybestack/llxprt-code-core/utils/stdio.js';
 import {
-  assembleAgentActivationBootstrap,
+  AgentProfilePreflight,
   createAgent,
 } from '@vybestack/llxprt-code-agents';
 import commandExists from 'command-exists';
-import {
-  ApprovalMode,
-  Config,
-  ExitCodes,
-  createSessionRecorder,
-  getProjectHash,
-} from '@vybestack/llxprt-code-core';
 import * as acp from '@vybestack/llxprt-code-zed-acp';
 import * as sandbox from './utils/sandbox.js';
-import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   bootstrapRuntimeAndConfig,
   handleSessionListAndDelete,
 } from './cliSessionBootstrap.js';
+import { maybeHopIntoSandbox } from './cliSandbox.js';
 import { activateConfiguredProvider } from './cliProviderInit.js';
-import { constructAgentWithSpinner } from './cliTerminalSession.js';
-import { loadCliConfig } from './config/config.js';
+import { createForegroundAgent } from './cliAgentBootstrap.js';
+import { ignoreReady, loadCliConfig } from './config/config.js';
 import { loadSettings } from './config/settings.js';
 import { parseArguments } from './config/cliArgParser.js';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 import { main, __resetUnhandledRejectionStateForTesting } from './cli.js';
 import {
   runExitCleanup,
+  registerCleanup,
   __resetCleanupStateForTesting,
 } from './utils/cleanup.js';
+import { loadCliConfigWithPreflight } from './__tests__/load-cli-config-fixture.js';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
-
-type ObservedBootstrap = {
-  config: Config;
-  settingsService: Parameters<
-    typeof agents.assembleAgentActivationBootstrap
-  >[1];
-  providerManager: agents.Agent['providerManager'];
-  operation: agents.AgentActivationOperation;
-  receipt?: agents.ActivationPreflight;
-  intent?: agents.ProviderActivationIntent;
-};
-
-class StartupExit extends Error {
-  constructor(readonly code: string | number | null | undefined) {
-    super(`startup exit ${code}`);
-  }
-}
 
 describe('real startup activation owner cleanup', () => {
   let directory: string;
   let previousEnv: NodeJS.ProcessEnv;
   let previousArgv: string[];
   let previousCwd: string;
-  let observed: ObservedBootstrap[];
-  let probeReceipts = false;
-  let exitReceiptChecks: Array<Promise<agents.Agent>>;
+  let configs: Config[];
   const restore: Array<{ mockRestore(): void }> = [];
 
   beforeEach(async () => {
@@ -107,54 +102,9 @@ describe('real startup activation owner cleanup', () => {
     ];
     process.chdir(directory);
     __resetCleanupStateForTesting();
-    observed = [];
-    exitReceiptChecks = [];
-    probeReceipts = false;
-    const assemble = assembleAgentActivationBootstrap;
-    restore.push(
-      spyOn(agents, 'assembleAgentActivationBootstrap').mockImplementation(
-        (...args) => {
-          const operation = assemble(...args);
-          const observation: ObservedBootstrap = {
-            config: args[0],
-            settingsService: args[1],
-            providerManager: args[2],
-            operation,
-          };
-          observed.push(observation);
-          const preflight = operation.preflight.bind(operation);
-          restore.push(
-            spyOn(operation, 'preflight').mockImplementation(async (intent) => {
-              const result = await preflight(intent);
-              if (result.token) {
-                observation.receipt = { operation, token: result.token };
-                observation.intent = intent;
-              }
-              return result;
-            }),
-          );
-          return operation;
-        },
-      ),
-    );
+    configs = [];
     restore.push(
       spyOn(process, 'exit').mockImplementation((code) => {
-        for (const owner of observed) {
-          expectNoForeground(owner.config);
-          if (probeReceipts && owner.receipt) {
-            const check = agents.fromConfig({
-              settingsService: owner.settingsService,
-              providerManager: owner.providerManager,
-              config: owner.config,
-              // Reject an accidentally live receipt before async adoption can
-              // race main's finally after the simulated process exit.
-              sessionId: '',
-              ...requireReceipt(owner),
-            });
-            void check.catch(() => undefined);
-            exitReceiptChecks.push(check);
-          }
-        }
         throw new StartupExit(code);
       }),
     );
@@ -162,10 +112,7 @@ describe('real startup activation owner cleanup', () => {
 
   afterEach(async () => {
     await runExitCleanup();
-    for (const owner of observed) {
-      await owner.operation.dispose();
-      await owner.config.dispose();
-    }
+    for (const config of configs) await config.dispose();
     for (const spy of restore.splice(0).reverse()) spy.mockRestore();
     __resetUnhandledRejectionStateForTesting();
     __resetCleanupStateForTesting();
@@ -175,308 +122,449 @@ describe('real startup activation owner cleanup', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  function expectNoForeground(config: Config): void {
-    expect(config.hasInitializationStarted()).toBe(false);
-  }
-
   function currentRuntimeId(): string {
     const runtimeId = process.env.LLXPRT_RUNTIME_ID;
     if (!runtimeId) throw new Error('Runtime id was not configured');
     return runtimeId;
   }
 
-  function requireReceipt(owner: ObservedBootstrap): {
-    activation: agents.ProviderActivationIntent;
-    activationPreflight: agents.ActivationPreflight;
-  } {
-    if (!owner.receipt || !owner.intent)
-      throw new Error('Missing preflight receipt');
-    return { activation: owner.intent, activationPreflight: owner.receipt };
-  }
-
-  async function expectInvalidReceipt(owner: ObservedBootstrap): Promise<void> {
-    await expect(
-      agents.fromConfig({
-        settingsService: owner.settingsService,
-        providerManager: owner.providerManager,
-        config: owner.config,
-        ...requireReceipt(owner),
-      }),
-    ).rejects.toThrow('token is invalid or already consumed');
-  }
-
-  async function expectClosed(owner: ObservedBootstrap): Promise<void> {
-    const result = await owner.operation.preflight({ authMode: 'none' });
-    expect(result.authFailed).toBe(true);
-    expect(result.authError).toBeInstanceOf(Error);
-    if (!(result.authError instanceof Error))
-      throw new Error('Missing disposal error');
-    expect(result.authError.message).toContain('disposed');
-    expect(result.token).toBeUndefined();
-  }
-
-  async function expectClosedAtExit(code: number): Promise<void> {
-    await expect(main()).rejects.toMatchObject({ code });
-    expect(observed.length).toBeGreaterThan(0);
-    if (probeReceipts) expect(exitReceiptChecks.length).toBeGreaterThan(0);
-    for (const check of exitReceiptChecks) {
-      await expect(check).rejects.toThrow(
-        'token is invalid or already consumed',
-      );
-    }
-    for (const owner of observed) await expectClosed(owner);
-  }
-
-  it.each(['activation', 'receipt'])(
-    'closes an untransferred owner when standalone loadCliConfig returns (%s)',
-    async (probe) => {
-      const settings = loadSettings(directory);
-      const argv = await parseArguments(settings.merged);
-      const config = await loadCliConfig(
-        settings.merged,
-        [],
-        new ExtensionEnablementManager(directory, []),
-        'standalone',
-        argv,
-        directory,
-      );
-      expect(observed).toHaveLength(1);
-      const owner = observed[0];
-      expect(owner.config).toBe(config);
-      expect(owner.receipt).toBeDefined();
-      if (probe === 'receipt') {
-        await expectInvalidReceipt(owner);
-      } else {
-        await expectClosed(owner);
-      }
-    },
-  );
-
-  it('closes the owner when finalization fails before handoff', async () => {
+  /**
+   * The startup steps `main()` composes before any Agent exists: the
+   * preflight `prepareRuntimeForProfile` returns and the Config
+   * `bootstrapRuntimeAndConfig` resolves over it (which registers the
+   * preflight's disposal as an exit cleanup).
+   */
+  async function bootstrapStartup() {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    await expect(
-      loadCliConfig(
-        settings.merged,
-        [],
-        new ExtensionEnablementManager(directory, []),
-        'finalization-failure',
-        argv,
-        directory,
-        {
-          onProviderSwitchReady: () => {
-            throw new Error('finalization interrupted');
-          },
-        },
-      ),
-    ).rejects.toThrow('finalization interrupted');
-    expect(observed).toHaveLength(1);
-    await expectClosed(observed[0]);
+    const authority = new CredentialAuthority();
+    const parsed = parseBootstrapArgs();
+    const preflight = await prepareRuntimeForProfile(
+      { ...parsed, runtimeMetadata: { ...parsed.runtimeMetadata } },
+      authority,
+      new SettingsService(),
+      undefined,
+      undefined,
+    );
+    const config = await bootstrapRuntimeAndConfig(
+      settings,
+      argv,
+      directory,
+      preflight,
+    );
+    configs.push(config);
+    return { settings, argv, authority, preflight, config };
+  }
+
+  async function receiptFor(
+    startup: Awaited<ReturnType<typeof bootstrapStartup>>,
+  ): Promise<StartupReceipt> {
+    const activation = await activateConfiguredProvider(
+      startup.config,
+      startup.preflight,
+      startup.argv,
+      startup.preflight,
+    );
+    expect(activation.authFailed).toBe(false);
+    if (activation.token === undefined)
+      throw new Error('Missing foreground receipt');
+    return { token: activation.token, intent: activation.intent ?? {} };
+  }
+
+  /**
+   * Standalone `loadCliConfig` through the fixture. The untransferred
+   * activation is the preflight itself (`onPreflightReady` hands it out before
+   * finalization); a wrapped `preflight` on that instance keeps the receipt
+   * loadCliConfig issues.
+   */
+  async function loadStandalone(
+    sessionId: string,
+    extra: Partial<Parameters<typeof loadCliConfigWithPreflight>[0]> = {},
+  ) {
+    const settings = loadSettings(directory);
+    const argv = await parseArguments(settings.merged);
+    const captured: {
+      preflight?: AgentProfilePreflight;
+      receipt?: StartupReceipt;
+    } = {};
+    const load = loadCliConfigWithPreflight({
+      settings: settings.merged,
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(directory, {
+        enabledOverride: [],
+      }),
+      sessionId,
+      argv,
+      cwd: directory,
+      authority: new CredentialAuthority(),
+      onPreflightReady: (preflight) => {
+        captured.preflight = preflight;
+        const original = preflight.preflight.bind(preflight);
+        restore.push(
+          spyOn(preflight, 'preflight').mockImplementation(async (intent) => {
+            const result = await original(intent);
+            if (result.token)
+              captured.receipt = { token: result.token, intent };
+            return result;
+          }),
+        );
+      },
+      ...extra,
+    });
+    return { captured, load };
+  }
+
+  function requirePreflight(captured: {
+    preflight?: AgentProfilePreflight;
+  }): AgentProfilePreflight {
+    if (captured.preflight === undefined)
+      throw new Error('Missing standalone preflight');
+    return captured.preflight;
+  }
+
+  it('closes an untransferred owner when standalone loadCliConfig returns (activation)', async () => {
+    const { captured, load } = await loadStandalone('standalone');
+    configs.push(await load);
+    expect(captured.receipt).toBeDefined();
+    await expectClosed(requirePreflight(captured));
   });
 
-  it.each(['activation', 'receipt'])(
-    'invalidates the receipt before list-extensions exits, without adopting a foreground Agent (%s)',
-    async (probe) => {
-      probeReceipts = probe === 'receipt';
-      process.argv.push('--list-extensions');
-      await expectClosedAtExit(0);
-      expect(observed).toHaveLength(1);
-    },
-  );
+  it('retires the receipt of an untransferred owner when standalone loadCliConfig returns (receipt)', async () => {
+    const { captured, load } = await loadStandalone('standalone-receipt');
+    configs.push(await load);
+    if (!captured.receipt) throw new Error('Missing standalone receipt');
+    await expect(
+      AgentProfilePreflight.createForegroundAgent(
+        requirePreflight(captured),
+        captured.receipt.token,
+        captured.receipt.intent,
+        {},
+      ),
+    ).rejects.toThrow('disposed');
+  });
 
-  it('keeps the explicit activation owner usable during ACP and closes it when the protocol server returns', async () => {
+  it('closes the owner when finalization fails before handoff', async () => {
+    const { captured, load } = await loadStandalone('finalization-failure', {
+      onProviderSwitchReady: () => {
+        throw new Error('finalization interrupted');
+      },
+    });
+    await expect(load).rejects.toThrow('finalization interrupted');
+    await expectClosed(requirePreflight(captured));
+  });
+
+  // main() part: the list-extensions exit code. Domain part: the startup exits
+  // main() composes (exitAfterExtensionList disposes the preflight;
+  // exitIfDirectImage, exitIfAuthenticationFailed and maybeHopIntoSandbox run
+  // the exit cleanup that bootstrapRuntimeAndConfig registered) retire the
+  // preflight and any receipt it issued.
+  it('exits 0 for list-extensions without adopting a foreground Agent', async () => {
+    process.argv.push('--list-extensions');
+    await expect(main()).rejects.toMatchObject({ code: 0 });
+  });
+
+  it.each([
+    [
+      'exitAfterExtensionList',
+      (preflight: AgentProfilePreflight) => preflight.dispose(),
+    ],
+    [
+      'the exit cleanup of exitIfDirectImage and exitIfAuthenticationFailed',
+      () => runExitCleanup(),
+    ],
+  ])('retires the preflight and its receipt on %s', async (_name, exit) => {
+    const startup = await bootstrapStartup();
+    const receipt = await receiptFor(startup);
+    expect(receipt.token).toBeDefined();
+    await exit(startup.preflight);
+    await expectPreflightRetired(startup.preflight, receipt);
+  });
+
+  // main() part: the ACP route runs the protocol server and returns. Domain
+  // part: over the startup main() composes for ACP (bootstrapRuntimeAndConfig,
+  // then the activation preflight handleActivatedZedIntegration leaves
+  // usable), the preflight stays usable until the exit cleanup retires it.
+  it('runs the ACP protocol server once and returns', async () => {
     process.argv.push('--experimental-acp');
-    let checked = false;
+    let served = 0;
     restore.push(
-      spyOn(acp, 'runZedIntegration').mockImplementation(async () => {
-        expect(observed).toHaveLength(1);
-        expect(observed[0].config.hasInitializationStarted()).toBe(false);
-        expect(
-          observed[0].operation.sessionClient.getAgentClient(),
-        ).toBeDefined();
-        const preflight = await observed[0].operation.preflight({
-          authMode: 'none',
-        });
-        expect(preflight.authFailed).toBe(false);
-        expect(preflight.token).toBeDefined();
-        checked = true;
+      spyOn(acp, 'runZedIntegration').mockImplementation(async (config) => {
+        expect(config.getExperimentalZedIntegration()).toBe(true);
+        served += 1;
       }),
     );
     await main();
-    expect(checked).toBe(true);
-    await expectClosed(observed[0]);
+    expect(served).toBe(1);
   });
 
-  it.each(['activation', 'receipt'])(
-    'closes the transferred owner on direct-image failure before conversational dispatch (%s)',
-    async (probe) => {
-      probeReceipts = probe === 'receipt';
-      process.argv = [
-        ...process.argv.slice(0, 6),
-        '--image-prompt',
-        'a tree',
-        '--image-output',
-        'tree.png',
-      ];
-      await expectClosedAtExit(1);
-      expect(observed).toHaveLength(1);
-    },
-  );
+  it('keeps the explicit activation preflight usable during ACP and retires it with the exit cleanup', async () => {
+    process.argv.push('--experimental-acp');
+    const startup = await bootstrapStartup();
+    expect(startup.config.getExperimentalZedIntegration()).toBe(true);
+    const result = await startup.preflight.preflight({ authMode: 'none' });
+    expect(result.authFailed).toBe(false);
+    expect(result.token).toBeDefined();
+    await runExitCleanup();
+    expect(() => startup.preflight.preflight({ authMode: 'none' })).toThrow(
+      'disposed',
+    );
+  });
 
-  it.each(['activation', 'receipt'])(
-    'closes the owner on fatal authentication before foreground assembly (%s)',
-    async (probe) => {
-      probeReceipts = probe === 'receipt';
-      restore.push(
-        spyOn(SessionClientOwner.prototype, 'refreshAuth').mockRejectedValue(
-          new Error('credential service unavailable'),
-        ),
-      );
-      await expectClosedAtExit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
-      expect(observed).toHaveLength(1);
-    },
-  );
+  it('exits 1 on direct-image failure before conversational dispatch', async () => {
+    process.argv = [
+      ...process.argv.slice(0, 6),
+      '--image-prompt',
+      'a tree',
+      '--image-output',
+      'tree.png',
+    ];
+    await expect(main()).rejects.toMatchObject({ code: 1 });
+  });
 
-  it.each(['activation', 'receipt'])(
-    'closes parent and standalone sandbox owners when the sandbox child exits (%s)',
-    async (probe) => {
-      probeReceipts = probe === 'receipt';
+  // exitBeforeAgent (exitIfAuthenticationFailed) runs the exit cleanup and
+  // exits ExitCodes.FATAL_AUTHENTICATION_ERROR when the activation preflight
+  // reports authFailed. No input to main() makes the fake provider's
+  // authentication fail (tried: a missing replay file throws ENOENT, an
+  // unconfigured or empty-keyfile openai provider authenticates lazily and
+  // fails later with exit 1), so the failed preflight is driven directly.
+  it('reports a failed activation without a receipt and retires the preflight on the exit cleanup', async () => {
+    const startup = await bootstrapStartup();
+    const failed = await startup.preflight.preflight({
+      provider: 'no-such-provider',
+      authMode: 'auto',
+    });
+    expect(failed.authFailed).toBe(true);
+    expect(failed.token).toBeUndefined();
+    await runExitCleanup();
+    expect(() => startup.preflight.preflight({ authMode: 'none' })).toThrow(
+      'disposed',
+    );
+  });
+
+  it('closes an untransferred owner when keyfile loading fails during finalization', async () => {
+    delete process.env.LLXPRT_FAKE_RESPONSES;
+    process.argv[3] = 'openai';
+    process.argv.push('--keyfile', resolve(directory, 'missing-key'));
+    const { captured, load } = await loadStandalone('keyfile-failure');
+    await expect(load).rejects.toThrow('missing-key');
+    await expectClosed(requirePreflight(captured));
+  });
+
+  // main() parts of the sandbox hop: the exit code and spawn failure it
+  // surfaces. Domain part: maybeHopIntoSandbox over a bootstrapped startup,
+  // with the forked sandbox preflight it is handed.
+  describe('sandbox hop', () => {
+    function enableSandbox(): void {
       process.argv.push('--sandbox', '--sandbox-engine', 'docker');
       restore.push(spyOn(commandExists, 'sync').mockReturnValue(true));
+    }
+
+    async function hop(
+      startup: Awaited<ReturnType<typeof bootstrapStartup>>,
+    ): Promise<{ forked: () => AgentProfilePreflight; done: Promise<void> }> {
+      let forked: AgentProfilePreflight | undefined;
+      const done = maybeHopIntoSandbox({
+        config: startup.config,
+        settings: startup.settings,
+        argv: startup.argv,
+        workspaceRoot: directory,
+        prepareSandboxPreflight: async () => {
+          forked = await startup.preflight.forkSandboxPreflight();
+          return forked;
+        },
+        initialAuthFailed: false,
+        readStdin: async () => '',
+        hasPipedInput: false,
+        bootstrapSelection: null,
+      });
+      return {
+        done,
+        forked: () => {
+          if (forked === undefined)
+            throw new Error('Missing sandbox preflight');
+          return forked;
+        },
+      };
+    }
+
+    it('exits 0 when the sandbox child exits', async () => {
+      enableSandbox();
       let launched = false;
       restore.push(
         spyOn(sandbox, 'start_sandbox').mockImplementation(async () => {
-          expect(observed).toHaveLength(2);
-          expect(observed[0].config.hasInitializationStarted()).toBe(false);
-          expect(observed[1].config.hasInitializationStarted()).toBe(false);
-          if (!probeReceipts) await expectClosed(observed[1]);
           launched = true;
           return 0;
         }),
       );
-      await expectClosedAtExit(0);
+      await expect(main()).rejects.toMatchObject({ code: 0 });
       expect(launched).toBe(true);
-    },
-  );
+    });
 
-  it('closes an untransferred owner when keyfile loading fails during finalization', async () => {
-    process.argv.push('--keyfile', resolve(directory, 'missing-key'));
-    const settings = loadSettings(directory);
-    const argv = await parseArguments(settings.merged);
-    await expect(
-      loadCliConfig(
-        settings.merged,
-        [],
-        new ExtensionEnablementManager(directory, []),
-        'keyfile-failure',
-        argv,
-        directory,
-      ),
-    ).rejects.toThrow('missing-key');
-    expect(observed).toHaveLength(1);
-    await expectClosed(observed[0]);
+    it('closes the forked sandbox preflight before the child runs and the parent when the child exits', async () => {
+      enableSandbox();
+      const startup = await bootstrapStartup();
+      const receipt = await receiptFor(startup);
+      const hopped: { forked?: () => AgentProfilePreflight } = {};
+      let launched = false;
+      restore.push(
+        spyOn(sandbox, 'start_sandbox').mockImplementation(async () => {
+          const forked = hopped.forked?.();
+          if (forked === undefined)
+            throw new Error('Missing sandbox preflight');
+          expect(() => forked.preflight({ authMode: 'none' })).toThrow(
+            'disposed',
+          );
+          expect(forked.captureSettingsSnapshot()).toStrictEqual(
+            startup.preflight.captureSettingsSnapshot(),
+          );
+          expect(
+            await Array.fromAsync(startup.preflight.captureHistory()),
+          ).toStrictEqual([]);
+          launched = true;
+          return 0;
+        }),
+      );
+      const started = await hop(startup);
+      hopped.forked = started.forked;
+      await expect(started.done).rejects.toMatchObject({ code: 0 });
+      expect(launched).toBe(true);
+      await runExitCleanup();
+      await expectPreflightRetired(startup.preflight, receipt);
+    });
+
+    it('rejects with the spawn failure from main() when the sandbox process cannot start', async () => {
+      enableSandbox();
+      restore.push(
+        spyOn(sandbox, 'start_sandbox').mockRejectedValue(
+          new Error('sandbox spawn failed'),
+        ),
+      );
+      await expect(main()).rejects.toThrow('sandbox spawn failed');
+    });
+
+    it('closes the forked and parent preflights when the sandbox process cannot start', async () => {
+      enableSandbox();
+      const startup = await bootstrapStartup();
+      const receipt = await receiptFor(startup);
+      restore.push(
+        spyOn(sandbox, 'start_sandbox').mockRejectedValue(
+          new Error('sandbox spawn failed'),
+        ),
+      );
+      const started = await hop(startup);
+      await expect(started.done).rejects.toThrow('sandbox spawn failed');
+      expect(() => started.forked().preflight({ authMode: 'none' })).toThrow(
+        'disposed',
+      );
+      await runExitCleanup();
+      await expectPreflightRetired(startup.preflight, receipt);
+    });
+
+    it('exits fatal authentication before launching a sandbox child or forking a sandbox preflight', async () => {
+      enableSandbox();
+      const startup = await bootstrapStartup();
+      const receipt = await receiptFor(startup);
+      let launched = false;
+      let forked = false;
+      restore.push(
+        spyOn(sandbox, 'start_sandbox').mockImplementation(async () => {
+          launched = true;
+          return 0;
+        }),
+      );
+      await expect(
+        maybeHopIntoSandbox({
+          config: startup.config,
+          settings: startup.settings,
+          argv: startup.argv,
+          workspaceRoot: directory,
+          prepareSandboxPreflight: async () => {
+            forked = true;
+            return startup.preflight.forkSandboxPreflight();
+          },
+          initialAuthFailed: true,
+          readStdin: async () => '',
+          hasPipedInput: false,
+          bootstrapSelection: null,
+        }),
+      ).rejects.toMatchObject({ code: ExitCodes.FATAL_AUTHENTICATION_ERROR });
+      expect(launched).toBe(false);
+      expect(forked).toBe(false);
+      await expectPreflightRetired(startup.preflight, receipt);
+    });
   });
 
-  it('closes the transferred owner when the sandbox process cannot start', async () => {
-    process.argv.push('--sandbox', '--sandbox-engine', 'docker');
-    restore.push(spyOn(commandExists, 'sync').mockReturnValue(true));
-    restore.push(
-      spyOn(sandbox, 'start_sandbox').mockRejectedValue(
-        new Error('sandbox spawn failed'),
-      ),
-    );
-    await expect(main()).rejects.toThrow('sandbox spawn failed');
-    expect(observed).toHaveLength(2);
-    for (const owner of observed) {
-      expectNoForeground(owner.config);
-      await expectClosed(owner);
+  it('keeps the caller Config usable while adopted foreground trust retires', async () => {
+    const settings = loadSettings(directory);
+    const argv = await parseArguments(settings.merged);
+    const credentialAuthority = new CredentialAuthority();
+    const callerSettings = new SettingsService();
+    const callerOwner = new SessionSettingsOwner(callerSettings);
+    try {
+      const parsed = parseBootstrapArgs();
+      const preflight = await prepareRuntimeForProfile(
+        {
+          ...parsed,
+          runtimeMetadata: {
+            ...parsed.runtimeMetadata,
+          },
+        },
+        credentialAuthority,
+        callerSettings,
+        callerOwner,
+        undefined,
+      );
+      registerCleanup(() => preflight.dispose());
+      const config = await loadCliConfig(
+        {
+          settings: settings.merged,
+          extensions: [],
+          extensionEnablementManager: new ExtensionEnablementManager(
+            directory,
+            { enabledOverride: [] },
+          ),
+          sessionId: 'borrowed-startup',
+          argv,
+          cwd: directory,
+          preflight,
+          settingsOwner: callerOwner,
+        },
+        ignoreReady,
+      );
+      configs.push(config);
+
+      const activationOperation = transferActivation(preflight);
+      registerCleanup(() => activationOperation.dispose());
+      const activation = await activateConfiguredProvider(
+        config,
+        preflight,
+        argv,
+        activationOperation,
+      );
+      if (activation.token === undefined)
+        throw new Error('Missing activation token');
+      const agent = await createForegroundAgent(
+        preflight,
+        activation.token,
+        activation.intent ?? {},
+        credentialAuthority,
+        {},
+      );
+      registerCleanup(() => agent.dispose());
+      await preflight.setTrustedFolderLive(true);
+      config.setApprovalMode(ApprovalMode.YOLO);
+      await preflight.setTrustedFolderLive(false);
+      expect(agent.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
+      expect(preflight.getActiveProviderName()).toBe('fake');
+      await runExitCleanup();
+      await expectClosed(activationOperation);
+      expect(() => preflight.setTrustedFolderLive(false)).toThrow('disposed');
+      expect(config.getProvider()).toBe('fake');
+      await agent.dispose();
+    } finally {
+      await callerOwner.dispose();
     }
   });
-
-  it('fails authentication before launching a sandbox child or assembling a foreground Agent', async () => {
-    process.argv.push('--sandbox', '--sandbox-engine', 'docker');
-    restore.push(spyOn(commandExists, 'sync').mockReturnValue(true));
-    restore.push(
-      spyOn(SessionClientOwner.prototype, 'refreshAuth').mockRejectedValue(
-        new Error('credential service unavailable'),
-      ),
-    );
-    restore.push(
-      spyOn(sandbox, 'start_sandbox').mockRejectedValue(
-        new Error('sandbox must not start without credentials'),
-      ),
-    );
-    await expectClosedAtExit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
-    expect(observed).toHaveLength(1);
-  });
-
-  it('keeps the caller Config and manager usable while adopted foreground trust retires', async () => {
-    const settings = loadSettings(directory);
-    const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
-    const manager = boot.providerManager;
-
-    const activation = await activateConfiguredProvider(
-      boot.config,
-      manager,
-      argv,
-      boot.activationOperation,
-    );
-    const agent = await constructAgentWithSpinner(
-      boot.config,
-      boot.providerManager,
-      boot.runtimeSettingsService,
-      boot.runtimeSettingsOwner,
-      activation.activationPreflight,
-      activation.intent,
-      undefined,
-      undefined,
-      undefined,
-      boot.policyOwner,
-      boot.oauthManager,
-      boot.providerFileLifecycle,
-    );
-    if (boot.policyOwner === undefined)
-      throw new Error('Missing bootstrap policy owner');
-    await boot.policyOwner.trust.setTrustedFolderLive(true);
-    boot.config.setApprovalMode(ApprovalMode.YOLO);
-    await boot.policyOwner.trust.setTrustedFolderLive(false);
-    expect(agent.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
-    await runExitCleanup();
-    await expectClosed(observed[0]);
-    await expect(
-      boot.policyOwner.trust.setTrustedFolderLive(false),
-    ).rejects.toThrow('disposed');
-    await manager.setActiveProvider('fake');
-    expect(boot.providerManager.getActiveProviderName()).toBe('fake');
-    expect(manager.getActiveProviderName()).toBe('fake');
-    await agent.dispose();
-  });
-
-  async function recordSession(
-    root = directory,
-  ): Promise<{ path: string; id: string }> {
-    const id = crypto.randomUUID();
-    const recording = createSessionRecorder({
-      sessionId: id,
-      projectHash: getProjectHash(root),
-      chatsDir: new Storage(root).getProjectChatsDir(),
-      workspaceDirs: [root],
-      provider: 'fake',
-      model: 'fake-model',
-    });
-    await seedSessionRows(recording, [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'session seed' }],
-      },
-    ]);
-    await recording.flush();
-    const path = recording.getFilePath();
-    if (!path) throw new Error('Session file was not created');
-    await recording.dispose();
-    return { id, path };
-  }
 
   it.each([
     'empty-list',
@@ -490,7 +578,7 @@ describe('real startup activation owner cleanup', () => {
       const seeded =
         caseName === 'empty-list' || caseName === 'delete-failure'
           ? undefined
-          : await recordSession();
+          : await recordStartupSession(directory);
       process.argv = [
         ...process.argv,
         ...(caseName.endsWith('list')
@@ -531,10 +619,7 @@ describe('real startup activation owner cleanup', () => {
       );
       restore.push(
         spyOn(process, 'exit').mockImplementation((code) => {
-          expect(observed).toHaveLength(1);
-          const owner = observed[0].config;
-          expect(disposed.has(owner)).toBe(true);
-          expect(observed[0].providerManager).toBeDefined();
+          expect(disposed.size).toBe(1);
           throw new StartupExit(code);
         }),
       );
@@ -563,7 +648,7 @@ describe('real startup activation owner cleanup', () => {
     async (action) => {
       const otherRoot = resolve(directory, 'other-project');
       await mkdir(otherRoot);
-      const unrelated = await recordSession(otherRoot);
+      const unrelated = await recordStartupSession(otherRoot);
       const output: string[] = [];
       restore.push(
         spyOn(stdio, 'writeToStdout').mockImplementation((chunk, ...args) => {
@@ -605,7 +690,7 @@ describe('real startup activation owner cleanup', () => {
   it.each(['list', 'delete'])(
     'handles %s with piped stdin and no prompt',
     async (action) => {
-      const seeded = await recordSession();
+      const seeded = await recordStartupSession(directory);
       process.argv = [
         'bun',
         'llxprt',
@@ -640,17 +725,16 @@ describe('real startup activation owner cleanup', () => {
   );
 
   it('releases the owner and Config when the session directory cannot be created', async () => {
-    const settings = loadSettings(directory);
-    const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
+    const { preflight, config } = await bootstrapStartup();
+    transferActivation(preflight);
     const invalidChatsDir = resolve(directory, 'not-a-directory');
     await writeFile(invalidChatsDir, 'a file');
     const disposed = new Set<Config>();
-    const originalDispose = boot.config.dispose.bind(boot.config);
+    const originalDispose = config.dispose.bind(config);
     restore.push(
-      spyOn(boot.config, 'dispose').mockImplementation(async () => {
+      spyOn(config, 'dispose').mockImplementation(async () => {
         await originalDispose();
-        disposed.add(boot.config);
+        disposed.add(config);
       }),
     );
     await expect(
@@ -658,25 +742,24 @@ describe('real startup activation owner cleanup', () => {
         { listSessions: true, deleteSession: undefined },
         invalidChatsDir,
         getProjectHash(directory),
-        boot.config,
+        config,
       ),
     ).rejects.toThrow(/EEXIST|ENOTDIR/);
-    expect(disposed.has(boot.config)).toBe(true);
+    expect(disposed.has(config)).toBe(true);
   });
 
   it('leaves the owner active when the delete selection is empty', async () => {
-    const settings = loadSettings(directory);
-    const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
+    const { preflight, config } = await bootstrapStartup();
+    transferActivation(preflight);
     await handleSessionListAndDelete(
       { listSessions: false, deleteSession: '' },
       new Storage(directory).getProjectChatsDir(),
       getProjectHash(directory),
-      boot.config,
+      config,
     );
-    expect(boot.providerManager).toBeDefined();
+    expect(preflight.getActiveProviderName()).toBe('fake');
     await runExitCleanup();
-    expect(boot.config.getProvider()).toBe('fake');
+    expect(config.getProvider()).toBe('fake');
   });
 
   it('preserves a same-label Agent sibling after an early list exit', async () => {
@@ -708,39 +791,32 @@ describe('real startup activation owner cleanup', () => {
   });
 
   it('preserves a same-label CLI sibling after an early list exit', async () => {
-    const settings = loadSettings(directory);
-    const argv = await parseArguments(settings.merged);
     let siblingActivation: agents.AgentActivationOperation | undefined;
-    const sibling = await loadCliConfig(
-      settings.merged,
-      [],
-      new ExtensionEnablementManager(directory, []),
-      'standalone-sibling',
-      argv,
-      directory,
-      {
-        onActivationBootstrapReady: (operation) => {
-          siblingActivation = operation;
-        },
+    const { captured, load } = await loadStandalone('standalone-sibling', {
+      onActivationBootstrapReady: (operation) => {
+        siblingActivation = operation;
       },
-    );
-    const siblingManager = observed[observed.length - 1].providerManager;
+    });
+    const sibling = await load;
+    const siblingPreflight = captured.preflight;
+    if (siblingPreflight === undefined)
+      throw new Error('Missing sibling preflight');
 
     process.argv.push('--list-sessions');
     restore.push(
       spyOn(process, 'exit').mockImplementation((code) => {
-        expect(siblingManager.listProviders()).toContain('fake');
-        expect(observed).toHaveLength(2);
+        expect(siblingPreflight.getActiveProviderName()).toBe('fake');
         throw new StartupExit(code);
       }),
     );
     try {
       await expect(main()).rejects.toMatchObject({ code: 0 });
-      await siblingManager.setActiveProvider('fake');
-      expect(siblingManager.getActiveProviderName()).toBe('fake');
+      await siblingPreflight.setActiveProvider('fake');
+      expect(siblingPreflight.getActiveProviderName()).toBe('fake');
       expect(sibling.getSessionId()).toBe('standalone-sibling');
     } finally {
       await siblingActivation?.dispose();
+      await siblingPreflight.dispose();
       await sibling.dispose();
     }
   });

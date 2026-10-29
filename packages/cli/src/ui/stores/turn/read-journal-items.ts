@@ -8,11 +8,9 @@ export async function readJournalItems(
   count = 64,
   activeOnly = false,
 ): Promise<HistoryItem[]> {
-  const history = agent.agentClient.getHistoryService();
-  if (history === null) throw new Error('Missing test journal history');
-  await history.waitForCommit();
-  const path = history.journalPath();
-  if (path === null) return [];
+  await agent.session.flushRecording();
+  const path = agent.session.getRecording().path;
+  if (path === undefined) return [];
   const cursor = await NativeJournalCursor.open(path, {}, count);
   try {
     const page = await cursor.pageBack(count);

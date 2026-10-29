@@ -21,3 +21,4 @@ export {
   reloadUserPolicyRules,
   type EditablePolicyRule,
 } from './userPolicyStore.js';
+export type { WorkspacePolicyOperations } from './policy-owner.js';

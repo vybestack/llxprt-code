@@ -6,6 +6,7 @@
 
 import type { SettingSpec, ValidationResult } from './registry-types.js';
 import { COMPRESSION_STRATEGIES } from './registry-types.js';
+import { deepFreezeTable } from '../immutableTable.js';
 
 function validateNonNegativeByteLimit(
   key: string,
@@ -20,7 +21,9 @@ function validateNonNegativeByteLimit(
   };
 }
 
-export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
+export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = deepFreezeTable<
+  readonly SettingSpec[]
+>([
   {
     key: 'temperature',
     category: 'model-param',
@@ -644,4 +647,4 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
     default: false,
     persistToProfile: true,
   },
-];
+]);

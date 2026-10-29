@@ -33,6 +33,10 @@ import type { OpenAIResponsesRequest } from '../openai-responses/OpenAIResponses
 import type { StreamResponseOptions } from '../openai-responses/openAIResponsesWebSocketTransport.js';
 import * as webSocketTransport from '../openai-responses/openAIResponsesWebSocketTransport.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 async function generate(
   provider: OpenAIResponsesProvider,
@@ -44,11 +48,10 @@ async function generate(
   settings.setProviderSetting(provider.name, 'temperature', 0.4);
   const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: 'codex-proxy',
-    config,
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
 

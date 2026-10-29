@@ -1,3 +1,4 @@
+import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -117,4 +118,41 @@ export function readInteractiveOutputTokens(
   return event.type === AgentEventType.Finished
     ? event.value.usageMetadata?.completionTokens
     : undefined;
+}
+
+export async function consumeInteractiveTurnOutput(
+  stream: AsyncIterable<ServerAgentStreamEvent>,
+  signal: AbortSignal,
+  execCtx: ExecutionLoopContext,
+): Promise<{
+  textResponse: string;
+  reportedOutputTokens: number | undefined;
+  outputCharacterCount: number;
+}> {
+  let textResponse = '';
+  let reportedOutputTokens: number | undefined;
+  let outputCounter = new InteractiveOutputCounter();
+  try {
+    for await (const event of stream) {
+      if (signal.aborted) break;
+      if (event.type === AgentEventType.Retry) {
+        textResponse = '';
+        reportedOutputTokens = undefined;
+        outputCounter = new InteractiveOutputCounter();
+        execCtx.onOutputReset?.();
+      }
+      outputCounter.add(event);
+      reportedOutputTokens =
+        readInteractiveOutputTokens(event) ?? reportedOutputTokens;
+      textResponse += processInteractiveStreamEvent(event, execCtx);
+    }
+  } catch (primary) {
+    if (signal.aborted) throw createAbortError();
+    throw primary;
+  }
+  return {
+    textResponse,
+    reportedOutputTokens,
+    outputCharacterCount: outputCounter.total,
+  };
 }

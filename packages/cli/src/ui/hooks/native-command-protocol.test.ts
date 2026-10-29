@@ -1,9 +1,10 @@
+import { captureSessionOwner } from '../../../../agents/src/api/__tests__/helpers/capture-session-owner.js';
+import { commandDeps } from '../../__tests__/native-command-fixture.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readJournalItems } from '../stores/turn/journal-turn-test-helpers.js';
 
 import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import {
-  DebugLogger,
   getProjectHash,
   LocalMediaStore,
   type MediaReferenceBlock,
@@ -22,41 +23,8 @@ import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { chatOwnerCommand } from '../commands/chatOwnerCommand.js';
-import { continueCommand } from '../commands/continueCommand.js';
 import type { HistoryItemWithoutId, Message } from '../types.js';
-import {
-  processSlashCommand,
-  type SlashCommandHandlerDeps,
-} from './slashCommandHandlers.js';
-import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
-
-const actions: SlashCommandProcessorActions = {
-  openAuthDialog: () => {},
-  openThemeDialog: () => {},
-  openEditorDialog: () => {},
-  openPrivacyNotice: () => {},
-  openSettingsDialog: () => {},
-  openLoggingDialog: () => {},
-  openSubagentDialog: () => {},
-  openModelsDialog: () => {},
-  openPermissionsDialog: () => {},
-  openPoliciesDialog: () => {},
-  openProviderDialog: () => {},
-  openLoadProfileDialog: () => {},
-  openCreateProfileDialog: () => {},
-  openProfileListDialog: () => {},
-  viewProfileDetail: () => {},
-  openProfileEditor: () => {},
-  quit: () => {},
-  setDebugMessage: () => {},
-  toggleCorgiMode: () => {},
-  toggleDebugProfiler: () => {},
-  dispatchExtensionStateUpdate: () => {},
-  addConfirmUpdateExtensionRequest: () => {},
-  openWelcomeDialog: () => {},
-  openSessionBrowserDialog: () => {},
-};
+import { processSlashCommand } from './slashCommandHandlers.js';
 
 async function durable(path: string): Promise<{
   count: number;
@@ -114,15 +82,17 @@ describe('native CLI command protocol', () => {
 
     process.env.LLXPRT_FAKE_RESPONSES = fixture;
     process.env.LLXPRT_LOG_HOME = join(root, 'logs');
-    const agent = await createAgent({
-      provider: 'fake',
-      model: 'fake-model',
-      sessionId: 'cli-native-source',
-      workingDir: root,
-      interactive: true,
-      folderTrust: true,
-      coreTools: [],
-    });
+    const { value: agent, owner } = await captureSessionOwner(() =>
+      createAgent({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: 'cli-native-source',
+        workingDir: root,
+        interactive: true,
+        folderTrust: true,
+        coreTools: [],
+      }),
+    );
     let displayed: readonly HistoryItemWithoutId[] = [];
     const errors: Message[] = [];
     const context = createMockCommandContext({
@@ -134,25 +104,7 @@ describe('native CLI command protocol', () => {
         },
       },
     });
-    const deps: SlashCommandHandlerDeps = {
-      commands: [chatOwnerCommand, continueCommand],
-      config: context.services.config,
-      commandContext: context,
-      actions,
-      addItem: context.ui.addItem,
-      addMessage: (message) => {
-        errors.push(message);
-      },
-      setIsProcessing: () => {},
-      setLocalIsProcessing: () => {},
-      setPendingItem: () => {},
-      setSessionShellAllowlist: () => {},
-      setConfirmationRequest: () => {},
-      confirmationLogger: new DebugLogger('native-cli-confirmation'),
-      slashCommandLogger: new DebugLogger('native-cli-protocol'),
-      beginSlashCommandAction: () => new AbortController(),
-      endSlashCommandAction: () => {},
-    };
+    const deps = commandDeps(context, errors);
     async function command(text: string): Promise<void> {
       expect(
         await processSlashCommand(deps, text, undefined, undefined, false),
@@ -179,7 +131,7 @@ describe('native CLI command protocol', () => {
       if (initial.media === undefined)
         throw new Error('Missing admitted image');
       const media = initial.media;
-      const store = agent.agentClient.mediaStore;
+      const store = owner.clients.getAgentClient().mediaStore;
       if (store === undefined) throw new Error('Missing CLI media store');
       expect(
         Buffer.from(await store.readVerified(media)).toString('base64'),
@@ -276,19 +228,22 @@ describe('native CLI command protocol', () => {
         await observer.close();
         await archive.close();
       }
-      const reopened = await createAgent({
-        provider: 'fake',
-        model: 'fake-model',
-        sessionId: 'reopening-cli',
-        workingDir: root,
-        interactive: true,
-        folderTrust: true,
-        coreTools: [],
-      });
+      const { value: reopened, owner: reopenedOwner } =
+        await captureSessionOwner(() =>
+          createAgent({
+            provider: 'fake',
+            model: 'fake-model',
+            sessionId: 'reopening-cli',
+            workingDir: root,
+            interactive: true,
+            folderTrust: true,
+            coreTools: [],
+          }),
+        );
       try {
         await reopened.session.resume(stableId);
         expect(await durable(await recording(reopened))).toStrictEqual(initial);
-        const freshStore = reopened.agentClient.mediaStore;
+        const freshStore = reopenedOwner.clients.getAgentClient().mediaStore;
         if (freshStore === undefined)
           throw new Error('Missing reopened media owner');
         const bytes = await freshStore.readVerified(media);

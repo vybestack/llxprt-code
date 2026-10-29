@@ -1,3 +1,4 @@
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -56,6 +57,7 @@ function requestOver(
   extra: Partial<GenerateChatOptions> = {},
 ): GenerateChatOptions {
   return {
+    invocation: makeLoadBalancerInvocation(),
     contents: poisonedContents,
     requestRows: rows,
     contentCount: rows.count,
@@ -132,10 +134,17 @@ describe('LoadBalancingProvider over a pinned requestRows selection (#854 WP15)'
 
   beforeEach(() => {
     const settingsService = new SettingsService();
-    providerManager = new ProviderManager({
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
-      config: createRuntimeConfigStub(settingsService),
-    });
+      createRuntimeConfigStub(settingsService),
+      undefined,
+      undefined,
+      undefined,
+    );
     delegates.clear();
     providerManager.getProviderByName = (name) => delegates.get(name);
   });

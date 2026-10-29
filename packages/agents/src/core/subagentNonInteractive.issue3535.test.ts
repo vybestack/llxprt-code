@@ -1,6 +1,8 @@
-import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { CoreToolRegistryHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolRegistryHostAdapter.js';
+import { afterAll } from 'bun:test';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -31,17 +33,16 @@ const fixturePaths = installTestWorkspacePaths({
  * which is how the structured tool_response pairing is verified.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
+import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import type {
   ContentBlock,
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
-import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
-import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.js';
 import {
@@ -50,8 +51,40 @@ import {
   Kind,
   type ToolResult,
 } from '@vybestack/llxprt-code-tools/tools/tools.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  ContextState,
+  SubagentTerminateMode,
+  type OutputConfig,
+  type OutputObject,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import type {
+  AgentRuntimeProviderAdapter,
+  ReadonlySettingsSnapshot,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { RuntimeModel } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeModel.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
+import { assembleSchedulerOwner } from '../session/assembleSchedulerOwner.js';
+import {
+  createStatelessRuntimeBundle,
+  defaultModelConfig,
+  defaultRunConfig,
+  scopeInputs,
+} from './__tests__/subagent-test-helpers.js';
+import { ChatSession, StreamEventType } from './chatSession.js';
+import { executeToolCall } from './nonInteractiveToolExecutor.js';
+import type { ExecutionLoopContext } from './subagentExecution.js';
+import { executeNonInteractiveRun } from './subagentNonInteractive.js';
+import { getScopeLocalFuncDefs } from './subagentRuntimeSetup.js';
+import {
+  classifyToolCompletions,
+  processFunctionCalls,
+} from './subagentToolProcessing.js';
 
 class RuntimeDisabledTool extends BaseDeclarativeTool<
   Record<string, unknown>,
@@ -132,32 +165,6 @@ class UppercaseToolInvocation extends BaseToolInvocation<
     };
   }
 }
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { RuntimeModel } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeModel.js';
-import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import type { AgentRuntimeProviderAdapter } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import {
-  ContextState,
-  SubagentTerminateMode,
-  type OutputConfig,
-  type OutputObject,
-} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { ChatSession, StreamEventType } from './chatSession.js';
-import { executeNonInteractiveRun } from './subagentNonInteractive.js';
-import type { ExecutionLoopContext } from './subagentExecution.js';
-import {
-  getScopeLocalFuncDefs,
-  createToolExecutionConfig,
-} from './subagentRuntimeSetup.js';
-import { SubAgentScope } from './subagent.js';
-import { classifyToolCompletions } from './subagentToolProcessing.js';
-import {
-  createStatelessRuntimeBundle,
-  defaultModelConfig,
-  defaultRunConfig,
-} from './__tests__/subagent-test-helpers.js';
 
 const { readTodos, TodoStoreMock } = (() => {
   const readTodos = vi.fn(async () => []);
@@ -258,7 +265,8 @@ async function runDirectNonInteractive(
   readonly requestCount: number;
   readonly requestContents: readonly IContent[][];
 }> {
-  const { config, executor, messageBus } = createEmptyRegistryConfig();
+  const { config, executor, messageBus, toolRegistry } =
+    createEmptyRegistryConfig();
   const baseBundle = createStatelessRuntimeBundle();
   const output: OutputObject = {
     terminate_reason: SubagentTerminateMode.ERROR,
@@ -271,7 +279,10 @@ async function runDirectNonInteractive(
     runConfig: defaultRunConfig,
     outputConfig: options.outputConfig,
     textToolParser: new GemmaToolCallParser(),
-    toolsView: baseBundle.runtimeContext.tools,
+    resolveToolName: (name) =>
+      name && baseBundle.runtimeContext.tools.getToolMetadata(name)
+        ? name
+        : null,
     logger,
   };
   let requestCount = 0;
@@ -303,23 +314,69 @@ async function runDirectNonInteractive(
   } as unknown as ChatSession;
 
   await executeNonInteractiveRun(
-    chat,
     [...getScopeLocalFuncDefs(options.outputConfig)],
     new AbortController(),
     [{ speaker: 'human', blocks: [{ type: 'text', text: 'start' }] }],
     Date.now(),
-    execCtx,
+    {
+      ...execCtx,
+      resolveToolName: (name) =>
+        name && baseBundle.runtimeContext.tools.getToolMetadata(name)
+          ? name
+          : null,
+    },
     {
       output,
       subagentId: 'direct-issue3535-agent',
       name: 'direct-issue3535-agent',
-      runtimeContext: baseBundle.runtimeContext,
+      sessionId: config.getSessionId(),
       logger,
-      config,
       runConfig: defaultRunConfig,
       outputConfig: options.outputConfig,
-      toolExecutorContext: executor,
-      messageBus,
+      streamTimeoutPolicy: chat.getStreamTimeoutPolicy(),
+      imagePayloadBudgetBytes: config.getImagePayloadBudgetBytes(),
+      streamModel: (message, tools, signal, promptId, modelParameters) =>
+        chat.sendMessageStream(
+          {
+            message,
+            modelParameters,
+            hookOwner: undefined,
+            config: { abortSignal: signal, tools },
+          },
+          promptId,
+        ),
+      executeToolCalls: (calls, controller, promptId, allowedToolNames) =>
+        processFunctionCalls(
+          calls,
+          controller,
+          promptId,
+          {
+            output,
+            outputConfig: options.outputConfig,
+            subagentId: 'direct-issue3535-agent',
+            logger,
+            imagePayloadBudgetBytes: config.getImagePayloadBudgetBytes(),
+            executeToolCall: (request, signal) =>
+              executeToolCall(
+                (callbacks) =>
+                  assembleSchedulerOwner('direct-issue3535-agent', {
+                    telemetry: executor.telemetry,
+                    config,
+                    messageBus,
+                    toolRegistry,
+                    readApprovalMode: () => config.getApprovalMode(),
+                    getToolGovernance: () => executor.readGovernance(),
+                    readExecutionPolicy: () => executor.readExecutionPolicy(),
+                    toolContextInteractiveMode: false,
+                    ...callbacks,
+                  }),
+                request,
+                signal,
+              ),
+          },
+          allowedToolNames,
+        ),
+      readTodoCompletionPrompt: async () => null,
     },
     () => undefined,
   );
@@ -357,10 +414,8 @@ function runtimeProviderFor(
           block.type === 'tool_call',
       );
       return (async function* () {
-        // The request rows are a provider-owned snapshot that closes once the
-        // send settles, so a real provider reads them during the call.
         const rows: IContent[] = [];
-        for await (const content of options.contents) rows.push(content);
+        for await (const row of options.contents) rows.push(row);
         requestContents.push(rows);
         yield {
           ...response,
@@ -382,7 +437,10 @@ function findToolResponsesByCallId(
     );
 }
 
-async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
+async function runInteractiveDirect(
+  responses: readonly IContent[],
+  settingsSnapshot?: ReadonlySettingsSnapshot,
+): Promise<{
   readonly output: OutputObject;
   readonly requestContents: readonly IContent[][];
 }> {
@@ -407,43 +465,29 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
   // as a bundle option so runtimeContext.provider is the scripted provider —
   // spreading it after construction would leave runtimeContext with the
   // default adapter, which yields an empty blocks[] IContent.
-  const baseBundle = createStatelessRuntimeBundle({
+  const bundle = createStatelessRuntimeBundle({
     history: new HistoryService(),
     providerAdapter,
+    toolRegistry,
   });
-  // The disk request path reads the live runtime config, as production runtimes provide.
-  const bundle = {
-    ...baseBundle,
-    runtimeContext: {
-      ...baseBundle.runtimeContext,
-      providerRuntime: {
-        ...baseBundle.runtimeContext.providerRuntime,
-        config,
-      },
+  const scope = await createSubagentScope(
+    {
+      name: 'interactive-issue3535-agent',
+      prompt: { systemPrompt: 'Do the task.' },
+      model: defaultModelConfig,
+      run: defaultRunConfig,
+      toolConfig: undefined,
+      outputConfig: OUTPUT_CONFIG,
     },
-  };
-  const toolExecutorContext = createToolExecutionConfig(bundle, toolRegistry);
-  const scope = new (SubAgentScope as unknown as new (
-    ...args: unknown[]
-  ) => SubAgentScope)(
-    'interactive-issue3535-agent',
-    bundle.runtimeContext,
-    defaultModelConfig,
-    defaultRunConfig,
-    { systemPrompt: 'Do the task.' },
-    undefined,
-    toolExecutorContext,
-    async () => [],
-    config,
-    fixturePaths(),
-    () => undefined,
-    emptyInstructionReads,
-    messageBus,
-    undefined,
-    OUTPUT_CONFIG,
-    undefined,
-    undefined,
-    {},
+    ...scopeInputs(config, {
+      runtimeBundle: bundle,
+      environmentContextLoader: async () => [],
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
+      messageBus,
+      settingsSnapshot,
+    }),
   );
   await scope.runInteractive(new ContextState());
   return {
@@ -475,6 +519,25 @@ describe('issue 3535 fatal-tool-error termination semantics', () => {
         [],
       ),
     ).toStrictEqual({ recovered: true, fatalCall: undefined });
+  });
+
+  it('applies the tool governance carried by the child settings snapshot', async () => {
+    const { requestContents } = await runInteractiveDirect(
+      [
+        toolCallBlock('uppercase', { text: 'governed' }, 'governed-call'),
+        stopped(),
+      ],
+      { tools: { disabled: ['uppercase'] } },
+    );
+
+    expect(
+      findToolResponsesByCallId(requestContents[1], 'governed-call'),
+    ).toMatchObject([
+      {
+        type: 'tool_response',
+        error: 'Tool "uppercase" is disabled in the current profile.',
+      },
+    ]);
   });
 
   it('recovers after a deduplicated fatal pair followed by a distinct successful call', async () => {
@@ -757,5 +820,11 @@ describe('issue 3535 fatal-tool-error termination semantics', () => {
     expect(output.emitted_vars).toStrictEqual({ alpha: 'A', beta: 'B' });
     expect(output.unrecovered_fatal_tool_error).toBeUndefined();
     expect(output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
+  });
+});
+
+describe('module isolation', () => {
+  afterAll(() => {
+    void vi.mock('@vybestack/llxprt-code-tools', () => toolsModule);
   });
 });

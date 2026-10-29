@@ -22,6 +22,7 @@ import {
   getCommandAndArgs,
   buildChildEnv,
   getProfileName,
+  toInlineProfileArg,
 } from './cli-args.js';
 import {
   readAndParseTelemetryLog,
@@ -619,7 +620,12 @@ function appendProfileFlag(commandArgs: string[], testDir: string): void {
       join(testDir, '.llxprt', 'profiles', `${profileName}.json`),
       'utf8',
     );
-    commandArgs.splice(insertionIndex, 0, '--profile', profileJson);
+    commandArgs.splice(
+      insertionIndex,
+      0,
+      '--profile',
+      toInlineProfileArg(profileJson),
+    );
   } else {
     commandArgs.splice(insertionIndex, 0, '--profile-load', profileName);
   }

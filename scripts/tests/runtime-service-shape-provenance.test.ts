@@ -18,6 +18,11 @@ describe('finite typed receiver exposure', () => {
       ),
     ).toEqual([
       expect.objectContaining({
+        rule: 'runtime-service-bundle',
+        line: 2,
+        column: 1,
+      }),
+      expect.objectContaining({
         rule: 'runtime-service-analysis-resource-limit',
         line: 3,
         column: 1,

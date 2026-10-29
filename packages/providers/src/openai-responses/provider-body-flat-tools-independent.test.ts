@@ -130,10 +130,19 @@ function makeBodyRuntime() {
   settings.setProviderSetting('openai-responses', 'model', 'o3-mini');
   settings.set('prompt-caching', 'off');
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: 'independent-flat-body',
   });
-  return { invocation: captureProviderInvocation(runtime, 'openai-responses') };
+  return {
+    invocation: captureProviderInvocation(
+      {
+        ...runtime,
+        globalSettings: settings.getAllGlobalSettings(),
+        providerSettings: settings.getProviderSettings('openai-responses'),
+        fetch: (input, init) => globalThis.fetch(input, init),
+      },
+      'openai-responses',
+    ),
+  };
 }
 
 async function runBody(rows: number, padding: number): Promise<number> {

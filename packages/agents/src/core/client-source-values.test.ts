@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
-import { buildAgent } from '../api/__tests__/helpers/agentHarness.js';
+import { buildCliStyleConfig } from '../api/__tests__/helpers/buildCliStyleConfig.js';
 import { sendHistoryTurn } from './__tests__/support/orchestrator-history-test-helpers.js';
 
 async function requiredRow(
@@ -68,8 +68,8 @@ async function assertRequestValues(
 
 describe('client source restored values', () => {
   it('preserves repeated frozen provenance and leaves imported AI unstamped through native request selection and send', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    const client = agent.agentClient;
+    const { agentClient: client, cleanup } =
+      await buildCliStyleConfig('plain-text.jsonl');
     const stamped: IContent = Object.freeze<IContent>({
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'saved reply' }],

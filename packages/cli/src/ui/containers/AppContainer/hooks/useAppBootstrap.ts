@@ -3,75 +3,82 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
 
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
-import { useStdin, useStdout } from 'ink';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useScrollbackBootstrap,
+  type ScrollbackPagerBinding,
+} from './useScrollbackBootstrap.js';
+import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 import { useResponsive } from '../../../hooks/useResponsive.js';
 import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
 import type { SettingsProfileStore } from '../../../stores/settings/settingsStore.js';
-import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 import type { TurnStore } from '../../../stores/turn/turnStore.js';
 import { useBracketedPaste } from '../../../hooks/useBracketedPaste.js';
 import { useConsoleMessages } from '../../../hooks/useConsoleMessages.js';
-import { useExtensionAutoUpdate } from '../../../hooks/useExtensionAutoUpdate.js';
 import { useCoreEventHandlers } from '../../../hooks/useCoreEventHandlers.js';
 import {
   useHistory,
   type UseHistoryManagerReturn,
 } from '../../../hooks/useHistoryManager.js';
 import { useMemoryMonitor } from '../../../hooks/useMemoryMonitor.js';
-import {
-  type ResumeBootHandle,
-  type IdeInfo,
-  type MessageBus,
-  type RecordingIntegration,
-  type SessionRecordingPort,
-  type LockHandle,
+import type { LoadedSettings } from '../../../../config/settings.js';
+import type {
+  HistoryService,
+  ResumeBootHandle,
+  IContent,
+  IdeInfo,
 } from '@vybestack/llxprt-code-core';
 import { useSessionStats } from '../../../contexts/SessionContext.js';
 import { useFocus } from '../../../hooks/useFocus.js';
-import type { AppState, AppAction } from '../../../reducers/appReducer.js';
 import type { UpdateObject } from '../../../utils/updateCheck.js';
-import { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
 import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
-import { useTodoContext } from '../../../contexts/TodoContext.js';
-import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
-import {
-  useScrollbackBootstrap,
-  type ScrollbackPagerBinding,
-} from './useScrollbackBootstrap.js';
 import { useUpdateAndOAuthBridges } from './useUpdateAndOAuthBridges.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
-import { registerCleanup } from '../../../../utils/cleanup.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { SessionRecordingEvent } from '@vybestack/llxprt-code-agents';
+import type { UseSessionInitializationParams } from './useSessionInitialization.js';
 import type { MemoryTelemetryController } from '../../../hooks/memoryTrend/memoryTelemetry.js';
-import type { LoadedSettings } from '../../../../config/settings.js';
-import type {
-  AgentClientSource,
-  StreamRuntime,
-  UiRuntime,
-} from '../../../cliUiRuntime.js';
 
 export interface AppBootstrapProps {
-  uiRuntime: UiRuntime;
-  /**
-   * The single interactive Agent threaded from the composition root.
-   */
-  agent: Agent;
-  settings: LoadedSettings;
-  startupWarnings?: string[];
+  readEmojiFilterMode: UseSessionInitializationParams['readEmojiFilterMode'];
+  readLlxprtMdFileCount: () => number;
+  readCoreMemoryFileCount: () => number;
+  readTerminalBackground: () => string | undefined;
+  readCurrentIde: () => IdeInfo | undefined;
+  readIdeMode: () => boolean;
+  readDebugMode: () => boolean;
+  triggerSessionStart: UseSessionInitializationParams['triggerSessionStart'];
+  appendHistory: (content: IContent) => Promise<void>;
+  recordRecordingEvent: (event: SessionRecordingEvent) => Promise<void>;
+  recordFeedback: (
+    severity: 'warning' | 'error' | 'info',
+    message: string,
+  ) => void | Promise<void>;
+  setTokenTrackingMetrics: Parameters<
+    typeof useTokenMetricsTracking
+  >[0]['setTokenTrackingMetrics'];
+  subscribeHistoryTokens: Parameters<
+    typeof useTokenMetricsTracking
+  >[0]['subscribeHistoryTokens'];
+  subscribeRecordingHistory: Parameters<
+    typeof useTokenMetricsTracking
+  >[0]['subscribeRecordingHistory'];
+  readProviderMetrics: Parameters<
+    typeof useTokenMetricsTracking
+  >[0]['readProviderMetrics'];
+  readSessionTokenUsage: Parameters<
+    typeof useTokenMetricsTracking
+  >[0]['readSessionTokenUsage'];
+  historyMaxItems?: number;
+  historyMaxBytes?: number;
+  hasSeenIdeIntegrationNudge?: boolean;
   resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
+  readJournal: () => Pick<HistoryService, 'appendDisplay' | 'length'> | null;
+  settings: LoadedSettings;
+  readRecordingPath: () => string | undefined;
   version: string;
-  runtimeMessageBus?: MessageBus;
-  appState: AppState;
-  appDispatch: React.Dispatch<AppAction>;
-  recordingIntegration?: RecordingIntegration;
-  recordingOwner?: 'agent' | 'raw';
-  initialRecordingService?: SessionRecordingPort;
-  initialLockHandle?: LockHandle | null;
   /** P12: optional memory telemetry controller (perf+memory enabled only). */
   memoryController?: MemoryTelemetryController;
   /** Terminal store; bootstrap owns the focus/narrow writer effects. */
@@ -86,59 +93,48 @@ export interface AppBootstrapProps {
 }
 
 export interface AppBootstrapResult {
-  uiRuntime: UiRuntime;
-  streamRuntime: StreamRuntime;
-  /**
-   * The single interactive Agent threaded from the composition root.
-   */
-  agent: Agent;
-  /**
-   * Narrow boundary that resolves the live AgentClient for the streaming
-   * path. Resolved once here so downstream hooks receive an explicit,
-   * minimal surface instead of dereferencing the runtime object inline.
-   */
-  agentClientSource: AgentClientSource;
-  stopTokenMetricsTracking: () => void;
-  settings: LoadedSettings;
-  runtime: ReturnType<typeof useRuntimeApi>;
   setLlxprtMdFileCount: (count: number) => void;
   handleNewMessage: ReturnType<typeof useConsoleMessages>['handleNewMessage'];
   clearConsoleMessagesState: ReturnType<
     typeof useConsoleMessages
   >['clearConsoleMessages'];
-  todos: ReturnType<typeof useTodoContext>['todos'];
-  updateTodos: ReturnType<typeof useTodoContext>['updateTodos'];
-  recordingIntegrationRef?: React.MutableRefObject<RecordingIntegration | null>;
-  recordingSwapCallbacks: ReturnType<
-    typeof useRecordingInfrastructure
-  >['recordingSwapCallbacks'];
-  /**
-   * P02e: pager binding when the boot-time scrollback flag was on and the
-   * session journal resolved; null keeps today's non-pager transcript path.
-   */
-  scrollbackPager: ScrollbackPagerBinding | null;
-  /** P02e: one-line restart prompt when the scrollback flag changed mid-session. */
-  idePromptAnswered: boolean;
   setIdePromptAnswered: React.Dispatch<React.SetStateAction<boolean>>;
   currentIDE: IdeInfo | undefined;
   shouldShowIdePrompt: boolean | null | undefined;
   updateInfo: UpdateObject | null;
-  setUpdateInfo: React.Dispatch<React.SetStateAction<UpdateObject | null>>;
-  stdin: ReturnType<typeof useStdin>['stdin'];
-  setRawMode: ReturnType<typeof useStdin>['setRawMode'];
-  stdout: ReturnType<typeof useStdout>['stdout'];
   nightly: boolean;
-  runtimeMessageBus?: MessageBus;
-  startupWarnings: string[];
-  resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
-  recordingIntegration?: RecordingIntegration;
-  recordingOwner?: 'agent' | 'raw';
+  stopTokenMetricsTracking: () => void;
+  scrollbackPager: ScrollbackPagerBinding | null;
+  recordRecordingEvent: AppBootstrapProps['recordRecordingEvent'];
+}
+
+function useInitializationBindings(
+  triggerSessionStart: AppBootstrapProps['triggerSessionStart'],
+  appendHistory: AppBootstrapProps['appendHistory'],
+  readEmojiFilterMode: AppBootstrapProps['readEmojiFilterMode'],
+  readLlxprtMdFileCount: AppBootstrapProps['readLlxprtMdFileCount'],
+  readCoreMemoryFileCount: AppBootstrapProps['readCoreMemoryFileCount'],
+) {
+  return {
+    triggerSessionStart,
+    appendHookContext: useCallback(
+      async (text: string) => {
+        await appendHistory({
+          speaker: 'human',
+          blocks: [{ type: 'text', text }],
+        });
+      },
+      [appendHistory],
+    ),
+    readEmojiFilterMode,
+    readLlxprtMdFileCount,
+    readCoreMemoryFileCount,
+  };
 }
 
 /** Initializes history, session, and IO primitives */
 function useBootstrapHistory(props: AppBootstrapProps) {
-  const { uiRuntime, agent, resumedBoot } = props;
-  const runtime = useRuntimeApi();
+  const { resumedBoot } = props;
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
   useBracketedPaste();
@@ -154,16 +150,12 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   // so theme switches propagate. The command guards equal writes.
   useEffect(() => {
     props.terminalStore.commands.setTerminalBackgroundColor(
-      props.uiRuntime.shell.getTerminalBackground(),
+      props.readTerminalBackground(),
     );
   });
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
-  const { stdout } = useStdout();
-  const { stdin, setRawMode } = useStdin();
   const nightly = props.version.includes('nightly');
-  props.turnStore.commands.bindJournal(() =>
-    agent.agentClient.getHistoryService(),
-  );
+  props.turnStore.commands.bindJournal(props.readJournal);
   const { addItem } = useHistory(props.turnStore);
   const {
     llxprtMdFileCount,
@@ -171,9 +163,13 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     coreMemoryFileCount,
     setCoreMemoryFileCount: _setCoreMemoryFileCount,
   } = useSessionInitialization({
-    uiRuntime,
-    agent,
-    recordingOwner: props.recordingOwner,
+    ...useInitializationBindings(
+      props.triggerSessionStart,
+      props.appendHistory,
+      props.readEmojiFilterMode,
+      props.readLlxprtMdFileCount,
+      props.readCoreMemoryFileCount,
+    ),
     addItem,
     resumedBoot,
   });
@@ -186,35 +182,25 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   }, [props.settingsStore, coreMemoryFileCount]);
   useMemoryMonitor({ addItem, memoryController: props.memoryController });
   return {
-    runtime,
     updateInfo,
     setUpdateInfo,
-    stdout,
-    stdin,
-    setRawMode,
     nightly,
     addItem,
     setLlxprtMdFileCount,
   };
 }
 
-/** Initializes task-list state */
-function useBootstrapTodo() {
-  const { todos, updateTodos } = useTodoContext();
-  return { todos, updateTodos };
-}
-
-function useIdeClientCleanup(uiRuntime: UiRuntime): void {
+function useMirroredTokenMetrics(
+  settingsStore: SettingsProfileStore,
+  tokenMetrics: ReturnType<typeof useTokenMetricsTracking>['tokenMetrics'],
+  historyTokenCount: number,
+): void {
   useEffect(() => {
-    const ideClient = uiRuntime.ide.getIdeClient();
-    if (ideClient === undefined) {
-      return undefined;
-    }
-    registerCleanup(() => {
-      void ideClient.disconnect();
-    });
-    return undefined;
-  }, [uiRuntime]);
+    settingsStore.commands.setTokenMetrics(tokenMetrics);
+  }, [settingsStore, tokenMetrics]);
+  useEffect(() => {
+    settingsStore.commands.setHistoryTokenCount(historyTokenCount);
+  }, [settingsStore, historyTokenCount]);
 }
 
 /** Initializes recording, IDE prompt, messages, and token metrics */
@@ -224,27 +210,12 @@ function useBootstrapEvents(
   setUpdateInfo: React.Dispatch<React.SetStateAction<UpdateObject | null>>,
 ) {
   const oauthControl = useOAuthControl();
-  const {
-    uiRuntime,
-    settings,
-    recordingIntegration,
-    initialRecordingService,
-    initialLockHandle,
-  } = props;
-  const { recordingIntegrationRef, recordingSwapCallbacks } =
-    useRecordingInfrastructure(
-      initialRecordingService,
-      recordingIntegration,
-      initialLockHandle,
-      props.recordingOwner,
-    );
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
-  const currentIDE = uiRuntime.ide.getIdeClient()?.getCurrentIde();
-  useIdeClientCleanup(uiRuntime);
+  const currentIDE = props.readCurrentIde();
   const shouldShowIdePrompt =
     Boolean(currentIDE) &&
-    !uiRuntime.ide.getIdeMode() &&
-    settings.merged.hasSeenIdeIntegrationNudge !== true &&
+    !props.readIdeMode() &&
+    props.hasSeenIdeIntegrationNudge !== true &&
     !idePromptAnswered;
   useUpdateAndOAuthBridges({
     addItem,
@@ -256,35 +227,27 @@ function useBootstrapEvents(
     handleNewMessage,
     clearConsoleMessages: clearConsoleMessagesState,
   } = useConsoleMessages();
-  useExtensionAutoUpdate({ settings, onConsoleMessage: handleNewMessage });
   useCoreEventHandlers({
     handleNewMessage,
-    uiRuntime,
-    recordingIntegrationRef,
-    recordingOwner: props.recordingOwner,
-    agent: props.agent,
+    readDebugMode: props.readDebugMode,
+    recordFeedback: props.recordFeedback,
   });
   const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
   const { tokenMetrics, stopTracking } = useTokenMetricsTracking({
-    uiRuntime,
+    setTokenTrackingMetrics: props.setTokenTrackingMetrics,
+    subscribeHistoryTokens: props.subscribeHistoryTokens,
+    subscribeRecordingHistory: props.subscribeRecordingHistory,
+    readProviderMetrics: props.readProviderMetrics,
+    readSessionTokenUsage: props.readSessionTokenUsage,
     updateHistoryTokenCount,
-    recordingIntegrationRef,
-    recordingOwner: props.recordingOwner,
   });
-  // Store mirrors: the footer renders token metrics from the settings store.
-  useEffect(() => {
-    props.settingsStore.commands.setTokenMetrics(tokenMetrics);
-  }, [props.settingsStore, tokenMetrics]);
-  useEffect(() => {
-    props.settingsStore.commands.setHistoryTokenCount(
-      sessionStats.historyTokenCount,
-    );
-  }, [props.settingsStore, sessionStats.historyTokenCount]);
+  useMirroredTokenMetrics(
+    props.settingsStore,
+    tokenMetrics,
+    sessionStats.historyTokenCount,
+  );
   return {
-    stopTokenMetricsTracking: stopTracking,
-    recordingIntegrationRef,
-    recordingSwapCallbacks,
-    idePromptAnswered,
+    stopTracking,
     setIdePromptAnswered,
     currentIDE,
     shouldShowIdePrompt,
@@ -295,60 +258,38 @@ function useBootstrapEvents(
 }
 
 export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
-  const { uiRuntime } = props;
-  const streamRuntime: StreamRuntime = uiRuntime;
   const h = useBootstrapHistory(props);
-  const t = useBootstrapTodo();
   const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo);
-  const { session: agentSession } = props.agent;
-  const agentJournalSource = useMemo(
-    () => ({
-      getCurrentRecording: () => {
-        const path = agentSession.getRecording().path;
-        return path ? { getFilePath: () => path } : null;
-      },
-    }),
-    [agentSession],
-  );
-  const historyEpoch = useStoreSelector(
+  const epoch = useStoreSelector(
     props.turnStore.store,
     (state) => state.historyEpoch,
   );
-  const sb = useScrollbackBootstrap({
-    epoch: historyEpoch,
-    emojiFilterMode: resolveEmojiFilterMode(uiRuntime.ephemeral),
+  const { readRecordingPath } = props;
+  const recordingSwapCallbacks = useMemo(
+    () => ({
+      getCurrentRecording: () => {
+        const path = readRecordingPath();
+        return path ? { getFilePath: () => path } : null;
+      },
+    }),
+    [readRecordingPath],
+  );
+  const { pager } = useScrollbackBootstrap({
     settings: props.settings,
-    recordingSwapCallbacks: agentJournalSource,
+    epoch,
+    emojiFilterMode: props.readEmojiFilterMode(),
+    recordingSwapCallbacks,
   });
   useEffect(() => {
     props.settingsStore.commands.setRawConsoleMessages(e.consoleMessages);
   }, [props.settingsStore, e.consoleMessages]);
   return {
-    uiRuntime,
-    streamRuntime,
-    agent: props.agent,
-    agentClientSource: streamRuntime.agentClientSource,
-    stopTokenMetricsTracking: e.stopTokenMetricsTracking,
-    settings: props.settings,
-    runtimeMessageBus: props.runtimeMessageBus,
-    startupWarnings: props.startupWarnings ?? [],
-    resumedBoot: props.resumedBoot,
-    recordingIntegration: props.recordingIntegration,
-    recordingOwner: props.recordingOwner,
+    stopTokenMetricsTracking: e.stopTracking,
+    scrollbackPager: pager,
+    recordRecordingEvent: props.recordRecordingEvent,
     nightly: h.nightly,
-    runtime: h.runtime,
     setLlxprtMdFileCount: h.setLlxprtMdFileCount,
     updateInfo: h.updateInfo,
-    setUpdateInfo: h.setUpdateInfo,
-    stdin: h.stdin,
-    setRawMode: h.setRawMode,
-    stdout: h.stdout,
-    todos: t.todos,
-    updateTodos: t.updateTodos,
-    recordingIntegrationRef: e.recordingIntegrationRef,
-    recordingSwapCallbacks: e.recordingSwapCallbacks,
-    scrollbackPager: sb.pager,
-    idePromptAnswered: e.idePromptAnswered,
     setIdePromptAnswered: e.setIdePromptAnswered,
     currentIDE: e.currentIDE,
     shouldShowIdePrompt: e.shouldShowIdePrompt,

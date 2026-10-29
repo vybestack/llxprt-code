@@ -79,6 +79,43 @@ export const AgentTelemetrySchema = z
     logPrompts: z.boolean().optional(),
     outfile: z.string().optional(),
     redactSensitiveData: z.boolean().optional(),
+    logApiBodies: z.boolean().optional(),
+    logApiBodyMaxChars: z.number().optional(),
+    outfileMaxBytes: z.number().optional(),
+    outfileMaxFiles: z.number().optional(),
+    logConversations: z.boolean().optional(),
+    logResponses: z.boolean().optional(),
+    maxConversationHistory: z.number().optional(),
+    conversationLogPath: z.string().optional(),
+    maxLogFiles: z.number().optional(),
+    maxLogSizeMB: z.number().optional(),
+    retentionDays: z.number().optional(),
+    redactFilePaths: z.boolean().optional(),
+    redactUrls: z.boolean().optional(),
+    redactEmails: z.boolean().optional(),
+    redactPersonalInfo: z.boolean().optional(),
+    customRedactionPatterns: z
+      .array(
+        z
+          .object({
+            name: z.string(),
+            pattern: z.instanceof(RegExp),
+            replacement: z.string(),
+            enabled: z.boolean(),
+          })
+          .strict(),
+      )
+      .optional(),
+    enableDataRetention: z.boolean().optional(),
+    conversationExpirationDays: z.number().optional(),
+    maxConversationsStored: z.number().optional(),
+    perf: z
+      .object({
+        enabled: z.boolean().optional(),
+        memory: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 

@@ -863,8 +863,6 @@ function statefulRuntime(
   const settings = new SettingsService();
   const config = createRuntimeConfigStub(settings);
   const providerRuntime = createProviderRuntimeContext({
-    settingsService: settings,
-    config,
     runtimeId,
   });
 

@@ -1,3 +1,4 @@
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -29,9 +30,10 @@ const ai = (text: string) => ({
 });
 
 describe('native agent owner restore and checkpoint names', () => {
+  useRecordingPrompts();
   it('uses captured media for durable recording, checkpoint fork and resume without Config media access', async () => {
-    await withNativeRecordingFixture(async ({ agent, config }) => {
-      const store = requireMediaStore(agent.agentClient);
+    await withNativeRecordingFixture(async ({ agent, config, clientFor }) => {
+      const store = requireMediaStore(clientFor(agent));
       const media = await store.admit({
         bytes: new Uint8Array([1, 3, 5, 7]),
         mimeType: 'image/png',
@@ -161,7 +163,7 @@ describe('native agent owner restore and checkpoint names', () => {
   }, 30000);
 
   it('rejects invalid turns and restores live and durable owners when client restoration fails', async () => {
-    await withNativeRecordingFixture(async ({ agent }) => {
+    await withNativeRecordingFixture(async ({ agent, clientFor }) => {
       await agent.setHistory([
         human('base'),
         ai('base-reply'),
@@ -174,7 +176,7 @@ describe('native agent owner restore and checkpoint names', () => {
       await expect(agent.session.restoreTurns(-1)).rejects.toThrow(
         'non-negative integer',
       );
-      const client = agent.agentClient;
+      const client = clientFor(agent);
       const original = client.resetChat.bind(client);
       const fault = spyOn(client, 'resetChat').mockImplementationOnce(
         async (...args) => {
@@ -320,6 +322,10 @@ describe('native agent owner restore and checkpoint names', () => {
             .map((entry) => entry.checkpointId)
             .sort(),
         ).toStrictEqual([first.checkpointId, second.checkpointId].sort());
+        await owner.setHistory([
+          human('owner-current'),
+          ai('owner-current-reply'),
+        ]);
         const restored = await owner.session.restoreTurns(1);
         expect(restored.itemsRemoved).toBe(2);
         await owner.session.flushRecording();
@@ -346,13 +352,14 @@ describe('native agent owner restore and checkpoint names', () => {
 });
 
 describe('public restore media reservation failure', () => {
+  useRecordingPrompts();
   for (const fixture of [
     withRecordingLifetimeFixture,
     withNativeRecordingFixture,
   ]) {
     it(`keeps live and durable rows atomic when the second media reservation fails (${fixture.name})`, async () => {
-      await fixture(async ({ agent }) => {
-        const store = requireMediaStore(agent.agentClient);
+      await fixture(async ({ agent, clientFor }) => {
+        const store = requireMediaStore(clientFor(agent));
         const first = await store.admit({
           bytes: new Uint8Array([2, 4, 6]),
           mimeType: 'image/png',
@@ -407,7 +414,7 @@ describe('public restore media reservation failure', () => {
         await agent.session.flushRecording();
         await agent.session.setRecording({ enabled: false });
         await agent.setHistory([]);
-        await agent.agentClient.getHistoryService()?.settleMediaOwnership();
+        await clientFor(agent).getHistoryService()?.settleMediaOwnership();
         expect(await store.hasReservations(first.contentId)).toBe(false);
         expect(await store.hasReservations(second.contentId)).toBe(false);
       });

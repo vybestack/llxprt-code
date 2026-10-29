@@ -1,3 +1,5 @@
+import { createTerminalHost } from '../../../session/terminalHost.js';
+let terminalHost = createTerminalHost();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -39,11 +41,7 @@ import {
   setPerfPhaseObserver,
 } from '@vybestack/llxprt-code-telemetry/perf/perfPhaseObserver.js';
 import type { PerfScheduler } from '@vybestack/llxprt-code-telemetry/perf/index.js';
-import {
-  replacePreviousInstanceAndOwner,
-  __setTrackedInstanceAndOwnerForTesting,
-  __resetInteractiveUIStateForTesting,
-} from '../../../session/interactiveUI.js';
+import {} from '../../../session/interactiveUI.js';
 import {
   cleanupInstanceAndOwner,
   rollbackInteractiveFailure,
@@ -111,8 +109,8 @@ describe('interactive lifecycle test lifecycle', () => {
     // Clear any tracked instance/owner left behind by a test without invoking
     // production cleanup (tests dispose real owners explicitly). This is the
     // test-only reset path, not a production code path.
-    __setTrackedInstanceAndOwnerForTesting(undefined, null);
-    __resetInteractiveUIStateForTesting();
+    terminalHost.publish(undefined, null);
+    terminalHost = createTerminalHost();
     setInteractiveStdoutObserver(null);
     setInteractiveRenderObserver(null);
     setPerfPhaseObserver(null);
@@ -152,8 +150,8 @@ describe('interactive lifecycle test lifecycle', () => {
       // Track A as the latest owner, then invoke the ACTUAL pre-start
       // replacement (the same routine startInteractiveUI calls before building
       // a new owner).
-      __setTrackedInstanceAndOwnerForTesting(undefined, ownerA);
-      await replacePreviousInstanceAndOwner();
+      terminalHost.publish(undefined, ownerA);
+      await terminalHost.cleanup();
 
       // A's observers, claim, and timer are gone.
       expect(getInteractiveStdoutObserver()).toBe(null);
@@ -202,8 +200,8 @@ describe('interactive lifecycle test lifecycle', () => {
       expect(getInteractiveStdoutObserver()).toBe(ownerA!.registry);
 
       // ACTUAL replacement of A.
-      __setTrackedInstanceAndOwnerForTesting(undefined, ownerA);
-      await replacePreviousInstanceAndOwner();
+      terminalHost.publish(undefined, ownerA);
+      await terminalHost.cleanup();
       expect(getInteractiveStdoutObserver()).toBe(null);
 
       // Start B.
@@ -252,10 +250,8 @@ describe('interactive lifecycle test lifecycle', () => {
 
       // Track both, then invoke the ACTUAL replacement: clear/unmount/dispose run
       // through the shared cleanupInstanceAndOwner.
-      __setTrackedInstanceAndOwnerForTesting(throwingClearInstance, owner);
-      await expect(replacePreviousInstanceAndOwner()).rejects.toThrow(
-        'clear failed',
-      );
+      terminalHost.publish(throwingClearInstance, owner);
+      await expect(terminalHost.cleanup()).rejects.toThrow('clear failed');
 
       // clear threw, but unmount ran and the real owner disposed (claim gone,
       // observers cleared).
@@ -500,12 +496,12 @@ describe('interactive lifecycle test lifecycle', () => {
         },
       };
 
-      __setTrackedInstanceAndOwnerForTesting(instance, owner);
-      await replacePreviousInstanceAndOwner();
+      terminalHost.publish(instance, owner);
+      await terminalHost.cleanup();
 
       // Simulate the registered global cleanup running AFTER the replacement
       // already captured+cleared the refs. It must find empty slots (no-op).
-      await replacePreviousInstanceAndOwner();
+      await terminalHost.cleanup();
 
       expect(clearCount).toBe(1);
       expect(unmountCount).toBe(1);
@@ -531,16 +527,14 @@ describe('interactive lifecycle test lifecycle', () => {
         },
       };
 
-      __setTrackedInstanceAndOwnerForTesting(instance, owner);
+      terminalHost.publish(instance, owner);
 
       // The first replacement captures+clears refs BEFORE calling
       // cleanupInstanceAndOwner, so even though clear throws the refs are gone.
-      await expect(replacePreviousInstanceAndOwner()).rejects.toThrow(
-        'clear boom',
-      );
+      await expect(terminalHost.cleanup()).rejects.toThrow('clear boom');
 
       // Second call finds empty slots — no double dispose despite the throw.
-      await replacePreviousInstanceAndOwner();
+      await terminalHost.cleanup();
 
       expect(clearCount).toBe(1);
       expect(unmountCount).toBe(1);
@@ -556,14 +550,12 @@ describe('interactive lifecycle test lifecycle', () => {
         },
       };
 
-      __setTrackedInstanceAndOwnerForTesting(undefined, owner);
+      terminalHost.publish(undefined, owner);
 
-      await expect(replacePreviousInstanceAndOwner()).rejects.toThrow(
-        'dispose boom',
-      );
+      await expect(terminalHost.cleanup()).rejects.toThrow('dispose boom');
 
       // Refs already cleared despite the throw — second call is a no-op.
-      await replacePreviousInstanceAndOwner();
+      await terminalHost.cleanup();
 
       expect(disposeCount).toBe(1);
     });

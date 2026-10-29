@@ -1,3 +1,11 @@
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { createSubagentScope } from './helpers/create-subagent-scope.js';
+import {
+  createStatelessRuntimeBundle as createRunnableRuntimeBundle,
+  scopeInputs,
+} from './subagent-test-helpers.js';
+import type { SubagentTestInputs } from './subagent-test-helpers.js';
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -24,38 +32,52 @@
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { SubAgentScope } from '../subagent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import * as RuntimeLoader from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type {
   AgentRuntimeContext,
   AgentRuntimeProviderAdapter,
   AgentRuntimeTelemetryAdapter,
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type {
   PromptConfig,
   ModelConfig,
   RunConfig,
-  SubAgentRuntimeOverrides,
-} from '../subagentTypes.js';
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import type { ContentGenerator } from '../contentGenerator.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 
+class StatelessConfig extends Config {
+  setModel(): never {
+    throw new Error('Forbidden foreground model mutation');
+  }
+  setProvider(): never {
+    throw new Error('Forbidden foreground provider mutation');
+  }
+  getToolRegistry(): never {
+    throw new Error('Forbidden Config tool discovery');
+  }
+  getEphemeralSetting(): never {
+    throw new Error('Forbidden Config settings discovery');
+  }
+  getEphemeralSettings(): never {
+    throw new Error('Forbidden Config settings discovery');
+  }
+}
 /**
  * Test helper: Create minimal Config for testing
  */
 function createTestConfig(overrides?: {
   model?: string;
   provider?: string;
-}): Config {
-  const config = new Config({
+}): StatelessConfig {
+  const config = new StatelessConfig({
     sessionId: 'test-session-id',
     targetDir: '/tmp/test-dir',
     cwd: '/tmp/test-dir',
@@ -107,84 +129,23 @@ function createStatelessRuntimeBundle(options?: {
   historyService?: HistoryService;
   providerRuntime?: ProviderRuntimeContext;
   toolRegistry?: ToolRegistry;
-}): AgentRuntimeLoaderResult {
-  const providerAdapter = statelessProviderAdapter(options);
-
-  const telemetryAdapter =
-    options?.telemetryAdapter ??
-    ({
-      logApiRequest: vi.fn(),
-      logApiResponse: vi.fn(),
-      logApiError: vi.fn(),
-    } as AgentRuntimeTelemetryAdapter);
-
-  const toolsView =
-    options?.toolsView ??
-    ({
-      listToolNames: vi.fn(() => []),
-      getToolMetadata: vi.fn(() => undefined),
-    } as ToolRegistryView);
-
-  const history = statelessHistory(options);
-
-  const providerRuntime =
-    options?.providerRuntime ??
-    ({
-      runtimeId: 'runtime-bundle',
-      metadata: {},
-      settingsService: {
-        get: vi.fn(),
-        set: vi.fn(),
-      },
-    } as unknown as ProviderRuntimeContext);
-
-  const toolRegistry =
-    options?.toolRegistry ??
-    ({
-      getTool: vi.fn(),
-      getFunctionDeclarationsFiltered: vi.fn(() => []),
-      getAllTools: vi.fn(() => []),
-    } as unknown as ToolRegistry);
-
-  const runtimeState = Object.freeze({
-    runtimeId: 'runtime-bundle',
-    provider: 'gemini',
-    model: options?.model ?? 'gemini-2.0-flash-thinking-exp',
-    sessionId: 'runtime-session',
-    proxyUrl: undefined,
-    modelParams: {
-      temperature: 0.7,
-      topP: 0.9,
-    },
+}): ReturnType<typeof createRunnableRuntimeBundle> {
+  const fixture = createRunnableRuntimeBundle({
+    providerAdapter: options?.providerAdapter,
+    telemetryAdapter: options?.telemetryAdapter,
+    toolsView: options?.toolsView,
+    history: options?.historyService,
+    toolRegistry: options?.toolRegistry,
   });
-
-  const runtimeContext: AgentRuntimeContext = Object.freeze({
-    state: runtimeState,
-    history,
-    ephemerals: {
-      compressionThreshold: () => 0.8,
-      contextLimit: () => 60_000,
-      preserveThreshold: () => 0.2,
-      toolFormatOverride: () => undefined,
-    },
-    telemetry: telemetryAdapter,
-    provider: providerAdapter,
-    tools: toolsView,
-    providerRuntime,
-  });
-
   return {
-    runtimeContext,
-    history,
-    providerAdapter,
-    telemetryAdapter,
-    toolsView,
-    contentGenerator: {
-      generateContent: vi.fn(),
-      generateContentStream: vi.fn(),
-      countTokens: vi.fn(),
-    } as unknown as ContentGenerator,
-    toolRegistry,
+    ...fixture,
+    runtimeContext: Object.freeze({
+      ...fixture.runtimeContext,
+      state: Object.freeze({
+        ...fixture.runtimeContext.state,
+        model: options?.model ?? 'gemini-2.0-flash-thinking-exp',
+      }),
+    }),
   };
 }
 
@@ -201,13 +162,13 @@ const createEnvironmentLoader = (): EnvironmentLoader =>
 
 function createRuntimeOverrides(
   options: {
-    runtimeBundle?: AgentRuntimeLoaderResult;
+    runtimeBundle?: ReturnType<typeof createRunnableRuntimeBundle>;
     environmentLoader?: EnvironmentLoader;
     toolRegistry?: ToolRegistry;
   } = {},
 ): {
-  overrides: SubAgentRuntimeOverrides;
-  runtimeBundle: AgentRuntimeLoaderResult;
+  overrides: SubagentTestInputs;
+  runtimeBundle: ReturnType<typeof createRunnableRuntimeBundle>;
   environmentLoader: EnvironmentLoader;
 } {
   const runtimeBundle =
@@ -216,7 +177,14 @@ function createRuntimeOverrides(
   const environmentLoader =
     options.environmentLoader ?? createEnvironmentLoader();
 
-  const overrides: SubAgentRuntimeOverrides = {
+  const overrides: SubagentTestInputs = {
+    instructions: emptyInstructionReads,
+    workspacePaths: {
+      resolve: (path) => path,
+      directories: () => [],
+      contains: () => true,
+      validate: () => null,
+    },
     readMcpInstructions: () => undefined,
     runtimeBundle,
     environmentContextLoader: environmentLoader,
@@ -228,10 +196,14 @@ function createRuntimeOverrides(
 
   return { overrides, runtimeBundle, environmentLoader };
 }
-let foregroundConfig: Config;
 
 describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
-  beforeEach(facadeCallback0);
+  let foregroundConfig: StatelessConfig;
+
+  beforeEach(() => {
+    // Clear all mocks before each test
+    vi.clearAllMocks();
+  });
 
   /**
    * @plan PLAN-20251028-STATELESS6.P07
@@ -242,73 +214,146 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
    * This test SHOULD FAIL because current code has setModel() at line 609
    */
   describe('Config Mutation Prevention', () => {
-    it(
-      'should NOT call config.setModel() when creating subagent',
-      facadeCallback1,
-    );
+    it('should NOT call config.setModel() when creating subagent', async () => {
+      // @plan PLAN-20251028-STATELESS6.P07
+      // @requirement REQ-STAT6-003.1
 
-    it(
-      'should NOT call config.setProvider() when creating subagent',
-      facadeCallback2,
-    );
+      // GIVEN foreground config with specific model
+      foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
+      const originalModel = foregroundConfig.getModel();
 
-    it('should NOT call any Config mutator methods', facadeCallback3);
+      // Spy on setModel to detect mutation attempts
+      const setModelSpy = vi.spyOn(foregroundConfig, 'setModel');
+
+      // WHEN subagent created with different model
+      const promptConfig = createTestPromptConfig();
+      const modelConfig = createTestModelConfig(
+        'gemini-2.0-flash-thinking-exp',
+      );
+      const runConfig = createTestRunConfig();
+
+      const { overrides } = createRuntimeOverrides();
+
+      await createSubagentScope(
+        {
+          name: 'test-subagent',
+          prompt: promptConfig,
+          model: modelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, overrides),
+      );
+
+      // THEN Config.setModel() should NEVER be called
+      expect(setModelSpy).not.toHaveBeenCalled();
+
+      // AND foreground model should remain unchanged
+      expect(foregroundConfig.getModel()).toBe(originalModel);
+      expect(foregroundConfig.getModel()).toBe('gemini-2.0-flash-exp');
+    });
+
+    it('should NOT call config.setProvider() when creating subagent', async () => {
+      // @plan PLAN-20251028-STATELESS6.P07
+      // @requirement REQ-STAT6-003.1
+
+      // GIVEN foreground config with specific provider
+      foregroundConfig = createTestConfig({
+        model: 'gemini-2.0-flash-exp',
+        provider: 'gemini',
+      });
+      const originalProvider = foregroundConfig.getProvider();
+
+      // Spy on setProvider to detect mutation attempts
+      const setProviderSpy = vi.spyOn(foregroundConfig, 'setProvider');
+
+      // WHEN subagent created
+      const promptConfig = createTestPromptConfig();
+      const modelConfig = createTestModelConfig(
+        'gemini-2.0-flash-thinking-exp',
+      );
+      const runConfig = createTestRunConfig();
+
+      const { overrides: providerOverrides } = createRuntimeOverrides();
+
+      await createSubagentScope(
+        {
+          name: 'test-subagent',
+          prompt: promptConfig,
+          model: modelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, providerOverrides),
+      );
+
+      // THEN Config.setProvider() should NEVER be called
+      expect(setProviderSpy).not.toHaveBeenCalled();
+
+      // AND foreground provider should remain unchanged
+      expect(foregroundConfig.getProvider()).toBe(originalProvider);
+    });
+
+    it('should NOT call any Config mutator methods', async () => {
+      // @plan PLAN-20251028-STATELESS6.P07
+      // @requirement REQ-STAT6-003.1
+
+      foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
+
+      // Spy on ALL Config mutators
+      const setModelSpy = vi.spyOn(foregroundConfig, 'setModel');
+      const setProviderSpy = vi.spyOn(foregroundConfig, 'setProvider');
+
+      const promptConfig = createTestPromptConfig();
+      const modelConfig = createTestModelConfig(
+        'gemini-2.0-flash-thinking-exp',
+      );
+      const runConfig = createTestRunConfig();
+
+      const { overrides: mutatorOverrides } = createRuntimeOverrides();
+
+      await createSubagentScope(
+        {
+          name: 'test-subagent',
+          prompt: promptConfig,
+          model: modelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, mutatorOverrides),
+      );
+
+      // ZERO Config mutations allowed
+      expect(setModelSpy).not.toHaveBeenCalled();
+      expect(setProviderSpy).not.toHaveBeenCalled();
+    });
   });
 
-  it(
-    'does not invoke AgentRuntimeLoader when runtime bundle supplied',
-    facadeCallback4,
-  );
+  it('does not invoke AgentRuntimeLoader when runtime bundle supplied', async () => {
+    foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
+    const loaderSpy = vi.spyOn(RuntimeLoader, 'loadAgentRuntime');
 
-  /**
-   * @plan PLAN-20251028-STATELESS6.P07
-   * @requirement REQ-STAT6-001.3
-   * @pseudocode agent-runtime-context.md line 80
-   *
-   * Test: AgentRuntimeContext passed to SubAgentScope is frozen
-   * This test SHOULD FAIL because SubAgentScope doesn't use AgentRuntimeContext yet
-   */
-  describe('Runtime View Immutability', () => {
-    it('should receive frozen AgentRuntimeContext', facadeCallback5);
+    const promptConfig = createTestPromptConfig();
+    const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
+    const runConfig = createTestRunConfig();
+    const { overrides } = createRuntimeOverrides();
 
-    it('should have frozen runtime state within context', facadeCallback6);
-  });
-
-  /**
-   * @plan PLAN-20251028-STATELESS6.P07
-   * @requirement REQ-STAT6-003.2
-   * @pseudocode agent-runtime-context.md line 96
-   *
-   * Test: Each SubAgentScope gets unique HistoryService instance
-   * This test SHOULD FAIL because current implementation may share history
-   */
-  describe('History Service Isolation', () => {
-    it(
-      'should allocate isolated history services for each subagent',
-      facadeCallback7,
+    await createSubagentScope(
+      {
+        name: 'test-subagent',
+        prompt: promptConfig,
+        model: modelConfig,
+        run: runConfig,
+        toolConfig: undefined,
+        outputConfig: undefined,
+      },
+      ...scopeInputs(foregroundConfig, overrides),
     );
 
-    it('should maintain isolated history between subagents', facadeCallback8);
-  });
-
-  /**
-   * @plan PLAN-20251028-STATELESS6.P07
-   * @requirement REQ-STAT6-001.1
-   * @pseudocode agent-runtime-context.md lines 92-98
-   *
-   * Test: SubAgentScope constructs isolated runtime state
-   * This test SHOULD FAIL because current implementation mutates Config instead
-   */
-  describe('Runtime State Construction', () => {
-    it(
-      'should construct isolated runtime context with subagent model',
-      facadeCallback9,
-    );
-
-    it(
-      'should build runtime context directly without mutating foreground config',
-      facadeCallback10,
-    );
+    expect(loaderSpy).not.toHaveBeenCalled();
   });
 
   /**
@@ -319,588 +364,405 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
    * This test ensures that if code regresses and calls setModel, we catch it
    */
   describe('Regression Guards', () => {
-    it(
-      'should throw if legacy setModel is invoked (regression guard)',
-      facadeCallback11,
-    );
+    it('should throw if legacy setModel is invoked (regression guard)', async () => {
+      // @plan PLAN-20251028-STATELESS6.P07
+      // @requirement REQ-STAT6-003.1
+
+      foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
+
+      // Inject spy that throws to simulate code regression detection
+      vi.spyOn(foregroundConfig, 'setModel').mockImplementation(() => {
+        throw new Error(
+          'REGRESSION: Config.setModel() called in subagent path',
+        );
+      });
+
+      const promptConfig = createTestPromptConfig();
+      const modelConfig = createTestModelConfig(
+        'gemini-2.0-flash-thinking-exp',
+      );
+      const runConfig = createTestRunConfig();
+
+      // Should NOT throw because setModel should never be called
+      // If this throws, it means the code is still using the legacy path
+      // After P08: setModel is no longer called, so the mock never throws
+      const { overrides } = createRuntimeOverrides();
+      const result = await createSubagentScope(
+        {
+          name: 'test-subagent',
+          prompt: promptConfig,
+          model: modelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, overrides),
+      );
+
+      // Verify that SubAgentScope was created successfully (setModel was NOT called)
+      expect(result).toBeDefined();
+      expect(result).toBeInstanceOf(SubAgentScope);
+    });
   });
 
   describe('Config Independence', () => {
-    it(
-      'throws if runtime bundle is omitted (enforces stateless runtime)',
-      facadeCallback12,
-    );
+    it('should not read from foreground Config during runtime context construction', async () => {
+      foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
 
-    it(
-      'should not read from foreground Config during runtime context construction',
-      facadeCallback13,
-    );
+      const regressionError = new Error(
+        'REGRESSION: SubAgentScope accessed foreground Config',
+      );
+
+      Object.defineProperty(foregroundConfig, 'getProviderManager', {
+        value: () => {
+          throw regressionError;
+        },
+      });
+      vi.spyOn(foregroundConfig, 'getToolRegistry').mockImplementation(() => {
+        throw regressionError;
+      });
+      vi.spyOn(foregroundConfig, 'getEphemeralSetting').mockImplementation(
+        () => {
+          throw regressionError;
+        },
+      );
+      vi.spyOn(foregroundConfig, 'getEphemeralSettings').mockImplementation(
+        () => {
+          throw regressionError;
+        },
+      );
+      vi.spyOn(
+        foregroundConfig,
+        'getContentGeneratorConfig',
+      ).mockImplementation(() => {
+        throw regressionError;
+      });
+      vi.spyOn(foregroundConfig, 'getSessionId').mockImplementation(() => {
+        throw regressionError;
+      });
+      vi.spyOn(foregroundConfig, 'getProvider').mockImplementation(() => {
+        throw regressionError;
+      });
+
+      const promptConfig = createTestPromptConfig();
+      const modelConfig = createTestModelConfig(
+        'gemini-2.0-flash-thinking-exp',
+      );
+      const runConfig = createTestRunConfig();
+
+      const providerRuntime = createProviderRuntimeContext({
+        runtimeId: 'override-runtime',
+      });
+
+      const providerAdapter: AgentRuntimeProviderAdapter = {
+        getActiveProvider: () => ({
+          name: 'gemini',
+          getModels: async () => [],
+          getDefaultModel: () => modelConfig.model,
+          generateChatCompletion: vi.fn(
+            async function* (): AsyncGenerator<IContent> {
+              yield { speaker: 'ai', blocks: [] };
+            },
+          ),
+        }),
+        setActiveProvider: vi.fn(),
+        getProviderKeys: () => {
+          throw new Error('Fixture has no key storage');
+        },
+      };
+
+      const telemetryAdapter: AgentRuntimeTelemetryAdapter = {
+        logApiRequest: vi.fn(),
+        logApiResponse: vi.fn(),
+        logApiError: vi.fn(),
+      };
+
+      const toolsView: ToolRegistryView = {
+        listToolNames: () => [],
+        getToolMetadata: () => undefined,
+      };
+
+      const runtimeBundle = createStatelessRuntimeBundle({
+        model: modelConfig.model,
+        providerAdapter,
+        telemetryAdapter,
+        toolsView,
+        providerRuntime,
+      });
+
+      const { overrides } = createRuntimeOverrides({ runtimeBundle });
+
+      await expect(
+        createSubagentScope(
+          {
+            name: 'stateless-subagent',
+            prompt: promptConfig,
+            model: modelConfig,
+            run: runConfig,
+            toolConfig: undefined,
+            outputConfig: undefined,
+          },
+          ...scopeInputs(foregroundConfig, overrides),
+        ),
+      ).resolves.toBeInstanceOf(SubAgentScope);
+    });
+  });
+  describe('behavior through ChildAgentScope execution', () => {
+    interface RecordedRun {
+      readonly scope: Awaited<ReturnType<typeof createSubagentScope>>;
+      readonly history: HistoryService;
+      readonly requests: RuntimeGenerateChatOptions[];
+      readonly runtimeContext: AgentRuntimeContext;
+      readonly run: () => Promise<void>;
+    }
+
+    const WORKSPACE_PATHS = {
+      resolve: (filePath: string) => filePath,
+      directories: () => [],
+      contains: () => true,
+      validate: () => null,
+    };
+
+    function systemInstructionOf(request: RuntimeGenerateChatOptions): string {
+      const instruction = request.systemInstruction;
+      if (typeof instruction !== 'string')
+        throw new Error('Expected a string system instruction');
+      return instruction;
+    }
+
+    async function createRecordedRun(options: {
+      readonly name: string;
+      readonly foreground: Config;
+      readonly provider: string;
+      readonly runtimeModel: string;
+      readonly sessionId: string;
+      readonly reply: string;
+      readonly prompt: string;
+      readonly environmentText: string;
+      readonly generationParameters?: { temperature: number; topP: number };
+    }): Promise<RecordedRun> {
+      const requests: RuntimeGenerateChatOptions[] = [];
+      const providerAdapter: AgentRuntimeProviderAdapter = {
+        getActiveProvider: () => ({
+          name: options.provider,
+          getDefaultModel: () => options.runtimeModel,
+          getModels: async () => [],
+          generateChatCompletion(
+            request: RuntimeGenerateChatOptions | AsyncIterable<IContent>,
+          ) {
+            if (!('contents' in request))
+              throw new Error('Expected options-form generation');
+            requests.push(request);
+            return (async function* () {
+              yield {
+                speaker: 'ai',
+                blocks: [{ type: 'text', text: options.reply }],
+              };
+            })();
+          },
+        }),
+        setActiveProvider: vi.fn(),
+        getProviderKeys: () => {
+          throw new Error('Test provider adapter has no key storage');
+        },
+      };
+      const history = new HistoryService();
+      const fixture = createRunnableRuntimeBundle({ history, providerAdapter });
+      const runtimeContext: AgentRuntimeContext = Object.freeze({
+        ...fixture.runtimeContext,
+        state: Object.freeze({
+          ...fixture.runtimeContext.state,
+          provider: options.provider,
+          model: options.runtimeModel,
+          sessionId: options.sessionId,
+        }),
+      });
+      const runtimeBundle: ReturnType<typeof createRunnableRuntimeBundle> = {
+        ...fixture,
+        runtimeContext,
+      };
+      const [runtime, operations] = scopeInputs(options.foreground, {
+        instructions: emptyInstructionReads,
+        workspacePaths: WORKSPACE_PATHS,
+        readMcpInstructions: () => undefined,
+        runtimeBundle,
+        environmentContextLoader: async () => [
+          { text: options.environmentText },
+        ],
+        admitModelParameters: () => ({
+          providerName: options.provider,
+          modelParams: options.generationParameters ?? {},
+        }),
+      });
+      const scope = await createSubagentScope(
+        {
+          name: options.name,
+          prompt: createTestPromptConfig(),
+          model: createTestModelConfig(options.runtimeModel),
+          run: createTestRunConfig(),
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        runtime,
+        operations,
+      );
+      const context = new ContextState();
+      context.set('task_behaviour_prompts', [options.prompt]);
+      return {
+        scope,
+        history,
+        requests,
+        runtimeContext,
+        run: () => scope.runNonInteractive(context),
+      };
+    }
+
+    async function historyTexts(history: HistoryService): Promise<string[]> {
+      const texts: string[] = [];
+      for await (const row of history.streamRawHistory())
+        texts.push(
+          row.blocks
+            .map((block) => (block.type === 'text' ? block.text : ''))
+            .join(''),
+        );
+      return texts;
+    }
+
+    it('uses the supplied runtime model at the content-generation boundary', async () => {
+      foregroundConfig = createTestConfig({ model: 'foreground-model' });
+      const setModelSpy = vi.spyOn(foregroundConfig, 'setModel');
+
+      const recorded = await createRecordedRun({
+        name: 'model-subagent',
+        foreground: foregroundConfig,
+        provider: 'recording-provider',
+        runtimeModel: 'subagent-runtime-model',
+        sessionId: 'model-session',
+        reply: 'MODEL-REPLY',
+        prompt: 'MODEL-PROMPT',
+        environmentText: 'MODEL-ENV',
+      });
+      await recorded.run();
+
+      expect(recorded.requests).toHaveLength(1);
+      expect(systemInstructionOf(recorded.requests[0])).toContain(
+        'with subagent-runtime-model via recording-provider',
+      );
+      expect(systemInstructionOf(recorded.requests[0])).not.toContain(
+        'foreground-model',
+      );
+      const reply = (
+        await Array.fromAsync(recorded.history.streamRawHistory())
+      ).find((entry) => entry.speaker === 'ai');
+      expect(reply?.metadata?.model).toBe('subagent-runtime-model');
+      expect(foregroundConfig.getModel()).toBe('foreground-model');
+      expect(setModelSpy).not.toHaveBeenCalled();
+    });
+
+    it('sends the supplied runtime state, not the foreground config, to the provider', async () => {
+      foregroundConfig = createTestConfig({
+        model: 'foreground-model',
+        provider: 'foreground-provider',
+      });
+      const setModelSpy = vi.spyOn(foregroundConfig, 'setModel');
+      const setProviderSpy = vi.spyOn(foregroundConfig, 'setProvider');
+
+      const recorded = await createRecordedRun({
+        name: 'state-subagent',
+        foreground: foregroundConfig,
+        provider: 'runtime-provider',
+        runtimeModel: 'runtime-model',
+        sessionId: 'runtime-state-session',
+        reply: 'STATE-REPLY',
+        prompt: 'STATE-PROMPT',
+        environmentText: 'STATE-ENV-FROM-LOADER',
+        generationParameters: { temperature: 0.31, topP: 0.41 },
+      });
+      await recorded.run();
+
+      expect(recorded.requests).toHaveLength(1);
+      const [request] = recorded.requests;
+      expect(request.metadata?.__logicalRequestId).toMatch(
+        /^runtime-state-session#state-subagent-/,
+      );
+      expect(request.modelParameters?.providerName).toBe('runtime-provider');
+      expect(request.modelParameters?.modelParams).toStrictEqual({
+        temperature: 0.31,
+        topP: 0.41,
+      });
+      expect(
+        systemInstructionOf(request).startsWith('STATE-ENV-FROM-LOADER'),
+      ).toBe(true);
+      expect(systemInstructionOf(request)).toContain(
+        'with runtime-model via runtime-provider',
+      );
+      expect(systemInstructionOf(request)).not.toContain('foreground-');
+      expect(await historyTexts(recorded.history)).toContain('STATE-PROMPT');
+      expect(setModelSpy).not.toHaveBeenCalled();
+      expect(setProviderSpy).not.toHaveBeenCalled();
+      expect(foregroundConfig.getModel()).toBe('foreground-model');
+      expect(foregroundConfig.getProvider()).toBe('foreground-provider');
+    });
+
+    it('writes each run only to its own supplied history while a second scope is live', async () => {
+      foregroundConfig = createTestConfig({ model: 'foreground-model' });
+
+      const first = await createRecordedRun({
+        name: 'subagent-a',
+        foreground: foregroundConfig,
+        provider: 'recording-provider',
+        runtimeModel: 'model-a',
+        sessionId: 'session-a',
+        reply: 'REPLY-FROM-A',
+        prompt: 'PROMPT-FOR-A',
+        environmentText: 'ENV-A',
+      });
+      const second = await createRecordedRun({
+        name: 'subagent-b',
+        foreground: foregroundConfig,
+        provider: 'recording-provider',
+        runtimeModel: 'model-b',
+        sessionId: 'session-b',
+        reply: 'REPLY-FROM-B',
+        prompt: 'PROMPT-FOR-B',
+        environmentText: 'ENV-B',
+      });
+      expect(first.history).not.toBe(second.history);
+
+      await first.run();
+      const afterFirst = await historyTexts(first.history);
+      expect(afterFirst).toStrictEqual(['PROMPT-FOR-A', 'REPLY-FROM-A']);
+      expect(await historyTexts(second.history)).toStrictEqual([]);
+
+      await second.run();
+      expect(await historyTexts(second.history)).toStrictEqual([
+        'PROMPT-FOR-B',
+        'REPLY-FROM-B',
+      ]);
+      expect(await historyTexts(first.history)).toStrictEqual(afterFirst);
+    });
+
+    it('leaves the supplied runtime context and state frozen and unchanged after a run', async () => {
+      foregroundConfig = createTestConfig({ model: 'foreground-model' });
+      const recorded = await createRecordedRun({
+        name: 'frozen-subagent',
+        foreground: foregroundConfig,
+        provider: 'recording-provider',
+        runtimeModel: 'frozen-model',
+        sessionId: 'frozen-session',
+        reply: 'FROZEN-REPLY',
+        prompt: 'FROZEN-PROMPT',
+        environmentText: 'FROZEN-ENV',
+      });
+      const stateBefore = { ...recorded.runtimeContext.state };
+
+      await recorded.run();
+
+      expect(Object.isFrozen(recorded.runtimeContext)).toBe(true);
+      expect(Object.isFrozen(recorded.runtimeContext.state)).toBe(true);
+      expect({ ...recorded.runtimeContext.state }).toStrictEqual(stateBefore);
+      expect(recorded.runtimeContext.state.model).toBe('frozen-model');
+      expect(recorded.runtimeContext.state.provider).toBe('recording-provider');
+    });
   });
 });
-
-function facadeCallback0(): void {
-  // Clear all mocks before each test
-  vi.clearAllMocks();
-}
-
-async function facadeCallback1(): Promise<void> {
-  // @plan PLAN-20251028-STATELESS6.P07
-  // @requirement REQ-STAT6-003.1
-
-  // GIVEN foreground config with specific model
-  foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-  const originalModel = foregroundConfig.getModel();
-
-  // Spy on setModel to detect mutation attempts
-  const setModelSpy = vi.spyOn(foregroundConfig, 'setModel');
-
-  // WHEN subagent created with different model
-  const promptConfig = createTestPromptConfig();
-  const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
-  const runConfig = createTestRunConfig();
-
-  const { overrides } = createRuntimeOverrides();
-
-  await SubAgentScope.create(
-    'test-subagent',
-    foregroundConfig,
-    promptConfig,
-    modelConfig,
-    runConfig,
-    undefined,
-    undefined,
-    overrides,
-  );
-
-  // THEN Config.setModel() should NEVER be called
-  expect(setModelSpy).not.toHaveBeenCalled();
-
-  // AND foreground model should remain unchanged
-  expect(foregroundConfig.getModel()).toBe(originalModel);
-  expect(foregroundConfig.getModel()).toBe('gemini-2.0-flash-exp');
-}
-
-async function facadeCallback2(): Promise<void> {
-  // @plan PLAN-20251028-STATELESS6.P07
-  // @requirement REQ-STAT6-003.1
-
-  // GIVEN foreground config with specific provider
-  foregroundConfig = createTestConfig({
-    model: 'gemini-2.0-flash-exp',
-    provider: 'gemini',
-  });
-  const originalProvider = foregroundConfig.getProvider();
-
-  // Spy on setProvider to detect mutation attempts
-  const setProviderSpy = vi.spyOn(foregroundConfig, 'setProvider');
-
-  // WHEN subagent created
-  const promptConfig = createTestPromptConfig();
-  const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
-  const runConfig = createTestRunConfig();
-
-  const { overrides: providerOverrides } = createRuntimeOverrides();
-
-  await SubAgentScope.create(
-    'test-subagent',
-    foregroundConfig,
-    promptConfig,
-    modelConfig,
-    runConfig,
-    undefined,
-    undefined,
-    providerOverrides,
-  );
-
-  // THEN Config.setProvider() should NEVER be called
-  expect(setProviderSpy).not.toHaveBeenCalled();
-
-  // AND foreground provider should remain unchanged
-  expect(foregroundConfig.getProvider()).toBe(originalProvider);
-}
-
-async function facadeCallback3(): Promise<void> {
-  // @plan PLAN-20251028-STATELESS6.P07
-  // @requirement REQ-STAT6-003.1
-
-  foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-  // Spy on ALL Config mutators
-  const setModelSpy = vi.spyOn(foregroundConfig, 'setModel');
-  const setProviderSpy = vi.spyOn(foregroundConfig, 'setProvider');
-
-  const promptConfig = createTestPromptConfig();
-  const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
-  const runConfig = createTestRunConfig();
-
-  const { overrides: mutatorOverrides } = createRuntimeOverrides();
-
-  await SubAgentScope.create(
-    'test-subagent',
-    foregroundConfig,
-    promptConfig,
-    modelConfig,
-    runConfig,
-    undefined,
-    undefined,
-    mutatorOverrides,
-  );
-
-  // ZERO Config mutations allowed
-  expect(setModelSpy).not.toHaveBeenCalled();
-  expect(setProviderSpy).not.toHaveBeenCalled();
-}
-
-async function facadeCallback4(): Promise<void> {
-  foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-  const loaderSpy = vi.spyOn(RuntimeLoader, 'loadAgentRuntime');
-
-  const promptConfig = createTestPromptConfig();
-  const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
-  const runConfig = createTestRunConfig();
-  const { overrides } = createRuntimeOverrides();
-
-  await SubAgentScope.create(
-    'test-subagent',
-    foregroundConfig,
-    promptConfig,
-    modelConfig,
-    runConfig,
-    undefined,
-    undefined,
-    overrides,
-  );
-
-  expect(loaderSpy).not.toHaveBeenCalled();
-}
-
-async function facadeCallback5(): Promise<void> {
-  // @plan PLAN-20251028-STATELESS6.P07
-  // @requirement REQ-STAT6-001.3
-
-  foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-  const promptConfig = createTestPromptConfig();
-  const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
-  const runConfig = createTestRunConfig();
-
-  const { overrides } = createRuntimeOverrides();
-
-  const scope = await SubAgentScope.create(
-    'test-subagent',
-    foregroundConfig,
-    promptConfig,
-    modelConfig,
-    runConfig,
-    undefined,
-    undefined,
-    overrides,
-  );
-
-  // WHEN SubAgentScope is created
-  // THEN it should have a frozen AgentRuntimeContext
-  // Note: This will fail because current implementation uses Config, not AgentRuntimeContext
-  const runtimeContext = (
-    scope as unknown as { runtimeContext: AgentRuntimeContext }
-  ).runtimeContext;
-
-  expect(runtimeContext).toBeDefined();
-  expect(Object.isFrozen(runtimeContext)).toBe(true);
-}
-
-async function facadeCallback6(): Promise<void> {
-  // @plan PLAN-20251028-STATELESS6.P07
-  // @requirement REQ-STAT6-001.3
-
-  foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-  const promptConfig = createTestPromptConfig();
-  const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
-  const runConfig = createTestRunConfig();
-
-  const { overrides: frozenOverrides } = createRuntimeOverrides();
-
-  const scope = await SubAgentScope.create(
-    'test-subagent',
-    foregroundConfig,
-    promptConfig,
-    modelConfig,
-    runConfig,
-    undefined,
-    undefined,
-    frozenOverrides,
-  );
-
-  // Access internal runtimeContext (will fail with current Config-based implementation)
-  const runtimeContext = (
-    scope as unknown as { runtimeContext: AgentRuntimeContext }
-  ).runtimeContext;
-
-  expect(runtimeContext.state).toBeDefined();
-  expect(Object.isFrozen(runtimeContext.state)).toBe(true);
-}
-
-async function facadeCallback7(): Promise<void> {
-  // @plan PLAN-20251028-STATELESS6.P07
-  // @requirement REQ-STAT6-003.2
-
-  foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-  const promptConfig = createTestPromptConfig();
-  const modelConfig1 = createTestModelConfig('gemini-2.0-flash-thinking-exp');
-  const modelConfig2 = createTestModelConfig('gemini-2.0-flash-exp');
-  const runConfig = createTestRunConfig();
-
-  // Create two subagent scopes
-  const { overrides: overridesA } = createRuntimeOverrides();
-  const scopeA = await SubAgentScope.create(
-    'subagent-a',
-    foregroundConfig,
-    promptConfig,
-    modelConfig1,
-    runConfig,
-    undefined,
-    undefined,
-    overridesA,
-  );
-
-  const { overrides: overridesB } = createRuntimeOverrides();
-  const scopeB = await SubAgentScope.create(
-    'subagent-b',
-    foregroundConfig,
-    promptConfig,
-    modelConfig2,
-    runConfig,
-    undefined,
-    undefined,
-    overridesB,
-  );
-
-  // Access runtime contexts (will fail with current Config-based implementation)
-  const contextA = (
-    scopeA as unknown as { runtimeContext: AgentRuntimeContext }
-  ).runtimeContext;
-  const contextB = (
-    scopeB as unknown as { runtimeContext: AgentRuntimeContext }
-  ).runtimeContext;
-
-  // History instances must be different references
-  expect(contextA.history).toBeDefined();
-  expect(contextB.history).toBeDefined();
-  expect(contextA.history).not.toBe(contextB.history);
-}
-
-async function facadeCallback8(): Promise<void> {
-  // @plan PLAN-20251028-STATELESS6.P07
-  // @requirement REQ-STAT6-003.2
-
-  foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-  const promptConfig = createTestPromptConfig();
-  const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
-  const runConfig = createTestRunConfig();
-
-  // Create two subagent scopes
-  const { overrides: histOverridesA } = createRuntimeOverrides();
-  const scopeA = await SubAgentScope.create(
-    'subagent-a',
-    foregroundConfig,
-    promptConfig,
-    modelConfig,
-    runConfig,
-    undefined,
-    undefined,
-    histOverridesA,
-  );
-
-  const { overrides: histOverridesB } = createRuntimeOverrides();
-  const scopeB = await SubAgentScope.create(
-    'subagent-b',
-    foregroundConfig,
-    promptConfig,
-    modelConfig,
-    runConfig,
-    undefined,
-    undefined,
-    histOverridesB,
-  );
-
-  // Access runtime contexts
-  const contextA = (
-    scopeA as unknown as { runtimeContext: AgentRuntimeContext }
-  ).runtimeContext;
-  const contextB = (
-    scopeB as unknown as { runtimeContext: AgentRuntimeContext }
-  ).runtimeContext;
-
-  // Verify histories are isolated (mutations don't cross boundaries)
-  // Note: This test structure assumes HistoryService has methods we can verify
-  // The actual implementation will depend on HistoryService interface
-  expect(contextA.history).not.toBe(contextB.history);
-}
-
-async function facadeCallback9(): Promise<void> {
-  // @plan PLAN-20251028-STATELESS6.P07
-  // @requirement REQ-STAT6-001.1
-
-  foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-  const promptConfig = createTestPromptConfig();
-  const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
-  const runConfig = createTestRunConfig();
-
-  const { overrides } = createRuntimeOverrides({
-    runtimeBundle: createStatelessRuntimeBundle({
-      model: modelConfig.model,
-    }),
-  });
-
-  const scope = await SubAgentScope.create(
-    'test-subagent',
-    foregroundConfig,
-    promptConfig,
-    modelConfig,
-    runConfig,
-    undefined,
-    undefined,
-    overrides,
-  );
-
-  // Access runtime context (will fail with current Config-based implementation)
-  const runtimeContext = (
-    scope as unknown as { runtimeContext: AgentRuntimeContext }
-  ).runtimeContext;
-
-  // Runtime context should have subagent model, NOT foreground model
-  expect(runtimeContext.state.model).toBe('gemini-2.0-flash-thinking-exp');
-
-  // Foreground config should be unchanged
-  expect(foregroundConfig.getModel()).toBe('gemini-2.0-flash-exp');
-}
-
-async function facadeCallback10(): Promise<void> {
-  // @plan PLAN-20251028-STATELESS6.P07
-  // @requirement REQ-STAT6-001.1
-
-  foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-  const originalModel = foregroundConfig.getModel();
-
-  // Create spy to detect any config access during runtime context creation
-  const setModelSpy = vi.spyOn(foregroundConfig, 'setModel');
-
-  const promptConfig = createTestPromptConfig();
-  const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
-  const runConfig = createTestRunConfig();
-
-  const { overrides: runtimeOverrides } = createRuntimeOverrides({
-    runtimeBundle: createStatelessRuntimeBundle({
-      model: modelConfig.model,
-    }),
-  });
-
-  const scope = await SubAgentScope.create(
-    'test-subagent',
-    foregroundConfig,
-    promptConfig,
-    modelConfig,
-    runConfig,
-    undefined,
-    undefined,
-    runtimeOverrides,
-  );
-
-  // Access runtime context
-  const runtimeContext = (
-    scope as unknown as { runtimeContext: AgentRuntimeContext }
-  ).runtimeContext;
-
-  // Verify runtime context was built directly (not via Config mutation)
-  expect(setModelSpy).not.toHaveBeenCalled();
-  expect(foregroundConfig.getModel()).toBe(originalModel);
-  expect(runtimeContext.state.model).toBe('gemini-2.0-flash-thinking-exp');
-}
-
-async function facadeCallback11(): Promise<void> {
-  // @plan PLAN-20251028-STATELESS6.P07
-  // @requirement REQ-STAT6-003.1
-
-  foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-  // Inject spy that throws to simulate code regression detection
-  vi.spyOn(foregroundConfig, 'setModel').mockImplementation(() => {
-    throw new Error('REGRESSION: Config.setModel() called in subagent path');
-  });
-
-  const promptConfig = createTestPromptConfig();
-  const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
-  const runConfig = createTestRunConfig();
-
-  // Should NOT throw because setModel should never be called
-  // If this throws, it means the code is still using the legacy path
-  // After P08: setModel is no longer called, so the mock never throws
-  const { overrides } = createRuntimeOverrides();
-  const result = await SubAgentScope.create(
-    'test-subagent',
-    foregroundConfig,
-    promptConfig,
-    modelConfig,
-    runConfig,
-    undefined,
-    undefined,
-    overrides,
-  );
-
-  // Verify that SubAgentScope was created successfully (setModel was NOT called)
-  expect(result).toBeDefined();
-  expect(result).toBeInstanceOf(SubAgentScope);
-}
-
-async function facadeCallback12(): Promise<void> {
-  foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-  const promptConfig = createTestPromptConfig();
-  const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
-  const runConfig = createTestRunConfig();
-
-  await expect(
-    SubAgentScope.create(
-      'stateless-subagent',
-      foregroundConfig,
-      promptConfig,
-      modelConfig,
-      runConfig,
-      undefined,
-      undefined,
-      { readMcpInstructions: () => undefined },
-    ),
-  ).rejects.toThrow('runtime bundle');
-}
-
-async function facadeCallback13(): Promise<void> {
-  foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-  const regressionError = new Error(
-    'REGRESSION: SubAgentScope accessed foreground Config',
-  );
-
-  Object.defineProperty(foregroundConfig, 'getProviderManager', {
-    value: () => {
-      throw regressionError;
-    },
-  });
-  vi.spyOn(foregroundConfig, 'getToolRegistry').mockImplementation(() => {
-    throw regressionError;
-  });
-  vi.spyOn(foregroundConfig, 'getEphemeralSetting').mockImplementation(() => {
-    throw regressionError;
-  });
-  vi.spyOn(foregroundConfig, 'getEphemeralSettings').mockImplementation(() => {
-    throw regressionError;
-  });
-  vi.spyOn(foregroundConfig, 'getContentGeneratorConfig').mockImplementation(
-    () => {
-      throw regressionError;
-    },
-  );
-  vi.spyOn(foregroundConfig, 'getSessionId').mockImplementation(() => {
-    throw regressionError;
-  });
-  vi.spyOn(foregroundConfig, 'getProvider').mockImplementation(() => {
-    throw regressionError;
-  });
-
-  const promptConfig = createTestPromptConfig();
-  const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
-  const runConfig = createTestRunConfig();
-
-  const settingsService = new SettingsService();
-  const providerRuntime = createProviderRuntimeContext({
-    settingsService,
-    runtimeId: 'override-runtime',
-  });
-
-  const providerAdapter: AgentRuntimeProviderAdapter = {
-    getActiveProvider: () =>
-      ({
-        name: 'gemini',
-        getDefaultModel: () => modelConfig.model,
-        generateChatCompletion: vi.fn(async function* () {
-          yield { speaker: 'ai', blocks: [] };
-        }),
-      }) as IProvider,
-    setActiveProvider: vi.fn(),
-  };
-
-  const telemetryAdapter: AgentRuntimeTelemetryAdapter = {
-    logApiRequest: vi.fn(),
-    logApiResponse: vi.fn(),
-    logApiError: vi.fn(),
-  };
-
-  const toolsView: ToolRegistryView = {
-    listToolNames: () => [],
-    getToolMetadata: () => undefined,
-  };
-
-  const runtimeBundle = createStatelessRuntimeBundle({
-    model: modelConfig.model,
-    providerAdapter,
-    telemetryAdapter,
-    toolsView,
-    providerRuntime,
-  });
-
-  const { overrides } = createRuntimeOverrides({ runtimeBundle });
-
-  await expect(
-    SubAgentScope.create(
-      'stateless-subagent',
-      foregroundConfig,
-      promptConfig,
-      modelConfig,
-      runConfig,
-      undefined,
-      undefined,
-      overrides,
-    ),
-  ).resolves.toBeInstanceOf(SubAgentScope);
-}
-
-function statelessHistory(
-  options?: Parameters<typeof createStatelessRuntimeBundle>[0],
-): HistoryService {
-  return (
-    options?.historyService ??
-    ({
-      clear: vi.fn(),
-      add: vi.fn(),
-      async *getCuratedForProviderStream() {
-        yield* [];
-      },
-      getIdGeneratorCallback: vi.fn(() => vi.fn()),
-      findUnmatchedToolCalls: vi.fn(() => []),
-    } as unknown as HistoryService)
-  );
-}
-
-function statelessProviderAdapter(
-  options?: Parameters<typeof createStatelessRuntimeBundle>[0],
-): AgentRuntimeProviderAdapter {
-  return (
-    options?.providerAdapter ??
-    ({
-      getActiveProvider: vi.fn(
-        () =>
-          ({
-            name: 'gemini',
-            generateChatCompletion: vi.fn(async function* () {
-              yield { speaker: 'ai', blocks: [] };
-            }),
-            getDefaultModel: () =>
-              options?.model ?? 'gemini-2.0-flash-thinking-exp',
-          }) as IProvider,
-      ),
-      setActiveProvider: vi.fn(),
-    } as AgentRuntimeProviderAdapter)
-  );
-}

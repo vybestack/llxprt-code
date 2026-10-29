@@ -447,27 +447,40 @@ function stringArrayProperty(
 /**
  * Issue #3256: The save_memory eval isolates itself from task bookkeeping via the
  * flat `excludeTools` settings list, which drives both registry exclusion and policy
- * denial. The exactly-three task-management tools must be excluded and `save_memory`
+ * denial. The three task-management tools must be excluded and `save_memory`
  * must not be excluded (it is registered by default and must remain reachable).
+ *
+ * The nightly model runs on CPU, so the request is also kept small: only
+ * `save_memory` is registered through `tools.core`, and the always-added
+ * subagent tools are excluded. Without this the default registry sends about
+ * 14.6k prompt tokens and the case exceeds the rig's 240 s timeout in prefill.
  */
 describe('save_memory eval tool isolation (operative flat excludeTools)', () => {
-  it('uses the operative flat excludeTools list for exactly the three todo tools', () => {
-    const settings = objectProperty(
+  function evalSettings(): ts.ObjectLiteralExpression {
+    return objectProperty(
       objectProperty(findEvalCase(loadSaveMemoryEval()), 'params'),
       'settings',
     );
+  }
 
-    expect(stringArrayProperty(settings, 'excludeTools')).toEqual(TODO_TOOLS);
+  it('uses the operative flat excludeTools list for the three todo tools', () => {
+    expect(stringArrayProperty(evalSettings(), 'excludeTools')).toEqual(
+      expect.arrayContaining(TODO_TOOLS),
+    );
   });
 
   it('does not exclude save_memory', () => {
-    const settings = objectProperty(
-      objectProperty(findEvalCase(loadSaveMemoryEval()), 'params'),
-      'settings',
-    );
-
-    expect(stringArrayProperty(settings, 'excludeTools')).not.toContain(
+    expect(stringArrayProperty(evalSettings(), 'excludeTools')).not.toContain(
       'save_memory',
+    );
+  });
+
+  it('registers only save_memory and excludes the always-added subagent tools', () => {
+    expect(
+      stringArrayProperty(objectProperty(evalSettings(), 'tools'), 'core'),
+    ).toEqual(['save_memory']);
+    expect(stringArrayProperty(evalSettings(), 'excludeTools')).toEqual(
+      expect.arrayContaining(['task', 'list_subagents']),
     );
   });
 });

@@ -78,6 +78,7 @@ function options(
     metadata: { abortSignal: signal },
     systemInstruction: 'system 雪',
     invocation: createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: 'native-continuation',
       providerName: 'openai',
       ephemeralsSnapshot: {

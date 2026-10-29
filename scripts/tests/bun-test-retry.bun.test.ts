@@ -62,7 +62,7 @@ describe('shared runner retry and timeout policy', () => {
     expect(result).toEqual(outcomes[1]);
     expect(logs).toEqual(['RETRY (2/2): spec.ts after per-file timeout']);
   });
-  it('reduces a recovered core reap failure without losing its cause', async () => {
+  it('keeps the first attempt reap failure when the retry reaps cleanly', async () => {
     const outcomes = [
       {
         passed: false,
@@ -85,7 +85,7 @@ describe('shared runner retry and timeout policy', () => {
       ...outcomes[1],
       passed: false,
       timedOut: true,
-      reapFailed: false,
+      reapFailed: true,
       reapError: 'first reap',
     });
     expect(logs).toEqual(['RETRY (2/2): core.ts after per-file timeout']);
@@ -289,7 +289,7 @@ describe('retry boundaries', () => {
     ).rejects.toBe(error);
     expect(count).toBe(1);
   });
-  it('core retains retry budget and exit code on first-reap recovery', async () => {
+  it('core retains retry budget and exit code while keeping the first reap failure', async () => {
     let count = 0;
     const logs: string[] = [];
     const result = await runCoreTimeoutRetry(
@@ -318,7 +318,7 @@ describe('retry boundaries', () => {
       passed: false,
       timedOut: true,
       timeoutMs: 456,
-      reapFailed: false,
+      reapFailed: true,
       reapError: 'first',
       exitCode: 0,
     });
@@ -434,15 +434,13 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawn } from 'node:child_process';
+import { withTerminatedNativeProcessTree } from './native-process-tree-fixture.js';
 import {
   buildCliJUnitCases,
   buildCoreJUnitCases,
   buildAuthJUnitCases,
   renderJUnitReport,
   cleanupAttemptDirectory,
-  observeChildClose,
-  killChildTreeAndWait,
   junitReportContainsPerTestTimeout,
   JUNIT_SCAN_CHUNK_BYTES,
 } from '../lib/bun-test-retry.js';
@@ -785,14 +783,22 @@ describe('mechanical composition', () => {
     ).rejects.toBe(error);
   });
   it('reaps a real detached child and observes close', async () => {
-    const child = spawn(
-      process.execPath,
-      ['-e', 'setInterval(() => {}, 1000)'],
-      { detached: process.platform !== 'win32', stdio: 'ignore' },
-    );
-    const closed = observeChildClose(child);
-    await killChildTreeAndWait(child, closed, { reapTimeoutMs: 8000 });
-    expect(child.signalCode).not.toBeNull();
-    expect(child.exitCode).toBeNull();
+    await withTerminatedNativeProcessTree((child, descendantPid) => {
+      if (child.pid === undefined)
+        throw new Error('Missing native child identity');
+      for (const pid of [child.pid, descendantPid]) {
+        expect(() => process.kill(pid, 0), `Native PID ${pid}`).toThrow(
+          expect.objectContaining({ code: 'ESRCH' }),
+        );
+      }
+      if (process.platform === 'win32') {
+        expect(child.signalCode).toBeNull();
+        expect(child.exitCode).not.toBeNull();
+        expect(child.exitCode).not.toBe(0);
+      } else {
+        expect(child.signalCode).not.toBeNull();
+        expect(child.exitCode).toBeNull();
+      }
+    });
   });
 });

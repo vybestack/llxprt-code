@@ -12,6 +12,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ChatSession } from '../../chatSession.js';
+import { chatSessionPorts } from '../../chatSessionPorts.js';
+import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { createHistoryProviderFileBindingStore } from '@vybestack/llxprt-code-core/services/history/provider-file-binding.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import {
   createAgentRuntimeContext,
@@ -181,6 +184,8 @@ export async function createPurgeChat(options: PurgeChatOptions): Promise<{
         name,
         parameters,
         signal,
+        undefined,
+        () => Promise.reject(new Error('Unexpected fixture network request')),
       ),
     state,
     history,
@@ -195,19 +200,26 @@ export async function createPurgeChat(options: PurgeChatOptions): Promise<{
     provider: createProviderAdapterFromManager(setup.providerManager),
     telemetry: createTelemetryAdapter(setup.config, isolatedTelemetry()),
     tools: createToolRegistryViewFromRegistry(),
-    providerRuntime: { ...setup.runtime, config: setup.config },
+    providerRuntime: { ...setup.runtime },
     mediaStore: store,
     mediaAdmission: new MediaAdmissionService(store),
   });
   await registerRuntimeMediaOwner(runtime);
-  const contentGenerator = {
-    generateContent: vi.fn(),
-    generateContentStream: vi.fn(),
-    countTokens: vi.fn().mockReturnValue(1),
-    embedContent: vi.fn(),
-  };
+  const contentGenerator = createContentGeneratorFixture();
   return {
-    chat: new ChatSession(runtime, contentGenerator, {}, []),
+    chat: new ChatSession(
+      chatSessionPorts(runtime),
+      setup.config,
+      new RequestMediaResolver(store),
+      1024 * 1024,
+      createHistoryProviderFileBindingStore(history),
+      harnessLifecycle(),
+      undefined,
+      undefined,
+      contentGenerator,
+      {},
+      [],
+    ),
     recording,
     execution: createPurgeExecution(recording),
     requests,
@@ -326,6 +338,8 @@ export async function createChat(
         name,
         parameters,
         signal,
+        undefined,
+        () => Promise.reject(new Error('Unexpected fixture network request')),
       ),
     state,
     history,
@@ -340,18 +354,32 @@ export async function createChat(
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime: {
       ...setup.runtime,
-      config: setup.config,
-      providerFileLifecycle: harnessLifecycle(),
     },
     mediaStore: store,
     mediaAdmission: new MediaAdmissionService(store),
   });
   await registerRuntimeMediaOwner(runtime);
-  const contentGenerator = {
+  const contentGenerator = createContentGeneratorFixture();
+  return new ChatSession(
+    chatSessionPorts(runtime),
+    setup.config,
+    new RequestMediaResolver(store),
+    1024 * 1024,
+    createHistoryProviderFileBindingStore(history),
+    harnessLifecycle(),
+    undefined,
+    undefined,
+    contentGenerator,
+    {},
+    [],
+  );
+}
+
+function createContentGeneratorFixture() {
+  return {
     generateContent: vi.fn(),
     generateContentStream: vi.fn(),
     countTokens: vi.fn().mockReturnValue(1),
     embedContent: vi.fn(),
   };
-  return new ChatSession(runtime, contentGenerator, {}, []);
 }

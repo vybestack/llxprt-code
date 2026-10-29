@@ -19,14 +19,10 @@ for (const size of [65]) {
         const expected = formatHistoryMemoryBreakdown(
           Array.from({ length: size }, (_, index) => suffixRow(index)),
         );
-        const context = createMockCommandContext({
-          services: {
-            agent: { agentClient: { getHistoryService: () => history } },
-          },
-        });
-        const memory = createPerfCommand().subCommands?.find(
-          (command) => command.name === 'memory',
-        );
+        const context = createMockCommandContext();
+        const memory = createPerfCommand({
+          readHistory: () => history.streamRawHistory(),
+        }).subCommands?.find((command) => command.name === 'memory');
         if (memory?.action === undefined)
           throw new Error('Missing memory action');
         const result = await memory.action(context, '');

@@ -7,20 +7,24 @@
 import type { SlashCommand } from './types.js';
 import { CommandKind } from './types.js';
 
-export const vimCommand: SlashCommand = {
-  name: 'vim',
-  description: 'toggle vim mode on/off',
-  kind: CommandKind.BUILT_IN,
-  action: async (context, _args) => {
-    const newVimState = await context.ui.toggleVimEnabled();
+export function createVimCommand(
+  toggleVimEnabled: () => Promise<boolean>,
+): SlashCommand {
+  return {
+    name: 'vim',
+    description: 'toggle vim mode on/off',
+    kind: CommandKind.BUILT_IN,
+    action: async () => {
+      const newVimState = await toggleVimEnabled();
 
-    const message = newVimState
-      ? 'Entered Vim mode. Run /vim again to exit.'
-      : 'Exited Vim mode.';
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: message,
-    };
-  },
-};
+      const message = newVimState
+        ? 'Entered Vim mode. Run /vim again to exit.'
+        : 'Exited Vim mode.';
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: message,
+      };
+    },
+  };
+}

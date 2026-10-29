@@ -20,6 +20,7 @@ function makeBodyRuntime() {
     model: 'o3-mini',
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: (input, init) => globalThis.fetch(input, init),
     runtimeId: 'critical-body',
     providerName: 'openai-responses',
     ephemeralsSnapshot: { 'prompt-caching': 'off' },

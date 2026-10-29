@@ -1,9 +1,10 @@
-import { detectFromProviderConfig } from '../../runtime/providerInspection.js';
+import { detectFromProviderConfig } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import {
   vi,
@@ -14,8 +15,8 @@ import {
   afterEach,
   setSystemTime,
 } from 'bun:test';
-import { statsCommand } from './statsCommand.js';
-import { type CommandContext } from './types.js';
+import { registerStatsCommand } from '../../__tests__/stats-command-test-owner.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 
@@ -24,7 +25,7 @@ const getActiveProviderNameMock = vi.fn();
 const providerManagerMock = vi.fn();
 
 describe('statsCommand null sessionStartTime guard', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -32,6 +33,10 @@ describe('statsCommand null sessionStartTime guard', () => {
 
     mockContext = createMockCommandContext({
       runtimeApi: {
+        fetch: (
+          input: RequestInfo | URL,
+          init?: RequestInit,
+        ): Promise<Response> => globalThis.fetch(input, init),
         getEphemeralSetting: getEphemeralSettingMock,
         getActiveProviderName: getActiveProviderNameMock,
         detectProviderQuota: (name: string) => {
@@ -55,7 +60,7 @@ describe('statsCommand null sessionStartTime guard', () => {
   it('should show an error when sessionStartTime is null', async () => {
     mockContext.session.stats.sessionStartTime = null as unknown as Date;
 
-    await statsCommand.action!(mockContext, '');
+    await registerStatsCommand(mockContext).action!(mockContext, '');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
@@ -69,7 +74,7 @@ describe('statsCommand null sessionStartTime guard', () => {
   it('should show an error when sessionStartTime is undefined', async () => {
     mockContext.session.stats.sessionStartTime = undefined as unknown as Date;
 
-    await statsCommand.action!(mockContext, '');
+    await registerStatsCommand(mockContext).action!(mockContext, '');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {

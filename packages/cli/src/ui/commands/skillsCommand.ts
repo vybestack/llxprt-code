@@ -4,20 +4,37 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import {
-  type CommandContext,
   type SlashCommand,
   type SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
-import { MessageType, type HistoryItemSkillsList } from '../types.js';
-import { SettingScope } from '../../config/settings.js';
-import { enableSkill, disableSkill } from '../../utils/skillSettings.js';
+import {
+  type HistoryItemWithoutId,
+  MessageType,
+  type HistoryItemSkillsList,
+  type HistoryItemInfo,
+} from '../types.js';
+
+import type { disableSkill } from '../../utils/skillSettings.js';
+import type { SkillDefinition } from '@vybestack/llxprt-code-core';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+export interface SkillsCommandOperations {
+  readonly isConfigured: boolean;
+  readonly isAvailable: boolean;
+  readonly list: (includeDisabled?: boolean) => SkillDefinition[];
+  readonly find: (name: string) => SkillDefinition | undefined;
+  readonly isAdminEnabled: () => boolean;
+  readonly enable: (name: string) => ReturnType<typeof disableSkill>;
+  readonly disable: (name: string) => ReturnType<typeof disableSkill>;
+  readonly reload: () => Promise<void>;
+  readonly addItem: UseHistoryManagerReturn['addItem'];
+  readonly setPendingItem: (item: HistoryItemWithoutId | null) => void;
+}
 import { renderSkillActionFeedback } from '../../utils/skillUtils.js';
 
 async function listAction(
-  context: CommandContext,
+  context: SkillsCommandOperations,
   args: string,
 ): Promise<void | SlashCommandActionReturn> {
   const subCommand = args.trim().toLowerCase();
@@ -35,13 +52,9 @@ async function listAction(
     }
   }
 
-  const skillManager = context.services.config?.skillOperations;
+  const skillManager = context.isAvailable ? context : null;
   if (!skillManager) {
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    context.addItem(
       {
         type: MessageType.ERROR,
         text: 'Could not retrieve skill manager.',
@@ -71,26 +84,16 @@ async function listAction(
     showDescriptions: useShowDescriptions,
   };
 
-  await writeCommandOutput(
-    () => context.services.agent?.agentClient.getHistoryService() ?? null,
-    context.services.agent?.session,
-    context.recordingOwner,
-    context.ui.addItem,
-    skillsListItem,
-  );
+  context.addItem(skillsListItem);
 }
 
 async function disableAction(
-  context: CommandContext,
+  context: SkillsCommandOperations,
   args: string,
 ): Promise<void | SlashCommandActionReturn> {
   const skillName = args.trim();
   if (!skillName) {
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    context.addItem(
       {
         type: MessageType.ERROR,
         text: 'Please provide a skill name to disable.',
@@ -99,13 +102,9 @@ async function disableAction(
     );
     return;
   }
-  const skillManager = context.services.config?.skillOperations;
+  const skillManager = context.isAvailable ? context : null;
   if (skillManager?.isAdminEnabled() === false) {
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    context.addItem(
       {
         type: MessageType.ERROR,
         text: 'Skills are disabled by your admin.',
@@ -117,11 +116,7 @@ async function disableAction(
 
   const skill = skillManager?.find(skillName);
   if (!skill) {
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    context.addItem(
       {
         type: MessageType.ERROR,
         text: `Skill "${skillName}" not found.`,
@@ -131,11 +126,7 @@ async function disableAction(
     return;
   }
 
-  const scope = context.services.settings.workspace.path
-    ? SettingScope.Workspace
-    : SettingScope.User;
-
-  const result = disableSkill(context.services.settings, skillName, scope);
+  const result = context.disable(skillName);
 
   let feedback = renderSkillActionFeedback(
     result,
@@ -145,11 +136,7 @@ async function disableAction(
     feedback += ' Use "/skills reload" for it to take effect.';
   }
 
-  await writeCommandOutput(
-    () => context.services.agent?.agentClient.getHistoryService() ?? null,
-    context.services.agent?.session,
-    context.recordingOwner,
-    context.ui.addItem,
+  context.addItem(
     {
       type: MessageType.INFO,
       text: feedback,
@@ -159,16 +146,12 @@ async function disableAction(
 }
 
 async function enableAction(
-  context: CommandContext,
+  context: SkillsCommandOperations,
   args: string,
 ): Promise<void | SlashCommandActionReturn> {
   const skillName = args.trim();
   if (!skillName) {
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    context.addItem(
       {
         type: MessageType.ERROR,
         text: 'Please provide a skill name to enable.',
@@ -178,13 +161,9 @@ async function enableAction(
     return;
   }
 
-  const skillManager = context.services.config?.skillOperations;
+  const skillManager = context.isAvailable ? context : null;
   if (skillManager?.isAdminEnabled() === false) {
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    context.addItem(
       {
         type: MessageType.ERROR,
         text: 'Skills are disabled by your admin.',
@@ -194,7 +173,7 @@ async function enableAction(
     return;
   }
 
-  const result = enableSkill(context.services.settings, skillName);
+  const result = context.enable(skillName);
 
   let feedback = renderSkillActionFeedback(
     result,
@@ -204,11 +183,7 @@ async function enableAction(
     feedback += ' Use "/skills reload" for it to take effect.';
   }
 
-  await writeCommandOutput(
-    () => context.services.agent?.agentClient.getHistoryService() ?? null,
-    context.services.agent?.session,
-    context.recordingOwner,
-    context.ui.addItem,
+  context.addItem(
     {
       type: MessageType.INFO,
       text: feedback,
@@ -248,15 +223,10 @@ function buildReloadSummary(
 }
 
 async function reloadAction(
-  context: CommandContext,
+  context: SkillsCommandOperations,
 ): Promise<void | SlashCommandActionReturn> {
-  const config = context.services.config;
-  if (!config) {
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+  if (!context.isConfigured) {
+    context.addItem(
       {
         type: MessageType.ERROR,
         text: 'Could not retrieve configuration.',
@@ -266,14 +236,14 @@ async function reloadAction(
     return;
   }
 
-  const skillManager = context.services.config?.skillOperations;
+  const skillManager = context.isAvailable ? context : null;
   if (!skillManager) throw new Error('Skills reload requires a session owner');
   const beforeNames = new Set(skillManager.list().map((s) => s.name));
 
   const startTime = Date.now();
   const pendingState = { itemSet: false };
   const pendingTimeout = setTimeout(() => {
-    context.ui.setPendingItem({
+    context.setPendingItem({
       type: MessageType.INFO,
       text: 'Reloading skills...',
     });
@@ -292,35 +262,27 @@ async function reloadAction(
           setTimeout(resolve, minVisibleDuration - elapsed),
         );
       }
-      context.ui.setPendingItem(null);
+      context.setPendingItem(null);
     }
 
     const afterSkills = skillManager.list();
     const successText = buildReloadSummary(beforeNames, afterSkills);
 
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    context.addItem(
       {
         type: 'info',
         text: successText,
         icon: '✓ ',
         color: 'green',
-      },
+      } as HistoryItemInfo,
       Date.now(),
     );
   } catch (error) {
     clearTimeout(pendingTimeout);
     if (pendingState.itemSet) {
-      context.ui.setPendingItem(null);
+      context.setPendingItem(null);
     }
-    await writeCommandOutput(
-      () => context.services.agent?.agentClient.getHistoryService() ?? null,
-      context.services.agent?.session,
-      context.recordingOwner,
-      context.ui.addItem,
+    context.addItem(
       {
         type: MessageType.ERROR,
         text: `Failed to reload skills: ${error instanceof Error ? error.message : String(error)}`,
@@ -331,10 +293,10 @@ async function reloadAction(
 }
 
 async function disableCompletion(
-  context: CommandContext,
+  context: SkillsCommandOperations,
   partialArg: string,
 ): Promise<string[]> {
-  const skillManager = context.services.config?.skillOperations;
+  const skillManager = context.isAvailable ? context : null;
   if (!skillManager) {
     return [];
   }
@@ -345,10 +307,10 @@ async function disableCompletion(
 }
 
 async function enableCompletion(
-  context: CommandContext,
+  context: SkillsCommandOperations,
   partialArg: string,
 ): Promise<string[]> {
-  const skillManager = context.services.config?.skillOperations;
+  const skillManager = context.isAvailable ? context : null;
   if (!skillManager) {
     return [];
   }
@@ -358,42 +320,48 @@ async function enableCompletion(
     .map((s) => s.name);
 }
 
-export const skillsCommand: SlashCommand = {
-  name: 'skills',
-  description:
-    'List, enable, disable, or reload LLxprt Code skills. Usage: /skills [list | disable <name> | enable <name> | reload]',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: false,
-  subCommands: [
-    {
-      name: 'list',
-      description:
-        'List available agent skills. Usage: /skills list [all] [nodesc]',
-      kind: CommandKind.BUILT_IN,
-      action: listAction,
-    },
-    {
-      name: 'disable',
-      description: 'Disable a skill by name. Usage: /skills disable <name>',
-      kind: CommandKind.BUILT_IN,
-      action: disableAction,
-      completion: disableCompletion,
-    },
-    {
-      name: 'enable',
-      description:
-        'Enable a disabled skill by name. Usage: /skills enable <name>',
-      kind: CommandKind.BUILT_IN,
-      action: enableAction,
-      completion: enableCompletion,
-    },
-    {
-      name: 'reload',
-      description:
-        'Reload the list of discovered skills. Usage: /skills reload',
-      kind: CommandKind.BUILT_IN,
-      action: reloadAction,
-    },
-  ],
-  action: listAction,
-};
+export function createSkillsCommand(
+  operations: SkillsCommandOperations,
+): SlashCommand {
+  return {
+    name: 'skills',
+    description:
+      'List, enable, disable, or reload LLxprt Code skills. Usage: /skills [list | disable <name> | enable <name> | reload]',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: false,
+    subCommands: [
+      {
+        name: 'list',
+        description:
+          'List available agent skills. Usage: /skills list [all] [nodesc]',
+        kind: CommandKind.BUILT_IN,
+        action: async (_invocation, args) => listAction(operations, args),
+      },
+      {
+        name: 'disable',
+        description: 'Disable a skill by name. Usage: /skills disable <name>',
+        kind: CommandKind.BUILT_IN,
+        action: async (_invocation, args) => disableAction(operations, args),
+        completion: async (_invocation, args) =>
+          disableCompletion(operations, args),
+      },
+      {
+        name: 'enable',
+        description:
+          'Enable a disabled skill by name. Usage: /skills enable <name>',
+        kind: CommandKind.BUILT_IN,
+        action: async (_invocation, args) => enableAction(operations, args),
+        completion: async (_invocation, args) =>
+          enableCompletion(operations, args),
+      },
+      {
+        name: 'reload',
+        description:
+          'Reload the list of discovered skills. Usage: /skills reload',
+        kind: CommandKind.BUILT_IN,
+        action: async () => reloadAction(operations),
+      },
+    ],
+    action: async (_invocation, args) => listAction(operations, args),
+  };
+}

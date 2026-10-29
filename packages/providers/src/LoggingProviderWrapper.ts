@@ -1,3 +1,4 @@
+import type { ProviderInvocationData } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -20,7 +21,7 @@ import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker
 import type { ProviderPerformanceMetrics } from './types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   ConfigBasedRedactor,
   type ConversationDataRedactor,
@@ -91,7 +92,7 @@ export type { ConversationDataRedactor };
  * In stateless hardening mode (P08), this wrapper:
  * - Drops constructor-captured config/settings
  * - Relies on per-call runtime metadata
- * - Implements runtime context push/pop (via runtimeContextResolver)
+ * - Captures immutable admission data per invocation
  * - Guards against missing runtime with MissingProviderRuntimeError
  */
 export class LoggingProviderWrapper implements IProvider {
@@ -109,7 +110,8 @@ export class LoggingProviderWrapper implements IProvider {
   private redactor: ConversationDataRedactor | null = null;
   private readonly injectedRedactor: ConversationDataRedactor | null = null;
   private performanceTracker: ProviderPerformanceTracker;
-  private runtimeContextResolver?: () => ProviderRuntimeContext;
+  private readInvocationData?: (providerName: string) => ProviderInvocationData;
+  private readRuntimeKind?: () => RuntimeKind | undefined;
   private statelessRuntimeMetadata: Record<string, unknown> | null = null;
   private debug: DebugLogger;
   private optionsNormalizer:
@@ -179,10 +181,16 @@ export class LoggingProviderWrapper implements IProvider {
    * @plan:PLAN-20251023-STATELESS-HARDENING.P05
    * @requirement:REQ-SP4-001
    * @pseudocode provider-runtime-handling.md lines 10-15
-   * Registers a resolver so runtime context is injected per invocation.
+   * Registers a reader for immutable invocation data.
    */
-  setRuntimeContextResolver(resolver: () => ProviderRuntimeContext): void {
-    this.runtimeContextResolver = resolver;
+  setInvocationDataReader(
+    reader: (providerName: string) => ProviderInvocationData,
+  ): void {
+    this.readInvocationData = reader;
+  }
+
+  setRuntimeKindReader(reader: () => RuntimeKind | undefined): void {
+    this.readRuntimeKind = reader;
   }
 
   /**
@@ -421,7 +429,8 @@ export class LoggingProviderWrapper implements IProvider {
     maybeTools: ProviderToolset | undefined,
   ): GenerateChatOptions {
     return normalizeChatCompletionOptions(contentOrOptions, maybeTools, {
-      runtimeContextResolver: this.runtimeContextResolver,
+      readInvocationData: this.readInvocationData,
+      readRuntimeKind: this.readRuntimeKind,
       statelessRuntimeMetadata: this.statelessRuntimeMetadata,
       optionsNormalizer: this.optionsNormalizer,
       providerName: this.wrapped.name,

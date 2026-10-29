@@ -1,3 +1,13 @@
+import type {
+  AgentActivationOperation,
+  Agent,
+  AgentEvent,
+} from '@vybestack/llxprt-code-agents';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  parseBootstrapArgs,
+  prepareRuntimeForProfile,
+} from '../config/profileBootstrap.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,24 +15,40 @@
  */
 import { createSessionModelCommand } from '../runtime/session-model-command.js';
 
-import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
 import {
   bootstrapRuntimeAndConfig,
-  setupOwnerSessionRecording,
+  setupOwnerSessionRecording as setupOwnerSessionRecordingCore,
 } from '../cliSessionBootstrap.js';
 import { activateConfiguredProvider } from '../cliProviderInit.js';
 import { createForegroundAgent } from '../cliAgentBootstrap.js';
-import { createRuntimeOwnerFeatures } from '../runtime/createRuntimeOwnerFeatures.js';
-import { loadSettings } from '../config/settings.js';
+import { createRuntimeOwnerFeatures } from './runtime-owner-features-fixture.js';
 import { parseArguments } from '../config/cliArgParser.js';
+import { loadSettings } from '../config/settings.js';
 import {
-  runExitCleanup,
   __resetCleanupStateForTesting,
+  runExitCleanup,
 } from '../utils/cleanup.js';
+
+function setupOwnerSessionRecording(
+  config: Parameters<typeof setupOwnerSessionRecordingCore>[0],
+  agent: Agent,
+  argv: Parameters<typeof setupOwnerSessionRecordingCore>[3],
+  selection: Parameters<typeof setupOwnerSessionRecordingCore>[4],
+  warnings?: Parameters<typeof setupOwnerSessionRecordingCore>[5],
+) {
+  return setupOwnerSessionRecordingCore(
+    config,
+    agent.session,
+    agent.session.listBrowserTargetsDetailed.bind(agent.session),
+    argv,
+    selection,
+    warnings,
+  ).then(({ resumedBoot }) => resumedBoot);
+}
 
 const scenario = z.enum(['record', 'profile', 'resume']).parse(process.argv[2]);
 const directory = z.string().parse(process.argv[3]);
@@ -37,15 +63,50 @@ if (!headless)
 async function bootstrap() {
   const settings = loadSettings(directory);
   const argv = await parseArguments(settings.merged);
-  const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
-  const activation = await activateConfiguredProvider(
-    boot.config,
-    boot.providerManager,
+  const credentialAuthority = new CredentialAuthority();
+  const callerSettings = new SettingsService();
+  const parsed = parseBootstrapArgs();
+  const preflight = await prepareRuntimeForProfile(
+    {
+      ...parsed,
+      runtimeMetadata: {
+        ...parsed.runtimeMetadata,
+      },
+    },
+    credentialAuthority,
+    callerSettings,
+    undefined,
+    undefined,
+  );
+  const config = await bootstrapRuntimeAndConfig(
+    settings,
     argv,
-    boot.activationOperation,
+    directory,
+    preflight,
+  );
+  let transferredActivation: AgentActivationOperation | undefined;
+  preflight.transferActivation((operation) => {
+    transferredActivation = operation;
+  });
+  if (transferredActivation === undefined)
+    throw new Error('Missing activation operation');
+  const activationOperation = transferredActivation;
+  const activation = await activateConfiguredProvider(
+    config,
+    preflight,
+    argv,
+    activationOperation,
   );
   if (activation.authFailed) throw new Error('Local activation failed');
-  return { boot, activation, argv };
+  return {
+    config,
+    preflight,
+    activationOperation,
+    credentialAuthority,
+    callerSettings,
+    activation,
+    argv,
+  };
 }
 
 async function stream(agent: Agent, prompt: string): Promise<AgentEvent[]> {
@@ -54,9 +115,10 @@ async function stream(agent: Agent, prompt: string): Promise<AgentEvent[]> {
   return events;
 }
 
-function ownerClosed(owner: { getAgentClient: () => unknown }): boolean {
+/** The disposed agent's session client rejects every history read. */
+async function agentClosed(agent: Agent): Promise<boolean> {
   try {
-    owner.getAgentClient();
+    for await (const _row of agent.streamHistory()) break;
     return false;
   } catch (error) {
     if (!(error instanceof Error) || !/disposed/i.test(error.message))
@@ -65,36 +127,39 @@ function ownerClosed(owner: { getAgentClient: () => unknown }): boolean {
   }
 }
 
+/** The workspace root the pre-Agent activation holds before the handoff. */
+function readProbeRoot(activationOperation: AgentActivationOperation): string {
+  return activationOperation.sessionClient.workspaceDirectories()[0];
+}
+
 async function record() {
-  const { boot, activation, argv } = await bootstrap();
+  const {
+    config,
+    preflight,
+    activationOperation,
+    credentialAuthority,
+    activation,
+    argv,
+  } = await bootstrap();
   try {
-    const owner = boot.activationOperation.sessionClient;
-    const agent = await createForegroundAgent({
-      policyOwner: boot.policyOwner,
-      oauthManager: boot.oauthManager,
-      providerFileLifecycle: boot.providerFileLifecycle,
-      config: boot.config,
-      settingsService: boot.runtimeSettingsService,
-      settingsOwner: boot.runtimeSettingsOwner,
-      providerManager: boot.providerManager,
-      activationPreflight: activation.activationPreflight,
-      activationPreflightIntent: activation.intent,
-    });
+    const probeRoot = readProbeRoot(activationOperation);
+    const agent = await createForegroundAgent(
+      preflight,
+      requireForegroundReceipt(activation),
+      activation.intent ?? {},
+      credentialAuthority,
+      {},
+    );
     try {
-      await setupOwnerSessionRecording(boot.config, agent, argv, null);
-      const ownerAdopted = agent.agentClient === owner.getAgentClient();
-      await verifyFilesystemAdoption(
-        agent,
-        boot.activationOperation.workspaceFilesystem,
-      );
+      await setupOwnerSessionRecording(config, agent, argv, null);
+      await verifyFilesystemAdoption(agent, probeRoot);
       const events = await stream(agent, 'local recorded prompt');
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('Missing recording path');
       await agent.dispose();
       return {
         headless,
-        ownerAdopted,
-        ownerClosed: ownerClosed(owner),
+        ownerClosed: await agentClosed(agent),
         events,
         path,
       };
@@ -102,45 +167,55 @@ async function record() {
       await agent.dispose();
     }
   } finally {
-    await boot.activationOperation.dispose();
-    await boot.config.dispose();
+    await activationOperation.dispose();
+    await config.dispose();
   }
 }
 
+function createFixtureRuntime(
+  agent: Agent,
+  settingsOwner: Parameters<typeof createRuntimeOwnerFeatures>[3],
+): ReturnType<typeof createRuntimeOwnerFeatures> {
+  return createRuntimeOwnerFeatures(
+    agent.providerReads.inspection,
+    () => agent.workspace.getDirectories(),
+    createSessionModelCommand(agent),
+    settingsOwner,
+    agent.workspace,
+    agent.modelParameters,
+    agent.settings,
+    agent.toolFormat,
+    agent.providerReads,
+    agent.auth.keys,
+    () => agent.providerReads.readOpenAIInfo(),
+  );
+}
+
 async function profile() {
-  const { boot, argv } = await bootstrap();
+  const { config, preflight, activationOperation, credentialAuthority, argv } =
+    await bootstrap();
   try {
-    const owner = boot.activationOperation.sessionClient;
-    const store = owner.getAgentClient().mediaStore;
-    const baseUrl = boot.runtimeSettingsOwner.readSelectedEndpoint();
+    const baseUrl = preflight.readSelectedEndpoint();
     if (typeof baseUrl !== 'string')
       throw new Error('Missing local profile URL');
-    await applyLocalProfile(boot, baseUrl);
+    await applyLocalProfile(preflight, baseUrl);
     const activation = await activateConfiguredProvider(
-      boot.config,
-      boot.providerManager,
+      config,
+      preflight,
       argv,
-      boot.activationOperation,
+      activationOperation,
     );
-    const agent = await createForegroundAgent({
-      policyOwner: boot.policyOwner,
-      oauthManager: boot.oauthManager,
-      providerFileLifecycle: boot.providerFileLifecycle,
-      config: boot.config,
-      settingsService: boot.runtimeSettingsService,
-      settingsOwner: boot.runtimeSettingsOwner,
-      providerManager: boot.providerManager,
-      activationPreflight: activation.activationPreflight,
-      activationPreflightIntent: activation.intent,
-    });
+    const probeRoot = readProbeRoot(activationOperation);
+    const providerBefore = preflight.getActiveProviderName();
+    const agent = await createForegroundAgent(
+      preflight,
+      requireForegroundReceipt(activation),
+      activation.intent ?? {},
+      credentialAuthority,
+      {},
+    );
     try {
-      const ownerAdopted = agent.agentClient === owner.getAgentClient();
-      await verifyFilesystemAdoption(
-        agent,
-        boot.activationOperation.workspaceFilesystem,
-      );
-      const mediaAdopted = agent.agentClient.mediaStore === store;
-      const providerAdopted = agent.providerManager === boot.providerManager;
+      await verifyFilesystemAdoption(agent, probeRoot);
       const borrowedSurface = [
         'config',
         'manager',
@@ -148,89 +223,75 @@ async function profile() {
         'getAgentClient',
       ].filter((key) => key in agent.sessionClient);
       await agent.sessionClient.publishTools();
-      const runtime = createRuntimeOwnerFeatures(
-        boot.config,
-        agent.providerManager,
-        () => agent.workspace.getDirectories(),
-        createSessionModelCommand(agent),
-        boot.runtimeSettingsOwner,
-        boot.runtimeSettingsService,
-        agent.workspace,
-      );
-      await setupOwnerSessionRecording(boot.config, agent, argv, null);
+      const runtime = createFixtureRuntime(agent, preflight);
+      await setupOwnerSessionRecording(config, agent, argv, null);
       const events = await stream(agent, 'profile-controlled prompt');
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('Missing profile recording path');
+      const providers = runtime.listProviders();
+      const activeProvider = runtime.getActiveProviderName();
+      const providerAdopted =
+        activeProvider === providerBefore && providers.includes(providerBefore);
       const observations = {
         headless,
         authFailed: activation.authFailed,
-        ownerAdopted,
-        mediaAdopted,
         providerAdopted,
         borrowedSurface,
         runtimeHasManager: 'providerManager' in runtime,
-        activeProvider: runtime.getActiveProviderName(),
-        providers: runtime.listProviders(),
+        activeProvider,
+        providers,
         events,
         path,
       };
       await agent.dispose();
-      return { ...observations, ownerClosed: ownerClosed(owner) };
+      return { ...observations, ownerClosed: await agentClosed(agent) };
     } finally {
       await agent.dispose();
     }
   } finally {
-    await boot.activationOperation.dispose();
-    await boot.config.dispose();
+    await activationOperation.dispose();
+    await config.dispose();
   }
 }
 
 async function resume() {
   const first = await bootstrap();
-  const firstAgent = await createForegroundAgent({
-    policyOwner: first.boot.policyOwner,
-    oauthManager: first.boot.oauthManager,
-    providerFileLifecycle: first.boot.providerFileLifecycle,
-    config: first.boot.config,
-    settingsService: first.boot.runtimeSettingsService,
-    settingsOwner: first.boot.runtimeSettingsOwner,
-    providerManager: first.boot.providerManager,
-    activationPreflight: first.activation.activationPreflight,
-    activationPreflightIntent: first.activation.intent,
-  });
+  const firstAgent = await createForegroundAgent(
+    first.preflight,
+    requireForegroundReceipt(first.activation),
+    first.activation.intent ?? {},
+    first.credentialAuthority,
+    {},
+  );
   let id: string;
   let firstEvents: AgentEvent[];
   try {
     await setupOwnerSessionRecording(
-      first.boot.config,
+      first.config,
       firstAgent,
       first.argv,
       null,
     );
     firstEvents = await stream(firstAgent, 'resume original prompt');
-    id = first.boot.config.getSessionId();
+    id = first.config.getSessionId();
   } finally {
     await firstAgent.dispose();
     await runExitCleanup();
     __resetCleanupStateForTesting();
-    await first.boot.config.dispose();
+    await first.config.dispose();
   }
   process.argv.push('--continue', id);
   const next = await bootstrap();
-  const nextAgent = await createForegroundAgent({
-    policyOwner: next.boot.policyOwner,
-    oauthManager: next.boot.oauthManager,
-    providerFileLifecycle: next.boot.providerFileLifecycle,
-    config: next.boot.config,
-    settingsService: next.boot.runtimeSettingsService,
-    settingsOwner: next.boot.runtimeSettingsOwner,
-    providerManager: next.boot.providerManager,
-    activationPreflight: next.activation.activationPreflight,
-    activationPreflightIntent: next.activation.intent,
-  });
+  const nextAgent = await createForegroundAgent(
+    next.preflight,
+    requireForegroundReceipt(next.activation),
+    next.activation.intent ?? {},
+    next.credentialAuthority,
+    {},
+  );
   try {
     const restored = await setupOwnerSessionRecording(
-      next.boot.config,
+      next.config,
       nextAgent,
       next.argv,
       null,
@@ -251,15 +312,13 @@ async function resume() {
       firstEvents,
       events,
       path,
-      firstOwnerClosed: ownerClosed(
-        first.boot.activationOperation.sessionClient,
-      ),
-      ownerClosed: ownerClosed(next.boot.activationOperation.sessionClient),
+      firstOwnerClosed: await agentClosed(firstAgent),
+      ownerClosed: await agentClosed(nextAgent),
     };
   } finally {
     await nextAgent.dispose();
-    await next.boot.activationOperation.dispose();
-    await next.boot.config.dispose();
+    await next.activationOperation.dispose();
+    await next.config.dispose();
   }
 }
 
@@ -276,16 +335,10 @@ try {
 
 async function verifyFilesystemAdoption(
   agent: Agent,
-  filesystem: WorkspaceFilesystemOwner,
+  probeRoot: string,
 ): Promise<void> {
-  const filesystemProbe = join(
-    filesystem.paths.directories()[0],
-    'adoption-filesystem.txt',
-  );
-  await filesystem.files.writeTextFile(
-    filesystemProbe,
-    'pre-Agent retained filesystem',
-  );
+  const filesystemProbe = join(probeRoot, 'adoption-filesystem.txt');
+  await writeFile(filesystemProbe, 'pre-Agent retained filesystem');
   const reader = agent.tools.get('read_file');
   if (!reader) throw new Error('Missing production read tool');
   const read = await reader.buildAndExecute(
@@ -298,17 +351,24 @@ async function verifyFilesystemAdoption(
     !read.llmContent.includes('pre-Agent retained filesystem')
   )
     throw new Error('CLI filesystem adoption mismatch');
-  await filesystem.files.writeTextFile(
-    filesystemProbe,
-    'post-adoption same root',
+  await writeFile(filesystemProbe, 'post-adoption same root');
+  const reread = await reader.buildAndExecute(
+    { file_path: filesystemProbe },
+    new AbortController().signal,
   );
+  if (
+    reread.error !== undefined ||
+    typeof reread.llmContent !== 'string' ||
+    !reread.llmContent.includes('post-adoption same root')
+  )
+    throw new Error('CLI filesystem adoption mismatch after rewrite');
 }
 
 async function applyLocalProfile(
-  boot: Awaited<ReturnType<typeof bootstrap>>['boot'],
+  preflight: Awaited<ReturnType<typeof bootstrap>>['preflight'],
   baseUrl: string,
 ): Promise<void> {
-  await boot.profileApplication.applySnapshot({
+  await preflight.applySnapshot({
     version: 1,
     provider: 'openai',
     model: 'gpt-4o-mini',
@@ -326,4 +386,12 @@ async function countHumanRows(
   let count = 0;
   for await (const row of rows) if (row.speaker === 'human') count++;
   return count;
+}
+
+function requireForegroundReceipt(
+  activation: Awaited<ReturnType<typeof activateConfiguredProvider>>,
+): NonNullable<typeof activation.token> {
+  if (activation.token === undefined)
+    throw new Error('Missing foreground receipt');
+  return activation.token;
 }

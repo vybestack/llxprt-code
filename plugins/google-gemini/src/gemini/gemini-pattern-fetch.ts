@@ -50,8 +50,11 @@ type PatternFetch = NonNullable<GoogleGenerativeAIProviderSettings['fetch']>;
 
 export function createPatternPreservingFetch(
   tools: LanguageModelV4CallOptions['tools'],
+  innerFetch: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
   onRequestBytes?: (bytes: number) => void,
-  innerFetch: PatternFetch = globalThis.fetch,
 ): PatternFetch {
   const schemas = new Map(
     tools?.flatMap((tool) =>
@@ -104,13 +107,13 @@ export function createPatternPreservingFetch(
     return innerFetch(input, { ...init, body: projectedBody });
   };
   // `preconnect` is a Bun-only member of `fetch`. The build tsconfig does not
-  // see globalThis.fetch with that member even though the AI SDK's fetch type
+  // see innerFetch with that member even though the AI SDK's fetch type
   // requires it, so forward by runtime lookup instead of by static type.
   return Object.assign(patternFetch, {
     preconnect: (url: string | URL) => {
-      const preconnect: unknown = Reflect.get(globalThis.fetch, 'preconnect');
+      const preconnect: unknown = Reflect.get(innerFetch, 'preconnect');
       if (typeof preconnect === 'function') {
-        Reflect.apply(preconnect, globalThis.fetch, [url]);
+        Reflect.apply(preconnect, innerFetch, [url]);
       }
     },
   });

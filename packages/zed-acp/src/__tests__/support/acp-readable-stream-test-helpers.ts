@@ -1,9 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { useOwnedCredentials as installOwnedCredentialFixture } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import * as acp from '@agentclientprotocol/sdk';
 import { Readable } from 'node:stream';
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createHash } from 'node:crypto';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -154,22 +154,24 @@ export function connectPeer(
   };
 }
 
+const credentials = installOwnedCredentialFixture();
+
 export function connectZed(
   config: Config,
   kind: InputKind,
 ): ReturnType<typeof connectPeer> & { dispose: () => Promise<void> } {
   const agents: ZedAgent[] = [];
   const settingsService = new SettingsService();
-  const providerManager = new ProviderManager({ config, settingsService });
   const peer = connectPeer(kind, (connection) => {
     const agent = new ZedAgent(
       config,
       connection,
       unusedProfileApplication,
-      providerManager,
       () => new SettingsService({ sessionSource: settingsService }),
       async () => [],
       { listProfiles: async () => [] },
+      undefined,
+      { credentialAuthority: credentials().authority },
     );
     agents.push(agent);
     return agent;
@@ -178,7 +180,6 @@ export function connectZed(
     ...peer,
     dispose: async () => {
       await Promise.all(agents.map((agent) => agent.disposeAll()));
-      providerManager.dispose();
     },
   };
 }
@@ -215,7 +216,7 @@ export class ReplayPeer implements acp.Agent {
   ): Promise<acp.LoadSessionResponse> {
     await deliverHistoryUpdates(
       readAgentHistoryForReplay(
-        { streamHistory: (signal) => this.history.streamRawHistory(signal) },
+        (signal) => this.history.streamRawHistory(signal),
         params.sessionId,
         this.abort.signal,
       ),

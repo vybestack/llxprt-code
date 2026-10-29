@@ -7,7 +7,7 @@
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { TurnProcessorRuntime } from './chatSessionPorts.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   RuntimeGenerateChatOptions,
@@ -24,7 +24,7 @@ import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
 import { historySourceFailure } from './historySourceError.js';
 
 export interface TurnSourceRequestInput {
-  readonly runtime: AgentRuntimeContext;
+  readonly runtime: TurnProcessorRuntime;
   readonly compression: CompressionHandler;
   readonly history: HistoryService;
   readonly provider: RuntimeProvider;

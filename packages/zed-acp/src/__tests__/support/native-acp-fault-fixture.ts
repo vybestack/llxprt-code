@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { OwnedCredentialFixture } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import type * as acp from '@agentclientprotocol/sdk';
 import {
   Config,
@@ -8,7 +9,6 @@ import {
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
 import { journalFileRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { vi } from 'bun:test';
 import { createHash } from 'node:crypto';
@@ -142,8 +142,8 @@ function observeRecordings() {
 export async function nativeAcpFixture(listFiles?: ChatSessionFileLister) {
   const saved = { ...process.env };
   const { root, config } = await fixtureConfig();
+  const credentials = await OwnedCredentialFixture.create();
   const settings = new SettingsService();
-  const manager = new ProviderManager({ config, settingsService: settings });
   const observed = observeRecordings();
   let zed: ZedAgent;
   let consume: (update: acp.SessionUpdate) => Promise<void> = async () => {};
@@ -160,10 +160,11 @@ export async function nativeAcpFixture(listFiles?: ChatSessionFileLister) {
         config,
         connection,
         unusedProfileApplication,
-        manager,
         () => new SettingsService({ sessionSource: settings }),
         listFiles,
         { listProfiles: async () => [] },
+        undefined,
+        { credentialAuthority: credentials.authority },
       );
       return zed;
     },
@@ -177,6 +178,7 @@ export async function nativeAcpFixture(listFiles?: ChatSessionFileLister) {
     config,
     peer,
     recordings: observed.recordings,
+    credentialAuthority: credentials.authority,
     updates,
     ...sessionOperations(config, root, peer),
     get zed(): ZedAgent {
@@ -192,8 +194,8 @@ export async function nativeAcpFixture(listFiles?: ChatSessionFileLister) {
       } finally {
         observed.restore();
         await peer.finish();
-        manager.dispose();
         await config.dispose();
+        await credentials.dispose();
         for (const key of ['LLXPRT_FAKE_RESPONSES', 'LLXPRT_LOG_HOME']) {
           if (saved[key] === undefined) delete process.env[key];
           else process.env[key] = saved[key];
@@ -208,4 +210,15 @@ export function replayText(update: acp.SessionUpdate): boolean {
     update.sessionUpdate === 'user_message_chunk' ||
     update.sessionUpdate === 'agent_message_chunk'
   );
+}
+
+export function nativeFailureLeaves(error: unknown): unknown[] {
+  if (error instanceof AggregateError)
+    return error.errors.flatMap(nativeFailureLeaves);
+  if (error instanceof Error) {
+    if ('errors' in error && Array.isArray(error.errors))
+      return error.errors.flatMap(nativeFailureLeaves);
+    if (error.cause !== undefined) return nativeFailureLeaves(error.cause);
+  }
+  return [error];
 }

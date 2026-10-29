@@ -220,6 +220,7 @@ export async function projectionRuntime(
   const runtimeId = randomUUID();
   const invocationFor = (ephemerals: Record<string, unknown>) =>
     createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId,
       providerName: provider.name,
       ephemeralsSnapshot: {

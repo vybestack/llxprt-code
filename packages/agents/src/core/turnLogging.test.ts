@@ -5,19 +5,18 @@
  */
 
 import { describe, expect, it, vi } from 'bun:test';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { logModelOutputResponse } from './turnLogging.js';
+import { logModelOutputResponse, turnTelemetryPorts } from './turnLogging.js';
 
 function createRuntimeContext(logApiResponse: ReturnType<typeof vi.fn>) {
-  return {
-    state: {
+  return turnTelemetryPorts(
+    {
       model: 'test-model',
       sessionId: 'session-id',
       runtimeId: 'runtime-id',
       provider: 'test-provider',
-    },
-    telemetry: { logApiResponse },
-  } as unknown as AgentRuntimeContext;
+    } as never,
+    { logApiResponse } as never,
+  );
 }
 
 describe('logModelOutputResponse', () => {

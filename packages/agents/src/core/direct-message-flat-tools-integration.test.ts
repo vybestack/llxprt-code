@@ -1,3 +1,4 @@
+import { directMessagePorts } from './directMessagePorts.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -72,13 +73,21 @@ describe('direct-message flat tools and replayable contents', () => {
     });
     const history = new HistoryService();
     const providerRuntime = createProviderRuntimeContext({
-      settingsService: settings,
-      config,
       runtimeId: 'critical-direct',
     });
     const context = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            runtimeId: providerRuntime.runtimeId,
+            fetch: globalThis.fetch,
+            globalSettings: settings.getAllGlobalSettings(),
+            providerSettings: settings.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
       state: createAgentRuntimeState({
         runtimeId: 'critical-direct',
         provider: provider.name,
@@ -93,6 +102,10 @@ describe('direct-message flat tools and replayable contents', () => {
         telemetry: { enabled: false, target: null },
       },
       provider: {
+        getProviderKeys: () => {
+          throw new Error('Fixture has no credential key authority');
+        },
+
         getActiveProvider: () => provider,
         setActiveProvider: () => {},
       },
@@ -105,7 +118,12 @@ describe('direct-message flat tools and replayable contents', () => {
       providerRuntime,
     });
     const processor = new DirectMessageProcessor(
-      context,
+      directMessagePorts(context),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       () => provider,
       () => providerRuntime,
       {},

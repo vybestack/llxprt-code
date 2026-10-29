@@ -184,6 +184,10 @@ export class MiddleOutArrayOracle {
       provider,
       summary,
       context,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       resolvedRuntime,
       resolvedConfig,
       resolvedOptions,
@@ -404,15 +408,15 @@ export class MiddleOutArrayOracle {
 
   private bindProvider(
     provider: IProvider,
-    owner: ProviderRequestCollaborators,
+    config: Config | undefined,
   ): IProvider {
     return bindCompressionProvider(
       provider,
-      owner.mediaResolver,
-      owner.requestMediaBudgetBytes,
-      owner.providerFileBindings,
-      owner.providerFileLifecycle,
-      owner.config?.getTargetDir(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      config?.getTargetDir(),
     );
   }
 
@@ -445,7 +449,7 @@ export class MiddleOutArrayOracle {
     try {
       const stream = this.bindProvider(
         provider,
-        resolvedRuntime,
+        resolvedConfig,
       ).generateChatCompletion(
         await buildCompressionChatOptions({
           requestRows: request,

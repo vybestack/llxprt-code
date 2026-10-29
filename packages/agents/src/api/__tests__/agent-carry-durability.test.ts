@@ -1,3 +1,4 @@
+import { capturedAgentClient } from './helpers/agent-client-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
@@ -47,7 +48,7 @@ async function verifyAcknowledgementFailure(size: number): Promise<number> {
         digest: expectedDigest(0).digest,
       });
       expect(next.owners.snapshot().liveRows).toBe(0);
-      expect(agent.agentClient).toBe(previous);
+      expect(capturedAgentClient(agent)).toBe(previous);
       expect(history.getTotalTokens() - tokens).toBe(0);
       const restored = await historyDigest(agent.streamHistory());
       expect(restored).toStrictEqual(expectedDigest(size));

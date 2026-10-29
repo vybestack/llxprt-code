@@ -18,7 +18,6 @@ import {
   type TrustedFolderSnapshot,
 } from '../../config/trustedFolders.js';
 import { type HistoryItemWithoutId, MessageType } from '../types.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import process from 'node:process';
 import {
   combineTrustUpdateFailure,
@@ -32,10 +31,14 @@ import type { SettingsProfileStore } from '../stores/settings/settingsStore.js';
 
 const debug = new DebugLogger('llxprt:ui:useFolderTrust');
 
-export type FolderTrustRuntime = Pick<
-  CliUiRuntime,
-  'getWorkingDir' | 'setTrustedFolderLive' | 'isTrustedFolder'
->;
+/**
+ * The live workspace-trust state the folder-trust flow reads and writes.
+ */
+export interface FolderTrustRuntime {
+  getWorkingDir(): string;
+  setTrustedFolderLive(trusted: boolean): Promise<void>;
+  isTrustedFolder(): boolean;
+}
 
 type AddItemFn = (item: HistoryItemWithoutId, timestamp: number) => number;
 

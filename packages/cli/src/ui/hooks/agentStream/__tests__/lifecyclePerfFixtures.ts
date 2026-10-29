@@ -1,8 +1,10 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 /**
  * Shared behavioral fixtures for useSubmitQuery operation-lifecycle integration
@@ -13,6 +15,7 @@
  */
 
 import { vi } from 'bun:test';
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import type React from 'react';
 import type { UseSubmitQueryDeps } from '../useSubmitQuery.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
@@ -99,8 +102,18 @@ export function buildLifecycleHookDeps(
   registry: OperationLifecycleRegistry,
 ): UseSubmitQueryDeps {
   return {
-    runtime: createStreamRuntimeForTest(),
-    agent: createMockAgentClient() as unknown as Agent,
+    ...{ runtime: createStreamRuntimeForTest() },
+    ...streamPolicyOperations(createStreamRuntimeForTest()),
+    ...submissionOperations(
+      {
+        ...createMockAgentClient(),
+        metrics: new UiTelemetryService(),
+      } as unknown as Agent,
+      {
+        flushAtTurnBoundary: vi.fn(),
+      } as unknown as RecordingIntegration,
+      undefined,
+    ),
     addItem: vi.fn().mockReturnValue(1),
     settings: {} as never,
     onDebugMessage: vi.fn(),
@@ -144,9 +157,7 @@ export function buildLifecycleHookDeps(
     submitQueryRef: { current: null },
     isResponding: false,
     streamingState: StreamingState.Idle,
-    recordingIntegration: {
-      flushAtTurnBoundary: vi.fn(),
-    } as unknown as RecordingIntegration,
+
     operationLifecycle: registry,
   };
 }

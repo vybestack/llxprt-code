@@ -31,6 +31,7 @@ function options(
     metadata: {},
     systemInstruction: 'system 雪',
     invocation: createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: 'native-kimi-estimate',
       providerName: 'kimi',
       ephemeralsSnapshot: {

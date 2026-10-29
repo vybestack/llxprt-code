@@ -3,19 +3,17 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   type SessionSettingsOwner,
-  type RuntimePolicyOwner,
-  type RuntimeProviderManager,
   FatalError,
-  type MessageBus,
-  type ProviderRuntimeContext,
-  createRuntimeSettingsService,
 } from '@vybestack/llxprt-code-core';
 
-import type {
-  AgentActivationOperation,
-  AgentProfileApplication,
+import {
+  prepareAgentPreflight,
+  captureAgentPreflightHostInput,
+  type AgentProfilePreflight,
 } from '@vybestack/llxprt-code-agents';
 
 /**
@@ -27,16 +25,8 @@ import type {
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { parseProfileJson } from '@vybestack/llxprt-code-settings';
-import type {
-  ProviderManager,
-  ProviderFileLifecycle,
-} from '@vybestack/llxprt-code-providers';
 import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
-import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
-import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 
 export const DEFAULT_RUNTIME_ID = 'cli.runtime.bootstrap';
 
@@ -72,20 +62,9 @@ export interface BootstrapProfileArgs {
 }
 
 export interface RuntimeBootstrapMetadata {
-  readonly sessionSettingsOwner?: SessionSettingsOwner;
-  settingsService?: SettingsService;
-  config?: ProviderRuntimeContext['config'];
-  oauthManager?: OAuthManager;
-  runtimeId?: string;
-  messageBus?: MessageBus;
-  metadata?: Record<string, unknown>;
-  /**
-   * The provider contribution registry produced by discovering and loading
-   * the installed plugin packages once at CLI startup (issue #2758).
-   * Forwarded to the providers assembly so alias construction dispatches
-   * through it.
-   */
-  providerContributions?: ProviderContributionRegistry;
+  readonly proxy?: string;
+  readonly runtimeId?: string;
+  readonly metadata?: Record<string, unknown>;
 }
 
 export interface ParsedBootstrapArgs {
@@ -98,34 +77,6 @@ export interface ParsedBootstrapArgs {
  * Both are resolved before Config exists and are threaded to the pre-Config
  * provider assembly and the post-Config re-assembly alike.
  */
-export interface CliRuntimeOverrides {
-  onOAuthManagerReady?: (manager: OAuthManager | undefined) => void;
-  onProviderFilesReady?: (lifecycle: ProviderFileLifecycle) => void;
-  readonly sessionSettingsOwner?: SessionSettingsOwner;
-  onPolicyOwnerReady?: (owner: RuntimePolicyOwner) => void;
-  onProviderManagerReady?: (manager: RuntimeProviderManager) => void;
-  onActivationBootstrapReady?: (operation: AgentActivationOperation) => void;
-  onProfileApplicationReady?: (application: AgentProfileApplication) => void;
-  onProviderSwitchReady?: (switchProvider: ProviderSwitcher) => void;
-  onRuntimeRegistrationReady?: (
-    registration: CliRuntimeRegistrationHandle,
-  ) => void;
-  settingsService?: SettingsService;
-  /**
-   * Provider contributions from the installed plugin packages, discovered and
-   * loaded once at startup (issue #2758).
-   */
-  providerContributions?: ProviderContributionRegistry;
-}
-
-export interface BootstrapRuntimeState {
-  policyOwner?: RuntimePolicyOwner;
-  runtime: ProviderRuntimeContext;
-  runtimeMessageBus: MessageBus;
-  providerManager: ProviderManager;
-  oauthManager?: OAuthManager;
-  registration?: CliRuntimeRegistrationHandle;
-}
 
 export interface ProfileApplicationResult {
   providerName: string | null;
@@ -133,14 +84,6 @@ export interface ProfileApplicationResult {
   baseUrl?: string;
   warnings: string[];
   error?: string;
-}
-
-export interface BootstrapResult {
-  runtime: ProviderRuntimeContext;
-  providerManager: ProviderManager;
-  oauthManager?: OAuthManager;
-  bootstrapArgs: BootstrapProfileArgs;
-  profile: ProfileApplicationResult;
 }
 
 function normaliseArgValue(value: string | undefined | null): string | null {
@@ -442,48 +385,27 @@ ${baseProfile.error}`);
  */
 export async function prepareRuntimeForProfile(
   parsed: ParsedBootstrapArgs,
-): Promise<BootstrapRuntimeState> {
-  const runtimeInit = parsed.runtimeMetadata;
-  const providedService = runtimeInit.settingsService;
-  // Explicit composition default (issue #2616): when the bootstrap caller did
-  // not hand us a service, construct one here — no ambient resolution.
-  const settingsService = providedService ?? createRuntimeSettingsService();
-
-  const runtimeId = runtimeInit.runtimeId ?? DEFAULT_RUNTIME_ID;
-  const metadata = {
-    ...(runtimeInit.metadata ?? {}),
-    stage: 'prepareRuntimeForProfile',
-  };
-
-  // Config may not exist yet during early CLI bootstrap (chicken-and-egg:
-  // Config is created later in loadCliConfig after profile resolution). The
-  // providers assembly helper guards against undefined config.
-  const runtimeConfig = runtimeInit.config;
-
-  // Delegate the ordered provider-runtime assembly (identity binding, session
-  // MessageBus construction, provider/OAuth manager creation, and CLI infra
-  // registration) to the providers package. Bus ownership lives inside that
-  // helper (#2378) — the CLI supplies declarative context only and never
-  // constructs a MessageBus itself.
-  const assembled = assembleCliProviderRuntime({
-    settingsService,
-    config: runtimeConfig,
-    settingsOwner: runtimeInit.sessionSettingsOwner,
-    runtimeId,
-    metadata,
-    oauthSettings: createOAuthSettingsAdapter(),
-    ...(runtimeInit.providerContributions !== undefined
-      ? { providerContributions: runtimeInit.providerContributions }
-      : {}),
+  authority?: CredentialAuthority,
+  settingsService?: SettingsService,
+  settingsOwner?: SessionSettingsOwner,
+  providerContributions?: ProviderContributionRegistry,
+): Promise<AgentProfilePreflight> {
+  const metadata = parsed.runtimeMetadata;
+  if (authority === undefined)
+    throw new Error('CLI profile bootstrap requires a credential authority');
+  const host = captureAgentPreflightHostInput({
+    runtimeId: metadata.runtimeId ?? DEFAULT_RUNTIME_ID,
+    proxy: metadata.proxy,
+    metadata: { ...metadata.metadata, stage: 'prepareRuntimeForProfile' },
   });
-
-  return {
-    runtime: assembled.runtime,
-    runtimeMessageBus: assembled.runtimeMessageBus,
-    providerManager: assembled.providerManager as ProviderManager,
-    oauthManager: assembled.oauthManager,
-    registration: assembled.registration,
-  };
+  return prepareAgentPreflight(
+    host,
+    authority,
+    settingsService,
+    settingsOwner,
+    providerContributions,
+    createOAuthSettingsAdapter(),
+  );
 }
 
 function isProfileValidationResult(
@@ -743,14 +665,6 @@ function getMaxNestingDepth(obj: unknown, currentDepth = 1): number {
   );
 }
 
-interface FullBootstrapResultInput {
-  runtime: BootstrapRuntimeState['runtime'];
-  providerManager: BootstrapRuntimeState['providerManager'];
-  oauthManager?: BootstrapRuntimeState['oauthManager'];
-  bootstrapArgs: BootstrapProfileArgs;
-  profileApplication: ProfileApplicationResult;
-}
-
 function createInlineProfileBootstrapResult(
   bootstrapArgs: BootstrapProfileArgs,
 ): ProfileApplicationResult {
@@ -762,21 +676,16 @@ ${baseProfile.error}`);
   return applyOverridesToProfile(baseProfile, bootstrapArgs);
 }
 
-interface ProfileLookupService {
-  getProfile?(
-    name: string | null,
-  ): { provider?: string; model?: string } | null | undefined;
-}
+type ProfileLookup = (
+  name: string | null,
+) => { provider?: string; model?: string } | null | undefined;
 
 function createLoadedProfileBootstrapResult(
   bootstrapArgs: BootstrapProfileArgs,
-  runtimeMetadata: RuntimeBootstrapMetadata,
+  readProfile?: ProfileLookup,
 ): ProfileApplicationResult {
-  const settingsService = runtimeMetadata.settingsService as
-    | ProfileLookupService
-    | undefined;
-  if (settingsService) {
-    const profile = settingsService.getProfile?.(bootstrapArgs.profileName);
+  if (readProfile !== undefined) {
+    const profile = readProfile(bootstrapArgs.profileName);
     if (profile !== null && profile !== undefined) {
       return applyOverridesToProfile(
         {
@@ -816,13 +725,13 @@ function createEmptyProfileBootstrapResult(): ProfileApplicationResult {
 
 function createTestingBootstrapResult(
   bootstrapArgs: BootstrapProfileArgs,
-  runtimeMetadata: RuntimeBootstrapMetadata,
+  readProfile?: ProfileLookup,
 ): ProfileApplicationResult {
   if (bootstrapArgs.profileJson !== null) {
     return createInlineProfileBootstrapResult(bootstrapArgs);
   }
   if (bootstrapArgs.profileName !== null) {
-    return createLoadedProfileBootstrapResult(bootstrapArgs, runtimeMetadata);
+    return createLoadedProfileBootstrapResult(bootstrapArgs, readProfile);
   }
   if (
     bootstrapArgs.providerOverride !== null ||
@@ -833,53 +742,11 @@ function createTestingBootstrapResult(
   return createEmptyProfileBootstrapResult();
 }
 
-function createFullBootstrapResult(
-  input: FullBootstrapResultInput,
-): BootstrapResult {
-  return {
-    runtime: {
-      ...input.runtime,
-      metadata: {
-        ...(input.runtime.metadata ?? {}),
-        stage: 'bootstrap-complete',
-      },
-    },
-    providerManager: input.providerManager,
-    oauthManager: input.oauthManager,
-    bootstrapArgs: input.bootstrapArgs,
-    profile: input.profileApplication,
-  };
-}
-
-/**
- * @plan PLAN-20251020-STATELESSPROVIDER3.P06
- * @plan PLAN-20251118-ISSUE533.P10
- * @requirement REQ-SP3-001
- * @requirement REQ-INT-001.1
- * @requirement REQ-INT-002.1
- * @pseudocode bootstrap-order.md lines 1-9
- */
 export function createBootstrapResult(
   bootstrapArgs: BootstrapProfileArgs,
-  runtimeMetadata: RuntimeBootstrapMetadata,
-): ProfileApplicationResult;
-export function createBootstrapResult(
-  input: FullBootstrapResultInput,
-): BootstrapResult;
-export function createBootstrapResult(
-  inputOrBootstrapArgs: FullBootstrapResultInput | BootstrapProfileArgs,
-  runtimeMetadata?: RuntimeBootstrapMetadata,
-): BootstrapResult | ProfileApplicationResult {
-  if (
-    runtimeMetadata !== undefined &&
-    typeof inputOrBootstrapArgs === 'object' &&
-    'profileName' in inputOrBootstrapArgs
-  ) {
-    return createTestingBootstrapResult(inputOrBootstrapArgs, runtimeMetadata);
-  }
-  return createFullBootstrapResult(
-    inputOrBootstrapArgs as FullBootstrapResultInput,
-  );
+  readProfile?: ProfileLookup,
+): ProfileApplicationResult {
+  return createTestingBootstrapResult(bootstrapArgs, readProfile);
 }
 
 /**

@@ -27,7 +27,7 @@ import type {
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type { Logger } from '@vybestack/llxprt-code-core/core/logger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import { OneShotStrategy } from './OneShotStrategy.js';
 import {
@@ -39,6 +39,10 @@ import {
   EmptySummaryError,
   isTransientCompressionError,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // ---------------------------------------------------------------------------
 // Helpers — build realistic IContent messages
@@ -148,17 +152,9 @@ function createThrowingProvider(): IProvider {
 // Stub logger
 // ---------------------------------------------------------------------------
 
-const noopLogger = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  log: () => {},
-} as unknown as Logger;
+const noopLogger = new DebugLogger('llxprt:test:compression');
 
 const testProviderRuntime = {
-  settingsService: new SettingsService(),
-  config: undefined,
   runtimeId: 'test-provider-runtime',
   metadata: { source: 'test' },
 };
@@ -179,9 +175,8 @@ function buildContext(
   }> = {},
 ): CompressionContext {
   const defaultProvider = createFakeProvider('default-provider');
+  const invocationSettings = new SettingsService();
   const contextProviderRuntime = {
-    settingsService: new SettingsService(),
-    config: undefined,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
   };
@@ -237,7 +232,15 @@ function buildContext(
       return {
         ...resolved,
         invocation: captureProviderInvocation(
-          resolved.runtime,
+          {
+            fetch: requestFetch,
+            runtimeId: resolved.runtime.runtimeId,
+            metadata: resolved.runtime.metadata,
+            globalSettings: invocationSettings.getAllGlobalSettings(),
+            providerSettings: invocationSettings.getProviderSettings(
+              resolved.provider.name,
+            ),
+          },
           resolved.provider.name,
         ),
       };
@@ -297,12 +300,22 @@ describe('OneShotStrategy', () => {
 
   describe('interface contract', () => {
     it('has name "one-shot"', () => {
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.name).toBe('one-shot');
     });
 
     it('requiresLLM is true', () => {
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.requiresLLM).toBe(true);
     });
   });
@@ -509,6 +522,7 @@ describe('OneShotStrategy', () => {
   });
 
   // -----------------------------------------------------------------------
+
   // Empty summary handling — permanent error (not retryable)
   // -----------------------------------------------------------------------
 

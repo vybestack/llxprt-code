@@ -16,7 +16,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
 import { loadProviderAliasEntries } from '../../composition/providerAliases.js';
-import { computeModelDefaults } from '../../runtime/providerMutations.js';
+import { computeModelDefaults } from '../../model-defaults.js';
 import { buildDiskTextResponsesContext } from '../responses-disk-text-projection.js';
 import type { OpenAIResponsesRequest } from '../OpenAIResponsesTypes.js';
 

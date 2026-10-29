@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   withPublicHistory,
   StreamOnlyHistory,
-} from '../api/__tests__/helpers/public-history-fixture.js';
+} from './__tests__/support/core-public-history-fixture.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { ChatSession } from './chatSession.js';
 import { publicDefaultBounds } from './__tests__/support/public-default-history-test-helpers.js';
@@ -15,8 +15,8 @@ for (const size of [65]) {
         await withPublicHistory(
           size,
           true,
-          async (agent, history, reader, decoded) => {
-            const chat = agent.agentClient.getChat();
+          async (_agent, history, reader, decoded, client) => {
+            const chat = client.getChat();
             if (!(chat instanceof ChatSession))
               throw new Error('Expected real chat');
             const unused = explicitFalse
@@ -46,29 +46,35 @@ for (const size of [65]) {
       }, 180_000);
 
       it('releases pinned readers after abort, source errors and consumer errors', async () => {
-        await withPublicHistory(size, true, async (agent, history, reader) => {
-          const chat = agent.agentClient.getChat();
-          if (!(history instanceof StreamOnlyHistory))
-            throw new Error('Expected controlled disk source');
-          const controller = new AbortController();
-          const cursor = chat.getHistory(false, controller.signal);
-          await cursor.next();
-          controller.abort(new Error('chat history abort'));
-          await expect(cursor.next()).rejects.toThrow('chat history abort');
-          history.failAfter = 3;
-          async function drainFault(): Promise<void> {
-            for await (const row of chat.getHistory()) void row;
-          }
-          await expect(drainFault()).rejects.toThrow('raw source fault');
-          history.failAfter = undefined;
-          async function consumerFault(): Promise<void> {
-            for await (const _row of chat.getHistory(false))
-              throw new Error('chat consumer fault');
-          }
-          await expect(consumerFault()).rejects.toThrow('chat consumer fault');
-          expect(reader.snapshot().liveRows).toBe(0);
-          expect(reader.within(publicDefaultBounds)).toBe(true);
-        });
+        await withPublicHistory(
+          size,
+          true,
+          async (_agent, history, reader, _decoded, client) => {
+            const chat = client.getChat();
+            if (!(history instanceof StreamOnlyHistory))
+              throw new Error('Expected controlled disk source');
+            const controller = new AbortController();
+            const cursor = chat.getHistory(false, controller.signal);
+            await cursor.next();
+            controller.abort(new Error('chat history abort'));
+            await expect(cursor.next()).rejects.toThrow('chat history abort');
+            history.failAfter = 3;
+            async function drainFault(): Promise<void> {
+              for await (const row of chat.getHistory()) void row;
+            }
+            await expect(drainFault()).rejects.toThrow('raw source fault');
+            history.failAfter = undefined;
+            async function consumerFault(): Promise<void> {
+              for await (const _row of chat.getHistory(false))
+                throw new Error('chat consumer fault');
+            }
+            await expect(consumerFault()).rejects.toThrow(
+              'chat consumer fault',
+            );
+            expect(reader.snapshot().liveRows).toBe(0);
+            expect(reader.within(publicDefaultBounds)).toBe(true);
+          },
+        );
       }, 180_000);
     });
   }

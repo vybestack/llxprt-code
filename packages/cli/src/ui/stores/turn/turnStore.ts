@@ -57,7 +57,9 @@ export interface TurnCommands {
   ) => number;
   clearItems: () => void;
   getJournalLength: () => number;
-  bindJournal: (readHistory: () => HistoryService | null) => void;
+  bindJournal: (
+    readHistory: () => Pick<HistoryService, 'appendDisplay' | 'length'> | null,
+  ) => void;
   /** Records an out-of-tree add request for a subscriber to perform. */
   requestAddItem: (
     itemData: HistoryItemWithoutId,
@@ -217,7 +219,9 @@ let nextDisplayId = 0;
 
 export function createTurnStore(initial?: Partial<TurnState>): TurnStore {
   const store = createStore<TurnState>({ ...initialTurnState(), ...initial });
-  let readHistory: (() => HistoryService | null) | null = null;
+  let readHistory:
+    | (() => Pick<HistoryService, 'appendDisplay' | 'length'> | null)
+    | null = null;
   return {
     store,
     commands: {

@@ -42,8 +42,8 @@ import {
   type LockHandle,
   type SessionMetadata,
   type SessionSummary,
-  type HistoryService,
   type LocalMediaStore,
+  type HistoryService,
 } from '@vybestack/llxprt-code-core';
 import { type DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
@@ -78,7 +78,10 @@ export interface ResumeContext {
   maxQueueBytes?: number;
   counters?: JournalReadCounters;
   recordingCallbacks: RecordingSwapCallbacks;
-  historyService?: HistoryService | null;
+  history?: {
+    adoptResumeBoot: HistoryService['adoptResumeBoot'];
+    attachRecording: (integration: RecordingIntegration) => Promise<void>;
+  };
   adoptSessionId?: (sessionId: string) => void;
   logger?: DebugLogger;
 }
@@ -232,8 +235,7 @@ async function commitResumeBoot(
   let warnings: string[] = [];
   try {
     const publish = async (): Promise<void> => {
-      if (context.historyService)
-        await integration.subscribeToJournal(context.historyService);
+      if (context.history) await context.history.attachRecording(integration);
       context.adoptSessionId?.(result.metadata.sessionId);
       callbacks.setRecording(
         result.recording,
@@ -242,8 +244,8 @@ async function commitResumeBoot(
         result.metadata,
       );
     };
-    if (context.historyService) {
-      warnings = await context.historyService.adoptResumeBoot(
+    if (context.history) {
+      warnings = await context.history.adoptResumeBoot(
         result.recording,
         result.boot,
         publish,

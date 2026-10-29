@@ -13,6 +13,8 @@
  * AuthKeysControl internally (injected with the same auth-state deps).
  */
 
+import type { ApiKeyUpdateResult } from '@vybestack/llxprt-code-core';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type {
   AgentAuthControl,
   AgentAuthKeysControl,
@@ -22,43 +24,8 @@ import type {
   AuthStatus,
 } from '../agent.js';
 import type { OAuthPromptHandler } from '../config-types.js';
-import type { AgentAuthState } from './authState.js';
 import { AuthKeysControl } from './authKeysControl.js';
-import type { AuthKeysControlDeps } from './authKeysControl.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-
-/**
- * Callback bundle injected by AgentImpl so AuthControl can read/mutate the
- * per-agent auth state and the live provider.
- *
- * @plan:PLAN-20260617-COREAPI.P18
- * @requirement:REQ-008
- */
-export interface AuthControlDeps {
-  /** The per-agent in-memory auth state. */
-  readonly authState: AgentAuthState;
-  /** Reads the current provider name (from providerState). */
-  readonly getCurrentProvider: () => string;
-  /** Reads the current keyName reference (from providerState). */
-  readonly getKeyName: () => string | undefined;
-  /** Computes the auth status for a provider (winner + oauth-aware). */
-  readonly getStatus: (provider: string) => AuthStatus;
-  /**
-   * The onOAuthPrompt handler threaded from config (the interactive-OAuth
-   * seam). Undefined when no handler was supplied.
-   */
-  readonly onOAuthPrompt: OAuthPromptHandler | undefined;
-  /**
-   * Sets/clears the baseUrl on providerState + the live provider (mirrors to
-   * getProviderStatus). Wrapped in try/catch by the caller.
-   */
-  readonly setBaseUrl: (baseUrl: string | null) => Promise<void>;
-  /** The deps bundle for the constructed AuthKeysControl. */
-  readonly keysDeps: AuthKeysControlDeps;
-  // @plan:PLAN-20260622-COREAPIGAP.P12 @requirement:REQ-005
-  /** Resolves the live OAuthManager (already on AgentDeps). Never cached. */
-  readonly getOAuthManager: () => OAuthManager;
-}
+import type { AgentAuthState } from './authState.js';
 
 /**
  * The public auth control. OAuth login flows through the onOAuthPrompt handler
@@ -74,8 +41,35 @@ export interface AuthControlDeps {
 export class AuthControl implements AgentAuthControl {
   readonly keys: AgentAuthKeysControl;
 
-  constructor(private readonly deps: AuthControlDeps) {
-    this.keys = new AuthKeysControl(deps.keysDeps);
+  constructor(
+    private readonly authState: AgentAuthState,
+    private readonly getCurrentProvider: () => string,
+    private readonly getStatus: (provider: string) => AuthStatus,
+    private readonly onOAuthPrompt: OAuthPromptHandler | undefined,
+    private readonly writeBaseUrl: (baseUrl: string | null) => Promise<void>,
+    readKeyName: () => string | undefined,
+    writeKeyName: (name: string | undefined) => void,
+    updateProviderApiKey: (
+      apiKey: string | null,
+    ) => Promise<ApiKeyUpdateResult>,
+    private readonly isOAuthEnabled: (provider: string) => boolean,
+    private readonly isOAuthAuthenticated: (
+      provider: string,
+    ) => Promise<boolean>,
+    private readonly readOAuthExpiry: (
+      provider: string,
+    ) => Promise<number | undefined>,
+    private readonly readHigherPriorityAuth: OAuthManager['getHigherPriorityAuth'],
+    private readonly readBucketStatuses: OAuthManager['getAuthStatusWithBuckets'],
+    readonly subscribeBucketConsent: AgentAuthControl['subscribeBucketConsent'],
+    readonly respondToBucketConsent: AgentAuthControl['respondToBucketConsent'],
+  ) {
+    this.keys = new AuthKeysControl(
+      authState,
+      readKeyName,
+      writeKeyName,
+      updateProviderApiKey,
+    );
   }
 
   /**
@@ -86,8 +80,8 @@ export class AuthControl implements AgentAuthControl {
    * @requirement:REQ-008
    */
   status(provider?: string): AuthStatus {
-    const resolved = provider ?? this.deps.getCurrentProvider();
-    return this.deps.getStatus(resolved);
+    const resolved = provider ?? this.getCurrentProvider();
+    return this.getStatus(resolved);
   }
 
   /**
@@ -97,7 +91,7 @@ export class AuthControl implements AgentAuthControl {
    * @requirement:REQ-008
    */
   async enableOAuth(provider: string): Promise<void> {
-    this.deps.authState.oauthEnabled.add(provider);
+    this.authState.oauthEnabled.add(provider);
   }
 
   /**
@@ -106,8 +100,8 @@ export class AuthControl implements AgentAuthControl {
    * @requirement:REQ-008
    */
   async disableOAuth(provider: string): Promise<void> {
-    this.deps.authState.oauthEnabled.delete(provider);
-    this.deps.authState.oauthAuthenticated.delete(provider);
+    this.authState.oauthEnabled.delete(provider);
+    this.authState.oauthAuthenticated.delete(provider);
   }
 
   /**
@@ -124,7 +118,7 @@ export class AuthControl implements AgentAuthControl {
     provider: string,
     opts?: { readonly bucket?: string },
   ): Promise<void> {
-    const handler = this.deps.onOAuthPrompt;
+    const handler = this.onOAuthPrompt;
     if (handler === undefined) {
       throw new Error(
         `OAuth login for provider "${provider}" requires an onOAuthPrompt handler`,
@@ -135,7 +129,7 @@ export class AuthControl implements AgentAuthControl {
     if (!accepted) {
       throw new Error('OAuth login was declined');
     }
-    this.deps.authState.oauthAuthenticated.add(provider);
+    this.authState.oauthAuthenticated.add(provider);
     // Honor an explicit bucket: switchBucket creates-the-bucket-active and
     // deactivates others (works from an empty set). With no bucket arg, preserve
     // the existing semantics exactly — seed a single active 'default' bucket.
@@ -156,18 +150,18 @@ export class AuthControl implements AgentAuthControl {
     provider: string,
     opts?: { readonly bucket?: string; readonly all?: boolean },
   ): Promise<void> {
-    this.deps.authState.oauthAuthenticated.delete(provider);
+    this.authState.oauthAuthenticated.delete(provider);
     if (opts?.all === true) {
-      this.deps.authState.buckets.delete(provider);
+      this.authState.buckets.delete(provider);
       return;
     }
     // When a specific bucket is named (and not `all`), remove just that bucket
     // from the provider's list, leaving the others intact. Plain logout (no
     // bucket, no all) clears auth but preserves all buckets.
     if (opts?.bucket !== undefined) {
-      const existing = this.deps.authState.buckets.get(provider);
+      const existing = this.authState.buckets.get(provider);
       if (existing !== undefined) {
-        this.deps.authState.buckets.set(
+        this.authState.buckets.set(
           provider,
           existing.filter((b) => b.name !== opts.bucket),
         );
@@ -182,8 +176,8 @@ export class AuthControl implements AgentAuthControl {
    * @requirement:REQ-008
    */
   listBuckets(provider?: string): readonly AuthBucket[] {
-    const resolved = provider ?? this.deps.getCurrentProvider();
-    return this.deps.authState.buckets.get(resolved) ?? [];
+    const resolved = provider ?? this.getCurrentProvider();
+    return this.authState.buckets.get(resolved) ?? [];
   }
 
   /**
@@ -193,7 +187,7 @@ export class AuthControl implements AgentAuthControl {
    * @requirement:REQ-008
    */
   async switchBucket(provider: string, bucket: string): Promise<void> {
-    const existing = this.deps.authState.buckets.get(provider) ?? [];
+    const existing = this.authState.buckets.get(provider) ?? [];
     const hasBucket = existing.some((b) => b.name === bucket);
     const updated: AuthBucket[] = existing.map((b) => ({
       ...b,
@@ -202,7 +196,7 @@ export class AuthControl implements AgentAuthControl {
     if (!hasBucket) {
       updated.push({ name: bucket, provider, active: true });
     }
-    this.deps.authState.buckets.set(provider, updated);
+    this.authState.buckets.set(provider, updated);
   }
 
   /**
@@ -211,13 +205,14 @@ export class AuthControl implements AgentAuthControl {
    * @requirement:REQ-008
    */
   async mcpLogin(server: string): Promise<void> {
-    this.deps.authState.mcpAuth.add(server);
+    this.authState.mcpAuth.add(server);
   }
 
   /**
    * Sets/clears the baseUrl on the auth state + mirrors onto providerState and
-   * the live provider via the real mutator (try/catch — safe no-op under the
-   * fake seam).
+   * the live provider via the real mutator. State is published only once the
+   * settings write succeeds, so a rejected write leaves the previous endpoint
+   * in force instead of half-adopting the new one.
    * @plan:PLAN-20260617-COREAPI.P18
    * @requirement:REQ-008
    */
@@ -228,15 +223,15 @@ export class AuthControl implements AgentAuthControl {
     // setBaseUrl mutates the CURRENT provider context only. If a different
     // provider is requested, throw rather than silently updating the wrong one.
     if (opts?.provider !== undefined) {
-      const current = this.deps.getCurrentProvider();
+      const current = this.getCurrentProvider();
       if (opts.provider !== current) {
         throw new Error(
           `setBaseUrl can only target the active provider "${current}", but provider "${opts.provider}" was requested`,
         );
       }
     }
-    this.deps.authState.baseUrl = baseUrl ?? undefined;
-    await this.deps.setBaseUrl(baseUrl);
+    await this.writeBaseUrl(baseUrl);
+    this.authState.baseUrl = baseUrl ?? undefined;
   }
 
   /**
@@ -246,7 +241,7 @@ export class AuthControl implements AgentAuthControl {
    * @requirement:REQ-008
    */
   private seedDefaultBucket(provider: string): void {
-    if (this.deps.authState.buckets.has(provider)) {
+    if (this.authState.buckets.has(provider)) {
       return;
     }
     const defaultBucket: AuthBucket = {
@@ -254,7 +249,7 @@ export class AuthControl implements AgentAuthControl {
       provider,
       active: true,
     };
-    this.deps.authState.buckets.set(provider, [defaultBucket]);
+    this.authState.buckets.set(provider, [defaultBucket]);
   }
 
   /**
@@ -266,16 +261,11 @@ export class AuthControl implements AgentAuthControl {
    * @pseudocode lines 1-17
    */
   async detailedStatus(provider: string): Promise<AuthProviderDetail> {
-    const mgr = this.deps.getOAuthManager();
-    const oauthEnabled = mgr.isOAuthEnabled(provider);
-    const authenticated = await mgr.isAuthenticated(provider);
-    let expiry: number | undefined;
-    if (authenticated) {
-      const token = await mgr.peekStoredToken(provider);
-      if (token !== null) {
-        expiry = token.expiry;
-      }
-    }
+    const oauthEnabled = this.isOAuthEnabled(provider);
+    const authenticated = await this.isOAuthAuthenticated(provider);
+    const expiry = authenticated
+      ? await this.readOAuthExpiry(provider)
+      : undefined;
     return { provider, authenticated, oauthEnabled, expiry };
   }
 
@@ -287,7 +277,7 @@ export class AuthControl implements AgentAuthControl {
    * @pseudocode lines 30-33
    */
   async getHigherPriorityAuth(provider: string): Promise<string | null> {
-    return this.deps.getOAuthManager().getHigherPriorityAuth(provider);
+    return this.readHigherPriorityAuth(provider);
   }
 
   /**
@@ -299,9 +289,7 @@ export class AuthControl implements AgentAuthControl {
   async listBucketStatuses(
     provider: string,
   ): Promise<readonly AuthBucketStatus[]> {
-    const raw = await this.deps
-      .getOAuthManager()
-      .getAuthStatusWithBuckets(provider);
+    const raw = await this.readBucketStatuses(provider);
     return raw.map((b) => ({
       bucket: b.bucket,
       authenticated: b.authenticated,

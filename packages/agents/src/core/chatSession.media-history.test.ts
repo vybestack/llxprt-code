@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createMediaHistoryChat } from './__tests__/selected-chat-media-fixture.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import {
   afterAll,
@@ -693,3 +695,79 @@ async function testMediaHistory19(): Promise<void> {
   expect(fixture.requests).toHaveLength(1);
   await fixture.recording.dispose();
 }
+
+describe('selected media dependencies', () => {
+  const owners: SessionSettingsOwner[] = [];
+  beforeEach(openMediaHistoryHarness);
+  afterEach(async () => {
+    for (const owner of owners.splice(0)) await owner.dispose();
+    await closeMediaHistoryHarness();
+  });
+  function createChat(
+    onRequest?: Parameters<typeof createMediaHistoryChat>[3],
+  ) {
+    return createMediaHistoryChat(
+      harnessDirectory(),
+      harnessLifecycle(),
+      owners,
+      onRequest,
+    );
+  }
+  it('materializes selected local media across non-streaming, streaming and direct requests', async () => {
+    const encodings: string[] = [];
+    const workspaces: Array<string | undefined> = [];
+    const chat = createChat(
+      async (_request, _bindings, contents, workspace) => {
+        encodings.push(...mediaEncodings(contents));
+        workspaces.push(workspace);
+      },
+    );
+    await chat.setHistory(mediaHistory());
+    await chat.sendMessage({ message: 'inspect image' }, 'selected-nonstream');
+    for await (const event of await chat.sendMessageStream(
+      { message: 'inspect again' },
+      'selected-stream',
+    )) {
+      expect(event).toBeDefined();
+    }
+    await chat.generateDirectMessage(
+      { message: mediaHistory()[0] },
+      'selected-direct',
+    );
+    expect(encodings.filter((encoding) => encoding === 'base64')).toHaveLength(
+      3,
+    );
+    const selectedConfig = chat.getConfig();
+    assertDefined(selectedConfig);
+    expect(workspaces).toStrictEqual(
+      Array(3).fill(selectedConfig.getTargetDir()),
+    );
+    await chat.clearHistory();
+  });
+  it('clears the selected file lifecycle instead of the runtime lifecycle', async () => {
+    const chat = createChat();
+    const identity = {
+      provider: 'media-history-provider',
+      baseURL: 'https://provider.test',
+      credentialHash: 'selected-owner',
+    };
+    const retained = await harnessLifecycle().retain({
+      cacheKey: 'selected-file-owner',
+      fileId: 'selected-file',
+      bytes: 1,
+      identity,
+      policy: {
+        mode: 'enabled',
+        scope: 'session',
+        retentionMs: 60_000,
+        deletion: 'delete',
+        zeroDataRetention: 'incompatible-while-retained',
+      },
+      scopeId: 'media-history-runtime',
+      deleteRemote: async () => undefined,
+    });
+    await retained.lease.release();
+    await chat.clearHistory();
+    expect(harnessLifecycle().snapshot().retainedFiles).toBe(0);
+  });
+});

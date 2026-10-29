@@ -30,6 +30,7 @@ describe('top-down sealed token accounting', () => {
         const metadata = await buildCompressionMetadata(
           'prompt',
           runtime,
+          undefined,
           history,
           async () => {
             throw new Error('Truncation does not use a provider');

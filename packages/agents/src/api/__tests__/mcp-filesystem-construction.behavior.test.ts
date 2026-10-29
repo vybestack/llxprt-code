@@ -9,12 +9,13 @@ import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Config } from '@vybestack/llxprt-code-core';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 
-const PRIMARY = 'MCP policy handoff requires its explicit runtime owner';
+const PRIMARY = 'Policy handoff must retain its trust authority';
 
 /** Depth-first messages of an error and any errors nested in aggregates. */
 function collectFailureMessages(failure: unknown): string[] {
@@ -63,22 +64,26 @@ describe('MCP filesystem constructor rejection', () => {
         debugMode: false,
         model: 'test',
       });
+      const retainedTrust = new WorkspaceTrustLifecycle({
+        localTrust: config.initialWorkspaceTrust,
+      });
+      const ownerTrust = new WorkspaceTrustLifecycle({
+        localTrust: config.initialWorkspaceTrust,
+      });
+      const policyOwner = new RuntimePolicyOwner(config, ownerTrust);
       try {
         let failure: unknown;
         try {
-          await McpRuntimeOwner.create(
-            createTestOAuthBinding(),
-            config,
-            new MessageBus(),
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            'caller',
-            undefined,
-            'runtime',
-            root,
-            borrowed ? 'caller' : 'runtime',
+          await createTestMcpRuntime(
+            {
+              oauth: createTestOAuthBinding(),
+              config,
+              policy: { owner: policyOwner, ownership: 'caller' },
+              trustPort: retainedTrust,
+              filesystemOwner: root,
+              filesystemOwnership: borrowed ? 'caller' : 'runtime',
+            },
+            {},
           );
         } catch (error) {
           failure = error;
@@ -116,6 +121,9 @@ describe('MCP filesystem constructor rejection', () => {
         );
         expect(releaseOutcome).toBe(!borrowed);
       } finally {
+        await policyOwner.dispose();
+        await ownerTrust.dispose();
+        await retainedTrust.dispose();
         await root.dispose().catch(() => undefined);
         await config.dispose();
         await rm(directory, { recursive: true, force: true });

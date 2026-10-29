@@ -10,15 +10,6 @@ import {
   createBootstrapResult,
 } from '../profileBootstrap.js';
 
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  ephemeralSettingHelp: {},
-  parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
-    success: true,
-    value: rawValue,
-  })),
-  applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-}));
-
 type BootstrapProfileArgs = {
   profileName: string | null;
   profileJson: string | null;
@@ -39,16 +30,9 @@ type MockSettingsService = {
   isLoaded: ReturnType<typeof vi.fn>;
 };
 
-type MockConfig = {
-  profiles: unknown[];
-};
-
 type RuntimeMetadata = {
-  settingsService?: MockSettingsService;
-  config?: MockConfig;
   runtimeId?: string;
   metadata?: Record<string, unknown>;
-  oauthManager?: Record<string, unknown>;
 };
 
 type ParsedBootstrapArgs = {
@@ -71,20 +55,13 @@ const parseArgsWithMeta = parseBootstrapArgs as unknown as (
 
 const createTestingBootstrapResult = createBootstrapResult as unknown as (
   args: BootstrapProfileArgs,
-  metadata: RuntimeMetadata,
+  readProfile?: (
+    name: string | null,
+  ) => { provider?: string; model?: string } | null | undefined,
 ) => ProfileApplicationResult;
 
 describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P09', () => {
-  let mockSettingsService: {
-    listProfiles: ReturnType<typeof vi.fn>;
-    getProfile: ReturnType<typeof vi.fn>;
-    getProfileByID: ReturnType<typeof vi.fn>;
-    isLoaded: ReturnType<typeof vi.fn>;
-  };
-  let mockConfig: {
-    profiles: unknown[];
-  };
-  let mockOAuthManager: Record<string, unknown>;
+  let mockSettingsService: MockSettingsService;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -94,10 +71,6 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       getProfileByID: vi.fn(),
       isLoaded: vi.fn().mockReturnValue(true),
     };
-    mockConfig = {
-      profiles: [],
-    };
-    mockOAuthManager = {};
   });
 
   afterEach(() => {
@@ -128,15 +101,10 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       debug: null,
     };
 
-    const parsed = parseArgsWithMeta(args, {
-      settingsService: mockSettingsService,
-      config: mockConfig,
-      oauthManager: mockOAuthManager,
-    });
+    const parsed = parseArgsWithMeta(args, {});
 
-    const result = createTestingBootstrapResult(
-      parsed.bootstrapArgs,
-      parsed.runtimeMetadata,
+    const result = createTestingBootstrapResult(parsed.bootstrapArgs, (name) =>
+      mockSettingsService.getProfile(name),
     );
 
     expect(result.providerName).toBe('openai');
@@ -167,15 +135,10 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       debug: null,
     };
 
-    const parsed = parseArgsWithMeta(args, {
-      settingsService: mockSettingsService,
-      config: mockConfig,
-      oauthManager: mockOAuthManager,
-    });
+    const parsed = parseArgsWithMeta(args, {});
 
-    const result = createTestingBootstrapResult(
-      parsed.bootstrapArgs,
-      parsed.runtimeMetadata,
+    const result = createTestingBootstrapResult(parsed.bootstrapArgs, (name) =>
+      mockSettingsService.getProfile(name),
     );
 
     expect(result.providerName).toBe('anthropic');
@@ -206,15 +169,10 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       debug: null,
     };
 
-    const parsed = parseArgsWithMeta(args, {
-      settingsService: mockSettingsService,
-      config: mockConfig,
-      oauthManager: mockOAuthManager,
-    });
+    const parsed = parseArgsWithMeta(args, {});
 
-    const result = createTestingBootstrapResult(
-      parsed.bootstrapArgs,
-      parsed.runtimeMetadata,
+    const result = createTestingBootstrapResult(parsed.bootstrapArgs, (name) =>
+      mockSettingsService.getProfile(name),
     );
 
     expect(result.providerName).toBe('openai');
@@ -244,15 +202,10 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       debug: null,
     };
 
-    const parsed = parseArgsWithMeta(args, {
-      settingsService: mockSettingsService,
-      config: mockConfig,
-      oauthManager: mockOAuthManager,
-    });
+    const parsed = parseArgsWithMeta(args, {});
 
-    const result = createTestingBootstrapResult(
-      parsed.bootstrapArgs,
-      parsed.runtimeMetadata,
+    const result = createTestingBootstrapResult(parsed.bootstrapArgs, (name) =>
+      mockSettingsService.getProfile(name),
     );
 
     expect(result.providerName).toBeNull();
@@ -284,15 +237,10 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       debug: null,
     };
 
-    const parsed = parseArgsWithMeta(args, {
-      settingsService: mockSettingsService,
-      config: mockConfig,
-      oauthManager: mockOAuthManager,
-    });
+    const parsed = parseArgsWithMeta(args, {});
 
-    const result = createTestingBootstrapResult(
-      parsed.bootstrapArgs,
-      parsed.runtimeMetadata,
+    const result = createTestingBootstrapResult(parsed.bootstrapArgs, (name) =>
+      mockSettingsService.getProfile(name),
     );
 
     expect(result.providerName).toBe('openai');
@@ -322,15 +270,10 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       debug: null,
     };
 
-    const parsed = parseArgsWithMeta(args, {
-      settingsService: mockSettingsService,
-      config: mockConfig,
-      oauthManager: mockOAuthManager,
-    });
+    const parsed = parseArgsWithMeta(args, {});
 
-    const result = createTestingBootstrapResult(
-      parsed.bootstrapArgs,
-      parsed.runtimeMetadata,
+    const result = createTestingBootstrapResult(parsed.bootstrapArgs, (name) =>
+      mockSettingsService.getProfile(name),
     );
 
     expect(result.providerName).toBe('anthropic');
@@ -360,15 +303,10 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       debug: null,
     };
 
-    const parsed = parseArgsWithMeta(args, {
-      settingsService: mockSettingsService,
-      config: mockConfig,
-      oauthManager: mockOAuthManager,
-    });
+    const parsed = parseArgsWithMeta(args, {});
 
-    const result = createTestingBootstrapResult(
-      parsed.bootstrapArgs,
-      parsed.runtimeMetadata,
+    const result = createTestingBootstrapResult(parsed.bootstrapArgs, (name) =>
+      mockSettingsService.getProfile(name),
     );
 
     expect(result.providerName).toBe('openai');
@@ -398,15 +336,10 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       debug: null,
     };
 
-    const parsed = parseArgsWithMeta(args, {
-      settingsService: mockSettingsService,
-      config: mockConfig,
-      oauthManager: mockOAuthManager,
-    });
+    const parsed = parseArgsWithMeta(args, {});
 
-    const result = createTestingBootstrapResult(
-      parsed.bootstrapArgs,
-      parsed.runtimeMetadata,
+    const result = createTestingBootstrapResult(parsed.bootstrapArgs, (name) =>
+      mockSettingsService.getProfile(name),
     );
 
     expect(result.providerName).toBe('anthropic');
@@ -439,11 +372,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
     };
 
     expect(() => {
-      parseArgsWithMeta(args, {
-        settingsService: mockSettingsService,
-        config: mockConfig,
-        oauthManager: mockOAuthManager,
-      });
+      parseArgsWithMeta(args, {});
     }).toThrow(/JSON/);
   });
 
@@ -470,11 +399,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
     };
 
     expect(() => {
-      parseArgsWithMeta(args, {
-        settingsService: mockSettingsService,
-        config: mockConfig,
-        oauthManager: mockOAuthManager,
-      });
+      parseArgsWithMeta(args, {});
     }).toThrow(/provider/);
   });
 
@@ -512,15 +437,10 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       debug: null,
     };
 
-    const parsed = parseArgsWithMeta(args, {
-      settingsService: mockSettingsService,
-      config: mockConfig,
-      oauthManager: mockOAuthManager,
-    });
+    const parsed = parseArgsWithMeta(args, {});
 
-    const result = createTestingBootstrapResult(
-      parsed.bootstrapArgs,
-      parsed.runtimeMetadata,
+    const result = createTestingBootstrapResult(parsed.bootstrapArgs, (name) =>
+      mockSettingsService.getProfile(name),
     );
 
     expect(result.providerName).toBe('openai');
@@ -550,15 +470,10 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       debug: null,
     };
 
-    const parsed = parseArgsWithMeta(args, {
-      settingsService: mockSettingsService,
-      config: mockConfig,
-      oauthManager: mockOAuthManager,
-    });
+    const parsed = parseArgsWithMeta(args, {});
 
-    const result = createTestingBootstrapResult(
-      parsed.bootstrapArgs,
-      parsed.runtimeMetadata,
+    const result = createTestingBootstrapResult(parsed.bootstrapArgs, (name) =>
+      mockSettingsService.getProfile(name),
     );
 
     expect(result.providerName).toBe('openai');

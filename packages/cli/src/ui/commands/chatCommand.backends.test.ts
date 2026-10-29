@@ -20,7 +20,7 @@ import {
   type RecordingSwapCallbacks,
 } from '../../services/performResume.js';
 import type { HistoryItemWithoutId } from '../types.js';
-import { chatCommand } from './chatCommand.js';
+import { rawChatCommand } from '../../__tests__/raw-chat-command.fixture.js';
 import type { CommandContext, SlashCommand } from './types.js';
 
 const PROJECT = 'chat-command-backends';
@@ -38,12 +38,6 @@ async function texts(rows: AsyncIterable<IContent>): Promise<string[]> {
   return out;
 }
 
-const command = (name: string): SlashCommand => {
-  const result = chatCommand.subCommands?.find((item) => item.name === name);
-  assertDefined(result);
-  return result;
-};
-
 interface Live {
   recording: SessionRecordingPort | null;
   integration: RecordingIntegration | null;
@@ -57,6 +51,16 @@ describe('/chat save then /chat resume with journal history', () => {
   let live: Live;
   let context: CommandContext;
   let displayed: HistoryItemWithoutId[];
+
+  const command = (name: string): SlashCommand => {
+    const result = rawChatCommand(
+      () => live.recording,
+      () => null,
+      () => 'claude-4',
+    ).subCommands?.find((item) => item.name === name);
+    assertDefined(result);
+    return result;
+  };
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'chat-command-backends-'));

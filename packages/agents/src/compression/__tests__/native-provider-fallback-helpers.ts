@@ -41,6 +41,7 @@ export function nativeFallback(
     applyResult,
     'indexed-fallback',
     runtime,
+    undefined,
     history,
     () => Promise.resolve({ provider, runtime: runtime.providerRuntime }),
     undefined,

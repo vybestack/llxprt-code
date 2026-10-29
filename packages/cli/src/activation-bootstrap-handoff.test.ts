@@ -1,3 +1,11 @@
+import { openRouteBPreflight } from '../../agents/src/api/__tests__/helpers/route-b-preflight.js';
+import { transferActivation } from './__tests__/startup-activation-fixture.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  parseBootstrapArgs,
+  prepareRuntimeForProfile,
+} from './config/profileBootstrap.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,12 +23,13 @@ import { activateConfiguredProvider } from './cliProviderInit.js';
 import { createForegroundAgent } from './cliAgentBootstrap.js';
 import { loadSettings } from './config/settings.js';
 import { parseArguments } from './config/cliArgParser.js';
-import { loadCliConfig } from './config/config.js';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 import {
   runExitCleanup,
+  registerCleanup,
   __resetCleanupStateForTesting,
 } from './utils/cleanup.js';
+import { loadCliConfigWithPreflight } from './__tests__/load-cli-config-fixture.js';
 
 describe('CLI activation operation handoff', () => {
   let directory: string;
@@ -59,53 +68,48 @@ describe('CLI activation operation handoff', () => {
   it('uses the config bootstrap operation for auto auth and real foreground adoption', async () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
+    const route = await openRouteBPreflight({
+      authority: new CredentialAuthority(),
+    });
     try {
-      await writeFile(join(directory, 'discovery.txt'), 'workspace discovery');
-      await writeFile(join(directory, '.llxprtignore'), 'discovery.txt\n');
-      const root = boot.activationOperation.workspaceFilesystem;
-      expect(await root.search.search(directory, '*.txt')).toStrictEqual([]);
-      expect(boot.providerManager.getActiveProviderName()).toBe('fake');
-      const manager = boot.providerManager;
+      await route.prepare();
+      const activationOperation = transferActivation(route.preflight);
+      registerCleanup(() => activationOperation.dispose());
+      const config = route.config;
+      const root = route.directory;
+      await writeFile(join(root, 'discovery.txt'), 'workspace discovery');
+      await writeFile(join(root, '.llxprtignore'), 'discovery.txt\n');
+      const filesystem = route.filesystem;
+      expect(await filesystem.search.search(root, '*.txt')).toStrictEqual([]);
+      expect(route.preflight.getActiveProviderName()).toBe('fake');
 
       const activation = await activateConfiguredProvider(
-        boot.config,
-        manager,
+        config,
+        route.preflight,
         argv,
-        boot.activationOperation,
+        activationOperation,
       );
       expect(activation.authFailed).toBe(false);
-      expect(activation.activationPreflight?.operation).toBe(
-        boot.activationOperation,
+      const agent = await createForegroundAgent(
+        route.preflight,
+        requireForegroundReceipt(activation),
+        activation.intent ?? {},
+        route.authority,
+        {},
       );
-      const contentConfig = boot.config.getContentGeneratorConfig();
-      const agent = await createForegroundAgent({
-        policyOwner: boot.policyOwner,
-        oauthManager: boot.oauthManager,
-        providerFileLifecycle: boot.providerFileLifecycle,
-        config: boot.config,
-        settingsService: boot.runtimeSettingsService,
-        settingsOwner: boot.runtimeSettingsOwner,
-        providerManager: boot.providerManager,
-        activationPreflight: activation.activationPreflight,
-        activationPreflightIntent: activation.intent,
-      });
-      await writeFile(join(directory, '.llxprtignore'), '');
-      expect(await agent.workspace.search(directory, '*.txt')).toStrictEqual([
+      await writeFile(join(root, '.llxprtignore'), '');
+      expect(await agent.workspace.search(root, '*.txt')).toStrictEqual([
         'discovery.txt',
       ]);
-      await writeFile(join(directory, '.llxprtignore'), 'discovery.txt\n');
-      expect(await root.search.search(directory, '*.txt')).toStrictEqual([]);
-      expect(agent.getRuntimeId()).toBe(boot.config.getSessionId());
-      expect(boot.config.getContentGeneratorConfig()).toBe(contentConfig);
+      await writeFile(join(root, '.llxprtignore'), 'discovery.txt\n');
+      expect(await filesystem.search.search(root, '*.txt')).toStrictEqual([]);
+      expect(agent.getRuntimeId()).toBe(config.getSessionId());
       expect(
-        (await boot.activationOperation.preflight({ authMode: 'none' }))
-          .authFailed,
+        (await activationOperation.preflight({ authMode: 'none' })).authFailed,
       ).toBe(true);
       await agent.dispose();
     } finally {
-      await boot.activationOperation.dispose();
-      await boot.config.dispose();
+      await route.close();
     }
   });
 
@@ -129,37 +133,62 @@ describe('CLI activation operation handoff', () => {
     );
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
+    const credentialAuthority = new CredentialAuthority();
+    const callerSettings = new SettingsService();
+    const parsed = parseBootstrapArgs();
+    const preflight = await prepareRuntimeForProfile(
+      {
+        ...parsed,
+        runtimeMetadata: {
+          ...parsed.runtimeMetadata,
+        },
+      },
+      credentialAuthority,
+      callerSettings,
+      undefined,
+      undefined,
+    );
+    const config = await bootstrapRuntimeAndConfig(
+      settings,
+      argv,
+      directory,
+      preflight,
+    );
+    let transferredActivation: AgentActivationOperation | undefined;
+    preflight.transferActivation((operation) => {
+      transferredActivation = operation;
+    });
+    if (transferredActivation === undefined)
+      throw new Error('Missing activation operation');
+    const activationOperation = transferredActivation;
+    registerCleanup(() => activationOperation.dispose());
     try {
-      const extension = boot.config
+      const extension = config
         .getExtensions()
         .find((item) => item.name === 'preflight');
       if (!extension)
         throw new Error('Preflight did not load the filesystem extension');
       const activation = await activateConfiguredProvider(
-        boot.config,
-        boot.providerManager,
+        config,
+        preflight,
         argv,
-        boot.activationOperation,
+        activationOperation,
       );
       let restart: ((extension: LlxprtExtension) => Promise<void>) | undefined;
-      const agent = await createForegroundAgent({
-        policyOwner: boot.policyOwner,
-        oauthManager: boot.oauthManager,
-        providerFileLifecycle: boot.providerFileLifecycle,
-        config: boot.config,
-        settingsService: boot.runtimeSettingsService,
-        settingsOwner: boot.runtimeSettingsOwner,
-        providerManager: boot.providerManager,
-        activationPreflight: activation.activationPreflight,
-        activationPreflightIntent: activation.intent,
-        onExtensionRestart: (operation) => {
-          restart = operation;
+      const agent = await createForegroundAgent(
+        preflight,
+        requireForegroundReceipt(activation),
+        activation.intent ?? {},
+        credentialAuthority,
+        {
+          onExtensionRestart: (operation) => {
+            restart = operation;
+          },
         },
-      });
+      );
       try {
         if (!restart) throw new Error('Missing exact restart port');
-        expect(boot.config.getExtensions()[0]).toBe(extension);
+        expect(config.getExtensions()[0]).toBe(extension);
         expect(agent.skills.list().map((skill) => skill.name)).toContain(
           'preflight',
         );
@@ -167,28 +196,55 @@ describe('CLI activation operation handoff', () => {
         expect(agent.skills.list().map((skill) => skill.name)).toContain(
           'preflight',
         );
-        expect('getExtensionLoader' in boot.config).toBe(false);
+        expect('getExtensionLoader' in config).toBe(false);
       } finally {
         await agent.dispose();
       }
     } finally {
-      await boot.activationOperation.dispose();
-      await boot.config.dispose();
+      await activationOperation.dispose();
+      await config.dispose();
     }
   });
 
   it('invalidates a transferred bootstrap on startup cleanup before Agent creation', async () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
+    const credentialAuthority = new CredentialAuthority();
+    const callerSettings = new SettingsService();
+    const parsed = parseBootstrapArgs();
+    const preflight = await prepareRuntimeForProfile(
+      {
+        ...parsed,
+        runtimeMetadata: {
+          ...parsed.runtimeMetadata,
+        },
+      },
+      credentialAuthority,
+      callerSettings,
+      undefined,
+      undefined,
+    );
+    const config = await bootstrapRuntimeAndConfig(
+      settings,
+      argv,
+      directory,
+      preflight,
+    );
+    let transferredActivation: AgentActivationOperation | undefined;
+    preflight.transferActivation((operation) => {
+      transferredActivation = operation;
+    });
+    if (transferredActivation === undefined)
+      throw new Error('Missing activation operation');
+    const activationOperation = transferredActivation;
+    registerCleanup(() => activationOperation.dispose());
     try {
       await runExitCleanup();
       expect(
-        (await boot.activationOperation.preflight({ authMode: 'none' }))
-          .authFailed,
+        (await activationOperation.preflight({ authMode: 'none' })).authFailed,
       ).toBe(true);
     } finally {
-      await boot.config.dispose();
+      await config.dispose();
     }
   });
 
@@ -197,20 +253,21 @@ describe('CLI activation operation handoff', () => {
     const argv = await parseArguments(settings.merged);
     let captured: AgentActivationOperation | undefined;
     await expect(
-      loadCliConfig(
-        settings.merged,
-        [],
-        new ExtensionEnablementManager(directory, []),
-        'handoff-failure',
+      loadCliConfigWithPreflight({
+        settings: settings.merged,
+        extensions: [],
+        extensionEnablementManager: new ExtensionEnablementManager(directory, {
+          enabledOverride: [],
+        }),
+        sessionId: 'handoff-failure',
         argv,
-        directory,
-        {
-          onActivationBootstrapReady: (operation) => {
-            captured = operation;
-            throw new Error('handoff failed');
-          },
+        cwd: directory,
+        authority: new CredentialAuthority(),
+        onActivationBootstrapReady: (operation) => {
+          captured = operation;
+          throw new Error('handoff failed');
         },
-      ),
+      }),
     ).rejects.toThrow('handoff failed');
     if (!captured) throw new Error('Missing handoff');
     expect((await captured.preflight({ authMode: 'none' })).authFailed).toBe(
@@ -218,3 +275,11 @@ describe('CLI activation operation handoff', () => {
     );
   });
 });
+
+function requireForegroundReceipt(
+  activation: Awaited<ReturnType<typeof activateConfiguredProvider>>,
+): NonNullable<typeof activation.token> {
+  if (activation.token === undefined)
+    throw new Error('Missing foreground receipt');
+  return activation.token;
+}

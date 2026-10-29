@@ -75,12 +75,13 @@ void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () => ({
   getEnvironmentContext: environmentContextMock,
 }));
 
+export const chatSessionConstructor = vi.fn((..._args: unknown[]) => ({
+  setActiveTodosProvider: vi.fn(),
+  setTranscriptPathProvider: vi.fn(),
+  getHistoryService: vi.fn().mockReturnValue(null),
+}));
 void vi.mock('../chatSession.js', () => ({
-  ChatSession: vi.fn().mockImplementation(() => ({
-    setActiveTodosProvider: vi.fn(),
-    setTranscriptPathProvider: vi.fn(),
-    getHistoryService: vi.fn().mockReturnValue(null),
-  })),
+  ChatSession: chatSessionConstructor,
 }));
 
 void vi.mock(
@@ -147,6 +148,11 @@ import { installChatSessionFactoryConfigFixture } from './support/chatSessionFac
 import { createChatSession } from '../ChatSessionFactory.js';
 import { createOwnerPolicyFixture } from './session-policy-fixture.js';
 import { observeStoredHistoryReuse } from './chat-session-factory-history-test-observation.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
+
 const createFixtureConfig = installChatSessionFactoryConfigFixture();
 
 export function makeConfig(
@@ -202,7 +208,14 @@ export function makeGenerationDeps(
       parameters?: AdmittedModelParameters,
       signal?: AbortSignal,
     ) =>
-      owner.prepareProviderInvocation(runtimeId, provider, parameters, signal),
+      owner.prepareProviderInvocation(
+        runtimeId,
+        provider,
+        parameters,
+        signal,
+        undefined,
+        requestFetch,
+      ),
     contentGenerator: makeContentGenerator(),
     generateContentConfig: {},
     toolRegistry: undefined,

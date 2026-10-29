@@ -1,3 +1,4 @@
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 /// <reference lib="esnext.array" />
 /**
  * @license
@@ -8,19 +9,19 @@
  * CompressionHandler.enforceProviderSource (issue #2207).
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { CompressionCallback } from '@vybestack/llxprt-code-providers';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
-  makeUserMessage,
-  makeAiText,
-  buildRuntimeContext,
   buildMockContentGenerator,
+  buildRuntimeContext,
+  makeAiText,
+  makeUserMessage,
 } from '../../core/__tests__/chatSession-density-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import type { CompressionCallback } from '@vybestack/llxprt-code-providers';
+
 import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
 
 function expectCapturedCallback(
@@ -88,7 +89,19 @@ const observeClearsCompressionCallbackWhenProviderSetterRejectsAttachment =
     });
 
     historyService.add(makeUserMessage('test'));
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      chatSessionPorts(runtimeContext),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
     const setCompressionCallback = vi.fn((cb: CompressionCallback | null) => {
       if (cb !== null) {
         throw new Error('attach failed');
@@ -96,6 +109,7 @@ const observeClearsCompressionCallbackWhenProviderSetterRejectsAttachment =
     });
     const providerWithThrowingSetter = {
       name: 'load-balancer',
+      getModels: async () => [],
       generateChatCompletion: vi.fn(),
       setCompressionCallback,
     };
@@ -114,11 +128,24 @@ const observeAttachedCallbackRunsCompressionMachineryAndReturnsHistoryContents =
       historyService.add(makeUserMessage(`Message ${i} `.repeat(50)));
     }
 
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      chatSessionPorts(runtimeContext),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     let capturedCallback: CompressionCallback | null = null;
     const providerWithCallback = {
       name: 'load-balancer',
+      getModels: async () => [],
       generateChatCompletion: vi.fn(),
       setCompressionCallback: vi.fn((cb: CompressionCallback | null) => {
         if (cb !== null) {
@@ -193,7 +220,19 @@ const observePreservesPendingRequestContentsWhenCallbackRecomposesCompressedHist
       ],
     });
     const pending = makeUserMessage('latest user request after tool result');
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      chatSessionPorts(runtimeContext),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
     // This test exercises the callback recompose path after successful
     // compression, not compression semantics, so mock COMPRESSED.
     vi.spyOn(
@@ -204,6 +243,7 @@ const observePreservesPendingRequestContentsWhenCallbackRecomposesCompressedHist
     let capturedCallback: CompressionCallback | null = null;
     const providerWithCallback = {
       name: 'load-balancer',
+      getModels: async () => [],
       generateChatCompletion: vi.fn(),
       setCompressionCallback: vi.fn((cb: CompressionCallback | null) => {
         if (cb !== null) {
@@ -260,7 +300,19 @@ const observePreservesAPendingMatchingToolResponseWithoutDuplicatingHistory =
         },
       ],
     };
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      chatSessionPorts(runtimeContext),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
     // This test exercises the callback recompose path after successful
     // compression, not compression semantics, so mock COMPRESSED.
     vi.spyOn(
@@ -271,6 +323,7 @@ const observePreservesAPendingMatchingToolResponseWithoutDuplicatingHistory =
     let capturedCallback: CompressionCallback | null = null;
     const providerWithCallback = {
       name: 'load-balancer',
+      getModels: async () => [],
       generateChatCompletion: vi.fn(),
       setCompressionCallback: vi.fn((cb: CompressionCallback | null) => {
         if (cb !== null) {
@@ -354,10 +407,23 @@ async function facadeCallback1(): Promise<void> {
   historyService.add(makeUserMessage('test'));
   historyService.add(makeAiText('response'));
 
-  const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+  const chat = new ChatSession(
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    mockContentGenerator,
+    {},
+    [],
+  );
 
   const providerWithCallback = {
     name: 'load-balancer',
+    getModels: async () => [],
     generateChatCompletion: vi.fn(),
     setCompressionCallback: vi.fn(),
   };
@@ -367,10 +433,10 @@ async function facadeCallback1(): Promise<void> {
     historyService,
     [],
     'test-prompt',
-    providerWithCallback as unknown as IProvider,
+    providerWithCallback,
   );
   chat['compressionHandler'].clearProviderCompressionCallback(
-    providerWithCallback as unknown as IProvider,
+    providerWithCallback,
   );
 
   expect(providerWithCallback.setCompressionCallback).toHaveBeenNthCalledWith(
@@ -392,7 +458,7 @@ async function facadeCallback2(): Promise<void> {
       historyService,
       [],
       'test-prompt',
-      providerWithThrowingSetter as unknown as IProvider,
+      providerWithThrowingSetter,
     ),
   ).rejects.toThrow('attach failed');
   expect(setCompressionCallback).toHaveBeenNthCalledWith(
@@ -410,10 +476,23 @@ async function facadeCallback3(): Promise<void> {
 
   historyService.add(makeUserMessage('test'));
 
-  const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+  const chat = new ChatSession(
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    mockContentGenerator,
+    {},
+    [],
+  );
 
   const providerWithoutCallback = {
     name: 'gemini',
+    getModels: async () => [],
     generateChatCompletion: vi.fn(),
   };
 
@@ -426,7 +505,7 @@ async function facadeCallback3(): Promise<void> {
       historyService,
       [],
       'test-prompt',
-      providerWithoutCallback as unknown as IProvider,
+      providerWithoutCallback,
     ),
   ).resolves.toStrictEqual(expectedContents);
 }
@@ -451,7 +530,7 @@ async function facadeCallback6(): Promise<void> {
   const { result, pending } =
     await observePreservesPendingRequestContentsWhenCallbackRecomposesCompressedHistory();
   expect(result).toContainEqual(pending);
-  expect(result.at(-1)).toStrictEqual(pending);
+  expect(result[result.length - 1]).toStrictEqual(pending);
 }
 
 async function facadeCallback7(): Promise<void> {
@@ -460,7 +539,19 @@ async function facadeCallback7(): Promise<void> {
     compressionThreshold: 0.0001,
   });
   historyService.add(makeUserMessage('previous assistant context'));
-  const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+  const chat = new ChatSession(
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    mockContentGenerator,
+    {},
+    [],
+  );
   const compressionHandler = chat['compressionHandler'];
   const performCompression = vi
     .spyOn(compressionHandler, 'performCompression')
@@ -472,7 +563,11 @@ async function facadeCallback7(): Promise<void> {
     historyService,
     [pending],
     'test-prompt',
-    { name: 'fake', generateChatCompletion: vi.fn() } as unknown as IProvider,
+    {
+      name: 'fake',
+      getModels: async () => [],
+      generateChatCompletion: vi.fn(),
+    },
   );
 
   expect(performCompression).toHaveBeenCalledWith('test-prompt', {
@@ -487,3 +582,49 @@ async function facadeCallback8(): Promise<void> {
   expect(countToolCalls(result, 'pending-call')).toBe(1);
   expect(countToolResponses(result, 'pending-call')).toBe(1);
 }
+
+describe('compression callback property admission', () => {
+  it('ignores non-callable setCompressionCallback properties', async () => {
+    const history = new HistoryService();
+    history.add(makeUserMessage('test'));
+    const runtime = buildRuntimeContext(history, {
+      contextLimit: 131134,
+      compressionThreshold: 0.85,
+    });
+    const chat = new ChatSession(
+      chatSessionPorts(runtime),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      buildMockContentGenerator(),
+    );
+    const provider = {
+      name: 'load-balancer',
+      getModels: async () => [],
+      generateChatCompletion: vi.fn(),
+    };
+    Object.defineProperty(provider, 'setCompressionCallback', {
+      value: 'not-a-function',
+    });
+    try {
+      const expected = await Array.fromAsync(
+        history.getCuratedForProviderStream(),
+      );
+      await expect(
+        enforceProviderSourceForTest(
+          chat['compressionHandler'],
+          history,
+          [],
+          'test-prompt',
+          provider,
+        ),
+      ).resolves.toStrictEqual(expected);
+    } finally {
+      await chat.clearHistoryForDisposal();
+    }
+  });
+});

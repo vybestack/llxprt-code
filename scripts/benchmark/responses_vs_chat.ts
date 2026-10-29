@@ -74,13 +74,16 @@ async function benchmarkAPI(
  */
 async function withRuntime<T>(
   metadata: ProviderRuntimeContext['metadata'],
-  task: (runtime: ProviderRuntimeContext) => Promise<T>,
+  task: (
+    runtime: ProviderRuntimeContext,
+    settings: SettingsService,
+  ) => Promise<T>,
 ): Promise<T> {
+  const settings = new SettingsService();
   const runtime = createProviderRuntimeContext({
-    settingsService: new SettingsService(),
     metadata,
   });
-  return task(runtime);
+  return task(runtime, settings);
 }
 
 function formatImprovementLabel(
@@ -101,10 +104,10 @@ async function runSingleTest(
   label: string,
   cleanup?: () => void,
 ): Promise<void> {
-  await withRuntime({ scenario }, async (runtime) => {
+  await withRuntime({ scenario }, async (_runtime, settings) => {
     const provider = new OpenAIProvider(apiKey);
-    runtime.settingsService.set('activeProvider', 'openai');
-    runtime.settingsService.set('model', model);
+    settings.set('activeProvider', 'openai');
+    settings.set('model', model);
 
     try {
       const result = await benchmarkAPI(provider, testMessages, apiType);

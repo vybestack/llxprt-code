@@ -1,3 +1,17 @@
+import { SessionControl } from '../control/sessionControl.js';
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  createRecordingProvider,
+  type RecordingProvider,
+} from './helpers/recording-provider.js';
+import { createAgent } from '../createAgent.js';
+import type { Agent } from '../agent.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { makeScratchDir } from './helpers/scratch-dir.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,9 +19,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { FakeProvider } from '@vybestack/llxprt-code-providers';
 import { drain } from './helpers/agentHarness.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { OneShotStrategy } from '../../compression/OneShotStrategy.js';
@@ -64,7 +76,53 @@ async function expectNativePurge(
   expect(rowTexts(rows)).not.toContain(foreignTurn);
 }
 
+async function withConfigHome(run: () => Promise<void>): Promise<void> {
+  const home = await mkdtemp(join(tmpdir(), 'recording-facade-home-'));
+  const previousHome = process.env.LLXPRT_CONFIG_HOME;
+  process.env.LLXPRT_CONFIG_HOME = home;
+  try {
+    await run();
+  } finally {
+    if (previousHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
+    else process.env.LLXPRT_CONFIG_HOME = previousHome;
+    await rm(home, { recursive: true, force: true });
+  }
+}
+
+async function withRouteCPair(
+  recording: RecordingProvider,
+  scenario: (agent: Agent, sibling: Agent) => Promise<void>,
+): Promise<void> {
+  await withConfigHome(async () => {
+    const directory = await makeScratchDir('recording-facade-channel-');
+    const agents: Agent[] = [];
+    const open = async (): Promise<Agent> => {
+      const agent = await createAgent({
+        provider: 'openai',
+        model: 'gpt-4o',
+        interactive: true,
+        workingDir: directory,
+        providerContributions: recording.contributions,
+        credentialAuthority: new CredentialAuthority(),
+      });
+      agents.push(agent);
+      return agent;
+    };
+    try {
+      const first = await open();
+      const second = await open();
+      await scenario(first, second);
+    } finally {
+      await runCleanupSteps([
+        ...[...agents].reverse().map((agent) => () => agent.dispose()),
+        () => rm(directory, { recursive: true, force: true }),
+      ]);
+    }
+  });
+}
+
 describe('native facade recording chat execution on a borrowed client', () => {
+  useRecordingPrompts();
   it('commits compression to its executing recorder across stop and resume', async () => {
     await withNativeRecordingFixture(async ({ agent, borrow }) => {
       const sibling = await borrow();
@@ -91,6 +149,7 @@ describe('native facade recording chat execution on a borrowed client', () => {
         await agent.session.setRecording({ enabled: true });
         const pathA = pathOf(agent.session.getRecording());
         const sessionA = agent.session.getSessionId();
+        await sibling.setHistory(compressionSeed('B'));
         await sibling.session.setRecording({ enabled: true });
         const pathB = pathOf(sibling.session.getRecording());
         expect(pathB).not.toBe(pathA);
@@ -132,18 +191,22 @@ describe('native facade recording chat execution on a borrowed client', () => {
     });
   }, 30000);
 
-  it('commits shared unowned media changes while keeping each facade turn in its own file', async () => {
+  it('keeps media purges and turns isolated between independently owned facades', async () => {
     await withNativeRecordingFixture(async ({ agent, borrow }) => {
       agent.setEphemeralSetting('media.semantic-purge', 'remove');
       const sibling = await borrow();
+      sibling.setEphemeralSetting('media.semantic-purge', 'remove');
       await agent.setHistory([mediaSeed()]);
+      await sibling.setHistory([mediaSeed()]);
       await agent.session.setRecording({ enabled: true });
       await sibling.session.setRecording({ enabled: true });
       const pathA = pathOf(agent.session.getRecording());
       const pathB = pathOf(sibling.session.getRecording());
       expect(pathA).not.toBe(pathB);
       expect((await nativeRows(pathA))[0].blocks).toHaveLength(2);
-      expect(await nativeRows(pathB)).toStrictEqual(await nativeRows(pathA));
+      expect((await nativeRows(pathB)).map((row) => row.blocks)).toStrictEqual(
+        (await nativeRows(pathA)).map((row) => row.blocks),
+      );
       const eventsA = await drain(agent.stream('native-purge-A'));
       expect(eventsA.filter((event) => event.type === 'error')).toStrictEqual(
         [],
@@ -152,9 +215,7 @@ describe('native facade recording chat execution on a borrowed client', () => {
       await sibling.session.flushRecording();
       await expectNativePurge(pathA, 'native-purge-A', 'native-purge-B');
       expect(rowTexts(await nativeRows(pathB))).toStrictEqual(['']);
-      expect((await nativeRows(pathB))[0].blocks).toStrictEqual([
-        mediaSeed().blocks[1],
-      ]);
+      expect((await nativeRows(pathB))[0].blocks).toHaveLength(2);
       await sibling.setHistory([mediaSeed()]);
       const eventsB = await drain(sibling.stream('native-purge-B'));
       expect(eventsB.filter((event) => event.type === 'error')).toStrictEqual(
@@ -163,10 +224,7 @@ describe('native facade recording chat execution on a borrowed client', () => {
       await agent.session.setRecording({ enabled: false });
       await sibling.session.setRecording({ enabled: false });
       await expectNativePurge(pathB, 'native-purge-B', 'native-purge-A');
-      expect(rowTexts(await nativeRows(pathA))).toStrictEqual(['']);
-      expect((await nativeRows(pathA))[0].blocks).toStrictEqual([
-        mediaSeed().blocks[1],
-      ]);
+      await expectNativePurge(pathA, 'native-purge-A', 'native-purge-B');
     });
   }, 30000);
 
@@ -179,16 +237,21 @@ describe('native facade recording chat execution on a borrowed client', () => {
       const pathA = pathOf(agent.session.getRecording());
       const before = await nativeRows(pathA);
       const liveBefore = await Array.fromAsync(sibling.streamHistory());
-      const events = await drain(sibling.stream('native-unrecorded-B'));
-      expect(events.filter((event) => event.type === 'error')).toMatchObject([
-        { type: 'error', error: { message: 'No active recording' } },
-      ]);
+      if (!(sibling.session instanceof SessionControl))
+        throw new Error('Missing recording session');
+      await expect(sibling.session.persistSemanticMediaPurge()).rejects.toThrow(
+        'No active recording',
+      );
       expect(sibling.session.getRecording().enabled).toBe(false);
       expect((await Array.fromAsync(sibling.streamHistory()))[0]).toStrictEqual(
         liveBefore[0],
       );
       await agent.session.setRecording({ enabled: false });
       expect(isDeepStrictEqual(await nativeRows(pathA), before)).toBe(true);
+      const events = await drain(sibling.stream('native-unrecorded-B'));
+      expect(events.filter((event) => event.type === 'error')).toStrictEqual(
+        [],
+      );
       expect(rowTexts(await nativeRows(pathA))).not.toContain(
         'native-unrecorded-B',
       );
@@ -196,18 +259,12 @@ describe('native facade recording chat execution on a borrowed client', () => {
   }, 30000);
 
   it('moves the executing recorder to its profile client without purging or appending to its borrowed sibling', async () => {
-    await withNativeRecordingFixture(async ({ agent, borrow, config }) => {
+    const replacement = createRecordingProvider({ alias: 'replacement' });
+    await withRouteCPair(replacement, async (agent, sibling) => {
       agent.setEphemeralSetting('media.semantic-purge', 'remove');
-      const sibling = await borrow();
-      const replacement = new FakeProvider(
-        fileURLToPath(
-          new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
-        ),
-        config.getTargetDir(),
-      );
-      replacement.name = 'replacement';
-      agent.providerManager.registerProvider(replacement);
+      sibling.setEphemeralSetting('media.semantic-purge', 'remove');
       await agent.setHistory([mediaSeed()]);
+      await sibling.setHistory([mediaSeed()]);
       await agent.session.setRecording({ enabled: true });
       await sibling.session.setRecording({ enabled: true });
       const pathA = pathOf(agent.session.getRecording());
@@ -241,5 +298,47 @@ describe('native facade recording chat execution on a borrowed client', () => {
         (await Array.fromAsync(agent.streamHistory()))[0].blocks,
       ).toStrictEqual([mediaSeed().blocks[1]]);
     });
+  }, 30000);
+  it('publishes unowned native media replacement to both recorders while routing owned rows separately', async () => {
+    await withNativeRecordingFixture(
+      async ({ agent, borrow, shareHistory, clientFor }) => {
+        const sibling = await borrow();
+        await shareHistory(agent, sibling);
+        const shared = clientFor(agent).getHistoryService();
+        if (shared === null) throw new Error('Missing shared journal');
+        await shared.addBatch([mediaSeed()]);
+        await agent.session.setRecording({ enabled: true });
+        await sibling.session.setRecording({ enabled: true });
+        const pathA = pathOf(agent.session.getRecording());
+        const pathB = pathOf(sibling.session.getRecording());
+        expect(pathA).not.toBe(pathB);
+        const history = clientFor(agent).getHistoryService();
+        if (history === null) throw new Error('Missing native shared history');
+        await history.detachedValues.transform(async (source, sink) => {
+          for await (const row of source.streamRows())
+            await sink.appendValue({
+              ...row,
+              blocks: row.blocks.filter(
+                (block) =>
+                  !(block.type === 'media' && block.encoding !== 'url'),
+              ),
+            });
+        });
+        await history.addBatch(
+          [{ speaker: 'human', blocks: [{ type: 'text', text: 'owned A' }] }],
+          undefined,
+          { origin: agent.session },
+        );
+        await history.addBatch(
+          [{ speaker: 'human', blocks: [{ type: 'text', text: 'owned B' }] }],
+          undefined,
+          { origin: sibling.session },
+        );
+        await agent.session.flushRecording();
+        await sibling.session.flushRecording();
+        await expectNativePurge(pathA, 'owned A', 'owned B');
+        await expectNativePurge(pathB, 'owned B', 'owned A');
+      },
+    );
   }, 30000);
 });

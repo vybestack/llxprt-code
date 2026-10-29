@@ -14,17 +14,17 @@ import { CoreAsyncTaskServiceAdapter } from '@vybestack/llxprt-code-core/tools-a
 import type { TaskLaunchOwner } from './task-launch-owner.js';
 import type { ShellJobOwner } from './shell-job-owner.js';
 import { TaskTool } from '../tools/task.js';
-import { ChildToolDisplay } from './childToolDisplay.js';
+import type { ChildToolDisplay } from './childToolDisplay.js';
 import type { SchedulerConstruction } from './assembleSchedulerOwner.js';
 
-export function bindChildToolRegistry(
-  registry: ToolLookup,
+export function bindChildToolRegistry<T extends ToolLookup>(
+  registry: T,
   display: ChildToolDisplay,
   taskLaunchOwner: TaskLaunchOwner | undefined,
   shellOwner: ShellJobOwner,
-): ToolLookup {
+): T {
   const view = new Proxy(registry, {
-    get(target: ToolLookup, key: string | symbol): unknown {
+    get(target: T, key: string | symbol): unknown {
       if (key === 'getTool') {
         return (...args: Parameters<ToolLookup['getTool']>) => {
           const tool = target.getTool(...args);
@@ -49,7 +49,7 @@ export function bindChildToolRegistry(
             });
           }
           return tool instanceof TaskTool
-            ? tool.withChildDisplay(() => display.open(), taskLaunchOwner, view)
+            ? tool.withChildDisplay(() => display.open(), taskLaunchOwner)
             : tool;
         };
       }
@@ -76,21 +76,4 @@ export function withChildToolDisplay(
         shellOwner,
       ),
     });
-}
-
-export function createChildToolAssembly(
-  construct: SchedulerConstruction,
-  taskLaunchOwner: TaskLaunchOwner,
-  shellOwner: ShellJobOwner,
-) {
-  const childDisplay = new ChildToolDisplay();
-  return {
-    childDisplay,
-    schedulerFactory: withChildToolDisplay(
-      construct,
-      childDisplay,
-      taskLaunchOwner,
-      shellOwner,
-    ),
-  };
 }

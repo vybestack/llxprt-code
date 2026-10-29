@@ -24,26 +24,33 @@ import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.j
  *   (HistoryService total is synced to the real value).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'bun:test';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { waitForCondition } from '../test-utils/eventLoop.js';
+
+import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 
 /**
  * A fake provider that implements projectPromptEnvelope by serializing the
@@ -131,6 +138,7 @@ function createEstimatingProvider(
 }
 
 interface TestFixture {
+  runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
   providerManager: ReturnType<
     typeof createChatSessionRuntime
   >['providerManager'];
@@ -167,7 +175,6 @@ function createTestFixture(provider: IProvider): TestFixture {
   const mockConfig = runtimeSetup.config;
   const providerRuntimeSnapshot: ProviderRuntimeContext = {
     ...runtimeSetup.runtime,
-    config: mockConfig,
   };
 
   if (
@@ -199,6 +206,7 @@ function createTestFixture(provider: IProvider): TestFixture {
   const historyService = new HistoryService();
 
   return {
+    runtimeSetup,
     providerManager: runtimeSetup.providerManager,
     mockConfig,
     runtimeState,
@@ -211,7 +219,7 @@ function createTestFixture(provider: IProvider): TestFixture {
 function buildChatSession(fixture: TestFixture): ChatSession {
   const view = createAgentRuntimeContext({
     ...createSessionPolicyFixture(
-      fixture.providerRuntimeSnapshot.settingsService,
+      fixture.runtimeSetup.settingsService,
       fixture.providerRuntimeSnapshot.runtimeId,
     ),
     state: fixture.runtimeState,
@@ -246,7 +254,19 @@ function buildChatSession(fixture: TestFixture): ChatSession {
     },
   });
 
-  return new ChatSession(view, fixture.mockContentGenerator, {}, []);
+  return new ChatSession(
+    chatSessionPorts(view),
+    fixture.mockConfig,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    fixture.mockContentGenerator,
+    {},
+    [],
+  );
 }
 
 function createRetryingProvider(
@@ -321,6 +341,8 @@ function createRetryingProvider(
 }
 
 const prepareRetryEstimationScenario = () => {
+  vi.useFakeTimers();
+  onTestFinished(() => vi.useRealTimers());
   const estimateHistory: number[] = [];
   const transportedBodies: string[] = [];
   const firstAttempt = Promise.withResolvers<void>();
@@ -701,7 +723,8 @@ async function testSplitCase8(): Promise<void> {
   } = prepareRetryEstimationScenario();
   await firstAttempt;
   expect(observation.attempt >= 1).toBe(true);
-
+  expect(await waitForCondition(() => vi.getTimerCount() > 0)).toBe(true);
+  await advanceTimersByTimeAsync(10_000);
   await sendPromise;
 
   expect(observation.attempt).toBeGreaterThanOrEqual(2);
@@ -710,7 +733,7 @@ async function testSplitCase8(): Promise<void> {
   expect(transportedBodies).toHaveLength(observation.attempt);
   expect(transportedBodies[1]).not.toBe(transportedBodies[0]);
   expect(chat.getPromptEnvelopeEstimate()?.estimatedPromptTokens).toBe(
-    estimateHistory.at(-1),
+    estimateHistory[estimateHistory.length - 1],
   );
 }
 

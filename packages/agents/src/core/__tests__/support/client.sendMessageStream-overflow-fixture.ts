@@ -1,3 +1,8 @@
+import type { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+let metricSource: UiTelemetryService;
+export function bindOverflowMetrics(metrics: UiTelemetryService): void {
+  metricSource = metrics;
+}
 /**
  * @license
  * Copyright 2026 Google LLC
@@ -20,7 +25,6 @@ import {
   PerformCompressionResult,
   type ServerAgentStreamEvent,
 } from '../../turn.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { fromAsync } from '../client-test-helpers.js';
 
@@ -35,11 +39,7 @@ export async function testShouldDeferOverflowDecisionsToFinalizedProviderEnforce
 
   // Set last prompt token count
   const lastPromptTokenCount = 900;
-  (
-    uiTelemetryService.getLastPromptTokenCount as Mock<
-      typeof uiTelemetryService.getLastPromptTokenCount
-    >
-  ).mockReturnValue(lastPromptTokenCount);
+  metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
   // Mock the chat to return the lastPromptTokenCount
   const mockChat = installOverflowMockChat(client, lastPromptTokenCount, {
@@ -83,11 +83,7 @@ export async function testShouldNOTEmitContextWindowWillOverflowWhenRemainingCap
 
   // e.g. 249,442 stored tokens against a 200,000-token model.
   const lastPromptTokenCount = 249442;
-  (
-    uiTelemetryService.getLastPromptTokenCount as Mock<
-      typeof uiTelemetryService.getLastPromptTokenCount
-    >
-  ).mockReturnValue(lastPromptTokenCount);
+  metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
   installOverflowMockChat(client, lastPromptTokenCount, {
     convertPartListUnionToIContent: vi
@@ -125,11 +121,7 @@ export async function testShouldNOTEmitContextWindowWillOverflowForAFunctionResp
   setMockTokenLimit(200000);
 
   const lastPromptTokenCount = 249442;
-  (
-    uiTelemetryService.getLastPromptTokenCount as Mock<
-      typeof uiTelemetryService.getLastPromptTokenCount
-    >
-  ).mockReturnValue(lastPromptTokenCount);
+  metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
   installOverflowMockChat(client, lastPromptTokenCount, {
     convertPartListUnionToIContent: vi.fn().mockReturnValue({
@@ -173,11 +165,7 @@ export async function testShouldDeferModelAwareTokenizationToFinalizedProviderEn
   const MOCKED_TOKEN_LIMIT = 10000;
   (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(MOCKED_TOKEN_LIMIT);
   const lastPromptTokenCount = 1000;
-  (
-    uiTelemetryService.getLastPromptTokenCount as Mock<
-      typeof uiTelemetryService.getLastPromptTokenCount
-    >
-  ).mockReturnValue(lastPromptTokenCount);
+  metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
   const estimateSpy = vi.fn();
   installOverflowMockChat(client, lastPromptTokenCount, {
@@ -213,11 +201,7 @@ export async function testShouldNOTInvokeTheTokenizerWhenRemainingCapacityIsAlre
   const MOCKED_TOKEN_LIMIT = 200000;
   (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(MOCKED_TOKEN_LIMIT);
   const lastPromptTokenCount = 249442;
-  (
-    uiTelemetryService.getLastPromptTokenCount as Mock<
-      typeof uiTelemetryService.getLastPromptTokenCount
-    >
-  ).mockReturnValue(lastPromptTokenCount);
+  metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
   const convertSpy = vi.fn();
   const estimateSpy = vi.fn();
@@ -249,11 +233,7 @@ export async function testShouldDeferFunctionResponseSizingToFinalizedProviderEn
   const MOCKED_TOKEN_LIMIT = 1000;
   (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(MOCKED_TOKEN_LIMIT);
   const lastPromptTokenCount = 0;
-  (
-    uiTelemetryService.getLastPromptTokenCount as Mock<
-      typeof uiTelemetryService.getLastPromptTokenCount
-    >
-  ).mockReturnValue(lastPromptTokenCount);
+  metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
   installOverflowMockChat(client, lastPromptTokenCount);
 

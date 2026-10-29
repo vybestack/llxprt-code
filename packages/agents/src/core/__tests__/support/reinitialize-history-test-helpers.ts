@@ -11,24 +11,10 @@ import {
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import {
-  buildAgent,
-  internalConfig,
-  internalSettingsService,
-} from '../../../api/__tests__/helpers/agentHarness.js';
-import { bindClientTokenization } from '../../../session/session-client-binding.js';
-import { SessionClientOwner } from '../../../session/session-client-owner.js';
-import type { Agent } from '../../../api/agent.js';
+import { buildCliStyleConfig } from '../../../api/__tests__/helpers/buildCliStyleConfig.js';
+import { bindClientTokenization } from './test-tokenization.js';
+import type { SessionClientOwner } from '../../../session/session-client-owner.js';
 import { ControlledOrchestratorHistory } from './orchestrator-history-test-helpers.js';
-
-function requireSessionClient(agent: Agent): SessionClientOwner {
-  const deps = 'deps' in agent ? agent.deps : undefined;
-  if (typeof deps !== 'object' || deps === null || !('sessionClient' in deps))
-    throw new Error('Expected an owned session client');
-  if (!(deps.sessionClient instanceof SessionClientOwner))
-    throw new Error('Expected an owned session client');
-  return deps.sessionClient;
-}
 
 export function reinitializeConfig(
   client: AgentClientContract,
@@ -84,25 +70,23 @@ export async function withReinitializeHistory<T>(
     async (history, owners) => {
       if (!(history instanceof ControlledOrchestratorHistory))
         throw new Error('Missing controlled journal');
-      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-      const config = internalConfig(agent);
-      const client = agent.agentClient;
+      const {
+        agentClient: client,
+        cleanup,
+        config,
+        settingsOwner,
+        sessionClient,
+      } = await buildCliStyleConfig('plain-text.jsonl');
       bindClientTokenization(
         client,
         accountingFactory((text) => text.length),
       );
-      internalSettingsService(agent).set('context-limit', 100_000_000);
+      settingsOwner.writeNamedParameter('context-limit', 100_000_000);
       const priorHistory = client.getHistoryService();
       client.storeHistoryServiceForReuse(history);
       try {
         await client.startChat([]);
-        return await action(
-          client,
-          history,
-          owners,
-          config,
-          requireSessionClient(agent),
-        );
+        return await action(client, history, owners, config, sessionClient);
       } finally {
         history.release.resolve();
         history.releaseConsumer();

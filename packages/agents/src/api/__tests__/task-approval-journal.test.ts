@@ -10,17 +10,15 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import { NativeJournalPageReader } from '@vybestack/llxprt-code-core/journal/native-journal-page-reader.js';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 import {
   ApprovalMode,
   fromConfig,
   toConfigParameters,
   type Agent,
 } from '@vybestack/llxprt-code-agents';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
-import { SubagentOrchestrator } from '../../core/subagentOrchestrator.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { SubAgentScope } from '../../core/subagent.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 async function approvals(history: HistoryService): Promise<unknown[]> {
   await history.waitForCommit();
@@ -67,18 +65,13 @@ async function exercise(
   let recorded: unknown[] = [];
   let requests = 0;
   const failures: unknown[] = [];
-  const actualLaunch = SubagentOrchestrator.prototype.launch;
-  const observation = spyOn(
-    SubagentOrchestrator.prototype,
-    'launch',
-  ).mockImplementation(async function (
-    this: SubagentOrchestrator,
-    ...args: Parameters<SubagentOrchestrator['launch']>
-  ) {
-    const launched = await actualLaunch.apply(this, args);
-    childHistory = launched.runtime.runtimeContext.history;
-    return launched;
-  });
+  const createScope = SubAgentScope.create;
+  const observation = spyOn(SubAgentScope, 'create').mockImplementation(
+    async (...args) => {
+      childHistory = args[1].admittedRuntime.history;
+      return createScope(...args);
+    },
+  );
   const output = join(directory, 'approved.txt');
   const server = createServer((request, response) => {
     void (async (): Promise<void> => {
@@ -197,7 +190,6 @@ async function exercise(
   });
   let config: Config | undefined;
   let agent: Agent | undefined;
-  let mcp: McpRuntimeOwner | undefined;
   let channel: ReturnType<Agent['tools']['openClientChannel']> | undefined;
   try {
     await new Promise<void>((resolve) =>
@@ -245,19 +237,21 @@ async function exercise(
       subagentDirectory: join(directory, 'subagents'),
       sessionId: 'approval-parent',
     });
-    mcp = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
-    agent = await fromConfig({
-      ...createSessionSettingsFixture(config),
-      runtimeFactoryBindings: createAgentRuntimeFactoryBindings(),
+    const settings = new SettingsService();
+    for (const [key, value] of Object.entries(config.getInitialSettings()))
+      settings.set(key, value);
+    agent = await fromConfig(
       config,
-      mcpRuntime: mcp,
-      mcpOwnership: 'caller',
-      activation: {
-        provider: 'openai',
-        model: 'parent-model',
-        cliOverrides: { key: 'local-test-key', baseUrl },
+      settings,
+      {
+        activation: {
+          provider: 'openai',
+          model: 'parent-model',
+          cliOverrides: { key: 'local-test-key', baseUrl },
+        },
       },
-    });
+      new CredentialAuthority(),
+    );
     agent.tools.subscribeChildTools({
       onToolCallsUpdate: (_executionId, calls) => {
         for (const call of calls) {
@@ -331,7 +325,6 @@ async function exercise(
   } finally {
     await channel?.release();
     await agent?.dispose();
-    await mcp?.dispose();
     await config?.dispose();
     observation.mockRestore();
     server.closeAllConnections();

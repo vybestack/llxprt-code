@@ -23,7 +23,10 @@ describe('enableZedSessionRecording', () => {
     } as unknown as Agent;
 
     await expect(
-      enableZedSessionRecording(agent, onFailure),
+      enableZedSessionRecording(
+        () => agent.session.setRecording({ enabled: true }),
+        onFailure,
+      ),
     ).resolves.toBeUndefined();
     expect(onFailure).toHaveBeenCalledWith(recordingError);
   });

@@ -7,7 +7,6 @@ import { z } from 'zod';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
 import { createSessionHookOwner } from './session-hook-owner-fixture.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -110,10 +109,14 @@ async function oracle(
     contents: callerOwnedProviderSource(expectedRows(mode)),
     tools: oracleTools(mode),
     invocation: captureProviderInvocation(
-      createProviderRuntimeContext({
-        settingsService: setup.settings,
+      {
         runtimeId: setup.runtime.state.runtimeId,
-      }),
+        fetch: globalThis.fetch,
+        globalSettings: setup.settings.getAllGlobalSettings(),
+        providerSettings: setup.settings.getProviderSettings(
+          setup.provider.name,
+        ),
+      },
       setup.provider.name,
     ),
     systemInstruction: setup.generation.systemInstruction,

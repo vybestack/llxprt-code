@@ -1,3 +1,4 @@
+import { capturedAgentClient } from './agent-client-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
@@ -15,7 +16,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { AgentClient } from '../../../core/client.js';
 import { isHistorySource } from '../../../core/deferredHistorySource.js';
-import { createAgentRuntimeFactoryBindings } from '../../runtimeFactories.js';
+import { buildAgentClientFactory } from '../../agentBootstrap.js';
 import { buildAgent, type Agent } from './agentHarness.js';
 
 export const carryBounds = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
@@ -121,7 +122,7 @@ export class CarryProbeClient extends AgentClient {
 
 function createProbe(
   ...[config, runtime, readMcp, store, paths, instr]: Parameters<
-    ReturnType<typeof createAgentRuntimeFactoryBindings>['agentClientFactory']
+    ReturnType<typeof buildAgentClientFactory>
   >
 ): CarryProbeClient {
   if (store === undefined || paths === undefined)
@@ -160,42 +161,27 @@ export async function withAgentCarry<T>(
       let replacement: CarryProbeClient | undefined;
       let armed = false;
       const ready = latch();
-      const defaults = createAgentRuntimeFactoryBindings();
-      const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-        runtimeFactoryBindings: {
-          ...defaults,
-          agentClientFactory: (
+      const defaults = buildAgentClientFactory();
+      const { agent, cleanup } = await buildAgent(
+        'plain-text.jsonl',
+        {},
+        (config, runtime, readMcp, store, paths, instr) => {
+          if (!armed)
+            return defaults(config, runtime, readMcp, store, paths, instr);
+          replacement = createProbe(
             config,
             runtime,
             readMcp,
             store,
             paths,
             instr,
-          ) => {
-            if (!armed)
-              return defaults.agentClientFactory(
-                config,
-                runtime,
-                readMcp,
-                store,
-                paths,
-                instr,
-              );
-            replacement = createProbe(
-              config,
-              runtime,
-              readMcp,
-              store,
-              paths,
-              instr,
-            );
-            configure(replacement);
-            ready.open();
-            return replacement;
-          },
+          );
+          configure(replacement);
+          ready.open();
+          return replacement;
         },
-      });
-      const previous = agent.agentClient;
+      );
+      const previous = capturedAgentClient(agent);
       const priorHistory = previous.getHistoryService();
       previous.storeHistoryServiceForReuse(history);
       const access = Object.assign(

@@ -47,7 +47,7 @@ describe('AnthropicOAuthProvider refreshToken', () => {
   });
 
   it('returns refreshed token without writing to tokenStore directly', async () => {
-    const provider = new AnthropicOAuthProvider(tokenStore);
+    const provider = new AnthropicOAuthProvider(globalThis.fetch, tokenStore);
 
     const deviceFlow = (
       provider as unknown as {
@@ -67,7 +67,7 @@ describe('AnthropicOAuthProvider refreshToken', () => {
   });
 
   it('returns null when token has no valid refresh_token', async () => {
-    const provider = new AnthropicOAuthProvider(tokenStore);
+    const provider = new AnthropicOAuthProvider(globalThis.fetch, tokenStore);
 
     const noRefreshToken: OAuthToken = {
       access_token: 'access',

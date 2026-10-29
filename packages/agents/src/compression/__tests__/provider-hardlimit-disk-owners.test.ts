@@ -35,6 +35,7 @@ async function paused(size: number): Promise<number> {
             install,
             prompt,
             runtime,
+            undefined,
             history,
             async () => ({
               provider: transport,

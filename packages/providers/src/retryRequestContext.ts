@@ -80,11 +80,6 @@ const EXPOSURE_STRENGTH: Readonly<Record<StreamExposure, number>> = {
   tool_call: 3,
 };
 
-const requestCommitStates = new WeakMap<
-  RetryRequestContext,
-  MutableRequestCommitState
->();
-
 /**
  * Structural seam through which any wrapper layer (guarded stream, load
  * balancer backend attempt, provider stream processor) reads or updates the
@@ -172,8 +167,8 @@ function resolveRequestCommitState(
 function requireRequestCommitState(
   context: RetryRequestContext,
 ): MutableRequestCommitState {
-  const state = requestCommitStates.get(context);
-  if (state === undefined) {
+  const state = getRequestMetadataContext(context.options);
+  if (!isMutableRequestCommitState(state)) {
     throw new TypeError('Unknown retry request context');
   }
   return state;
@@ -347,7 +342,6 @@ export function resolveRetryRequestContext(
   };
   const request = core as RetryRequestContext;
   attachRecoveryTrackingMembers(request, tracking);
-  requestCommitStates.set(request, commitState);
   return request;
 }
 

@@ -16,6 +16,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import type { ObserveInput } from './tmux-harness-input-diagnostics.ts';
 
 import {
   compileMatcher,
@@ -149,6 +150,7 @@ export async function executeLineStep(
   sessionName: string,
   sendKeys: SendKeysFn,
   defaults: HarnessDefaults,
+  observeInput?: ObserveInput,
 ): Promise<void> {
   if (typeof step.text !== 'string') {
     throw new Error(`Invalid line.text`);
@@ -162,7 +164,9 @@ export async function executeLineStep(
     return treatAsShell ? defaults.shellSubmitKeys : defaults.submitKeys;
   })();
 
+  await observeInput?.('before-type', step.text);
   runTmux(['send-keys', '-t', sessionName, '-l', step.text]);
+  await observeInput?.('after-type', step.text);
   await sleep(postTypeMs);
   await sendKeys(submitKeys);
 }
@@ -564,12 +568,20 @@ interface DispatchContext {
   sendKeys: SendKeysFn;
   scriptState: ScriptState;
   defaults: HarnessDefaults;
+  observeInput?: ObserveInput;
 }
 
 export async function executeStepDispatch(
   step: Step,
   i: number,
-  { sessionName, outDir, sendKeys, scriptState, defaults }: DispatchContext,
+  {
+    sessionName,
+    outDir,
+    sendKeys,
+    scriptState,
+    defaults,
+    observeInput,
+  }: DispatchContext,
 ): Promise<void> {
   switch (step.type) {
     case 'wait':
@@ -577,7 +589,13 @@ export async function executeStepDispatch(
     case 'resize':
       return executeResizeStep(step, sessionName);
     case 'line':
-      return executeLineStep(step, sessionName, sendKeys, defaults);
+      return executeLineStep(
+        step,
+        sessionName,
+        sendKeys,
+        defaults,
+        observeInput,
+      );
     case 'key':
       return executeKeyStep(step, sendKeys);
     case 'keys':

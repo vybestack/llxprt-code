@@ -180,6 +180,16 @@ function resolveMountPath(input: string): string {
   return resolved;
 }
 
+// Container destinations live in the container's POSIX namespace, so they must
+// not pass through the host path resolver (which rewrites separators on Windows).
+function normalizeContainerMountPath(input: string): string {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) {
+    throw new FatalSandboxError(`Mount path cannot be empty.`);
+  }
+  return path.posix.normalize(trimmed);
+}
+
 function normalizeEnvEntries(
   env: Record<string, unknown> | undefined,
 ): Record<string, string> | undefined {
@@ -217,7 +227,7 @@ function normalizeMounts(
       throw new FatalSandboxError('Sandbox mount requires a "from" path.');
     }
     const from = resolveMountPath(mount.from);
-    const to = mount.to ? resolveMountPath(mount.to) : undefined;
+    const to = mount.to ? normalizeContainerMountPath(mount.to) : undefined;
     const mode = mount.mode ?? 'ro';
     if (mode !== 'ro' && mode !== 'rw') {
       throw new FatalSandboxError(

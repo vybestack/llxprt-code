@@ -1,3 +1,4 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -33,6 +34,10 @@ import {
   toolResponseMsg,
   testProviderRuntime,
 } from './__tests__/MiddleOutStrategy-test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('MiddleOutStrategy core', () => {
   // -----------------------------------------------------------------------
@@ -41,12 +46,22 @@ describe('MiddleOutStrategy core', () => {
 
   describe('interface contract', () => {
     it('has name "middle-out"', () => {
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.name).toBe('middle-out');
     });
 
     it('reports requiresLLM as true', () => {
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.requiresLLM).toBe(true);
     });
   });
@@ -181,7 +196,15 @@ describe('MiddleOutStrategy core', () => {
         history,
         resolveProvider: () => ({
           invocation: captureProviderInvocation(
-            testProviderRuntime,
+            {
+              fetch: requestFetch,
+              runtimeId: testProviderRuntime.runtimeId,
+              metadata: testProviderRuntime.metadata,
+              globalSettings: new SettingsService().getAllGlobalSettings(),
+              providerSettings: new SettingsService().getProviderSettings(
+                fakeProvider.name,
+              ),
+            },
             fakeProvider.name,
           ),
           provider: fakeProvider,
@@ -240,7 +263,16 @@ describe('MiddleOutStrategy core', () => {
             if (profileName === 'compression-profile') {
               return {
                 invocation: captureProviderInvocation(
-                  testProviderRuntime,
+                  {
+                    fetch: requestFetch,
+                    runtimeId: testProviderRuntime.runtimeId,
+                    metadata: testProviderRuntime.metadata,
+                    globalSettings:
+                      new SettingsService().getAllGlobalSettings(),
+                    providerSettings: new SettingsService().getProviderSettings(
+                      profileProvider.name,
+                    ),
+                  },
                   profileProvider.name,
                 ),
                 provider: profileProvider,
@@ -249,7 +281,15 @@ describe('MiddleOutStrategy core', () => {
             }
             return {
               invocation: captureProviderInvocation(
-                testProviderRuntime,
+                {
+                  fetch: requestFetch,
+                  runtimeId: testProviderRuntime.runtimeId,
+                  metadata: testProviderRuntime.metadata,
+                  globalSettings: new SettingsService().getAllGlobalSettings(),
+                  providerSettings: new SettingsService().getProviderSettings(
+                    defaultProvider.name,
+                  ),
+                },
                 defaultProvider.name,
               ),
               provider: defaultProvider,
@@ -284,7 +324,15 @@ describe('MiddleOutStrategy core', () => {
           resolvedWithProfileName = profileName;
           return {
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                fetch: requestFetch,
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings: new SettingsService().getAllGlobalSettings(),
+                providerSettings: new SettingsService().getProviderSettings(
+                  defaultProvider.name,
+                ),
+              },
               defaultProvider.name,
             ),
             provider: defaultProvider,
@@ -354,6 +402,7 @@ describe('MiddleOutStrategy core', () => {
         await compressMiddleOutViaDisk(ctx),
       );
       const topCount = result.top;
+
       const ackMsg = result.newHistory[topCount + 1];
 
       expect(ackMsg.speaker).toBe('ai');
@@ -377,7 +426,12 @@ describe('MiddleOutStrategy core', () => {
         history,
         resolveProvider: () => ({
           invocation: captureProviderInvocation(
-            testProviderRuntime,
+            {
+              ...testProviderRuntime,
+              fetch: requestFetch,
+              globalSettings: {},
+              providerSettings: {},
+            },
             provider.name,
           ),
           provider,
@@ -399,7 +453,9 @@ describe('MiddleOutStrategy core', () => {
         await compressMiddleOutViaDisk(ctx),
       );
 
-      expect(new MiddleOutStrategy().name).toBe('middle-out');
+      expect(
+        new MiddleOutStrategy(undefined, undefined, undefined, undefined).name,
+      ).toBe('middle-out');
       expect(providerCalls()).toBe(1);
       expect(typeof result.top).toBe('number');
       expect(typeof result.bottom).toBe('number');
@@ -422,7 +478,10 @@ describe('MiddleOutStrategy core', () => {
 
       expect(providerCalls()).toBe(1);
       expect(sent.length).toBeGreaterThan(0);
-      expect(new MiddleOutStrategy().requiresLLM).toBe(true);
+      expect(
+        new MiddleOutStrategy(undefined, undefined, undefined, undefined)
+          .requiresLLM,
+      ).toBe(true);
     });
   });
 });

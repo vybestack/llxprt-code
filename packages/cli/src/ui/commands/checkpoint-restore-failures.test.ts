@@ -15,7 +15,7 @@ import {
   failDurableWrite,
   gateJournalRowCommit,
 } from '../hooks/agentStream/checkpoint-disk-test-helpers.js';
-import { restoreCommand } from './restoreCommand.js';
+import { checkpointCommand } from '../../__tests__/checkpoint-command-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { expectedCleanupDigest } from '../../utils/__tests__/support/cleanup-history-test-helpers.js';
 
@@ -77,7 +77,7 @@ async function failure(fault: Fault, active: boolean): Promise<boolean> {
       );
     }
     const context = createMockCommandContext({
-      services: { config: runtime, agent: { agentClient: client } },
+      services: { config: runtime },
     });
     context.signal = abort.signal;
     let uiPublished = false;
@@ -88,11 +88,9 @@ async function failure(fault: Fault, active: boolean): Promise<boolean> {
       uiPublished = true;
       return 1;
     };
+    let git: GitService | undefined;
     if (fault === 'snapshot' || fault === 'abort') {
-      const git = new GitService(
-        fixture.root,
-        fixture.config.projectHistoryDir,
-      );
+      git = new GitService(fixture.root, fixture.config.projectHistoryDir);
       vi.spyOn(git, 'createFileSnapshot').mockResolvedValue(
         'project-before-restore',
       );
@@ -111,7 +109,7 @@ async function failure(fault: Fault, active: boolean): Promise<boolean> {
         throw new Error('checkpoint acknowledgement failure');
       });
     try {
-      const outcome = await restoreCommand(runtime)?.action?.(
+      const outcome = await checkpointCommand(client, runtime, git)?.action?.(
         context,
         'restore',
       );
@@ -155,10 +153,10 @@ describe('CLI checkpoint restoration atomic recovery', () => {
         services: { config: runtime },
       });
       try {
-        const result = await restoreCommand(runtime)?.action?.(
-          context,
-          '../restore',
-        );
+        const result = await checkpointCommand(
+          fixture.client,
+          runtime,
+        )?.action?.(context, '../restore');
         expect(result).toMatchObject({
           type: 'message',
           messageType: 'error',

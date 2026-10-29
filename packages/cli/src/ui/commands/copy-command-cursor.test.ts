@@ -6,7 +6,6 @@ import { deferred } from '@vybestack/llxprt-code-core/services/history/__tests__
 import {
   clipboardOracle,
   publicChat,
-  publicCommandContext,
   publicRow,
   PublicCursorHistory,
 } from '../../__tests__/public-history-cursor.js';
@@ -15,7 +14,17 @@ let clipboard: (text: string) => Promise<void> = async () => {};
 void mock.module('../utils/commandUtils.js', () => ({
   copyToClipboard: (text: string): Promise<void> => clipboard(text),
 }));
-const { copyCommand } = await import('./copyCommand.js');
+const { createCopyCommand } = await import('./copyCommand.js');
+const { bindCopyCommandHistoryRead } = await import('./copyCommandHost.js');
+function copyCursor(chat: ReturnType<typeof publicChat>, signal?: AbortSignal) {
+  return createCopyCommand(
+    bindCopyCommandHistoryRead(
+      () => true,
+      () => chat.streamHistory(signal),
+    ),
+    (text) => clipboard(text),
+  );
+}
 
 function sha(text: string): string {
   return createHash('sha256').update(text).digest('hex');
@@ -37,9 +46,8 @@ for (const size of [65]) {
         size,
         async (history, reader, counters) => {
           if (!observed) throw new Error('missing observed history');
-          const action = copyCommand.action;
-          if (!action) throw new Error('missing copy action');
-          const result = action(publicCommandContext(publicChat(history)), '');
+          const action = copyCursor(publicChat(history)).action;
+          const result = action();
           await Promise.race([entered.promise, result]);
           try {
             expect(sha(output)).toBe(sha(clipboardOracle(size)));
@@ -91,10 +99,10 @@ for (const size of [65]) {
             entered.resolve();
             await resume.promise;
           };
-          const result = copyCommand.action?.(
-            publicCommandContext(publicChat(history), controller.signal),
-            '',
-          );
+          const result = copyCursor(
+            publicChat(history),
+            controller.signal,
+          ).action();
           const settled = Promise.resolve(result).catch(
             (error: unknown) => error,
           );
@@ -145,10 +153,7 @@ for (const size of [65]) {
             entered.resolve();
             await resume.promise;
           };
-          const result = copyCommand.action?.(
-            publicCommandContext(publicChat(history)),
-            '',
-          );
+          const result = copyCursor(publicChat(history)).action();
           await Promise.race([entered.promise, result]);
           try {
             expect(counters.snapshot()).toMatchObject({
@@ -193,10 +198,7 @@ describe('clipboard cursor failures and large rows', () => {
     await withSuffixFixture(
       2,
       async (history, owner) => {
-        await copyCommand.action?.(
-          publicCommandContext(publicChat(history)),
-          '',
-        );
+        await copyCursor(publicChat(history)).action();
         expect(actual).toBe(sha(clipboardOracle(2, bytes)));
         expect(owner.snapshot().peakSerializedBytes).toBeGreaterThan(
           8 * 1024 * 1024,
@@ -224,9 +226,9 @@ describe('clipboard cursor failures and large rows', () => {
         observed.beforeYield = async (index) => {
           if (index === 3) throw new Error('journal read fault');
         };
-        await expect(
-          copyCommand.action?.(publicCommandContext(publicChat(history)), ''),
-        ).rejects.toThrow('journal read fault');
+        await expect(copyCursor(publicChat(history)).action()).rejects.toThrow(
+          'journal read fault',
+        );
         expect(writes).toBe(0);
         for (const owner of [reader, observed.borrowed, observed.copies])
           expect(owner.snapshot().liveRows).toBe(0);
@@ -248,10 +250,7 @@ describe('clipboard cursor failures and large rows', () => {
     await withSuffixFixture(
       6,
       async (history, reader) => {
-        const result = await copyCommand.action?.(
-          publicCommandContext(publicChat(history)),
-          '',
-        );
+        const result = await copyCursor(publicChat(history)).action();
         expect(result).toMatchObject({
           messageType: 'error',
           content: 'Failed to copy to the clipboard. clipboard fault',

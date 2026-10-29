@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -16,7 +17,6 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 import { ExtensionStorage } from './extension.js';
@@ -24,6 +24,7 @@ import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {} from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+import { loadCliConfigWithPreflight } from '../__tests__/load-cli-config-fixture.js';
 
 const realTrustedFoldersModule = { ...(await import('./trustedFolders.js')) };
 const realLlxprtCodeCoreModule = {
@@ -101,113 +102,6 @@ const runtimeSettingsState = {
   oauthManager: null as unknown,
 };
 
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
-  const getProviderManager = () =>
-    runtimeSettingsState.providerManager ??
-    ({
-      listProviders: vi.fn(() => []),
-      getActiveProviderName: vi.fn(() => null),
-      setActiveProvider: vi.fn(),
-      getActiveProvider: vi.fn(() => undefined),
-      getAvailableModels: vi.fn(async () => []),
-      getProviderByName: vi.fn(() => undefined),
-    } as unknown as ServerConfig.RuntimeProviderManager);
-
-  return {
-    ephemeralSettingHelp: {},
-    parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
-      success: true,
-      value: rawValue,
-    })),
-    applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-    applyProfileSnapshot: vi.fn(
-      async (profile: {
-        provider?: string;
-        model?: string;
-        baseUrl?: string;
-      }) => ({
-        providerName: profile.provider ?? '',
-        modelName: profile.model ?? '',
-        baseUrl: profile.baseUrl,
-        warnings: [],
-      }),
-    ),
-    switchActiveProvider: vi.fn(async () => ({
-      changed: true,
-      previousProvider: null,
-      nextProvider: 'mock-provider',
-      infoMessages: [],
-    })),
-    applyCliArgumentOverrides: vi.fn(async () => {}),
-    providerManager: vi.fn(() => runtimeSettingsState.providerManager),
-    oauthManager: vi.fn(() => {
-      if (runtimeSettingsState.oauthManager == null) {
-        throw new Error('OAuthManager missing from runtime registration');
-      }
-      return runtimeSettingsState.oauthManager;
-    }),
-    providerStatus: vi.fn(() => ({
-      name:
-        runtimeSettingsState.providerManager?.getActiveProviderName() ??
-        runtimeSettingsState.context?.config?.getProvider() ??
-        null,
-    })),
-    listProviders: vi.fn(() => getProviderManager().listProviders()),
-    getActiveProviderName: vi.fn(() =>
-      getProviderManager().getActiveProviderName(),
-    ),
-    setActiveModel: vi.fn(async () => ({
-      changed: false,
-      previousModel: null,
-      nextModel: null,
-      infoMessages: [],
-    })),
-    listAvailableModels: vi.fn(async () =>
-      getProviderManager().getAvailableModels(),
-    ),
-    getActiveModelName: vi.fn(() => null),
-    getActiveProfileName: vi.fn(() => null),
-    getActiveModelParams: vi.fn(() => ({})),
-    getEphemeralSettings: vi.fn(() => ({})),
-    getEphemeralSetting: vi.fn(() => undefined),
-    setEphemeralSetting: vi.fn(),
-    setActiveModelParam: vi.fn(),
-    clearActiveModelParam: vi.fn(),
-    saveProfileSnapshot: vi.fn(async () => undefined),
-    saveLoadBalancerProfile: vi.fn(async () => undefined),
-    loadProfileByName: vi.fn(async () => undefined),
-    deleteProfileByName: vi.fn(async () => undefined),
-    listSavedProfiles: vi.fn(() => []),
-    getProfileByName: vi.fn(() => undefined),
-    setDefaultProfileName: vi.fn(),
-    updateActiveProviderBaseUrl: vi.fn(async () => undefined),
-    updateActiveProviderApiKey: vi.fn(async () => undefined),
-    getRuntimeDiagnosticsSnapshot: vi.fn(() => ({})),
-    getActiveToolFormatState: vi.fn(() => ({})),
-    setActiveToolFormatOverride: vi.fn(),
-    getActiveProviderMetrics: vi.fn(() => undefined),
-    getSessionTokenUsage: vi.fn(() => undefined),
-    assembleCliProviderRuntime: vi.fn(
-      (input: {
-        settingsService: unknown;
-        config: unknown;
-        runtimeId: string;
-        metadata?: Record<string, unknown>;
-      }) => ({
-        runtime: {
-          settingsService: input.settingsService,
-          config: input.config,
-          runtimeId: input.runtimeId,
-          metadata: input.metadata,
-        },
-        runtimeMessageBus: { kind: 'session-bus' },
-        providerManager: getProviderManager(),
-        oauthManager: { id: 'oauth-manager' },
-      }),
-    ),
-  };
-});
-
 void vi.mock('@vybestack/llxprt-code-core', () => {
   const actualServer = realLlxprtCodeCoreModule;
   return {
@@ -274,16 +168,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(true);
   });
 
@@ -291,16 +188,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = false;
     process.argv = ['node', 'script.js', '--prompt-interactive', 'test'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(true);
   });
 
@@ -308,16 +208,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = false;
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
   });
 
@@ -325,16 +228,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '--prompt', 'test'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
   });
 
@@ -342,16 +248,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '--model', 'gemini-2.5-pro', 'Hello'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
   });
 
@@ -366,16 +275,19 @@ describe('loadCliConfig interactive', () => {
       'Hello world',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
   });
 
@@ -383,16 +295,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '-e', 'none', 'hello'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('hello');
     expect(argv.extensions).toStrictEqual(['none']);
@@ -402,16 +317,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', 'hello world how are you'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('hello world how are you');
     expect(argv.prompt).toBe('hello world how are you');
@@ -432,16 +350,19 @@ describe('loadCliConfig interactive', () => {
       'array',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('write a function to sort array');
     expect(argv.model).toBe('gemini-2.5-pro');
@@ -451,16 +372,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', ''];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(true);
     expect(argv.query).toBeUndefined();
   });
@@ -479,16 +403,19 @@ describe('loadCliConfig interactive', () => {
       'you',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('hello world how are you');
     expect(argv.extensions).toStrictEqual(['none']);
@@ -498,16 +425,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '--model', 'gemini-2.5-pro'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(true);
   });
 });
@@ -583,16 +513,17 @@ describe('loadCliConfig fileFiltering', () => {
         fileFiltering: { [property]: value },
       };
       const argv = await parseArguments(settings);
-      const config = await loadCliConfig(
+      const config = await loadCliConfigWithPreflight({
         settings,
-        [],
-        new ExtensionEnablementManager(
+        extensions: [],
+        extensionEnablementManager: new ExtensionEnablementManager(
           ExtensionStorage.getUserExtensionsDir(),
-          argv.extensions,
+          { enabledOverride: argv.extensions },
         ),
-        'test-session',
+        sessionId: 'test-session',
         argv,
-      );
+        authority: new CredentialAuthority(),
+      });
       expect(getter(config)).toBe(value);
     },
   );

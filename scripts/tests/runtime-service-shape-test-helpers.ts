@@ -5,6 +5,7 @@
  */
 import { resolve } from 'node:path';
 import ts from 'typescript';
+import { compilerSourcePath } from '../compiler-source-path.js';
 import {
   scanRuntimeServiceProgram,
   scanRuntimeServiceShapes,
@@ -39,13 +40,15 @@ export function scan(
   source: string,
   file = 'consumer.ts',
 ): readonly RuntimeServiceShapeFinding[] {
-  return scanRuntimeServiceShapes({ ...roots, [file]: source }, options);
+  return scanRuntimeServiceShapes({ ...roots, [file]: source }, options, [
+    file,
+  ]);
 }
 
 export function scanInstalled(
   source: string,
+  file = resolve('closed-type-installed-fixture.ts'),
 ): readonly RuntimeServiceShapeFinding[] {
-  const file = resolve('closed-type-installed-fixture.ts');
   const compilerOptions: ts.CompilerOptions = {
     strict: true,
     noEmit: true,
@@ -60,7 +63,8 @@ export function scanInstalled(
   const program = ts.createProgram([file], compilerOptions, {
     ...base,
     getSourceFile: (name, version) =>
-      name === file
+      base.getCanonicalFileName(compilerSourcePath(name)) ===
+      base.getCanonicalFileName(compilerSourcePath(file))
         ? ts.createSourceFile(
             file,
             `export class Clock { tick(): void {} } export class Session { id = 'session'; }\n${source}`,

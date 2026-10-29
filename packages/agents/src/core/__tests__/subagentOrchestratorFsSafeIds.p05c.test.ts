@@ -1,3 +1,5 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -42,10 +44,11 @@ import {
   createSessionSettingsFixture,
   subagentSessionPorts,
 } from '../../api/__tests__/helpers/session-settings-fixture.js';
-import type { SubAgentScope } from '../subagent.js';
+import type { SubAgentScopeFactory } from '../subagent.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import {
   createRuntimeBundle,
+  fakeChildScope,
   fixtureToolSelection,
 } from './subagentOrchestrator-test-helpers.js';
 
@@ -129,7 +132,6 @@ function buildOrchestrator(
   const loadProfile = vi
     .fn()
     .mockImplementation(async (name: string) => profiles[name]);
-  let childContext: SubAgentScope['runtimeContext'] | undefined;
   const runtimeLoader = vi
     .fn()
     .mockImplementation(async (options: AgentRuntimeLoaderOptions) => {
@@ -142,26 +144,19 @@ function buildOrchestrator(
       });
       await history.waitForCommit();
       const bundle = createRuntimeBundle('sess', history);
-      childContext = bundle.runtimeContext;
       return {
         ...bundle,
         history,
         runtimeContext: { ...bundle.runtimeContext, history },
       };
     });
-  const scope = {
-    get runtimeContext(): SubAgentScope['runtimeContext'] {
-      if (childContext === undefined) throw new Error('Child runtime missing');
-      return childContext;
-    },
-    getAgentId: () => 'child-agent-1',
-  } as unknown as SubAgentScope;
-  const scopeFactory = vi.fn<typeof SubAgentScope.create>(async () => {
+  const scopeFactory = vi.fn<SubAgentScopeFactory>(async () => {
     onScope?.();
-    return scope;
+    return fakeChildScope({ getAgentId: () => 'child-agent-1' });
   });
   const session = createSessionSettingsFixture(config);
-  const orchestrator = new SubagentOrchestrator({
+  const orchestrator = createTestChildOrchestrator({
+    credentialAuthority: new CredentialAuthority(),
     ...subagentSessionPorts(session),
     instructions: emptyInstructionReads,
     toolRegistry: fixtureToolSelection(),
@@ -191,7 +186,10 @@ async function launch(
   orchestrator: SubagentOrchestrator,
   name: string,
 ): Promise<() => Promise<void>> {
-  const result = await orchestrator.launch({ name });
+  const result = await orchestrator.launch(
+    { name },
+    new AbortController().signal,
+  );
   return result.dispose;
 }
 
@@ -222,9 +220,9 @@ describe('P05c orchestrator allocates fs-safe child ids @plan:PLAN-20260917-ISSU
     const config = makeForegroundConfig();
     Object.defineProperty(config, 'projectTempDir', { value: undefined });
     const { orchestrator } = buildOrchestrator(config);
-    await expect(orchestrator.launch({ name: 'helper' })).rejects.toThrow(
-      /must be of type string/,
-    );
+    await expect(
+      orchestrator.launch({ name: 'helper' }, new AbortController().signal),
+    ).rejects.toThrow(/must be of type string/);
   });
 
   it('keeps the child sessionId distinct from the parent session id', async () => {
@@ -291,8 +289,8 @@ describe('mandatory launch journal lifecycle', () => {
     const baseline = (await readdir(chatsDir)).sort();
     const { orchestrator, runtimeLoader } = buildOrchestrator(config);
     const [first, second] = await Promise.all([
-      orchestrator.launch({ name: 'helper' }),
-      orchestrator.launch({ name: 'scout' }),
+      orchestrator.launch({ name: 'helper' }, new AbortController().signal),
+      orchestrator.launch({ name: 'scout' }, new AbortController().signal),
     ]);
     const files = (await readdir(chatsDir)).filter((file) =>
       file.endsWith('.llxj'),
@@ -314,9 +312,12 @@ describe('mandatory launch journal lifecycle', () => {
     ).toBe(true);
     const childId = capturedStates(runtimeLoader)[0].sessionId;
     const nestedConfig = makeForegroundConfig(childId, config.getTargetDir());
-    const nested = await buildOrchestrator(nestedConfig).orchestrator.launch({
-      name: 'helper',
-    });
+    const nested = await buildOrchestrator(nestedConfig).orchestrator.launch(
+      {
+        name: 'helper',
+      },
+      new AbortController().signal,
+    );
     const nestedFiles = await readdir(chatsDir);
     expect(nestedFiles.filter((file) => file.endsWith('.llxj'))).toHaveLength(
       4,
@@ -354,9 +355,9 @@ describe('mandatory launch journal failure cleanup', () => {
     const { orchestrator } = buildOrchestrator(config, undefined, () => {
       throw new Error('scope startup failed');
     });
-    await expect(orchestrator.launch({ name: 'helper' })).rejects.toThrow(
-      'scope startup failed',
-    );
+    await expect(
+      orchestrator.launch({ name: 'helper' }, new AbortController().signal),
+    ).rejects.toThrow('scope startup failed');
     expect(await readdir(config.projectChatsDir)).toStrictEqual([]);
   });
 
@@ -424,11 +425,29 @@ describe.each(['journal'] as const)('production child history on %s', () => {
       if (parentFile === null) throw new Error('Missing parent file');
       const before = await readFile(parentFile);
       const baseline = (await readdir(config.projectChatsDir)).sort();
-      const { orchestrator } = buildOrchestrator(config);
+      const { orchestrator, runtimeLoader } = buildOrchestrator(config);
       try {
-        const result = await orchestrator.launch({ name: 'helper' });
+        const result = await orchestrator.launch(
+          { name: 'helper' },
+          new AbortController().signal,
+        );
         try {
-          const history = result.runtime.history;
+          const loaded = runtimeLoader.mock.calls[0]?.[0];
+          if (
+            typeof loaded !== 'object' ||
+            loaded === null ||
+            !('overrides' in loaded)
+          )
+            throw new Error('Missing child loader options');
+          const overrides = loaded.overrides;
+          if (
+            typeof overrides !== 'object' ||
+            overrides === null ||
+            !('historyService' in overrides) ||
+            !(overrides.historyService instanceof HistoryService)
+          )
+            throw new Error('Missing child history');
+          const history = overrides.historyService;
           expect(history.journalPath()?.endsWith('.llxj')).toBe(true);
           await collectJournalRowsForAssertions(history, (rows) => {
             expect(rows.map((row) => row.blocks)).toStrictEqual([

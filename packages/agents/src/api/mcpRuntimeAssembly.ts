@@ -10,6 +10,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import {
+  subscribeMcpTrust,
+  reconcileMcpStartupTrust,
+} from './mcp-trust-subscription.js';
+import {
   createHookReloadBinding,
   retainSessionBinding,
   trackSessionPublication,
@@ -23,7 +27,6 @@ import {
   type WorkspaceTrustControlPort,
   type WorkspaceIdePort,
 } from '@vybestack/llxprt-code-core';
-import { ownsMcpMemory, type MemoryHandoff } from './mcpOAuthAssembly.js';
 import {
   retainWorkspaceTools,
   retainWorkspaceEnvironment,
@@ -56,7 +59,6 @@ import type { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/
 import {
   composeDefinitionRoots,
   initializeWorkspaceDefinitions,
-  assertDefinitionBootstrapConfig,
   projectTrustedSubagents,
   updateWorkspaceExtensionDefinitions,
   refreshWorkspaceDefinitionMemory,
@@ -65,7 +67,7 @@ import {
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 
 import {
-  McpClientManager,
+  type McpClientManager,
   type DiscoveredMCPPrompt,
   type McpOAuthBinding,
   type TokenStorage,
@@ -115,17 +117,22 @@ import { MCP_SESSION_APPROVAL_SOURCE } from '@vybestack/llxprt-code-core/policy/
 
 import {
   assembleWorkspaceApproval,
+  capabilityValue,
+  handoffOwner,
+  handoffOwnership,
+  retainSuppliedRuntimeOwners,
   retainWorkspaceAuthority,
-  selectMcpConstructionInputs,
   retainMcpPolicyProjection,
   retainWorkspaceCheckpoints,
-  type AgentMcpOperations,
-  type McpRuntimeConstructionInputs,
+  resolveTrustHandoff,
+  type McpOwnerHandoff,
+  type McpRuntimeAcquisition,
+  type McpRuntimeOperations,
 } from './mcp-runtime-construction.js';
-export type {
-  AgentMcpOperations,
-  McpRuntimeConstructionInputs,
-} from './mcp-runtime-construction.js';
+import type {
+  AgentExtensionOperationsPort,
+  AgentRuntimeMcpPort,
+} from './mcpRuntimePorts.js';
 
 import {
   type WorkspaceMcpSettings,
@@ -133,7 +140,9 @@ import {
 } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
-export class McpRuntimeOwner implements AgentMcpOperations {
+export class McpRuntimeOwner
+  implements AgentRuntimeMcpPort, AgentExtensionOperationsPort
+{
   readonly trust: WorkspaceTrustControlPort;
   readonly ide: WorkspaceIdePort;
   private readonly authority: WorkspaceAuthorityComposition;
@@ -164,7 +173,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
     return this.workspaceCheckpoints.operations;
   }
   readonly workspaceMemory: WorkspaceMemoryOwner;
-  private readonly ownsMemory = (): boolean => ownsMcpMemory(this.memoryOwner);
+  private readonly ownsMemory: boolean;
   readonly workspaceFilesystem: WorkspaceFilesystemOwner;
   private readonly ownsFilesystem: boolean;
   readonly workspaceLsp: WorkspaceLspOwner;
@@ -209,14 +218,16 @@ export class McpRuntimeOwner implements AgentMcpOperations {
   private allowedServers: string[] | undefined;
   private readonly serverCommand: ReturnType<Config['getMcpServerCommand']>;
   private readonly debugMode: boolean;
-  private readonly reloadOperations = new Set<Promise<void>>();
+  private readonly reconfigurationOperations = new Set<Promise<void>>();
   readonly readServerSettings = (): WorkspaceMcpSettings => {
     if (this.stopped) throw new Error('MCP runtime is stopped');
     return projectWorkspaceMcpSettings(this.serverSettings, this.extensions);
   };
   private manager: McpClientManager | undefined;
+  private readonly initialTrust: boolean;
   private releaseMcpPublication: (() => void) | undefined;
   private initialization: Promise<void> | undefined;
+  private pendingInitialization: Promise<void> | undefined;
   private discovery: Promise<void> | undefined;
   private skillsClosing: Promise<void> | undefined;
   private lspClosing: Promise<void> | undefined;
@@ -234,7 +245,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
   private readonly approvalWrites = new Set<Promise<void>>();
   private readonly approvalPolicy: McpApprovalPolicy;
   readonly messageBus: MessageBus;
-  private readonly feedback?: HostFeedbackSink;
+  private readonly feedback: HostFeedbackSink;
   private readonly oauth: McpOAuthBinding;
   readonly performOAuth = assembleMcpOAuthOperation(
     () => this.oauth,
@@ -245,14 +256,13 @@ export class McpRuntimeOwner implements AgentMcpOperations {
   readonly readOAuthCredentials: TokenStorage['getCredentials'];
 
   static async create(
-    ...inputs: McpRuntimeConstructionInputs
+    acquisition: McpRuntimeAcquisition,
+    operations: McpRuntimeOperations,
   ): Promise<McpRuntimeOwner> {
     const resources = new McpConstructionResources();
+    retainSuppliedRuntimeOwners(resources, acquisition);
     try {
-      return new McpRuntimeOwner(
-        resources,
-        selectMcpConstructionInputs(inputs),
-      );
+      return new McpRuntimeOwner(resources, acquisition, operations);
     } catch (error) {
       return resources.reject(error);
     }
@@ -260,33 +270,33 @@ export class McpRuntimeOwner implements AgentMcpOperations {
 
   private readonly config: Config;
   private readonly managerFactory: typeof McpClientManager;
-  private readonly memoryOwner: MemoryHandoff | undefined;
   private readonly mcpSettings: SessionMcpSettingsReads | undefined;
 
   private constructor(
     resources: McpConstructionResources,
-    inputs: ReturnType<typeof selectMcpConstructionInputs>,
+    inputs: McpRuntimeAcquisition,
+    operations: McpRuntimeOperations,
   ) {
     this.config = inputs.config;
-    this.managerFactory = inputs.managerFactory ?? McpClientManager;
-    this.memoryOwner = inputs.memoryOwner;
-    this.mcpSettings = inputs.mcpSettings;
+    this.managerFactory = inputs.managerFactory;
+    this.ownsMemory = handoffOwnership(inputs.memory) === 'runtime';
+    this.mcpSettings = capabilityValue(operations.mcpSettings);
     this.serverCommand = inputs.config.getMcpServerCommand();
     this.debugMode = inputs.config.getDebugMode();
     [this.serverSettings, this.extensions, this.allowedServers] =
       captureWorkspaceServerDeclarations(
         inputs.config,
-        inputs.extensionLoader,
-        inputs.mcpSettings,
+        handoffOwner(inputs.extensionLoader),
+        this.mcpSettings,
       );
     this.authority = retainWorkspaceAuthority(
       resources,
       inputs.config,
-      inputs.trustPort ?? inputs.policyOwner?.trust,
-      inputs.idePort,
-      inputs.trustCleanup,
+      resolveTrustHandoff(inputs.trust, inputs.policy),
+      inputs.ide,
     );
     this.trust = this.authority.trust;
+    this.initialTrust = this.trust.isTrustedFolder();
     this.ide = this.authority.ide;
     this.workspaceCheckpoints = retainWorkspaceCheckpoints(
       resources,
@@ -298,32 +308,23 @@ export class McpRuntimeOwner implements AgentMcpOperations {
       this.policyOwner,
       this.ownsPolicy,
     ] = this.composeEnvironment(resources, inputs);
-    this.ownsFilesystem = inputs.filesystemOwnership === 'runtime';
+    this.ownsFilesystem = handoffOwnership(inputs.filesystem) === 'runtime';
     this.releasePolicyProjection = retainMcpPolicyProjection(
       resources,
       this.policyOwner,
       () => this.serverSettings.settingsMcpServers,
     );
-    this.ownsDefinitions = inputs.definitionOwnership === 'runtime';
+    this.ownsDefinitions = handoffOwnership(inputs.definitions) === 'runtime';
     [this.workspaceDefinitions, this.definitionContributions] =
-      composeDefinitionRoots(
-        resources,
-        inputs.config,
-        inputs.definitionOwner,
-        inputs.definitionOwnership,
-      );
-    this.workspaceLsp = this.composeLsp(
-      resources,
-      inputs.lspOwner,
-      inputs.lspOwnership,
-    );
-    this.ownsLsp = inputs.lspOwnership === 'runtime';
+      composeDefinitionRoots(resources, inputs.config, inputs.definitions);
+    this.workspaceLsp = this.composeLsp(resources, inputs.lsp);
+    this.ownsLsp = handoffOwnership(inputs.lsp) === 'runtime';
     this.tools = this.composeTools(resources);
     [this.workspaceSkills, this.workspaceExtensions] =
       this.composeSkillsAndExtensions(
         resources,
-        inputs.skillOperations ?? DEFAULT_SKILL_OPERATIONS,
-        inputs.extensionLoader,
+        capabilityValue(operations.skillOperations) ?? DEFAULT_SKILL_OPERATIONS,
+        handoffOwner(inputs.extensionLoader),
       );
     ({ binding: this.oauth, readCredentials: this.readOAuthCredentials } =
       assembleRuntimeOAuth(inputs.oauth));
@@ -335,26 +336,23 @@ export class McpRuntimeOwner implements AgentMcpOperations {
       },
     );
     this.catalogs = this.composeCatalogs(resources);
-    this.feedback = inputs.host?.emitFeedback;
+    this.feedback = operations.emitFeedback;
     this.messageBus = this.policyOwner.session.messageBus;
-    assertDefinitionBootstrapConfig(inputs.config.hasInitializationStarted());
   }
 
   private composeEnvironment(
     resources: McpConstructionResources,
-    inputs: ReturnType<typeof selectMcpConstructionInputs>,
+    inputs: McpRuntimeAcquisition,
   ): ReturnType<typeof retainWorkspaceEnvironment> {
     const environment = retainWorkspaceEnvironment(
       resources,
       inputs.config,
       this.trust,
-      inputs.filesystemOwner,
-      inputs.filesystemOwnership,
-      inputs.memoryOwner,
+      inputs.filesystem,
+      inputs.memory,
       () => this.extensions.slice(),
-      inputs.messageBus,
-      inputs.policyOwner,
-      inputs.policyOwnership,
+      inputs.policy,
+      inputs.filesystemService,
     );
     this.subscriptions.push(environment[4]);
     return environment;
@@ -396,10 +394,9 @@ export class McpRuntimeOwner implements AgentMcpOperations {
 
   private composeLsp(
     resources: McpConstructionResources,
-    owner: WorkspaceLspOwner | undefined,
-    ownership: 'runtime' | 'caller',
+    handoff: McpOwnerHandoff<WorkspaceLspOwner>,
   ): WorkspaceLspOwner {
-    return composeMcpLsp(resources, this.config, owner, ownership, this.trust);
+    return composeMcpLsp(resources, this.config, handoff, this.trust);
   }
   private composeTools(
     resources: McpConstructionResources,
@@ -485,6 +482,11 @@ export class McpRuntimeOwner implements AgentMcpOperations {
       throw new Error('Cannot initialize a stopped MCP runtime');
     if (this.initialization !== undefined) return this.initialization;
     this.initialization = this.initializeWorkspace();
+    this.pendingInitialization = this.initialization;
+    const settled = (): void => {
+      this.pendingInitialization = undefined;
+    };
+    void this.initialization.then(settled, settled);
     return this.initialization;
   }
 
@@ -550,26 +552,13 @@ export class McpRuntimeOwner implements AgentMcpOperations {
       undefined,
       this.feedback,
     );
-    this.subscribeToTrust(this.manager);
-  }
-
-  private subscribeToTrust(manager: McpClientManager): void {
-    this.subscriptions = [
-      ...this.subscriptions,
-      this.trust.subscribeTrustChange((transition) => {
-        if (!transition.trusted) manager.quarantineForTrustRevocation();
-      }),
-      this.trust.subscribeTrustTransition((transition) => {
-        const operation = transition.trusted
-          ? manager.onFolderTrustGained()
-          : manager.onFolderTrustRevoked();
-        this.trustOperations.add(operation);
-        void operation
-          .finally(() => this.trustOperations.delete(operation))
-          .catch(() => undefined);
-        return operation;
-      }),
-    ];
+    subscribeMcpTrust(
+      this.manager,
+      this.trust,
+      this.trustOperations,
+      (unsubscribe) => this.subscriptions.push(unsubscribe),
+    );
+    await reconcileMcpStartupTrust(this.manager, this.trust, this.initialTrust);
   }
 
   private readEnvironmentInstructions(): string {
@@ -610,8 +599,10 @@ export class McpRuntimeOwner implements AgentMcpOperations {
 
   async refresh(server?: string): Promise<void> {
     const manager = this.requireManager();
-    if (server === undefined) await manager.restart();
-    else await manager.restartServer(server);
+    await trackSessionPublication(
+      this.reconfigurationOperations,
+      server === undefined ? manager.restart() : manager.restartServer(server),
+    );
   }
 
   async awaitDiscovery(): Promise<ReadonlyMap<string, string>> {
@@ -655,17 +646,15 @@ export class McpRuntimeOwner implements AgentMcpOperations {
         new Error('MCP server reload is not available in this composition.'),
       );
     const binding = this.mcpSettings;
-    const operation = updateWorkspaceExtensionDefinitions(
-      this.definitionContributions,
-      () => this.reloadAcceptedServers(manager, binding),
-      () => this.extensions.slice(),
-      this.workspaceMemory,
+    return trackSessionPublication(
+      this.reconfigurationOperations,
+      updateWorkspaceExtensionDefinitions(
+        this.definitionContributions,
+        () => this.reloadAcceptedServers(manager, binding),
+        () => this.extensions.slice(),
+        this.workspaceMemory,
+      ),
     );
-    this.reloadOperations.add(operation);
-    void operation
-      .finally(() => this.reloadOperations.delete(operation))
-      .catch(() => undefined);
-    return operation;
   }
 
   private reloadAcceptedServers(
@@ -688,13 +677,11 @@ export class McpRuntimeOwner implements AgentMcpOperations {
 
   private publishSessionTools(): Promise<void> {
     if (this.stopped) return Promise.resolve();
-    return this.trackPublication(this.publishAcceptedSessionTools());
-  }
-
-  private publishAcceptedSessionTools(): Promise<void> {
-    return publishSessionTools(
-      () => this.sessionBindings,
-      () => this.isStopped(),
+    return this.trackPublication(
+      publishSessionTools(
+        () => this.sessionBindings,
+        () => this.isStopped(),
+      ),
     );
   }
 
@@ -725,24 +712,33 @@ export class McpRuntimeOwner implements AgentMcpOperations {
   closeAdmission(): void {
     if (this.stopped) return;
     this.stopped = true;
-    this.discoveryClosing = this.manager?.cancelDiscovery();
+    const manager = this.manager;
+    this.discoveryClosing = Promise.resolve().then(() =>
+      manager?.cancelDiscovery(),
+    );
+    void this.discoveryClosing.catch(() => undefined);
+    this.catalogs.closeAdmission();
     this.workspaceSkills.closeAdmission();
     this.authority.closeAdmission();
     this.workspaceExtensions.closeAdmission();
     if (this.ownsPolicy) this.policyOwner.closeAdmission();
     if (this.ownsFilesystem) this.workspaceFilesystem.closeFileAdmission();
-    if (this.ownsMemory()) this.workspaceMemory.closeAdmission();
+    if (this.ownsMemory) this.workspaceMemory.closeAdmission();
+    if (this.ownsDefinitions) this.workspaceDefinitions.closeAdmission();
   }
 
   dispose(): Promise<void> {
     if (this.disposal !== undefined) return this.disposal;
-    this.disposal = Promise.resolve().then(() => this.disposeResources());
+    const initialization = this.pendingInitialization;
+    this.disposal = Promise.resolve().then(() =>
+      this.disposeResources(initialization),
+    );
     this.closingOperations = settleMcpClosures([
       () => this.closeAdmission(),
       () => this.discoveryClosing,
-      () => {
+      async () => {
         this.ideClosing = this.authority.closeIde();
-        return this.ideClosing;
+        await Promise.allSettled([this.ideClosing]);
       },
       () => {
         this.lspClosing = this.ownsLsp
@@ -756,10 +752,20 @@ export class McpRuntimeOwner implements AgentMcpOperations {
     return this.disposal;
   }
 
+  // Admission closure aborts accepted work; connections are physically retired
+  // only after refresh, reload and extension work has been joined.
+  private retireConnections(): void {
+    this.managerClosing = Promise.resolve().then(async () => {
+      await Promise.allSettled([this.catalogs.dispose()]);
+      await this.manager?.stop();
+    });
+    void this.managerClosing.catch(() => undefined);
+  }
+
   private async closePublicationResources(): Promise<
     Array<PromiseSettledResult<void>>
   > {
-    await Promise.allSettled([...this.reloadOperations]);
+    await Promise.allSettled([...this.reconfigurationOperations]);
     await this.workspaceExtensions.joinAccepted();
     await Promise.allSettled([
       this.initialization,
@@ -767,9 +773,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
       ...this.trustOperations,
       ...this.contextOperations,
     ]);
-    this.managerClosing = this.manager?.stop();
     this.workspaceCheckpoints.closeAdmission();
-    if (this.ownsDefinitions) this.workspaceDefinitions.closeAdmission();
     this.definitionContributions.closeAdmission();
     this.catalogs.closeAdmission();
     this.toolsAdmissionClosing = Promise.allSettled([
@@ -796,12 +800,15 @@ export class McpRuntimeOwner implements AgentMcpOperations {
     ]);
   }
 
-  private async disposeResources(): Promise<void> {
+  private async disposeResources(
+    initialization: Promise<void> | undefined,
+  ): Promise<void> {
     const failures: unknown[] = [];
     const publicationClosures = await this.closePublicationResources();
+    this.retireConnections();
     failures.push(
       ...(await joinMcpRetirementOperations([
-        this.initialization,
+        initialization,
         this.discovery,
         ...this.trustOperations,
         ...this.approvalWrites,
@@ -826,13 +833,11 @@ export class McpRuntimeOwner implements AgentMcpOperations {
         !this.ownsDefinitions
           ? this.definitionContributions.dispose()
           : undefined,
-      () => this.lspClosing,
       () => this.catalogs.dispose(),
       () => this.managerClosing,
       () => this.releaseMcpPublication?.(),
       () => this.tools.dispose(),
-      () => this.skillsClosing,
-      () => (this.ownsMemory() ? this.workspaceMemory.dispose() : undefined),
+      () => (this.ownsMemory ? this.workspaceMemory.dispose() : undefined),
       () =>
         this.ownsFilesystem ? this.workspaceFilesystem.dispose() : undefined,
     ]) {
@@ -842,20 +847,10 @@ export class McpRuntimeOwner implements AgentMcpOperations {
         failures.push(error);
       }
     }
-    const joins = await Promise.allSettled([
-      this.authority.dispose(),
-      this.policyClosing,
-      ...this.trustOperations,
-      ...this.approvalWrites,
-      this.discovery,
-      this.initialization,
-    ]);
+    const joins = await Promise.allSettled([this.authority.dispose()]);
     for (const result of joins)
       if (result.status === 'rejected') failures.push(result.reason);
     if (failures.length > 0)
-      throw new AggregateError(
-        [...new Set(failures)],
-        'Workspace runtime cleanup failed',
-      );
+      throw new AggregateError(failures, 'Workspace runtime cleanup failed');
   }
 }

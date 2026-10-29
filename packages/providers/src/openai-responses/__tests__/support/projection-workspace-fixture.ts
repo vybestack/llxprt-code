@@ -33,6 +33,7 @@ export function singleAttemptOptions(
   return {
     ...options,
     invocation: createRuntimeInvocationContext({
+      fetch: (input, init) => globalThis.fetch(input, init),
       runtimeId: options.invocation.runtimeId,
       providerName: 'openai-responses',
       ephemeralsSnapshot: {

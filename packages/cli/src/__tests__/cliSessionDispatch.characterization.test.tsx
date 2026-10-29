@@ -33,11 +33,8 @@ import {
   setupUnhandledRejectionHandler,
 } from '../session/signalHandlers.js';
 import { initializeOutputListenersAndFlush } from '../session/outputListeners.js';
-import { dispatchInteractiveOrNonInteractive } from '../session/nonInteractiveSession.js';
-import {
-  startInteractiveUI,
-  __resetInteractiveUIStateForTesting,
-} from '../session/interactiveUI.js';
+import { dispatchInteractiveOrNonInteractive } from './session-dispatch-fixture.js';
+import { startInteractiveUIForTest } from './raw-interactive-startup-fixture.js';
 
 import {
   ExitCalledError,
@@ -84,7 +81,7 @@ function registerSuite1(): void {
       await dispatchInteractiveOrNonInteractive({
         runtimeSettings: configRoot.runtimeSettings,
         config: config as never,
-        agent: createFakeAgent() as never,
+        agent: (await createFakeAgent()) as never,
         settings: settings as never,
         workspaceRoot: '/tmp/test',
         recordingOwner: 'agent',
@@ -114,7 +111,7 @@ function registerSuite1(): void {
         dispatchInteractiveOrNonInteractive({
           runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
-          agent: createFakeAgent() as never,
+          agent: (await createFakeAgent()) as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
           recordingOwner: 'agent',
@@ -401,7 +398,7 @@ async function verifyExits1WhenPipedStdinAndPromptAreBothEmptyNoInputNonInteract
     await dispatchInteractiveOrNonInteractive({
       runtimeSettings: configRoot.runtimeSettings,
       config: config as never,
-      agent: createFakeAgent() as never,
+      agent: await createFakeAgent(),
       settings: settings as never,
       workspaceRoot: '/tmp/test',
       recordingOwner: 'agent',
@@ -452,7 +449,7 @@ function registerPipedInputTest(): void {
         dispatchInteractiveOrNonInteractive({
           runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
-          agent: createFakeAgent() as never,
+          agent: (await createFakeAgent()) as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
           recordingOwner: 'agent',
@@ -509,7 +506,7 @@ function registerSuite5(): void {
         dispatchInteractiveOrNonInteractive({
           runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
-          agent: createFakeAgent() as never,
+          agent: (await createFakeAgent()) as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
           recordingOwner: 'agent',
@@ -539,7 +536,6 @@ function registerSuite6(): void {
       // Reset interactiveUI module-level state (cleanupRegistered,
       // titleResetExitListenerRegistered, latestInstance) so each test starts
       // with a fresh first-call registration.
-      __resetInteractiveUIStateForTesting();
     });
 
     afterEach(() => {
@@ -558,9 +554,9 @@ function registerSuite6(): void {
 
       const exitBefore = listeners.listenerCount('exit');
 
-      await startInteractiveUI(
+      await startInteractiveUIForTest(
         config as never,
-        createFakeAgent() as never,
+        (await createFakeAgent()) as never,
         settings as never,
         [],
         '/tmp/test',
@@ -588,9 +584,9 @@ function registerSuite6(): void {
 
       const exitBefore = listeners.listenerCount('exit');
 
-      await startInteractiveUI(
+      await startInteractiveUIForTest(
         config as never,
-        createFakeAgent() as never,
+        (await createFakeAgent()) as never,
         settings as never,
         [],
         '/tmp/test',
@@ -616,9 +612,9 @@ function registerSuite6(): void {
         hideWindowTitle: true,
       });
 
-      await startInteractiveUI(
+      await startInteractiveUIForTest(
         config as never,
-        createFakeAgent() as never,
+        (await createFakeAgent()) as never,
         settings as never,
         ['startup warning'],
         '/tmp/test',

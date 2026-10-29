@@ -11,12 +11,12 @@ import { readRecordedRows } from '../../__tests__/journal-recording.js';
 import {
   buildAgent,
   drain,
-  internalAgentClient,
   type Agent,
 } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { HistoryItem } from '../types.js';
-import { chatCommand } from './chatCommand.js';
+import { rawClientChatCommand } from '../../__tests__/raw-chat-command.fixture.js';
+import { captureSessionOwner } from '../../../../agents/src/api/__tests__/helpers/capture-session-owner.js';
 import type { CommandContext } from './types.js';
 import { expect, spyOn } from 'bun:test';
 import {
@@ -39,15 +39,42 @@ export async function contents(
   return result;
 }
 
+const cliClients = new WeakMap<
+  CommandContext,
+  { client: AgentClientContract; recording: SessionRecordingPort }
+>();
+
 export async function runCommand(
   context: CommandContext,
   name: string,
   args = '',
 ): Promise<unknown> {
+  const owned = cliClients.get(context);
+  if (owned === undefined) throw new Error('Missing command client');
+  const failure: { observed?: { error: unknown } } = {};
+  const recording = new Proxy(owned.recording, {
+    get(target, property, receiver) {
+      if (property === 'flush') {
+        return async (): Promise<void> => {
+          try {
+            await target.flush();
+          } catch (error) {
+            failure.observed = { error };
+            throw error;
+          }
+        };
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const chatCommand = rawClientChatCommand(
+    owned.client,
+    () => recording,
+    () => 'fake-model',
+  );
   const command = chatCommand.subCommands?.find((item) => item.name === name);
   if (command?.action === undefined) throw new Error('Missing chat command');
   const withPrefix = NativeHistoryPrefixOwner.prototype.withPrefix;
-  const failure: { observed?: { error: unknown } } = {};
   const observation = spyOn(
     NativeHistoryPrefixOwner.prototype,
     'withPrefix',
@@ -109,16 +136,21 @@ export async function withCLI(
   seed?: readonly IContent[],
   beforeRecording?: (history: HistoryService) => Promise<void>,
 ): Promise<void> {
-  const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-    workingDir: root,
-  });
+  const {
+    value: { agent, cleanup },
+    owner,
+  } = await captureSessionOwner(() =>
+    buildAgent('plain-text.jsonl', {
+      workingDir: root,
+    }),
+  );
   let recording: SessionRecordingPort | undefined;
   try {
     await drain(agent.stream('initialize CLI'));
     await agent.setHistory(
       seed ?? Array.from({ length: size }, (_, i) => row(i)),
     );
-    const client = internalAgentClient(agent);
+    const client = owner.clients.getAgentClient();
     const history = client.getHistoryService();
     if (history === null) throw new Error('Missing initialized history');
     await beforeRecording?.(history);
@@ -140,6 +172,7 @@ export async function withCLI(
       services: { agent },
       recordingSwapCallbacks: { getCurrentRecording: () => currentRecording },
     });
+    cliClients.set(context, { client, recording: currentRecording });
     context.ui.clear = () => {
       displayed.length = 0;
     };

@@ -1,120 +1,92 @@
 /**
  * /continue command - Browse and resume previous sessions
  *
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
  * @plan PLAN-20260214-SESSIONBROWSER.P20
  * @requirement REQ-RC-001, REQ-EN-001, REQ-EN-002, REQ-RC-010, REQ-RC-011, REQ-RC-012, REQ-RC-013, REQ-MP-004
  * @pseudocode continue-command.md
  */
 
 import type {
+  SessionDiscovery,
+  ValidatedSessionMediaPackage,
+} from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import type {
   CommandContext,
-  SlashCommandActionReturn,
   SlashCommand,
+  SlashCommandActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
 import type { CommandArgumentSchema } from './schema/types.js';
-import { SessionDiscovery } from '@vybestack/llxprt-code-core';
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { basename } from 'node:path';
-import { handleContinuePackageAction } from './continuePackageActions.js';
-import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
+import { handleContinuePackageActionForOwner } from './continuePackageActions.js';
 
-/**
- * Schema for /continue command tab completion
- * @plan PLAN-20260214-SESSIONBROWSER.P20
- * @requirement REQ-RC-013
- */
-const continueSchema: CommandArgumentSchema = [
-  {
-    kind: 'value' as const,
-    name: 'target',
-    description: 'Session/checkpoint name, session ID, index, or "latest"',
-    completer: async (ctx: CommandContext) => {
-      const config = ctx.services.config;
-      if (config?.isInteractive() !== true) return [];
-      const latest = {
-        value: 'latest',
-        description: 'Most recent session',
-      };
-      let targets: Awaited<
-        ReturnType<typeof SessionDiscovery.listContinueTargets>
-      >;
-      try {
-        if (ctx.recordingOwner === 'agent') {
-          const agent = ctx.services.agent;
-          if (agent === null) throw new Error('Session agent is unavailable');
-          targets = [...(await agent.session.listBrowserTargets())];
-        } else {
-          const detailed = await SessionDiscovery.listContinueTargetsDetailed(
-            config.projectChatsDir,
-            basename(config.projectTempDir),
-            ctx.services.agent?.agentClient.mediaStore,
-          );
-          warnUnreadableRecordings(
-            '/continue completions',
-            detailed.unreadableRecordings,
-          );
-          targets = detailed.targets;
+export interface ContinueCommandOperations {
+  readonly isInteractive: () => boolean;
+  readonly listContinueTargets: () => Promise<
+    Awaited<ReturnType<typeof SessionDiscovery.listContinueTargets>>
+  >;
+  readonly exportSession: (
+    sessionRef: string,
+    destination: string,
+  ) => Promise<void>;
+  readonly validateSessionPackage: (
+    packageDirectory: string,
+  ) => Promise<ValidatedSessionMediaPackage>;
+}
+
+function createOwnedContinueSchema(
+  operations: ContinueCommandOperations,
+): CommandArgumentSchema {
+  return [
+    {
+      kind: 'value' as const,
+      name: 'target',
+      description: 'Session/checkpoint name, session ID, index, or "latest"',
+      completer: async () => {
+        if (!operations.isInteractive()) return [];
+        const latest = { value: 'latest', description: 'Most recent session' };
+        try {
+          const targets = await operations.listContinueTargets();
+          return [
+            latest,
+            ...targets.map((target) =>
+              target.kind === 'checkpoint'
+                ? {
+                    value: target.checkpointName,
+                    description: 'Recording checkpoint',
+                  }
+                : {
+                    value: target.session.name ?? target.session.sessionId,
+                    description: target.session.name
+                      ? 'Named session'
+                      : 'Session ID',
+                  },
+            ),
+          ];
+        } catch (error: unknown) {
+          debugLogger.warn('Failed to discover /continue completions:', error);
+          return [latest];
         }
-      } catch (error: unknown) {
-        debugLogger.warn('Failed to discover /continue completions:', error);
-        return [latest];
-      }
-      return [
-        latest,
-        ...targets.map((target) => {
-          if (target.kind === 'checkpoint') {
-            return {
-              value: target.checkpointName,
-              description: 'Recording checkpoint',
-            };
-          }
-          return {
-            value: target.session.name ?? target.session.sessionId,
-            description: target.session.name ? 'Named session' : 'Session ID',
-          };
-        }),
-      ];
+      },
     },
-  },
-];
+  ];
+}
 
-/**
- * Check if there is an active conversation (messages in history)
- * Uses pendingItem as indicator per test expectations
- * @plan PLAN-20260214-SESSIONBROWSER.P20
- */
 function hasActiveConversation(ctx: CommandContext): boolean {
   return ctx.ui.pendingItem !== null;
 }
 
-/**
- * Check if there is a request in progress
- * Uses session.isProcessing per test expectations
- * @plan PLAN-20260214-SESSIONBROWSER.P20
- * @requirement REQ-MP-004
- */
 function isProcessing(ctx: CommandContext): boolean {
   return ctx.session.isProcessing === true;
 }
 
-/**
- * /continue command implementation
- * @plan PLAN-20260214-SESSIONBROWSER.P20
- * @requirement REQ-EN-001, REQ-EN-002, REQ-RC-001, REQ-RC-010, REQ-RC-011, REQ-RC-012, REQ-MP-004
- */
-export const continueCommand: SlashCommand = {
-  name: 'continue',
-  description: 'Browse and resume previous sessions',
-  kind: CommandKind.BUILT_IN,
-  schema: continueSchema,
-  action: async (
-    ctx: CommandContext,
-    args: string,
-  ): Promise<SlashCommandActionReturn> => {
-    const config = ctx.services.config;
-
-    // Guard: Check for in-flight request first (REQ-MP-004)
+function createOwnedContinueAction(
+  operations: ContinueCommandOperations,
+): SlashCommand['action'] {
+  return async (ctx, args): Promise<SlashCommandActionReturn> => {
     if (isProcessing(ctx)) {
       return {
         type: 'message',
@@ -122,68 +94,49 @@ export const continueCommand: SlashCommand = {
         content: 'Cannot continue session while a request is in progress.',
       };
     }
-
-    // Parse args: trim whitespace
     const trimmedArgs = args.trim();
-
-    const packageAction = await handleContinuePackageAction(
-      ctx,
+    const activeConversation = hasActiveConversation(ctx);
+    const packageAction = await handleContinuePackageActionForOwner(
+      operations,
       trimmedArgs,
-      hasActiveConversation(ctx),
+      activeConversation,
     );
     if (packageAction !== undefined) return packageAction;
-
-    // No-args path (REQ-EN-001)
     if (!trimmedArgs) {
-      // Check interactive mode (REQ-RC-012)
-      // Guard: config must exist and have isInteractive method
-      const isInteractive =
-        typeof config?.isInteractive === 'function' && config.isInteractive();
-      if (!isInteractive) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: 'Session browser requires interactive mode.',
-        };
-      }
-      // Return dialog action
-      return {
-        type: 'dialog',
-        dialog: 'sessionBrowser',
-      };
+      return operations.isInteractive()
+        ? { type: 'dialog', dialog: 'sessionBrowser' }
+        : {
+            type: 'message',
+            messageType: 'error',
+            content: 'Session browser requires interactive mode.',
+          };
     }
-
-    // Direct resume path (REQ-EN-002)
-    const sessionRef = trimmedArgs;
-
-    // Check active conversation guard (REQ-RC-010, REQ-RC-011)
-    const activeConversation = hasActiveConversation(ctx);
-
     if (activeConversation) {
-      // Non-interactive mode with active conversation is an error (REQ-RC-011)
-      // Guard: config must exist and have isInteractive method
-      const isInteractiveMode =
-        typeof config?.isInteractive === 'function' && config.isInteractive();
-      if (!isInteractiveMode) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content:
-            'Cannot replace active conversation in non-interactive mode.',
-        };
-      }
-      // Interactive mode with active conversation requires confirmation (REQ-RC-010)
-      return {
-        type: 'perform_resume',
-        sessionRef,
-        requiresConfirmation: true,
-      };
+      return operations.isInteractive()
+        ? {
+            type: 'perform_resume',
+            sessionRef: trimmedArgs,
+            requiresConfirmation: true,
+          }
+        : {
+            type: 'message',
+            messageType: 'error',
+            content:
+              'Cannot replace active conversation in non-interactive mode.',
+          };
     }
+    return { type: 'perform_resume', sessionRef: trimmedArgs };
+  };
+}
 
-    // No active conversation - proceed without confirmation
-    return {
-      type: 'perform_resume',
-      sessionRef,
-    };
-  },
-};
+export function createContinueCommand(
+  operations: ContinueCommandOperations,
+): SlashCommand {
+  return {
+    name: 'continue',
+    description: 'Browse and resume previous sessions',
+    kind: CommandKind.BUILT_IN,
+    schema: createOwnedContinueSchema(operations),
+    action: createOwnedContinueAction(operations),
+  };
+}

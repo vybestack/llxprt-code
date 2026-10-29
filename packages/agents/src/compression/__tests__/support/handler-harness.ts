@@ -1,3 +1,4 @@
+import { chatSessionPorts } from '../../../core/chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { vi } from 'bun:test';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -11,10 +12,6 @@ type DiskFallback = (
   install: (candidate: ProviderFallbackCandidate) => Promise<void>,
   targetTokenCount?: number,
 ) => Promise<boolean>;
-
-interface HandlerInternals {
-  performProviderDiskFallback: DiskFallback;
-}
 
 export interface HandlerHarness {
   handler: CompressionHandler;
@@ -44,22 +41,30 @@ export function buildHandlerHarness(
   } = {},
 ): HandlerHarness {
   const handler = new CompressionHandler(
-    runtimeContext,
+    chatSessionPorts(runtimeContext).compression,
+    undefined,
     history,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     options.generationConfig ?? {},
-    () => ({ provider: {} as never, runtime: {} as never }),
+    () => {
+      throw new Error(
+        'This ladder fixture must not resolve a summary provider',
+      );
+    },
     async () => {},
   );
   vi.spyOn(handler, 'ensureDensityOptimized').mockResolvedValue(undefined);
   const performCompression = spyPerformCompression(handler);
-  const internals = handler as unknown as HandlerInternals;
   if (options.realDiskFallback !== true)
-    internals.performProviderDiskFallback = async () => false;
+    handler['performProviderDiskFallback'] = async () => false;
   return {
     handler,
     performCompression,
     setDiskFallback: (fallback) => {
-      internals.performProviderDiskFallback = fallback;
+      handler['performProviderDiskFallback'] = fallback;
     },
   };
 }

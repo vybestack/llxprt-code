@@ -1,3 +1,4 @@
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -198,7 +199,11 @@ async function buildCodexHarness(
   });
   const tokenStore = new KeyringTokenStore({ secureStore: store, lockDir });
   const oauthManager = new OAuthManager(tokenStore);
-  registerStandardOAuthProviders(oauthManager, tokenStore);
+  registerStandardOAuthProviders(
+    oauthManager,
+    (input, init) => globalThis.fetch(input, init),
+    tokenStore,
+  );
   const browserFlow = oauthManager.getProvider('codex');
   if (browserFlow === undefined) {
     throw new Error('codex OAuth provider was not registered');
@@ -212,9 +217,7 @@ async function buildCodexHarness(
 
   const send = async (): Promise<SentRequest> => {
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'codex-keyring-3965',
-      config: createRuntimeConfigStub(settings),
     });
     const ephemerals = { retries: 1, retrywait: 1 };
     const options = createProviderCallOptions({
@@ -223,12 +226,15 @@ async function buildCodexHarness(
       config: createRuntimeConfigStub(settings),
       runtime,
       invocation: createRuntimeInvocationContext({
+        fetch: (input, init) => globalThis.fetch(input, init),
         runtimeId: runtime.runtimeId,
         runtimeMetadata: runtime.metadata,
         providerName: provider.name,
         ephemeralsSnapshot: ephemerals,
       }),
-      contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] }],
+      contents: callerOwnedRawProviderSource([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+      ]),
     });
     const callsBefore = fetchSpy.mock.calls.length;
     for await (const _chunk of provider.generateChatCompletion(options)) {

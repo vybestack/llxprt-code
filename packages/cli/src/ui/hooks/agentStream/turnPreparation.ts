@@ -4,27 +4,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { StreamRuntime } from '../../cliUiRuntime.js';
-
 /**
  * Resets or carries-over per-turn state depending on whether this is a new
  * prompt or a continuation. Also handles bucket failover reset/reauth.
  */
 export async function prepareTurnForQuery(
   isContinuation: boolean,
-  runtime: StreamRuntime,
+  resetBuckets: () => void,
   startNewPrompt: () => void,
   setThought: (t: null) => void,
+  resetBucketSession: () => void,
+  ensureBucketsAuthenticated: () => Promise<void>,
 ): Promise<void> {
   if (!isContinuation) {
     startNewPrompt();
     setThought(null);
-    runtime.bucketFailover.resetBuckets?.();
+    resetBuckets();
   } else {
-    runtime.bucketFailover.resetBucketSession?.();
+    resetBucketSession();
   }
   try {
-    await runtime.bucketFailover.ensureBucketsAuthenticated?.();
+    await ensureBucketsAuthenticated();
   } catch {
     // Swallow — partial auth is acceptable.
   }

@@ -67,6 +67,7 @@ describe('cold native Chat storage cost', () => {
               metadata: {},
               systemInstruction: 'system 雪',
               invocation: createRuntimeInvocationContext({
+                fetch: (input, init) => globalThis.fetch(input, init),
                 runtimeId: 'cold-cost',
                 providerName: 'openai',
                 ephemeralsSnapshot: {},

@@ -1,3 +1,4 @@
+import { capturedAgentClient } from './helpers/agent-client-observation.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -563,7 +564,7 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: 
       const live = [textMessage('user', 'live deferred origin')];
       await agent.setHistory(live);
 
-      const history = agent.agentClient.getHistoryService();
+      const history = capturedAgentClient(agent).getHistoryService();
       if (history === null) throw new Error('Expected live history service');
       let failOnce = true;
       const interruptAdoption = (): void => {
@@ -845,7 +846,7 @@ describe('native public session controls', () => {
   }
 
   it('rolls back failed adoption publication and carries the deferred live history into the next turn', async () => {
-    await withNativeRecordingFixture(async ({ agent, chatsDir }) => {
+    await withNativeRecordingFixture(async ({ agent, chatsDir, clientFor }) => {
       await agent.setHistory([
         textMessage('user', 'recorded origin'),
         textMessage('model', 'recorded response'),
@@ -855,7 +856,7 @@ describe('native public session controls', () => {
       await agent.session.setRecording({ enabled: false });
       const before = readFileSync(path);
       await agent.setHistory([textMessage('user', 'live deferred origin')]);
-      const history = agent.agentClient.getHistoryService();
+      const history = clientFor(agent).getHistoryService();
       if (history === null) throw new Error('Expected live history service');
       const failure = new Error('adoption publication interrupted');
       const interrupt = (): void => {

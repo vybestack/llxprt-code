@@ -4,7 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { AggregateDisposeError } from '../api/disposeErrors.js';
+export async function closeSubagentScope(
+  closeScope: () => void,
+  primaryHistory: unknown,
+  fallbackHistory: unknown,
+  closeRuntime: () => Promise<void>,
+): Promise<void> {
+  const history = firstDefinedHistory(primaryHistory, fallbackHistory);
+  await runCleanupSteps([
+    closeScope,
+    () => disposeHistoryLike(history),
+    closeRuntime,
+  ]);
+}
 
 export async function cleanupAfterFailure(
   primary: unknown,
@@ -48,10 +62,16 @@ export async function disposeHistoryLike(history: unknown): Promise<void> {
   if (history === undefined || history === null) {
     return;
   }
-  const disposable = (history as { dispose?: () => void | Promise<void> })
-    .dispose;
+  if (history instanceof HistoryService) {
+    await runCleanupSteps([
+      () => history.dispose(),
+      () => history.waitForOwnershipSettlement(),
+    ]);
+    return;
+  }
+  const disposable = (history as { dispose?: () => void }).dispose;
   if (typeof disposable === 'function') {
-    await disposable.call(history);
+    await Promise.resolve(disposable.call(history));
     return;
   }
   const clearable = history as {

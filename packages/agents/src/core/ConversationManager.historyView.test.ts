@@ -1,6 +1,6 @@
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -49,6 +49,10 @@ import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const GENERATING_MODEL = 'claude-opus-4-8';
 
@@ -64,15 +68,13 @@ function buildConversationManager(): {
   settingsService.set('providers.stub.model', 'stub-model');
 
   const providerRuntime: ProviderRuntimeContext = createProviderRuntimeContext({
-    settingsService,
-    config,
     runtimeId: 'test.runtime.conversationManager.historyView',
     metadata: { source: 'ConversationManager.historyView.test' },
   });
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
 
   const provider: IProvider = {
     name: 'stub',
@@ -80,7 +82,6 @@ function buildConversationManager(): {
     getModels: vi.fn(async () => []),
     getDefaultModel: () => GENERATING_MODEL,
     generateChatCompletion: vi.fn(async function* () {}),
-    getAuthToken: vi.fn(async () => 'stub-auth-token'),
   };
   manager.registerProvider(provider);
 
@@ -93,7 +94,18 @@ function buildConversationManager(): {
   const historyService = new HistoryService();
   const view = createAgentRuntimeContext({
     prepareProviderInvocation: (name, parameters, signal) =>
-      captureProviderInvocation(providerRuntime, name, parameters, signal),
+      captureProviderInvocation(
+        {
+          fetch: requestFetch,
+          runtimeId: providerRuntime.runtimeId,
+          metadata: providerRuntime.metadata,
+          globalSettings: settingsService.getAllGlobalSettings(),
+          providerSettings: settingsService.getProviderSettings(name),
+        },
+        name,
+        parameters,
+        signal,
+      ),
     state: runtimeState,
     history: historyService,
     settings: {

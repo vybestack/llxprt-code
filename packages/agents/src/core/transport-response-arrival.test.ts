@@ -1,3 +1,4 @@
+import { chatSessionPorts } from './chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
@@ -76,7 +77,12 @@ describe('agent transport recording wiring', () => {
       try {
         if (direct) {
           const processor = new TurnProcessor(
-            setup.runtime,
+            chatSessionPorts(setup.runtime).turn,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
             setup.compression,
             () => setup.provider,
             (_source, metadata) => ({

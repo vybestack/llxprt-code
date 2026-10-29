@@ -93,12 +93,6 @@ describe('Core compatibility shims', () => {
       expect(providerKeyStorageShim.ProviderKeyStorage).toBe(
         providerKeyStoragePkg.ProviderKeyStorage,
       );
-      expect(providerKeyStorageShim.getProviderKeyStorage).toBe(
-        providerKeyStoragePkg.getProviderKeyStorage,
-      );
-      expect(providerKeyStorageShim.resetProviderKeyStorage).toBe(
-        providerKeyStoragePkg.resetProviderKeyStorage,
-      );
       expect(providerKeyStorageShim.KEY_NAME_REGEX).toBe(
         providerKeyStoragePkg.KEY_NAME_REGEX,
       );
@@ -152,22 +146,6 @@ describe('Core compatibility shims', () => {
   });
 
   describe('singleton identity', () => {
-    it('getProviderKeyStorage and resetProviderKeyStorage affect the same singleton', () => {
-      // Reset both sides to ensure clean state
-      providerKeyStoragePkg.resetProviderKeyStorage();
-
-      // Get singleton from storage package
-      const fromStorage = providerKeyStoragePkg.getProviderKeyStorage();
-      // Get singleton from core shim
-      const fromCoreShim = providerKeyStorageShim.getProviderKeyStorage();
-
-      // They must be the exact same object (singleton identity)
-      expect(fromCoreShim).toBe(fromStorage);
-
-      // Clean up
-      providerKeyStoragePkg.resetProviderKeyStorage();
-    });
-
     it('getConversationFileWriter deep-path shim identity', () => {
       // Reset to ensure clean state using storage testing module
       resetConversationFileWriterForTesting();

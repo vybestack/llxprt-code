@@ -56,31 +56,62 @@ type DiskSummaryOutcome = {
   readonly summary?: IContent;
 };
 
+export interface SummaryTransport {
+  readonly mediaResolver: ConstructorParameters<typeof MiddleOutStrategy>[0];
+  readonly requestMediaBudgetBytes: ConstructorParameters<
+    typeof MiddleOutStrategy
+  >[1];
+  readonly providerFileBindings: ConstructorParameters<
+    typeof MiddleOutStrategy
+  >[2];
+  readonly providerFileLifecycle: ConstructorParameters<
+    typeof MiddleOutStrategy
+  >[3];
+}
+
+function middleOutStrategy(transport: SummaryTransport): MiddleOutStrategy {
+  return new MiddleOutStrategy(
+    transport.mediaResolver,
+    transport.requestMediaBudgetBytes,
+    transport.providerFileBindings,
+    transport.providerFileLifecycle,
+  );
+}
+
 export function runDiskMiddleOut(
+  transport: SummaryTransport,
   ...args: Parameters<typeof buildCompressionMetadata>
 ): Promise<DiskSummaryOutcome> {
-  return runDiskSummary('middle-out', ...args);
+  return runDiskSummary('middle-out', transport, ...args);
 }
 
 export function runDiskOneShot(
+  transport: SummaryTransport,
   ...args: Parameters<typeof buildCompressionMetadata>
 ): Promise<DiskSummaryOutcome> {
-  return runDiskSummary('one-shot', ...args);
+  return runDiskSummary('one-shot', transport, ...args);
 }
 
 async function runDiskSummary(
   name: 'middle-out' | 'one-shot',
+  transport: SummaryTransport,
   ...args: Parameters<typeof buildCompressionMetadata>
 ): Promise<DiskSummaryOutcome> {
   const metadata = await buildCompressionMetadata(...args);
-  const history = args[2];
-  const origin = args[7]?.historyOrigin;
+  const history = args[3];
+  const origin = args[8]?.historyOrigin;
   const input = await history.openCompressionInput();
   const previous = input.previous;
   const attempt = async (): Promise<DiskSummaryOutcome> => {
     const context = { ...metadata, history: input.rows };
+    const oneShot = new OneShotStrategy(
+      transport.mediaResolver,
+      transport.requestMediaBudgetBytes,
+      transport.providerFileBindings,
+      transport.providerFileLifecycle,
+    );
     const strategy =
-      name === 'middle-out' ? new MiddleOutStrategy() : new OneShotStrategy();
+      name === 'middle-out' ? middleOutStrategy(transport) : oneShot;
     let result: SummaryOutput;
     try {
       result = await retryWithBackoff(() => strategy.prepareDisk(context), {
@@ -90,7 +121,7 @@ async function runDiskSummary(
         shouldRetryOnError: shouldRetryCompressionError,
       });
       if (name === 'middle-out' && result.kind === 'noop')
-        result = await new OneShotStrategy().prepareDisk(context);
+        result = await oneShot.prepareDisk(context);
     } catch (primaryError) {
       if (!isFallbackEligibleCompressionError(primaryError)) throw primaryError;
       metadata.logger.warn(

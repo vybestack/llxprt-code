@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -146,6 +147,7 @@ function isKimiCodeKey(apiKey: string): boolean {
  * @returns Balance info if available, null on error
  */
 export async function fetchKimiUsage(
+  requestFetch: NetworkFetch,
   apiKey: string,
   baseUrl?: string,
 ): Promise<KimiBalanceInfo | null> {
@@ -166,7 +168,7 @@ export async function fetchKimiUsage(
   const endpoint = buildKimiBalanceEndpoint(baseUrl);
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await requestFetch(endpoint, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -243,6 +245,7 @@ export function formatKimiUsage(usage: KimiBalanceInfo): string[] {
  * @returns Usage info if available, null on error
  */
 export async function fetchKimiCodeUsage(
+  requestFetch: NetworkFetch,
   apiKey: string,
   baseUrl?: string,
 ): Promise<KimiCodeUsageInfo | null> {
@@ -254,7 +257,7 @@ export async function fetchKimiCodeUsage(
   const endpoint = buildKimiCodeUsageEndpoint(baseUrl);
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await requestFetch(endpoint, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,

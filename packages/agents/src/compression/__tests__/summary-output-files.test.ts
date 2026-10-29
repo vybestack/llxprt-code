@@ -273,6 +273,7 @@ describe('summary output candidate allocation', () => {
           const metadata = await buildCompressionMetadata(
             'output-producer',
             setup.runtime,
+            undefined,
             history,
             async () => ({
               provider: setup.transport,
@@ -287,8 +288,13 @@ describe('summary output candidate allocation', () => {
           );
           const producer =
             strategy === 'middle-out'
-              ? new MiddleOutStrategy()
-              : new OneShotStrategy();
+              ? new MiddleOutStrategy(
+                  undefined,
+                  undefined,
+                  undefined,
+                  undefined,
+                )
+              : new OneShotStrategy(undefined, undefined, undefined, undefined);
           const receipt = await operationFileCreates(async () => {
             const result = await producer.prepareDisk({
               ...metadata,

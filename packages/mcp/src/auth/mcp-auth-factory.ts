@@ -4,17 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Factory contributions for custom `authProviderType` auth providers (#2764).
- *
- * `mcp` sits below `providers` in the dependency graph and cannot reach the
- * runtime-plugin composition registry. Following the `registerMcpHostServices`
- * precedent (#3305), this module inverts the dependency: the transport looks
- * up factories in a registry the host populates once during startup from the
- * loaded runtime plugins. Built-in auth (standard OAuth, static headers) never
- * consults this registry; only a server that selects a custom
- * `authProviderType` does.
- */
+/** Immutable custom-auth contributions are built and injected by each host owner. */
 
 import type { MCPServerConfig } from '../config/mcpServerConfig.js';
 import type { McpAuthProvider } from './auth-provider.js';
@@ -43,11 +33,6 @@ export interface McpAuthFactoryRegistry {
   listAuthProviderTypes(): readonly string[];
 }
 
-const EMPTY_REGISTRY: McpAuthFactoryRegistry = Object.freeze({
-  getAuthProviderFactory: (_authProviderType: string) => undefined,
-  listAuthProviderTypes: () => Object.freeze([]),
-});
-
 /**
  * Builds an immutable registry from factory contributions. Keys are the
  * lowercased `authProviderType` strings, matching the provider registry's
@@ -74,34 +59,4 @@ export function buildMcpAuthFactoryRegistry(
       factories.get(authProviderType.toLowerCase()),
     listAuthProviderTypes: () => Object.freeze([...orderedTypes]),
   });
-}
-
-let registered: McpAuthFactoryRegistry | undefined;
-
-/**
- * Registers the process-wide factory set, replacing any previously
- * registered one.
- *
- * Replacement rather than merge mirrors the `registerMcpHostServices` seam:
- * startup can run repeatedly in one process (the CLI test suites invoke
- * `main()` many times), and each run re-wires the factories from the
- * currently loaded plugins.
- */
-export function registerMcpAuthFactories(
-  contributions: readonly McpAuthFactoryContribution[],
-): void {
-  registered = buildMcpAuthFactoryRegistry(contributions);
-}
-
-/**
- * The registered factory registry. Empty until the host registers factories,
- * so an unregistered process keeps exactly the built-in auth behavior.
- */
-export function getRegisteredMcpAuthFactoryRegistry(): McpAuthFactoryRegistry {
-  return registered ?? EMPTY_REGISTRY;
-}
-
-/** Restores the unregistered state. Intended for test isolation. */
-export function resetRegisteredMcpAuthFactories(): void {
-  registered = undefined;
 }

@@ -1,8 +1,9 @@
+import { capturedAgentClient } from './helpers/agent-client-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { buildAgent } from './helpers/agentHarness.js';
 import {
   CarryProbeClient,
@@ -39,40 +40,32 @@ async function* mediaSource(): AsyncIterable<IContent> {
 describe('AgentImpl carried media ownership', () => {
   it('preserves signatures, cache and provider metadata, and media reservations through failed startup and retry', async () => {
     let armed = false;
-    const defaults = createAgentRuntimeFactoryBindings();
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-      runtimeFactoryBindings: {
-        ...defaults,
-        agentClientFactory: (config, runtime, readMcp, media, paths, instr) => {
-          if (!armed)
-            return defaults.agentClientFactory(
-              config,
-              runtime,
-              readMcp,
-              media,
-              paths,
-              instr,
-            );
-          if (media === undefined || paths === undefined)
-            throw new Error('Carry probe requires the session media store');
-          const probe = new CarryProbeClient(
-            config,
-            runtime,
-            readMcp ?? (() => undefined),
-            media,
-            paths,
-            undefined,
-            undefined,
-            instr,
-          );
-          vi.spyOn(probe, 'startChat').mockRejectedValueOnce(
-            new Error('Media startup fault'),
-          );
-          return probe;
-        },
+    const defaults = buildAgentClientFactory();
+    const { agent, cleanup } = await buildAgent(
+      'plain-text.jsonl',
+      {},
+      (config, runtime, readMcp, media, paths, instr) => {
+        if (!armed)
+          return defaults(config, runtime, readMcp, media, paths, instr);
+        if (media === undefined || paths === undefined)
+          throw new Error('Carry probe requires the session media store');
+        const probe = new CarryProbeClient(
+          config,
+          runtime,
+          readMcp ?? (() => undefined),
+          media,
+          paths,
+          undefined,
+          undefined,
+          instr,
+        );
+        vi.spyOn(probe, 'startChat').mockRejectedValueOnce(
+          new Error('Media startup fault'),
+        );
+        return probe;
       },
-    });
-    const previous = agent.agentClient;
+    );
+    const previous = capturedAgentClient(agent);
     const store = requireMediaStore(previous);
     await previous.storeHistoryForLaterUse(mediaSource());
     const digest = await historyDigest(previous.streamHistory());
@@ -90,7 +83,7 @@ describe('AgentImpl carried media ownership', () => {
       await expect(agent.setModel('media-carried-model')).rejects.toThrow(
         'Media startup fault',
       );
-      const next = agent.agentClient;
+      const next = capturedAgentClient(agent);
       expect(next.hasChatInitialized()).toBe(false);
       const failedStartup = {
         digest: await historyDigest(agent.streamHistory()),

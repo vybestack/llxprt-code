@@ -8,7 +8,7 @@ import {
 } from './chunk-fields.js';
 import type { RowDraft } from './rowDraft.js';
 import { BoundedIdNodeCache } from './idTrieCache.js';
-import type { RowHeader } from './rowRecord.js';
+import { ROW_BLOCK_TYPE, type RowHeader } from './rowRecord.js';
 import type { BuildContext } from './groupBuildShared.js';
 import type { RecordAppender } from './groupAppender.js';
 import {
@@ -115,7 +115,12 @@ export class JournalArrivalRecorder {
   }
   async beginNamedBlock(row: ArrivalRow, type: number): Promise<ArrivalBlock> {
     await this.flush();
-    return this.mutate((group) => group.beginBlock(row, type, true));
+    return this.mutate(async (group) => {
+      const block = await group.beginBlock(row, type, true);
+      if (type === ROW_BLOCK_TYPE.text)
+        await group.appendNamed(block, 'text', new Uint8Array());
+      return block;
+    });
   }
   async indexedBlock(
     row: ArrivalRow,

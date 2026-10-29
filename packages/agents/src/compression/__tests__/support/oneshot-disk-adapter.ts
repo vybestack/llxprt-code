@@ -20,10 +20,12 @@ export async function compressOneShotViaDisk(
   const candidate = new HistoryDensityRows();
   try {
     for (const row of context.history) source.append(row);
-    const result = await new OneShotStrategy().compressDisk(
-      { ...context, history: source },
-      candidate,
-    );
+    const result = await new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ).compressDisk({ ...context, history: source }, candidate);
     if (result.kind === 'noop') return result;
     return { kind: 'applied', newHistory: [...candidate] };
   } finally {

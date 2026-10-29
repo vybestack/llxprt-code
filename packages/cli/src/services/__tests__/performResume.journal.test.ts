@@ -113,7 +113,11 @@ describe('performResume on the journal backend with the live recorder bound', ()
       currentModel: 'claude-4',
       workspaceDirs: [],
       recordingCallbacks: callbacks,
-      historyService: history,
+      history: {
+        adoptResumeBoot: history.adoptResumeBoot.bind(history),
+        attachRecording: (integration) =>
+          integration.subscribeToJournal(history),
+      },
       adoptSessionId:
         adoptSessionId ??
         ((id) => {

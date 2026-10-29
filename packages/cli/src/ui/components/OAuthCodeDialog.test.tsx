@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, afterEach } from 'bun:test';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'bun:test';
 import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
 import { renderWithProviders, waitFor } from '../../__tests__/render.js';
 import { Text } from 'ink';
 import { Colors } from '../colors.js';
 import { act, useState } from 'react';
 import { OAuthCodeDialog } from './OAuthCodeDialog.js';
-import { oauthUIBridge } from '@vybestack/llxprt-code-auth';
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 
 const PLACEHOLDER = '(paste only - typing disabled)';
 
@@ -24,23 +24,26 @@ const paste = (
   });
 
 describe('OAuthCodeDialog', () => {
+  let bridge: OAuthUIBridge;
+
+  beforeEach(() => {
+    bridge = new OAuthUIBridge();
+  });
+
   afterEach(() => {
-    const attempt = oauthUIBridge.getDialog();
-    if (attempt) oauthUIBridge.dismissDialog(attempt.id);
-    oauthUIBridge.clearPending();
     vi.useRealTimers();
   });
 
   it.each(['managed', 'legacy'])(
     'blocks duplicate submissions while the same %s attempt is waiting',
     async (mode) => {
-      if (mode === 'managed')
-        oauthUIBridge.beginDialog('duplicate', 'claudecode');
+      if (mode === 'managed') bridge.beginDialog('duplicate', 'claudecode');
       function Host(): React.JSX.Element {
         const [codes, setCodes] = useState<string[]>([]);
         return (
           <>
             <OAuthCodeDialog
+              dialogState={bridge}
               provider="claudecode"
               onClose={() => {}}
               onSubmit={(code) => setCodes((old) => [...old, code])}
@@ -79,6 +82,7 @@ describe('OAuthCodeDialog', () => {
     const onSubmit = vi.fn();
     const { stdin, stdout, unmount } = renderWithProviders(
       <OAuthCodeDialog
+        dialogState={bridge}
         provider="gemini"
         onClose={onClose}
         onSubmit={onSubmit}
@@ -119,6 +123,7 @@ describe('OAuthCodeDialog', () => {
     const onSubmit = vi.fn();
     const { stdin, stdout, unmount } = renderWithProviders(
       <OAuthCodeDialog
+        dialogState={bridge}
         provider="gemini"
         onClose={onClose}
         onSubmit={onSubmit}
@@ -143,6 +148,7 @@ describe('OAuthCodeDialog', () => {
     const onSubmit = vi.fn();
     const { stdin, unmount } = renderWithProviders(
       <OAuthCodeDialog
+        dialogState={bridge}
         provider="gemini"
         onClose={onClose}
         onSubmit={onSubmit}
@@ -175,6 +181,7 @@ describe('OAuthCodeDialog', () => {
     const onSubmit = vi.fn();
     const { stdin, stdout, unmount } = renderWithProviders(
       <OAuthCodeDialog
+        dialogState={bridge}
         provider="gemini"
         onClose={onClose}
         onSubmit={onSubmit}
@@ -208,6 +215,7 @@ describe('OAuthCodeDialog', () => {
       ) : (
         <>
           <OAuthCodeDialog
+            dialogState={bridge}
             provider="claudecode"
             onClose={() => setClosed(true)}
             onSubmit={setSubmitted}
@@ -242,6 +250,7 @@ describe('OAuthCodeDialog', () => {
     const onSubmit = vi.fn();
     const { stdin, unmount } = renderWithProviders(
       <OAuthCodeDialog
+        dialogState={bridge}
         provider="gemini"
         onClose={onClose}
         onSubmit={onSubmit}
@@ -266,6 +275,7 @@ describe('OAuthCodeDialog', () => {
     const onSubmit = vi.fn();
     const { stdin, stdout, unmount } = renderWithProviders(
       <OAuthCodeDialog
+        dialogState={bridge}
         provider="gemini"
         onClose={onClose}
         onSubmit={onSubmit}
@@ -292,6 +302,7 @@ describe('OAuthCodeDialog', () => {
     const onSubmit = vi.fn();
     const { stdin, stdout, unmount } = renderWithProviders(
       <OAuthCodeDialog
+        dialogState={bridge}
         provider="gemini"
         onClose={onClose}
         onSubmit={onSubmit}
@@ -313,6 +324,7 @@ describe('OAuthCodeDialog', () => {
     const onSubmit = vi.fn();
     const { stdin, stdout, unmount } = renderWithProviders(
       <OAuthCodeDialog
+        dialogState={bridge}
         provider="gemini"
         onClose={onClose}
         onSubmit={onSubmit}
@@ -340,6 +352,7 @@ describe('OAuthCodeDialog', () => {
 
     const { stdout, unmount } = renderWithProviders(
       <OAuthCodeDialog
+        dialogState={bridge}
         provider="gemini"
         onClose={vi.fn()}
         onSubmit={vi.fn()}
@@ -357,6 +370,7 @@ describe('OAuthCodeDialog', () => {
 
     const generic = renderWithProviders(
       <OAuthCodeDialog
+        dialogState={bridge}
         provider="openai"
         onClose={vi.fn()}
         onSubmit={vi.fn()}

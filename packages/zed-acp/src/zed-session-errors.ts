@@ -337,3 +337,24 @@ function isNotFoundResumeReason(detail: string): boolean {
     RESUME_SESSION_INDEX_OUT_OF_RANGE_RE.test(reason)
   );
 }
+
+export function rethrowZedSessionFailure(
+  primary: unknown,
+  cleanupFailures: readonly unknown[],
+): never {
+  if (cleanupFailures.length === 0) throw primary;
+  if (primary instanceof acp.RequestError) {
+    const previous = Object.prototype.hasOwnProperty.call(primary, 'cause')
+      ? [primary.cause]
+      : [];
+    primary.cause = new AggregateError(
+      [...previous, ...cleanupFailures],
+      'ACP session release failed',
+    );
+    throw primary;
+  }
+  throw new AggregateError(
+    [primary, ...cleanupFailures],
+    'ACP session startup and release failed',
+  );
+}

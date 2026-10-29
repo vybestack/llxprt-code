@@ -35,7 +35,6 @@ import type {
   RuntimeProviderToolset,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type {
-  AgentRuntimeContext,
   AgentRuntimeProviderAdapter,
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -47,11 +46,17 @@ import {
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
-import { SubAgentScope } from './subagent.js';
+import type { ChildAgentScope } from './subagentOrchestrator.js';
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
 import {
   createCompletedToolCallResponse,
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
+  scopeInputs,
   createRuntimeOverrides,
   createStatelessRuntimeBundle,
   defaultModelConfig,
@@ -100,7 +105,7 @@ type HookMode =
 
 interface RuntimeHarness {
   readonly requests: GenerateChatOptions[];
-  readonly scope: SubAgentScope;
+  readonly scope: ChildAgentScope;
 }
 
 type CompletedToolCallFixture = Omit<
@@ -254,16 +259,30 @@ function createScriptedProvider(
   };
 }
 
+const retainSubagentCleanup = installSubagentCleanup();
+
 async function createHarness(params: {
   readonly responses: readonly IContent[];
   readonly hookMode?: HookMode;
   readonly toolConfig?: { readonly tools: readonly string[] };
   readonly outputConfig?: OutputConfig | null;
 }): Promise<RuntimeHarness> {
-  const { config, toolRegistry, mcpRuntime } = await createMockConfig();
+  const settings = seedSubagentSettings();
+  const config = createSubagentConfig(settings, retainSubagentCleanup);
+  await acquireSubagentSettings(config, settings, retainSubagentCleanup);
+  const mcpRuntime = await acquireSubagentWorkspace(
+    config,
+    retainSubagentCleanup,
+  );
+  const toolRegistry = mcpRuntime.toolSelection;
   const requests: GenerateChatOptions[] = [];
   const provider = createScriptedProvider(params.responses, requests);
   const providerAdapter: AgentRuntimeProviderAdapter = {
+    getProviderKeys: () => {
+      throw new Error(
+        'Output-emitter fixture does not use provider credentials',
+      );
+    },
     getActiveProvider: () => provider,
     getProviderByName: () => provider,
     setActiveProvider: vi.fn(),
@@ -281,19 +300,13 @@ async function createHarness(params: {
     toolRegistry,
     toolsView,
     history: new HistoryService(),
+    settings,
   });
   const hookOwner = createHookExecution(
     config,
     params.hookMode ?? { enabled: false },
   );
-  const runtimeContext: AgentRuntimeContext = {
-    ...baseBundle.runtimeContext,
-    providerRuntime: {
-      ...baseBundle.runtimeContext.providerRuntime,
-      config,
-    },
-  };
-  const runtimeBundle = { ...baseBundle, runtimeContext };
+  const runtimeBundle = baseBundle;
   const { overrides } = createRuntimeOverrides(
     mcpRuntime.workspaceFilesystem.paths,
     { runtimeBundle, toolRegistry },
@@ -301,17 +314,21 @@ async function createHarness(params: {
   const toolConfig = params.toolConfig
     ? { tools: [...params.toolConfig.tools] }
     : undefined;
-  const scope = await SubAgentScope.create(
-    'issue3526-agent',
-    config,
-    { systemPrompt: 'Complete the task and emit each required output.' },
-    defaultModelConfig,
-    defaultRunConfig,
-    toolConfig,
-    params.outputConfig === null
-      ? undefined
-      : (params.outputConfig ?? OUTPUT_CONFIG),
-    { ...overrides, hookOwner },
+  const scope = await createSubagentScope(
+    {
+      name: 'issue3526-agent',
+      prompt: {
+        systemPrompt: 'Complete the task and emit each required output.',
+      },
+      model: defaultModelConfig,
+      run: defaultRunConfig,
+      toolConfig,
+      outputConfig:
+        params.outputConfig === null
+          ? undefined
+          : (params.outputConfig ?? OUTPUT_CONFIG),
+    },
+    ...scopeInputs(config, { ...overrides, hookOwner }),
   );
   return { requests, scope };
 }

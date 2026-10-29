@@ -67,7 +67,9 @@ describe('LocalMediaStore local contention', () => {
   let stores: readonly LocalMediaStore[] = [];
 
   beforeEach(async (): Promise<void> => {
-    directory = await mkdtemp(join(tmpdir(), 'llxprt-media-queue-'));
+    directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'llxprt-media-queue-')),
+    );
   });
 
   afterEach(async (): Promise<void> => {

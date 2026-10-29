@@ -1,10 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { StreamProcessorRuntime } from './chatSessionPorts.js';
 import { prepareHistoryUserInput } from './streamResponseHelpers.js';
 
 export async function submitUserPrompt(
-  runtime: AgentRuntimeContext,
+  runtime: Pick<StreamProcessorRuntime, 'history' | 'state'>,
   input: IContent | IContent[],
   submissionId: string,
   eager: ReadonlySet<string>,

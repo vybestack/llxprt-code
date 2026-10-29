@@ -4,12 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { CommandContext, MessageActionReturn } from './types.js';
-import {
-  agentActiveProviderStatus,
-  agentProviderSwitchRecorder,
-  recordActiveProviderSwitch,
-} from '../utils/recordActiveProviderSwitch.js';
+import type { MessageActionReturn } from './types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const logger = new DebugLogger('llxprt:ui:profile-command');
@@ -67,53 +62,6 @@ export function classifyLoadError(
     messageType: 'error',
     content: `Failed to load profile: ${error.message}`,
   };
-}
-
-export async function applyLoadedProfileConfig(
-  context: CommandContext,
-): Promise<void> {
-  await context.services.agent?.sessionClient.publishTools();
-}
-
-export async function recordProviderSwitch(
-  context: CommandContext,
-  result: { providerName?: string },
-  profileLoadResult: ProfileLoadResultView,
-  reportFailure: (message: string) => void,
-): Promise<void> {
-  const agent = context.services.agent;
-  if (!agent) throw new Error('Session agent is unavailable');
-  return recordActiveProviderSwitch(
-    context.recordingOwner === 'agent'
-      ? agentProviderSwitchRecorder((event) =>
-          agent.session.recordRecordingEvent(event),
-        )
-      : context.recordingIntegration,
-    agentActiveProviderStatus(
-      () => agent.getProvider(),
-      () => agent.getModel(),
-    ),
-    reportFailure,
-    {
-      providerName: result.providerName,
-      modelName: profileLoadResult.modelName,
-    },
-  );
-}
-
-export function schedulePaymentModeCheck(
-  context: CommandContext,
-  previousProvider: string | undefined,
-): void {
-  const extendedContext = context as CommandContext & {
-    checkPaymentModeChange?: (forcePreviousProvider?: string) => void;
-  };
-  if (extendedContext.checkPaymentModeChange) {
-    setTimeout(
-      () => extendedContext.checkPaymentModeChange?.(previousProvider),
-      100,
-    );
-  }
 }
 
 export { logger };

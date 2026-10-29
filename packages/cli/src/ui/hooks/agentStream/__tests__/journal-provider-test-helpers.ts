@@ -8,16 +8,11 @@ export function scriptProvider(
   agent: Agent,
   generate: () => AsyncIterableIterator<IContent>,
 ): ReturnType<typeof spyOn<FakeProvider, 'generateChatCompletion'>> {
-  let provider: unknown = agent.providerManager.getProviderByName('fake');
-  while (
-    typeof provider === 'object' &&
-    provider !== null &&
-    'wrappedProvider' in provider
-  )
-    provider = provider.wrappedProvider;
-  if (!(provider instanceof FakeProvider))
-    throw new Error('Missing fake provider');
-  return spyOn(provider, 'generateChatCompletion').mockImplementation(generate);
+  if (agent.getProvider() !== 'fake') throw new Error('Missing fake provider');
+  return spyOn(
+    FakeProvider.prototype,
+    'generateChatCompletion',
+  ).mockImplementation(generate);
 }
 
 export function gate(): { readonly promise: Promise<void>; release(): void } {

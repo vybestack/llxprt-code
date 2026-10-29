@@ -158,7 +158,9 @@ export function buildNewContentGeneratorConfig(
 
 /**
  * Transfers existing history to the new agent client, stripping thought
- * signatures when migrating from GenAI to Vertex.
+ * signatures when migrating from GenAI to Vertex. The live HistoryService is
+ * reused by the new client except for that migration: the signatures live in
+ * the service's own content, so the stripped copy needs a fresh service.
  */
 export async function transferHistoryToNewClient(
   logger: DebugLogger,
@@ -208,6 +210,8 @@ export async function prepareProfileClient(
   factory: AgentClientFactory,
   selectedState: AgentRuntimeState,
   contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
+  disposeCandidate: (client: AgentClientContract) => Promise<void> = (client) =>
+    client.dispose(),
 ): Promise<
   ReturnType<typeof buildNewContentGeneratorConfig> & {
     client: AgentClientContract;
@@ -270,7 +274,7 @@ export async function prepareProfileClient(
       try {
         await adoption?.rollback();
       } finally {
-        await client.dispose();
+        await disposeCandidate(client);
       }
     },
   };

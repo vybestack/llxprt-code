@@ -21,7 +21,6 @@ import type {
   CanonicalFinishReason,
 } from '@vybestack/llxprt-code-core';
 import { isCanonicalFinishReason } from '@vybestack/llxprt-code-core';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import type {
   AgentEvent,
   AgentStopInfo,
@@ -36,6 +35,7 @@ import {
 } from './streamUtils.js';
 
 export interface AgentEventDeps {
+  setLastPromptTokenCount: (count: number) => void;
   addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
   flushPendingHistoryItem: (timestamp: number) => void;
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
@@ -238,7 +238,7 @@ export function dispatchAgentEvent(
     case 'thinking':
       return dispatchThinkingEvent(deps);
     case 'usage':
-      return dispatchUsageEvent(event);
+      return dispatchUsageEvent(event, deps);
     case 'model-info':
     case 'compression':
     case 'context-warning':
@@ -347,9 +347,10 @@ function dispatchThinkingEvent(deps: AgentEventDeps): void {
 
 function dispatchUsageEvent(
   event: Extract<AgentEvent, { type: 'usage' }>,
+  deps: AgentEventDeps,
 ): void {
   if (event.usage.promptTokenCount !== undefined) {
-    uiTelemetryService.setLastPromptTokenCount(event.usage.promptTokenCount);
+    deps.setLastPromptTokenCount(event.usage.promptTokenCount);
   }
   return;
 }

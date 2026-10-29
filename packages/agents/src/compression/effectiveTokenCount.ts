@@ -14,7 +14,7 @@
  */
 
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+
 import {
   extractThinkingBlocks,
   estimateThinkingTokens,
@@ -25,13 +25,21 @@ import {
  * thinking blocks that the active reasoning settings will strip before the
  * request is sent.
  */
+/**
+ * The reasoning settings that decide whether thinking blocks reach the
+ * provider, and therefore whether their tokens count against the budget.
+ */
+export interface ReasoningHistoryPolicy {
+  includeInContext(): boolean;
+  stripFromContext(): 'all' | 'allButLast' | 'none';
+}
+
 export async function computeEffectiveTokenCount(
   historyService: HistoryService,
-  runtimeContext: AgentRuntimeContext,
+  policy: ReasoningHistoryPolicy,
 ): Promise<number> {
-  const includeInContext =
-    runtimeContext.ephemerals.reasoning.includeInContext();
-  const stripPolicy = runtimeContext.ephemerals.reasoning.stripFromContext();
+  const includeInContext = policy.includeInContext();
+  const stripPolicy = policy.stripFromContext();
 
   // If reasoning IS included in context, all tokens count.
   if (includeInContext) {

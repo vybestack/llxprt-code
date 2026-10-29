@@ -17,7 +17,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { Config } from '@vybestack/llxprt-code-core';
-import { createProviderSessionOwner } from './integration-tests/__tests__/session-client-owner-fixture.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderActivationIntent } from '@vybestack/llxprt-code-agents';
@@ -36,6 +35,7 @@ function makeConfig(
     model?: string;
     cliModelOverride?: string;
     profileModelParams?: Record<string, unknown>;
+    cliModelParams?: Record<string, unknown>;
     bootstrapArgs?: Record<string, unknown>;
   } = {},
 ): Config {
@@ -60,6 +60,9 @@ function makeConfig(
     ...(overrides.profileModelParams !== undefined
       ? { _profileModelParams: overrides.profileModelParams }
       : {}),
+    ...(overrides.cliModelParams !== undefined
+      ? { _cliModelParams: overrides.cliModelParams }
+      : {}),
     ...(overrides.bootstrapArgs !== undefined
       ? { _bootstrapArgs: overrides.bootstrapArgs }
       : {}),
@@ -67,58 +70,29 @@ function makeConfig(
 }
 
 let managers: ProviderManager[] = [];
-function makeProviderManager(activeProviderName: string): {
-  providerManager: ProviderManager;
-  settingsService: SettingsService;
-} {
-  const settingsService = new SettingsService();
-  const manager = new ProviderManager({
-    settingsService,
-  });
-  managers.push(manager);
-  return {
-    providerManager: Object.assign(manager, {
-      getActiveProviderName: () => activeProviderName,
-    }),
-    settingsService,
-  };
-}
-function makeProviderManagerWithNoActive(): {
-  providerManager: ProviderManager;
-  settingsService: SettingsService;
-} {
-  const settingsService = new SettingsService();
-  const manager = new ProviderManager({
-    settingsService,
-  });
-  managers.push(manager);
-  return { providerManager: manager, settingsService };
-}
-function makeOperation(
-  config: Config,
-  manager: ProviderManager,
-  settingsService: SettingsService,
-) {
-  const operation = createProviderSessionOwner(
-    config,
-    manager,
-    settingsService,
+function makeProviderManager(activeProviderName: string): ProviderManager {
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new SettingsService(),
   );
-  return {
-    preflight: preflightMock,
-    workspaceDefinitions: operation.workspaceDefinitions,
-    workspaceTrust: operation.workspaceTrust,
-    trustCleanup: operation.trustCleanup,
-    workspaceMemory: operation.workspaceMemory,
-    workspaceMemoryOwnership: operation.workspaceMemoryOwnership,
-    workspaceFilesystem: operation.workspaceFilesystem,
-    sessionClient: operation.sessionClient,
-    takeMediaOwner: operation.takeMediaOwner.bind(operation),
-    settingsOwnerOwnership: operation.settingsOwnerOwnership,
-    takeSettingsOwner: operation.takeSettingsOwner.bind(operation),
-    takeSessionClient: operation.takeSessionClient.bind(operation),
-    dispose: () => operation.dispose(),
-  };
+  managers.push(manager);
+  return Object.assign(manager, {
+    getActiveProviderName: () => activeProviderName,
+  });
+}
+function makeProviderManagerWithNoActive(): ProviderManager {
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new SettingsService(),
+  );
+  managers.push(manager);
+  return manager;
 }
 
 function makeArgs(): ParsedCliArgs {
@@ -150,14 +124,13 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       infoMessages: ['switched'],
     });
     const config = makeConfig('anthropic');
-    const { providerManager, settingsService } =
-      makeProviderManager('anthropic');
+    const providerManager = makeProviderManager('anthropic');
 
     const failed = await activateConfiguredProvider(
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      { preflight: preflightMock },
     );
 
     expect(failed.authFailed).toBe(false);
@@ -169,14 +142,13 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       infoMessages: [],
     });
     const config = makeConfig('anthropic');
-    const { providerManager, settingsService } =
-      makeProviderManager('anthropic');
+    const providerManager = makeProviderManager('anthropic');
 
     const failed = await activateConfiguredProvider(
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      { preflight: preflightMock },
     );
 
     expect(failed.authFailed).toBe(true);
@@ -186,15 +158,11 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
 
   it('assembles the intent with a configured provider and no model override', async () => {
     const config = makeConfig('anthropic');
-    const { providerManager, settingsService } =
-      makeProviderManager('anthropic');
+    const providerManager = makeProviderManager('anthropic');
 
-    await activateConfiguredProvider(
-      config,
-      providerManager,
-      makeArgs(),
-      makeOperation(config, providerManager, settingsService),
-    );
+    await activateConfiguredProvider(config, providerManager, makeArgs(), {
+      preflight: preflightMock,
+    });
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
     expect(intent).toStrictEqual({
@@ -207,15 +175,11 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
 
   it('assembles the intent with defaultProvider when config has no provider but manager has an active provider', async () => {
     const config = makeConfig(undefined);
-    const { providerManager, settingsService } =
-      makeProviderManager('anthropic');
+    const providerManager = makeProviderManager('anthropic');
 
-    await activateConfiguredProvider(
-      config,
-      providerManager,
-      makeArgs(),
-      makeOperation(config, providerManager, settingsService),
-    );
+    await activateConfiguredProvider(config, providerManager, makeArgs(), {
+      preflight: preflightMock,
+    });
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
     expect(intent).toStrictEqual({
@@ -228,15 +192,11 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
 
   it('assembles the intent with neither provider nor defaultProvider when unconfigured (#2481)', async () => {
     const config = makeConfig(undefined);
-    const { providerManager, settingsService } =
-      makeProviderManagerWithNoActive();
+    const providerManager = makeProviderManagerWithNoActive();
 
-    await activateConfiguredProvider(
-      config,
-      providerManager,
-      makeArgs(),
-      makeOperation(config, providerManager, settingsService),
-    );
+    await activateConfiguredProvider(config, providerManager, makeArgs(), {
+      preflight: preflightMock,
+    });
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
     expect(intent).toStrictEqual({
@@ -252,15 +212,11 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
     const config = makeConfig('anthropic', {
       cliModelOverride: 'claude-3.5-sonnet',
     });
-    const { providerManager, settingsService } =
-      makeProviderManager('anthropic');
+    const providerManager = makeProviderManager('anthropic');
 
-    await activateConfiguredProvider(
-      config,
-      providerManager,
-      makeArgs(),
-      makeOperation(config, providerManager, settingsService),
-    );
+    await activateConfiguredProvider(config, providerManager, makeArgs(), {
+      preflight: preflightMock,
+    });
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
     expect(intent).toStrictEqual({
@@ -280,15 +236,11 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
         baseurlOverride: 'https://api.example.com',
       },
     });
-    const { providerManager, settingsService } =
-      makeProviderManager('anthropic');
+    const providerManager = makeProviderManager('anthropic');
 
-    await activateConfiguredProvider(
-      config,
-      providerManager,
-      makeArgs(),
-      makeOperation(config, providerManager, settingsService),
-    );
+    await activateConfiguredProvider(config, providerManager, makeArgs(), {
+      preflight: preflightMock,
+    });
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
     expect(intent).toStrictEqual({
@@ -302,6 +254,27 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
     });
   });
 
+  it('assembles the intent with merged profile and CLI model params', async () => {
+    const config = makeConfig('openai', {
+      model: 'kimi-k2.5',
+      profileModelParams: { temperature: 0.4 },
+      cliModelParams: { top_p: 0.9 },
+    });
+    const providerManager = makeProviderManager('openai');
+
+    await activateConfiguredProvider(config, providerManager, makeArgs(), {
+      preflight: preflightMock,
+    });
+
+    const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
+    expect(intent).toStrictEqual({
+      provider: 'openai',
+      modelParams: { temperature: 0.4, top_p: 0.9 },
+      cliOverrides: {},
+      authMode: 'auto',
+    });
+  });
+
   // ── Preflight error contract (#2378) ─────────────────────────────────
   //
   // The pre-existing contract (introduced in #2374, preserved by #2378)
@@ -311,14 +284,13 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
   it('returns true (auth-failed) when the preflight throws, preserving the non-crash contract', async () => {
     preflightMock.mockRejectedValue(new Error('preflight blew up'));
     const config = makeConfig('anthropic');
-    const { providerManager, settingsService } =
-      makeProviderManager('anthropic');
+    const providerManager = makeProviderManager('anthropic');
 
     const failed = await activateConfiguredProvider(
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      { preflight: preflightMock },
     );
 
     expect(failed.authFailed).toBe(true);

@@ -99,6 +99,7 @@ export async function startSourceRouteHarness(): Promise<SourceRouteHarness> {
     return {
       ...base,
       invocation: createRuntimeInvocationContext({
+        fetch: (input, init) => globalThis.fetch(input, init),
         runtimeId: runtime?.runtimeId ?? base.invocation.runtimeId,
         providerName: setup.provider.name,
         ephemeralsSnapshot: {

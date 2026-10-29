@@ -6,53 +6,40 @@
  * @plan PLAN-20260214-SESSIONBROWSER.P29
  */
 
-import {
-  WorkspaceTrustLifecycle,
-  assembleWorkspaceMemory,
-  WorkspaceFilesystemOwner,
-} from '@vybestack/llxprt-code-core';
-
-import process from 'node:process';
+import type {
+  AgentActivationOperation,
+  AgentProfileApplication,
+} from '@vybestack/llxprt-code-agents';
 import type {
   ApprovalMode,
-  PolicyEngineConfig,
   Config,
   LlxprtExtension,
-  SandboxConfig,
   MCPServerConfig,
+  PolicyEngineConfig,
+  SandboxConfig,
+  SessionSettingsOwner,
+  ProviderSwitcher,
 } from '@vybestack/llxprt-code-core';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import process from 'node:process';
 
+import { type CliArgs } from './cliArgParser.js';
+import type { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+import { resolveMcpServers } from './mcpServerConfig.js';
+import {
+  resolveDeclarativeCliConfig,
+  type DeclarativeCliConfig,
+} from './declarativeCliConfig.js';
+import { loadSandboxConfig } from './sandboxConfig.js';
 import {
   loadSettings,
   type MergedSettings,
   type Settings,
 } from './settings.js';
-import { loadSandboxConfig } from './sandboxConfig.js';
-import { resolveMcpServers } from './mcpServerConfig.js';
-import { type CliArgs } from './cliArgParser.js';
-import type { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
-// @plan:PLAN-20251020-STATELESSPROVIDER3.P04
-import {
-  parseBootstrapArgs,
-  prepareRuntimeForProfile,
-  type BootstrapRuntimeState,
-  type CliRuntimeOverrides,
-} from './profileBootstrap.js';
-
-import {
-  resolveProfileToLoad,
-  loadAndPrepareProfile,
-  type ProfileLoadResult,
-} from './profileResolution.js';
-import { resolveContextAndEnvironment } from './interactiveContext.js';
-import { loadEnvironment } from './environmentLoader.js';
-import { resolveApprovalMode } from './approvalModeResolver.js';
-import { resolveProviderAndModel } from './providerModelResolver.js';
 import { buildConfig } from './configBuilder.js';
 import { finalizeConfig } from './postConfigRuntime.js';
-import { resolveIntermediateConfig } from './intermediateConfig.js';
+import type { ProfileLoadResult } from './profileResolution.js';
+import { resolveProviderAndModel } from './providerModelResolver.js';
 
 type ConfigBuildPieces = {
   context: ContextResolutionResult;
@@ -84,77 +71,68 @@ type ConfigBuildPieces = {
 };
 
 import type { ContextResolutionResult } from './interactiveContext.js';
+import type { PostConfigPreflight } from './postConfigRuntime.js';
+
+/**
+ * The preflight operations `loadCliConfig` and its post-configuration pipeline
+ * drive. Callers hand in the created preflight; this contract names only the
+ * operations the pipeline itself calls.
+ */
+export interface ConfigBuildPreflight extends PostConfigPreflight {
+  readProviderDefaultModel(provider: string): string | undefined;
+  chooseProviderModel(provider: string, model: string): void;
+  captureSettings(): Record<string, unknown>;
+  bindMcpSettings(
+    initial: Parameters<SessionSettingsOwner['bindMcpSettings']>[0],
+    load: Parameters<SessionSettingsOwner['bindMcpSettings']>[1],
+  ): void;
+  dispose(): Promise<void>;
+}
+
+/** Values `loadCliConfig` reads once while it builds the Config. */
+export interface CliConfigLoadInput {
+  readonly settings: Settings;
+  readonly extensions: LlxprtExtension[];
+  readonly extensionEnablementManager: ExtensionEnablementManager;
+  readonly sessionId: string;
+  readonly argv: CliArgs;
+  readonly cwd: string;
+  readonly preflight: ConfigBuildPreflight;
+  /** An externally owned settings owner the preflight prepares its workspace over. */
+  readonly settingsOwner?: SessionSettingsOwner;
+}
+
+/**
+ * Hand-offs `loadCliConfig` makes while the Config is being finalized.
+ * `activationBootstrap` is the only one that changes what happens: when present
+ * the preflight's post-config activation is transferred to it, and when absent
+ * the preflight keeps the activation for the caller to transfer or finish.
+ */
+export interface CliConfigReadyCallbacks {
+  readonly activationBootstrap?: (operation: AgentActivationOperation) => void;
+  readonly profileApplication: (application: AgentProfileApplication) => void;
+  readonly providerSwitch: (switchProvider: ProviderSwitcher) => void;
+}
+
+const ignore = (): void => undefined;
+
+export const ignoreReady: CliConfigReadyCallbacks = {
+  profileApplication: ignore,
+  providerSwitch: ignore,
+};
 
 // ─── Orchestrator ────────────────────────────────────────────────────────────
 
-/** Steps 1-3: Bootstrap runtime and resolve profile */
-async function bootstrapAndLoadProfile(
-  settings: Settings,
-  argv: CliArgs,
-  runtimeOverrides: CliRuntimeOverrides,
-) {
-  const bootstrapParsed = parseBootstrapArgs();
-  const parsedWithOverrides = {
-    bootstrapArgs: bootstrapParsed.bootstrapArgs,
-    runtimeMetadata: {
-      ...bootstrapParsed.runtimeMetadata,
-      settingsService:
-        runtimeOverrides.settingsService ??
-        bootstrapParsed.runtimeMetadata.settingsService,
-      providerContributions:
-        runtimeOverrides.providerContributions ??
-        bootstrapParsed.runtimeMetadata.providerContributions,
-    },
-  };
-  const bootstrapArgs = parsedWithOverrides.bootstrapArgs;
-  const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
-  if (runtimeState.registration) {
-    runtimeOverrides.onRuntimeRegistrationReady?.(runtimeState.registration);
-  }
-  // The registry may come from either source. Post-config re-assembly must see
-  // the SAME one, or it rebuilds the provider manager without the plugins.
-  const effectiveOverrides: CliRuntimeOverrides = {
-    ...runtimeOverrides,
-    ...(parsedWithOverrides.runtimeMetadata.providerContributions === undefined
-      ? {}
-      : {
-          providerContributions:
-            parsedWithOverrides.runtimeMetadata.providerContributions,
-        }),
-  };
-
-  const { profileToLoad, profileExplicitlySpecified } = resolveProfileToLoad({
-    bootstrapArgs,
-    settings,
-    cliProvider: argv.provider,
-  });
-  const profileResult = await loadAndPrepareProfile({
-    bootstrapArgs,
-    settings,
-    argv,
-    profileToLoad,
-    profileExplicitlySpecified,
-  });
-  return { bootstrapArgs, runtimeState, profileResult, effectiveOverrides };
-}
-
-/** Steps 7-8: Resolve approval mode and provider/model, sync to SettingsService */
-function resolveApprovalAndProvider(
+/** Step 8: Resolve provider/model, sync to SettingsService */
+function resolveProviderModelSelection(
   argv: CliArgs,
   profileMergedSettings: MergedSettings,
-  context: ContextResolutionResult,
   profileResult: ProfileLoadResult,
-  runtimeState: BootstrapRuntimeState,
+  runtimeState: Pick<
+    ConfigBuildPreflight,
+    'readProviderDefaultModel' | 'chooseProviderModel'
+  >,
 ) {
-  const securitySettings = (profileMergedSettings as Partial<MergedSettings>)
-    .security;
-  const approvalMode = resolveApprovalMode({
-    cliApprovalMode: argv.approvalMode,
-    cliYolo: argv.yolo,
-    disableYoloMode: securitySettings?.disableYoloMode,
-    secureModeEnabled: profileMergedSettings.admin?.secureModeEnabled,
-    trustedFolder: context.trustedFolder,
-  });
   const providerModel = resolveProviderAndModel({
     cliProvider: argv.provider,
     profileProvider: profileResult.profileProvider,
@@ -164,22 +142,19 @@ function resolveApprovalAndProvider(
     settingsModel: profileMergedSettings.model,
     envDefaultModel: process.env.LLXPRT_DEFAULT_MODEL,
     envProviderModel: process.env.GEMINI_MODEL,
-    providerDefaultModel: runtimeState.providerManager
-      .getProviderByName('gemini')
-      ?.getDefaultModel(),
+    providerDefaultModel: runtimeState.readProviderDefaultModel('gemini'),
   });
   if (
     providerModel.provider !== undefined &&
     providerModel.model &&
     providerModel.model.trim() !== ''
   ) {
-    runtimeState.runtime.settingsService.setProviderSetting(
+    runtimeState.chooseProviderModel(
       providerModel.provider,
-      'model',
       providerModel.model,
     );
   }
-  return { approvalMode, providerModel };
+  return providerModel;
 }
 
 function applyStartupMcpProfileOverrides(
@@ -208,42 +183,30 @@ function applyStartupMcpProfileOverrides(
 async function resolveConfigBuildPieces(
   argv: CliArgs,
   settings: Settings,
-  profileMergedSettings: MergedSettings,
-  profileResult: ProfileLoadResult,
-  runtimeState: BootstrapRuntimeState,
+  declarative: DeclarativeCliConfig,
+  runtimeState: Pick<
+    ConfigBuildPreflight,
+    'readProviderDefaultModel' | 'chooseProviderModel'
+  >,
   cwd: string,
-  extensions: LlxprtExtension[],
-  extensionEnablementManager: ExtensionEnablementManager,
 ): Promise<ConfigBuildPieces> {
-  const context = resolveContextAndEnvironment({
-    argv,
-    profileMergedSettings,
-    originalSettings: settings,
-    cwd,
-    extensions,
-    extensionEnablementManager,
-  });
+  const {
+    context,
+    profileResult,
+    mcpServers,
+    blockedMcpServers,
+    approvalMode,
+    intermediate,
+  } = declarative;
+  const profileMergedSettings = profileResult.profileMergedSettings;
   const memoryContent = '';
   const fileCount = 0;
   const filePaths: string[] = [];
-  const { mcpServers, blockedMcpServers } = resolveMcpServers(
-    profileMergedSettings,
-    context,
-    argv.allowedMcpServerNames,
-  );
-  const { approvalMode, providerModel } = resolveApprovalAndProvider(
+  const providerModel = resolveProviderModelSelection(
     argv,
     profileMergedSettings,
-    context,
     profileResult,
     runtimeState,
-  );
-  const intermediate = await resolveIntermediateConfig(
-    argv,
-    settings,
-    profileMergedSettings,
-    context,
-    approvalMode,
   );
   const sandboxConfig = await loadSandboxConfig(profileMergedSettings, argv);
   const reloadMcpServers = async () => {
@@ -285,50 +248,17 @@ async function resolveConfigBuildPieces(
   };
 }
 
-/**
- * Narrow the bootstrap runtime's structural settings state to the
- * SettingsService surface Config consumes (profileBootstrap composes it via
- * createRuntimeSettingsService). Fails fast with a clear message instead of
- * letting a malformed runtime surface as an opaque error inside buildConfig.
- */
-function isSettingsServiceLike(
-  value: unknown,
-): value is { get: unknown; set: unknown } {
-  if (value === null || typeof value !== 'object') {
-    return false;
-  }
-  const candidate = value as { get?: unknown; set?: unknown };
-  return (
-    typeof candidate.get === 'function' && typeof candidate.set === 'function'
-  );
-}
-
-function requireBootstrapSettingsService(
-  runtimeState: BootstrapRuntimeState,
-): SettingsService {
-  // The runtime is assembled upstream via type assertions, so the static type
-  // cannot be trusted here — validate the value structurally as unknown.
-  const settingsService: unknown = runtimeState.runtime.settingsService;
-  if (!isSettingsServiceLike(settingsService)) {
-    throw new Error(
-      '[config] Bootstrap runtime is missing its SettingsService. ' +
-        'prepareRuntimeForProfile() must run before loadCliConfig() (issue #2300).',
-    );
-  }
-  return settingsService as SettingsService;
-}
-
 function buildLoadedConfig(
   sessionId: string,
   cwd: string,
   argv: CliArgs,
   pieces: ConfigBuildPieces,
-  settingsService: SettingsService,
+  initialSettings: Record<string, unknown>,
 ): Config {
   return buildConfig({
     sessionId,
     cwd,
-    settingsService,
+    initialSettings,
     argv,
     profileSettingsWithTools: pieces.profileSettingsWithTools,
     context: pieces.context,
@@ -362,56 +292,51 @@ function buildLoadedConfig(
  * Each step delegates to a focused module — see 00-overview.md.
  */
 export async function loadCliConfig(
-  settings: Settings,
-  extensions: LlxprtExtension[],
-  extensionEnablementManager: ExtensionEnablementManager,
-  sessionId: string,
-  argv: CliArgs,
-  cwd: string = process.cwd(),
-  runtimeOverrides: CliRuntimeOverrides = {},
+  input: CliConfigLoadInput,
+  onReady: CliConfigReadyCallbacks,
 ): Promise<Config> {
-  loadEnvironment();
-  const { bootstrapArgs, runtimeState, profileResult, effectiveOverrides } =
-    await bootstrapAndLoadProfile(settings, argv, runtimeOverrides);
+  const {
+    settings,
+    extensions,
+    extensionEnablementManager,
+    sessionId,
+    argv,
+    cwd,
+    preflight: runtimeState,
+    settingsOwner,
+  } = input;
+  const declarative = await resolveDeclarativeCliConfig({
+    settings,
+    argv,
+    cwd,
+    extensions,
+    extensionEnablementManager,
+  });
+  const { bootstrap, profileResult } = declarative;
+  const bootstrapArgs = bootstrap.bootstrapArgs;
   const profileMergedSettings = profileResult.profileMergedSettings;
 
   const pieces = await resolveConfigBuildPieces(
     argv,
     settings,
-    profileMergedSettings,
-    profileResult,
+    declarative,
     runtimeState,
     cwd,
-    extensions,
-    extensionEnablementManager,
   );
   // The Config must bind to the SAME SettingsService the bootstrap runtime
   // registered — Config construction never adopts ambient state (issue #2300).
-  bindSelectedMcpSettings(effectiveOverrides, pieces);
   const config = buildLoadedConfig(
     sessionId,
     cwd,
     argv,
     pieces,
-    requireBootstrapSettingsService(runtimeState),
+    runtimeState.captureSettings(),
   );
 
-  const trust = new WorkspaceTrustLifecycle({
-    localTrust: config.initialWorkspaceTrust,
-  });
-  const filesystem = new WorkspaceFilesystemOwner({
-    targetDir: config.getTargetDir(),
-    includeDirectories: config.getConfiguredIncludeDirectories(),
-    isTrusted: () => trust.isTrustedFolder(),
-  });
-  const memory = assembleWorkspaceMemory(config, filesystem, trust);
-  try {
-    await memory.operations.refresh();
-    return await finalizeConfig({
-      filesystem,
-      memory,
-      workspaceTrust: trust,
-      trustCleanup: () => trust.dispose(),
+  return finalizeConfig(
+    {
+      bindMcpSettings: () =>
+        bindSelectedMcpSettings(settingsOwner ?? runtimeState, pieces),
       config,
       runtimeState,
       bootstrapArgs,
@@ -421,31 +346,22 @@ export async function loadCliConfig(
       profileLoadResult: profileResult,
       providerModelResult: pieces.providerModel,
       defaultDisabledTools: profileMergedSettings.defaultDisabledTools ?? [],
-      runtimeOverrides: effectiveOverrides,
       approvalMode: pieces.approvalMode,
       interactive: pieces.context.interactive,
-    });
-  } catch (error) {
-    const results = [];
-    for (const resource of [memory, filesystem, trust])
-      results.push(...(await Promise.allSettled([resource.dispose()])));
-    const failures = results.flatMap((result) =>
-      result.status === 'rejected' ? [result.reason] : [],
-    );
-    if (failures.length > 0)
-      throw new AggregateError(
-        [error, ...failures],
-        'Memory bootstrap cleanup failed',
-      );
-    throw error;
-  }
+    },
+    settingsOwner,
+    onReady.activationBootstrap,
+    onReady.profileApplication,
+    onReady.providerSwitch,
+    false,
+  );
 }
 
 function bindSelectedMcpSettings(
-  overrides: CliRuntimeOverrides,
+  owner: Pick<ConfigBuildPreflight, 'bindMcpSettings'>,
   pieces: ConfigBuildPieces,
 ): void {
-  overrides.sessionSettingsOwner?.bindMcpSettings(
+  owner.bindMcpSettings(
     {
       mcpServers: pieces.mcpServers,
       blockedMcpServers: [...pieces.blockedMcpServers],

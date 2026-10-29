@@ -13,18 +13,17 @@ import { createTaskPolicyFixture } from './__tests__/task-policy-fixture.js';
  * string descriptions.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { TaskTool, type TaskToolParams } from './task.js';
-import { TaskTool, type TaskToolParams } from './task.js';
-import {
-  validateOutputSpec,
-  validateOutputParams,
-  normalizeTaskParams,
-} from './taskToolGovernance.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
+import { TaskTool, type TaskToolParams } from './task.js';
+import {
+  normalizeTaskParams,
+  validateOutputParams,
+  validateOutputSpec,
+} from './taskToolGovernance.js';
 
 const CANONICAL_TASK_PARAM_NAMES = [
   'async',
@@ -53,9 +52,9 @@ describe('Issue #2533: TaskTool single parameter vocabulary', () => {
   ): TaskTool {
     return new TaskTool(config, {
       ...createTaskPolicyFixture({}),
-      readMcpInstructions: () => undefined,
+
       messageBus: new MessageBus(),
-      orchestratorFactory: () => orchestrator,
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
     });
   }
 
@@ -157,7 +156,10 @@ describe('Issue #2533: TaskTool single parameter vocabulary', () => {
       'rejects legacy %s before validating values',
       (legacyName, canonicalName) => {
         const tool = new ValueValidatingTaskTool(config, {
-          readMcpInstructions: () => undefined,
+          ...createTaskPolicyFixture({}),
+          launchChild: async () => {
+            throw new Error('Validation-only scenario');
+          },
           messageBus: new MessageBus(),
         });
         const params = {
@@ -409,9 +411,9 @@ describe('Issue #2533: TaskTool single parameter vocabulary', () => {
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
         ...createTaskPolicyFixture({}),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
         isInteractiveEnvironment: () => true,
       });
 

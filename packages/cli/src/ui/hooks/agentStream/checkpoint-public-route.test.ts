@@ -37,7 +37,7 @@ describe('checkpoint public disk route after eager preparation removal', () => {
             checkpointTool,
             dir,
             checkpointGit,
-            agent,
+            fixture.history.streamRawHistory.bind(fixture.history),
 
             () => {},
             fs.ops,

@@ -1,3 +1,4 @@
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -177,4 +178,26 @@ export async function shouldIncludeSubagentDelegationForConfig(
   enabledToolNames: string[],
 ): Promise<boolean> {
   return shouldIncludeSubagentDelegation(enabledToolNames, () => definitions);
+}
+
+export function captureClientToolDeclarations(
+  client: Pick<AgentClientContract, 'tools' | 'isInitialized'>,
+): ToolDeclaration[] | undefined {
+  const selection = client.tools;
+  return client.isInitialized()
+    ? buildToolDeclarationsFromView(selection, {
+        listToolNames: () => selection.getAllToolNames(),
+      })
+    : undefined;
+}
+
+export function prepareClientToolPublication(
+  source: Pick<AgentClientContract, 'tools' | 'isInitialized'>,
+): (
+  target: Pick<AgentClientContract, 'isInitialized' | 'setTools'>,
+) => Promise<void> {
+  const declarations = captureClientToolDeclarations(source);
+  return async (target) => {
+    if (target.isInitialized()) await target.setTools(declarations);
+  };
 }

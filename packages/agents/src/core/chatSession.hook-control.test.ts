@@ -5,18 +5,14 @@ import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { ChatSession, StreamEventType } from './chatSession.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import {
-  BeforeModelHookOutput,
   AfterModelHookOutput,
+  BeforeModelHookOutput,
   BeforeToolSelectionHookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
@@ -25,6 +21,11 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
+import { ChatSession, StreamEventType } from './chatSession.js';
+import { chatSessionPorts, type ChatSessionPorts } from './chatSessionPorts.js';
 
 describe('ChatSession hook execution control', () => {
   let mockHookSystem: {
@@ -41,6 +42,7 @@ describe('ChatSession hook execution control', () => {
   let hookOwner: HookExecutionOwner;
   let mockProvider: IProvider;
   let chat: ChatSession;
+  let chatPorts: ChatSessionPorts;
   let mockContentGenerator: {
     generateContent: ReturnType<typeof vi.fn>;
     generateContentStream: ReturnType<typeof vi.fn>;
@@ -112,7 +114,6 @@ describe('ChatSession hook execution control', () => {
     // Set up provider runtime context
     const providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: mockConfig,
     };
 
     // Create mock ContentGenerator
@@ -162,7 +163,20 @@ describe('ChatSession hook execution control', () => {
       providerRuntime: providerRuntimeSnapshot,
     });
 
-    chat = new ChatSession(view, mockContentGenerator, {}, []);
+    chatPorts = chatSessionPorts(view);
+    chat = new ChatSession(
+      chatPorts,
+      mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
   });
 
   describe('BeforeModel hook stop', () => {
@@ -380,11 +394,14 @@ describe('ChatSession hook execution control', () => {
       beforeModelOutput,
     );
     const chatWithTools = new ChatSession(
-      (
-        chat as unknown as {
-          runtimeContext: ConstructorParameters<typeof ChatSession>[0];
-        }
-      ).runtimeContext,
+      chatPorts,
+      chat.getConfig(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       mockContentGenerator,
       {
         tools: [

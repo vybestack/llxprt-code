@@ -1,3 +1,4 @@
+import { chatSessionPorts } from './chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
@@ -52,7 +53,14 @@ async function request(mode: Mode) {
     },
   };
   const processor = new StreamProcessor(
-    runtime,
+    chatSessionPorts(runtime).stream,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     new ConversationManager(setup.history, runtime),
     setup.compression,
     () => setup.provider,

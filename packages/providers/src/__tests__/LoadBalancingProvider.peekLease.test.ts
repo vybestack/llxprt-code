@@ -1,6 +1,7 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
 import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
-const fixtureOwners = installRuntimeTestOwners();
+const fixtureSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -85,6 +86,7 @@ function createSourceDelegate(name: string, model: string): SourceDelegate {
       );
       const prepared = await native.projectPromptEnvelope(
         streamCallOptions({
+          invocation: makeLoadBalancerInvocation(),
           providerName: 'openai-responses',
           contents: rows,
           resolved: { model },
@@ -157,12 +159,17 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
   beforeEach(() => {
     const settingsService = new SettingsService();
     const config: Config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      fixtureSettings(config, settingsService),
+    );
   });
 
   for (const strategy of ['round-robin', 'failover'] as const) {
@@ -172,6 +179,7 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
       const lb = loadBalancerFor(member('prov-a', 'gpt-5.6-sol'), strategy);
 
       const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
         contents: replayableContents(rows),
       });
       if (projection === undefined) throw new Error('expected a projection');
@@ -207,9 +215,11 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
     const lb = loadBalancerFor(member('prov-a', 'gpt-5.6-sol'));
 
     const peeked = await lb.projectPromptEnvelope({
+      invocation: makeLoadBalancerInvocation(),
       contents: replayableContents(rows),
     });
     const own = await delegate.provider.projectPromptEnvelope?.({
+      invocation: makeLoadBalancerInvocation(),
       contents: replayableContents(rows),
     });
     if (peeked === undefined || own === undefined)
@@ -232,6 +242,7 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
     const lb = loadBalancerFor(member('prov-a', 'gpt-5.6-sol'));
 
     const projection = await lb.projectPromptEnvelope({
+      invocation: makeLoadBalancerInvocation(),
       contents: replayableContents(rows),
     });
     if (projection === undefined) throw new Error('expected a projection');
@@ -272,6 +283,7 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
     const lb = loadBalancerFor(member('prov-b', 'unregistered-model-x'));
 
     const projection = await lb.projectPromptEnvelope({
+      invocation: makeLoadBalancerInvocation(),
       contents: replayableContents(rows),
     });
     if (projection === undefined) throw new Error('expected a projection');
@@ -296,6 +308,7 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
     const lb = loadBalancerFor(member('prov-a', 'gpt-5.6-sol'));
 
     const peeked = await lb.projectPromptEnvelope({
+      invocation: makeLoadBalancerInvocation(),
       contents: replayableContents(rows),
     });
     if (peeked === undefined) throw new Error('expected a projection');
@@ -304,6 +317,7 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
 
     const chunks: IContent[] = [];
     for await (const chunk of lb.generateChatCompletion({
+      invocation: makeLoadBalancerInvocation(),
       contents: callerOwnedRawProviderSource(rows),
       promptEnvelopeTransportToken: peeked.transportToken,
     })) {
@@ -324,9 +338,11 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
     const lb = loadBalancerFor(member('prov-a', 'gpt-5.6-sol'));
 
     const first = await lb.projectPromptEnvelope({
+      invocation: makeLoadBalancerInvocation(),
       contents: replayableContents(rows),
     });
     const second = await lb.projectPromptEnvelope({
+      invocation: makeLoadBalancerInvocation(),
       contents: replayableContents(rows),
     });
     expect(delegate.live()).toBe(2);
@@ -367,6 +383,7 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
     const lb = loadBalancerFor(member('prov-c', 'model-c'));
 
     const first = await lb.projectPromptEnvelope({
+      invocation: makeLoadBalancerInvocation(),
       contents: replayableContents([]),
     });
     expect(releases).toStrictEqual([]);
@@ -374,6 +391,7 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
     await first?.releaseIfUnsent?.();
     expect(releases).toStrictEqual(['released-0']);
     const second = await lb.projectPromptEnvelope({
+      invocation: makeLoadBalancerInvocation(),
       contents: replayableContents([]),
     });
     await second?.releaseIfUnsent?.();
@@ -403,6 +421,7 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
     providerManager.registerProvider(delegate);
     const lb = loadBalancerFor(member('prov-d', 'model-d'));
     const projection = await lb.projectPromptEnvelope({
+      invocation: makeLoadBalancerInvocation(),
       contents: replayableContents([]),
     });
     await expect(projection?.releaseIfUnsent?.()).rejects.toThrow(

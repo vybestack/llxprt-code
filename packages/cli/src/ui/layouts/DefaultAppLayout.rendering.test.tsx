@@ -115,8 +115,11 @@ const journalPager = registerJournalPagerFixture();
 import { SettingsProfileProvider } from '../stores/settings/SettingsContext.js';
 import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
 import { VimModeProvider } from '../contexts/VimModeContext.js';
-const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
-  '../cliUiRuntime.js'
+const { buildUiRuntimeFromSource } = await import(
+  '../../__tests__/ui-runtime-composition-fixture.js'
+);
+const { buildLayoutRuntimeForTest } = await import(
+  '../../__tests__/slash-command-runtime-fixture.js'
 );
 
 const TERMINAL_HEIGHT = 24;
@@ -150,6 +153,7 @@ function createConfigSource(screenReader: boolean) {
     getMcpServers: () => [],
     getBlockedMcpServers: () => [],
     getTargetDir: () => '/tmp',
+    getProjectTempDir: () => '/tmp',
     getDebugMode: () => false,
     getEphemeralSetting: () => undefined,
     isTrustedFolder: () => true,
@@ -194,6 +198,10 @@ async function renderLayout({
       : [{ speaker: 'human', blocks: [{ type: 'text', text: historyText }] }],
   );
 
+  const uiRuntime = buildUiRuntimeFromSource(
+    configSource as never,
+    await createUiSessionOwner(),
+  );
   const rendered = render(
     <SettingsProfileProvider store={createSettingsProfileStore()}>
       <VimModeProvider settings={settings}>
@@ -222,13 +230,21 @@ async function renderLayout({
                   rowHeightLines: () => 1,
                 },
               }}
-              uiRuntime={buildUiRuntimeFromSource(
+              subscribeContextRange={() => () => {}}
+              readIdeMode={() => false}
+              readIdeDiffingEnabled={() => false}
+              subscribeIdeDiffing={() => () => {}}
+              resolveIdeDiff={async () => {}}
+              readIdeWorkspaceTrust={() => undefined}
+              subscribeIdeWorkspaceTrust={() => () => {}}
+              screenReaderEnabled={uiRuntime.app.getScreenReader()}
+              disableLoadingPhrases={
+                uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+              }
+              debugMode={uiRuntime.app.getDebugMode()}
+              layoutRuntime={buildLayoutRuntimeForTest(
                 configSource as never,
-                createUiSessionOwner(),
-              )}
-              slashCommandRuntime={buildSlashCommandRuntime(
-                configSource as never,
-                createUiSessionOwner(),
+                await createUiSessionOwner(),
               )}
               settings={settings}
               startupWarnings={[]}

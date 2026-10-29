@@ -5,8 +5,12 @@
  */
 
 import React from 'react';
+import type { ChatRecordingOperations } from './chatCommand.js';
 import { Text } from 'ink';
-import type { Agent, CheckpointInfo } from '@vybestack/llxprt-code-agents';
+import type {
+  AgentHistoryItem,
+  CheckpointInfo,
+} from '@vybestack/llxprt-code-agents';
 import { Colors } from '../colors.js';
 import { MessageType, type HistoryItemChatList } from '../types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
@@ -15,12 +19,44 @@ import type {
   SlashCommand,
   SlashCommandActionReturn,
 } from './types.js';
-import { chatCommand } from './chatCommand.js';
+import {
+  composeChatCommand,
+  type ChatSubcommandActions,
+} from './chatCommandShape.js';
 
-function owner(context: CommandContext): Agent {
-  const agent = context.services.agent;
-  if (!agent) throw new Error('No session owner available');
-  return agent;
+/**
+ * Operations the owner-backed /chat command uses. The host binds each one to
+ * the session owner that registered the command, so invocation context never
+ * selects the owner.
+ */
+export interface ChatOwnerOperations {
+  readonly listCheckpoints: () => Promise<readonly CheckpointInfo[]>;
+  readonly createCheckpoint: (
+    name: string,
+    options: { readonly overwrite: boolean },
+  ) => Promise<unknown>;
+  readonly resume: (tag: string) => Promise<AsyncIterable<AgentHistoryItem>>;
+  readonly deleteCheckpoint: (checkpointId: string) => Promise<void>;
+  readonly renameCheckpoint: (
+    checkpointId: string,
+    name: string,
+    options: { readonly overwrite: boolean },
+  ) => Promise<void>;
+  readonly getHistoryCount: () => number;
+  readonly clearHistory: ChatRecordingOperations['clearHistory'];
+  readonly restoreTurns: (
+    turns: number,
+    options?: Parameters<ChatRecordingOperations['clearHistory']>[0],
+  ) => Promise<{
+    readonly remainingHistory: AsyncIterable<AgentHistoryItem>;
+    readonly itemsRemoved: number;
+  }>;
+  readonly nameCurrentSession: (
+    name: string,
+    options: { readonly overwrite: boolean },
+  ) => Promise<void>;
+  readonly getRecordingPath: () => string | undefined;
+  readonly getModel: () => string;
 }
 
 function failure(operation: string, error: unknown): SlashCommandActionReturn {
@@ -68,10 +104,16 @@ function resolveCheckpoint(
   return matchesByName[0] ?? `No checkpoint found with tag: ${ref}`;
 }
 
-const actions: Record<string, NonNullable<SlashCommand['action']>> = {
-  list: async (context) => {
+function usageError(content: string): SlashCommandActionReturn {
+  return { type: 'message', messageType: 'error', content };
+}
+
+type ChatAction = ChatSubcommandActions['list'];
+
+function createListAction(operations: ChatOwnerOperations): ChatAction {
+  return async (context) => {
     try {
-      const checkpoints = await owner(context).session.listCheckpoints();
+      const checkpoints = await operations.listCheckpoints();
       const item: HistoryItemChatList = {
         type: MessageType.CHAT_LIST,
         chats: checkpoints
@@ -86,17 +128,15 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
     } catch (error) {
       return failure('list saved chat checkpoints', error);
     }
-  },
-  save: async (context, args) => {
+  };
+}
+
+function createSaveAction(operations: ChatOwnerOperations): ChatAction {
+  return async (context, args) => {
     const tag = args.trim();
-    if (!tag)
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Missing tag. Usage: /chat save <tag>',
-      };
+    if (!tag) return usageError('Missing tag. Usage: /chat save <tag>');
     try {
-      await owner(context).session.createCheckpoint(tag, {
+      await operations.createCheckpoint(tag, {
         overwrite: context.overwriteConfirmed === true,
       });
       return {
@@ -110,32 +150,27 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
         failure('save checkpoint', error)
       );
     }
-  },
-  resume: async (context, args) => {
+  };
+}
+
+function createResumeAction(operations: ChatOwnerOperations): ChatAction {
+  return async (context, args) => {
     const tag = args.trim();
-    if (!tag)
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Missing tag. Usage: /chat resume <tag>',
-      };
+    if (!tag) return usageError('Missing tag. Usage: /chat resume <tag>');
     try {
-      const agent = owner(context);
-      await agent.session.resume(tag);
+      await operations.resume(tag);
       return undefined;
     } catch (error) {
       return failure('resume checkpoint', error);
     }
-  },
-  delete: async (context, args) => {
+  };
+}
+
+function createDeleteAction(operations: ChatOwnerOperations): ChatAction {
+  return async (context, args) => {
     const force = args.includes('--force');
     const tag = args.replace('--force', '').trim();
-    if (!tag)
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Missing tag. Usage: /chat delete <tag>',
-      };
+    if (!tag) return usageError('Missing tag. Usage: /chat delete <tag>');
     if (!force && context.overwriteConfirmed !== true)
       return {
         type: 'confirm_action',
@@ -151,10 +186,9 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
         },
       };
     try {
-      const agent = owner(context);
       const resolved = resolveCheckpoint(
         tag,
-        await agent.session.listCheckpoints(),
+        await operations.listCheckpoints(),
       );
       if (typeof resolved === 'string')
         return {
@@ -162,7 +196,7 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
           messageType: 'info',
           content: `${resolved}.`,
         };
-      await agent.session.deleteCheckpoint(resolved.checkpointId);
+      await operations.deleteCheckpoint(resolved.checkpointId);
       return {
         type: 'message',
         messageType: 'info',
@@ -171,25 +205,22 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
     } catch (error) {
       return failure('delete checkpoint', error);
     }
-  },
-  rename: async (context, args) => {
+  };
+}
+
+function createRenameAction(operations: ChatOwnerOperations): ChatAction {
+  return async (context, args) => {
     const parts = args.trim().split(/\s+/);
     if (parts.length !== 2)
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Usage: /chat rename <old_tag> <new_tag>',
-      };
+      return usageError('Usage: /chat rename <old_tag> <new_tag>');
     const [oldTag, newTag] = parts;
     try {
-      const agent = owner(context);
       const resolved = resolveCheckpoint(
         oldTag,
-        await agent.session.listCheckpoints(),
+        await operations.listCheckpoints(),
       );
-      if (typeof resolved === 'string')
-        return { type: 'message', messageType: 'error', content: resolved };
-      await agent.session.renameCheckpoint(resolved.checkpointId, newTag, {
+      if (typeof resolved === 'string') return usageError(resolved);
+      await operations.renameCheckpoint(resolved.checkpointId, newTag, {
         overwrite: context.overwriteConfirmed === true,
       });
       return {
@@ -203,41 +234,47 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
         failure('rename checkpoint', error)
       );
     }
-  },
-  clear: async (context) => {
+  };
+}
+
+function createClearAction(operations: ChatOwnerOperations): ChatAction {
+  return async (context) => {
     try {
-      const agent = owner(context);
-      if (agent.getStats().turnCount === 0)
+      if (operations.getHistoryCount() === 0)
         return {
           type: 'message',
           messageType: 'info',
           content: 'No conversation to clear.',
         };
-      await agent.session.clearHistory();
-      context.ui.updateHistoryTokenCount(0);
-      context.ui.clear();
+      await operations.clearHistory({
+        signal: context.signal,
+        publish: () => {
+          context.ui.updateHistoryTokenCount(0);
+          context.ui.clear();
+        },
+      });
       return undefined;
     } catch (error) {
+      context.signal.throwIfAborted();
       return failure('clear history', error);
     }
-  },
-  restore: async (context, args) => {
+  };
+}
+
+function createRestoreAction(operations: ChatOwnerOperations): ChatAction {
+  return async (context, args) => {
     const turnsStr = args.trim();
-    if (!turnsStr)
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Usage: /chat restore <number>',
-      };
+    if (!turnsStr) return usageError('Usage: /chat restore <number>');
     const turns = parseInt(turnsStr, 10);
     if (isNaN(turns) || turns < 1)
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Please provide a valid positive number of turns to restore.',
-      };
+      return usageError(
+        'Please provide a valid positive number of turns to restore.',
+      );
     try {
-      const result = await owner(context).session.restoreTurns(turns);
+      const result = await operations.restoreTurns(turns, {
+        signal: context.signal,
+        publish: () => context.ui.clear(),
+      });
       if (result.itemsRemoved === 0)
         return {
           type: 'message',
@@ -245,22 +282,20 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
           content:
             'Not enough history to restore the requested number of turns.',
         };
-      context.ui.clear();
       return undefined;
     } catch (error) {
+      context.signal.throwIfAborted();
       return failure('restore history', error);
     }
-  },
-  name: async (context, args) => {
+  };
+}
+
+function createNameAction(operations: ChatOwnerOperations): ChatAction {
+  return async (context, args) => {
     const name = args.trim();
-    if (!name)
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Missing name. Usage: /chat name <name>',
-      };
+    if (!name) return usageError('Missing name. Usage: /chat name <name>');
     try {
-      await owner(context).session.nameCurrentSession(name, {
+      await operations.nameCurrentSession(name, {
         overwrite: context.overwriteConfirmed === true,
       });
       return {
@@ -274,38 +309,50 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
         failure('name session', error)
       );
     }
-  },
-  debug: async (context) => {
-    const agent = owner(context);
-    const entries = agent.getStats().turnCount;
-    const recording = agent.session.getRecording();
+  };
+}
+
+function createDebugAction(operations: ChatOwnerOperations): ChatAction {
+  return async () => {
+    const count = operations.getHistoryCount();
     return {
       type: 'message',
       messageType: 'info',
-      content: `Chat Debug Information:\n• Chat initialized: ${entries > 0}\n• History entries: ${entries}\n• Current model: ${agent.getModel()}\n• Recording: ${recording.path ?? 'not active'}`,
+      content: `Chat Debug Information:\n• Chat initialized: ${count > 0}\n• History entries: ${count}\n• Current model: ${operations.getModel()}\n• Recording: ${operations.getRecordingPath() ?? 'not active'}`,
     };
-  },
-};
+  };
+}
 
-const checkpointSchema = [
-  {
-    kind: 'value' as const,
-    name: 'tag',
-    description: 'Select saved checkpoint',
-    completer: withFuzzyFilter(async (context: CommandContext) =>
-      (await owner(context).session.listCheckpoints()).map((entry) => ({
-        value: entry.name,
-        description: 'Saved conversation checkpoint',
-      })),
-    ),
-  },
-];
-
-export const chatOwnerCommand: SlashCommand = {
-  ...chatCommand,
-  subCommands: chatCommand.subCommands?.map((command) => ({
-    ...command,
-    action: actions[command.name],
-    ...(command.schema ? { schema: checkpointSchema } : {}),
-  })),
-};
+export function createChatOwnerCommand(
+  operations: ChatOwnerOperations,
+  readFuzzyFiltering: () => boolean,
+): SlashCommand {
+  return composeChatCommand(
+    {
+      list: createListAction(operations),
+      save: createSaveAction(operations),
+      resume: createResumeAction(operations),
+      delete: createDeleteAction(operations),
+      rename: createRenameAction(operations),
+      clear: createClearAction(operations),
+      restore: createRestoreAction(operations),
+      name: createNameAction(operations),
+      debug: createDebugAction(operations),
+    },
+    [
+      {
+        kind: 'value',
+        name: 'tag',
+        description: 'Select saved checkpoint',
+        completer: withFuzzyFilter(
+          async () =>
+            (await operations.listCheckpoints()).map((entry) => ({
+              value: entry.name,
+              description: 'Saved conversation checkpoint',
+            })),
+          readFuzzyFiltering,
+        ),
+      },
+    ],
+  );
+}

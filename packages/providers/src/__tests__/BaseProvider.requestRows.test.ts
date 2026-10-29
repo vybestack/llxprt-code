@@ -92,6 +92,7 @@ function callOptions(
       signal === undefined
         ? options.invocation
         : createRuntimeInvocationContext({
+            fetch: (input, init) => globalThis.fetch(input, init),
             runtimeId: 'request-rows',
             providerName: 'neutral-rows',
             ephemeralsSnapshot: {},

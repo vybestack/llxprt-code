@@ -9,8 +9,9 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import { OpenAIProvider } from '@vybestack/llxprt-code-providers/openai/OpenAIProvider.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { dumpcontextCommand } from './dumpcontextCommand.js';
-import { bindDumpManager } from './__tests__/dumpcontext-owner-fixture.js';
+import { createDumpcontextCommand } from './dumpcontextCommand.js';
+import { bindDumpcontextCommand } from './dumpcontextCommandHost.js';
+import { getProviderDumpMetadata } from '@vybestack/llxprt-code-agents';
 
 class StreamingHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
@@ -40,20 +41,24 @@ describe('dumpcontext real streaming command', () => {
             blocks: [{ type: 'text', text: `message-${index}` }],
           });
         await history.waitForCommit();
-        const manager = new ProviderManager({
-          settingsService: new SettingsService(),
-        });
+        const manager = new ProviderManager(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          new SettingsService(),
+        );
         manager.registerProvider(new OpenAIProvider('unused-test-key'));
         manager.setActiveProvider('openai');
-        const context = createMockCommandContext({
-          services: {
-            agent: { agentClient: { getHistoryService: () => history } },
-          },
-        });
-        bindDumpManager(
-          context,
-          () => ({}),
-          () => manager,
+        const context = createMockCommandContext();
+        const dumpcontextCommand = createDumpcontextCommand(
+          bindDumpcontextCommand({
+            readMode: () => 'off',
+            writeMode: () => {},
+            readHistory: () => history.openDumpSnapshot(),
+            readProvider: () => getProviderDumpMetadata(manager),
+            readOutputSettings: () => ({}),
+          }),
         );
         if (dumpcontextCommand.action === undefined)
           throw new Error('Missing dump command');

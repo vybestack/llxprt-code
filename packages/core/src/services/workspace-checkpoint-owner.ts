@@ -14,6 +14,7 @@ export interface WorkspaceCheckpointOperations {
 export class WorkspaceCheckpointOwner {
   private readonly service: GitService | undefined;
   private initialization: Promise<void> | undefined;
+  private pendingInitialization: Promise<void> | undefined;
   private tail: Promise<void> = Promise.resolve();
   private readonly pending = new Set<Promise<void>>();
   private closed = false;
@@ -42,7 +43,13 @@ export class WorkspaceCheckpointOwner {
   }
 
   private initializeService(service: GitService): Promise<void> {
-    this.initialization ??= service.initialize();
+    if (this.initialization !== undefined) return this.initialization;
+    this.initialization = service.initialize();
+    this.pendingInitialization = this.initialization;
+    const settled = (): void => {
+      this.pendingInitialization = undefined;
+    };
+    void this.initialization.then(settled, settled);
     return this.initialization;
   }
 
@@ -87,7 +94,9 @@ export class WorkspaceCheckpointOwner {
   private async drain(): Promise<void> {
     const results = await Promise.allSettled([
       ...this.pending,
-      ...(this.initialization === undefined ? [] : [this.initialization]),
+      ...(this.pendingInitialization === undefined
+        ? []
+        : [this.pendingInitialization]),
     ]);
     const failures = results.flatMap((result) =>
       result.status === 'rejected' ? [result.reason] : [],

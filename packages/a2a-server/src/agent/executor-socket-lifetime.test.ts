@@ -2,28 +2,35 @@
 import { describe, expect, it } from 'bun:test';
 import express from 'express';
 import { Agent, createServer, request } from 'node:http';
-import { DefaultExecutionEventBus, RequestContext } from '@a2a-js/sdk/server';
+import {
+  DefaultExecutionEventBus,
+  RequestContext,
+  ServerCallContext,
+} from '@a2a-js/sdk/server';
 import { CoderAgentExecutor } from './executor.js';
 import { Task } from './task.js';
 import { CoderAgentEvent } from '../types.js';
-import { requestStorage } from '../http/requestStorage.js';
+import { createRequestCancellationUser } from '../http/request-cancellation.js';
 
 class CompletedTurnExecutor extends CoderAgentExecutor {
   override async createTask(
     taskId: string,
     contextId: string,
   ): ReturnType<CoderAgentExecutor['createTask']> {
-    const task = new Task(taskId, contextId, {
-      async *stream() {
+    const task = new Task(
+      taskId,
+      contextId,
+      async function* () {
         yield { type: 'done', reason: 'stop' };
       },
-      injectSteer: () => undefined,
-      getModel: () => 'test-model',
-      getProvider: () => 'test-provider',
-      listTools: () => [],
-      listMcpServers: () => [],
-      respondToConfirmation: () => undefined,
-    });
+      () => undefined,
+      () => 'test-model',
+      () => 'test-provider',
+      () => [],
+      () => [],
+      () => undefined,
+      async () => {},
+    );
     return {
       task,
       id: taskId,
@@ -46,27 +53,31 @@ describe('A2A execution socket lifetime', () => {
     const counts: number[] = [];
     const app = express();
     app.get('/', (req, res, next) => {
-      void requestStorage
-        .run({ req }, async () => {
-          const before = req.socket.listenerCount('end');
-          const context = new RequestContext(
-            {
-              kind: 'message',
-              role: 'user',
-              messageId: 'message',
-              parts: [{ kind: 'text', text: 'go' }],
-            },
-            'task',
-            'context',
-          );
-          await new CompletedTurnExecutor().execute(
-            context,
-            new DefaultExecutionEventBus(),
-          );
-          counts.push(req.socket.listenerCount('end') - before);
-          res.end('done');
-        })
-        .catch(next);
+      void (async () => {
+        const before = req.socket.listenerCount('end');
+        const context = new RequestContext(
+          {
+            kind: 'message',
+            role: 'user',
+            messageId: 'message',
+            parts: [{ kind: 'text', text: 'go' }],
+          },
+          'task',
+          'context',
+          undefined,
+          undefined,
+          new ServerCallContext(
+            undefined,
+            await createRequestCancellationUser(req),
+          ),
+        );
+        await new CompletedTurnExecutor().execute(
+          context,
+          new DefaultExecutionEventBus(),
+        );
+        counts.push(req.socket.listenerCount('end') - before);
+        res.end('done');
+      })().catch(next);
     });
     const server = createServer(app);
     await new Promise<void>((resolve) =>

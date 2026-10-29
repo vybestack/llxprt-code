@@ -26,6 +26,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { execa } from 'execa';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -33,8 +34,12 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  escapeShellArg,
+  getShellConfiguration,
+} from '../../packages/core/src/utils/shell-utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..');
@@ -56,7 +61,11 @@ interface RunnerModule {
     packageDirs?: readonly string[];
   }) => readonly LintCommand[];
   readPackageDirs: (repoRoot: string) => readonly string[];
-  executeLintCommands: (commands: readonly LintCommand[]) => Promise<void>;
+  executeLintCommands: (
+    commands: readonly LintCommand[],
+    cancelSignal?: AbortSignal,
+  ) => Promise<void>;
+  classifyRunnerFailure: (error: unknown) => { exitCode: number };
 }
 
 /** Imports the real runner module under test; nothing here is stubbed. */
@@ -67,7 +76,7 @@ async function loadRunner(): Promise<RunnerModule> {
 let fixtureRoot: string;
 
 beforeAll(() => {
-  fixtureRoot = mkdtempSync(join(tmpdir(), 'llxprt-lint-partition-'));
+  fixtureRoot = mkdtempSync(join(tmpdir(), "llxprt lint partition's Ω-"));
   // A flat-config fixture with no type-aware rules: this exercises ESLint's
   // file discovery and ignore semantics, which is what the partition depends
   // on, without paying for a TypeScript program.
@@ -162,7 +171,11 @@ describe('lint partition covers exactly what `eslint .` covers (#3387)', () => {
       partitioned.push(...(await lintedFiles(command.args)));
     }
     expect(
-      partitioned.some((file) => file.endsWith('packages/direct.js')),
+      partitioned.some(
+        (file) =>
+          basename(file) === 'direct.js' &&
+          basename(dirname(file)) === 'packages',
+      ),
     ).toBe(true);
   });
 
@@ -183,8 +196,52 @@ describe('lint partition covers exactly what `eslint .` covers (#3387)', () => {
 });
 
 /** A command that runs a real shell snippet, shaped like a LintCommand. */
-function shellCommand(label: string, script: string): LintCommand {
-  return { cmd: '/bin/sh', args: ['-c', script], nodeOptions: '', label };
+function shellCommand(
+  label: string,
+  status: number | 'signal' | 'hold',
+  marker?: string,
+): LintCommand {
+  const { executable, argsPrefix, shell } = getShellConfiguration();
+  const args = [
+    process.execPath,
+    join(__dirname, 'lint-command-fixture.ts'),
+    label,
+    String(status),
+    ...(marker === undefined ? [] : [marker]),
+  ];
+  const invocation = args.map((arg) => escapeShellArg(arg, shell)).join(' ');
+  if (status === 'hold') {
+    // No shell wrapper: cancellation must terminate the long-lived process
+    // itself, not only a shell that would leave it running on Windows.
+    return {
+      cmd: process.execPath,
+      args: args.slice(1),
+      nodeOptions: '',
+      label,
+    };
+  }
+  if (status === 'signal') {
+    const script =
+      shell === 'powershell'
+        ? 'Stop-Process -Id $PID -Force; Start-Sleep -Seconds 5'
+        : 'kill -TERM $$; sleep 5';
+    return {
+      cmd: executable,
+      args: [...argsPrefix, script],
+      nodeOptions: '',
+      label,
+    };
+  }
+  const script =
+    shell === 'powershell'
+      ? `& ${invocation}; exit $LASTEXITCODE`
+      : `exec ${invocation}`;
+  return {
+    cmd: executable,
+    args: [...argsPrefix, script],
+    nodeOptions: '',
+    label,
+  };
 }
 
 describe('partitioned execution semantics (#3387)', () => {
@@ -193,9 +250,9 @@ describe('partitioned execution semantics (#3387)', () => {
     const marker = join(fixtureRoot, 'ran.txt');
     rmSync(marker, { force: true });
     const commands = [
-      shellCommand('first', `echo first >> ${marker}; exit 1`),
-      shellCommand('second', `echo second >> ${marker}`),
-      shellCommand('third', `echo third >> ${marker}`),
+      shellCommand('first', 1, marker),
+      shellCommand('second', 0, marker),
+      shellCommand('third', 0, marker),
     ];
     await expect(executeLintCommands(commands)).rejects.toThrow();
     expect(readFileSync(marker, 'utf8').split('\n').filter(Boolean)).toEqual([
@@ -208,9 +265,9 @@ describe('partitioned execution semantics (#3387)', () => {
   it('propagates the first failing exit code, not the last', async () => {
     const { executeLintCommands } = await loadRunner();
     const commands = [
-      shellCommand('ok', 'true'),
-      shellCommand('two', 'exit 2'),
-      shellCommand('three', 'exit 3'),
+      shellCommand('ok', 0),
+      shellCommand('two', 2),
+      shellCommand('three', 3),
     ];
     const error = await executeLintCommands(commands).catch(
       (caught: unknown) => caught,
@@ -220,22 +277,48 @@ describe('partitioned execution semantics (#3387)', () => {
 
   it('resolves without error when every group succeeds', async () => {
     const { executeLintCommands } = await loadRunner();
-    await executeLintCommands([
-      shellCommand('a', 'true'),
-      shellCommand('b', 'true'),
-    ]);
+    await executeLintCommands([shellCommand('a', 0), shellCommand('b', 0)]);
   });
 
-  it('aborts the remaining groups when a group is killed by a signal', async () => {
-    const { executeLintCommands } = await loadRunner();
-    const marker = join(fixtureRoot, 'signal.txt');
+  // Windows has no signals: a child it terminates is only an exit code. The
+  // cancellation test below covers the interruption path that exists there.
+  it.skipIf(process.platform === 'win32')(
+    'aborts the remaining groups when a group is killed by a signal',
+    async () => {
+      const { executeLintCommands } = await loadRunner();
+      const marker = join(fixtureRoot, 'signal.txt');
+      rmSync(marker, { force: true });
+      const commands = [
+        shellCommand('killed', 'signal'),
+        shellCommand('after', 0, marker),
+      ];
+      await expect(executeLintCommands(commands)).rejects.toThrow();
+      // An interruption is not a lint result: nothing after it should run.
+      expect(() => readFileSync(marker, 'utf8')).toThrow();
+    },
+  );
+
+  it('aborts the remaining groups when the runner cancels the running group', async () => {
+    const { executeLintCommands, classifyRunnerFailure } = await loadRunner();
+    const started = join(fixtureRoot, 'cancel-started.txt');
+    const marker = join(fixtureRoot, 'cancel-after.txt');
+    rmSync(started, { force: true });
     rmSync(marker, { force: true });
-    const commands = [
-      shellCommand('killed', 'kill -TERM $$; sleep 5'),
-      shellCommand('after', `echo after >> ${marker}`),
-    ];
-    await expect(executeLintCommands(commands)).rejects.toThrow();
-    // An interruption is not a lint result: nothing after it should run.
-    expect(() => readFileSync(marker, 'utf8')).toThrow();
-  });
+    const cancellation = new AbortController();
+    const outcome = executeLintCommands(
+      [shellCommand('held', 'hold', started), shellCommand('after', 0, marker)],
+      cancellation.signal,
+    ).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+    // Cancel only once the real child is running, so the runner has to
+    // terminate an admitted process rather than refuse to start one.
+    while (!existsSync(started)) await Bun.sleep(10);
+    cancellation.abort();
+    const error = await outcome;
+    expect(error).toBeDefined();
+    expect(classifyRunnerFailure(error).exitCode).toBe(143);
+    expect(existsSync(marker)).toBe(false);
+  }, 30_000);
 });

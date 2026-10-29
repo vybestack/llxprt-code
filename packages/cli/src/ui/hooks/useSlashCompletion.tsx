@@ -16,10 +16,10 @@ import { useCompletion } from './useCompletion.js';
 import type { SlashCommandCompletionContext } from './slashCompletionTypes.js';
 import {
   handleCompletionEffect,
-  type StateRefs,
   type AllSetters,
+  type AtPathCompletionRuntime,
+  type StateRefs,
 } from './slashCompletionEffect.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 export interface UseSlashCompletionReturn {
   suggestions: Suggestion[];
@@ -40,16 +40,16 @@ export interface UseSlashCompletionReturn {
   leafCommand: SlashCommand | null;
 }
 
-type RuntimeExtensionConfig = Partial<Pick<CliUiRuntime, 'isExtensionEnabled'>>;
-type RuntimeCommandContext = Omit<CommandContext, 'services'> & {
-  services?: { config?: RuntimeExtensionConfig | null };
-};
+type RuntimeExtensionConfig = Partial<{
+  isExtensionEnabled(extensionName: string): boolean;
+}>;
 
-function getExtCfg(
-  ctx: CommandContext,
-): RuntimeExtensionConfig | null | undefined {
-  return (ctx as RuntimeCommandContext).services?.config;
-}
+/**
+ * Everything slash completion reads from the runtime: extension enablement for
+ * extension-provided commands, plus the `@path` file reads.
+ */
+export type SlashCompletionRuntime = AtPathCompletionRuntime &
+  RuntimeExtensionConfig;
 
 function computeCmdIdx(
   row: number,
@@ -140,10 +140,11 @@ function useMemoInput(
 }
 
 function useSetupEffect(
+  enableFuzzyFiltering: boolean,
   buf: TextBuffer,
   cmds: readonly SlashCommand[],
   ctx: CommandContext,
-  cfg: CliUiRuntime | undefined,
+  cfg: SlashCompletionRuntime | undefined,
   dirs: readonly string[],
   cwd: string,
   reverseSearchActive: boolean,
@@ -159,6 +160,7 @@ function useSetupEffect(
   useEffect(
     () =>
       handleCompletionEffect(
+        enableFuzzyFiltering,
         mi,
         cmdIdx,
         col,
@@ -175,6 +177,7 @@ function useSetupEffect(
         setters,
       ),
     [
+      enableFuzzyFiltering,
       mi,
       cmdIdx,
       col,
@@ -194,10 +197,11 @@ function useSetupEffect(
 }
 
 function useSlashCompletionSetup(
+  enableFuzzyFiltering: boolean,
   buffer: TextBuffer,
   slashCommands: readonly SlashCommand[],
   commandContext: CommandContext,
-  config: CliUiRuntime | undefined,
+  config: SlashCompletionRuntime | undefined,
   dirs: readonly string[],
   cwd: string,
   reverseSearchActive: boolean,
@@ -212,7 +216,7 @@ function useSlashCompletionSetup(
 ) {
   const refs = useStateRefs();
   const [cursorRow, cursorCol] = buffer.cursor;
-  const extCfg = getExtCfg(commandContext);
+  const extCfg = config;
   const cmdIdx = useMemo(
     () => computeCmdIdx(cursorRow, cursorCol, buffer.lines),
     [cursorRow, cursorCol, buffer.lines],
@@ -256,6 +260,7 @@ function useSlashCompletionSetup(
   );
 
   useSetupEffect(
+    enableFuzzyFiltering,
     buffer,
     slashCommands,
     commandContext,
@@ -351,13 +356,14 @@ function useCommandLookup(
 }
 
 export function useSlashCompletion(
+  enableFuzzyFiltering: boolean,
   buffer: TextBuffer,
   dirs: readonly string[],
   cwd: string,
   slashCommands: readonly SlashCommand[],
   commandContext: CommandContext,
   reverseSearchActive: boolean = false,
-  config?: CliUiRuntime,
+  config?: SlashCompletionRuntime,
 ): UseSlashCompletionReturn {
   const {
     suggestions,
@@ -380,6 +386,7 @@ export function useSlashCompletion(
   const [activeHint, setActiveHint] = React.useState<string>('');
 
   const { cmdIdx, refs, cursorRow } = useSlashCompletionSetup(
+    enableFuzzyFiltering,
     buffer,
     slashCommands,
     commandContext,
