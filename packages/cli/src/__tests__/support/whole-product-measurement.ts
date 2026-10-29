@@ -77,8 +77,9 @@ export function historyDataCensus(snapshot: unknown): HistoryDataCensus {
     const name = parsed.nodeClassNames.at(parsed.nodes[index + 2]);
     if (name === undefined || !Number.isSafeInteger(bytes) || bytes < 0)
       throw new Error('Invalid Inspector node');
-    const previous = types[name] ?? { count: 0, bytes: 0 };
-    types[name] = { count: previous.count + 1, bytes: previous.bytes + bytes };
+    const previous = types[name] ?? (types[name] = { count: 0, bytes: 0 });
+    previous.count += 1;
+    previous.bytes += bytes;
     totalBytes += bytes;
     if (historyDataTypes.has(name)) dataBytes += bytes;
   }
