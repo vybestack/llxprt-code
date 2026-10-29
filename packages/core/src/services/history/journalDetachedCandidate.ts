@@ -22,6 +22,7 @@ import type { JournalDetachedPublication } from './journalDetachedPublication.js
 import { pullFeed, type PullFeed } from './journalDetachedStream.js';
 import type { ResolvedOwner } from './journalOwners.js';
 import { encodeContentRow } from './journalRowCodec.js';
+import { previewOfContent } from '../../recording/sessionMetaKeys.js';
 
 /** The chronology number of an entry; a row without a marker counts as 0, as the span rules do. */
 export function entrySeq(entry: RowEntry): number {
@@ -59,6 +60,7 @@ export interface CandidateContext {
  */
 export class JournalCandidate {
   tokens: number;
+  readonly previews = new Map<number, string>();
   /** Rows pushed by the transform (rows appended, in append mode). */
   count = 0;
   readonly range = new ContextRangeAccumulator();
@@ -208,7 +210,13 @@ export class JournalCandidate {
         this.ctx.origin,
         inheritedOwner,
       );
-    else await this.place(encodeContentRow(row, { owner }));
+    else {
+      const publishedOwner = await this.place(encodeContentRow(row, { owner }));
+      if (!this.previews.has(publishedOwner)) {
+        const preview = previewOfContent(row);
+        if (preview !== undefined) this.previews.set(publishedOwner, preview);
+      }
+    }
     for (const reference of collectMediaReferences([row]))
       await this.ctx.media?.put(reference);
     this.count++;
@@ -220,19 +228,20 @@ export class JournalCandidate {
       this.ctx.publication.discardOwnerRegistration();
   }
 
-  private async place(draft: RowDraft): Promise<void> {
+  private async place(draft: RowDraft): Promise<number> {
     const entry = await this.nextEntry();
     if (this.feed === undefined) {
       if (entry !== undefined) {
         const stored = await this.ctx.snapshot.readRow(entry);
         if (draftEqualsStored({ ...draft, owner: entry.owner }, stored)) {
           this.head++;
-          return;
+          return entry.owner;
         }
       }
       await this.openGroup();
     }
     await this.feed?.put(draft);
+    return draft.owner;
   }
 
   private async nextEntry(): Promise<RowEntry | undefined> {

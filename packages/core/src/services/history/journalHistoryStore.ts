@@ -621,6 +621,14 @@ export class JournalHistoryStore
    * that hold it (decision G7): the adopted file holds every row, a bound
    * recorder its own origin's and the unowned ones.
    */
+  async offerOwnerPreview(owner: number, text: string): Promise<void> {
+    this.offerPreview(
+      { speaker: 'human', blocks: [{ type: 'text', text }] },
+      await this.owners.originOf(owner),
+    );
+    await this.adoptedWrites.settle();
+  }
+
   private offerPreview(content: IContent, origin: string | undefined): void {
     if (this.previews.has(origin)) return;
     const text = previewOfContent(content);

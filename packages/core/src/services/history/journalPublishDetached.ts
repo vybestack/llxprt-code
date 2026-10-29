@@ -419,6 +419,13 @@ async function finishPublication(
   await finalizeMutationEffects(effects);
   completion.finalized = true;
   options.signal?.throwIfAborted();
+  // Replacement rows bypass the append path; publish only their bounded previews
+  // after the replacement and its caller hooks have succeeded.
+  if (candidate.previews.size > 0) {
+    for (const [owner, text] of candidate.previews)
+      await store.offerOwnerPreview(owner, text);
+    await store.settleFanout();
+  }
 }
 
 interface CompensationInput {

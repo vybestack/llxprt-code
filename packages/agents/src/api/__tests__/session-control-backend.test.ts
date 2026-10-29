@@ -3,9 +3,110 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import { basename } from 'node:path';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 import { recordedRows } from './support/recorded-rows.js';
+import { SessionDiscovery } from '@vybestack/llxprt-code-core/recording/SessionDiscovery.js';
 
 for (const backend of ['journal']) {
   describe(`session control on ${backend}`, () => {
+    it('seeds the first human preview when recording starts over deferred history', async () => {
+      await withRecordingLifetimeFixture(async ({ agent }) => {
+        await agent.setHistory([
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'earlier assistant message' }],
+          },
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'first human preview' }],
+          },
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'later human message' }],
+          },
+        ]);
+        await agent.session.setRecording({ enabled: true });
+        const path = agent.session.getRecording().path;
+        if (path === undefined) throw new Error('Missing recording');
+        await agent.session.setRecording({ enabled: false });
+        expect(await SessionDiscovery.readFirstUserMessage(path)).toBe(
+          'first human preview',
+        );
+      });
+    }, 30000);
+
+    it('does not seed a preview from a rejected deferred replacement', async () => {
+      await withRecordingLifetimeFixture(async ({ agent, clientFor }) => {
+        const history = clientFor(agent).getHistoryService();
+        if (history === null) throw new Error('Missing history');
+        await expect(
+          history.detachedValues.replace(
+            [
+              {
+                speaker: 'human',
+                blocks: [{ type: 'text', text: 'rejected human preview' }],
+              },
+            ],
+            undefined,
+            {
+              afterPublication: () => {
+                throw new Error('reject replacement');
+              },
+            },
+          ),
+        ).rejects.toThrow('reject replacement');
+        await agent.setHistory([
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'accepted human preview' }],
+          },
+        ]);
+        await agent.session.setRecording({ enabled: true });
+        const path = agent.session.getRecording().path;
+        if (path === undefined) throw new Error('Missing recording');
+        await agent.session.setRecording({ enabled: false });
+        expect(await SessionDiscovery.readFirstUserMessage(path)).toBe(
+          'accepted human preview',
+        );
+      });
+    }, 30000);
+
+    it('keeps retained replacement previews owned by their original session', async () => {
+      await withRecordingLifetimeFixture(
+        async ({ agent, borrow, clientFor, shareHistory }) => {
+          const sibling = await borrow();
+          await shareHistory(agent, sibling);
+          const history = clientFor(agent).getHistoryService();
+          if (history === null) throw new Error('Missing history');
+          await history.detachedValues.replace(
+            [
+              {
+                speaker: 'human',
+                blocks: [{ type: 'text', text: 'first owner preview' }],
+              },
+            ],
+            undefined,
+            { origin: agent.session },
+          );
+          const retained = await Array.fromAsync(agent.streamHistory());
+          await history.detachedValues.replace(retained, undefined, {
+            origin: sibling.session,
+          });
+          await sibling.session.setRecording({ enabled: true });
+          await sibling.session.recordRecordingTitle('Sibling recording');
+          const siblingPath = sibling.session.getRecording().path;
+          if (siblingPath === undefined) throw new Error('Missing recording');
+          expect(
+            await SessionDiscovery.readFirstUserMessage(siblingPath),
+          ).toBeNull();
+          await agent.session.setRecording({ enabled: true });
+          const ownerPath = agent.session.getRecording().path;
+          if (ownerPath === undefined) throw new Error('Missing recording');
+          expect(await SessionDiscovery.readFirstUserMessage(ownerPath)).toBe(
+            'first owner preview',
+          );
+        },
+      );
+    }, 30000);
+
     it('can record again after attachment succeeds but the subscription fails', async () => {
       await withRecordingLifetimeFixture(
         async ({ agent, config, clientFor }) => {
