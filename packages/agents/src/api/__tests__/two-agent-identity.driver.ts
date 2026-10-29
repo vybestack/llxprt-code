@@ -170,10 +170,17 @@ async function writeEffect(agent: Agent, content: string): Promise<void> {
   expect(result.error).toBeUndefined();
 }
 
+const turnNumbers = new WeakMap<Agent, number>();
+
 async function turn(agent: Agent, text: string): Promise<void> {
+  const turnNumber = (turnNumbers.get(agent) ?? 0) + 1;
+  turnNumbers.set(agent, turnNumber);
   successful(
     await collect(
-      agent.stream(text, { mcpDiscovery: 'skip', promptId: 'equal-prompt' }),
+      agent.stream(text, {
+        mcpDiscovery: 'skip',
+        promptId: `equal-prompt-${turnNumber}`,
+      }),
     ),
   );
 }

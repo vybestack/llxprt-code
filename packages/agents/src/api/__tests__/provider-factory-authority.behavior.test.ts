@@ -1,4 +1,4 @@
-import { withGpt56DiskSources } from '../../../../providers/src/tokenizers/gpt56-disk-tokenizer-factory.js';
+import { withGpt56DiskSources } from '@vybestack/llxprt-code-providers/tokenizers/gpt56-disk-tokenizer-factory.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { useConsumerPromptDirectory } from './helpers/consumer-owner-primitives.js';
 

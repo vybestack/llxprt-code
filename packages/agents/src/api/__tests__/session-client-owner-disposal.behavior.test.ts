@@ -20,6 +20,19 @@ import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 const MODEL_PROFILE = { model: 'fake-model', displayLabel: 'fake-model' };
 
+class ObservedSettingsOwner extends SessionSettingsOwner {
+  deliveredNotifications = 0;
+
+  override subscribeModelChanges(
+    listener: Parameters<SessionSettingsOwner['subscribeModelChanges']>[0],
+  ): () => void {
+    return super.subscribeModelChanges((profile) => {
+      this.deliveredNotifications += 1;
+      listener(profile);
+    });
+  }
+}
+
 describe('SessionClientOwner disposal', () => {
   useConsumerPromptDirectory();
   useFakeResponsesReplay('plain-text.jsonl');
@@ -28,13 +41,13 @@ describe('SessionClientOwner disposal', () => {
   async function withClientOwner(
     scenario: (
       opened: OpenedClientOwner,
-      settingsOwner: SessionSettingsOwner,
+      settingsOwner: ObservedSettingsOwner,
     ) => Promise<void>,
   ): Promise<void> {
     const directory = await realpath(
       await mkdtemp(join(tmpdir(), 'session-client-owner-disposal-')),
     );
-    let settingsOwner: SessionSettingsOwner | undefined;
+    let settingsOwner: ObservedSettingsOwner | undefined;
     const opened = await openClientOwner(
       credentials().authority,
       {
@@ -47,7 +60,7 @@ describe('SessionClientOwner disposal', () => {
       { provider: 'fake', model: 'fake-model' },
       {
         createSettingsOwner: (settings) =>
-          (settingsOwner = new SessionSettingsOwner(settings)),
+          (settingsOwner = new ObservedSettingsOwner(settings)),
       },
     );
     try {
@@ -65,9 +78,13 @@ describe('SessionClientOwner disposal', () => {
     await withClientOwner(async (opened, settingsOwner) => {
       expect(opened.client.hasChatInitialized()).toBe(true);
 
+      const delivered = settingsOwner.deliveredNotifications;
       settingsOwner.publishModelProfile(MODEL_PROFILE);
 
       expect(opened.client.hasChatInitialized()).toBe(false);
+      expect(settingsOwner.deliveredNotifications - delivered).toBeGreaterThan(
+        0,
+      );
     });
   }, 30000);
 
@@ -76,9 +93,12 @@ describe('SessionClientOwner disposal', () => {
       expect(opened.client.hasChatInitialized()).toBe(true);
 
       await opened.owner.dispose();
+      expect(opened.client.hasChatInitialized()).toBe(false);
+      const delivered = settingsOwner.deliveredNotifications;
       settingsOwner.publishModelProfile(MODEL_PROFILE);
 
-      expect(opened.client.hasChatInitialized()).toBe(true);
+      expect(settingsOwner.deliveredNotifications - delivered).toBe(0);
+      expect(opened.client.hasChatInitialized()).toBe(false);
     });
   }, 30000);
 });

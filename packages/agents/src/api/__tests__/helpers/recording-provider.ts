@@ -61,6 +61,19 @@ interface Gate {
 }
 
 class RecordingOpenAIProvider extends OpenAIProvider {
+  private readonly preparedTools = new WeakMap<
+    object,
+    NormalizedGenerateChatOptions['tools']
+  >();
+
+  override async projectPromptEnvelope(
+    options: Parameters<OpenAIProvider['projectPromptEnvelope']>[0],
+  ): ReturnType<OpenAIProvider['projectPromptEnvelope']> {
+    const projection = await super.projectPromptEnvelope(options);
+    this.preparedTools.set(projection.transportToken, options.tools);
+    return projection;
+  }
+
   constructor(
     private readonly record: (request: RecordedRequest) => Promise<number>,
     private readonly responseText: string,
@@ -72,7 +85,13 @@ class RecordingOpenAIProvider extends OpenAIProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    const index = await this.record(options);
+    const token = options.promptEnvelopeTransportToken;
+    const index = await this.record({
+      ...options,
+      tools:
+        token === undefined ? options.tools : this.preparedTools.get(token),
+    });
+    if (token !== undefined) this.preparedTools.delete(token);
     yield {
       speaker: 'ai',
       blocks: this.responses[index] ?? [
