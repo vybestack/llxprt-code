@@ -10,6 +10,34 @@ export type LongTextCounter = (
   unitCache?: Map<string, number>,
 ) => number;
 
+function countShortPieces(
+  value: string,
+  pieces: RegExp,
+  countShort: (text: string) => number,
+  cache: Map<string, number>,
+): number {
+  const matcher = new RegExp(pieces);
+  let tokens = 0;
+  let position = 0;
+  for (
+    let match = matcher.exec(value);
+    match !== null;
+    match = matcher.exec(value)
+  ) {
+    const piece = match[0];
+    let measured = cache.get(piece);
+    if (measured === undefined) {
+      measured = countShort(piece);
+      if (cache.size < 256) cache.set(piece, measured);
+    }
+    tokens += measured;
+    position = matcher.lastIndex;
+  }
+  if (position !== value.length)
+    throw new Error('Tokenizer pattern did not cover short input');
+  return tokens;
+}
+
 function countShortBatches(
   value: string,
   pieces: RegExp,
@@ -72,10 +100,13 @@ export function createLongTextCounter(
       return tokens;
     };
     const shortPieces = new Map<string, number>();
-    const short = (value: string): number =>
+    const short = (value: string, batchWholeRun = false): number =>
       counted(value, () => {
         if (unitCache === undefined) return countShort(value);
-        return countShortBatches(value, pieces, countShort, shortPieces);
+        const measurePieces = batchWholeRun
+          ? countShortBatches
+          : countShortPieces;
+        return measurePieces(value, pieces, countShort, shortPieces);
       });
     if (text.length <= 512) return short(text);
     const matcher = new RegExp(pieces);
@@ -106,7 +137,9 @@ export function createLongTextCounter(
     }
     if (position !== text.length)
       throw new Error('Tokenizer pattern did not cover input');
-    return start < text.length ? count + short(text.slice(start)) : count;
+    return start < text.length
+      ? count + short(text.slice(start), start === 0)
+      : count;
   };
 }
 
