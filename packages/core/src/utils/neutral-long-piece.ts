@@ -8,6 +8,7 @@ export type LongTextCounter = (
   text: string,
   countShort: (text: string) => number,
   unitCache?: Map<string, number>,
+  shortRuns?: 'whole' | 'batched',
 ) => number;
 
 function countShortPieces(
@@ -91,7 +92,7 @@ export function createLongTextCounter(
     );
   const pieces = new RegExp(pattern, pattern.includes('&&') ? 'vy' : 'uy');
   let ranks: ReadonlyMap<string, number> | undefined;
-  return (text, countShort, unitCache) => {
+  return (text, countShort, unitCache, shortRuns = 'whole') => {
     const counted = (value: string, measure: () => number): number => {
       const cached = unitCache?.get(value);
       if (cached !== undefined) return cached;
@@ -102,10 +103,12 @@ export function createLongTextCounter(
     const shortPieces = new Map<string, number>();
     const short = (value: string, batchWholeRun = false): number =>
       counted(value, () => {
-        if (unitCache === undefined) return countShort(value);
-        const measurePieces = batchWholeRun
-          ? countShortBatches
-          : countShortPieces;
+        if (unitCache === undefined && shortRuns === 'whole')
+          return countShort(value);
+        const measurePieces =
+          batchWholeRun || shortRuns === 'batched'
+            ? countShortBatches
+            : countShortPieces;
         return measurePieces(value, pieces, countShort, shortPieces);
       });
     if (text.length <= 512) return short(text);

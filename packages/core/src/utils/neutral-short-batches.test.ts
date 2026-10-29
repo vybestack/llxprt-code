@@ -9,6 +9,66 @@ import { encodingLongTextCounter } from './neutral-long-piece.js';
 import { estimateTokens } from './toolOutputLimiter.js';
 
 describe('neutral token counting short-piece batches', () => {
+  it('bounds one-shot tool envelope encoding work at two row counts', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        tool_calls: [
+          {
+            id: 'call12345',
+            type: 'function',
+            function: {
+              name: 'read',
+              arguments: JSON.stringify({
+                text: 'cold payload 雪 '.repeat(1800),
+              }),
+            },
+          },
+        ],
+      },
+    ];
+    const texts = [
+      JSON.stringify({ messages }),
+      JSON.stringify({ messages: [...messages, ...messages] }),
+    ];
+    const encoder = encoding_for_model('gpt-4o');
+    const expected = texts.reduce(
+      (tokens, text) => tokens + encoder.encode(text).length,
+      0,
+    );
+    encoder.free();
+    const encode = Tiktoken.prototype.encode;
+    let calls = 0;
+    let characters = 0;
+    const measured = spyOn(Tiktoken.prototype, 'encode').mockImplementation(
+      function (
+        this: Tiktoken,
+        ...args: Parameters<typeof encode>
+      ): ReturnType<typeof encode> {
+        calls++;
+        characters += args[0].length;
+        return encode.apply(this, args);
+      },
+    );
+    try {
+      const work = [20, 40].map((rows) => {
+        calls = 0;
+        characters = 0;
+        let tokens = 0;
+        for (let row = 0; row < rows; row++)
+          for (const text of texts) tokens += estimateTokens(text);
+        expect(tokens).toBe(expected * rows);
+        expect(characters).toBeLessThan(rows * 4096);
+        expect(calls).toBeLessThan(rows * 32);
+        return { calls, characters };
+      });
+      expect(work[1].calls).toBe(work[0].calls * 2);
+      expect(work[1].characters).toBe(work[0].characters * 2);
+    } finally {
+      measured.mockRestore();
+    }
+  });
+
   it('counts a one-shot quoted prompt exactly without encoding every word', () => {
     const text = Array.from(
       { length: 200 },

@@ -90,6 +90,8 @@ export function estimateTokens(text: string): number {
       return encodingLongTextCounter('o200k_base')(
         text,
         (piece) => encoder.encode(piece).length,
+        undefined,
+        'batched',
       );
   }
   const encoded = encodeText(text);
