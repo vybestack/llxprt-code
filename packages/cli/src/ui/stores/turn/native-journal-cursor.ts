@@ -703,6 +703,11 @@ export class NativeJournalCursor {
   }
   private async refreshReader(): Promise<void> {
     this.options.signal?.throwIfAborted();
+    if (
+      this.publishedEnd !== undefined &&
+      this.reader.size === this.publishedEnd
+    )
+      return;
     const next = await NativeJournalPageReader.open(
       this.reader.path,
       this.options.journal,

@@ -41,38 +41,43 @@ function useJournalEmission(
   });
   const printed = useRef({ transcriptId: -1n, keys: new Set<string>() });
   useEffect(() => {
-    if (emission.rows.length > 0 || emission.header)
-      setEmission((previous) => ({ ...previous, rows: [], header: false }));
-  }, [emission]);
-  useEffect(() => {
-    printed.current = { transcriptId: -1n, keys: new Set<string>() };
-    setFrame(store.getState());
-    const timer = setInterval(() => {
-      const next = store.getState();
-      if (next.atFileEnd) setFrame(next);
-      else void store.pageForward().then(() => setFrame(store.getState()));
-    }, SCROLLBACK_VIEWPORT_POLL_MS);
-    return () => clearInterval(timer);
-  }, [store]);
-  useEffect(() => {
-    const candidates = responding ? frame.rows.slice(0, -1) : frame.rows;
-    const stable = settledTranscriptPrefix(candidates, responding);
-    const rows = stable.filter((row) => unprinted(row, printed.current));
-    if (rows.length === 0) return;
-    for (const row of rows) {
+    // A queued emission can be superseded; acknowledge only the committed batch.
+    for (const row of emission.rows) {
       const position = transcriptPosition(row);
       if (position === undefined) continue;
       if (position > printed.current.transcriptId) printed.current.keys.clear();
       printed.current.transcriptId = position;
       printed.current.keys.add(row.key);
     }
+    if (emission.rows.length > 0 || emission.header)
+      setEmission((previous) => ({ ...previous, rows: [], header: false }));
+  }, [emission]);
+  useEffect(() => {
+    printed.current = { transcriptId: -1n, keys: new Set<string>() };
+    const update = () => setFrame(store.getState());
+    const unsubscribe = store.subscribe(update);
+    update();
+    const timer = setInterval(() => {
+      if (!store.getState().atFileEnd) void store.pageForward();
+    }, SCROLLBACK_VIEWPORT_POLL_MS);
+    return () => {
+      clearInterval(timer);
+      unsubscribe();
+    };
+  }, [store]);
+  useEffect(() => {
+    if (emission.rows.length > 0 || emission.header) return;
+    const candidates = responding ? frame.rows.slice(0, -1) : frame.rows;
+    const stable = settledTranscriptPrefix(candidates, responding);
+    const rows = stable.filter((row) => unprinted(row, printed.current));
+    if (rows.length === 0) return;
     setEmission((previous) => ({
       serial: previous.serial + 1,
       rows,
       width,
       header: false,
     }));
-  }, [frame, width, responding]);
+  }, [frame, width, responding, emission]);
   const live = responding
     ? frame.rows.slice(-1).filter((row) => unprinted(row, printed.current))
     : [];

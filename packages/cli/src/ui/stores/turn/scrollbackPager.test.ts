@@ -32,6 +32,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import { encodeContentRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
 import {
@@ -238,6 +239,26 @@ async function cleanupPagerFixture(): Promise<void> {
 describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1,G2', () => {
   beforeEach(() => setupPagerFixture());
   afterEach(() => cleanupPagerFixture());
+
+  it('publishes committed rows and immediate purges without a polling reader', async () => {
+    await fixture.addUser(1);
+    const store = makeStore({
+      settings: { marginViewports: 0, byteFloorBytes: 0, purgeDebounceMs: 0 },
+    });
+    await store.resumeFromJournal();
+    const frames: string[][] = [];
+    const unsubscribe = store.subscribe(() => frames.push(rowTexts(store)));
+    await fixture.addUser(2);
+    await waitFor(() => expect(frames.at(-1)).toContain('r-2'));
+    expect(frames.at(-1)).toStrictEqual(['r-1', 'r-2']);
+    store.pageOut('older');
+    expect(frames.at(-1)).toStrictEqual([]);
+    unsubscribe();
+    const publishedFrames = frames.length;
+    await store.pageBack();
+    expect(frames).toHaveLength(publishedFrames);
+    expect(rowTexts(store)).toStrictEqual(['r-1', 'r-2']);
+  });
 
   it('rejects non-native journal paths before opening the pager', () => {
     expect(() =>

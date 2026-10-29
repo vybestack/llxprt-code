@@ -289,6 +289,18 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       () => undefined,
     );
     await run;
+    this.publish();
+  }
+
+  private readonly listeners = new Set<() => void>();
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private publish(): void {
+    for (const listener of this.listeners) listener();
   }
 
   getState(): ScrollbackPagerState {
@@ -319,6 +331,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       await run;
     } finally {
       this.inFlightBackReads -= 1;
+      this.publish();
     }
   }
 
@@ -330,6 +343,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       () => undefined,
     );
     await run;
+    this.publish();
   }
 
   /**
@@ -362,6 +376,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       throw error;
     } finally {
       this.inFlightBackReads -= 1;
+      this.publish();
     }
   }
 
@@ -498,6 +513,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     if (this.closed) return;
     this.closed = true;
     this.subscription.close();
+    this.listeners.clear();
     this.generation += 1;
     this.controller.abort();
     this.controller = new AbortController();
@@ -520,6 +536,10 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     if (this.closed) return;
     this.clearPurgeTimer();
     this.purgeDirection = direction;
+    if (this.settings.purgeDebounceMs === 0) {
+      this.flushPurge();
+      return;
+    }
     this.purgeTimer = setTimeout(() => {
       this.purgeTimer = null;
       this.flushPurge();
@@ -595,6 +615,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     if (this.closed) return;
     this.evictSubContext();
     this.evictFarEnd(this.purgeDirection);
+    this.publish();
   }
 
   /**

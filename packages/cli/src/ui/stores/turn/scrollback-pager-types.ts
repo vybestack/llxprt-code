@@ -61,6 +61,7 @@ export interface ScrollbackResumeSummary {
 }
 export interface ScrollbackPagerStore {
   getState(): ScrollbackPagerState;
+  subscribe(listener: () => void): () => void;
   pageBack(): Promise<void>;
   pageForward(): Promise<void>;
   resumeFromJournal(): Promise<ScrollbackResumeSummary>;

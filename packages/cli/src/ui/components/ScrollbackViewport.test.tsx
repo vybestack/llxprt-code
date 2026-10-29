@@ -168,6 +168,7 @@ function scriptedStore(config: {
   const state = config.state;
   return {
     getState: () => state,
+    subscribe: () => () => undefined,
     pageBack: () => new Promise<void>(() => undefined),
     pageForward: () => Promise.resolve(),
     // Unexercised by these tests, mirroring the never-resolving pageBack.
