@@ -19,6 +19,10 @@ import { describe, expect, it } from 'bun:test';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
 import { createUserMessage, type IContent } from './IContent.js';
 import { HistoryService } from './HistoryService.js';
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
+import { JournalOwners } from './journalOwners.js';
+import { historyOriginId } from './historyOriginId.js';
+import { decodeStoredRow } from './journalRowCodec.js';
 
 function createBlockedTokenizerFactory(): {
   factory: RuntimeTokenizerFactory;
@@ -32,6 +36,9 @@ function createBlockedTokenizerFactory(): {
 
   return {
     factory: {
+      estimatePrompt: async () => {
+        throw new Error('Blocked tokenizer fixture does not estimate prompts');
+      },
       getTokenizer: () => ({
         countTokens: async (content: unknown) => {
           if (blocking) {
@@ -208,27 +215,64 @@ describe('HistoryService replaceAll serialization', () => {
   });
 
   it('keeps the committed content, its identity and its origin when afterPublication rejects a replaceAll', async () => {
-    const service = new HistoryService();
-    const origin = { name: 'session' };
-    const summary = createUserMessage('committed-summary');
-    const candidate = createUserMessage('rejected-summary');
-    await service.replaceAll([summary], undefined, { origin });
-    const committedTokens = service.getTotalTokens();
+    await withNativeDetachedFixture(async ({ history: service, session }) => {
+      const origin = { name: 'session' };
+      const summary = createUserMessage('committed-summary');
+      const candidate = createUserMessage('rejected-summary');
+      await service.replaceAll([summary], undefined, { origin });
+      const committedTokens = service.getTotalTokens();
+      const committed = await session.store.snapshot();
+      try {
+        const identity = await committed.entryAt(0);
+        const content = decodeStoredRow(await committed.readRow(identity));
+        expect(content).toMatchObject(summary);
+        expect(committed.rows).toBe(1);
 
-    await expect(
-      service.replaceAll([candidate], undefined, {
-        origin,
-        afterPublication: () => {
-          throw new Error('reject summary replacement');
-        },
-      }),
-    ).rejects.toThrow('reject summary replacement');
+        await expect(
+          service.replaceAll([candidate], undefined, {
+            origin,
+            afterPublication: async () => {
+              await collectRowsForAssertions(
+                service.streamRawHistory(),
+                (all) => {
+                  expect(all).toHaveLength(1);
+                  expect(all[0]).toMatchObject(candidate);
+                },
+              );
+              throw new Error('reject summary replacement');
+            },
+          }),
+        ).rejects.toThrow('reject summary replacement');
 
-    expect(service.getAll()).toStrictEqual([summary]);
-    expect(service.getAll()[0]).toBe(summary);
-    expect(service.getContentOrigin(summary)).toBe(origin);
-    expect(service.getContentOrigin(candidate)).toBeUndefined();
-    expect(service.getTotalTokens()).toBe(committedTokens);
-    await expectConsistentTokenCount(service);
+        await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+          expect(all).toStrictEqual([content]);
+          expect(
+            all.some(
+              (row) =>
+                row.blocks[0]?.type === 'text' &&
+                row.blocks[0].text === 'rejected-summary',
+            ),
+          ).toBe(false);
+        });
+        const restored = await session.store.snapshot();
+        try {
+          expect(restored.rows).toBe(1);
+          const entry = await restored.entryAt(0);
+          expect(entry).toStrictEqual(identity);
+          expect(decodeStoredRow(await restored.readRow(entry))).toStrictEqual(
+            content,
+          );
+          expect(
+            await new JournalOwners(session.store).originOf(entry.owner),
+          ).toBe(historyOriginId(origin));
+        } finally {
+          await restored.close();
+        }
+        expect(service.getTotalTokens()).toBe(committedTokens);
+        await expectConsistentTokenCount(service);
+      } finally {
+        await committed.close();
+      }
+    });
   });
 });

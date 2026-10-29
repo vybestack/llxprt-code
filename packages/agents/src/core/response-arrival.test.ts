@@ -1,5 +1,5 @@
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import { waitForCondition } from '../test-utils/eventLoop.js';
+import { waitForConditionOnEventLoop } from '../test-utils/eventLoop.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { createSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
@@ -79,7 +79,7 @@ describe('production response arrival', () => {
         );
         const enteredRetry =
           !retry ||
-          (await waitForCondition(
+          (await waitForConditionOnEventLoop(
             () => attempts === 1 && vi.getTimerCount() > 0,
           ));
         expect(enteredRetry).toBe(true);
