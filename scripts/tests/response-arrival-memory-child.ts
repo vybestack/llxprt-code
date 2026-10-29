@@ -21,6 +21,7 @@ import type { RowOwnership } from '../../packages/core/src/recording/rowOwnershi
 import { HistoryMediaOwnership } from '../../packages/core/src/storage/history-media-ownership.js';
 import { LocalMediaStore } from '../../packages/core/src/storage/local-media-store.js';
 import { TurnProcessor } from '../../packages/agents/src/core/TurnProcessor.js';
+import { chatSessionPorts } from '../../packages/agents/src/core/chatSessionPorts.js';
 import {
   processorFixture,
   sourcePending,
@@ -44,7 +45,12 @@ function directProcessor(
   setup: Awaited<ReturnType<typeof processorFixture>>,
 ): TurnProcessor {
   return new TurnProcessor(
-    setup.runtime,
+    chatSessionPorts(setup.runtime).turn,
+    setup.config,
+    setup.runtime.mediaResolver,
+    undefined,
+    undefined,
+    undefined,
     setup.compression,
     () => setup.provider,
     (_source, metadata) => ({ ...setup.runtime.providerRuntime, metadata }),
