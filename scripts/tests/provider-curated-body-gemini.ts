@@ -3,7 +3,7 @@
 // module (the agents tsc program would then require the plugin's dependencies).
 import { GeminiProvider } from '../../plugins/google-gemini/src/gemini/GeminiProvider.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
-import type { ProviderRuntimeContext } from '../../packages/core/src/runtime/providerRuntimeContext.js';
+import type { RequestMediaResolutionService } from '../../packages/core/src/storage/request-media-resolver.js';
 import {
   captureCuratedBody as capturePackageBody,
   captureWithAdapter,
@@ -42,7 +42,7 @@ export function captureCuratedBody(
   retry = false,
   orchestrated = false,
   responseContents?: IContent[],
-  mediaResolver?: ProviderRuntimeContext['mediaResolver'],
+  mediaResolver?: RequestMediaResolutionService,
 ): Promise<string> {
   if (name !== 'gemini')
     return capturePackageBody(

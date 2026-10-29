@@ -93,12 +93,12 @@ function summaryRuntime(
   settings.set('prompt-caching', caching ? 'on' : 'off');
   settings.setProviderSetting(name, 'model', summaryModel(name));
   settings.setProviderSetting(name, 'streaming', 'disabled');
+  const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: 'summary-body',
-    config: createRuntimeConfigStub(settings),
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: (input, init) => globalThis.fetch(input, init),
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
     providerName: name,
@@ -117,7 +117,7 @@ function summaryRuntime(
   const options = createProviderCallOptions({
     providerName: name,
     settings,
-    config: runtime.config,
+    config,
     runtime,
     invocation,
     contents: { async *[Symbol.asyncIterator]() {} },
@@ -183,6 +183,7 @@ async function summaryPreparation(
   const metadata = await buildCompressionMetadata(
     'oracle',
     context,
+    undefined,
     history,
     async () => resolved,
     async () => 'finish the experiment',
@@ -238,7 +239,12 @@ export async function invokedSummaryBodies(
     actualLane = true;
     const handler = new CompressionHandler(
       context,
+      undefined,
       history,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {},
       async () => resolved,
       async () => {},

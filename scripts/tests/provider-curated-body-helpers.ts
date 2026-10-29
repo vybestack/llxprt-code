@@ -5,10 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { withFetchPreconnect } from '../../packages/test-utils/src/fetch-test-helpers.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { SettingsService } from '../../packages/settings/src/settings/SettingsService.js';
-import {
-  createProviderRuntimeContext,
-  type ProviderRuntimeContext,
-} from '../../packages/core/src/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '../../packages/core/src/runtime/providerRuntimeContext.js';
+import type { RequestMediaResolutionService } from '../../packages/core/src/storage/request-media-resolver.js';
 import { bindProviderMedia } from '../../packages/core/src/runtime/bindProviderMedia.js';
 import { createRuntimeInvocationContext } from '../../packages/core/src/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
@@ -75,20 +73,19 @@ export async function captureWithAdapter(
   retry = false,
   orchestrated = false,
   responseContents?: IContent[],
-  mediaResolver?: ProviderRuntimeContext['mediaResolver'],
+  mediaResolver?: RequestMediaResolutionService,
 ): Promise<string> {
   const settings = new SettingsService();
   settings.set('auth-key', 'test-key');
   settings.set('prompt-caching', caching ? 'on' : 'off');
   settings.setProviderSetting(name, 'model', adapter.model);
   settings.setProviderSetting(name, 'streaming', 'disabled');
+  const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: `purge-body-${name}`,
-    config: createRuntimeConfigStub(settings),
-    mediaResolver,
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: (input, init) => globalThis.fetch(input, init),
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
     providerName: name,
@@ -104,7 +101,7 @@ export async function captureWithAdapter(
   const options = createProviderCallOptions({
     providerName: name,
     settings,
-    config: runtime.config,
+    config,
     runtime,
     invocation,
     contents: rows,
@@ -161,7 +158,7 @@ export function captureCuratedBody(
   retry = false,
   orchestrated = false,
   responseContents?: IContent[],
-  mediaResolver?: ProviderRuntimeContext['mediaResolver'],
+  mediaResolver?: RequestMediaResolutionService,
 ): Promise<string> {
   return captureWithAdapter(
     name,

@@ -1388,7 +1388,11 @@ async function runBatchHarness(
   const stderrPath = join(root, 'runner.stderr');
   const child = Bun.spawn([process.execPath, harness], {
     cwd: root,
-    env: { ...process.env, LLXPRT_CORE_TEST_CONCURRENCY: '1' },
+    env: {
+      ...process.env,
+      LLXPRT_CORE_TEST_CONCURRENCY: '1',
+      LLXPRT_CLI_TEST_PARTITION: '1of1',
+    },
     stdout: Bun.file(stdoutPath),
     stderr: Bun.file(stderrPath),
   });

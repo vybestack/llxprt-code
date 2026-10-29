@@ -11,11 +11,8 @@ import { exportSummaryRow } from '../../packages/core/src/services/history/expor
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import { RequestMediaResolver } from '../../packages/core/src/storage/request-media-resolver.js';
-import {
-  buildAgent,
-  internalAgentClient,
-} from '../../packages/agents/src/api/__tests__/helpers/agentHarness.js';
-import { bindClientTokenization } from '../../packages/agents/src/session/session-client-binding.js';
+import { buildAgent } from '../../packages/agents/src/api/__tests__/helpers/agentHarness.js';
+import { capturedAgentClient } from '../../packages/agents/src/api/__tests__/helpers/agent-client-observation.js';
 import { createToolCheckpoint } from '../../packages/cli/src/ui/hooks/agentStream/checkpointPersistence.js';
 import {
   checkpointGit,
@@ -23,7 +20,7 @@ import {
   checkpointUiHistory,
   savedCheckpoint,
 } from '../../packages/cli/src/ui/hooks/agentStream/checkpoint-disk-test-helpers.js';
-import { restoreCommand } from '../../packages/cli/src/ui/commands/restoreCommand.js';
+import { createRestoreCommand } from '../../packages/cli/src/ui/commands/restoreCommand.js';
 import { createMockCommandContext } from '../../packages/cli/src/__tests__/mockCommandContext.js';
 import { captureCuratedBody } from './provider-curated-body-gemini.js';
 
@@ -105,11 +102,15 @@ async function roundTrip(size: number): Promise<void> {
   await withBatchFixture(async ({ history }) => {
     await seedRows(history, size);
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    const client = internalAgentClient(agent);
+    const client = capturedAgentClient(agent);
     const priorHistory = client.getHistoryService();
     const root = await mkdtemp(join(tmpdir(), 'checkpoint-body-'));
     try {
-      bindClientTokenization(client, exactTokenizer());
+      const tokenizer = exactTokenizer();
+      client.bindTokenization(
+        (provider, model) => tokenizer.getTokenizer(provider, model),
+        tokenizer,
+      );
       client.storeHistoryServiceForReuse(history);
       await history.recalculateTokens();
       const expectedTokens = size * (6 + 1000);
@@ -118,21 +119,13 @@ async function roundTrip(size: number): Promise<void> {
         checkpointTool,
         root,
         checkpointGit,
-        agent,
+        (signal) => agent.streamHistory(signal),
         () => {},
       );
       const saved = await savedCheckpoint(root);
       let loadedUi = JSON.stringify(checkpointUiHistory);
       const context = createMockCommandContext();
       context.services.agent = agent;
-      if (context.services.config === null)
-        throw new Error('Missing fixture runtime');
-      const runtime = {
-        ...context.services.config,
-        projectCheckpointsDir: root,
-        getCheckpointingEnabled: () => true,
-      };
-      context.services.config = runtime;
       context.ui.clear = () => {
         loadedUi = '';
       };
@@ -141,10 +134,17 @@ async function roundTrip(size: number): Promise<void> {
           'Restore must project journal rows, not reload a UI copy',
         );
       };
-      const outcome = await restoreCommand(runtime)?.action?.(
-        context,
-        basename(saved.path),
+      const restore = createRestoreCommand(
+        {
+          enabled: true,
+          checkpointDirectory: root,
+          replaceHistoryFromSource: (rows, signal) =>
+            agent.session.replaceHistoryFromSource(rows, signal),
+          git: undefined,
+        },
+        () => false,
       );
+      const outcome = await restore?.action?.(context, basename(saved.path));
       expect(outcome).toStrictEqual({
         type: 'tool',
         toolName: checkpointTool.request.name,

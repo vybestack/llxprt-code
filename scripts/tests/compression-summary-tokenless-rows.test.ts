@@ -211,12 +211,12 @@ function runtimeFor(family: Family) {
   settings.set('auth-key', 'test-key');
   settings.setProviderSetting(family, 'model', MODELS[family]);
   settings.setProviderSetting(family, 'streaming', 'disabled');
+  const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: `tokenless-${family}`,
-    config: createRuntimeConfigStub(settings),
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: (input, init) => globalThis.fetch(input, init),
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
     providerName: family,
@@ -225,13 +225,15 @@ function runtimeFor(family: Family) {
   const call = createProviderCallOptions({
     providerName: family,
     settings,
-    config: runtime.config,
+    config,
     runtime,
     invocation,
     contents: { async *[Symbol.asyncIterator]() {} },
   });
   return {
     runtime,
+    settings,
+    config,
     invocation,
     resolved: { ...call.resolved, model: MODELS[family] },
   };
@@ -255,7 +257,8 @@ type Wrap = 'direct' | 'compression-lb' | 'provider-lb';
  * buildCompressionChatOptions.
  */
 async function summaryCall(family: Family, wrap: Wrap) {
-  const { runtime, invocation, resolved } = runtimeFor(family);
+  const { runtime, settings, config, invocation, resolved } =
+    runtimeFor(family);
   const concrete = makeProvider(family);
   const journal = journalRows();
   const request = diskSummaryRequestSelection(
@@ -274,7 +277,7 @@ async function summaryCall(family: Family, wrap: Wrap) {
           profileName: 'member',
           provider: concrete,
           runtime,
-          config: runtime.config,
+          config,
           resolved,
           invocation,
         },
@@ -283,10 +286,15 @@ async function summaryCall(family: Family, wrap: Wrap) {
       'non-interactive',
     );
   } else if (wrap === 'provider-lb') {
-    const manager = new ProviderManager({
-      settingsService: runtime.settingsService,
-      config: runtime.config,
-    });
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      config,
+      runtime,
+    );
     manager.getProviderByName = (name) =>
       name === concrete.name ? concrete : undefined;
     provider = new LoadBalancingProvider(
@@ -312,8 +320,8 @@ async function summaryCall(family: Family, wrap: Wrap) {
   const options = await buildCompressionChatOptions({
     requestRows: request,
     providerRuntime: runtime,
-    resolvedConfig: runtime.config,
-    fallbackConfig: runtime.config,
+    resolvedConfig: config,
+    fallbackConfig: config,
     resolvedOptions: resolved,
     invocation,
     fallbackModel: MODELS[family],

@@ -52,6 +52,7 @@ async function oracle(
   const metadata = await buildCompressionMetadata(
     'oracle',
     runtime,
+    undefined,
     history,
     async () => {
       throw new Error('No oracle provider');

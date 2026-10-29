@@ -48,6 +48,7 @@ async function oracle(
   const metadata = await buildCompressionMetadata(
     'oracle',
     runtime,
+    undefined,
     history,
     async () => ({
       provider: transport,
@@ -113,6 +114,7 @@ function enforceFor(
           install,
           prompt,
           runtime,
+          undefined,
           history,
           async () => ({
             provider: transport,

@@ -49,6 +49,7 @@ function enforcerFor(
         install,
         prompt,
         setup.runtime,
+        undefined,
         history,
         async () => ({
           provider: setup.transport,
@@ -92,6 +93,7 @@ async function oracle(
   const metadata = await buildCompressionMetadata(
     'oracle',
     setup.runtime,
+    undefined,
     history,
     async () => ({
       provider: setup.transport,

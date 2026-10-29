@@ -4,10 +4,8 @@ import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 
 import { admitDeferredHistorySource } from '../../packages/agents/src/core/deferredHistorySource.js';
-import {
-  buildAgent,
-  internalAgentClient,
-} from '../../packages/agents/src/api/__tests__/helpers/agentHarness.js';
+import { buildAgent } from '../../packages/agents/src/api/__tests__/helpers/agentHarness.js';
+import { capturedAgentClient } from '../../packages/agents/src/api/__tests__/helpers/agent-client-observation.js';
 import { captureCompressionBody } from './support/compression-value-openai-body.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
@@ -97,7 +95,7 @@ async function verifyBody(size: number, bytes: number): Promise<number> {
       const release = await admitDeferredHistorySource(
         history,
         bodyInput(size, bytes),
-        requireMediaStore(internalAgentClient(agent)),
+        requireMediaStore(capturedAgentClient(agent)),
         { ownership: owners },
         'fake-model',
       );

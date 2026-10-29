@@ -750,11 +750,7 @@
   "packages/core/src/config/config.b2.test.ts": 1,
   "packages/core/src/config/config.d.test.ts": 1,
   "packages/core/src/config/config.ephemeral.test.ts": 1,
-  "packages/core/src/config/config.folderTrustLive.test.ts": 1,
-  "packages/core/src/config/config.folderTrustMcpWiring.test.ts": 1,
-  "packages/core/src/config/config.ideTrustLive.test.ts": 1,
   "packages/core/src/config/config.includeDirectories.test.ts": 1,
-  "packages/core/src/config/config.initializeBoundary.test.ts": 1,
   "packages/core/src/config/config.mcp-lazy.test.ts": 1,
   "packages/core/src/config/config.skillReload.test.ts": 1,
   "packages/core/src/config/configBaseCore.utilityModel.test.ts": 1,
@@ -1135,7 +1131,6 @@
   "packages/core/src/recording/subagentSessionStart.p05c.test.ts": 1,
   "packages/core/src/recording/torn-tail-error-controlled-pause.journal.test.ts": 1,
   "packages/core/src/resources/resource-registry.test.ts": 1,
-  "packages/core/src/runtime/__tests__/AgentRuntimeState.configDispose.test.ts": 1,
   "packages/core/src/runtime/__tests__/regression-guards.test.ts": 1,
   "packages/core/src/runtime/__tests__/RuntimeInvocationContext.separation.test.ts": 1,
   "packages/core/src/runtime/admittedModelParameters.test.ts": 1,
@@ -1576,5 +1571,9 @@
   "packages/providers/src/openai/native-chat-tokenizer-work.test.ts": 24,
   "packages/providers/src/openai/native-mistral-cold-fill-text.test.ts": 64,
   "packages/providers/src/openai/native-mistral-cold-fill-tools.test.ts": 110,
-  "packages/providers/src/openai/native-mistral-cold-fill-collisions.test.ts": 66
+  "packages/providers/src/openai/native-mistral-cold-fill-collisions.test.ts": 66,
+  "packages/agents/src/api/__tests__/AgentRuntimeState.configDispose.test.ts": 1,
+  "packages/agents/src/api/__tests__/config.folderTrustLive.test.ts": 1,
+  "packages/agents/src/api/__tests__/workspace-ide-trust-live.behavior.test.ts": 1,
+  "packages/agents/src/api/__tests__/workspace-trust-mcp-wiring.behavior.test.ts": 1
 }

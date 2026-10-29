@@ -66,12 +66,12 @@ export async function captureCompressionBody(
   settings.set('prompt-caching', caching ? 'on' : 'off');
   settings.setProviderSetting('openai', 'model', 'gpt-5.2');
   settings.setProviderSetting('openai', 'streaming', 'disabled');
+  const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: 'compression-openai-body',
-    config: createRuntimeConfigStub(settings),
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: (input, init) => globalThis.fetch(input, init),
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
     providerName: 'openai',
@@ -89,7 +89,7 @@ export async function captureCompressionBody(
   const options = createProviderCallOptions({
     providerName: 'openai',
     settings,
-    config: runtime.config,
+    config,
     runtime,
     invocation,
     contents: rows,
