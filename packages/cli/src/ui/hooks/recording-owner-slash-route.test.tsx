@@ -14,7 +14,7 @@ import { useFakeResponsesReplay } from '../../../../agents/src/api/__tests__/hel
 import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { describe, expect, it, vi } from 'bun:test';
 import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
-import { readFile } from 'node:fs/promises';
+import { appendJournalUiItem } from './command-journal-output.js';
 import { act } from 'react';
 import { Agent } from '@vybestack/llxprt-code-agents';
 import { SessionStatsProvider } from '../contexts/SessionContext.js';
@@ -148,6 +148,14 @@ function slashInputs(
     ...commandRegistry,
     ...createCommandRegistrationFixture(_agent),
     ...createUnconfiguredHistoryReaders(),
+    writeOutput: async (item) => {
+      if (recordingOwner !== 'agent') return;
+      await appendJournalUiItem(
+        { appendDisplay: _agent.session.appendDisplay.bind(_agent.session) },
+        undefined,
+        item,
+      );
+    },
     ports: createUnconfiguredSlashCommandPorts(),
     settings: createMockSettings({}),
     addItem: () => 0,
@@ -269,7 +277,11 @@ describe('interactive slash command recording route', () => {
       await act(async () => {
         await result.current.handleSlashCommand('/chat save owner-route');
       });
-      expect(await readFile(path, 'utf8')).toContain('owner-route');
+      expect(
+        (await agent.session.listCheckpoints()).map(
+          (checkpoint) => checkpoint.name,
+        ),
+      ).toContain('owner-route');
       unmount();
     } finally {
       await route.close();
@@ -302,7 +314,11 @@ describe('interactive slash command recording route', () => {
       await act(async () => {
         await result.current.handleSlashCommand('/chat save raw-default');
       });
-      expect(await readFile(path, 'utf8')).not.toContain('raw-default');
+      expect(
+        (await agent.session.listCheckpoints()).map(
+          (checkpoint) => checkpoint.name,
+        ),
+      ).not.toContain('raw-default');
       unmount();
     } finally {
       await route.close();

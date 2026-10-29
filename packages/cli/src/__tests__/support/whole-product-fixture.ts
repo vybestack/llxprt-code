@@ -98,11 +98,14 @@ function dispatcher(
 ): Pick<WholeProductFixture, 'errors' | 'command' | 'displayed'> {
   let displayed: readonly HistoryItemWithoutId[] = [];
   const errors: Message[] = [];
-  const context = createMockCommandContext({
-    recordingOwner: 'agent',
-    services: { agent: live },
-    ui: {},
-  });
+  const context = createMockCommandContext(
+    {
+      recordingOwner: 'agent',
+      services: { agent: live, config: { logSlashCommand: () => {} } },
+      ui: {},
+    },
+    live,
+  );
   const deps = commandDeps(context, errors);
   return {
     errors,

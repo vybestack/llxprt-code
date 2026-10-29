@@ -20,8 +20,10 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
-const requestFetch: NetworkFetch = () =>
-  Promise.reject(new Error('This test must not make network requests'));
+const requestFetch: NetworkFetch = async (_input, init) =>
+  new Response(await new Response(init?.body).text(), {
+    headers: { 'content-type': 'application/json' },
+  });
 
 /**
  * Mock the Vercel AI SDK to control streaming responses

@@ -8,7 +8,7 @@ import type { CliArgs } from './config/cliArgParser.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-import { handoffCliConfig } from './test-utils/bootstrap-config.js';
+import { handoffCliConfig } from './test-utils/bootstrap-config.test-helper.js';
 
 import {
   describe,

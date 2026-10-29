@@ -11,7 +11,7 @@ import {
   AgentProfilePreflight,
   type Agent,
 } from '@vybestack/llxprt-code-agents';
-import { handoffCliConfig } from './test-utils/bootstrap-config.js';
+import { handoffCliConfig } from './test-utils/bootstrap-config.test-helper.js';
 
 import {
   describe,

@@ -19,7 +19,7 @@ import {
 } from './cap-payload.fixtures.js';
 import { rowIdentityKey } from '../utils/rowIdentity.js';
 import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
-import { registerNativeCapScenarios } from './cap-native-scenarios.fixtures.js';
+import { registerNativeCapScenarios } from './cap-native-scenarios.test-helper.js';
 import {
   JournalSession,
   NativeJournalPageReader,

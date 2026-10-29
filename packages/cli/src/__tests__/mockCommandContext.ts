@@ -131,7 +131,7 @@ type DeepPartial<T> = T extends object
  * @param overrides - A deep partial object to override any default mock values.
  * @returns A complete, mocked CommandOwnerFixture object.
  */
-const buildDefaultMocks = (): CommandOwnerFixture => ({
+const buildDefaultMocks = (sessionOwner?: Agent): CommandOwnerFixture => ({
   runtimeApi: createMockRuntimeApi(),
   refreshProviderAliases: vi.fn(async () => {}),
   oauthControl: createUnavailableOAuthControl(),
@@ -142,21 +142,24 @@ const buildDefaultMocks = (): CommandOwnerFixture => ({
     args: '',
   },
   services: {
-    config: composeFixtureRuntime({
-      getMcpServers: () => undefined,
-      getMcpServerCommand: () => undefined,
-      getBlockedMcpServers: () => undefined,
-      getProvider: () => undefined,
-      getModel: () => 'test-model',
-      isInteractive: () => true,
-      isExtensionEnabled: () => true,
-      getWorkingDir: () => process.cwd(),
-      getProjectRoot: () => process.cwd(),
-      getCheckpointingEnabled: () => false,
-      getEphemeralSettings: () => ({}),
-      getEphemeralSetting: vi.fn(),
-      setEphemeralSetting: vi.fn(),
-    } as unknown as Config),
+    config: composeFixtureRuntime(
+      {
+        getMcpServers: () => undefined,
+        getMcpServerCommand: () => undefined,
+        getBlockedMcpServers: () => undefined,
+        getProvider: () => undefined,
+        getModel: () => 'test-model',
+        isInteractive: () => true,
+        isExtensionEnabled: () => true,
+        getWorkingDir: () => process.cwd(),
+        getProjectRoot: () => process.cwd(),
+        getCheckpointingEnabled: () => false,
+        getEphemeralSettings: () => ({}),
+        getEphemeralSetting: vi.fn(),
+        setEphemeralSetting: vi.fn(),
+      } as unknown as Config,
+      sessionOwner,
+    ),
     agent: null,
     settings: { merged: { ui: {} } } as LoadedSettings,
     git: undefined as GitService | undefined,
@@ -206,8 +209,9 @@ const buildDefaultMocks = (): CommandOwnerFixture => ({
 
 export const createMockCommandContext = (
   overrides: DeepPartial<CommandOwnerFixture> = {},
+  sessionOwner?: Agent,
 ): CommandOwnerFixture => {
-  const defaultMocks: CommandOwnerFixture = buildDefaultMocks();
+  const defaultMocks: CommandOwnerFixture = buildDefaultMocks(sessionOwner);
 
   // Deep merge that preserves special objects (Dates, vitest mocks, etc.)
   const merge = (target: unknown, source: unknown): CommandOwnerFixture => {
