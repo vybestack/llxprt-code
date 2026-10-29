@@ -7,7 +7,7 @@ import type { IContent } from '@vybestack/llxprt-code-core';
 import {
   writeNativeEdits,
   type NativePagerEdit,
-} from './native-pager-test-fixture.js';
+} from './native-pager.fixtures.js';
 import {
   createScrollbackPagerStore,
   type ScrollbackPagerStore,

@@ -44,6 +44,7 @@ function feedbackInputs(owner: Agent) {
           type: 'session_event',
           severity,
           message,
+          presentation: 'already-appended',
         });
     },
   };

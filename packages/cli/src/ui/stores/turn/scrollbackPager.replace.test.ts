@@ -14,7 +14,7 @@ import type { IContent } from '@vybestack/llxprt-code-core';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import { encodeContentRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
 import { TRAILER_RECORD_BYTES } from '@vybestack/llxprt-code-core/journal/trailerRecord.js';
-import { writeNativeEdits } from './native-pager-test-fixture.js';
+import { writeNativeEdits } from './native-pager.fixtures.js';
 import {
   createScrollbackPagerStore,
   type ScrollbackPagerStore,

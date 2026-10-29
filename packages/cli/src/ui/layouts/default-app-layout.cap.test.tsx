@@ -16,10 +16,10 @@ import {
   count,
   serializedBytes,
   sizedMessage,
-} from './cap-payload.fixture.js';
+} from './cap-payload.fixtures.js';
 import { rowIdentityKey } from '../utils/rowIdentity.js';
 import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
-import { registerNativeCapScenarios } from './cap-native-scenarios.fixture.js';
+import { registerNativeCapScenarios } from './cap-native-scenarios.fixtures.js';
 import {
   JournalSession,
   NativeJournalPageReader,

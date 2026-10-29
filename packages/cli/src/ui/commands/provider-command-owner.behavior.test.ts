@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
@@ -145,12 +146,12 @@ describe('registered provider command ownership', () => {
     const rightPath = right.session.getRecording().path;
     if (!leftPath || !rightPath)
       throw new Error('Owner recording paths are unavailable');
-    const [leftLog, rightLog] = await Promise.all([
-      readFile(leftPath, 'utf8'),
-      readFile(rightPath, 'utf8'),
+    const [leftFacts, rightFacts] = await Promise.all([
+      readJournalFileFacts(leftPath),
+      readJournalFileFacts(rightPath),
     ]);
-    expect(leftLog).toContain('provider_switch');
-    expect(rightLog).not.toContain('provider_switch');
+    expect(leftFacts?.facts.provider).toBe('fake');
+    expect(rightFacts?.facts.provider).toBe(contributed.alias);
   }, 30000);
 
   it('reports an unchanged provider without switching', async () => {

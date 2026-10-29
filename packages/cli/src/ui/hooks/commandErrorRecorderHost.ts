@@ -18,6 +18,7 @@ export function bindCommandErrorRecorder(
         type: 'session_event',
         severity: 'error',
         message,
+        presentation: 'already-appended',
       });
     };
   }

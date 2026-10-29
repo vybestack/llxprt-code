@@ -22,6 +22,23 @@ async function displayTexts(path: string): Promise<string[]> {
 }
 
 describe('session display recording', () => {
+  it('logs an already displayed event without appending a second presentation row', async () => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
+      await agent.session.setRecording({ enabled: true });
+      await agent.session.appendDisplay({ type: 'warning' }, 'single warning');
+      await agent.session.recordRecordingEvent({
+        type: 'session_event',
+        severity: 'warning',
+        message: 'single warning',
+        presentation: 'already-appended',
+      });
+      const path = agent.session.getRecording().path;
+      if (path === undefined) throw new Error('Missing recording path');
+      expect(await displayTexts(path)).toStrictEqual(['single warning']);
+      expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
+    });
+  });
+
   it('materializes an operational event before the first conversational row', async () => {
     await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.session.setRecording({ enabled: true });

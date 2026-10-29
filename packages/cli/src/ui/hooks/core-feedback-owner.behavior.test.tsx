@@ -51,6 +51,7 @@ describe('bound core feedback recording', () => {
             type: 'session_event',
             severity,
             message,
+            presentation: 'already-appended',
           });
         },
         handleNewMessage: (message: ConsoleMessageItem) =>

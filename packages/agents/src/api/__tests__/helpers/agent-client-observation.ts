@@ -1,5 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { spyOn } from 'bun:test';
 import type { Agent } from '../../agent.js';
 import type {
   AgentClientContract,
@@ -20,24 +19,22 @@ export async function observeAgentConstruction(
   const clients: AgentClientContract[] = [];
   let config: Config | undefined;
   const create = SessionClientOwner.create;
-  const observation = spyOn(SessionClientOwner, 'create').mockImplementation(
-    async (session, acquisition, host) => {
-      config = session.config;
-      const construct = factory ?? acquisition.factory;
-      return create(
-        session,
-        {
-          ...acquisition,
-          factory: (...args) => {
-            const client = construct(...args);
-            if (client !== undefined) clients.push(client);
-            return client;
-          },
+  SessionClientOwner.create = async (session, acquisition, host) => {
+    config = session.config;
+    const construct = factory ?? acquisition.factory;
+    return create(
+      session,
+      {
+        ...acquisition,
+        factory: (...args) => {
+          const client = construct(...args);
+          if (client !== undefined) clients.push(client);
+          return client;
         },
-        host,
-      );
-    },
-  );
+      },
+      host,
+    );
+  };
   try {
     const agent = await build();
     if (config === undefined)
@@ -45,7 +42,7 @@ export async function observeAgentConstruction(
     observations.set(agent, { clients, config });
     return agent;
   } finally {
-    observation.mockRestore();
+    SessionClientOwner.create = create;
   }
 }
 

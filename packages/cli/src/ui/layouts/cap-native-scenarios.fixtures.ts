@@ -8,7 +8,7 @@ import {
   message,
   sizedMessage,
   serializedBytes,
-} from './cap-payload.fixture.js';
+} from './cap-payload.fixtures.js';
 
 type Layout = (
   history: HistoryItem[],

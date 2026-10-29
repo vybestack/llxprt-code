@@ -99,6 +99,7 @@ export function useBootstrapRuntime(
             type: 'session_event',
             severity,
             message,
+            presentation: 'already-appended',
           });
         }
         return recordingIntegrationRef?.current?.recordSessionEvent(

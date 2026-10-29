@@ -20,6 +20,7 @@ export type SessionRecordingEvent =
       readonly type: 'session_event';
       readonly severity: 'info' | 'warning' | 'error';
       readonly message: string;
+      readonly presentation?: 'already-appended';
     };
 
 export async function recordSessionEvent(
@@ -37,6 +38,7 @@ export async function recordSessionEvent(
     integration.recordDirectoriesChanged([...event.directories]);
   } else {
     integration.recordSessionEvent(event.severity, event.message);
-    await appendDisplay({ type: event.severity }, event.message);
+    if (event.presentation !== 'already-appended')
+      await appendDisplay({ type: event.severity }, event.message);
   }
 }

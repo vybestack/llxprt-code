@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import {
   writeNativeEdits,
   type NativePagerEdit as Edit,
-} from './native-pager-test-fixture.js';
+} from './native-pager.fixtures.js';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import {
   createScrollbackPagerStore,
