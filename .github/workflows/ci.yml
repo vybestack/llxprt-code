@@ -346,7 +346,7 @@ jobs:
         with:
           path: |
             ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'patches/**') }}
 
       - name: 'Run lockfile check'
         run: |-
@@ -1173,7 +1173,7 @@ jobs:
         with:
           path: |
             ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'patches/**') }}
 
       # S6 (#2243): `bun install` resolves dependencies; the root postinstall
       # (scripts/postinstall.cjs) then symlinks Bun's static workspace copies to
@@ -1614,7 +1614,7 @@ jobs:
         with:
           path: |
             ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'patches/**') }}
 
       - name: 'Install dependencies for SecureStore tests'
         run: |-
