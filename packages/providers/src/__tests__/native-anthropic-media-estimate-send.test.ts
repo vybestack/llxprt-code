@@ -141,6 +141,7 @@ async function publicMediaCase(
     sink.route.baseURL,
     resolver,
     store,
+    4096,
   );
   const read = store.readReserved.bind(store);
   const mediaReads: number[] = [];

@@ -16,6 +16,7 @@ export function loggingChatSession(
   runtime: AgentRuntimeContext,
   provider: RuntimeProvider,
   generation: ChatSessionConfig,
+  requestMediaBudgetBytes?: number,
 ): ChatSession {
   runtime.provider.getActiveProvider = () => provider;
   const unused = async (): Promise<never> => {
@@ -24,8 +25,8 @@ export function loggingChatSession(
   return new ChatSession(
     chatSessionPorts(runtime),
     undefined,
-    undefined,
-    undefined,
+    runtime.mediaResolver,
+    requestMediaBudgetBytes,
     undefined,
     undefined,
     undefined,

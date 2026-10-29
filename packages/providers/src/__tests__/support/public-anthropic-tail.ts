@@ -57,6 +57,7 @@ export function publicChat(
   baseURL: string,
   mediaResolver?: RequestMediaResolver,
   mediaStore?: LocalMediaStore,
+  requestMediaBudgetBytes?: number,
 ): {
   readonly chat: ReturnType<typeof loggingChatSession>;
   readonly owner: SessionSettingsOwner;
@@ -107,9 +108,12 @@ export function publicChat(
       logApiError() {},
     },
   });
-  const chat = loggingChatSession(runtime, provider, {
-    systemInstruction: 'system 雪',
-  });
+  const chat = loggingChatSession(
+    runtime,
+    provider,
+    { systemInstruction: 'system 雪' },
+    requestMediaBudgetBytes,
+  );
   return { chat, owner };
 }
 
