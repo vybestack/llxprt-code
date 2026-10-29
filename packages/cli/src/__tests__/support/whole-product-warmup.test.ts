@@ -33,8 +33,8 @@ describe('whole-product warmup workload', () => {
         Array.from({ length: 610 }, (_, index) => index),
       );
       expect(measured.payloadBytes).toStrictEqual([
-        ...Array.from({ length: 500 }, () => 4096),
-        ...Array.from({ length: 110 }, () => 65_536),
+        ...Array.from({ length: 580 }, () => 4096),
+        ...Array.from({ length: 30 }, () => 65_536),
       ]);
       expect(measured.result.turns).toBe(measured.turns.length);
       expect(

@@ -19,9 +19,9 @@ export async function wholeProductWarmup(
   const samples = [];
   let readings: number[] = [];
   for (let turn = 0; turn < WHOLE_PRODUCT_WARMUP_TURNS; turn++) {
-    // Full-size tool/save/compression cycles compile code that the small-row
-    // cache fill leaves cold, beyond the original three full-size cycles.
-    await runTurn(turn, turn < 500 ? 4096 : 65_536);
+    // The encode cache is restored at turn 500. Exercise uncached tokenizer,
+    // tool/save/compression paths on small rows before three full-size cycles.
+    await runTurn(turn, turn < 580 ? 4096 : 65_536);
     // Warm-up readings are diagnostics; baseline and measured-window samples
     // are collected separately. Only sample the final three warm-up windows.
     if (turn >= WHOLE_PRODUCT_WARMUP_TURNS - 30 && turn % 10 !== 0)
