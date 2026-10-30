@@ -507,7 +507,7 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = deepFreezeTable<
     owner: 'application',
     propagation: 'next-turn',
     description:
-      'Maximum aggregate normalized media payload in bytes, applied to one tool-result batch and to one provider request. Tool batches default to 15728640. When unset, request sizing is derived by the provider (native Anthropic: 32000000 bytes; others: 15728640). An explicit value, including 0 or 15728640, always wins. Saved to a profile only when set.',
+      'Maximum aggregate normalized media (images, PDFs, audio) payload in bytes, applied to one tool-result batch and to one provider request. The default is 15728640 (15 MiB) for tool batches and for requests to every provider, native Anthropic included. A separate 32000000-byte limit applies to the whole serialized native Anthropic request body. An explicit value, including 15728640, replaces the media budget. 0 disables the tool-batch filter and request-side image retirement, and the request resolver then rejects any encoded media. Saved to a profile only when set.',
     type: 'number',
     default: 15 * 1024 * 1024,
     persistToProfile: true,

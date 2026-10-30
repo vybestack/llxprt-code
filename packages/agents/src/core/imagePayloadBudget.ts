@@ -176,20 +176,47 @@ export function enforceImageBudget(
   return { blocks: result, omitted, totalImageBytes: runningTotal };
 }
 
+/**
+ * Feedback is model-visible text added to the request, so its size must not
+ * grow with the number of omitted images or the length of their labels. The
+ * omitted images themselves are never dropped from the accounting: the header
+ * count covers all of them and each category reports how many were not listed.
+ */
+const MAX_LISTED_PER_CATEGORY = 20;
+const MAX_LABEL_LENGTH = 64;
+
+function boundedLabel(label: string): string {
+  const characters = [...label];
+  return characters.length <= MAX_LABEL_LENGTH
+    ? label
+    : `${characters.slice(0, MAX_LABEL_LENGTH).join('')}...`;
+}
+
 function describeOmittedImage(img: OmittedImage): string {
   const identity = [
     img.filename === undefined || img.filename === ''
       ? undefined
-      : `file ${img.filename}`,
+      : `file ${boundedLabel(img.filename)}`,
     img.toolName === undefined || img.toolName === ''
       ? undefined
-      : `tool ${img.toolName}`,
+      : `tool ${boundedLabel(img.toolName)}`,
     img.callId === undefined || img.callId === ''
       ? undefined
-      : `call ${img.callId}`,
+      : `call ${boundedLabel(img.callId)}`,
   ].filter((part): part is string => part !== undefined);
   const subject = identity.length > 0 ? identity.join(', ') : 'unidentified';
   return `- ${subject}: ${img.mimeType ?? 'unknown type'}, ${img.sizeBytes} encoded bytes`;
+}
+
+function describeOmittedImages(images: readonly OmittedImage[]): string {
+  const lines = images
+    .slice(0, MAX_LISTED_PER_CATEGORY)
+    .map(describeOmittedImage);
+  const unlisted = images.length - lines.length;
+  if (unlisted > 0) {
+    lines.push(`- and ${unlisted} more omitted images not listed`);
+  }
+  return lines.join('\n');
 }
 
 /**
@@ -213,7 +240,7 @@ export function buildOmissionFeedback(
   if (aggregate.length > 0) {
     sections.push(
       `Omitted because the batch exceeded the limit:\n` +
-        `${aggregate.map(describeOmittedImage).join('\n')}\n` +
+        `${describeOmittedImages(aggregate)}\n` +
         `Request fewer images per call or read them in smaller batches ` +
         `to stay within the limit.`,
     );
@@ -221,7 +248,7 @@ export function buildOmissionFeedback(
   if (oversize.length > 0) {
     sections.push(
       `Cannot fit alone (larger than the ${budgetBytes}-byte limit by ` +
-        `itself):\n${oversize.map(describeOmittedImage).join('\n')}\n` +
+        `itself):\n${describeOmittedImages(oversize)}\n` +
         `These images cannot fit alone. Provide a resized or cropped, ` +
         `smaller version.`,
     );

@@ -640,4 +640,126 @@ describe('buildOmissionFeedback', () => {
     const feedback = buildOmissionFeedback([], 6000);
     expect(feedback).toContain('0 image(s)');
   });
+
+  describe('with a very large number of omissions', () => {
+    const LISTED_PER_CATEGORY = 20;
+
+    function manyOmissions(
+      count: number,
+      overrides: Partial<OmittedImage>,
+    ): OmittedImage[] {
+      return Array.from({ length: count }, (_, index) =>
+        omission({
+          callId: `call-${index}`,
+          filename: `img-${index}.png`,
+          ...overrides,
+        }),
+      );
+    }
+
+    function listedEntries(feedback: string): string[] {
+      return feedback.split('\n').filter((line) => line.startsWith('- file '));
+    }
+
+    it('lists a bounded number of aggregate omissions and counts the rest, keeping the remedy', () => {
+      const feedback = buildOmissionFeedback(
+        manyOmissions(100, { reason: 'aggregate-budget' }),
+        6000,
+      );
+
+      expect({
+        listed: listedEntries(feedback).length,
+        lastListed: feedback.includes(`img-${LISTED_PER_CATEGORY - 1}.png`),
+        firstUnlisted: feedback.includes(`img-${LISTED_PER_CATEGORY}.png`),
+        headerCount: feedback.includes('100 image(s) were omitted'),
+        remainder: feedback.includes('and 80 more omitted images not listed'),
+        remedy: feedback.includes('Request fewer images per call'),
+      }).toStrictEqual({
+        listed: LISTED_PER_CATEGORY,
+        lastListed: true,
+        firstUnlisted: false,
+        headerCount: true,
+        remainder: true,
+        remedy: true,
+      });
+    });
+
+    it('bounds the intrinsic list independently and keeps the resize guidance', () => {
+      const feedback = buildOmissionFeedback(
+        [
+          ...manyOmissions(3, { reason: 'aggregate-budget' }),
+          ...manyOmissions(45, {
+            reason: 'exceeds-budget-alone',
+            sizeBytes: 9000,
+          }).map((entry, index) => ({
+            ...entry,
+            filename: `huge-${index}.png`,
+          })),
+        ],
+        6000,
+      );
+
+      expect({
+        listed: listedEntries(feedback).length,
+        aggregateAllListed: [0, 1, 2].every((i) =>
+          feedback.includes(`img-${i}.png`),
+        ),
+        oversizeRemainder: feedback.includes(
+          'and 25 more omitted images not listed',
+        ),
+        guidance: feedback.includes('Provide a resized or cropped'),
+      }).toStrictEqual({
+        listed: 3 + LISTED_PER_CATEGORY,
+        aggregateAllListed: true,
+        oversizeRemainder: true,
+        guidance: true,
+      });
+    });
+
+    it('does not add a remainder line when everything fits in the list', () => {
+      const feedback = buildOmissionFeedback(
+        manyOmissions(LISTED_PER_CATEGORY, { reason: 'aggregate-budget' }),
+        6000,
+      );
+
+      expect([
+        listedEntries(feedback).length,
+        feedback.includes('not listed'),
+      ]).toStrictEqual([LISTED_PER_CATEGORY, false]);
+    });
+
+    it('bounds each label so one long filename or call id cannot dominate the feedback', () => {
+      const feedback = buildOmissionFeedback(
+        [
+          omission({
+            filename: `${'f'.repeat(500)}.png`,
+            toolName: 't'.repeat(500),
+            callId: 'c'.repeat(500),
+          }),
+        ],
+        6000,
+      );
+
+      expect(feedback.length).toBeLessThan(700);
+    });
+
+    it('keeps every tool response id in the budgeted blocks however many images are omitted', () => {
+      const blocks = Array.from({ length: 60 }, (_, index) => [
+        toolResponseBlock('read_file', `call-${index}`),
+        mediaBlock('image/png', 5000, `img-${index}.png`),
+      ]).flat();
+
+      const result = enforceImageBudget(blocks, 6000);
+
+      expect({
+        omitted: result.omitted.length,
+        retainedCallIds: result.blocks.flatMap((block) =>
+          block.type === 'tool_response' ? [block.callId] : [],
+        ),
+      }).toStrictEqual({
+        omitted: 59,
+        retainedCallIds: Array.from({ length: 60 }, (_, i) => `call-${i}`),
+      });
+    });
+  });
 });

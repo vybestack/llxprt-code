@@ -244,10 +244,24 @@ export function retireEnvelopeImages(
   return retired === history ? envelope.contents : [...retired, ...tail];
 }
 
+/** Encoded bytes of every media block the request resolver would count. */
+function totalCountedBytes(contents: readonly IContent[]): number {
+  return contents.reduce(
+    (total, content) =>
+      content.blocks.reduce(
+        (sum, block) => sum + (countedBytes(block) ?? 0),
+        total,
+      ),
+    0,
+  );
+}
+
 /**
  * Compression only helps with byte pressure when something other than the
  * request being sent can shrink: any body overflow, or a media overflow while
- * earlier media remains after retirement.
+ * earlier media remains after retirement and the pending media alone fits the
+ * budget the request was rejected under. Pending media is never rewritten, so
+ * when it alone exceeds that budget no history change can fix the request.
  */
 export function compressionCanRelieve(
   error: unknown,
@@ -257,17 +271,29 @@ export function compressionCanRelieve(
   if (!(error instanceof RequestMediaByteOverflowError)) {
     return true;
   }
-  return hasCountedMedia(
-    contents.slice(0, Math.max(0, contents.length - pendingCount)),
-  );
+  const splitAt = Math.max(0, contents.length - pendingCount);
+  if (
+    error.budgetBytes > 0 &&
+    totalCountedBytes(contents.slice(splitAt)) > error.budgetBytes
+  ) {
+    return false;
+  }
+  return hasCountedMedia(contents.slice(0, splitAt));
 }
 
-/** Names a pending-only media overflow; any other error passes through. */
+/**
+ * Names a pending-only media overflow, judged against the budget the request
+ * was rejected under; any other error passes through.
+ */
 export function explainPendingOverflow(
   error: unknown,
-  budgetBytes: number,
+  pending: readonly IContent[],
 ): unknown {
-  return error instanceof RequestMediaByteOverflowError && budgetBytes > 0
-    ? new PendingMediaBudgetError(error)
+  if (!(error instanceof RequestMediaByteOverflowError)) {
+    return error;
+  }
+  const pendingBytes = totalCountedBytes(pending);
+  return error.budgetBytes > 0 && pendingBytes > error.budgetBytes
+    ? new PendingMediaBudgetError(error, pendingBytes)
     : error;
 }

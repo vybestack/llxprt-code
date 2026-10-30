@@ -36,6 +36,21 @@ describe('issue 3199 media settings', () => {
     }
   });
 
+  it('describes the media budget and the native request-body ceiling as separate limits', () => {
+    const description = getSettingSpec(
+      'image-payload-budget-bytes',
+    )?.description;
+
+    expect(description).toContain('15728640');
+    expect(description).toContain(
+      'A separate 32000000-byte limit applies to the whole serialized native Anthropic request body.',
+    );
+    expect(description).not.toContain('native Anthropic: 32000000');
+    expect(description).toContain(
+      '0 disables the tool-batch filter and request-side image retirement, and the request resolver then rejects any encoded media.',
+    );
+  });
+
   it('rejects malformed and non-finite media budgets without coercion', () => {
     const malformedValues: readonly unknown[] = [
       -1,

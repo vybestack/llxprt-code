@@ -322,3 +322,85 @@ describe('partitioned execution semantics (#3387)', () => {
     expect(existsSync(marker)).toBe(false);
   }, 30_000);
 });
+
+describe('scoped runs over a package whose files are all ignored (#3984 CI lint)', () => {
+  let scopedRoot: string;
+
+  beforeAll(() => {
+    scopedRoot = mkdtempSync(join(tmpdir(), 'llxprt lint scoped-'));
+    // `packages/ignored` mirrors packages/lsp: eslint.config.js ignores it
+    // wholesale, yet CI's affected-target selector can still select it when
+    // only its (ignored) test files changed.
+    writeFileSync(
+      join(scopedRoot, 'eslint.config.js'),
+      "export default [{ ignores: ['packages/ignored/**'] }, { files: ['**/*.js'], rules: { 'no-var': 'error' } }];\n",
+    );
+    mkdirSync(join(scopedRoot, 'packages', 'ignored'), { recursive: true });
+    writeFileSync(
+      join(scopedRoot, 'packages', 'ignored', 'i.js'),
+      'var ignored = 1;\n',
+    );
+    mkdirSync(join(scopedRoot, 'packages', 'clean'), { recursive: true });
+    writeFileSync(
+      join(scopedRoot, 'packages', 'clean', 'c.js'),
+      'const clean = 1;\n',
+    );
+    mkdirSync(join(scopedRoot, 'packages', 'dirty'), { recursive: true });
+    writeFileSync(
+      join(scopedRoot, 'packages', 'dirty', 'd.js'),
+      'var dirty = 1;\n',
+    );
+    // The runner always adds integration-tests to a scoped run.
+    mkdirSync(join(scopedRoot, 'integration-tests'), { recursive: true });
+    writeFileSync(
+      join(scopedRoot, 'integration-tests', 't.js'),
+      'const t = 1;\n',
+    );
+  });
+
+  afterAll(() => {
+    rmSync(scopedRoot, { recursive: true, force: true });
+  });
+
+  /** Runs every scoped command with real ESLint; returns each exit code by label. */
+  async function scopedExitCodes(
+    targets: readonly string[],
+  ): Promise<Record<string, number | undefined>> {
+    const { buildLintCommands, readPackageDirs } = await loadRunner();
+    const commands = buildLintCommands({
+      targets,
+      forwardedArgs: ['--max-warnings', '0'],
+      cache: false,
+      packageDirs: readPackageDirs(scopedRoot),
+    });
+    const codes: Record<string, number | undefined> = {};
+    for (const command of commands) {
+      const result = await execa(command.cmd, [...command.args], {
+        cwd: scopedRoot,
+        reject: false,
+      });
+      codes[command.label] = result.exitCode;
+    }
+    return codes;
+  }
+
+  it('does not fail a selected package whose files are all ignored', async () => {
+    const codes = await scopedExitCodes(['packages/ignored', 'packages/clean']);
+    expect(codes).toEqual({
+      'integration-tests': 0,
+      'packages/clean': 0,
+      'packages/ignored': 0,
+    });
+  });
+
+  it('still lints real source in a selected package and fails on its findings', async () => {
+    const codes = await scopedExitCodes(['packages/ignored', 'packages/dirty']);
+    expect(codes['packages/dirty']).toBe(1);
+    expect(codes['packages/ignored']).toBe(0);
+  });
+
+  it('still fails loudly for a scoped target that is not a package on disk', async () => {
+    const codes = await scopedExitCodes(['packages/missing']);
+    expect(codes['packages/missing']).toBe(2);
+  });
+});

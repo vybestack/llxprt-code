@@ -92,7 +92,7 @@ export class RequestMediaByteOverflowError extends RequestMediaResolutionError {
       `aggregate budget (${totalBytes} > ${budgetBytes})`,
     );
     this.name = 'RequestMediaByteOverflowError';
-    this.message = `Request media totals ${totalBytes} bytes across all selected images in the conversation, over the ${budgetBytes} byte budget (${totalBytes} > ${budgetBytes}). The budget was crossed at content ${contentId} in turn ${turnId}; that image is where the running total passed the limit, not necessarily the largest. Compress the conversation, remove earlier images, or raise image-payload-budget-bytes`;
+    this.message = `The selected request media has reached at least ${totalBytes} bytes (images, PDFs and audio all count), over the ${budgetBytes} byte budget (${totalBytes} > ${budgetBytes}). The budget was crossed at content ${contentId} in turn ${turnId}; that item is where the running total passed the limit, not necessarily the largest, and later media was not counted. Compress the conversation, remove earlier media, or raise image-payload-budget-bytes`;
   }
 }
 

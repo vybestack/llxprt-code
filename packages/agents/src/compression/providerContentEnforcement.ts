@@ -198,7 +198,7 @@ export class ProviderContentEnforcer {
       throw error;
     }
     if (!compressionCanRelieve(error, contents, pending.length)) {
-      throw explainPendingOverflow(error, this.mediaBudgetBytes());
+      throw explainPendingOverflow(error, pending);
     }
     const recovered = await this.runCompressionAndRecompose(
       request.promptId,

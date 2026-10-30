@@ -7,14 +7,18 @@
 import { RequestMediaByteOverflowError } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 
 /**
- * The images of the request being sent alone exceed the request media budget,
- * after every earlier image was already omitted. Compressing history cannot
- * help, so the pending content is kept untouched and the cause is reported.
- * It is still a {@link RequestMediaByteOverflowError} for callers that
- * classify byte pressure.
+ * The media of the request being sent (images, PDFs, audio) alone exceeds the
+ * request media budget. Compressing history cannot help, so the pending
+ * content is kept untouched and the cause is reported. It is still a
+ * {@link RequestMediaByteOverflowError} for callers that classify byte
+ * pressure; its inherited `totalBytes` is the resolver's running subtotal where
+ * the budget was first crossed, while `pendingBytes` is the full pending total.
  */
 export class PendingMediaBudgetError extends RequestMediaByteOverflowError {
-  constructor(readonly overflow: RequestMediaByteOverflowError) {
+  constructor(
+    readonly overflow: RequestMediaByteOverflowError,
+    readonly pendingBytes: number,
+  ) {
     super(
       overflow.contentId,
       overflow.turnId,
@@ -22,6 +26,6 @@ export class PendingMediaBudgetError extends RequestMediaByteOverflowError {
       overflow.budgetBytes,
     );
     this.name = 'PendingMediaBudgetError';
-    this.message = `The images in this request total ${overflow.totalBytes} encoded bytes, over the ${overflow.budgetBytes} byte image budget even with every earlier image omitted. Send fewer images at once or resize or crop them; the conversation history was left unchanged.`;
+    this.message = `The media attached to this request totals ${pendingBytes} encoded bytes, over the ${overflow.budgetBytes} byte request media budget on its own. Send fewer or smaller attachments; the conversation history was left unchanged.`;
   }
 }

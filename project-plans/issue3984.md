@@ -1,5 +1,15 @@
 # Issue #3984: request media budget and historical image retirement
 
+## Verified PR remediation
+
+After CodeRabbit and the scoped CI lint failure, the complete serial remediation
+cycle finished on 2026-10-30 at 18:28:27 (-03:00), all exit 0: full typecheck,
+strict CI-equivalent scoped lint (including `packages/lsp`), format check, build,
+complete workspace tests, and live `gpt-luna-high` smoke. The actual formatter
+also passed afterward. Test-audit findings are identical to r10. A bounded
+independent review of these changes passed with no concrete defects. The
+construction-time budget limitation is tracked as follow-up #3989.
+
 ## Final local verification
 
 The complete **r10** sequence passed on Linux on 2026-10-30:
@@ -170,3 +180,55 @@ The prior 32,000,000-byte default-media acceptance expectation is superseded and
 These focused checks preceded the subsequent broad verification cycles recorded
 above. They do not replace complete workspace checks. No commit or push has
 been made at this checkpoint.
+
+## PR #3988 review and CI lint remediation (post de64fe1087)
+
+**CI lint failure.** `Lint (Javascript)` failed with exit 2: the scoped run passed
+`packages/lsp` (selected because only its ignored test files changed) and ESLint
+refused it because every file there is ignored by `eslint.config.js`. The runner
+tolerated that only for full-run package groups. Scoped targets that name an
+existing `packages/<name>` directory now get `--no-error-on-unmatched-pattern`
+too. A target that is not a package on disk (stale or mistyped) still fails
+loudly, non-ignored source in a selected package is still linted, and no ignore
+was added or broadened. Tests: `scripts/tests/run-lint-partition.test.ts`
+(real ESLint over a fixture with an ignored, a clean and a dirty package). The
+real repro `LLXPRT_LINT_TARGETS='["packages/lsp"]' bun scripts/run-lint.ts
+--max-warnings 0` exits 2 on the old runner and 0 now.
+
+**CodeRabbit threads (all five verified valid and fixed).**
+
+1. `compressionCanRelieve` counted earlier non-image media even when pending
+   media alone exceeded the budget. It now sums pending counted bytes and stops
+   futile compression only for `RequestMediaByteOverflowError` with positive
+   `error.budgetBytes` (the budget the request was rejected under, not the
+   configured one). Body-overflow and non-positive-budget paths are unchanged.
+2. `PendingMediaBudgetError` message is media-neutral and reports the pending
+   media total it computed (not the resolver's first-crossing subtotal).
+3. `buildOmissionFeedback` lists at most 20 entries per category plus
+   "and N more omitted images not listed", bounds each label to 64 characters,
+   and keeps the header count, guidance, and every tool-response block.
+4. `RequestMediaByteOverflowError` message says the selected request media "has
+   reached at least" the first-crossing subtotal and that later media was not
+   counted; images, PDFs and audio all count. No extra materialization.
+5. The `image-payload-budget-bytes` registry description now states the 15 MiB
+   media default for every provider, the separate 32000000-byte native Anthropic
+   body limit, and explicit `0` semantics (tool-batch filter and request-side
+   retirement off; resolver rejects encoded media). The docs paragraph matches.
+
+**Review-body follow-ups (outside diff).**
+
+- `ChatSessionFactory.ts:278` reads the image payload budget once per session
+  from `Config`'s construction snapshot. Valid but pre-existing at the merge base
+  and a cross-package lifecycle change (getter, session and compression
+  options); deferred, not part of this fix.
+- `mcp-cutover-server-fixture.ts` `releaseHeldUnlessSettled`: declined. Releasing
+  after the deadline is deliberate so an implementation that joins the held
+  request completes instead of hanging; failing there would turn a slow abort
+  into a hang or a different failure.
+
+**Red/green evidence** (scratch, uncommitted, in `.tmp-issue3984/`):
+`ci-remediation-{lint,enforcer,resolver,feedback,settings}-{red,green}.log`,
+`ci-remediation-lsp-repro-{red,green}.log`, `ci-remediation-scoped-lint.log`.
+Limits: the settings description test asserts the registry's user-facing text, and
+the lint regression runs real ESLint on a fixture rather than on `packages/lsp`
+itself; the `packages/lsp` run is covered by the repro logs above.

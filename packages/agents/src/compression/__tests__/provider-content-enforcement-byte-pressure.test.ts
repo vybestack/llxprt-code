@@ -55,6 +55,22 @@ function textTurn(speaker: IContent['speaker'], text: string): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
+function pdfTurn(label: string, base64Length: number): IContent {
+  return {
+    speaker: 'human',
+    blocks: [
+      {
+        type: 'media',
+        encoding: 'base64',
+        mimeType: 'application/pdf',
+        data: 'd'.repeat(base64Length),
+        semanticMetadata: {},
+      },
+    ],
+    metadata: { turnId: `turn-${label}` },
+  };
+}
+
 type Compression = (
   history: HistoryService,
 ) => Promise<PerformCompressionResult>;
@@ -219,7 +235,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
     );
 
     expect(error instanceof Error ? error.message : '').toContain(
-      'all selected images',
+      'selected request media has reached at least',
     );
   });
 
@@ -467,6 +483,59 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
         compressionRuns: 0,
         canonicalUnchanged: true,
       });
+    });
+
+    it('stops futile compression when pending PDF media alone is over budget, even with earlier non-image media', async () => {
+      const h = harness(summarizeHistory, undefined, BYTE_BUDGET);
+      h.history.add(pdfTurn('earlier', 300));
+      h.history.add(textTurn('ai', 'read the first document'));
+      await h.history.waitForTokenUpdates();
+      const before = JSON.stringify(h.history.getAll());
+
+      const error = await rejection(
+        h.enforcer.enforce(h.envelope([pdfTurn('pending', 1200)]), 'r5'),
+      );
+
+      expect({
+        typed: error instanceof PendingMediaBudgetError,
+        compressionRuns: h.compressionRuns(),
+        canonicalUnchanged: JSON.stringify(h.history.getAll()) === before,
+        message: error instanceof Error ? error.message : undefined,
+      }).toStrictEqual({
+        typed: true,
+        compressionRuns: 0,
+        canonicalUnchanged: true,
+        message:
+          'The media attached to this request totals 1200 encoded bytes, over the 1000 byte request media budget on its own. Send fewer or smaller attachments; the conversation history was left unchanged.',
+      });
+    });
+
+    it('judges pending media against the budget the request was rejected under, not the configured one', async () => {
+      const h = harness(summarizeHistory, undefined, 5 * BYTE_BUDGET);
+      seedImages(h.history);
+      await h.history.waitForTokenUpdates();
+
+      const error = await rejection(
+        h.enforcer.enforce(h.envelope([pdfTurn('pending', 1200)]), 'r6'),
+      );
+
+      expect([
+        error instanceof PendingMediaBudgetError,
+        h.compressionRuns(),
+      ]).toStrictEqual([true, 0]);
+    });
+
+    it('still gives earlier media one compression pass when pending media fits the rejecting budget', async () => {
+      const h = harness(summarizeHistory, undefined, 5 * BYTE_BUDGET);
+      seedImages(h.history);
+      await h.history.waitForTokenUpdates();
+
+      const result = await h.enforcer.enforce(
+        h.envelope([pdfTurn('pending', 600)]),
+        'r7',
+      );
+
+      expect([h.compressionRuns(), mediaBlocks(result)]).toStrictEqual([1, 1]);
     });
 
     it('does not guess a pending boundary when it is undefined', async () => {

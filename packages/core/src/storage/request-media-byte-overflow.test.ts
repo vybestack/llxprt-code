@@ -112,7 +112,7 @@ describe('request media byte overflow', () => {
     );
   });
 
-  it('describes the total across the whole selected history, not a single oversized image', async () => {
+  it('describes a running total across the selected media, not a single oversized image', async () => {
     const { store, contents, total } = await selection();
 
     const error = await rejection(
@@ -125,8 +125,64 @@ describe('request media byte overflow', () => {
     );
 
     const message = error instanceof Error ? error.message : '';
-    expect(message).toContain('all selected images');
+    expect(message).toContain(
+      `selected request media has reached at least ${total} bytes`,
+    );
+    expect(message).not.toContain('selected images');
     expect(message).not.toContain('failed for content');
+  });
+
+  it('reports the first-crossing subtotal for mixed PDF, inline and referenced media without claiming it is the full total', async () => {
+    const { store } = await selection();
+    const reference = await admitted(store, 4, 30);
+    const inlinePdf: IContent = {
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'media',
+          encoding: 'base64',
+          mimeType: 'application/pdf',
+          data: 'p'.repeat(100),
+          semanticMetadata: {},
+        },
+      ],
+      metadata: { turnId: 'turn-pdf' },
+    };
+    const inlineLater: IContent = {
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'media',
+          encoding: 'base64',
+          mimeType: 'audio/mpeg',
+          data: 'a'.repeat(500),
+          semanticMetadata: {},
+        },
+      ],
+      metadata: { turnId: 'turn-audio' },
+    };
+    const crossingSubtotal = reference.normalizedBase64Length + 100;
+
+    const error = await rejection(
+      new RequestMediaResolver(store).resolve({
+        contents: [turn('turn-ref', reference), inlinePdf, inlineLater],
+        requestId: 'mixed',
+        turnId: 'active-turn',
+        aggregateBudgetBytes: crossingSubtotal - 1,
+      }),
+    );
+
+    const message = error instanceof Error ? error.message : '';
+    expect(error).toMatchObject({
+      totalBytes: crossingSubtotal,
+      turnId: 'turn-pdf',
+    });
+    expect(message).toContain(
+      `selected request media has reached at least ${crossingSubtotal} bytes`,
+    );
+    expect(message).toContain('later media was not counted');
+    expect(message).not.toContain('selected images');
+    expect(message).not.toContain('totals');
   });
 
   it('admits the same selection when the budget equals its total', async () => {
