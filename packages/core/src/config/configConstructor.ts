@@ -142,6 +142,7 @@ export interface ConfigConstructorTarget {
   enableToolOutputTruncation: boolean;
   continueOnFailedApiCall: boolean;
   imagePayloadBudgetBytes: number;
+  explicitImagePayloadBudgetBytes: number | undefined;
   enableShellOutputEfficiency: boolean;
   continueSession: boolean | string;
   extensionManagement: boolean;
@@ -498,12 +499,15 @@ function applySessionFlags(
 ): void {
   config.continueOnFailedApiCall = params.continueOnFailedApiCall ?? true;
   const imagePayloadBudgetBytes = params.imagePayloadBudgetBytes;
-  config.imagePayloadBudgetBytes =
+  config.explicitImagePayloadBudgetBytes =
     typeof imagePayloadBudgetBytes === 'number' &&
     Number.isSafeInteger(imagePayloadBudgetBytes) &&
     imagePayloadBudgetBytes >= 0
       ? imagePayloadBudgetBytes
-      : DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES;
+      : undefined;
+  config.imagePayloadBudgetBytes =
+    config.explicitImagePayloadBudgetBytes ??
+    DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES;
   config.continueSession = params.continueSession ?? false;
   config.storageRoot = path.resolve(params.storageRoot ?? config.targetDir);
   config.globalConfigRoot = Storage.getGlobalConfigDir();

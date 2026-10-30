@@ -115,16 +115,22 @@ describe('FolderTrustDialog', () => {
 
     act(() => {
       stdin.write('\r');
-      stdin.write('\r');
-      stdin.write(KITTY_ESCAPE_SEQUENCE);
     });
 
     await waitFor(() => {
       expect(onSelect).toHaveBeenCalledOnce();
     });
+
+    act(() => {
+      stdin.write('\r');
+      stdin.write(KITTY_ESCAPE_SEQUENCE);
+    });
+    expect(onSelect).toHaveBeenCalledOnce();
     expect(mockedExit).not.toHaveBeenCalled();
-    selection.resolve();
-    await selection.promise;
+    await act(async () => {
+      selection.resolve();
+      await selection.promise;
+    });
 
     act(() => {
       stdin.write(KITTY_ESCAPE_SEQUENCE);

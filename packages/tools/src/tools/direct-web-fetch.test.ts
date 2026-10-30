@@ -83,12 +83,36 @@ function trackConnection(
   });
 }
 
+function waitForConnectionClose(
+  res: http.ServerResponse,
+  watchdogMs: number,
+): Promise<void> {
+  const socket = res.socket;
+  if (res.destroyed || socket === null || socket.destroyed) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const finish = (): void => {
+      clearTimeout(watchdog);
+      res.off('close', finish);
+      socket.off('close', finish);
+      resolve();
+    };
+    // Safety bound only: a client that never cancels must still let the
+    // server finish so the test fails on its assertions instead of hanging.
+    const watchdog = setTimeout(finish, watchdogMs);
+    res.once('close', finish);
+    socket.once('close', finish);
+  });
+}
+
 async function pacedWrite(
   res: http.ServerResponse,
   state: ConnectionState,
   chunks: number,
   chunkBytes = 256,
   gapMs = 10,
+  holdAfterLastChunkMs = 0,
 ): Promise<void> {
   for (let i = 0; i < chunks; i++) {
     if (res.writableEnded || res.destroyed || res.socket?.destroyed === true) {
@@ -99,6 +123,12 @@ async function pacedWrite(
     if (i < chunks - 1) {
       await delay(gapMs);
     }
+  }
+  if (holdAfterLastChunkMs > 0) {
+    // The final chunk is the one that crosses the byte budget. Do not end the
+    // response until the client has closed the connection, otherwise a fast
+    // end() races the client's cancellation and masks it.
+    await waitForConnectionClose(res, holdAfterLastChunkMs);
   }
   if (!res.writableEnded && res.socket?.destroyed !== true) {
     state.completed = true;
@@ -548,7 +578,7 @@ describe('DirectWebFetchTool', () => {
       connectionClosed = trackConnection(res, state);
       res.writeHead(200, { 'content-type': 'application/octet-stream' });
       res.write('partial-body-marker');
-      loopback.trackWriter(pacedWrite(res, state, 21, 256 * 1024, 5));
+      loopback.trackWriter(pacedWrite(res, state, 21, 256 * 1024, 5, 3000));
     });
 
     const result = await tool

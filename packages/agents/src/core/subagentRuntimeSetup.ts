@@ -681,7 +681,7 @@ export async function createChatObject(
     logger,
     systemPromptAssembler,
     providerFileLifecycle,
-    config.getImagePayloadBudgetBytes(),
+    config.getRequestImagePayloadBudgetOverrideBytes(),
     tryBucketFailover,
     readCurrentBucket,
   );
@@ -769,7 +769,7 @@ function instantiateChat(
   _logger: { debug: (fn: () => string) => void },
   systemPromptAssembler: SystemPromptAssembler | undefined,
   providerFileLifecycle: ProviderFileLifecycle | undefined,
-  requestMediaBudgetBytes: number,
+  requestMediaBudgetBytes: number | undefined,
   tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
   readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
 ): ChatSession | null {

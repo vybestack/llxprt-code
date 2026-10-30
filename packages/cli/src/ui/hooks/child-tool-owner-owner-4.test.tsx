@@ -16,6 +16,8 @@ import {
   type ChildToolOwner,
 } from '../../__tests__/child-tool-owner-agent-fixture.js';
 
+const APPROVAL_READY_TIMEOUT_MS = 30_000;
+
 describe('Mounted CLI child execution ownership', () => {
   const cleanupOwners: Array<() => Promise<void>> = [];
 
@@ -51,10 +53,17 @@ describe('Mounted CLI child execution ownership', () => {
       value.hook?.result.current[0].find(
         (call) => call.request.callId === 'same-child-call',
       );
-    await waitFor(() => {
-      expect(waiting(a)?.status).toBe('awaiting_approval');
-      expect(waiting(b)?.status).toBe('awaiting_approval');
-    });
+    // Each owner starts a real stdio MCP server and child agent before its
+    // approval is raised; that takes about a second, which is the default
+    // waitFor budget. The bound only decides when a missing approval is
+    // reported as a failure.
+    await waitFor(
+      () => {
+        expect(waiting(a)?.status).toBe('awaiting_approval');
+        expect(waiting(b)?.status).toBe('awaiting_approval');
+      },
+      { timeout: APPROVAL_READY_TIMEOUT_MS },
+    );
     const approval = waiting(a);
     const denial = waiting(b);
     if (

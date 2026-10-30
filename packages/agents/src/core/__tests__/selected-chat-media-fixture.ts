@@ -94,13 +94,17 @@ export function createMediaHistoryChat(
   lifecycle: ProviderFileLifecycle,
   retainedInvocationOwners: SessionSettingsOwner[],
   onRequest?: MediaHistoryRequest,
+  limits: {
+    readonly quotaBytes?: number;
+    readonly mediaBudgetBytes?: number;
+  } = {},
 ): ChatSession {
   const provider = createMediaHistoryProvider(onRequest);
   const setup = createChatSessionRuntime({ provider });
   const history = new HistoryService();
   const store = new LocalMediaStore({
     rootDirectory: join(directory, 'media'),
-    quotaBytes: 1024 * 1024,
+    quotaBytes: limits.quotaBytes ?? 1024 * 1024,
   });
   const state = createAgentRuntimeState({
     runtimeId: 'media-history-runtime',
@@ -155,7 +159,7 @@ export function createMediaHistoryChat(
     chatSessionPorts(runtime),
     setup.config,
     new RequestMediaResolver(store),
-    1024 * 1024,
+    limits.mediaBudgetBytes ?? 1024 * 1024,
     createHistoryProviderFileBindingStore(history),
     lifecycle,
     undefined,

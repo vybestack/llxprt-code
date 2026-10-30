@@ -14,11 +14,11 @@ import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/c
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import {
+  releaseHeldUnlessSettled,
   startNoAuthMcpFixture,
   type NoAuthMcpFixture,
 } from './helpers/mcp-cutover-server-fixture.js';
 
-const BARRIER_MS = 20;
 const SOCKET_CLOSE_WAIT_MS = 2000;
 
 function delay(milliseconds: number): Promise<void> {
@@ -112,8 +112,7 @@ describe('McpRuntimeOwner retirement with a reload in flight (characterization)'
         const disposing = owner
           .dispose()
           .then(() => fixture.events.push('disposed'));
-        await delay(BARRIER_MS);
-        fixture.release(method);
+        await releaseHeldUnlessSettled(fixture, method, reloading);
         await disposing;
         const outcome = await reloading;
         await socketsClosed(fixture);
