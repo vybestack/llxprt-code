@@ -21,6 +21,10 @@ const fixture = fileURLToPath(
   new URL('../../../lsp/test/fixtures/fake-lsp-server.ts', import.meta.url),
 );
 
+// Two real LSP service startups plus four diagnostics waits can exceed Bun's
+// default 5s test timeout on a loaded machine.
+const REAL_PROCESS_TEST_TIMEOUT_MS = 30_000;
+
 function settings(): {
   servers: Array<{ id: string; command: string; args?: string[] }>;
   navigationTools: boolean;
@@ -171,31 +175,38 @@ describe('WorkspaceLspOwner real process lifetime', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('checks real changed files and isolates independent roots with identical labels', async () => {
-    const { directory, file } = await workspace();
-    const first = new WorkspaceLspOwner(settings(), directory, () => true);
-    const second = new WorkspaceLspOwner(settings(), directory, () => true);
-    await activate(first, directory);
-    await activate(second, directory);
-    const diagnostics = await first.diagnostics.waitForDiagnostics(file, 5000);
-    expect(
-      diagnostics.some(
-        (diagnostic) =>
-          diagnostic.severity === 'error' && diagnostic.line === 1,
-      ),
-    ).toBe(true);
-    await first.dispose();
-    await expect(
-      first.diagnostics.waitForDiagnostics(file, 5000),
-    ).rejects.toThrow('stopped');
-    expect(
-      (await second.diagnostics.waitForDiagnostics(file, 5000)).length,
-    ).toBeGreaterThan(0);
-    await writeFile(file, 'const value = 1;\n');
-    expect(
-      await second.diagnostics.waitForDiagnostics(file, 5000),
-    ).toStrictEqual([]);
-  });
+  it(
+    'checks real changed files and isolates independent roots with identical labels',
+    async () => {
+      const { directory, file } = await workspace();
+      const first = new WorkspaceLspOwner(settings(), directory, () => true);
+      const second = new WorkspaceLspOwner(settings(), directory, () => true);
+      await activate(first, directory);
+      await activate(second, directory);
+      const diagnostics = await first.diagnostics.waitForDiagnostics(
+        file,
+        5000,
+      );
+      expect(
+        diagnostics.some(
+          (diagnostic) =>
+            diagnostic.severity === 'error' && diagnostic.line === 1,
+        ),
+      ).toBe(true);
+      await first.dispose();
+      await expect(
+        first.diagnostics.waitForDiagnostics(file, 5000),
+      ).rejects.toThrow('stopped');
+      expect(
+        (await second.diagnostics.waitForDiagnostics(file, 5000)).length,
+      ).toBeGreaterThan(0);
+      await writeFile(file, 'const value = 1;\n');
+      expect(
+        await second.diagnostics.waitForDiagnostics(file, 5000),
+      ).toStrictEqual([]);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
 
   it('withdraws navigation tools and denies retained operations before joining shutdown', async () => {
     const { directory, file } = await workspace();

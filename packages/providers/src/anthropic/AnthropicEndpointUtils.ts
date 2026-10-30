@@ -9,6 +9,8 @@ import {
   isUrlEncodedMediaBlock,
   type MediaCategory,
 } from '../utils/mediaUtils.js';
+import { DEFAULT_REQUEST_MEDIA_BUDGET_BYTES } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { DEFAULT_HTTP_JSON_ENVELOPE_BYTES } from '../utils/boundedJsonBody.js';
 
 /**
  * The default Anthropic API endpoint used when no explicit base URL is
@@ -18,6 +20,65 @@ import {
  * compared against third-party Anthropic-compatible endpoints (e.g. z.ai).
  */
 export const ANTHROPIC_DEFAULT_BASE_URL = 'https://api.anthropic.com';
+
+/**
+ * Conservative request-size envelope for the native Anthropic Messages API in
+ * decimal bytes. The API reference documents 128 MB while Claude Code's error
+ * guidance documents 32 MB, and no OAuth-specific maximum is published, so
+ * the lower documented figure is used for automatic sizing.
+ */
+export const ANTHROPIC_NATIVE_REQUEST_ENVELOPE_BYTES = 32_000_000;
+
+/**
+ * True only for the default endpoint or the exact `api.anthropic.com` host.
+ * Arbitrary Anthropic-compatible base URLs keep the provider default.
+ */
+export function isNativeAnthropicMessagesEndpoint(baseURL?: string): boolean {
+  if (baseURL === undefined || baseURL.trim() === '') {
+    return true;
+  }
+  try {
+    const host = new URL(baseURL.trim()).hostname
+      .toLowerCase()
+      .replace(/\.$/, '');
+    return host === 'api.anthropic.com';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * An explicit budget always wins. Without one, the native endpoint uses the
+ * shared 15 MiB image budget (the 32,000,000 byte envelope bounds the whole
+ * serialized body, not the image share); other hosts keep the generic
+ * provider default by returning `undefined`.
+ */
+export function resolveAnthropicRequestMediaBudgetBytes(
+  configuredBytes: number | undefined,
+  baseURL: string | undefined,
+): number | undefined {
+  if (configuredBytes !== undefined) {
+    return configuredBytes;
+  }
+  return isNativeAnthropicMessagesEndpoint(baseURL)
+    ? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES
+    : undefined;
+}
+
+/**
+ * Exact serialized-body ceiling for a finalized Messages request. The native
+ * endpoint is always capped at the conservative envelope, independent of any
+ * explicit media budget: a configured media budget only tightens or relaxes
+ * the image share, never the transport ceiling. Other endpoints keep the
+ * generic allocation ceiling.
+ */
+export function resolveAnthropicRequestBodyLimitBytes(
+  baseURL: string | undefined,
+): number {
+  return isNativeAnthropicMessagesEndpoint(baseURL)
+    ? ANTHROPIC_NATIVE_REQUEST_ENVELOPE_BYTES
+    : DEFAULT_HTTP_JSON_ENVELOPE_BYTES;
+}
 
 /**
  * Determines whether a base URL points to the native Anthropic API

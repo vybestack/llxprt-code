@@ -53,6 +53,8 @@ import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
 import {
   isAnthropicOAuthBaseURL,
   createMediaSupportPredicate,
+  resolveAnthropicRequestBodyLimitBytes,
+  resolveAnthropicRequestMediaBudgetBytes,
   ANTHROPIC_DEFAULT_BASE_URL,
 } from './AnthropicEndpointUtils.js';
 import { findAnthropicToolSchema } from './AnthropicToolSchema.js';
@@ -62,6 +64,7 @@ import { projectAnthropicPromptEnvelope } from '../runtime/promptEnvelopeProject
 import {
   buildAnthropicRequestHeaders,
   withCredentialHeader,
+  assertAnthropicRequestBodyWithinLimit,
   createAnthropicApiCall,
   executeAnthropicApiCall,
 } from './AnthropicApiExecution.js';
@@ -143,7 +146,10 @@ export class AnthropicProvider extends BaseProvider {
     const media = captureRequestMediaInput(
       options.metadata['logicalRequestId'],
       invocation.runtimeId,
-      this.requestMediaBudgetBytes,
+      resolveAnthropicRequestMediaBudgetBytes(
+        this.requestMediaBudgetBytes,
+        options.resolved.baseURL,
+      ),
       this.requestMediaResolver,
     );
     return resolveRequestMedia(media, contents, invocation.signal);
@@ -665,6 +671,7 @@ export class AnthropicProvider extends BaseProvider {
       effectiveRequestBody,
       customHeaders,
       effectiveOptions.invocation.signal,
+      resolveAnthropicRequestBodyLimitBytes(effectiveOptions.resolved.baseURL),
     );
 
     const executed = await this.executeWithImageRecovery(
@@ -818,6 +825,7 @@ export class AnthropicProvider extends BaseProvider {
         sanitized.body,
         customHeaders,
         options.invocation.signal,
+        resolveAnthropicRequestBodyLimitBytes(options.resolved.baseURL),
       ),
       rateLimitLogger,
       customHeaders,
@@ -888,6 +896,10 @@ export class AnthropicProvider extends BaseProvider {
         authToken,
       );
       registerAnthropicRequestCleanup(mediaRequest, requestContext.requestBody);
+      await assertAnthropicRequestBodyWithinLimit(
+        requestContext.requestBody,
+        resolveAnthropicRequestBodyLimitBytes(resolvedOptions.resolved.baseURL),
+      );
       const transportToken = Object.freeze({});
       this.preparedPromptEnvelopes.set(transportToken, {
         requestContext,

@@ -79,6 +79,56 @@ export class RequestMediaResolutionError extends Error {
   }
 }
 
+export class RequestMediaByteOverflowError extends RequestMediaResolutionError {
+  constructor(
+    contentId: string,
+    turnId: string,
+    readonly totalBytes: number,
+    readonly budgetBytes: number,
+  ) {
+    super(
+      contentId,
+      turnId,
+      `aggregate budget (${totalBytes} > ${budgetBytes})`,
+    );
+    this.name = 'RequestMediaByteOverflowError';
+    this.message = `The selected request media has reached at least ${totalBytes} bytes (images, PDFs and audio all count), over the ${budgetBytes} byte budget (${totalBytes} > ${budgetBytes}). The budget was crossed at content ${contentId} in turn ${turnId}; that item is where the running total passed the limit, not necessarily the largest, and later media was not counted. Compress the conversation, remove earlier media, or raise image-payload-budget-bytes`;
+  }
+}
+
+/**
+ * The finalized provider request body (every image, text, and tool block as
+ * serialized for the wire) exceeds the byte ceiling the endpoint accepts.
+ * Callers treat it like {@link RequestMediaByteOverflowError}: the request
+ * is too large in bytes regardless of token headroom.
+ */
+export class RequestBodyByteOverflowError extends Error {
+  constructor(
+    readonly totalBytes: number,
+    readonly limitBytes: number,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `Request body size limit exceeded (${totalBytes} > ${limitBytes} bytes). Compress the conversation or remove earlier images`,
+      options,
+    );
+    this.name = 'RequestBodyByteOverflowError';
+  }
+}
+
+export type RequestByteOverflowError =
+  | RequestMediaByteOverflowError
+  | RequestBodyByteOverflowError;
+
+export function isRequestByteOverflowError(
+  error: unknown,
+): error is RequestByteOverflowError {
+  return (
+    error instanceof RequestMediaByteOverflowError ||
+    error instanceof RequestBodyByteOverflowError
+  );
+}
+
 function abortError(): Error {
   const error = new Error('Media request resolution was aborted');
   error.name = 'AbortError';
@@ -144,10 +194,11 @@ function selectedNormalizedBytes(input: RequestMediaResolutionInput): number {
         !Number.isSafeInteger(nextTotal) ||
         nextTotal > input.aggregateBudgetBytes
       ) {
-        throw new RequestMediaResolutionError(
+        throw new RequestMediaByteOverflowError(
           block.encoding === 'reference' ? block.contentId : 'inline-media',
           turnId,
-          `aggregate budget (${nextTotal} > ${input.aggregateBudgetBytes})`,
+          nextTotal,
+          input.aggregateBudgetBytes,
         );
       }
       total = nextTotal;

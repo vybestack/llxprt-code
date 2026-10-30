@@ -7,10 +7,7 @@
 import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import {
-  invalidateResponsesStatefulChain,
-  type IContent,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
   RuntimeProvider as IProvider,
   RuntimeCompressionGuardInfo,
@@ -20,12 +17,25 @@ import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.
 import { getCompletionBudget } from './compressionBudgeting.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
+import {
+  DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
+  isRequestByteOverflowError,
+  type RequestByteOverflowError,
+} from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { isAbortLikeError } from './is-abort-like-error.js';
 import { buildContextOverflowError } from './contextOverflowError.js';
 import {
   INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
   computeHistoryTruncationTarget,
   computeMarginAdjustedLimit,
 } from './contextLimitPolicy.js';
+import { executeFallbackTruncation } from './fallbackTruncationCommit.js';
+import {
+  compressionCanRelieve,
+  explainPendingOverflow,
+  retireEnvelopeImages,
+  retireHistoricalImages,
+} from './historicalImageRetirement.js';
 import {
   truncateOversizedToolResponsesUnified,
   type UnifiedTruncationResult,
@@ -64,6 +74,12 @@ export interface ProviderContentEnforcementDeps {
   resetPromptTokenBaseline: () => void;
   restorePromptTokenBaseline: (baseline: number | null) => void;
   estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>;
+  /**
+   * Explicit request media budget override; the shared default applies when
+   * absent. The oldest historical images are retired from every request view
+   * that would exceed it (issue #3984).
+   */
+  requestMediaBudgetBytes?: number;
 }
 
 interface ContextLimits {
@@ -94,32 +110,44 @@ interface OverflowReductionResult {
   truncationApplied: boolean;
 }
 
-interface FallbackStateSnapshot {
-  readonly history: IContent[];
-  readonly cacheAnchorSeq: number;
-  readonly promptTokenBaseline: number | null;
-}
-
 export class ProviderContentEnforcer {
   constructor(private readonly deps: ProviderContentEnforcementDeps) {}
 
+  /** `byteRecoveryAttempted` is internal: it bounds byte recovery to one pass. */
   async enforce(
     envelope: ProviderContentEnvelope,
     promptId: string,
     provider?: IProvider,
+    byteRecoveryAttempted = false,
   ): Promise<IContent[]> {
     await this.deps.historyService.waitForTokenUpdates();
     const model = this.resolveModel(provider);
     const limits = this.computeContextLimits(provider, model);
-    const initialProjected = await this.estimateProviderProjection(
-      envelope.contents,
-      limits.completionBudget,
-      model,
-      'initial',
-    );
+    const contents = retireEnvelopeImages(envelope, this.mediaBudgetBytes());
+    let initialProjected: number;
+    try {
+      initialProjected = await this.estimateProviderProjection(
+        contents,
+        limits.completionBudget,
+        model,
+        'initial',
+      );
+    } catch (error) {
+      if (!isRequestByteOverflowError(error) || byteRecoveryAttempted) {
+        throw error;
+      }
+      return this.recoverFromByteOverflow(
+        error,
+        envelope,
+        contents,
+        { promptId, provider, model },
+        limits.completionBudget,
+      );
+    }
 
     const earlyReturn = this.checkEarlyReturn(
       envelope,
+      contents,
       limits,
       initialProjected,
     );
@@ -152,19 +180,59 @@ export class ProviderContentEnforcer {
     );
   }
 
+  /**
+   * One bounded recovery from request-byte pressure that remains after image
+   * retirement: a single compression pass when something other than the
+   * pending request can shrink, otherwise the typed overflow with the pending
+   * content untouched. Never retries an unchanged request.
+   */
+  private async recoverFromByteOverflow(
+    error: RequestByteOverflowError,
+    envelope: ProviderContentEnvelope,
+    contents: IContent[],
+    request: { promptId: string; provider?: IProvider; model: string },
+    completionBudget: number,
+  ): Promise<IContent[]> {
+    const pending = envelope.pendingContents;
+    if (pending === undefined) {
+      throw error;
+    }
+    if (!compressionCanRelieve(error, contents, pending.length)) {
+      throw explainPendingOverflow(error, pending);
+    }
+    const recovered = await this.runCompressionAndRecompose(
+      request.promptId,
+      pending,
+      completionBudget,
+      request.model,
+      'post-byte-pressure-compression',
+      true,
+    );
+    if (recovered.compressionFailure !== undefined) {
+      throw error;
+    }
+    return this.enforce(
+      { ...envelope, contents: recovered.contents },
+      request.promptId,
+      request.provider,
+      true,
+    );
+  }
+
   private checkEarlyReturn(
     envelope: ProviderContentEnvelope,
+    contents: IContent[],
     limits: ContextLimits,
     initialProjected: number,
   ): IContent[] | undefined {
     if (initialProjected <= limits.compressionThreshold) {
-      return envelope.contents;
+      return contents;
     }
     if (
       envelope.pendingContents === undefined &&
       initialProjected <= limits.marginAdjustedLimit
     ) {
-      return envelope.contents;
+      return contents;
     }
     return undefined;
   }
@@ -513,12 +581,13 @@ export class ProviderContentEnforcer {
     completionBudget: number,
     model: string,
     stage: string = 'post-compression',
+    propagateAbort: boolean = false,
   ): Promise<ProjectionResult> {
     // The try/catch covers ONLY performCompression, the token-update wait,
-    // and compression-result handling. Projection calls (projectSuccess /
-    // projectWithFailure) are executed OUTSIDE the catch so that a projection
-    // rejection surfaces as a stage-aware error rather than being swallowed
-    // and re-projected as a compression failure.
+    // and compression-result handling. Projection calls (projectContents)
+    // are executed OUTSIDE the catch so that a projection rejection surfaces
+    // as a stage-aware error rather than being swallowed and re-projected as
+    // a compression failure.
     let compressionResult: PerformCompressionResult;
     let compressionError: Error | undefined;
     try {
@@ -528,6 +597,9 @@ export class ProviderContentEnforcer {
       });
       await this.deps.historyService.waitForTokenUpdates();
     } catch (error) {
+      if (propagateAbort && isAbortLikeError(error)) {
+        throw error;
+      }
       compressionResult = PerformCompressionResult.FAILED;
       compressionError = this.normalizeError(error);
       this.deps.logger.warn(
@@ -537,12 +609,12 @@ export class ProviderContentEnforcer {
       );
     }
     if (compressionError !== undefined) {
-      return this.projectWithFailure(
+      return this.projectContents(
         pendingContents,
         completionBudget,
         model,
-        compressionError,
         stage,
+        compressionError,
       );
     }
     if (compressionResult !== PerformCompressionResult.COMPRESSED) {
@@ -550,17 +622,22 @@ export class ProviderContentEnforcer {
         () =>
           `[CompressionHandler] Provider-content compression finished without COMPRESSED result: ${compressionResult}`,
       );
-      return this.projectWithFailure(
+      return this.projectContents(
         pendingContents,
         completionBudget,
         model,
+        stage,
         new Error(
           `Auto compression did not complete during hard-limit enforcement (result: ${compressionResult})`,
         ),
-        stage,
       );
     }
-    return this.projectSuccess(pendingContents, completionBudget, model, stage);
+    return this.projectContents(
+      pendingContents,
+      completionBudget,
+      model,
+      stage,
+    );
   }
 
   private async retryCompressionIfIneffective(
@@ -627,7 +704,8 @@ export class ProviderContentEnforcer {
     compressionFailure: Error | undefined,
     targetTokenCount: number | undefined,
   ): Promise<OverflowReductionResult> {
-    const fallbackOutcome = await this.executeFallbackTruncation(
+    const fallbackOutcome = await executeFallbackTruncation(
+      this.deps,
       promptId,
       targetTokenCount,
     );
@@ -653,136 +731,6 @@ export class ProviderContentEnforcer {
     return result;
   }
 
-  private captureFallbackState(): FallbackStateSnapshot {
-    return {
-      history: [...this.deps.historyService.getRawHistory()],
-      cacheAnchorSeq: this.deps.historyService.getCacheAnchorSeq(),
-      promptTokenBaseline: this.deps.getPromptTokenBaseline(),
-    };
-  }
-
-  private async restoreFallbackState(
-    snapshot: FallbackStateSnapshot,
-  ): Promise<void> {
-    await this.deps.historyService.replaceAll(
-      [...snapshot.history],
-      this.deps.runtimeContext.state.model,
-      { origin: this.deps.historyOrigin },
-    );
-    if (snapshot.cacheAnchorSeq === 0) {
-      this.deps.historyService.resetCacheAnchorSeq();
-    } else {
-      this.deps.historyService.setCacheAnchorSeq(snapshot.cacheAnchorSeq);
-    }
-    this.deps.restorePromptTokenBaseline(snapshot.promptTokenBaseline);
-  }
-
-  private async restoreRejectedFallback(
-    snapshot: FallbackStateSnapshot,
-    fallbackError: unknown,
-  ): Promise<Error> {
-    const failure = this.normalizeError(fallbackError);
-    try {
-      await this.restoreFallbackState(snapshot);
-      return failure;
-    } catch (rollbackError) {
-      return new AggregateError(
-        [failure, this.normalizeError(rollbackError)],
-        'Provider truncation fallback failed and its state rollback also failed',
-      );
-    }
-  }
-
-  /**
-   * Executes fallback truncation and commits its candidate history atomically.
-   * The existing history remains untouched unless the complete candidate is
-   * accepted and its token accounting succeeds.
-   */
-  private async executeFallbackTruncation(
-    promptId: string,
-    targetTokenCount: number | undefined,
-  ): Promise<{
-    truncationApplied: boolean;
-    truncationFailure?: Error;
-  }> {
-    const snapshot = this.captureFallbackState();
-    let truncationFailure: Error | undefined;
-    let fallbackSucceeded = false;
-    const candidate = { installed: false, committed: false };
-    try {
-      fallbackSucceeded = await this.deps.performFallbackCompression(
-        promptId,
-        async (newHistory) => {
-          await this.deps.historyService.replaceAll(
-            [...invalidateResponsesStatefulChain(newHistory)],
-            this.deps.runtimeContext.state.model,
-            { origin: this.deps.historyOrigin },
-          );
-          candidate.installed = true;
-          this.deps.historyService.resetCacheAnchorSeq();
-          this.deps.resetPromptTokenBaseline();
-          candidate.committed = true;
-        },
-        targetTokenCount,
-      );
-      if (!fallbackSucceeded && candidate.installed) {
-        throw new Error(
-          'Fallback compression rejected after installing candidate history',
-        );
-      }
-    } catch (fallbackError) {
-      truncationFailure = candidate.installed
-        ? await this.restoreRejectedFallback(snapshot, fallbackError)
-        : this.normalizeError(fallbackError);
-      candidate.committed = false;
-      this.deps.logger.warn(
-        () =>
-          '[CompressionHandler] Provider truncation fallback rejected during hard-limit enforcement',
-        truncationFailure,
-      );
-    }
-    if (fallbackSucceeded && !candidate.committed) {
-      this.deps.logger.warn(
-        () =>
-          '[CompressionHandler] Fallback compression succeeded without providing candidate history',
-      );
-    }
-    return {
-      truncationApplied: fallbackSucceeded && candidate.committed,
-      truncationFailure,
-    };
-  }
-
-  private projectSuccess(
-    pendingContents: IContent[],
-    completionBudget: number,
-    model: string,
-    stage: string,
-  ): Promise<ProjectionResult> {
-    return this.projectContents(
-      pendingContents,
-      completionBudget,
-      model,
-      stage,
-    );
-  }
-
-  private projectWithFailure(
-    pendingContents: IContent[],
-    completionBudget: number,
-    model: string,
-    compressionFailure: Error,
-    stage: string,
-  ): Promise<ProjectionResult> {
-    return this.projectContents(
-      pendingContents,
-      completionBudget,
-      model,
-      stage,
-      compressionFailure,
-    );
-  }
-
   private async projectContents(
     pendingContents: IContent[],
     completionBudget: number,
@@ -802,11 +750,23 @@ export class ProviderContentEnforcer {
       : { contents, projected, compressionFailure };
   }
 
+  /**
+   * Every recomposition (after density optimization, compression or
+   * truncation) re-applies image retirement to the curated history before the
+   * pending region is appended, so no step can resurrect retired pixels.
+   */
   private recomposeProviderContents(pendingContents: IContent[]): IContent[] {
-    return buildProviderContent(
+    const history = retireHistoricalImages(
       this.deps.historyService.getCurated(),
       pendingContents,
-      this.deps.logger,
+      this.mediaBudgetBytes(),
+    );
+    return buildProviderContent(history, pendingContents, this.deps.logger);
+  }
+
+  private mediaBudgetBytes(): number {
+    return (
+      this.deps.requestMediaBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES
     );
   }
 
@@ -825,6 +785,9 @@ export class ProviderContentEnforcer {
           );
       return requestTokens + completionBudget;
     } catch (error) {
+      if (isRequestByteOverflowError(error)) {
+        throw error;
+      }
       const projectionError = this.normalizeError(error);
       throw new Error(
         `Token projection failed at ${stage} stage during provider-content hard-limit enforcement: ${projectionError.message}`,

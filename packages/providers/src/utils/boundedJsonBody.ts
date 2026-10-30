@@ -7,6 +7,18 @@
 export const DEFAULT_STREAMING_JSON_CHUNK_BYTES = 64 * 1024;
 export const DEFAULT_HTTP_JSON_ENVELOPE_BYTES = 128 * 1024 * 1024;
 
+export class BoundedJsonEnvelopeOverflowError extends RangeError {
+  constructor(
+    readonly byteLength: number,
+    readonly maxEnvelopeBytes: number,
+  ) {
+    super(
+      `JSON request envelope exceeds ${maxEnvelopeBytes} bytes (${byteLength} bytes)`,
+    );
+    this.name = 'BoundedJsonEnvelopeOverflowError';
+  }
+}
+
 export interface BoundedJsonHttpBody {
   readonly stream: ReadableStream<Uint8Array>;
   readonly byteLength: number;
@@ -460,8 +472,9 @@ export class BoundedJsonBody {
     validateLimit('maxEnvelopeBytes', limits.maxEnvelopeBytes);
     const plan = new PlanBuilder().build(value);
     if (plan.byteLength > limits.maxEnvelopeBytes) {
-      throw new RangeError(
-        `JSON request envelope exceeds ${limits.maxEnvelopeBytes} bytes (${plan.byteLength} bytes)`,
+      throw new BoundedJsonEnvelopeOverflowError(
+        plan.byteLength,
+        limits.maxEnvelopeBytes,
       );
     }
     if (plan.byteLength > 0 && limits.maxChunkBytes === 0) {
