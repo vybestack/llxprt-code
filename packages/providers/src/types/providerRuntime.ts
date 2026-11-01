@@ -4,8 +4,26 @@
  * @requirement REQ-SP4-002
  */
 
+/**
+ * One authorization result: the bearer and, when the credential source knows
+ * it, the account identity that belongs to that same credential.
+ * `identity: 'absent'` means the source read the full stored credential and it
+ * has no account identity; no later lookup can supply one.
+ */
+export interface RequestCredential {
+  readonly token: string;
+  readonly accountId?: string;
+  readonly identity?: 'absent';
+}
+
 export interface RuntimeAuthTokenProvider {
   provide: () => Promise<string | undefined> | string | undefined;
+  /**
+   * Resolves the bearer together with its account identity from ONE credential
+   * read. Providers whose requests carry an identity beside the bearer (Codex)
+   * consume this instead of reading the store a second time.
+   */
+  provideCredential?: () => Promise<RequestCredential>;
 }
 
 export type ResolvedAuthToken = string | RuntimeAuthTokenProvider;

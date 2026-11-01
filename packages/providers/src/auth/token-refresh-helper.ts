@@ -227,8 +227,8 @@ export async function executeTokenRefresh(
 // --------------------------------------------------------------------------
 
 /**
- * Try to refresh an expired disk token. Returns access_token on success,
- * or undefined when refresh is not possible or fails.
+ * Try to refresh an expired disk token. Returns the refreshed (merged) token on
+ * success, or undefined when refresh is not possible or fails.
  */
 export async function tryRefreshDiskToken(
   providerName: string,
@@ -236,7 +236,7 @@ export async function tryRefreshDiskToken(
   diskToken: OAuthToken,
   tokenStore: TokenStore,
   providerRegistry: ProviderRegistry,
-): Promise<string | undefined> {
+): Promise<OAuthToken | undefined> {
   const provider = providerRegistry.getProvider(providerName);
   if (!provider) return undefined;
   try {
@@ -251,7 +251,7 @@ export async function tryRefreshDiskToken(
         () =>
           `[issue1317] Refreshed expired disk token for ${providerName}, skipping OAuth`,
       );
-      return mergedToken.access_token;
+      return mergedToken;
     }
   } catch (refreshError) {
     logger.debug(
@@ -264,7 +264,7 @@ export async function tryRefreshDiskToken(
 
 /**
  * Perform disk check while holding the refresh lock.
- * Returns access_token if a usable token exists (valid or refreshable),
+ * Returns the token if a usable one exists (valid or refreshable),
  * or undefined to continue to full auth.
  */
 export async function performDiskCheckUnderLock(
@@ -272,7 +272,7 @@ export async function performDiskCheckUnderLock(
   bucketToCheck: string | undefined,
   tokenStore: TokenStore,
   providerRegistry: ProviderRegistry,
-): Promise<string | undefined> {
+): Promise<OAuthToken | undefined> {
   const diskToken = await tokenStore.getToken(providerName, bucketToCheck);
   const thirtySecondsFromNow = Math.floor(Date.now() / 1000) + 30;
 
@@ -281,7 +281,7 @@ export async function performDiskCheckUnderLock(
       () =>
         `[issue1262/1195] Found valid token on disk for ${providerName}, skipping OAuth`,
     );
-    return diskToken.access_token;
+    return diskToken;
   }
 
   // @fix issue1317: expired disk token with refresh_token — try refresh

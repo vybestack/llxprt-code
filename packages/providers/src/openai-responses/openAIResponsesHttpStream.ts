@@ -74,6 +74,8 @@ export interface StreamResponsesParams {
    */
   rebuildStateless?: () => Promise<StreamResponsesParams>;
   apiKey: string;
+  /** Identity paired with `apiKey`; headers and dumps never read it elsewhere. */
+  accountId?: string;
   baseURL: string;
   isCodex: boolean;
   request: OpenAIResponsesRequest;
@@ -112,16 +114,16 @@ function resolveResponsesContentType(params: { isCodex: boolean }): string {
  * WebSocket-fallback dump (#3159): both record the same physical HTTP send
  * shape, so both call sites must build headers identically.
  */
-export async function buildHttpDumpMetadata(
+export function buildHttpDumpMetadata(
   params: Pick<
     StreamResponsesParams,
-    'apiKey' | 'isCodex' | 'normalizedOptions'
+    'apiKey' | 'accountId' | 'isCodex' | 'normalizedOptions'
   >,
   deps: ResponsesExecutorDeps,
-): Promise<RequestDumpMetadata> {
+): RequestDumpMetadata {
   return {
-    headers: await buildResponsesHeaders(
-      params.apiKey,
+    headers: buildResponsesHeaders(
+      params,
       resolveResponsesContentType(params),
       params.isCodex,
       params.normalizedOptions,
@@ -163,13 +165,13 @@ export async function* streamOverHttp(
     maxEnvelopeBytes: DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
   });
   const headers = {
-    ...(await buildResponsesHeaders(
-      params.apiKey,
+    ...buildResponsesHeaders(
+      params,
       contentType,
       params.isCodex,
       params.normalizedOptions,
       deps,
-    )),
+    ),
     'Content-Length': String(body.byteLength),
   };
   deps.logger.debug(
@@ -220,28 +222,36 @@ export async function* streamOverHttp(
   if (disposalFailed) throw disposalError;
 }
 
-export async function buildResponsesHeaders(
-  apiKey: string,
+/**
+ * Builds the HTTP headers from the request's own credential. Pure: no
+ * credential is read here, so a header (or its dump) can never carry an
+ * identity that differs from the bearer it was built beside.
+ */
+export function buildResponsesHeaders(
+  credential: Pick<StreamResponsesParams, 'apiKey' | 'accountId'>,
   contentType: string,
   isCodex: boolean,
   options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
-): Promise<Record<string, string>> {
+): Record<string, string> {
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${apiKey}`,
+    Authorization: `Bearer ${credential.apiKey}`,
     'Content-Type': contentType,
     ...options.headers,
   };
-  if (isCodex) await addCodexHeaders(headers, options, deps);
+  if (isCodex) addCodexHeaders(headers, credential.accountId, options, deps);
   return headers;
 }
 
-async function addCodexHeaders(
+function addCodexHeaders(
   headers: Record<string, string>,
+  accountId: string | undefined,
   options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
-): Promise<void> {
-  const accountId = await deps.getCodexAccountId();
+): void {
+  if (accountId === undefined || accountId === '') {
+    throw new Error('Codex request has no account identity for its credential');
+  }
   headers['ChatGPT-Account-ID'] = accountId;
   headers['originator'] = 'codex_cli_rs';
 
@@ -533,7 +543,7 @@ export async function dumpFallbackHttpRequest(
       '/responses',
       params.request,
       params.baseURL,
-      await buildHttpDumpMetadata(params, deps),
+      buildHttpDumpMetadata(params, deps),
     ),
   );
   return result?.baseId;

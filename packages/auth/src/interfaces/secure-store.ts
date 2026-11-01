@@ -79,3 +79,31 @@ export function isRuntimeReplacedStoreError(
     error.code === 'RUNTIME_REPLACED'
   );
 }
+
+const CREDENTIAL_STORE_OUTAGE_CODES: ReadonlySet<string> = new Set([
+  'UNAVAILABLE',
+  'LOCKED',
+  'DENIED',
+  'TIMEOUT',
+  'RUNTIME_REPLACED',
+]);
+
+/**
+ * Structural guard for a credential-store infrastructure failure: the secure
+ * store reported that it could not be used (locked, denied, timed out,
+ * unavailable, or its runtime was replaced). Like `isRuntimeReplacedStoreError`
+ * it is duck-typed on `code`, so it survives duplicated package copies.
+ *
+ * A missing or corrupt credential is deliberately NOT an outage: those mean
+ * there is nothing usable to read and login is the correct remediation.
+ * Errors without a recognized structural code are never classified here.
+ */
+export function isCredentialStoreOutageError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return false;
+  }
+  return (
+    typeof error.code === 'string' &&
+    CREDENTIAL_STORE_OUTAGE_CODES.has(error.code)
+  );
+}

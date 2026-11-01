@@ -97,8 +97,10 @@ describe('Codex headers after starting a new session', () => {
         providerName: 'openai-responses',
         logger: new DebugLogger('clear-headers-test'),
         isCodexMode: () => true,
-        getCodexAccountId: async () => 'account',
-        resolveAuthTokenForPrompt: async () => 'token',
+        resolveRequestCredential: async () => ({
+          bearer: 'token',
+          accountId: 'account',
+        }),
         shouldRetryOnError: () => false,
         getUnallowedModelParameters: () => new Set<string>(),
       };
@@ -118,8 +120,8 @@ describe('Codex headers after starting a new session', () => {
           'model',
         );
         headers.push(
-          await buildResponsesHeaders(
-            'token',
+          buildResponsesHeaders(
+            { apiKey: 'token', accountId: 'account' },
             'application/json',
             true,
             request,
@@ -127,10 +129,11 @@ describe('Codex headers after starting a new session', () => {
           ),
         );
         headers.push(
-          await buildWebSocketHandshakeHeaders(
-            { apiKey: 'token', normalizedOptions: request },
-            deps,
-          ),
+          buildWebSocketHandshakeHeaders({
+            apiKey: 'token',
+            accountId: 'account',
+            normalizedOptions: request,
+          }),
         );
         yield* original.call(this, options);
       });

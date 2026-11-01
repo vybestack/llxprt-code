@@ -17,6 +17,7 @@ import {
   type CredentialMechanism,
   type CredentialResolutionErrorKind,
   type CredentialResolutionResult,
+  type ResolvedBearer,
 } from './credential-resolution-error.js';
 import type {
   AuthPrecedenceConfig,
@@ -25,6 +26,8 @@ import type {
   OAuthTokenRequestMetadata,
 } from './precedence.js';
 import { resolveProfileId } from './precedence.js';
+import { isCredentialStoreOutageError } from './interfaces/secure-store.js';
+import type { OAuthToken } from './types.js';
 
 export type { ResolveAuthOptions } from './precedence.js';
 
@@ -186,7 +189,7 @@ export class AuthPrecedenceResolver {
         trace,
         options?.profileId,
       );
-      if (oauthAuth !== null) return { token: oauthAuth };
+      if (oauthAuth !== null) return oauthAuth;
     }
     const recordedFailure = this.selectResolutionFailure(trace.failures);
     return {
@@ -338,7 +341,7 @@ export class AuthPrecedenceResolver {
     providerKey: string | undefined,
     trace: ResolutionTrace,
     profileId?: string,
-  ): Promise<string | null> {
+  ): Promise<ResolvedBearer | null> {
     const context = this.buildOAuthContext(
       settingsService,
       providerKey,
@@ -349,15 +352,41 @@ export class AuthPrecedenceResolver {
     trace.configuredSource = true;
     trace.remediation = remediation;
     try {
-      const token = await this.fetchOAuthToken(context);
-      if (token === null) {
+      const credential = await this.fetchOAuthCredential(context);
+      if (credential === null) {
         trace.credentialMissing = true;
       }
-      return token;
+      return credential;
     } catch (cause) {
-      this.recordFailure(trace, cause, remediation);
+      this.recordFailure(
+        trace,
+        cause,
+        isCredentialStoreOutageError(cause)
+          ? this.credentialStoreOutageRemediation(cause)
+          : remediation,
+      );
       return null;
     }
+  }
+
+  /**
+   * A credential store that cannot be read says nothing about whether the user
+   * is logged in, and logging in cannot succeed while it is unusable, so the
+   * remediation must point at the store. Prefer the store's own remediation.
+   */
+  private credentialStoreOutageRemediation(cause: unknown): string {
+    const reported =
+      typeof cause === 'object' && cause !== null && 'remediation' in cause
+        ? cause.remediation
+        : undefined;
+    const detail =
+      typeof reported === 'string' && reported.trim() !== ''
+        ? reported.trim()
+        : undefined;
+    const base =
+      `The credential store for ${this.config.oauthProvider} could not be ` +
+      'read. This is a credential store problem, not a login problem.';
+    return detail === undefined ? base : `${base} ${detail}`;
   }
 
   private buildOAuthContext(
@@ -395,14 +424,34 @@ export class AuthPrecedenceResolver {
     }
   }
 
-  private async fetchOAuthToken(
+  private async fetchOAuthCredential(
     context: OAuthResolutionContext,
-  ): Promise<string | null> {
-    const token = await this.oauthManager!.getToken(
-      this.config.oauthProvider!,
-      this.buildOAuthRequestMetadata(context),
-    );
-    return token == null || token === '' ? null : token;
+  ): Promise<ResolvedBearer | null> {
+    const manager = this.oauthManager!;
+    const metadata = this.buildOAuthRequestMetadata(context);
+    if (typeof manager.resolveToken === 'function') {
+      const full = await manager.resolveToken(
+        this.config.oauthProvider!,
+        metadata,
+      );
+      return this.projectOAuthCredential(full);
+    }
+    const token = await manager.getToken(this.config.oauthProvider!, metadata);
+    return token == null || token === '' ? null : { token };
+  }
+
+  /** Projects ONLY the bearer and account id; refresh/ID tokens stay behind. */
+  private projectOAuthCredential(
+    token: OAuthToken | null,
+  ): ResolvedBearer | null {
+    if (token == null) return null;
+    const bearer = token.access_token;
+    if (typeof bearer !== 'string' || bearer === '') return null;
+    return 'account_id' in token &&
+      typeof token.account_id === 'string' &&
+      token.account_id !== ''
+      ? { token: bearer, accountId: token.account_id }
+      : { token: bearer, identity: 'absent' };
   }
 
   private buildOAuthRequestMetadata(

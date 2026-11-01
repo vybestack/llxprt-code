@@ -86,8 +86,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       providerName: this.name,
       logger: this.logger,
       isCodexMode: () => this.isCodexMode(),
-      getCodexAccountId: () => this.getCodexAccountId(),
-      resolveAuthTokenForPrompt: () => this.getAuthTokenForPrompt(),
+      resolveRequestCredential: () => this.resolveResponsesRequestCredential(),
       shouldRetryOnError: (error) => this.shouldRetryOnError(error),
       getMediaTransportCapabilities: (isCodex) =>
         isCodex
