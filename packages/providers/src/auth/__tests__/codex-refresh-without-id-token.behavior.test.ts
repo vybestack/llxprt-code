@@ -194,6 +194,36 @@ describe('Codex refresh response without id_token (#3991)', () => {
     });
   });
 
+  it('fails closed when the response has no id_token and the stored account is blank', async () => {
+    const h = await harness({
+      access_token: 'new-access',
+      refresh_token: 'new-refresh',
+      token_type: 'Bearer',
+      expires_in: 3600,
+    });
+    const blankAccount: CodexOAuthToken = {
+      access_token: 'old-access',
+      refresh_token: 'old-refresh',
+      token_type: 'Bearer',
+      expiry: nowSeconds() - 600,
+      account_id: '   ',
+    };
+    await h.store.saveToken('codex', blankAccount);
+
+    const refreshed = await h.manager.getOAuthToken('codex');
+    const persisted = await h.store.getToken('codex');
+
+    expect({
+      refreshedAccess: refreshed?.access_token,
+      persistedAccess: persisted?.access_token,
+      persistedRefresh: persisted?.refresh_token,
+    }).toStrictEqual({
+      refreshedAccess: undefined,
+      persistedAccess: 'old-access',
+      persistedRefresh: 'old-refresh',
+    });
+  });
+
   it('fails closed without overwriting the stored token when a provided id_token is malformed', async () => {
     const h = await harness({
       access_token: 'new-access',

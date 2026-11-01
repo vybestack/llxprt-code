@@ -780,6 +780,25 @@ describe('Credential resolution diagnostics', () => {
       expect(result).toStrictEqual({ token: 'bearer-3', identity: 'absent' });
     });
 
+    it('treats a blank stored account id as no identity', async () => {
+      const resolver = oauthResolver({
+        getToken: async () => null,
+        resolveToken: async () => ({
+          access_token: 'bearer-4',
+          token_type: 'Bearer',
+          expiry: 4_000_000_000,
+          account_id: '   ',
+        }),
+        isAuthenticated: async () => true,
+      });
+
+      const result = await resolver.resolveAuthenticationResult({
+        includeOAuth: true,
+      });
+
+      expect(result).toStrictEqual({ token: 'bearer-4', identity: 'absent' });
+    });
+
     it.each(['LOCKED', 'DENIED', 'TIMEOUT', 'UNAVAILABLE', 'RUNTIME_REPLACED'])(
       'does not ask for login when the credential store fails with %s',
       async (code) => {

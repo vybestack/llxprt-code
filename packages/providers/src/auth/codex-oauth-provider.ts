@@ -74,14 +74,14 @@ function waitForAbort<T>(
   });
 }
 
-/** Reads a non-empty string field a stored token may carry. */
+/** Reads a non-blank string field a stored token may carry. */
 function storedStringField(
   token: OAuthToken,
   field: string,
 ): string | undefined {
   if (!(field in token)) return undefined;
   const value: unknown = Reflect.get(token, field);
-  return typeof value === 'string' && value !== '' ? value : undefined;
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined;
 }
 
 /**

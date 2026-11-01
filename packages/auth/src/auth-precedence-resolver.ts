@@ -449,7 +449,7 @@ export class AuthPrecedenceResolver {
     if (typeof bearer !== 'string' || bearer === '') return null;
     return 'account_id' in token &&
       typeof token.account_id === 'string' &&
-      token.account_id !== ''
+      token.account_id.trim() !== ''
       ? { token: bearer, accountId: token.account_id }
       : { token: bearer, identity: 'absent' };
   }

@@ -395,3 +395,26 @@ its own exit status: typecheck 0, lint 0, format 0, build 0, test 0, smoke 0
 (`gpt-luna-high` haiku), audit 0. Providers 664/664 files; CLI 996/996 files
 (10546 pass, 0 fail). The four `(fail)` lines printed inside core output are the
 intentional run_bun_tests self-test fixtures; their enclosing files pass.
+
+## CodeRabbit remediation (PR #3993, round 1)
+
+Finding: `storedStringField` in `codex-oauth-provider.ts` accepted a
+whitespace-only stored `account_id`, so a refresh without `id_token` could
+persist and use a blank identity. The same gap existed in the request path:
+`projectOAuthCredential` treated `"   "` as an identity and would send it as
+`ChatGPT-Account-ID`.
+
+- RED: `codex-refresh-without-id-token.behavior.test.ts` "fails closed when the
+  response has no id_token and the stored account is blank" persisted
+  new-access/new-refresh instead of failing closed. `credential-resolution.test.ts`
+  "treats a blank stored account id as no identity" returned the blank account.
+- GREEN: both checks now trim. Refresh fails closed and keeps the stored token.
+  The request projection marks `identity: 'absent'`, so it fails before the
+  wire with no second read. Refresh 5/5, credential resolution 24/24, and the
+  atomic-credential plus #3965 suites together 28/28.
+- Full serial cycle r6: typecheck, lint, format, build, smoke and audit all
+  exit 0. Full test exit 1 came from one test-utils real-CLI deadline test
+  whose runtime (11-22s across runs) straddles its 12s `TestRig.run()` budget.
+  It passed in r2 and r4 on this branch and 3/3 in isolation, and the full
+  test-utils suite then passed 17/17. It is filed as #3994 and not
+  attributed to main without a baseline. Every other package passed.
