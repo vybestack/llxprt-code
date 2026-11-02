@@ -79,6 +79,20 @@ export const CodexOAuthTokenSchema = OAuthTokenSchema.extend({
 export type CodexOAuthToken = z.infer<typeof CodexOAuthTokenSchema>;
 
 /**
+ * Result of a Codex refresh grant. Refresh responses may omit id_token, so the
+ * account is optional here; callers must supply the previously stored account.
+ * Login and code-exchange results stay on the strict CodexOAuthTokenSchema.
+ */
+export const CodexRefreshedTokenSchema = CodexOAuthTokenSchema.extend({
+  account_id: z
+    .string()
+    .optional()
+    .describe('Present only when the refresh response carried an id_token'),
+});
+
+export type CodexRefreshedToken = z.infer<typeof CodexRefreshedTokenSchema>;
+
+/**
  * Codex token response schema
  */
 export const CodexTokenResponseSchema = z.object({

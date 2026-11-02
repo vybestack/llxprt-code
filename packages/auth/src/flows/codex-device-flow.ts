@@ -9,8 +9,10 @@ import { randomBytes, createHash } from 'crypto';
 import type { IDebugLogger } from '../interfaces/index.js';
 import {
   CodexOAuthTokenSchema,
+  CodexRefreshedTokenSchema,
   CodexTokenResponseSchema,
   type CodexOAuthToken,
+  type CodexRefreshedToken,
 } from '../types.js';
 import { z } from 'zod';
 
@@ -470,13 +472,14 @@ export class CodexDeviceFlow {
   /**
    * Refresh an expired access token using refresh token
    * @param refreshToken Valid refresh token
-   * @returns New CodexOAuthToken with updated expiry
-   * @throws Error if refresh fails or id_token missing
+   * @returns New token with updated expiry; account_id is present only when
+   * the response carried an id_token (the caller preserves the stored one)
+   * @throws Error if refresh fails or a provided id_token has no account
    */
   async refreshToken(
     refreshToken: string,
     signal?: AbortSignal,
-  ): Promise<CodexOAuthToken> {
+  ): Promise<CodexRefreshedToken> {
     this.logger.debug('Refreshing expired token');
 
     const response = await this.fetchWithDeadline(
@@ -522,7 +525,7 @@ export class CodexDeviceFlow {
         : 3600;
     const expiry = now + expiresIn;
 
-    return CodexOAuthTokenSchema.parse({
+    return CodexRefreshedTokenSchema.parse({
       access_token: tokenResponse.access_token,
       token_type: tokenResponse.token_type,
       expiry,

@@ -12,7 +12,7 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/cor
 function buildProviderWithOAuth() {
   const oauthManager = {
     getOAuthToken: vi.fn(async () => ({
-      access_token: 'test',
+      access_token: 'test-api-key',
       token_type: 'Bearer',
       expires_in: 3600,
       expiry: Math.floor(Date.now() / 1000) + 3600,

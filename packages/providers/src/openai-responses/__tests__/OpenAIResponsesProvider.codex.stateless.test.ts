@@ -89,7 +89,7 @@ class TestableCodexProvider extends OpenAIResponsesProvider {
 
   constructor(oauthManager: object) {
     super(
-      'codex-api-key',
+      'codex-token',
       CODEX_BASE_URL,
       undefined,
       oauthManager,

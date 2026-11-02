@@ -63,7 +63,7 @@ async function* streamOverWebSocketWithRenewal(
   deps: ResponsesExecutorDeps,
   transport: WebSocketTransport,
 ): AsyncIterableIterator<IContent> {
-  const streamOptions = await buildWebSocketStreamOptions(params, deps);
+  const streamOptions = buildWebSocketStreamOptions(params);
   try {
     yield* streamOverWebSocketOrFallback(
       transport,
@@ -110,11 +110,10 @@ async function* streamOverWebSocketWithRenewal(
   }
 }
 
-async function buildWebSocketStreamOptions(
+function buildWebSocketStreamOptions(
   params: StreamResponsesParams,
-  deps: ResponsesExecutorDeps,
-): Promise<StreamResponseOptions> {
-  const headers = await buildWebSocketHandshakeHeaders(params, deps);
+): StreamResponseOptions {
+  const headers = buildWebSocketHandshakeHeaders(params);
   return {
     responsesURL: `${params.baseURL}/responses`,
     headers,

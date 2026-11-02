@@ -34,6 +34,7 @@ export { OAuthUIBridge, OAUTH_UI_MAX_PENDING } from './oauth-ui-bridge.js';
 export type {
   OAuthToken,
   CodexOAuthToken,
+  CodexRefreshedToken,
   AuthStatus,
   BucketStats,
   DeviceCodeResponse,
@@ -92,6 +93,7 @@ export type {
   CredentialResolutionErrorKind,
   CredentialResolutionErrorOptions,
   CredentialResolutionResult,
+  ResolvedBearer,
 } from './credential-resolution-error.js';
 
 export { resolveProfileId } from './precedence.js';

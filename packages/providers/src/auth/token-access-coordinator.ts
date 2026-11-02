@@ -38,6 +38,7 @@ import {
 import {
   resolveProfileBuckets,
   resolveCurrentProfileSessionMetadata,
+  resolveCurrentProfileSessionBucket,
 } from './token-profile-resolver.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';
@@ -432,7 +433,7 @@ export class TokenAccessCoordinator {
     providerName: string,
     explicitBucket: boolean,
     requestMetadata: OAuthTokenRequestMetadata | undefined,
-  ): Promise<string | null> {
+  ): Promise<OAuthToken | null> {
     if (explicitBucket) {
       return null;
     }
@@ -446,14 +447,33 @@ export class TokenAccessCoordinator {
   /**
    * Get access token string for a specific provider.
    * Triggers OAuth flows when necessary (via injected authenticator).
+   * Delegates to {@link resolveToken}, so both share one set of semantics.
    */
   async getToken(
     providerName: string,
     bucket?: string | unknown,
     signal?: AbortSignal,
   ): Promise<string | null> {
+    const token = await this.resolveToken(providerName, bucket, signal);
+    return token === null ? null : token.access_token;
+  }
+
+  /**
+   * Resolve the full token for a provider with exactly the semantics of
+   * {@link getToken}: unknown provider and disabled OAuth yield null, then the
+   * stored token (refreshing under lock when expiring), the other profile
+   * buckets, the locked disk check, and finally authentication. The returned
+   * token is the credential the access token belongs to, so callers that need
+   * an identity (e.g. the Codex account id) take it from this same result
+   * instead of reading the store a second time.
+   */
+  async resolveToken(
+    providerName: string,
+    bucket?: string | unknown,
+    signal?: AbortSignal,
+  ): Promise<OAuthToken | null> {
     logger.debug(
-      () => `[FLOW] getToken() called for provider: ${providerName}`,
+      () => `[FLOW] resolveToken() called for provider: ${providerName}`,
     );
 
     if (!this.providerRegistry.getProvider(providerName)) {
@@ -499,7 +519,7 @@ export class TokenAccessCoordinator {
         () =>
           `[FLOW] Returning existing token for ${providerName} (expiry=${token.expiry})`,
       );
-      return token.access_token;
+      return token;
     }
 
     // @fix issue1616: Peek other profile buckets before triggering full re-auth.
@@ -580,7 +600,7 @@ export class TokenAccessCoordinator {
     explicitBucket: boolean,
     requestMetadata: OAuthTokenRequestMetadata | undefined,
     signal?: AbortSignal,
-  ): Promise<string | null> {
+  ): Promise<OAuthToken | null> {
     logger.debug(
       () =>
         `[FLOW] No existing token for ${providerName}, triggering OAuth flow...`,
@@ -633,12 +653,12 @@ export class TokenAccessCoordinator {
 
   /**
    * Peek other profile buckets for a valid token (issue1616 path).
-   * Returns access_token string if found, null if none found.
+   * Returns the token if found, null if none found.
    */
   private async peekOtherProfileBuckets(
     providerName: string,
     requestMetadata: OAuthTokenRequestMetadata | undefined,
-  ): Promise<string | null> {
+  ): Promise<OAuthToken | null> {
     const profileBuckets = await this.getProfileBuckets(
       providerName,
       requestMetadata,
@@ -676,7 +696,7 @@ export class TokenAccessCoordinator {
             peekBucket,
             peekToken,
           );
-          return peekToken.access_token;
+          return peekToken;
         }
       } catch (peekError) {
         // Unusable for every bucket, not just this one: continuing the loop
@@ -698,14 +718,14 @@ export class TokenAccessCoordinator {
   /**
    * Disk-check with refresh lock before triggering OAuth (issue1262/1195/1317).
    * Returns:
-   *  - string  → valid token found, return it
+   *  - token   → valid token found, return it
    *  - null    → no valid token and refresh attempted/failed, caller should NOT trigger auth
    *  - undefined → lock missed or no useful disk token; caller continues to auth
    */
   private async performDiskCheck(
     providerName: string,
     bucketToCheck: string | undefined,
-  ): Promise<string | null | undefined> {
+  ): Promise<OAuthToken | null | undefined> {
     const lockAcquired = await this.tokenStore.acquireRefreshLock(
       providerName,
       { waitMs: 5000, bucket: bucketToCheck },
@@ -747,7 +767,7 @@ export class TokenAccessCoordinator {
         bucketToCheck,
         diskToken,
       );
-      return diskToken.access_token;
+      return diskToken;
     }
 
     return undefined; // continue to auth
@@ -760,7 +780,7 @@ export class TokenAccessCoordinator {
     explicitBucket: boolean,
     reason: 'authentication-required' | 'reauthentication-required',
     signal?: AbortSignal,
-  ): Promise<string | null> {
+  ): Promise<OAuthToken | null> {
     signal?.throwIfAborted();
     // @plan PLAN-20260827-ISSUE2562.P04
     // @requirement REQ-2562-3
@@ -828,7 +848,7 @@ export class TokenAccessCoordinator {
       explicitBucket ? bucketToCheck : requestMetadata,
       signal,
     );
-    return newToken ? newToken.access_token : null;
+    return newToken ?? null;
   }
 
   // --------------------------------------------------------------------------
@@ -851,29 +871,12 @@ export class TokenAccessCoordinator {
     provider: string,
     metadata?: OAuthTokenRequestMetadata,
   ): Promise<string | undefined> {
-    const scopedSessionBucket = this.facadeRef.getSessionBucket(
+    return resolveCurrentProfileSessionBucket(
       provider,
       metadata,
+      (name, scope) => this.facadeRef.getSessionBucket(name, scope),
+      (name, scope) => this.getProfileBuckets(name, scope),
     );
-    if (scopedSessionBucket) {
-      return scopedSessionBucket;
-    }
-
-    const profileBuckets = await this.getProfileBuckets(provider, metadata);
-    if (profileBuckets.length === 1) {
-      return profileBuckets[0];
-    }
-
-    const unscopedSessionBucket = this.facadeRef.getSessionBucket(provider);
-    if (
-      unscopedSessionBucket &&
-      (profileBuckets.length === 0 ||
-        profileBuckets.includes(unscopedSessionBucket))
-    ) {
-      return unscopedSessionBucket;
-    }
-
-    return undefined;
   }
 
   async getProfileBuckets(
