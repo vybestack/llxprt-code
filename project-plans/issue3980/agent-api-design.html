@@ -1,0 +1,1079 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent API design (issue #3980)</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2128; --bd:#30363d;
+    --tx:#e6edf3; --mu:#8b949e; --dim:#6e7681;
+    --blue:#58a6ff; --green:#3fb950; --yellow:#d29922;
+    --red:#f85149; --purple:#bc8cff; --cyan:#39c5cf; --orange:#f0883e;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--tx);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1120px;margin:0 auto;padding:48px 32px 120px}
+  h1{font-size:34px;line-height:1.2;margin:0 0 8px}
+  h2{font-size:25px;margin:64px 0 12px;padding-top:12px;border-top:1px solid var(--bd)}
+  h3{font-size:19px;margin:32px 0 8px;color:var(--blue)}
+  p,li{color:var(--tx)} .mu{color:var(--mu)} .small{font-size:14px}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+  code{font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--panel2);
+    padding:1px 5px;border-radius:4px;border:1px solid var(--bd)}
+  pre{background:var(--panel);border:1px solid var(--bd);border-radius:8px;padding:16px 18px;overflow:auto;
+    font:13.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin:12px 0 20px}
+  pre code{background:none;border:0;padding:0}
+  pre .cm{color:var(--dim)} pre .kw{color:var(--purple)} pre .ty{color:var(--cyan)}
+  table{border-collapse:collapse;width:100%;margin:12px 0 24px;font-size:15px}
+  th,td{border:1px solid var(--bd);padding:9px 12px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);color:var(--mu);font-weight:600}
+  .lede{font-size:18px;color:var(--mu);max-width:880px}
+  nav.toc{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:14px 22px;margin:28px 0}
+  nav.toc ol{columns:2;margin:6px 0;padding-left:22px} nav.toc li{margin:2px 0;font-size:15px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:16px 20px}
+  .card h4{margin:0 0 6px;font-size:16px}
+  .card ul{margin:6px 0 0;padding-left:20px} .card li{font-size:15px;margin:3px 0}
+  .agent h4{color:var(--green)} .host h4{color:var(--blue)} .out h4{color:var(--orange)}
+  .principles{counter-reset:p;list-style:none;padding:0}
+  .principles li{counter-increment:p;position:relative;padding:10px 14px 10px 52px;margin:8px 0;
+    background:var(--panel);border:1px solid var(--bd);border-radius:8px}
+  .principles li:before{content:counter(p);position:absolute;left:14px;top:9px;width:26px;height:26px;
+    border-radius:50%;background:var(--panel2);border:1px solid var(--bd);text-align:center;line-height:24px;
+    color:var(--blue);font-weight:700;font-size:14px}
+  .tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:10px;border:1px solid var(--bd);
+    color:var(--mu);margin-left:6px;vertical-align:middle}
+  .tag.allow{color:var(--green);border-color:#2f5f39} .tag.deny{color:var(--red);border-color:#6b2a28}
+  .tag.ask{color:var(--yellow);border-color:#6b5320}
+  svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+  .figure{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:14px;margin:16px 0 22px}
+  .figure .cap{color:var(--mu);font-size:14px;margin:6px 4px 0}
+  .note{border-left:3px solid var(--yellow);background:var(--panel);padding:10px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+  .decision{border-left:3px solid var(--purple);background:var(--panel);padding:10px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+  .decision b{color:var(--purple)}
+  /* demo */
+  #demo{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:18px;margin:18px 0}
+  #demo .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  #demo select,#demo button{background:var(--panel2);color:var(--tx);border:1px solid var(--bd);border-radius:6px;
+    padding:6px 12px;font-size:14px;cursor:pointer}
+  #demo button:hover{border-color:var(--blue)}
+  #demo button:disabled{opacity:.4;cursor:default}
+  .lanes{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px}
+  .lane{border:1px solid var(--bd);border-radius:8px;padding:8px;text-align:center;font-size:14px;color:var(--mu);
+    transition:all .15s}
+  .lane.from{border-color:var(--blue);color:var(--tx);background:#14233a}
+  .lane.to{border-color:var(--green);color:var(--tx);background:#13291b}
+  .lane.both{border-color:var(--purple);color:var(--tx);background:#241a36}
+  .steprow{display:grid;grid-template-columns:1.1fr 1fr;gap:14px}
+  .steps{max-height:420px;overflow:auto;border:1px solid var(--bd);border-radius:8px;padding:6px}
+  .steps div{padding:6px 10px;border-radius:6px;font-size:14px;color:var(--mu);cursor:pointer}
+  .steps div.cur{background:var(--panel2);color:var(--tx);border-left:3px solid var(--blue)}
+  .steps div.done{color:var(--dim)}
+  .side h5{margin:4px 0;color:var(--mu);font-size:13px;text-transform:uppercase;letter-spacing:.05em}
+  .side pre{margin:4px 0 12px;max-height:210px}
+  .status{display:inline-block;padding:2px 10px;border-radius:12px;font-size:13px;border:1px solid var(--bd)}
+  .st-idle{color:var(--mu)} .st-running{color:var(--green);border-color:#2f5f39}
+  .st-awaiting-decision{color:var(--yellow);border-color:#6b5320}
+  .st-closing,.st-closed{color:var(--red);border-color:#6b2a28}
+  .explain{font-size:15px;margin:6px 0 0;color:var(--tx)}
+  @media (max-width:820px){.grid2,.steprow{grid-template-columns:1fr} nav.toc ol{columns:1}
+    .lanes{grid-template-columns:repeat(2,1fr)}}
+</style>
+<style>
+  .st-cancelling{color:var(--orange);border-color:#6b4320}
+  .st-starting{color:var(--cyan);border-color:#1f5257}
+  .rule{border:1px solid var(--bd);border-radius:8px;background:var(--panel);padding:10px 16px;margin:10px 0}
+  .rule b{color:var(--cyan)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Agent API design</h1>
+<p class="mu">Issue <a href="https://github.com/vybestack/llxprt-code/issues/3980">#3980</a>. Status: proposal for review, revised after one architecture review. Date: 2026-10-28.</p>
+
+<p class="lede">This page designs the agent API on its own terms, without starting from today's llxprt code. The agent runs and controls the agent loop. It receives a closed, validated definition and a set of host ports, never a configuration object or a service locator. It reaches the outside world only through those ports. Interactive and headless hosts use the same agent; they differ only in how they answer decision requests. Adapting llxprt is later work, and section 17 only shows where today's pieces would land.</p>
+
+<nav class="toc">
+<strong>Contents</strong>
+<ol>
+  <li><a href="#principles">Principles</a></li>
+  <li><a href="#ownership">Who owns what</a></li>
+  <li><a href="#shape">The shape</a></li>
+  <li><a href="#api">The API</a></li>
+  <li><a href="#content">Content and context</a></li>
+  <li><a href="#loop">The loop</a></li>
+  <li><a href="#tools">Tools: trust, scheduling, output</a></li>
+  <li><a href="#policy">Policy and decisions</a></li>
+  <li><a href="#demo-sec">Step through a turn</a></li>
+  <li><a href="#concurrency">Mailbox and command timing</a></li>
+  <li><a href="#models">Models, limits and budgets</a></li>
+  <li><a href="#shutdown">Shutdown</a></li>
+  <li><a href="#sessions">Sessions, recovery, rewind, fork</a></li>
+  <li><a href="#subagents">Subagents</a></li>
+  <li><a href="#ports">Port contracts and interceptors</a></li>
+  <li><a href="#hosts">Host sketches, testing and decisions</a></li>
+  <li><a href="#llxprt">Adapting llxprt (later)</a></li>
+</ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="principles">1. Principles</h2>
+<ol class="principles">
+  <li><b>The agent runs the loop.</b> It decides when to call the model, which tool calls run, in what order and under which policy, when to retry or fall back, when to compact and when a turn ends. No host sequences any of these steps.</li>
+  <li><b>No configuration object, no service locator.</b> The precise rule: no host or application settings object, no getter bag, no provider registry and nothing that carries secrets enters the agent. The agent receives an <code>AgentDefinition</code>, a closed and validated value describing the agent's behavior, and an <code>AgentHost</code>, a fixed set of narrow ports. The definition has no paths, environment, credentials or objects with methods.</li>
+  <li><b>Inversion of control.</b> When the agent needs something from outside, it calls a port: model access, tool execution, a decision, storage, time, diagnostics. The host never reaches into the agent. It sends commands and reads events.</li>
+  <li><b>Separation of concerns.</b> The agent owns behavior and conversation state. The host owns presentation, input, configuration sources, credentials, workspace access, sandboxing and UI composition. The agent core has no filesystem, network, environment or process access.</li>
+  <li><b>One way in, one way out.</b> Changes go in through <code>submit</code>, <code>steer</code>, <code>cancel</code> and typed commands. State comes out through one ordered event stream, a snapshot that carries its stream cursor, and a transcript reader. There are no per-field getters.</li>
+  <li><b>Interactive and headless are contracts.</b> Every request for a person goes through one port. A headless port answers immediately and can say that no answer is possible. The agent never offers the model a tool that nobody could answer.</li>
+  <li><b>Authority is separate from preference.</b> Restrictions the host imposes (folder trust, organization rules) can never be overridden by approval modes, remembered approvals or a child's policy.</li>
+  <li><b>The agent owns only what it creates.</b> Ports are borrowed and the agent never closes them. Every port operation that can wait takes an abort signal, and honoring it is part of the port's contract.</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="ownership">2. Who owns what</h2>
+<div class="grid2">
+  <div class="card agent">
+    <h4>The agent owns</h4>
+    <ul>
+      <li>The loop: steps, tool scheduling, retries, model fallback, limits, loop detection, ending a turn</li>
+      <li>Conversation history, checkpoints and their consistency (every tool call gets a result, including after a cancel or a crash)</li>
+      <li>Policy evaluation, grants from approvals, and the audit record of each decision</li>
+      <li>Plan mode, and the built-in tools that need a person (<code>ask_user</code>, <code>propose_plan</code>)</li>
+      <li>Context management: token accounting, transient context lifetimes, compaction</li>
+      <li>Steering, cancellation and the timing of every command</li>
+      <li>Subagents built from its own templates, and their lifetimes</li>
+      <li>The state machine, the event stream, and its own shutdown order</li>
+    </ul>
+  </div>
+  <div class="card host">
+    <h4>The host owns</h4>
+    <ul>
+      <li>Rendering, input, keybindings, dialogs, slash commands, themes and UI composition</li>
+      <li>Reading settings, profiles, argv and environment, and turning them into an <code>AgentDefinition</code></li>
+      <li>Credentials and authentication flows, inside its model adapters</li>
+      <li>Workspace access, shells, sandboxes and MCP connections, inside its tool adapters</li>
+      <li>Trusted tool metadata: which effects and concurrency class each tool has</li>
+      <li>The authority layer of policy (trust, organization rules)</li>
+      <li>Fetching resources: files, MCP prompts and resources, IDE selections, memory files</li>
+      <li>Answering decision requests, with a person or a headless rule</li>
+      <li>Where sessions are stored and where diagnostics go; closing its ports</li>
+    </ul>
+  </div>
+</div>
+<div class="card out" style="margin-top:18px">
+  <h4>Never inside the agent</h4>
+  <p class="small" style="margin:4px 0 0">Settings and profile files, provider registries, OAuth and API keys, MCP clients, the filesystem, shell execution, sandboxing, terminal output, telemetry exporters and debug flags. Each one lives behind a port or never reaches the agent. When the agent needs a fact from one of them, it gets the fact as data in the definition, as content, or as a port's answer.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="shape">3. The shape</h2>
+<div class="figure">
+<svg viewBox="0 0 1040 430" width="100%" role="img" aria-label="Host, definition, ports and agent core">
+  <defs>
+    <marker id="ar" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/></marker>
+    <marker id="arg" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3fb950"/></marker>
+    <marker id="arb" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#58a6ff"/></marker>
+  </defs>
+  <rect x="10" y="10" width="330" height="410" rx="12" fill="#14233a" stroke="#58a6ff"/>
+  <text x="26" y="38" fill="#58a6ff" font-size="17" font-weight="700">Host (CLI, headless, zed-acp, a2a)</text>
+  <rect x="28" y="56" width="294" height="62" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="40" y="80" fill="#e6edf3" font-size="14">Config sources (host-kit)</text>
+  <text x="40" y="100" fill="#8b949e" font-size="12.5">settings, profiles, argv, env, trust</text>
+  <rect x="28" y="128" width="294" height="62" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="40" y="152" fill="#e6edf3" font-size="14">Definition builder</text>
+  <text x="40" y="172" fill="#8b949e" font-size="12.5">produces a closed, validated value</text>
+  <rect x="28" y="200" width="294" height="110" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="40" y="224" fill="#e6edf3" font-size="14">Port implementations</text>
+  <text x="40" y="244" fill="#8b949e" font-size="12.5">model adapters (own credentials)</text>
+  <text x="40" y="262" fill="#8b949e" font-size="12.5">tool catalog (fs, shell, MCP, web)</text>
+  <text x="40" y="280" fill="#8b949e" font-size="12.5">decisions (dialog or headless rule)</text>
+  <text x="40" y="298" fill="#8b949e" font-size="12.5">store, clock, diagnostics sink</text>
+  <rect x="28" y="320" width="294" height="84" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="40" y="344" fill="#e6edf3" font-size="14">Presentation</text>
+  <text x="40" y="364" fill="#8b949e" font-size="12.5">render events, snapshot to view state,</text>
+  <text x="40" y="382" fill="#8b949e" font-size="12.5">slash commands, keybindings</text>
+  <rect x="390" y="96" width="240" height="70" rx="10" fill="#1c2128" stroke="#d29922"/>
+  <text x="406" y="124" fill="#d29922" font-size="15" font-weight="700">AgentDefinition</text>
+  <text x="406" y="146" fill="#8b949e" font-size="12.5">model, tools, policy, limits</text>
+  <rect x="390" y="196" width="240" height="70" rx="10" fill="#1c2128" stroke="#bc8cff"/>
+  <text x="406" y="224" fill="#bc8cff" font-size="15" font-weight="700">AgentHost (ports)</text>
+  <text x="406" y="246" fill="#8b949e" font-size="12.5">models, tools, decisions, store ...</text>
+  <rect x="680" y="10" width="350" height="410" rx="12" fill="#13291b" stroke="#3fb950"/>
+  <text x="696" y="38" fill="#3fb950" font-size="17" font-weight="700">Agent (one conversation)</text>
+  <rect x="698" y="56" width="314" height="54" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="710" y="80" fill="#e6edf3" font-size="14">Mailbox</text>
+  <text x="710" y="99" fill="#8b949e" font-size="12.5">submit, steer, cancel, commands, close</text>
+  <rect x="698" y="120" width="314" height="74" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="710" y="144" fill="#e6edf3" font-size="14">Loop</text>
+  <text x="710" y="163" fill="#8b949e" font-size="12.5">context, model attempts, tool segments,</text>
+  <text x="710" y="181" fill="#8b949e" font-size="12.5">limits, fallback, compaction, steering</text>
+  <rect x="698" y="204" width="152" height="60" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="710" y="228" fill="#e6edf3" font-size="14">Policy</text>
+  <text x="710" y="247" fill="#8b949e" font-size="12.5">authority, grants</text>
+  <rect x="860" y="204" width="152" height="60" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="872" y="228" fill="#e6edf3" font-size="14">Journal</text>
+  <text x="872" y="247" fill="#8b949e" font-size="12.5">history, checkpoints</text>
+  <rect x="698" y="274" width="314" height="54" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="710" y="298" fill="#e6edf3" font-size="14">State machine and events</text>
+  <text x="710" y="317" fill="#8b949e" font-size="12.5">snapshot() with cursor, events(since)</text>
+  <rect x="698" y="338" width="314" height="66" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="710" y="362" fill="#e6edf3" font-size="14">Children</text>
+  <text x="710" y="381" fill="#8b949e" font-size="12.5">turn-owned subagents, narrowed policy</text>
+  <path d="M322 160 L388 132" stroke="#d29922" stroke-width="1.6" fill="none" marker-end="url(#ar)"/>
+  <path d="M322 250 L388 232" stroke="#bc8cff" stroke-width="1.6" fill="none" marker-end="url(#ar)"/>
+  <path d="M630 131 L696 100" stroke="#d29922" stroke-width="1.6" fill="none" marker-end="url(#ar)"/>
+  <path d="M630 231 L696 231" stroke="#bc8cff" stroke-width="1.6" fill="none" marker-end="url(#ar)"/>
+  <path d="M696 300 C560 330 470 360 324 362" stroke="#3fb950" stroke-width="1.8" fill="none" marker-end="url(#arg)"/>
+  <text x="430" y="352" fill="#3fb950" font-size="12.5">events, snapshot</text>
+  <path d="M324 392 C470 412 560 412 696 82" stroke="#58a6ff" stroke-width="1.6" fill="none" marker-end="url(#arb)" stroke-dasharray="5 4"/>
+  <text x="430" y="406" fill="#58a6ff" font-size="12.5">commands, submit</text>
+  <path d="M850 196 C800 180 700 300 630 262" stroke="#bc8cff" stroke-width="1.3" fill="none" stroke-dasharray="3 3"/>
+  <text x="560" y="300" fill="#bc8cff" font-size="12">agent calls ports</text>
+</svg>
+<p class="cap">The host turns its configuration sources into a definition, builds the ports, and hands both to <code>createAgent</code>. After that it only sends inputs and reads output. The agent calls the host only through the ports it was given.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="api">4. The API</h2>
+<h3>Creation is asynchronous and complete</h3>
+<script type="text/plain" class="code">
+function createAgent(
+  definition: AgentDefinition,   // closed value; validated before anything else happens
+  host: AgentHost,               // borrowed ports; the agent never closes them
+  start?: { resume: SessionId } | { fork: { from: SessionId; at: CheckpointId } },
+  signal?: AbortSignal,
+): Promise<Agent>;               // resolves only when the agent is ready to accept submit()
+
+// Rejects with CreateError:
+//   kind 'definition' (with every validation problem), 'model' (resolve failed),
+//   'store' (resume or fork load failed), 'recovery' (journal could not be reconciled)
+</script>
+<p>Creation validates the definition, resolves the primary model (so the context window is known), and, for resume or fork, loads and reconciles the session journal (section 13). An agent that exists is always ready. There is no half-built state.</p>
+
+<h3>The definition: what the agent is</h3>
+<script type="text/plain" class="code">
+interface AgentDefinition {
+  readonly name: string;
+  readonly instructions: readonly InstructionBlock[];  // trusted system text, already loaded by the host
+  readonly model: ModelSelection;                      // section 11
+  readonly tools: readonly ToolId[];                   // catalog tools this agent may be offered
+  readonly policy: PolicyDocument;                     // section 8
+  readonly limits: Limits;                             // section 11
+  readonly context: ContextStrategy;
+  readonly retry: RetryPolicy;
+  readonly loop: LoopDetection;
+  readonly subagents: readonly SubagentTemplate[];     // empty: no start_subagent tool
+  readonly toolOutput: ToolOutputLimits;               // section 7
+}
+
+interface ContextStrategy {
+  readonly compactAtRatio: number;       // e.g. 0.8 of the active model's context window
+  readonly keepRecentTurns: number;
+  readonly summarizer: 'active-model' | { readonly ref: ModelRef };
+}
+interface RetryPolicy { readonly maxAttempts: number; readonly backoffMs: readonly number[] }
+interface LoopDetection {
+  readonly maxIdenticalCalls: number;    // same tool + same args within one turn
+  readonly maxStepsWithoutProgress: number; // steps whose tool results are all errors or repeats
+}
+type ToolId = string;                    // qualified: '<source>/<name>', e.g. 'builtin/read_file', 'mcp:github/create_issue'
+</script>
+
+<h3>The host: what the agent may call</h3>
+<script type="text/plain" class="code">
+interface AgentHost {
+  readonly models: ModelPort;
+  readonly tools: ToolCatalog;
+  readonly decisions: DecisionPort;
+  readonly interceptors?: Interceptors;   // section 15
+  readonly store?: SessionStore;          // absent: in-memory session, resume and fork unavailable
+  readonly clock?: Clock;                 // absent: real time
+  readonly diagnostics?: DiagnosticSink;  // push-only; the agent never reads debug flags
+}
+</script>
+
+<h3>The agent: one conversation</h3>
+<script type="text/plain" class="code">
+interface Agent {
+  readonly id: AgentId;
+  readonly session: SessionId;
+
+  submit(input: UserInput): Turn;          // synchronous admission; BusyError or ClosedError
+  steer(input: UserInput): void;           // running turns only; NotRunningError otherwise
+  cancel(reason?: string): void;           // cancels the running turn; no-op when idle
+  command(command: AgentCommand): Promise<CommandResult>; // resolves when applied (section 10)
+
+  snapshot(): AgentSnapshot;               // operational summary plus the stream cursor
+  events(options?: { after?: Sequence }): AsyncIterable<AgentEvent>;
+  transcript(range?: { from?: CheckpointId; to?: CheckpointId }): Promise<readonly TranscriptEntry[]>;
+
+  close(options?: { finalizeTimeoutMs?: number }): Promise<CloseReport>; // idempotent; default 10000 ms; later calls return the first promise
+}
+
+interface Turn {
+  readonly id: TurnId;
+  readonly events: AsyncIterable<AgentEvent>;  // events whose turn field equals id; ends after turn.completed
+  readonly result: Promise<TurnResult>;        // never rejects; failures are outcomes
+}
+
+type TurnResult = {
+  readonly outcome: 'done' | 'cancelled' | 'limit' | 'failed';
+  readonly reason?: 'decision-unavailable' | 'auth' | 'model' | 'loop' | 'closing'
+                  | 'max-steps' | 'token-budget' | 'cost-budget' | 'timeout';
+  readonly finalText: string;
+  readonly usage: Usage;                       // includes retries, compaction and children
+  readonly checkpoint: CheckpointId;           // where this turn ended in the transcript
+};
+
+type AgentSnapshot = {
+  readonly cursor: Sequence;                   // events(after: cursor) continues with no gap or duplicate
+  readonly status: 'idle' | 'running' | 'awaiting-decision' | 'cancelling' | 'closing' | 'closed';
+  readonly mode: 'normal' | 'plan';
+  readonly turn?: { readonly id: TurnId; readonly step: number };
+  readonly model: { readonly active: ModelRef; readonly contextWindow: number };
+  readonly tools: readonly ToolSummary[];      // what the model is offered for the current or next turn
+  readonly policy: PolicySummary;              // authority, preferences, grants
+  readonly pendingDecisions: readonly DecisionRequest[];
+  readonly queued: { readonly steers: number; readonly commands: number };
+  readonly context: readonly ContextItemSummary[];
+  readonly usage: { readonly session: Usage; readonly turn?: Usage };
+  readonly history: { readonly entries: number; readonly estimatedTokens: number; readonly head: CheckpointId };
+  readonly children: readonly ChildSummary[];
+};
+</script>
+<p><code>BusyError</code> stays. One agent is one conversation, and the turn is reserved synchronously inside <code>submit</code>, so two calls in the same tick cannot both see <code>idle</code>. <code>ClosedError</code> takes precedence over <code>BusyError</code>. A host that wants to queue user input keeps its own queue; the host-kit provides one with cancellation.</p>
+
+<h3>Events: the only output</h3>
+<script type="text/plain" class="code">
+type AgentEvent = { readonly seq: Sequence; readonly at: number; readonly agent: AgentId; readonly turn?: TurnId } & (
+  | { type: 'turn.started'; input: UserInput }
+  | { type: 'model.attempt'; step: number; attempt: AttemptId; model: ModelRef; tokens: number }
+  | { type: 'model.text' | 'model.thinking'; attempt: AttemptId; delta: string }   // provisional
+  | { type: 'model.attempt.discarded'; attempt: AttemptId; error: ModelErrorKind }  // UI drops its deltas
+  | { type: 'model.response'; attempt: AttemptId; usage: Usage; finish: FinishReason } // commits the attempt
+  | { type: 'tool.proposed'; call: ToolCall }
+  | { type: 'policy.evaluated'; call: CallId; outcome: 'allow' | 'deny' | 'ask'; rule: RuleId; layer: string }
+  | { type: 'decision.requested'; request: DecisionRequest }
+  | { type: 'decision.resolved'; request: RequestId; resolution: Resolution; by: DecidedBy }
+  | { type: 'grant.added' | 'grant.revoked'; grant: Grant }
+  | { type: 'tool.started'; call: CallId }
+  | { type: 'tool.progress'; call: CallId; progress: ToolProgress }                 // lossy; latest wins
+  | { type: 'tool.finished'; call: CallId; result: ToolResult }
+  | { type: 'steer.applied'; input: UserInput }
+  | { type: 'command.applied' | 'command.rejected'; command: CommandId; reason?: string }
+  | { type: 'context.compacted'; before: number; after: number; checkpoint: CheckpointId }
+  | { type: 'mode.changed'; mode: 'normal' | 'plan' }
+  | { type: 'child.started' | 'child.finished'; child: AgentId; template: string }
+  | { type: 'turn.completed'; result: TurnResult }
+  | { type: 'state.changed'; snapshot: AgentSnapshot }   // on status, mode, model, tools, policy, queue changes only
+  | { type: 'agent.closed'; report: CloseReport }
+);
+</script>
+<div class="rule"><b>Stream rules.</b> Sequences are per session and keep increasing across resume. <code>events({ after })</code> is exclusive: it starts with the event after <code>after</code>. The agent retains a bounded replay window (the last N events or the current turn, whichever is larger). An <code>after</code> older than the window fails with <code>CursorExpired</code>, and the host re-reads <code>snapshot()</code>. Each subscriber has a bounded buffer. A subscriber that falls behind gets <code>Lagging</code> and must resubscribe from a fresh snapshot. The agent never blocks on a slow reader. Every turn-scoped event carries <code>turn</code>. After <code>agent.closed</code>, every iterator ends.</div>
+<p>A UI does this once: read <code>snapshot()</code>, subscribe with <code>after: snapshot.cursor</code>, and fold events into its own store. Text and progress arrive as deltas, and <code>state.changed</code> arrives only on real state transitions, so it is cheap. The snapshot is an operational summary, not the conversation. Message content comes from the stream as it happens, or from <code>transcript()</code>.</p>
+
+<!-- ============================================================ -->
+<h2 id="content">5. Content and context</h2>
+<script type="text/plain" class="code">
+type ContentPart =
+  | { kind: 'text'; text: string }
+  | { kind: 'image'; mediaType: string; data: Uint8Array | { ref: BlobRef } }
+  | { kind: 'audio'; mediaType: string; data: Uint8Array | { ref: BlobRef } }
+  | { kind: 'file'; name: string; mediaType: string; text?: string; ref?: BlobRef }
+  | { kind: 'resource'; uri: string; title?: string; parts: readonly ContentPart[] }; // already fetched by the host
+
+interface UserInput { readonly parts: readonly ContentPart[] }
+interface InstructionBlock { readonly id: string; readonly source: string; readonly text: string } // trusted
+
+interface ContextItem {
+  readonly id: string;                         // stable id; set or replace by id
+  readonly source: 'ide-selection' | 'ide-diagnostics' | 'memory' | 'skill' | 'mcp-resource' | 'file' | string;
+  readonly trust: 'trusted' | 'untrusted';     // untrusted is framed as data, never as instructions
+  readonly lifetime: 'next-turn' | 'until-replaced' | 'session';
+  readonly parts: readonly ContentPart[];
+}
+</script>
+<ul>
+  <li><b>Instructions</b> are trusted system text. <b>Context items</b> are material the model should know about. Untrusted items (MCP resources, fetched pages, file contents) go to the model clearly framed as data, never as instructions.</li>
+  <li>IDE selections and diagnostics use <code>until-replaced</code>. Setting an item with the same id replaces the old one, so stale selections never pile up. <code>next-turn</code> items drop off after one turn.</li>
+  <li>The host fetches everything: MCP prompts become <code>UserInput</code>, MCP resources become <code>resource</code> parts, memory and skills become instruction blocks or context items. Memory writes are tools, so a write goes through policy.</li>
+  <li>The agent checks each part against <code>ModelClient.info.modalities</code>. A part the active model cannot take is rejected at <code>submit</code> with <code>UnsupportedContent</code>, never silently dropped.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="loop">6. The loop</h2>
+<div class="figure">
+<svg viewBox="0 0 1040 270" width="100%" role="img" aria-label="Agent state machine">
+  <defs><marker id="a2" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/></marker></defs>
+  <g font-size="14">
+    <rect x="20" y="100" width="120" height="50" rx="25" fill="#1c2128" stroke="#8b949e"/><text x="60" y="130" fill="#e6edf3">idle</text>
+    <rect x="260" y="100" width="140" height="50" rx="25" fill="#13291b" stroke="#3fb950"/><text x="298" y="130" fill="#3fb950">running</text>
+    <rect x="510" y="14" width="200" height="50" rx="25" fill="#2b2410" stroke="#d29922"/><text x="535" y="44" fill="#d29922">awaiting-decision</text>
+    <rect x="510" y="100" width="160" height="50" rx="25" fill="#2b1f10" stroke="#f0883e"/><text x="548" y="130" fill="#f0883e">cancelling</text>
+    <rect x="510" y="196" width="140" height="50" rx="25" fill="#2b1414" stroke="#f85149"/><text x="548" y="226" fill="#f85149">closing</text>
+    <rect x="840" y="196" width="140" height="50" rx="25" fill="#2b1414" stroke="#f85149"/><text x="882" y="226" fill="#f85149">closed</text>
+  </g>
+  <g stroke="#8b949e" stroke-width="1.5" fill="none" marker-end="url(#a2)">
+    <path d="M140 115 L258 115"/><path d="M260 138 L142 138"/>
+    <path d="M400 108 C440 70 470 50 508 42"/><path d="M510 58 C470 80 440 100 402 118"/>
+    <path d="M400 125 L508 125"/>
+    <path d="M590 150 C590 170 200 190 120 152"/>
+    <path d="M330 150 C360 220 450 225 508 221"/>
+    <path d="M650 221 L838 221"/>
+  </g>
+  <g font-size="12.5" fill="#8b949e">
+    <text x="160" y="108">submit()</text><text x="150" y="160">turn.completed</text>
+    <text x="400" y="56">ask</text><text x="420" y="88">resolved</text>
+    <text x="414" y="140">cancel()</text>
+    <text x="250" y="185">started work settled</text>
+    <text x="380" y="214">close()</text><text x="680" y="212">finalized</text>
+  </g>
+</svg>
+<p class="cap">One turn at a time. <code>cancelling</code> lasts until every started operation has settled; only then does the agent accept the next <code>submit</code>. <code>close()</code> is accepted from any state.</p>
+</div>
+<h3>One turn, step by step</h3>
+<ol>
+  <li><b>Admit.</b> <code>submit</code> reserves the turn, appends the user input, pins the turn's tool set (section 7) and emits <code>turn.started</code>.</li>
+  <li><b>Prepare.</b> Build the request from instructions, context items, history and tool schemas. If the estimate passes <code>compactAtRatio</code>, compact first. That is automatic compaction, and it happens only here, never during a model attempt or a tool segment.</li>
+  <li><b>Reserve and call.</b> Check limits before the call (section 11). Start a model attempt. Streamed text is provisional until <code>model.response</code> commits the attempt. A retryable error discards the attempt and either retries or falls back.</li>
+  <li><b>Tool calls.</b> Each proposed call is validated, intercepted, checked against policy and scheduled in segments (section 7).</li>
+  <li><b>Boundary.</b> Every step ends at a boundary, including the last one. At the boundary the agent appends results, applies queued commands of the boundary kind, applies queued steering, checks limits and loop detection, and records a checkpoint. If steering was applied, the loop continues even when the model gave no tool calls, so steering is never lost. Otherwise the turn ends when the model gave no tool calls.</li>
+  <li><b>Cancel</b> at any point: stop new dispatch, abort the turn signal, wait for every started operation to settle, then record results (section 7) and end with <code>cancelled</code>. Queued steering for the turn is dropped and reported in the result. Queued commands stay queued and apply at the next point where their kind applies.</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="tools">7. Tools: trust, scheduling, output</h2>
+<h3>Descriptors come from the host, not from the tool</h3>
+<script type="text/plain" class="code">
+interface ToolCatalog {
+  pin(ids: readonly ToolId[], signal: AbortSignal): Promise<ToolSet>;  // immutable for one turn
+  subscribe?(onChange: (change: CatalogChange) => void): Unsubscribe;  // agent-owned; disposed at close
+}
+interface ToolSet {
+  readonly tools: readonly ToolHandle[];
+  readonly revoked: AbortSignal;          // aborts if the host revokes a capability mid-turn
+}
+interface ToolHandle {
+  readonly descriptor: ToolDescriptor;
+  prepare(args: unknown, signal: AbortSignal): Promise<PreparedCall>;   // validation + preview, no effects
+  execute(prepared: PreparedCall, context: ToolContext): Promise<ToolOutcome>;
+}
+interface ToolDescriptor {
+  readonly id: ToolId;                    // qualified and versioned: 'mcp:github/create_issue@3'
+  readonly description: string;           // from the tool; untrusted text
+  readonly inputSchema: JsonSchema;       // from the tool
+  readonly effects: readonly Effect[];    // assigned by the host adapter, never by the tool
+  readonly concurrency: 'parallel' | 'exclusive'; // assigned by the host adapter
+  readonly resources?: readonly string[]; // lock keys for cross-agent exclusion, e.g. 'fs:/repo'
+}
+type Effect = 'read' | 'write' | 'execute' | 'network' | 'spawn';
+interface PreparedCall {
+  readonly token: PreparedToken;          // what an approval binds to
+  readonly args: unknown;                 // validated, final
+  readonly preview?: ToolPreview;         // diff, command line, URL
+  readonly preconditions?: readonly Precondition[]; // e.g. file hash at preparation
+}
+type ToolOutcome =
+  | { status: 'ok'; result: ToolResult }
+  | { status: 'error'; error: ToolError; result?: ToolResult }
+  | { status: 'stale' };                  // preconditions failed; the agent re-prepares and re-asks
+</script>
+<ul>
+  <li><b>Trust.</b> A tool's effects and concurrency class come from the host adapter that wraps it, not from the tool's own description. The adapter for an MCP server assigns conservative defaults (<code>execute</code>, <code>network</code>, <code>write</code>, exclusive) unless the host's own settings for that server say otherwise. Tool ids are qualified by source, so two servers cannot impersonate each other or a built-in.</li>
+  <li><b>Policy is not a sandbox.</b> Policy decides whether the agent asks the tool to act. The host's executor and sandbox enforce what the action can actually touch. A path rule is checked against the resolved real path that <code>prepare</code> returns, not against the text the model wrote.</li>
+  <li><b>Dispatch enforcement.</b> A call naming a tool outside the pinned set gets an error result. Advertising only certain tools is not the enforcement mechanism; dispatch is.</li>
+  <li><b>Catalog changes.</b> A new or updated tool appears from the next turn. A revocation (server disconnected, trust withdrawn) aborts <code>ToolSet.revoked</code>. Pending decisions for revoked tools resolve as rejected, running calls see their signal abort, and later calls get a <code>revoked</code> error result.</li>
+</ul>
+
+<h3>Scheduling within a step</h3>
+<div class="rule"><b>Segment rule.</b> The model's calls are taken in order and split into segments. Each run of consecutive <code>parallel</code> calls forms one segment, and each <code>exclusive</code> call is a segment by itself. Segments run strictly in order. Inside a parallel segment, each call goes through policy on its own. A call waiting on a decision holds up only the end of its segment, while the other calls in that segment run. A later segment never starts before the earlier one finishes. Example: <code>[A exclusive, waiting on approval], [B parallel, C parallel], [D exclusive]</code>. B and C wait for A's segment, and D waits for B and C. Exclusivity covers this agent and its children. Exclusion across separate agents uses <code>resources</code> lock keys, which the host's executor enforces.</div>
+
+<h3>What a cancelled or crashed call reports</h3>
+<table>
+<tr><th>Call state when cancel or close arrives</th><th>Result recorded and shown to the model</th></tr>
+<tr><td>Not yet dispatched</td><td><code>not-run</code>: the tool never ran.</td></tr>
+<tr><td>Waiting on a decision</td><td><code>not-run</code>, and the decision resolves with <code>by: 'cancelled'</code>.</td></tr>
+<tr><td>Running, and settles after the abort</td><td>The tool's own outcome. If it reports <code>aborted</code>, the result says effects may be partial.</td></tr>
+<tr><td>Started before a crash, no outcome recorded</td><td><code>indeterminate</code>: the tool may have acted. Recovery never re-runs it automatically (section 13).</td></tr>
+</table>
+
+<h3>Output size and streaming</h3>
+<script type="text/plain" class="code">
+interface ToolOutputLimits {
+  readonly maxResultBytes: number;       // per call, model-visible
+  readonly maxStepResultBytes: number;   // all calls in one step
+  readonly truncation: 'head' | 'tail' | 'head-and-tail';
+}
+interface ToolContext {
+  readonly signal: AbortSignal;
+  readonly call: CallId;
+  readonly output: BoundedWriter;        // streamed output; the adapter stops producing at the cap
+  progress(update: ToolProgress): void;  // presentation only, lossy, latest wins, never stored
+}
+interface ToolResult {
+  readonly parts: readonly ContentPart[];
+  readonly truncated?: { readonly originalBytes: number; readonly kept: 'head' | 'tail' | 'head-and-tail' };
+  readonly raw?: BlobRef;                // full output kept by the store when available
+}
+</script>
+<p>Streamed output goes through a bounded writer, so a shell or MCP tool cannot fill memory before the agent sees it. The agent applies the per-call and per-step caps before anything reaches the model and records how much was truncated. Progress is for display only; it never becomes part of history.</p>
+
+<!-- ============================================================ -->
+<h2 id="policy">8. Policy and decisions</h2>
+<h3>Two kinds of policy, evaluated in a fixed order</h3>
+<script type="text/plain" class="code">
+interface PolicyDocument {
+  readonly authority: readonly PolicyRule[];     // host restrictions: trust, organization; only deny or ask
+  readonly preferences: readonly PolicyLayer[];  // approval modes and user rules; first match wins
+  readonly fallback: 'allow' | 'deny' | 'ask';
+}
+interface PolicyLayer { readonly name: string; readonly rules: readonly PolicyRule[] }
+interface PolicyRule {
+  readonly id: RuleId;
+  readonly match: PolicyMatch;
+  readonly outcome: 'allow' | 'deny' | 'ask';
+  readonly reason?: string;                      // to the model on deny, to the person on ask
+}
+interface PolicyMatch {                          // every present field must match
+  readonly tools?: readonly ToolPattern[];       // 'builtin/*', 'mcp:github/*'
+  readonly effects?: readonly Effect[];          // matches if the call has any listed effect
+  readonly args?: readonly ArgMatcher[];         // all must match; a missing argument never matches
+}
+type ArgMatcher =
+  | { arg: string; pathUnder: string }           // checked on the real path from prepare()
+  | { arg: string; commandPrefix: readonly string[] } // parsed argv prefix, not string prefix
+  | { arg: string; equals: string | number | boolean }
+  | { arg: string; urlHost: readonly string[] };
+</script>
+<div class="rule"><b>Evaluation.</b> For a prepared call: (1) every authority rule that matches applies, and the strictest one wins (deny before ask). (2) If authority did not deny, the first match among grants, then preference layers, then the fallback, gives the preference outcome. (3) The final outcome is the stricter of the authority outcome and the preference outcome, ordered deny, ask, allow. So no approval mode, grant or "yolo" preset can get past an authority deny, and an authority ask always asks.</div>
+<p>Approval modes are preference presets that the host builds, for example auto-edit as a layer that allows <code>write</code> under the workspace. <code>set-preferences</code> swaps the preference layers. <code>set-authority</code> replaces authority, and the agent then revokes every grant that conflicts with the new authority. A policy change applies at the next policy evaluation, or at the end of the turn if no evaluation happens first. Calls already waiting on a decision are evaluated again: if the new outcome is allow, the decision resolves with <code>by: 'policy'</code>, and if it is deny, the decision resolves as rejected.</p>
+
+<h3>Grants: what an approval remembers</h3>
+<script type="text/plain" class="code">
+interface Grant {
+  readonly id: GrantId;
+  readonly scope: GrantScope;              // offered in the request; the person picks one
+  readonly duration: 'turn' | 'session';
+  readonly policyRevision: number;         // grants are dropped when authority changes against them
+}
+type GrantScope =
+  | { kind: 'exact'; tool: ToolId; args: unknown }                  // this exact operation
+  | { kind: 'tool-path'; tool: ToolId; pathUnder: string }           // offered only if the tool has a path arg
+  | { kind: 'tool-command'; tool: ToolId; commandPrefix: readonly string[] }
+  | { kind: 'tool'; tool: ToolId };                                  // widest; shown with a warning
+</script>
+<p>Approving once binds to the <code>PreparedToken</code>, so it covers exactly the validated final arguments. Wider grants come only from scopes the agent offered in the request and the person chose. When a person edits the arguments, the agent prepares the edited call again and evaluates policy again. If the outcome is allow, it runs. If it is deny, it is rejected. If it is ask, the person's approval of their own edit counts as the decision for that one prepared call, so there is no approval loop. A <code>stale</code> outcome at execution makes the agent prepare again and ask again with the new preview.</p>
+
+<h3>Decisions: one port, typed per request</h3>
+<script type="text/plain" class="code">
+interface DecisionPort {
+  readonly presence: 'human' | 'none';
+  decide<R extends DecisionRequest>(request: R, signal: AbortSignal): Promise<ResponseFor<R> | Unavailable>;
+}
+type DecisionRequest = { readonly id: RequestId; readonly from: AgentId; readonly turn: TurnId } & (
+  | { kind: 'tool-call'; call: PreparedCallView; effects: readonly Effect[]; rule: RuleId; scopes: readonly GrantScope[] }
+  | { kind: 'question'; prompt: string; choices?: readonly string[] }   // from the built-in ask_user tool
+  | { kind: 'plan'; plan: string }                                      // from the built-in propose_plan tool
+);
+type ToolCallResponse = { outcome: 'approve'; scope?: GrantScope; duration?: 'turn' | 'session' }
+                      | { outcome: 'approve-edited'; args: unknown }
+                      | { outcome: 'reject'; message?: string };
+type QuestionResponse = { outcome: 'answer'; text: string } | { outcome: 'decline' };
+type PlanResponse     = { outcome: 'approve' } | { outcome: 'revise'; feedback: string } | { outcome: 'reject' };
+type Unavailable      = { outcome: 'unavailable' };   // ends the turn: failed, 'decision-unavailable'
+type ResponseFor<R extends DecisionRequest> =
+  R extends { kind: 'tool-call' } ? ToolCallResponse :
+  R extends { kind: 'question' }  ? QuestionResponse :
+  R extends { kind: 'plan' }      ? PlanResponse : never;
+type DecidedBy = 'policy' | 'human' | 'headless-rule' | 'timeout' | 'cancelled';
+</script>
+<p>The built-in interaction tools belong to the agent, so every question to a person goes through the agent's pending-decision state and audit record. A host tool cannot close over the decision port, because the port is never given to tools.</p>
+
+<h3>Plan mode is agent behavior</h3>
+<ul>
+  <li><code>command({ type: 'set-mode', mode: 'plan' })</code> enters plan mode. While in it, the agent adds an authority rule that denies <code>write</code>, <code>execute</code> and <code>spawn</code> effects, and offers <code>propose_plan</code>.</li>
+  <li><code>propose_plan</code> creates a <code>plan</code> decision. Approve leaves plan mode at the boundary and continues the turn in normal mode with the plan as a context item. Revise returns the feedback to the model. Reject ends the turn.</li>
+  <li>When headless, <code>propose_plan</code> is not offered and <code>set-mode</code> to <code>plan</code> is rejected. A headless host that wants a plan asks for one in the prompt and reads the final text.</li>
+</ul>
+
+<table>
+<tr><th>Situation</th><th>Interactive (<code>presence: 'human'</code>)</th><th>Headless (<code>presence: 'none'</code>)</th></tr>
+<tr><td>Outcome allow</td><td colspan="2">Runs. <code>policy.evaluated</code> records the rule and its layer.</td></tr>
+<tr><td>Outcome deny</td><td colspan="2">Does not run. The model gets the rule's reason as the result.</td></tr>
+<tr><td>Outcome ask</td><td>A person decides, taking as long as needed. Cancel and close abort the wait.</td><td>The port answers at once from its rule: <code>deny</code> (reject), <code>fail</code> (<code>unavailable</code>, so the turn fails) or <code>approve</code> (recorded as <code>headless-rule</code>, exact scope only).</td></tr>
+<tr><td><code>ask_user</code>, <code>propose_plan</code></td><td>Offered.</td><td>Not offered, and rejected at dispatch if called anyway.</td></tr>
+<tr><td>Decision timeout</td><td>Optional <code>decisionTimeoutMs</code>. When it expires, the request is rejected with <code>by: 'timeout'</code>.</td><td>Not needed.</td></tr>
+</table>
+<p>Protocol hosts such as zed-acp and a2a are <code>presence: 'human'</code> with the person at the far end of the protocol. The agent cannot tell the difference.</p>
+
+<!-- ============================================================ -->
+<h2 id="demo-sec">9. Step through a turn</h2>
+<p>Pick a scenario and step through it. The lanes show who is talking, the step list shows the sequence, and the panel shows the event the agent emits and its status. Events are shown in short form; the full fields are in sections 4 to 8.</p>
+<div id="demo">
+  <div class="bar">
+    <select id="scenario"></select>
+    <button id="prev">Back</button>
+    <button id="next">Next</button>
+    <button id="reset">Reset</button>
+    <span class="mu small" id="counter"></span>
+  </div>
+  <div class="lanes">
+    <div class="lane" data-lane="host">Host / UI</div>
+    <div class="lane" data-lane="agent">Agent</div>
+    <div class="lane" data-lane="model">Model port</div>
+    <div class="lane" data-lane="tools">Tool catalog</div>
+    <div class="lane" data-lane="decisions">Decision port</div>
+  </div>
+  <div class="steprow">
+    <div class="steps" id="steps"></div>
+    <div class="side">
+      <h5>What happens</h5>
+      <p class="explain" id="explain"></p>
+      <h5>Event emitted</h5>
+      <pre id="event"></pre>
+      <h5>Agent status</h5>
+      <span id="status" class="status"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="concurrency">10. Mailbox and command timing</h2>
+<p>The agent is an actor with one mailbox. Admission is synchronous: <code>submit</code>, <code>steer</code>, <code>cancel</code>, <code>command</code> and <code>close</code> each decide on the spot whether they are accepted, and that moment is the linearization point. Accepted work is then applied at a defined point. The mailbox never waits on a port. While the loop awaits a model, a tool or a decision, the mailbox still accepts <code>cancel</code>, <code>close</code>, <code>steer</code> and commands, and queues each until its application point. Automatic compaction cannot overlap a model attempt or a tool segment, history cannot change during a model call, and no command can land halfway through shutdown.</p>
+<script type="text/plain" class="code">
+type AgentCommand = { readonly id?: CommandId } & (
+  | { type: 'set-model'; selection: ModelSelection }
+  | { type: 'set-preferences'; layers: readonly PolicyLayer[] }
+  | { type: 'set-authority'; rules: readonly PolicyRule[] }
+  | { type: 'set-limits'; limits: Limits }
+  | { type: 'set-mode'; mode: 'normal' | 'plan' }
+  | { type: 'set-instructions'; instructions: readonly InstructionBlock[] }
+  | { type: 'set-context'; items: readonly ContextItem[] }      // add or replace by id
+  | { type: 'remove-context'; ids: readonly string[] }
+  | { type: 'revoke-grant'; grant: GrantId }
+  | { type: 'compact' }
+  | { type: 'rewind'; to: CheckpointId }
+  | { type: 'clear' }
+);
+type CommandResult = { status: 'applied'; at: Sequence } | { status: 'rejected'; reason: string };
+</script>
+<table>
+<tr><th>Input</th><th>Idle</th><th>While a turn runs</th><th>On cancel</th><th>On close</th></tr>
+<tr><td><code>submit</code></td><td>Starts a turn.</td><td><code>BusyError</code>.</td><td><code>BusyError</code> until cancelling finishes.</td><td><code>ClosedError</code>.</td></tr>
+<tr><td><code>steer</code></td><td><code>NotRunningError</code>.</td><td>Applied at the next boundary.</td><td>Dropped; counted in the result.</td><td><code>ClosedError</code>.</td></tr>
+<tr><td><code>set-preferences</code>, <code>set-authority</code>, <code>revoke-grant</code></td><td>Applied now.</td><td>Applied at the next policy evaluation, including pending decisions. If the turn ends first, applied at the turn's end, before the agent returns to idle.</td><td>Applied when cancelling finishes.</td><td>Rejected.</td></tr>
+<tr><td><code>set-limits</code>, <code>set-context</code>, <code>remove-context</code>, <code>set-mode</code></td><td>Applied now.</td><td>Applied at the next boundary.</td><td>Applied when cancelling finishes.</td><td>Rejected.</td></tr>
+<tr><td><code>set-model</code>, <code>set-instructions</code></td><td>Applied now.</td><td>Applied when the turn ends.</td><td>Applied when cancelling finishes.</td><td>Rejected.</td></tr>
+<tr><td><code>compact</code></td><td>Runs now.</td><td>Runs when the turn ends.</td><td>Runs when cancelling finishes.</td><td>Rejected.</td></tr>
+<tr><td><code>rewind</code>, <code>clear</code></td><td>Applied now.</td><td colspan="2">Rejected with <code>BusyError</code>.</td><td>Rejected.</td></tr>
+</table>
+<p>A command's promise resolves when the command is applied, or with <code>rejected</code> when it can never apply. Close rejects every queued command with reason <code>closing</code>. Nothing is left unsettled.</p>
+
+<!-- ============================================================ -->
+<h2 id="models">11. Models, limits and budgets</h2>
+<script type="text/plain" class="code">
+interface ModelSelection {
+  readonly primary: ModelChoice;
+  readonly fallbacks: readonly ModelChoice[];            // tried in order
+  readonly fallbackOn: readonly ModelErrorKind[];        // e.g. ['overloaded', 'quota', 'rate-limit']
+}
+interface ModelChoice { readonly ref: ModelRef; readonly parameters: ModelParameters }
+type ModelRef = { readonly provider: string; readonly model: string }; // opaque to the agent
+interface ModelParameters {
+  readonly temperature?: number;
+  readonly maxOutputTokens?: number;
+  readonly reasoning?: { readonly effort?: 'low' | 'medium' | 'high'; readonly budgetTokens?: number };
+  readonly extra?: Readonly<Record<string, string | number | boolean>>;  // passed through to the adapter
+}
+interface Limits {
+  readonly maxStepsPerTurn: number;
+  readonly turnTokenBudget?: number;     // input + output + reasoning, including retries, compaction, children
+  readonly turnCostBudget?: number;      // in the adapter's reported currency units
+  readonly turnTimeoutMs?: number;       // an active timer, not a boundary check
+  readonly maxParallelChildren: number;
+  readonly decisionTimeoutMs?: number;
+}
+</script>
+<ul>
+  <li><b>Attempts.</b> Each model call is an attempt with an id. Text and thinking deltas are provisional. <code>model.response</code> commits the attempt, and only committed tool calls are scheduled. A retry or fallback after partial output emits <code>model.attempt.discarded</code> first, so a UI drops those deltas and nothing appears twice.</li>
+  <li><b>Fallback</b> belongs to the agent. On a listed error kind, the agent moves to the next choice whose <code>ModelClient.info</code> supports what the turn needs (tools, the modalities in use, the context size). The adapter stays responsible for credentials and transport. Quota and rate limits are typed errors carrying <code>retryAfterMs</code>, and the agent decides whether to wait, fall back or stop.</li>
+  <li><b>Budgets.</b> Before each model call and each child start, the agent reserves an upper bound against the turn budget: the input estimate, plus the output cap (<code>parameters.maxOutputTokens</code>, or <code>info.maxOutputTokens</code> when unset), plus the reasoning cap (<code>reasoning.budgetTokens</code>, or the output cap when unset). The cost reservation is <code>price()</code> of that bound, and a cost budget on a model whose adapter has no <code>price</code> is rejected at creation. Unused reservation is returned afterwards. Parallel children reserve from the same budget, so reservations alone can never exceed it. Budgets are soft by at most one attempt: if a provider reports more than was reserved, the overshoot is recorded, and the turn ends at the next check with outcome <code>limit</code>. Retries, failed attempts and compaction count against the budget.</li>
+  <li><b>Loop detection.</b> The same tool with the same arguments more than <code>maxIdenticalCalls</code> times in a turn, or <code>maxStepsWithoutProgress</code> steps in a row whose results are all errors or repeats, ends the turn with outcome <code>limit</code> and reason <code>loop</code>.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="shutdown">12. Shutdown</h2>
+<p><code>close()</code> is idempotent, and it uses two scopes: work is cancelled, and finalization runs under its own signal with a deadline (<code>close({ finalizeTimeoutMs })</code>, default 10 seconds).</p>
+<ol>
+  <li><b>Stop admission.</b> Inputs now throw <code>ClosedError</code>, and queued commands are rejected with reason <code>closing</code>. Status becomes <code>closing</code>.</li>
+  <li><b>Cancel work.</b> The running turn is cancelled as in section 6, pending decisions resolve with <code>by: 'cancelled'</code>, and children are closed.</li>
+  <li><b>Wait for started work.</b> Every started port operation (model attempts, tool executions, interceptors, children) settles. Each one's signal is already aborted, so a port that honors the contract settles promptly.</li>
+  <li><b>Finalize</b> under the finalization signal: record results for calls that have none, write the closing records, and wait for <code>SessionStore.append</code> to resolve, which means the records are durable. Unsubscribe from the catalog.</li>
+  <li><b>Report.</b> Emit <code>turn.completed</code> for a cancelled turn, then <code>state.changed</code> with status <code>closed</code>, then <code>agent.closed</code>. Every iterator then ends, and <code>close()</code> resolves with a <code>CloseReport</code> listing what was cancelled, which port operations failed, and whether finalization finished within its deadline. A failure in one step is recorded, and later steps still run.</li>
+</ol>
+<p>The agent closes no port. The host closes adapters, MCP connections and stores after <code>close()</code> resolves, because only the host knows whether another agent still uses them.</p>
+
+<!-- ============================================================ -->
+<h2 id="sessions">13. Sessions, recovery, rewind, fork</h2>
+<script type="text/plain" class="code">
+interface SessionStore {
+  append(session: SessionId, records: readonly JournalRecord[], signal: AbortSignal): Promise<void>; // durable on resolve
+  load(session: SessionId, signal: AbortSignal): Promise<readonly JournalRecord[]>;
+  blob?: { put(data: Uint8Array, signal: AbortSignal): Promise<BlobRef>; get(ref: BlobRef, signal: AbortSignal): Promise<Uint8Array> };
+}
+type JournalRecord =
+  | { kind: 'entry'; checkpoint: CheckpointId; entry: TranscriptEntry }   // user, model, tool result
+  | { kind: 'tool-started'; call: CallId; prepared: PreparedToken }        // written before execute()
+  | { kind: 'tool-finished'; call: CallId; outcome: ToolOutcome }
+  | { kind: 'decision-pending'; request: DecisionRequest }
+  | { kind: 'decision-resolved'; request: RequestId; resolution: Resolution }
+  | { kind: 'grant'; grant: Grant } | { kind: 'grant-revoked'; grant: GrantId }
+  | { kind: 'command-applied'; command: AgentCommand }
+  | { kind: 'compacted'; replaces: { from: CheckpointId; to: CheckpointId }; summary: TranscriptEntry }
+  | { kind: 'turn-ended'; result: TurnResult };
+</script>
+<ul>
+  <li><b>The journal is the source of truth.</b> The agent writes a record before each externally visible step. <code>tool-started</code> is written before <code>execute()</code> is called.</li>
+  <li><b>Recovery</b> (<code>createAgent(..., { resume })</code>) replays the journal and reconciles anything left open:
+    <ul>
+      <li>A turn without <code>turn-ended</code> is closed as <code>cancelled</code> with reason <code>closing</code>.</li>
+      <li>A <code>tool-started</code> without <code>tool-finished</code> becomes <code>indeterminate</code>. The model is told the call may have acted, and it is never re-run automatically.</li>
+      <li>A pending decision is not reissued as-is. The turn it belonged to was closed, so the person sees what was pending in the transcript and can submit again, and the fresh turn evaluates policy against the current tools and authority.</li>
+      <li>Session grants are restored only if the current authority still permits them. Turn grants are dropped.</li>
+    </ul>
+  </li>
+  <li><b>Checkpoints.</b> Every boundary and every turn end records a <code>CheckpointId</code>. Checkpoints sit only where every tool call has its result, so rewinding never leaves a call without one. <code>transcript()</code> exposes them.</li>
+  <li><b>Rewind</b> moves the head back to a checkpoint, and later entries are kept in the journal as an abandoned branch. If the target is inside a compacted range, the rewind is rejected, and fork is the way to go back further. Rewind does not undo changes in the workspace; the host's checkpointing tools do that.</li>
+  <li><b>Fork</b> (<code>createAgent(..., { fork: { from, at } })</code>) starts a new session that copies the journal up to a checkpoint. The source session is untouched.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="subagents">14. Subagents</h2>
+<ul>
+  <li><b>Templates.</b> The definition lists subagent templates (name, instructions, tool ids, policy, limits). With any templates, the agent offers the built-in <code>start_subagent</code> tool with the <code>spawn</code> effect, and policy governs it like any other tool.</li>
+  <li><b>Children belong to the turn that started them.</b> A child runs as a tool call. Several children in one parallel segment run at the same time, up to <code>maxParallelChildren</code>. The parent's turn cannot finish until every child it started has finished or been cancelled and has settled. Cancelling the parent cancels its children, and closing it closes them. There are no detached children. A host that wants background work creates a separate agent and manages it itself.</li>
+  <li><b>Narrowing is an intersection.</b>
+    <ul>
+      <li>The child's tools are the template's tool ids intersected with the parent's pinned tool set.</li>
+      <li>For each call, the child's outcome is the stricter of the parent's outcome and the child's own, ordered deny, ask, allow. Strictness here means the full parent evaluation, with authority, grants and fallback, not just the parent's deny rules.</li>
+      <li>A parent that would ask makes the child ask, through the parent's decision port, with the child's id in the request.</li>
+      <li>Parent policy changes apply to running children at their next evaluation. A grant made inside a child stays in the child.</li>
+    </ul>
+  </li>
+  <li><b>Budget.</b> Child usage is reserved from and charged to the parent turn's budget (section 11).</li>
+  <li><b>The child host</b> is built by the agent from the parent's ports: the same model port, the filtered catalog, the parent's decision port tagged with the child id, tagged diagnostics, and a child session in the parent's store.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="ports">15. Port contracts and interceptors</h2>
+<script type="text/plain" class="code">
+interface ModelPort {
+  resolve(ref: ModelRef, signal: AbortSignal): Promise<ModelClient>;
+}
+interface ModelClient {
+  readonly info: {
+    readonly contextWindow: number; readonly maxOutputTokens: number; readonly tools: boolean; readonly reasoning: boolean;
+    readonly modalities: readonly ('text' | 'image' | 'audio' | 'file')[];
+  };
+  stream(request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelChunk>;
+  countTokens?(request: ModelRequest, signal: AbortSignal): Promise<number>;
+  price?(usage: Usage): number;   // cost in the adapter's units; required when turnCostBudget is set
+}
+interface ModelRequest {
+  readonly instructions: readonly InstructionBlock[];
+  readonly messages: readonly TranscriptEntry[];
+  readonly tools: readonly { readonly id: ToolId; readonly description: string; readonly inputSchema: JsonSchema }[];
+  readonly parameters: ModelParameters;
+}
+type ModelChunk =
+  | { kind: 'text' | 'thinking'; delta: string }
+  | { kind: 'tool-call'; id: CallId; tool: ToolId; argsDelta: string }
+  | { kind: 'finish'; reason: FinishReason; usage: Usage };
+
+type ModelErrorKind = 'auth' | 'quota' | 'rate-limit' | 'overloaded' | 'invalid-request' | 'context-length' | 'network' | 'aborted' | 'other';
+interface ModelError { readonly kind: ModelErrorKind; readonly retryable: boolean; readonly retryAfterMs?: number; readonly message: string }
+interface ToolError { readonly kind: 'invalid-args' | 'failed' | 'aborted' | 'revoked' | 'unavailable'; readonly message: string }
+interface StoreError { readonly kind: 'unavailable' | 'corrupt' | 'aborted'; readonly message: string }
+
+interface DiagnosticSink { emit(record: DiagnosticRecord): void } // synchronous, never throws, never blocks
+interface Clock { now(): number; sleep(ms: number, signal: AbortSignal): Promise<void> }
+</script>
+<table>
+<tr><th>Contract</th><th>Detail</th></tr>
+<tr><td>Abort</td><td>Every operation that can wait takes a signal and settles promptly after it aborts. Synchronous, non-blocking calls (<code>emit</code>, <code>now</code>, <code>progress</code>) take none. Conformance suites test this for each implementation.</td></tr>
+<tr><td>Typed errors</td><td>Ports reject with the typed errors above. The agent turns them into outcomes: a model <code>auth</code> error with no fallback ends the turn as <code>failed</code>, reason <code>auth</code>. A tool error becomes a result the model sees. A store error during a turn ends it as <code>failed</code> and is reported in the close report.</td></tr>
+<tr><td>No re-entry</td><td>A port never calls the agent's public methods. Callbacks the agent passes in (<code>progress</code>, catalog <code>onChange</code>) are the only way back, and they only queue information.</td></tr>
+<tr><td>Credentials</td><td>Credentials live inside model adapters. An auth failure is a <code>ModelError</code>. The host re-authenticates and the user submits again.</td></tr>
+</table>
+
+<h3>Interceptors: constrained hooks at fixed points</h3>
+<script type="text/plain" class="code">
+interface Interceptors {
+  readonly deadlineMs: number;   // per call; a timeout counts as 'continue' and is reported
+  beforeTurn?(input: UserInput, signal: AbortSignal): Promise<Continue | Block | { addContext: readonly ContextItem[] }>;
+  beforeModel?(view: ModelRequestView, signal: AbortSignal): Promise<Continue | Block | { addContext: readonly ContextItem[] }>;
+  beforeTool?(call: PreparedCallView, signal: AbortSignal): Promise<Continue | Block | { patchArgs: JsonPatch }>;
+  afterTool?(call: PreparedCallView, result: ToolResult, signal: AbortSignal): Promise<Continue | { redact: readonly Redaction[]; note?: string }>;
+  beforeCompact?(signal: AbortSignal): Promise<Continue | Block>;
+  afterTurn?(result: TurnResult, signal: AbortSignal): Promise<Continue | { continueWith: UserInput }>;
+}
+type Continue = { action: 'continue' };
+type Block = { action: 'block'; reason: string };
+</script>
+<p>Interceptors cannot replace what the agent owns. They can add context, block, patch arguments or redact results. A patched call is validated, prepared and evaluated against policy again. A redacted result keeps the raw output in the journal blob for audit, with the redaction recorded. <code>afterTurn</code> may ask for one more pass with new input, which counts as steering and is bounded by the turn's limits. This covers hooks that block or rewrite. Hooks that only watch subscribe to events. Anything beyond these points is not a hook.</p>
+
+<!-- ============================================================ -->
+<h2 id="hosts">16. Host sketches, testing and decisions</h2>
+<h3>Interactive CLI</h3>
+<script type="text/plain" class="code">
+const sources = await loadHostSources({ argv, cwd, env });           // host-kit: settings, profiles, trust
+const definition = buildDefinition(sources);                         // pure, unit-testable
+const host: AgentHost = {
+  models: providerAdapters(sources.credentials, sources.network),   // auth and proxy live here
+  tools: workspaceCatalog(sources.workspace, sources.trust).with(mcpCatalog(sources.mcp)),
+  decisions: inkDecisionQueue(),                                     // presence: 'human'
+  store: journalStore(sources.sessionDir),
+  diagnostics: debugSink(sources.debug),                             // --debug filtering happens once, here
+};
+const agent = await createAgent(definition, host, argv.resume ? { resume: argv.resume } : undefined);
+const view = await subscribeView(agent);                             // snapshot + events(after: cursor) into a store
+render(<App view={view} input={inputPort(agent)} decisions={host.decisions} />);
+
+// Slash commands are UI code that calls the API:
+//   /model x     -> agent.command({ type: 'set-model', selection })
+//   /compress    -> agent.command({ type: 'compact' })
+//   /plan        -> agent.command({ type: 'set-mode', mode: 'plan' })
+//   /auto-edit   -> agent.command({ type: 'set-preferences', layers: presets.autoEdit(sources) })
+//   /auth        -> host re-auths its adapter; the user submits again
+</script>
+<h3>Non-interactive CLI</h3>
+<script type="text/plain" class="code">
+const agent = await createAgent(buildDefinition(sources), {
+  models, tools, diagnostics,
+  decisions: headlessDecisions({ onAsk: argv.approve ? 'approve' : argv.strict ? 'fail' : 'deny' }),
+});
+try {
+  const turn = agent.submit({ parts: [{ kind: 'text', text: argv.prompt }] });
+  const streaming = argv.outputFormat === 'stream-json'
+    ? (async () => { for await (const event of turn.events) writeJsonLine(event); })()
+    : Promise.resolve();
+  const result = await turn.result;
+  await streaming;
+  writeFinal(argv.outputFormat, result);
+  process.exitCode = result.outcome === 'done' ? 0 : 1;
+} finally {
+  await agent.close();
+  await closeHostPorts();
+}
+</script>
+<h3>zed-acp and a2a</h3>
+<script type="text/plain" class="code">
+// zed-acp: one agent per ACP session; the decision port maps to ACP permission requests.
+decisions: { presence: 'human', decide: (r, signal) => connection.requestPermission(toAcp(r), { signal }).then(fromAcp) }
+// a2a: one agent per task. decision.requested -> task state 'input-required'; the next client
+// message resolves decide(); a client disconnect -> agent.cancel().
+</script>
+<p>None of these hosts imports anything except the agent API entry, its value types and the host-kit. The host-kit holds configuration loading, so all hosts read settings and profiles the same way, and the agent never sees any of it.</p>
+
+<h3>Testing and the boundary check</h3>
+<ul>
+  <li><b>Behavior tests use fake ports:</b> a scripted model, in-memory tools, scripted decisions, a fake clock and an in-memory store. In the implementation, the scenarios in section 9 become type-checked fixtures, and the page's short forms are derived from them. Each becomes a test on the event sequence and the result. Further scenarios to add: authority against grants, competing commands, cancel settlement, stale previews, crash recovery with an indeterminate call, a child that outruns the budget, and replay across an expired cursor.</li>
+  <li><b>Port conformance suites</b> run against every implementation and check abort, typed errors, no re-entry, durable append, and headless answers within a deadline.</li>
+  <li><b>The boundary is an import rule,</b> enforced on the dependency graph in CI. Hosts may import the agent API entry, its value types and the host-kit. The agent core imports no host, adapter or I/O module. This checks imports, not names or shapes, so renaming cannot get around it.</li>
+</ul>
+
+<h3>Decisions taken</h3>
+<div class="decision"><b>D1. One agent is one conversation.</b> Hosts with many sessions create many agents and share their ports.</div>
+<div class="decision"><b>D2. The agent is an actor with synchronous admission and a mailbox.</b> Every input has one linearization point and one application point (section 10).</div>
+<div class="decision"><b>D3. No application configuration object and no service locator.</b> A closed, validated definition describes behavior, and ports carry capabilities. Changing what the agent is means a command or a new agent.</div>
+<div class="decision"><b>D4. Creation is asynchronous and complete.</b> An existing agent is always ready.</div>
+<div class="decision"><b>D5. Credentials never enter the agent.</b> An auth failure is a typed model error.</div>
+<div class="decision"><b>D6. Authority is separate from preferences.</b> Authority can only deny or ask, and always wins. Preferences and grants are first-match. Grants are scoped by what the person chose.</div>
+<div class="decision"><b>D7. Tool metadata used by policy comes from host adapters,</b> and tool ids are qualified by source. Policy is not a sandbox.</div>
+<div class="decision"><b>D8. One path to a person.</b> Request-specific responses, plus <code>unavailable</code> for headless failure. The interaction tools are agent built-ins.</div>
+<div class="decision"><b>D9. Children belong to the turn that started them,</b> and their policy is the intersection with the parent's. There are no detached children.</div>
+<div class="decision"><b>D10. The journal is the source of truth.</b> Recovery never re-runs a call that may have acted.</div>
+<div class="decision"><b>D11. Output is one event stream with a cursor, a snapshot and a transcript reader.</b> Text is provisional until its attempt commits.</div>
+<div class="decision"><b>D12. Diagnostics are push-only.</b> Debug filtering happens once, in the host's sink.</div>
+<div class="decision"><b>D13. Configuration loading lives in a shared host-kit,</b> neither in the agent nor separately in each host.</div>
+
+<!-- ============================================================ -->
+<h2 id="llxprt">17. Adapting llxprt (later)</h2>
+<p class="mu">Where today's pieces would go. This is not a plan; the adaptation plan follows approval of this design.</p>
+<table>
+<tr><th>Today</th><th>Under this design</th></tr>
+<tr><td><code>Config</code>, <code>SettingsService</code>, profiles, argv handling</td><td>The host-kit's <code>loadHostSources</code> and <code>buildDefinition</code>.</td></tr>
+<tr><td><code>AgentProfilePreflight</code> and CLI-driven activation</td><td>Gone. The host builds a definition, and <code>createAgent</code> does the rest.</td></tr>
+<tr><td><code>ProviderManager</code>, providers, OAuth, token stores, proxy</td><td><code>ModelPort</code> adapters owned by the host.</td></tr>
+<tr><td><code>ToolRegistry</code>, built-in tools, MCP client manager, MCP prompts and resources</td><td><code>ToolCatalog</code> adapters with host-assigned descriptors. Prompts and resources become content.</td></tr>
+<tr><td><code>PolicyEngine</code>, confirmation <code>MessageBus</code>, approval modes, folder trust</td><td>Authority and preferences evaluated by the agent, plus a <code>DecisionPort</code> per host.</td></tr>
+<tr><td>Hooks system</td><td>The six interceptor points, plus event subscribers.</td></tr>
+<tr><td><code>HistoryService</code>, recording, resume</td><td>The agent journal and a <code>SessionStore</code> adapter.</td></tr>
+<tr><td>Compression, todo and plan tools</td><td><code>ContextStrategy</code>, the <code>compact</code> command, and plan mode.</td></tr>
+<tr><td>Subagent orchestrator, task tool, async tasks</td><td>Turn-owned children through <code>start_subagent</code>. Background work becomes separate host-managed agents.</td></tr>
+<tr><td>Memory files, skills, IDE context</td><td>Instruction blocks and context items with lifetimes. Memory writes are tools.</td></tr>
+<tr><td><code>DebugLogger</code> configuration, telemetry</td><td>One <code>DiagnosticSink</code> plus events.</td></tr>
+<tr><td>83-member <code>Agent</code>, 33 bound members, 76 <code>AppContainerRuntime</code> props</td><td>Eight methods, an event stream with a cursor, a snapshot and a transcript.</td></tr>
+</table>
+
+<p class="mu small" style="margin-top:40px">Revised after one independent architecture review. Every major and minor finding of that review is answered in this version.</p>
+</div>
+
+<script>
+(function(){
+  var esc=function(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
+  var kws=/\b(interface|type|function|readonly|const|await|async|class|extends|return|new|for|of|import|from|try|finally)\b/g;
+  document.querySelectorAll('script.code').forEach(function(node){
+    var text=node.textContent.replace(/^\n+/,'').replace(/\s+$/,'');
+    var html=text.split('\n').map(function(line){
+      var i=line.indexOf('//'); var code=i>=0?line.slice(0,i):line; var cm=i>=0?line.slice(i):'';
+      code=esc(code).replace(kws,'<span class="kw">$1</span>');
+      return code+(cm?'<span class="cm">'+esc(cm)+'</span>':'');
+    }).join('\n');
+    var pre=document.createElement('pre'); var c=document.createElement('code'); c.innerHTML=html;
+    pre.appendChild(c); node.parentNode.replaceChild(pre,node);
+  });
+})();
+
+(function(){
+  var S={
+    interactive:{title:'Interactive: read, then an edit that needs approval',steps:[
+      {from:'host',to:'agent',label:'submit("fix the typo in README")',status:'running',
+       ev:{type:'turn.started',turn:'t1',input:{parts:[{kind:'text',text:'fix the typo in README'}]}},
+       x:'Admission reserves the turn. The agent pins the turn\'s tool set from the catalog.'},
+      {from:'agent',to:'model',label:'Model attempt 1',status:'running',
+       ev:{type:'model.attempt',turn:'t1',step:1,attempt:'a1',model:{provider:'p',model:'m'},tokens:2140},
+       x:'Limits are reserved before the call. Streamed text stays provisional until the attempt commits.'},
+      {from:'model',to:'agent',label:'Attempt commits; model proposes read_file',status:'running',
+       ev:{type:'tool.proposed',turn:'t1',call:{id:'c1',tool:'builtin/read_file',args:{path:'README.md'}}},
+       x:'Only calls from a committed attempt are scheduled.'},
+      {from:'agent',to:'agent',label:'Policy: allow (preference layer)',status:'running',
+       ev:{type:'policy.evaluated',turn:'t1',call:'c1',outcome:'allow',rule:'default/read',layer:'preferences'},
+       x:'Authority does not restrict reads here, and the preference layer allows them. No person is involved.'},
+      {from:'agent',to:'tools',label:'read_file runs',status:'running',
+       ev:{type:'tool.finished',turn:'t1',call:'c1',result:{parts:[{kind:'text',text:'(412 lines)'}]}},
+       x:'The result is checked against maxResultBytes before the model sees it.'},
+      {from:'model',to:'agent',label:'Attempt 2 proposes replace(README.md)',status:'running',
+       ev:{type:'tool.proposed',turn:'t1',call:{id:'c2',tool:'builtin/replace',args:{path:'README.md',old:'teh',new:'the'}}},
+       x:'This tool has the write effect, assigned by the host adapter.'},
+      {from:'agent',to:'tools',label:'prepare(): real path, diff, file hash',status:'running',
+       ev:{type:'state.changed',snapshot:{status:'running',turn:{id:'t1',step:2}}},
+       x:'Preparation has no effects. It returns a token, the resolved path /repo/README.md, a diff preview and a precondition (the file hash).'},
+      {from:'agent',to:'decisions',label:'Policy: ask, so decide()',status:'awaiting-decision',
+       ev:{type:'decision.requested',request:{id:'r1',kind:'tool-call',turn:'t1',rule:'default/write-ask',scopes:[{kind:'exact',tool:'builtin/replace'},{kind:'tool-path',tool:'builtin/replace',pathUnder:'/repo/README.md'},{kind:'tool-path',tool:'builtin/replace',pathUnder:'/repo'}]}},
+       x:'The request lists the grant scopes the person may choose. The UI shows the diff.'},
+      {from:'decisions',to:'agent',label:'Person approves for this file, this session',status:'running',
+       ev:{type:'decision.resolved',request:'r1',resolution:{outcome:'approve',scope:{kind:'tool-path',tool:'builtin/replace',pathUnder:'/repo/README.md'},duration:'session'},by:'human'},
+       x:'The grant covers what the person chose: replace on this file. It does not cover the whole repository.'},
+      {from:'agent',to:'host',label:'Grant recorded',status:'running',
+       ev:{type:'grant.added',grant:{id:'g1',scope:{kind:'tool-path',tool:'builtin/replace',pathUnder:'/repo/README.md'},duration:'session'}},
+       x:'The host may save this as a preference rule. The agent never writes settings.'},
+      {from:'agent',to:'tools',label:'execute(prepared); precondition holds',status:'running',
+       ev:{type:'tool.finished',turn:'t1',call:'c2',result:{parts:[{kind:'text',text:'1 replacement'}]}},
+       x:'The file hash still matches, so the approved change is the one applied.'},
+      {from:'model',to:'agent',label:'Attempt 3 ends with text; boundary',status:'running',
+       ev:{type:'model.response',turn:'t1',attempt:'a3',finish:'stop',usage:{input:6400,output:38}},
+       x:'This is the last step, and it still ends at a boundary. No steering is queued, so the turn ends.'},
+      {from:'agent',to:'host',label:'Turn completed',status:'idle',
+       ev:{type:'turn.completed',turn:'t1',result:{outcome:'done',finalText:'Fixed the typo.',checkpoint:'k7',usage:{input:14560,output:212}}},
+       x:'turn.result resolves, and the agent accepts the next submit.'}
+    ]},
+    headlessDeny:{title:'Headless, onAsk: deny',steps:[
+      {from:'host',to:'agent',label:'submit(prompt) with a headless decision port',status:'running',
+       ev:{type:'turn.started',turn:'t1'},
+       x:'presence is none, so ask_user and propose_plan are not offered.'},
+      {from:'model',to:'agent',label:'Model proposes replace(README.md)',status:'running',
+       ev:{type:'tool.proposed',turn:'t1',call:{id:'c2',tool:'builtin/replace'}},x:'A write.'},
+      {from:'agent',to:'decisions',label:'Policy: ask; port rejects at once',status:'running',
+       ev:{type:'decision.resolved',request:'r1',resolution:{outcome:'reject',message:'Writes need approval and no one is present.'},by:'headless-rule'},
+       x:'The headless port answers in the same tick.'},
+      {from:'agent',to:'model',label:'Rejection becomes the tool result',status:'running',
+       ev:{type:'tool.finished',turn:'t1',call:'c2',result:{parts:[{kind:'text',text:'Not run: writes need approval and no one is present.'}]}},
+       x:'Every call has a result, so history stays valid. The model can explain instead.'},
+      {from:'agent',to:'host',label:'Turn completed',status:'idle',
+       ev:{type:'turn.completed',turn:'t1',result:{outcome:'done',finalText:'I could not edit README in this mode. The fix is teh -> the.'}},
+       x:'The host writes its output, then closes the agent and its ports in finally.'}
+    ]},
+    headlessFail:{title:'Headless, onAsk: fail',steps:[
+      {from:'host',to:'agent',label:'submit(prompt)',status:'running',ev:{type:'turn.started',turn:'t1'},x:'The same start.'},
+      {from:'model',to:'agent',label:'Model proposes replace(README.md)',status:'running',
+       ev:{type:'tool.proposed',turn:'t1',call:{id:'c2',tool:'builtin/replace'}},x:'A write.'},
+      {from:'agent',to:'decisions',label:'Policy: ask; port returns unavailable',status:'running',
+       ev:{type:'decision.resolved',request:'r1',resolution:{outcome:'unavailable'},by:'headless-rule'},
+       x:'Unavailable is a separate response from reject, so the agent knows to end the turn rather than tell the model.'},
+      {from:'agent',to:'host',label:'Turn completed: failed',status:'idle',
+       ev:{type:'turn.completed',turn:'t1',result:{outcome:'failed',reason:'decision-unavailable',finalText:''}},
+       x:'CI gets a failure that names what was needed, and the exit code is 1.'}
+    ]},
+    steerCancel:{title:'Steer, then cancel',steps:[
+      {from:'host',to:'agent',label:'submit("find unused exports in src/")',status:'running',ev:{type:'turn.started',turn:'t2'},x:'A long turn.'},
+      {from:'agent',to:'tools',label:'grep runs (parallel segment)',status:'running',ev:{type:'tool.started',turn:'t2',call:'c5'},x:'A tool is running.'},
+      {from:'host',to:'agent',label:'User steers: "skip the tests folder"',status:'running',
+       ev:{type:'state.changed',snapshot:{status:'running',turn:{id:'t2',step:1},queued:{steers:1,commands:0}}},
+       x:'Admission accepts the steer and queues it. Nothing interrupts the running tool.'},
+      {from:'agent',to:'agent',label:'Boundary: steer applied',status:'running',
+       ev:{type:'steer.applied',turn:'t2',input:{parts:[{kind:'text',text:'skip the tests folder'}]}},
+       x:'The steer becomes a user message before the next model attempt.'},
+      {from:'host',to:'agent',label:'User presses Esc: cancel()',status:'cancelling',
+       ev:{type:'state.changed',snapshot:{status:'cancelling',turn:{id:'t2',step:2}}},
+       x:'New dispatch stops, and the turn signal aborts the model attempt and running tools.'},
+      {from:'tools',to:'agent',label:'Started work settles',status:'cancelling',
+       ev:{type:'tool.finished',turn:'t2',call:'c6',result:{parts:[{kind:'text',text:'aborted; effects may be partial'}]}},
+       x:'The agent waits for every started operation before going idle, so no old tool can act during the next turn.'},
+      {from:'agent',to:'host',label:'Turn completed: cancelled',status:'idle',
+       ev:{type:'turn.completed',turn:'t2',result:{outcome:'cancelled',finalText:'(partial)'}},
+       x:'Every call has a result. The agent is idle and usable.'}
+    ]},
+    closeDuringDecision:{title:'close() while a decision is pending',steps:[
+      {from:'agent',to:'decisions',label:'An edit waits for approval',status:'awaiting-decision',
+       ev:{type:'decision.requested',request:{id:'r9',kind:'tool-call',turn:'t3'}},x:'The UI shows a prompt.'},
+      {from:'host',to:'agent',label:'close() (window closed or SIGTERM)',status:'closing',
+       ev:{type:'state.changed',snapshot:{status:'closing'}},
+       x:'Admission stops and queued commands are rejected with reason closing.'},
+      {from:'agent',to:'decisions',label:'Decision aborted through its signal',status:'closing',
+       ev:{type:'decision.resolved',request:'r9',resolution:{outcome:'reject'},by:'cancelled'},
+       x:'The prompt goes away, and the tool never runs.'},
+      {from:'agent',to:'agent',label:'Work settled; finalize under its own signal',status:'closing',
+       ev:{type:'turn.completed',turn:'t3',result:{outcome:'cancelled',reason:'closing'}},
+       x:'Children are closed and started operations settle. Then the closing records are appended, which makes them durable, using the finalization signal.'},
+      {from:'agent',to:'host',label:'agent.closed; iterators end; close() resolves',status:'closed',
+       ev:{type:'agent.closed',report:{cancelledTurn:'t3',abortedDecisions:1,portFailures:[],finalized:true}},
+       x:'Only now does the host close its own ports.'}
+    ]}
+  };
+  var sel=document.getElementById('scenario'),stepsEl=document.getElementById('steps'),
+      evEl=document.getElementById('event'),stEl=document.getElementById('status'),
+      exEl=document.getElementById('explain'),ctr=document.getElementById('counter'),
+      prev=document.getElementById('prev'),next=document.getElementById('next');
+  var cur='interactive',i=0;
+  Object.keys(S).forEach(function(k){var o=document.createElement('option');o.value=k;o.textContent=S[k].title;sel.appendChild(o);});
+  function draw(){
+    var sc=S[cur],st=sc.steps[i];
+    stepsEl.innerHTML='';
+    sc.steps.forEach(function(s,j){var d=document.createElement('div');d.textContent=(j+1)+'. '+s.label;
+      d.className=j===i?'cur':(j<i?'done':'');d.onclick=function(){i=j;draw();};stepsEl.appendChild(d);});
+    document.querySelectorAll('.lane').forEach(function(l){var n=l.getAttribute('data-lane');
+      l.className='lane'+(n===st.from&&n===st.to?' both':n===st.from?' from':n===st.to?' to':'');});
+    evEl.textContent=JSON.stringify(st.ev,null,2);
+    stEl.textContent=st.status;stEl.className='status st-'+st.status;
+    exEl.textContent=st.x;
+    ctr.textContent='Step '+(i+1)+' of '+sc.steps.length+'  (blue: sender, green: receiver)';
+    prev.disabled=i===0;next.disabled=i===sc.steps.length-1;
+    var c=stepsEl.querySelector('.cur'); if(c) c.scrollIntoView({block:'nearest'});
+  }
+  sel.onchange=function(){cur=sel.value;i=0;draw();};
+  prev.onclick=function(){if(i>0){i--;draw();}};
+  next.onclick=function(){if(i<S[cur].steps.length-1){i++;draw();}};
+  document.getElementById('reset').onclick=function(){i=0;draw();};
+  document.addEventListener('keydown',function(e){if(e.target.tagName==='SELECT')return;
+    if(e.key==='ArrowRight')next.onclick(); if(e.key==='ArrowLeft')prev.onclick();});
+  draw();
+})();
+</script>
+</body>
+</html>
