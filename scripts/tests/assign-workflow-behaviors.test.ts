@@ -762,10 +762,14 @@ describe.skipIf(IS_WINDOWS)('unassign-stale-issues.sh behavioral', () => {
   });
 
   it('paginates candidate discovery beyond one page', () => {
-    // Create >30 issues (default page size) to force pagination
+    // The script requests per_page=100, so the fake only splits the listing
+    // into pages when its page size is forced down. Three issues at two per
+    // page give a full first page and a partial second one. Each issue costs
+    // about fifteen fake gh calls, so this stays small on purpose.
+    const issueCount = 3;
     const issues: Record<string, unknown> = {};
     const timeline: Record<string, unknown> = {};
-    for (let i = 1; i <= 35; i++) {
+    for (let i = 1; i <= issueCount; i++) {
       issues[String(i)] = makeIssue({
         number: i,
         assignees: [`user-${i}`],
@@ -786,14 +790,15 @@ describe.skipIf(IS_WINDOWS)('unassign-stale-issues.sh behavioral', () => {
       ];
     }
 
-    const repo = createFakeRepo(defaultStateWith({ issues, timeline }));
+    const repo = createFakeRepo(
+      defaultStateWith({ page_size: 2, issues, timeline }),
+    );
 
     const result = repo.runCleanup();
 
-    // All 35 should be discovered and processed (pagination works)
     expect(result.status).toBe(0);
-    // Verify issues from the second page (31-35) were processed
-    for (let i = 31; i <= 35; i++) {
+    // Every page, including the partial last one, was discovered and processed
+    for (let i = 1; i <= issueCount; i++) {
       const issue = stateIssue(result.state, i);
       expect(issue._assignees).not.toContain(`user-${i}`);
     }
