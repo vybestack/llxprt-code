@@ -329,6 +329,17 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
   const [validationError, setValidationError] = useState<string | null>(null);
   const existingProfiles = useExistingProfiles();
 
+  // The profiles directory is scanned asynchronously, so a name typed before
+  // the scan resolves was validated against an empty list. Re-check it once
+  // the scan lands.
+  useEffect(() => {
+    if (profileNameInput) {
+      setValidationError(
+        validateProfileName(profileNameInput, existingProfiles),
+      );
+    }
+  }, [existingProfiles, profileNameInput]);
+
   const [suggestions] = useState(() =>
     generateProfileNameSuggestions(state.config),
   );
