@@ -23,7 +23,10 @@ import {
   type RequestByteOverflowError,
 } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { isAbortLikeError } from './is-abort-like-error.js';
-import { buildContextOverflowError } from './contextOverflowError.js';
+import {
+  buildContextOverflowError,
+  buildUnrecoverableBoundaryError,
+} from './contextOverflowError.js';
 import {
   INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
   computeHistoryTruncationTarget,
@@ -36,6 +39,10 @@ import {
   retireEnvelopeImages,
   retireHistoricalImages,
 } from './historicalImageRetirement.js';
+import {
+  isRelievableMediaPressure,
+  relieveMediaPressure,
+} from './mediaPressureFallback.js';
 import {
   truncateOversizedToolResponsesUnified,
   type UnifiedTruncationResult,
@@ -133,8 +140,11 @@ export class ProviderContentEnforcer {
         'initial',
       );
     } catch (error) {
-      if (!isRequestByteOverflowError(error) || byteRecoveryAttempted) {
+      if (!isRelievableMediaPressure(error)) {
         throw error;
+      }
+      if (byteRecoveryAttempted) {
+        return this.relieveMediaPressure(error, envelope, provider, false);
       }
       return this.recoverFromByteOverflow(
         error,
@@ -145,6 +155,29 @@ export class ProviderContentEnforcer {
       );
     }
 
+    try {
+      return await this.enforceBeyondInitialProjection(
+        envelope,
+        contents,
+        { promptId, model },
+        limits,
+        initialProjected,
+      );
+    } catch (error) {
+      if (!isRelievableMediaPressure(error)) {
+        throw error;
+      }
+      return this.relieveMediaPressure(error, envelope, provider, true);
+    }
+  }
+
+  private async enforceBeyondInitialProjection(
+    envelope: ProviderContentEnvelope,
+    contents: IContent[],
+    request: { promptId: string; model: string },
+    limits: ContextLimits,
+    initialProjected: number,
+  ): Promise<IContent[]> {
     const earlyReturn = this.checkEarlyReturn(
       envelope,
       contents,
@@ -155,7 +188,7 @@ export class ProviderContentEnforcer {
       return earlyReturn;
     }
     if (envelope.pendingContents === undefined) {
-      throw this.buildUnrecoverableBoundaryError(
+      throw buildUnrecoverableBoundaryError(
         initialProjected,
         limits.marginAdjustedLimit,
       );
@@ -164,17 +197,17 @@ export class ProviderContentEnforcer {
     const postOpt = await this.optimizeAndProject(
       envelope.pendingContents,
       limits.completionBudget,
-      model,
+      request.model,
     );
     if (postOpt.projected <= limits.compressionThreshold) {
       return postOpt.contents;
     }
 
     return this.enforceWithEscalation(
-      promptId,
+      request.promptId,
       envelope.pendingContents,
       limits,
-      model,
+      request.model,
       initialProjected,
       postOpt.projected,
     );
@@ -194,22 +227,42 @@ export class ProviderContentEnforcer {
     completionBudget: number,
   ): Promise<IContent[]> {
     const pending = envelope.pendingContents;
+    const relieve = (
+      cause: RequestByteOverflowError,
+      historyChanged: boolean,
+    ) =>
+      this.relieveMediaPressure(
+        cause,
+        envelope,
+        request.provider,
+        historyChanged,
+      );
     if (pending === undefined) {
-      throw error;
+      return relieve(error, false);
     }
     if (!compressionCanRelieve(error, contents, pending.length)) {
       throw explainPendingOverflow(error, pending);
     }
-    const recovered = await this.runCompressionAndRecompose(
-      request.promptId,
-      pending,
-      completionBudget,
-      request.model,
-      'post-byte-pressure-compression',
-      true,
-    );
+    let recovered: ProjectionResult;
+    try {
+      recovered = await this.runCompressionAndRecompose(
+        request.promptId,
+        pending,
+        completionBudget,
+        request.model,
+        'post-byte-pressure-compression',
+        true,
+      );
+    } catch (recoveryError) {
+      if (!isRelievableMediaPressure(recoveryError)) {
+        throw recoveryError;
+      }
+      return relieve(recoveryError, true);
+    }
     if (recovered.compressionFailure !== undefined) {
-      throw error;
+      // A failed compression may have left history half rewritten; the
+      // request it was meant to relieve is what the fallback relieves.
+      return relieve(error, false);
     }
     return this.enforce(
       { ...envelope, contents: recovered.contents },
@@ -217,6 +270,39 @@ export class ProviderContentEnforcer {
       request.provider,
       true,
     );
+  }
+
+  /**
+   * Last-resort answer to byte pressure that compression and normal retirement
+   * did not relieve (issue #4000): retire every image outside the protected
+   * region and project once more. After a completed compression or
+   * truncation (`historyChanged`) the history is recomposed from the curated
+   * history, provided the envelope's pending tail is proven; otherwise the
+   * envelope's own contents, including any hook edits, are relieved.
+   */
+  private relieveMediaPressure(
+    error: RequestByteOverflowError,
+    envelope: ProviderContentEnvelope,
+    provider: IProvider | undefined,
+    historyChanged: boolean,
+  ): Promise<IContent[]> {
+    const model = this.resolveModel(provider);
+    const { completionBudget } = this.computeContextLimits(provider, model);
+    return relieveMediaPressure({
+      error,
+      envelope,
+      historyChanged,
+      budgetBytes: this.mediaBudgetBytes(),
+      curated: () => this.deps.historyService.getCurated(),
+      logger: this.deps.logger,
+      project: (candidate) =>
+        this.estimateProviderProjection(
+          candidate,
+          completionBudget,
+          model,
+          'post-media-fallback',
+        ),
+    });
   }
 
   private checkEarlyReturn(
@@ -543,19 +629,6 @@ export class ProviderContentEnforcer {
       }
     }
     return this.deps.runtimeContext.state.model;
-  }
-
-  private buildUnrecoverableBoundaryError(
-    projected: number,
-    marginAdjustedLimit: number,
-  ): Error {
-    return new Error(
-      'Context overflow requires compression, but the pending-content boundary is unrecoverable: ' +
-        'a BeforeModel hook replaced or restructured the conversation contents, and no usable ' +
-        'llm_request_boundary metadata was available, so compression cannot safely recompose the pending region. ' +
-        'Consider reducing the context size, or have the hook supply valid llm_request_boundary metadata. ' +
-        `Projected ${projected} exceeds safety-adjusted limit ${marginAdjustedLimit}.`,
-    );
   }
 
   private async optimizeAndProject(

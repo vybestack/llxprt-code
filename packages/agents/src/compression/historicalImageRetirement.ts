@@ -146,6 +146,20 @@ export function retireHistoricalImages(
   }
   if (total > budgetBytes) retireOldest(history.length);
 
+  return renderRetirement(history, retired);
+}
+
+/**
+ * Request view of `history` with the given image slots replaced by their
+ * retirement notes, or `history` itself when nothing retires. A stored
+ * Responses parent no longer describes the rewritten prefix, so the view must
+ * not offer it as a continuation point; only the view's own copies lose the
+ * marker and canonical entries keep it.
+ */
+function renderRetirement(
+  history: IContent[],
+  retired: ReadonlyMap<string, ImageSlot>,
+): IContent[] {
   if (retired.size === 0) return history;
   const view = history.map((content, contentIndex) => {
     const blocks = content.blocks.map((block, blockIndex): ContentBlock => {
@@ -158,13 +172,37 @@ export function retireHistoricalImages(
       ? { ...content, blocks }
       : content;
   });
-  // A stored Responses parent no longer describes the rewritten prefix, so the
-  // view must not offer it as a continuation point. Only the view's own copies
-  // lose the marker; canonical entries keep it.
   const firstRetired = Math.min(
     ...[...retired.values()].map((slot) => slot.contentIndex),
   );
   return invalidateResponsesStatefulChainForRetainedRewrite(view, firstRetired);
+}
+
+/**
+ * Last-resort request view for media pressure that normal retirement did not
+ * relieve: every image in `contents` before `protectedStart` is replaced by
+ * its retirement note. Non-image and URL media stay, and the protected region
+ * is never touched. Returns `contents` itself when no image retires.
+ */
+export function retireEveryHistoricalImage(
+  contents: IContent[],
+  protectedStart: number,
+): IContent[] {
+  const retired = new Map<string, ImageSlot>();
+  contents.slice(0, protectedStart).forEach((content, contentIndex) => {
+    content.blocks.forEach((block, blockIndex) => {
+      const bytes = countedBytes(block);
+      if (bytes !== undefined && block.type === 'media' && isImage(block)) {
+        retired.set(`${contentIndex}:${blockIndex}`, {
+          contentIndex,
+          blockIndex,
+          bytes,
+          block,
+        });
+      }
+    });
+  });
+  return renderRetirement(contents, retired);
 }
 
 /** True when any content carries media the resolver would count. */
@@ -210,36 +248,66 @@ function samePendingContent(actual: IContent, declared: IContent): boolean {
   );
 }
 
+/** True when the contents tail carries exactly the declared pending region. */
+export function isPendingRegionProven(
+  contents: readonly IContent[],
+  pending: readonly IContent[] | undefined,
+): boolean {
+  if (pending === undefined) return false;
+  const splitAt = contents.length - pending.length;
+  return (
+    splitAt >= 0 &&
+    contents
+      .slice(splitAt)
+      .every((content, index) => samePendingContent(content, pending[index]))
+  );
+}
+
+/**
+ * Index where the region retirement must never touch begins. A proven tail
+ * is exactly the declared pending region. When the boundary is unproven (it
+ * is undefined, or a hook or normalization rewrote the tail) the newest
+ * content is protected, plus everything from the last content that still
+ * carries the declared first pending item, so a hook that appended items
+ * after the user's turn cannot cost the user their own attachment.
+ */
+export function protectedRegionStart(
+  contents: readonly IContent[],
+  pending: readonly IContent[] | undefined,
+): number {
+  if (pending === undefined) return Math.max(0, contents.length - 1);
+  if (isPendingRegionProven(contents, pending)) {
+    return contents.length - pending.length;
+  }
+  const newest = Math.max(0, contents.length - 1);
+  if (pending.length === 0) return newest;
+  for (let index = newest; index >= 0; index -= 1) {
+    if (samePendingContent(contents[index], pending[0])) return index;
+  }
+  return newest;
+}
+
 /**
  * Request view of an already composed envelope with the oldest historical
  * images retired. The envelope's pending contents are the authority. The tail
  * of the contents is trusted as that region only when it carries exactly the
  * declared speakers and blocks (the provider pipeline clones content, so
- * identity alone cannot be required). Anything else, such as appended hook
- * items the envelope does not name, rewritten pending blocks, or a payload
- * that cannot be compared, is unproven: nothing retires and nothing is
- * guessed. The envelope's own array is returned when nothing retires so a
- * projection prepared for it stays valid.
+ * identity alone cannot be required). Otherwise the boundary is unproven and
+ * {@link protectedRegionStart} protects the newest content; media pressure
+ * from older history must never end the turn (issue #4000). The envelope's
+ * own array is returned when nothing retires so a projection prepared for it
+ * stays valid.
  */
 export function retireEnvelopeImages(
   envelope: ProviderContentEnvelope,
   budgetBytes: number,
 ): IContent[] {
-  const pending = envelope.pendingContents;
-  if (pending === undefined) {
-    return envelope.contents;
-  }
-  const splitAt = envelope.contents.length - pending.length;
-  if (splitAt < 0) {
-    return envelope.contents;
-  }
-  const tail = envelope.contents.slice(splitAt);
-  if (
-    !tail.every((content, index) => samePendingContent(content, pending[index]))
-  ) {
-    return envelope.contents;
-  }
+  const splitAt = protectedRegionStart(
+    envelope.contents,
+    envelope.pendingContents,
+  );
   const history = envelope.contents.slice(0, splitAt);
+  const tail = envelope.contents.slice(splitAt);
   const retired = retireHistoricalImages(history, tail, budgetBytes);
   return retired === history ? envelope.contents : [...retired, ...tail];
 }

@@ -170,11 +170,16 @@ export class RetirementSession {
   private readonly originalFetch = globalThis.fetch;
   private compression: (history: HistoryService) => Promise<void> = () =>
     Promise.reject(new Error('compression must not run'));
+  private compressionOutcome = PerformCompressionResult.COMPRESSED;
 
   constructor(
     private readonly directory: string,
-    private readonly requestMediaBudgetBytes: number | undefined,
+    requestMediaBudgetBytes: number | undefined,
     quotaBytes: number = 256 * 1024 * 1024,
+    /** Budget the enforcer retires against; defaults to the provider's. */
+    private readonly enforcerBudgetBytes:
+      | number
+      | undefined = requestMediaBudgetBytes,
   ) {
     this.store = new LocalMediaStore({
       rootDirectory: join(this.directory, 'media'),
@@ -245,6 +250,14 @@ export class RetirementSession {
   }
 
   /**
+   * The result the compression workflow reports without running (for example
+   * a cooldown skip). Defaults to COMPRESSED after running the callback.
+   */
+  useCompressionOutcome(outcome: PerformCompressionResult): void {
+    this.compressionOutcome = outcome;
+  }
+
+  /**
    * An image whose stored bytes are not in this session's media store, as
    * after store loss: the reference is valid metadata but cannot be read.
    */
@@ -299,6 +312,9 @@ export class RetirementSession {
       ensureDensityOptimized: () => Promise.resolve(),
       performCompression: async () => {
         this.compressionRuns += 1;
+        if (this.compressionOutcome !== PerformCompressionResult.COMPRESSED) {
+          return this.compressionOutcome;
+        }
         await this.compression(this.history);
         return PerformCompressionResult.COMPRESSED;
       },
@@ -307,7 +323,7 @@ export class RetirementSession {
       resetPromptTokenBaseline: () => undefined,
       restorePromptTokenBaseline: () => undefined,
       estimateFinalizedPromptTokens: estimate,
-      requestMediaBudgetBytes: this.requestMediaBudgetBytes,
+      requestMediaBudgetBytes: this.enforcerBudgetBytes,
     });
   }
 
@@ -318,6 +334,8 @@ export class RetirementSession {
   async send(
     pending: IContent[],
     drain: boolean = true,
+    /** The pending region the envelope declares; undefined is unrecoverable. */
+    declared: { readonly pending: IContent[] | undefined } = { pending },
   ): Promise<{ contents: IContent[] }> {
     const composed = buildProviderContent(
       this.history.getCurated(),
@@ -332,7 +350,7 @@ export class RetirementSession {
         buildOptions: (candidate) => ({ ...this.options, contents: candidate }),
         enforce: (candidate, estimate) =>
           this.enforcerFor(estimate).enforce(
-            { contents: candidate, pendingContents: pending },
+            { contents: candidate, pendingContents: declared.pending },
             'prompt-3984',
             this.provider,
           ),
