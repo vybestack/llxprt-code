@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 /**
@@ -206,4 +207,24 @@ export function protectedRegionStart(
     searchFrom = earliest - 1;
   }
   return start;
+}
+
+/**
+ * {@link protectedRegionStart} for an envelope. The declared compression
+ * boundary decides when there is one. Without it the user's original items
+ * (`protectedContents`) still identify their own fragments, so a hook that
+ * restructured the request cannot turn the user's fresh attachments into
+ * retirable history. The identity search only protects media; it never makes
+ * compression available.
+ */
+export function envelopeProtectedStart(
+  envelope: Pick<
+    ProviderContentEnvelope,
+    'contents' | 'pendingContents' | 'protectedContents'
+  >,
+): number {
+  return protectedRegionStart(
+    envelope.contents,
+    envelope.pendingContents ?? envelope.protectedContents,
+  );
 }

@@ -9,6 +9,7 @@ import { isAbortLikeError } from './is-abort-like-error.js';
 import {
   captureHistoryState,
   rollbackHistoryState,
+  watchIndependentWrites,
 } from './historyStateRollback.js';
 import type { ProviderContentEnforcementDeps } from './providerContentEnforcement.js';
 
@@ -26,7 +27,6 @@ interface CompressionAttempt {
 async function attemptCompression(
   deps: ProviderContentEnforcementDeps,
   promptId: string,
-  propagateAbort: boolean,
 ): Promise<CompressionAttempt> {
   try {
     const result = await deps.performCompression(promptId, {
@@ -48,7 +48,7 @@ async function attemptCompression(
     };
   } catch (error) {
     const compressionError = normalizeError(error);
-    if (!(propagateAbort && isAbortLikeError(error))) {
+    if (!isAbortLikeError(error)) {
       deps.logger.warn(
         () =>
           '[CompressionHandler] Auto compression failed during hard-limit enforcement',
@@ -64,30 +64,36 @@ async function attemptCompression(
  * exception, FAILED, NOOP or SKIPPED, undefined only for a confirmed
  * COMPRESSED. Anything else may have left history half rewritten, so the
  * history, cache anchor and prompt-token baseline captured beforehand are
- * restored before the caller recomposes or continues; when that rollback
- * fails the request is rejected rather than continued. `propagateAbort`
- * rethrows cancellation, after the rollback, instead of treating it as a
- * failed compression.
+ * restored before the caller recomposes or continues, except entries other
+ * writers committed while the compression ran; when that rollback
+ * fails the request is rejected rather than continued. Cancellation is
+ * rethrown after the rollback on every path: it is never a failed compression
+ * that lets truncation or the overflow error take over.
  */
 export async function runGuardedCompression(
   deps: ProviderContentEnforcementDeps,
   promptId: string,
-  propagateAbort: boolean,
 ): Promise<Error | undefined> {
   const snapshot = captureHistoryState(deps);
-  const attempt = await attemptCompression(deps, promptId, propagateAbort);
+  const writes = watchIndependentWrites(deps.historyService);
+  let attempt: CompressionAttempt;
+  try {
+    attempt = await attemptCompression(deps, promptId);
+  } finally {
+    writes.stop();
+  }
   if (attempt.failure === undefined) {
     return undefined;
   }
   try {
-    await rollbackHistoryState(deps, snapshot);
+    await rollbackHistoryState(deps, snapshot, writes);
   } catch (rollbackError) {
     throw new AggregateError(
       [attempt.failure, normalizeError(rollbackError)],
       'Auto compression failed and its history rollback also failed',
     );
   }
-  if (propagateAbort && isAbortLikeError(attempt.thrown)) {
+  if (isAbortLikeError(attempt.thrown)) {
     throw attempt.thrown;
   }
   return attempt.failure;

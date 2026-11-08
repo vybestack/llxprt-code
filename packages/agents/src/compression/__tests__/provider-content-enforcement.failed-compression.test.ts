@@ -25,10 +25,9 @@ import { textTurn, useReliefConversation } from './media-relief-fixtures.js';
 const PARTIAL = 'PARTIAL SUMMARY FROM FAILED COMPRESSION';
 const REAL_SUMMARY = 'REAL SUMMARY OF THE EARLIER CONVERSATION';
 
+/** Applies the rewrite through replaceAll, as the production apply path does. */
 async function rewriteToPartialSummary(history: HistoryService): Promise<void> {
-  history.clear();
-  history.add(aiTurn(PARTIAL));
-  await history.waitForTokenUpdates();
+  await history.replaceAll([aiTurn(PARTIAL)]);
 }
 
 async function crashAfterPartialRewrite(

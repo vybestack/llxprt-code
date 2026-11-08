@@ -133,3 +133,50 @@ describe('stored Responses parents in the pending tail after retire-all recompos
     });
   });
 });
+
+describe('stored Responses parents before the first retired image (issue #4000 CodeRabbit T6)', () => {
+  const conversation = useReliefConversation('llxprt-issue4000-cr-t6-');
+  const EARLY_PARENT = 'resp_before_every_image';
+  const LATE_PARENT = 'resp_after_first_image';
+
+  function seedEarlyParent(): void {
+    const { history } = conversation.session();
+    history.add(textTurn('opening question'));
+    history.add(storedAiTurn('opening answer', EARLY_PARENT));
+  }
+
+  it('still selects a parent that sits before every retired image', async () => {
+    const session = conversation.session();
+    session.contextLimit = 1_000_000;
+    seedEarlyParent();
+    await conversation.seedImages(3);
+
+    const contents = await session.recomposeViaCallback([
+      textTurn('next question'),
+    ]);
+
+    expect(providerView(contents)).toStrictEqual({
+      parentId: EARLY_PARENT,
+      noteCount: 3,
+      storedEntries: 1,
+    });
+  });
+
+  it('selects no parent when the only stored parent follows the first retired image', async () => {
+    const session = conversation.session();
+    session.contextLimit = 1_000_000;
+    await conversation.seedImages(1);
+    session.history.add(storedAiTurn('answer after one image', LATE_PARENT));
+    await conversation.seedImages(2);
+
+    const contents = await session.recomposeViaCallback([
+      textTurn('next question'),
+    ]);
+
+    expect(providerView(contents)).toStrictEqual({
+      parentId: undefined,
+      noteCount: 3,
+      storedEntries: 0,
+    });
+  });
+});

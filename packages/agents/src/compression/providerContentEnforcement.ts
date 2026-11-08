@@ -14,8 +14,6 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import { invalidateResponsesStatefulChainForRetainedRewrite } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import {
   DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
   isRequestByteOverflowError,
@@ -28,6 +26,7 @@ import {
 } from './contextLimitPolicy.js';
 import {
   computeContextLimits,
+  limitsForGuard,
   type ContextLimits,
 } from './enforcementLimits.js';
 import {
@@ -36,13 +35,19 @@ import {
   type OverflowReductionResult,
 } from './overflowReduction.js';
 import { executeFallbackTruncation } from './fallbackTruncationCommit.js';
+import {
+  calibrateGuardOverhead,
+  measureRequestTokens,
+  type CallbackRequest,
+  type GuardCalibration,
+} from './guardCalibration.js';
 import { runGuardedCompression } from './guardedCompression.js';
 import {
   compressionCanRelieve,
+  composeRetiredRequest,
   explainPendingOverflow,
   retireEnvelopeImages,
   retireEveryHistoricalImage,
-  retireHistoricalImages,
 } from './historicalImageRetirement.js';
 import { protectedRegionStart } from './pendingBoundary.js';
 import {
@@ -108,16 +113,29 @@ interface ProjectionResult {
   compressionFailure?: Error;
 }
 
-export class ProviderContentEnforcer {
+/** Internal modes of an enforcer that continues a relieved request. */
+interface EnforcerMode {
   /**
-   * `retiresAllHistoricalImages` is internal: it marks the enforcer that
-   * continues a request after media relief, so every recomposition keeps all
-   * historical images retired and retired pixels never come back.
+   * Every recomposition keeps all historical images retired, so retired
+   * pixels never come back after media relief.
    */
+  readonly retiresAllHistoricalImages?: boolean;
+  /**
+   * Fit checks use the content estimator (the finalized one still validates
+   * the request), because the guard overhead was calibrated with it.
+   */
+  readonly measuresByContents?: boolean;
+}
+
+export class ProviderContentEnforcer {
   constructor(
     private readonly deps: ProviderContentEnforcementDeps,
-    private readonly retiresAllHistoricalImages = false,
+    private readonly mode: EnforcerMode = {},
   ) {}
+
+  private get retiresAllHistoricalImages(): boolean {
+    return this.mode.retiresAllHistoricalImages === true;
+  }
 
   /** `byteRecoveryAttempted` is internal: it bounds byte recovery to one pass. */
   async enforce(
@@ -257,7 +275,6 @@ export class ProviderContentEnforcer {
     const compressionFailure = await runGuardedCompression(
       this.deps,
       request.promptId,
-      true,
     );
     if (compressionFailure !== undefined) {
       return relieve(error, false);
@@ -332,7 +349,11 @@ export class ProviderContentEnforcer {
   private withHistoryImagesRetired(): ProviderContentEnforcer {
     return this.retiresAllHistoricalImages
       ? this
-      : new ProviderContentEnforcer(this.deps, true);
+      : this.withMode({ retiresAllHistoricalImages: true });
+  }
+
+  private withMode(patch: EnforcerMode): ProviderContentEnforcer {
+    return new ProviderContentEnforcer(this.deps, { ...this.mode, ...patch });
   }
 
   private checkEarlyReturn(
@@ -446,37 +467,68 @@ export class ProviderContentEnforcer {
     promptId: string,
     guard?: CompressionGuardInfo,
     provider?: IProvider,
+    originalContents?: IContent[],
   ): Promise<IContent[]> {
     if (pendingContents.length === 0) {
       return [];
     }
+    const calibration = await this.calibrateGuard(
+      guard,
+      originalContents,
+      this.resolveModel(provider),
+    );
+    const enforcer =
+      calibration?.measuresByContents === true
+        ? this.withMode({ measuresByContents: true })
+        : this;
+    const request = { promptId, guard, provider, calibration };
     try {
-      return await this.recomposeWithinLimits(
-        pendingContents,
-        promptId,
-        guard,
-        provider,
-      );
+      return await enforcer.recomposeWithinLimits(pendingContents, request);
     } catch (error) {
       if (
         !isRelievableMediaPressure(error) ||
-        !this.canRelieveHistoryImages()
+        !enforcer.canRelieveHistoryImages()
       ) {
         throw error;
       }
     }
     // Media pressure from history: repeat once with every historical image
-    // retired, under the same guard-derived limits (issue #4000).
+    // retired, under the same guard-derived limits and the same calibrated
+    // overhead (issue #4000).
     try {
-      return await this.withHistoryImagesRetired().recomposeWithinLimits(
-        pendingContents,
-        promptId,
-        guard,
-        provider,
-      );
+      return await enforcer
+        .withHistoryImagesRetired()
+        .recomposeWithinLimits(pendingContents, request);
     } catch (error) {
       throw explainPendingOverflow(error, pendingContents);
     }
+  }
+
+  /**
+   * The guard's fixed overhead, measured once from the request the guard
+   * measured. Without that request (a caller that does not supply it) the
+   * overhead is derived from the recomposed contents instead.
+   */
+  private async calibrateGuard(
+    guard: CompressionGuardInfo | undefined,
+    originalContents: IContent[] | undefined,
+    model: string,
+  ): Promise<GuardCalibration | undefined> {
+    if (guard === undefined || originalContents === undefined) {
+      return undefined;
+    }
+    return calibrateGuardOverhead({
+      guardEstimatedTokens: guard.estimatedTokens,
+      original: originalContents,
+      estimateOwn: (contents) =>
+        this.estimateProviderProjection(
+          contents,
+          0,
+          model,
+          'guard-calibration',
+        ),
+      estimateByContents: this.contentEstimator(model),
+    });
   }
 
   private canRelieveHistoryImages(): boolean {
@@ -490,15 +542,13 @@ export class ProviderContentEnforcer {
 
   private async recomposeWithinLimits(
     pendingContents: IContent[],
-    promptId: string,
-    guard: CompressionGuardInfo | undefined,
-    provider: IProvider | undefined,
+    request: CallbackRequest,
   ): Promise<IContent[]> {
+    const { promptId, provider } = request;
     const model = this.resolveModel(provider);
     const { limits, initialProjected } = await this.computeCallbackLimits(
       pendingContents,
-      guard,
-      provider,
+      request,
       model,
     );
     const postOpt = await this.optimizeAndProject(
@@ -578,10 +628,10 @@ export class ProviderContentEnforcer {
    */
   private async computeCallbackLimits(
     pendingContents: IContent[],
-    guard: CompressionGuardInfo | undefined,
-    provider: IProvider | undefined,
+    request: CallbackRequest,
     model: string,
   ): Promise<{ limits: ContextLimits; initialProjected: number }> {
+    const { guard, provider, calibration } = request;
     if (guard === undefined) {
       const limits = this.computeContextLimits(provider, model);
       const initialProjected = await this.estimateProviderProjection(
@@ -598,15 +648,13 @@ export class ProviderContentEnforcer {
       model,
       'initial',
     );
-    const overhead = Math.max(0, guard.estimatedTokens - initialProjected);
-    const effectiveLimit = Math.max(1, guard.contextLimit - overhead);
-    const limits: ContextLimits = {
-      completionBudget: 0,
-      limit: guard.contextLimit,
-      marginAdjustedLimit: effectiveLimit,
-      compressionThreshold: effectiveLimit,
+    const overhead =
+      calibration?.overhead ??
+      Math.max(0, guard.estimatedTokens - initialProjected);
+    return {
+      limits: limitsForGuard(guard.contextLimit, overhead),
+      initialProjected,
     };
-    return { limits, initialProjected };
   }
 
   private async truncateToolResponsesUnified(
@@ -688,11 +736,7 @@ export class ProviderContentEnforcer {
     // Projection runs OUTSIDE runCompression's catch so a projection rejection
     // surfaces as a stage-aware error rather than being swallowed and
     // re-projected as a compression failure.
-    const compressionFailure = await runGuardedCompression(
-      this.deps,
-      promptId,
-      false,
-    );
+    const compressionFailure = await runGuardedCompression(this.deps, promptId);
     return this.projectContents(
       pendingContents,
       completionBudget,
@@ -817,30 +861,19 @@ export class ProviderContentEnforcer {
    * truncation) re-applies image retirement to the curated history before the
    * pending region is appended, so no step can resurrect retired pixels.
    *
-   * Retirement rewrites what the server-side chain of a stored Responses
-   * parent holds, wherever that parent sits in the request. The parent
-   * markers are therefore invalidated over the fully rejoined request,
-   * pending tail included, from its first entry: normalization can shift
-   * indexes, so no narrower start is provably correct. Only the request
-   * view's copies lose markers; canonical entries keep them.
+   * Stored Responses parents are invalidated from the first entry retirement
+   * changed, so a parent before every retired image stays valid.
    */
   private recomposeProviderContents(pendingContents: IContent[]): IContent[] {
-    const curated = this.deps.historyService.getCurated();
-    const history = this.retiresAllHistoricalImages
-      ? retireEveryHistoricalImage(curated, curated.length)
-      : retireHistoricalImages(
-          curated,
-          pendingContents,
-          this.mediaBudgetBytes(),
-        );
-    const composed = buildProviderContent(
-      history,
-      pendingContents,
+    return composeRetiredRequest(
+      {
+        curated: this.deps.historyService.getCurated(),
+        pending: pendingContents,
+        retireAll: this.retiresAllHistoricalImages,
+        budgetBytes: this.mediaBudgetBytes(),
+      },
       this.deps.logger,
     );
-    return history === curated
-      ? composed
-      : invalidateResponsesStatefulChainForRetainedRewrite(composed, 0);
   }
 
   private mediaBudgetBytes(): number {
@@ -856,12 +889,14 @@ export class ProviderContentEnforcer {
     stage: string = 'initial',
   ): Promise<number> {
     try {
-      const requestTokens = this.deps.estimateFinalizedPromptTokens
-        ? await this.deps.estimateFinalizedPromptTokens(contents)
-        : await this.deps.historyService.estimateTokensForContents(
-            contents,
-            model,
-          );
+      const requestTokens = await measureRequestTokens(
+        {
+          finalized: this.deps.estimateFinalizedPromptTokens,
+          byContents: this.contentEstimator(model),
+          preferContents: this.mode.measuresByContents === true,
+        },
+        contents,
+      );
       return requestTokens + completionBudget;
     } catch (error) {
       if (isRequestByteOverflowError(error)) {
@@ -873,6 +908,13 @@ export class ProviderContentEnforcer {
         { cause: projectionError },
       );
     }
+  }
+
+  private contentEstimator(
+    model: string,
+  ): (contents: IContent[]) => Promise<number> {
+    return (contents) =>
+      this.deps.historyService.estimateTokensForContents(contents, model);
   }
 
   private computeContextLimits(

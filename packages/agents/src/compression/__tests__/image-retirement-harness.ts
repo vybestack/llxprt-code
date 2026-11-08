@@ -35,7 +35,10 @@ import {
   createPromptEnvelopePreparer,
   preparePromptEnvelopeAfterEnforcement,
 } from '../../core/promptEnvelopeSendSeam.js';
-import { ProviderContentEnforcer } from '../providerContentEnforcement.js';
+import {
+  ProviderContentEnforcer,
+  type CompressionGuardInfo,
+} from '../providerContentEnforcement.js';
 
 export const MODEL = 'claude-sonnet-4-20250514';
 export const BASE_URL = 'https://api.anthropic.com';
@@ -147,6 +150,16 @@ export async function rejection(work: Promise<unknown>): Promise<unknown> {
     return error;
   }
   throw new Error('Expected operation to reject');
+}
+
+/** How a test describes the request envelope to the production send seam. */
+export interface DeclaredRequest {
+  /** The pending region the envelope declares; undefined is unrecoverable. */
+  readonly pending: IContent[] | undefined;
+  /** The user's original turn, carried when the boundary is unrecoverable. */
+  readonly protectedContents?: IContent[];
+  /** The request as a BeforeModel hook left it; composed from history if absent. */
+  readonly contents?: IContent[];
 }
 
 export interface SentRequest {
@@ -339,14 +352,15 @@ export class RetirementSession {
   async send(
     pending: IContent[],
     drain: boolean = true,
-    /** The pending region the envelope declares; undefined is unrecoverable. */
-    declared: { readonly pending: IContent[] | undefined } = { pending },
+    declared: DeclaredRequest = { pending },
   ): Promise<{ contents: IContent[] }> {
-    const composed = buildProviderContent(
-      this.history.getCurated(),
-      pending,
-      DebugLogger.getLogger('test:issue3984:compose'),
-    );
+    const composed =
+      declared.contents ??
+      buildProviderContent(
+        this.history.getCurated(),
+        pending,
+        DebugLogger.getLogger('test:issue3984:compose'),
+      );
     const { contents, prepared, preparer } =
       await preparePromptEnvelopeAfterEnforcement({
         provider: this.provider,
@@ -355,7 +369,13 @@ export class RetirementSession {
         buildOptions: (candidate) => ({ ...this.options, contents: candidate }),
         enforce: (candidate, estimate) =>
           this.enforcerFor(estimate).enforce(
-            { contents: candidate, pendingContents: declared.pending },
+            {
+              contents: candidate,
+              pendingContents: declared.pending,
+              ...(declared.protectedContents === undefined
+                ? {}
+                : { protectedContents: declared.protectedContents }),
+            },
             'prompt-3984',
             this.provider,
           ),
@@ -380,7 +400,13 @@ export class RetirementSession {
    * pending region through the enforcer, then proves the real provider
    * projection accepts the returned contents.
    */
-  async recomposeViaCallback(pending: IContent[]): Promise<IContent[]> {
+  async recomposeViaCallback(
+    pending: IContent[],
+    /** What the context guard measured; absent when no guard is involved. */
+    guard?: CompressionGuardInfo,
+    /** The request the provider handed its callback; absent for the legacy call. */
+    original?: IContent[],
+  ): Promise<IContent[]> {
     const preparer = createPromptEnvelopePreparer(
       this.provider,
       (candidate) => ({ ...this.options, contents: candidate }),
@@ -394,14 +420,24 @@ export class RetirementSession {
       ).compressAndRecompose(
         pending,
         'prompt-callback',
-        undefined,
+        guard,
         this.provider,
+        original,
       );
       await preparer.prepare(contents);
       return contents;
     } finally {
       await preparer.releaseUnused();
     }
+  }
+
+  /** The request a provider would receive: curated history plus `pending`. */
+  compose(pending: IContent[]): IContent[] {
+    return buildProviderContent(
+      this.history.getCurated(),
+      pending,
+      DebugLogger.getLogger('test:issue3984:compose'),
+    );
   }
 
   /** Commits a human turn and its answer to canonical history. */

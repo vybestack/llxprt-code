@@ -315,3 +315,120 @@ markers.
   hook that dropped an attachment of a declared item while an unlabeled older
   copy remains in history can widen the protected region to that copy (the
   safe direction: it never retires current media).
+
+## CodeRabbit round (PR #4015)
+
+Six review threads, each verified against the code before acting. Every FIXED
+thread has a regression test that was run red before the fix and green after.
+
+### T5 (Major) FIXED: cancellation during compression after relief
+
+`runGuardedCompression` rethrew an abort only for the byte-recovery call; the
+escalation ladder, the ineffective-compression retry, the post-relief
+continuation and `compressAndRecompose` passed `propagateAbort = false`, so an
+abort after relief became a failed compression and enforcement went on to
+truncation or `ContextOverflowError`. The flag is gone: an abort is rolled back
+and then rethrown on every path (guardedCompression.ts).
+
+Tests (`provider-content-enforcement.abort-after-relief.test.ts`, red:
+`ContextOverflowError` instead of `AbortError`): escalation ladder, ineffective
+retry (third run aborts), callback after relief, callback without relief. Each
+asserts the `AbortError`, nothing sent and history equal to the pre-compression
+history.
+
+### T3 (Major) FIXED: pending images when the hook boundary is unknown
+
+`ProviderContentEnvelope` gains an optional `protectedContents`: the user's
+original pending items, carried when `pendingContents` is undefined. It is not a
+compression boundary; `envelopeProtectedStart` (pendingBoundary.ts) feeds it to
+the identity-based `protectedRegionStart` only when no boundary is declared, in
+`retireEnvelopeImages` and in the media-pressure fallback. Compression stays
+unavailable. `fireBeforeModelHook` returns it, `StreamProcessor` threads it via
+`prepareStreamEnvelope`. `TurnProcessor` needed no change: its envelope always
+declares `pendingContents` (no hook runs there), so `protectedContents` would
+only repeat it.
+
+Tests (`historical-image-retirement.protected-contents.test.ts`,
+`historical-image-retirement.hook-boundary.test.ts`; red: all three images
+retired, zero kept): a split pending turn with an unrecoverable boundary keeps
+both pending images and retires only the older one, at the unit level, through
+the production send seam, and through a real `BeforeModelHookOutput` handled by
+`fireBeforeModelHook`. Guards: no carried turn means the old behavior, an
+unrelated history image is not protected, compression still does not run.
+
+### T6 (Minor) FIXED: valid Responses parents before retired images
+
+`recomposeProviderContents` invalidated from index 0. It now composes the
+unretired history through the same `buildProviderContent` normalization and
+invalidates from the first entry whose blocks differ
+(`invalidateParentsFromFirstRetirement`, historicalImageRetirement.ts), only
+when retirement changed something. A parent before every retired image stays
+selectable; a parent at or after the first one is not. Limitation kept by the
+existing helper: when a stored parent also sits after the first retired image,
+`invalidateResponsesStatefulChainForRetainedRewrite` clears every marker, so the
+earlier parent is dropped as well (full history, still correct).
+
+Tests (`provider-content-enforcement.responses-parent.test.ts`, real
+`computeStatefulConversation`; red: parent undefined): parent before all images
+selected with three notes; parent after the first image not selected. The
+existing round-3 tests stay green.
+
+### T4 (Major) FIXED: relieved request rechecked against the guard
+
+The callback now receives its original contents. `compressAndRecompose` takes
+them as an optional fifth argument and calibrates the guard's fixed overhead
+once (`calibrateGuardOverhead`, guardCalibration.ts) as
+`guard.estimatedTokens - estimate(original)`, then reuses it for the relieved
+retry instead of recomputing it from relieved contents. When the finalized
+estimator rejects the original on bytes, the overhead is measured with the
+content estimator and the enforcer measures its fit checks with that same
+estimator (`measuresByContents`; the finalized estimator still runs to validate
+bytes). A caller that does not pass the original keeps the old derivation. No
+`CompressionGuardInfo` or `LoadBalancingProvider` change was needed.
+
+Tests (`provider-content-enforcement.guard-calibration.test.ts`; red:
+`ContextOverflowError` at 251 against 250): a relieved request that fits
+`limit - overhead` is returned; one over it is still rejected.
+
+### T2 (Major) FIXED: rollback dropped independent writes
+
+Verified: (a) `HistoryService.add` queues under the compression lock
+(historyCompressionQueue.ts) and `endCompression` applies the queue inside
+`performCompression`'s `finally`, before our rollback runs, while `addBatch`
+(appendGeneration) is not gated by the lock at all. (b) The real apply path is
+one atomic `replaceAll` (cacheAnchor.ts:98-102), so a partial rewrite needs a
+failure after the commit (anchor update, telemetry); the rollback is mostly
+defense in depth, yet any failure after a queued add flushed made history differ
+from the snapshot and `replaceAll(snapshot)` dropped that add. (c) `generate`
+with `writeHistory` (session-text-generation.ts) writes to the same
+`HistoryService` as an interactive turn.
+
+Fix: `watchIndependentWrites` records the entries announced through
+`contentAdded` and `contentBatchAdded` during the attempt (compression applies
+through `replaceAll`, which announces none). The rollback restores the snapshot
+and appends the surviving announced entries, and treats history as untouched
+when it equals the snapshot apart from them.
+
+Tests (`provider-content-enforcement.rollback-independent-writes.test.ts`, red:
+the entry was missing): an add queued under the lock and an `addBatch` during a
+failing compression both survive; the partial summary does not. The simulated
+partial rewrites in `provider-content-enforcement.failed-compression.test.ts`
+now use `replaceAll` like the production apply path (assertions unchanged); a
+`clear()` plus `add()` rewrite is indistinguishable from a concurrent writer.
+The fallback-truncation restore (`restoreHistoryState` without independent
+entries) is unchanged.
+
+### T1 (Minor) DECLINED: bind stored parents to the request view
+
+A response stored from a retired request holds notes server-side; a later
+request that selects it as parent sends only what follows it, so the model
+continues from what it actually saw. Stateful mode never resends content the
+server already holds, with or without retirement. Retirement is deterministic
+and monotone for a fixed budget (`requestMediaBudgetBytes` is fixed at
+construction), so a later request never offers the parent with pixels it lacks,
+and a compression rewrite strips the markers. A marker bound to the request view
+would need the provider to know whether the request was retired: a new mechanism
+for no observable defect.
+
+Test (`historical-image-retirement.monotone.test.ts`, passes): every image an
+earlier request retired is retired again after the conversation grows.

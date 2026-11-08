@@ -19,8 +19,8 @@ import {
   retireEveryHistoricalImage,
 } from './historicalImageRetirement.js';
 import {
+  envelopeProtectedStart,
   isPendingRegionProven,
-  protectedRegionStart,
 } from './pendingBoundary.js';
 import { PendingMediaBudgetError } from './pendingMediaBudgetError.js';
 
@@ -93,7 +93,7 @@ export async function relieveMediaPressure(
     isPendingRegionProven(envelope.contents, pending)
       ? buildProviderContent(input.curated(), pending, input.logger)
       : envelope.contents;
-  const start = protectedRegionStart(contents, pending);
+  const start = envelopeProtectedStart({ ...envelope, contents });
   const retired = retireEveryHistoricalImage(contents, start);
   const protectedRegion = retired.slice(start);
   if (retired === contents) {

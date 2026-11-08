@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import {
+  buildProviderContent,
+  type ProviderContentEnvelope,
+} from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type {
   ContentBlock,
   IContent,
@@ -13,7 +17,7 @@ import type {
 import { invalidateResponsesStatefulChainForRetainedRewrite } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { RequestMediaByteOverflowError } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { PendingMediaBudgetError } from './pendingMediaBudgetError.js';
-import { protectedRegionStart } from './pendingBoundary.js';
+import { envelopeProtectedStart } from './pendingBoundary.js';
 
 /**
  * Fraction of the request media budget a retirement batch retires down to.
@@ -219,7 +223,7 @@ export function hasCountedMedia(contents: readonly IContent[]): boolean {
  * of the contents is trusted as that region only when it carries exactly the
  * declared speakers and blocks (the provider pipeline clones content, so
  * identity alone cannot be required). Otherwise the boundary is unproven and
- * {@link protectedRegionStart} protects the newest content; media pressure
+ * {@link envelopeProtectedStart} protects the newest content; media pressure
  * from older history must never end the turn (issue #4000). The envelope's
  * own array is returned when nothing retires so a projection prepared for it
  * stays valid.
@@ -228,10 +232,7 @@ export function retireEnvelopeImages(
   envelope: ProviderContentEnvelope,
   budgetBytes: number,
 ): IContent[] {
-  const splitAt = protectedRegionStart(
-    envelope.contents,
-    envelope.pendingContents,
-  );
+  const splitAt = envelopeProtectedStart(envelope);
   const history = envelope.contents.slice(0, splitAt);
   const tail = envelope.contents.slice(splitAt);
   const retired = retireHistoricalImages(history, tail, budgetBytes);
@@ -247,6 +248,82 @@ export function retireEnvelopeImages(
     [...retired, ...tail],
     firstRewritten,
   );
+}
+
+function sameBlock(left: ContentBlock, right: ContentBlock): boolean {
+  if (left === right) return true;
+  if (left.type !== right.type) return false;
+  return (
+    left.type !== 'text' || (right.type === 'text' && left.text === right.text)
+  );
+}
+
+/**
+ * Index of the first entry whose blocks differ between two compositions of the
+ * same request, or 0 when they cannot be aligned. Retirement only swaps
+ * blocks inside entries, so both compositions normalize identically and the
+ * first difference is exactly where the request view starts to diverge from
+ * what a stored Responses parent holds server-side.
+ */
+function firstRewrittenIndex(
+  original: readonly IContent[],
+  rewritten: readonly IContent[],
+): number {
+  if (original.length !== rewritten.length) return 0;
+  const index = rewritten.findIndex(
+    (content, position) =>
+      content.blocks.length !== original[position].blocks.length ||
+      content.blocks.some(
+        (block, blockIndex) =>
+          !sameBlock(block, original[position].blocks[blockIndex]),
+      ),
+  );
+  return Math.max(0, index);
+}
+
+/**
+ * The composed request view with Responses parents invalidated from the first
+ * entry retirement rewrote. A stored parent before every retired image keeps
+ * the server-side chain valid, because everything after it, retirement notes
+ * included, is sent as new input. Only the view's copies lose markers.
+ */
+export function invalidateParentsFromFirstRetirement(
+  original: readonly IContent[],
+  retired: IContent[],
+): IContent[] {
+  return invalidateResponsesStatefulChainForRetainedRewrite(
+    retired,
+    firstRewrittenIndex(original, retired),
+  );
+}
+
+/**
+ * The provider-ready request for `curated` history and the pending region
+ * with historical images retired (all of them, or oldest first to the budget).
+ * Parent markers are invalidated over the fully rejoined request, pending tail
+ * included, and only the request view's copies lose them. The unretired
+ * composition is built only when retirement changed something.
+ */
+export function composeRetiredRequest(
+  input: {
+    readonly curated: IContent[];
+    readonly pending: IContent[];
+    readonly retireAll: boolean;
+    readonly budgetBytes: number;
+  },
+  logger: DebugLogger,
+): IContent[] {
+  const { curated, pending } = input;
+  const history = input.retireAll
+    ? retireEveryHistoricalImage(curated, curated.length)
+    : retireHistoricalImages(curated, pending, input.budgetBytes);
+  const composed = buildProviderContent(history, pending, logger);
+  return history === curated
+    ? composed
+    : invalidateParentsFromFirstRetirement(
+        buildProviderContent(curated, pending, logger),
+        composed,
+      );
 }
 
 /** Encoded bytes of every media block the request resolver would count. */
