@@ -5,54 +5,25 @@
  */
 
 import { invalidateResponsesStatefulChain } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderContentEnforcementDeps } from './providerContentEnforcement.js';
+import {
+  captureHistoryState,
+  restoreHistoryState,
+  type HistoryStateSnapshot,
+} from './historyStateRollback.js';
 
 function normalizeError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-interface FallbackStateSnapshot {
-  readonly history: IContent[];
-  readonly cacheAnchorSeq: number;
-  readonly promptTokenBaseline: number | null;
-}
-
-function captureFallbackState(
-  deps: ProviderContentEnforcementDeps,
-): FallbackStateSnapshot {
-  return {
-    history: [...deps.historyService.getRawHistory()],
-    cacheAnchorSeq: deps.historyService.getCacheAnchorSeq(),
-    promptTokenBaseline: deps.getPromptTokenBaseline(),
-  };
-}
-
-async function restoreFallbackState(
-  deps: ProviderContentEnforcementDeps,
-  snapshot: FallbackStateSnapshot,
-): Promise<void> {
-  await deps.historyService.replaceAll(
-    [...snapshot.history],
-    deps.runtimeContext.state.model,
-    { origin: deps.historyOrigin },
-  );
-  if (snapshot.cacheAnchorSeq === 0) {
-    deps.historyService.resetCacheAnchorSeq();
-  } else {
-    deps.historyService.setCacheAnchorSeq(snapshot.cacheAnchorSeq);
-  }
-  deps.restorePromptTokenBaseline(snapshot.promptTokenBaseline);
-}
-
 async function restoreRejectedFallback(
   deps: ProviderContentEnforcementDeps,
-  snapshot: FallbackStateSnapshot,
+  snapshot: HistoryStateSnapshot,
   fallbackError: unknown,
 ): Promise<Error> {
   const failure = normalizeError(fallbackError);
   try {
-    await restoreFallbackState(deps, snapshot);
+    await restoreHistoryState(deps, snapshot);
     return failure;
   } catch (rollbackError) {
     return new AggregateError(
@@ -75,7 +46,7 @@ export async function executeFallbackTruncation(
   truncationApplied: boolean;
   truncationFailure?: Error;
 }> {
-  const snapshot = captureFallbackState(deps);
+  const snapshot = captureHistoryState(deps);
   let truncationFailure: Error | undefined;
   let fallbackSucceeded = false;
   const candidate = { installed: false, committed: false };

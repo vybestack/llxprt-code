@@ -209,3 +209,109 @@ Regression tests (all run red before their fix):
 - `provider-content-enforcement.media-relief.test.ts`: findings 1, 2 (false
   pending overflow through the production seam), 3, 5 and 6, including the
   32,000,000 byte body cap through the compression callback.
+
+## Review round 3 (final)
+
+A second independent review reproduced three HIGH blockers through public
+APIs. Each has failing behavioral regression tests that were run red before
+the fix. The new tests share `__tests__/media-relief-fixtures.ts` (real
+LocalMediaStore, HistoryService, ProviderContentEnforcer, production send seam
+and AnthropicProvider projection; only HTTP is stubbed).
+
+### H1. A failed compression could still return partially rewritten history
+
+Relief already used the saved pre-compression request, but the token ladder
+that ran afterwards (density optimization, the callback's compression
+projection) read the shared curated history, which a failed compression may
+have half rewritten.
+
+Fix: every compression now runs through `runGuardedCompression`
+(guardedCompression.ts). It captures the raw history, cache-anchor sequence and
+prompt-token baseline (historyStateRollback.ts, the pattern
+`fallbackTruncationCommit.ts` already used, now shared by both) before calling
+`performCompression`. On an exception or any outcome other than COMPRESSED the
+state is restored through `HistoryService.replaceAll`, `setCacheAnchorSeq` /
+`resetCacheAnchorSeq` and `restorePromptTokenBaseline` before anything is
+recomposed. Nothing is written when the compression changed nothing, so a
+skipped compression never re-stamps history. When the rollback itself fails the
+request is rejected with an `AggregateError` of the compression failure and the
+rollback failure. Cancellation is rethrown after the rollback. Because the
+guard sits in the one place that runs compression, it covers the byte-recovery
+path in `enforce`, the escalation ladder, the ineffective-compression retry
+and `compressAndRecompose`.
+
+Tests (`provider-content-enforcement.failed-compression.test.ts`):
+
+- enforce, a later compression succeeds: the real summary is sent, never the
+  failed one (red: the partial summary was sent, one compression run).
+- enforce, every compression fails after rewriting: `ContextOverflowError`,
+  nothing sent, canonical history equals the pre-compression history (red:
+  the request was sent with the partial summary).
+- enforce, cancellation after a partial rewrite: the abort propagates and
+  history is restored (red: history left rewritten).
+- enforce, the rollback fails: rejects with both causes, nothing sent (red:
+  continued and sent).
+- compressAndRecompose: `ContextOverflowError` and restored history instead of
+  returning the partial summary (red: returned it).
+
+### H2. A split pending item could lose a current-turn image
+
+`protectedRegionStart` consumed a declared pending item at its newest matching
+fragment, so a hook that split one item (images A and B) into two contents left
+fragment A outside the protected region and enforcement retired it.
+
+Fix (pendingBoundary.ts): for each declared item the search continues backwards
+until every attachment identity of the item is placed, and the region starts at
+the earliest fragment. A later fragment must carry an attachment not yet
+placed, so an older copy of an already-placed image (or a shared turn alone)
+cannot drag history into the region. Conflicting provenance still rejects a
+fragment. The attachment identities of each declared item are now computed once
+instead of rebuilding arrays and sets on every comparison.
+
+Tests (`historical-image-retirement.split-pending.test.ts`): two fragments plus
+an appended hook note keep both current images and retire only the older one
+(red: A retired, only B kept); a hook note between the fragments (red, same);
+guards that an unrelated history image and a conflicting-provenance copy are
+not protected.
+
+### H3. Retire-all recomposition exposed stale Responses parents
+
+`recomposeProviderContents` retired and invalidated the curated prefix and then
+appended the pending contents, so a stored parent in the pending tail survived
+and `computeStatefulConversation` selected it, trimming the provider input to
+the entries after it and dropping the retirement notes.
+
+Fix: when retirement changed the history view, the fully rejoined provider
+request (pending included) goes through
+`invalidateResponsesStatefulChainForRetainedRewrite(composed, 0)`. Normalization
+in `buildProviderContent` can shift indexes, so no narrower start is provably
+correct. The copy-on-write contract keeps canonical entries marked.
+`retireEnvelopeImages` and the fallback's `retireEveryHistoricalImage` already
+invalidated over the rejoined array (round 2) and are unchanged.
+
+Tests (`provider-content-enforcement.responses-parent.test.ts`) call the real
+`computeStatefulConversation` (providers package, imported by relative path as
+other agents tests already do for providers sources): the callback path and the
+enforce path (after a compression) must select no parent and keep all three
+retirement notes (red: `resp_stale_pending_tail` selected, zero notes,
+`responsesStored` kept); canonical history and pending entries keep their
+markers.
+
+### Not fixed in this round
+
+- MEDIUM, guard overhead calibration (`computeCallbackLimits`): on the relieved
+  retry the overhead is `guard.estimatedTokens - ownEstimate(relieved)`, so the
+  image-token savings are counted as fixed overhead and a request that fits can
+  still be rejected. Keeping the pre-relief calibration needs the own estimate
+  of the unrelieved request, which the finalized estimator cannot return
+  because the provider rejects that request on bytes. Estimating it with the
+  history estimator would mix two estimators. The correct fix is for the guard
+  to pass its fixed overhead (finalized estimate minus contents-only estimate)
+  in `CompressionGuardInfo`, a contract change in core and the load-balancing
+  provider. Documented as a follow-up.
+- `DirectMessageProcessor` sends a `historyPrefix` without provider-content
+  enforcement. This gap exists outside this incident and is untouched.
+- Historical non-image media can still surface the typed byte error, and a
+  hook that dropped an attachment of a declared item while an unlabeled older
+  copy remains in history can widen the protected region to that copy (the
+  safe direction: it never retires current media).

@@ -91,11 +91,21 @@ function mediaIdentities(content: IContent): string[] {
   });
 }
 
-function sharesMedia(actual: IContent, declared: IContent): boolean {
-  const declaredMedia = new Set(mediaIdentities(declared));
-  return mediaIdentities(actual).some((identity) =>
-    declaredMedia.has(identity),
-  );
+/** A declared pending item with its attachment identities computed once. */
+interface DeclaredItem {
+  readonly content: IContent;
+  readonly identities: ReadonlySet<string>;
+}
+
+function declaredItem(content: IContent): DeclaredItem {
+  return { content, identities: new Set(mediaIdentities(content)) };
+}
+
+function sharesMedia(
+  actual: IContent,
+  identities: ReadonlySet<string>,
+): boolean {
+  return mediaIdentities(actual).some((identity) => identities.has(identity));
 }
 
 /**
@@ -105,31 +115,77 @@ function sharesMedia(actual: IContent, declared: IContent): boolean {
  * when the same attachment appears again, as when the user pastes an image
  * they sent earlier.
  */
-function isRewriteOf(actual: IContent, declared: IContent): boolean {
-  if (actual === declared) return true;
-  if (actual.speaker !== declared.speaker) return false;
+function isRewriteOf(actual: IContent, declared: DeclaredItem): boolean {
+  if (actual === declared.content) return true;
+  if (actual.speaker !== declared.content.speaker) return false;
   let sharesProvenance = false;
   for (const key of PROVENANCE_KEYS) {
     const mine = provenance(actual, key);
-    const theirs = provenance(declared, key);
+    const theirs = provenance(declared.content, key);
     if (mine === undefined || theirs === undefined) continue;
     if (mine !== theirs) return false;
     sharesProvenance = true;
   }
-  if (!sharesProvenance) return sharesMedia(actual, declared);
+  if (!sharesProvenance) return sharesMedia(actual, declared.identities);
   // A shared turn does not vouch for a different attachment set.
-  const actualHasMedia = mediaIdentities(actual).length > 0;
-  const declaredHasMedia = mediaIdentities(declared).length > 0;
-  return !actualHasMedia || !declaredHasMedia || sharesMedia(actual, declared);
+  return (
+    declared.identities.size === 0 ||
+    mediaIdentities(actual).length === 0 ||
+    sharesMedia(actual, declared.identities)
+  );
+}
+
+/**
+ * True when `candidate` is a fragment of `item` that matters to the search.
+ * The first fragment found is any rewrite of the item; each later one must
+ * also carry an attachment of the item not yet placed, so an earlier copy of
+ * an image already placed cannot drag history into the region.
+ */
+function isRelevantFragment(
+  candidate: IContent,
+  item: DeclaredItem,
+  unplaced: ReadonlySet<string>,
+  foundAny: boolean,
+): boolean {
+  if (!isRewriteOf(candidate, item)) return false;
+  return !foundAny || mediaIdentities(candidate).some((id) => unplaced.has(id));
+}
+
+/**
+ * Index of the earliest fragment of `item` at or before `searchFrom`. A hook
+ * may split one declared item into several contents, so the newest match is
+ * not enough: the search continues backwards until every attachment of the
+ * item is placed.
+ */
+function earliestFragment(
+  contents: readonly IContent[],
+  item: DeclaredItem,
+  searchFrom: number,
+): number | undefined {
+  const unplaced = new Set(item.identities);
+  let earliest: number | undefined;
+  for (
+    let index = searchFrom;
+    index >= 0 && (earliest === undefined || unplaced.size > 0);
+    index -= 1
+  ) {
+    const candidate = contents[index];
+    if (isRelevantFragment(candidate, item, unplaced, earliest !== undefined)) {
+      earliest = index;
+      mediaIdentities(candidate).forEach((id) => unplaced.delete(id));
+    }
+  }
+  return earliest;
 }
 
 /**
  * Index where the region retirement must never touch begins. A proven tail is
  * exactly the declared pending region. Otherwise the declared items are
  * identified from the newest content backwards, in order, and the region
- * starts at the earliest one found; everything after it is kept, including
- * items a hook appended. Items that cannot be identified are not guessed at,
- * and when none can be, only the newest content is protected.
+ * starts at the earliest fragment of the earliest item found; everything
+ * after it is kept, including items a hook appended. Items that cannot be
+ * identified are not guessed at, and when none can be, only the newest
+ * content is protected.
  */
 export function protectedRegionStart(
   contents: readonly IContent[],
@@ -140,16 +196,14 @@ export function protectedRegionStart(
   if (isPendingRegionProven(contents, pending)) {
     return contents.length - pending.length;
   }
+  const items = pending.map(declaredItem);
   let start = newest;
   let searchFrom = contents.length - 1;
-  for (let item = pending.length - 1; item >= 0; item -= 1) {
-    for (let index = searchFrom; index >= 0; index -= 1) {
-      if (isRewriteOf(contents[index], pending[item])) {
-        start = Math.min(start, index);
-        searchFrom = index - 1;
-        break;
-      }
-    }
+  for (let item = items.length - 1; item >= 0; item -= 1) {
+    const earliest = earliestFragment(contents, items[item], searchFrom);
+    if (earliest === undefined) continue;
+    start = Math.min(start, earliest);
+    searchFrom = earliest - 1;
   }
   return start;
 }

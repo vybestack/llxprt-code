@@ -13,14 +13,14 @@ import type {
   RuntimeCompressionGuardInfo,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import { invalidateResponsesStatefulChainForRetainedRewrite } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import {
   DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
   isRequestByteOverflowError,
   type RequestByteOverflowError,
 } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { isAbortLikeError } from './is-abort-like-error.js';
 import { buildUnrecoverableBoundaryError } from './contextOverflowError.js';
 import {
   INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
@@ -36,6 +36,7 @@ import {
   type OverflowReductionResult,
 } from './overflowReduction.js';
 import { executeFallbackTruncation } from './fallbackTruncationCommit.js';
+import { runGuardedCompression } from './guardedCompression.js';
 import {
   compressionCanRelieve,
   explainPendingOverflow,
@@ -253,7 +254,8 @@ export class ProviderContentEnforcer {
     // The outcome is classified before anything is projected: only a confirmed
     // compression may be recomposed from history. A failed one may have left
     // history half rewritten, so the saved pre-compression request is relieved.
-    const compressionFailure = await this.runCompression(
+    const compressionFailure = await runGuardedCompression(
+      this.deps,
       request.promptId,
       true,
     );
@@ -686,7 +688,11 @@ export class ProviderContentEnforcer {
     // Projection runs OUTSIDE runCompression's catch so a projection rejection
     // surfaces as a stage-aware error rather than being swallowed and
     // re-projected as a compression failure.
-    const compressionFailure = await this.runCompression(promptId, false);
+    const compressionFailure = await runGuardedCompression(
+      this.deps,
+      promptId,
+      false,
+    );
     return this.projectContents(
       pendingContents,
       completionBudget,
@@ -694,46 +700,6 @@ export class ProviderContentEnforcer {
       stage,
       compressionFailure,
     );
-  }
-
-  /**
-   * Runs one compression and classifies its outcome: the failure for an
-   * exception, FAILED, NOOP or SKIPPED, undefined only for a confirmed
-   * COMPRESSED. `propagateAbort` rethrows cancellation instead of treating it
-   * as a failed compression.
-   */
-  private async runCompression(
-    promptId: string,
-    propagateAbort: boolean,
-  ): Promise<Error | undefined> {
-    try {
-      const result = await this.deps.performCompression(promptId, {
-        bypassCooldown: true,
-        trigger: 'auto',
-      });
-      await this.deps.historyService.waitForTokenUpdates();
-      if (result === PerformCompressionResult.COMPRESSED) {
-        return undefined;
-      }
-      this.deps.logger.debug(
-        () =>
-          `[CompressionHandler] Provider-content compression finished without COMPRESSED result: ${result}`,
-      );
-      return new Error(
-        `Auto compression did not complete during hard-limit enforcement (result: ${result})`,
-      );
-    } catch (error) {
-      if (propagateAbort && isAbortLikeError(error)) {
-        throw error;
-      }
-      const compressionError = this.normalizeError(error);
-      this.deps.logger.warn(
-        () =>
-          '[CompressionHandler] Auto compression failed during hard-limit enforcement',
-        compressionError,
-      );
-      return compressionError;
-    }
   }
 
   private async retryCompressionIfIneffective(
@@ -850,6 +816,13 @@ export class ProviderContentEnforcer {
    * Every recomposition (after density optimization, compression or
    * truncation) re-applies image retirement to the curated history before the
    * pending region is appended, so no step can resurrect retired pixels.
+   *
+   * Retirement rewrites what the server-side chain of a stored Responses
+   * parent holds, wherever that parent sits in the request. The parent
+   * markers are therefore invalidated over the fully rejoined request,
+   * pending tail included, from its first entry: normalization can shift
+   * indexes, so no narrower start is provably correct. Only the request
+   * view's copies lose markers; canonical entries keep them.
    */
   private recomposeProviderContents(pendingContents: IContent[]): IContent[] {
     const curated = this.deps.historyService.getCurated();
@@ -860,7 +833,14 @@ export class ProviderContentEnforcer {
           pendingContents,
           this.mediaBudgetBytes(),
         );
-    return buildProviderContent(history, pendingContents, this.deps.logger);
+    const composed = buildProviderContent(
+      history,
+      pendingContents,
+      this.deps.logger,
+    );
+    return history === curated
+      ? composed
+      : invalidateResponsesStatefulChainForRetainedRewrite(composed, 0);
   }
 
   private mediaBudgetBytes(): number {
