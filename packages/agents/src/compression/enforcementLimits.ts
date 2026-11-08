@@ -73,12 +73,14 @@ export function computeContextLimits(
  * beyond the contents is subtracted from the limit, and no completion budget
  * is re-reserved: the fit predicate mirrors the guard's own check,
  * ownEstimate(contents') + overhead <= guard.contextLimit (issue #3499).
+ * When the overhead alone reaches the limit no room is left (clamped at 0, not
+ * floored at one token), so no candidate fits and the overflow error runs.
  */
 export function limitsForGuard(
   contextLimit: number,
   overhead: number,
 ): ContextLimits {
-  const effectiveLimit = Math.max(1, contextLimit - overhead);
+  const effectiveLimit = Math.max(0, contextLimit - overhead);
   return {
     completionBudget: 0,
     limit: contextLimit,

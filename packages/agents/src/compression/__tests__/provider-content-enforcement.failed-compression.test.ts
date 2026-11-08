@@ -123,7 +123,7 @@ describe('a failed compression restores history before the ladder continues (iss
       conversation.seedBigText();
       session.useCompression(async (history) => {
         await rewriteToPartialSummary(history);
-        history.replaceAll = () => Promise.reject(new Error('disk full'));
+        history.transformAll = () => Promise.reject(new Error('disk full'));
         throw new Error('summarizer crashed after rewriting history');
       });
 

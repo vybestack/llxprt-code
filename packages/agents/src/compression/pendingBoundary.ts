@@ -92,19 +92,27 @@ function mediaIdentities(content: IContent): string[] {
   });
 }
 
-/** A declared pending item with its attachment identities computed once. */
+/**
+ * A declared pending item with its attachment occurrences computed once: each
+ * identity maps to how many times the item carries it, because a user can
+ * paste the same image twice.
+ */
 interface DeclaredItem {
   readonly content: IContent;
-  readonly identities: ReadonlySet<string>;
+  readonly identities: ReadonlyMap<string, number>;
 }
 
 function declaredItem(content: IContent): DeclaredItem {
-  return { content, identities: new Set(mediaIdentities(content)) };
+  const identities = new Map<string, number>();
+  for (const identity of mediaIdentities(content)) {
+    identities.set(identity, (identities.get(identity) ?? 0) + 1);
+  }
+  return { content, identities };
 }
 
 function sharesMedia(
   actual: IContent,
-  identities: ReadonlySet<string>,
+  identities: ReadonlyMap<string, number>,
 ): boolean {
   return mediaIdentities(actual).some((identity) => identities.has(identity));
 }
@@ -139,31 +147,43 @@ function isRewriteOf(actual: IContent, declared: DeclaredItem): boolean {
 /**
  * True when `candidate` is a fragment of `item` that matters to the search.
  * The first fragment found is any rewrite of the item; each later one must
- * also carry an attachment of the item not yet placed, so an earlier copy of
- * an image already placed cannot drag history into the region.
+ * also carry an attachment occurrence of the item not yet placed, so an
+ * earlier copy of an image whose occurrences are all placed cannot drag
+ * history into the region.
  */
 function isRelevantFragment(
   candidate: IContent,
   item: DeclaredItem,
-  unplaced: ReadonlySet<string>,
+  unplaced: ReadonlyMap<string, number>,
   foundAny: boolean,
 ): boolean {
   if (!isRewriteOf(candidate, item)) return false;
   return !foundAny || mediaIdentities(candidate).some((id) => unplaced.has(id));
 }
 
+/** Marks one occurrence of `identity` placed; surplus copies are ignored. */
+function placeOccurrence(
+  unplaced: Map<string, number>,
+  identity: string,
+): void {
+  const remaining = unplaced.get(identity);
+  if (remaining === undefined) return;
+  if (remaining <= 1) unplaced.delete(identity);
+  else unplaced.set(identity, remaining - 1);
+}
+
 /**
  * Index of the earliest fragment of `item` at or before `searchFrom`. A hook
  * may split one declared item into several contents, so the newest match is
- * not enough: the search continues backwards until every attachment of the
- * item is placed.
+ * not enough: the search continues backwards until every attachment occurrence
+ * of the item is placed.
  */
 function earliestFragment(
   contents: readonly IContent[],
   item: DeclaredItem,
   searchFrom: number,
 ): number | undefined {
-  const unplaced = new Set(item.identities);
+  const unplaced = new Map(item.identities);
   let earliest: number | undefined;
   for (
     let index = searchFrom;
@@ -173,7 +193,7 @@ function earliestFragment(
     const candidate = contents[index];
     if (isRelevantFragment(candidate, item, unplaced, earliest !== undefined)) {
       earliest = index;
-      mediaIdentities(candidate).forEach((id) => unplaced.delete(id));
+      mediaIdentities(candidate).forEach((id) => placeOccurrence(unplaced, id));
     }
   }
   return earliest;

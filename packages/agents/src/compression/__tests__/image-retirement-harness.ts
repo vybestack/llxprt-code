@@ -406,6 +406,8 @@ export class RetirementSession {
     guard?: CompressionGuardInfo,
     /** The request the provider handed its callback; absent for the legacy call. */
     original?: IContent[],
+    /** Replaces the projection-based token estimator (a tokenizer boundary). */
+    estimate?: (contents: IContent[]) => Promise<number>,
   ): Promise<IContent[]> {
     const preparer = createPromptEnvelopePreparer(
       this.provider,
@@ -414,9 +416,10 @@ export class RetirementSession {
     );
     try {
       const contents = await this.enforcerFor(
-        async (candidate) =>
-          (await preparer.prepare(candidate)).estimate?.estimatedPromptTokens ??
-          1,
+        estimate ??
+          (async (candidate) =>
+            (await preparer.prepare(candidate)).estimate
+              ?.estimatedPromptTokens ?? 1),
       ).compressAndRecompose(
         pending,
         'prompt-callback',

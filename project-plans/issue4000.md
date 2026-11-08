@@ -432,3 +432,96 @@ for no observable defect.
 
 Test (`historical-image-retirement.monotone.test.ts`, passes): every image an
 earlier request retired is retired again after the conversation grows.
+
+## CodeRabbit round 2 (PR #4015)
+
+Four review threads, each verified against the code before acting. Every
+thread had a regression test that was run red before the fix and green after.
+
+### A (Minor) FIXED: guard fit limit floored at one token
+
+`limitsForGuard` (enforcementLimits.ts) computed
+`Math.max(1, contextLimit - overhead)`. With the calibrated overhead at or above
+the guard's context limit it still admitted a candidate whose estimate was one
+token, which breaks the documented predicate
+`ownEstimate(contents') + overhead <= guard.contextLimit`; the load balancer
+then rejected it on recheck. The floor is now 0. No ratio or division uses the
+value: `marginAdjustedLimit` and `compressionThreshold` are only compared with
+`<=` / `>` (providerContentEnforcement.ts, pendingContextWindowEnforcement.ts)
+or subtracted (`computeHistoryTruncationTarget`, `buildContextOverflowError`),
+and the latter already clamp at 0. With a limit of 0 nothing non-empty fits and
+the existing `ContextOverflowError` path runs.
+
+Tests (`provider-content-enforcement.guard-overhead-floor.test.ts`; the
+tokenizer boundary reports one token for the tiny request; red: the candidate
+was returned, `Expected operation to reject`): overhead equal to the guard
+limit gives `ContextOverflowError` and no candidate; a candidate that fits
+exactly in the room the overhead leaves is still returned. The harness's
+`recomposeViaCallback` gained an optional estimator argument for this.
+
+### B (Major) FIXED: rollback lost an entry the failed rewrite removed
+
+Verified: `surviving()` kept an announced entry only when it was still in the
+history at rollback time. An `addBatch` that commits before the compression's
+`replaceAll` (built from an older snapshot) is removed by that replace, so the
+rollback restored the snapshot without it. `watchIndependentWrites` now exposes
+`announced()`: every entry announced through `contentAdded` and
+`contentBatchAdded` during the attempt, in announcement order, without repeats.
+The rollback target is the snapshot followed by the announced entries the
+snapshot does not hold. History counts as untouched only when it equals that
+target (and the cache anchor matches the snapshot).
+
+Test (`provider-content-enforcement.rollback-serialization.test.ts`; red: the
+entry was missing): an `addBatch` committed during a failing compression whose
+partial rewrite, done through `replaceAll`, removed it. The entry survives the
+rollback and the partial summary does not.
+
+### C (Major) FIXED: read and replace were two queue slots
+
+Verified in HistoryServiceCore.ts: `add` (`runSynchronousHistoryMutation`),
+`addBatch`, `replaceAll` and `transformAll` all go through one FIFO
+(`historyMutationQueue`), so an `addBatch` or `add` queued before the
+rollback's `replaceAll` commits between the rollback's read and its replace,
+and the replace drops it. The public `transformAll` already runs a transform of
+the latest history as one queued mutation (it reads `this.history` inside the
+queue slot), so no new core method was needed. The rollback now reads, checks
+the independent writes, checks "untouched" and returns the restored history
+inside one `transformAll` call. An untouched history is reported by throwing a
+private sentinel from the transform, which commits nothing, so a skipped
+compression still never re-stamps history. The write watcher now stops after
+the rollback (`runGuardedCompression`), because writes queued ahead of the
+rollback commit after the compression returned.
+
+Tests (`provider-content-enforcement.rollback-serialization.test.ts`; red: the
+entry was missing, and for the queued `add` behind an in-flight `replaceAll`
+the request was sent with the partial summary because the rollback read the
+pre-commit history and saw nothing to undo): an `addBatch` still in flight when
+the compression fails survives; an `add` queued behind an in-flight rewrite
+survives and the partial summary is rolled back. A core contract test
+(`HistoryService.transformAll.test.ts`) pins the two properties the rollback
+relies on: the transform sees entries committed by writes queued before it, and
+a throwing transform commits nothing and leaves the queue usable.
+
+Changed existing test: in `provider-content-enforcement.failed-compression.test.ts`
+("rejects instead of continuing when the rollback itself fails") the rollback
+failure was injected by stubbing `history.replaceAll`. The rollback now commits
+through `transformAll`, so the stub moved to `transformAll`. The assertion is
+unchanged; the injection point is the mutation the rollback performs.
+
+### D (Minor) FIXED: repeated image in a split pending item
+
+Verified: `DeclaredItem.identities` was a `Set`, so an item carrying the same
+image twice was fully "placed" by the newest fragment and the earlier fragment
+fell outside the protected region. Identities are now a multiset (identity to
+count). The backward search places one occurrence per matching attachment and
+continues until every occurrence is placed; a later fragment must carry a
+still-unplaced occurrence, and surplus copies are ignored, so an older history
+copy beyond the count is not pulled in. Conflicting-provenance rejection is
+unchanged.
+
+Tests (`historical-image-retirement.repeated-pending.test.ts`; red: the earlier
+copy was retired, 2 notes instead of 1): a split item with the same image twice
+keeps both copies (declared boundary, carried `protectedContents`, and the
+production send seam with one stored reference repeated); an older history copy
+beyond the occurrence count is still retired; a single content carrying both
+copies keeps both (guard, green before and after).

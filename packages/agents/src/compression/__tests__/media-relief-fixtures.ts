@@ -14,6 +14,7 @@ import { afterEach, beforeEach } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   RetirementSession,
@@ -34,6 +35,17 @@ const BIG_TEXT = 'word '.repeat(20_000);
 
 export function textTurn(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
+}
+
+/** Every text block of the committed history, in order. */
+export function historyTexts(history: HistoryService): string[] {
+  return history
+    .getAll()
+    .flatMap((content) =>
+      content.blocks.flatMap((block) =>
+        block.type === 'text' ? [block.text] : [],
+      ),
+    );
 }
 
 /** An AI entry that a Responses backend stored and could chain from. */

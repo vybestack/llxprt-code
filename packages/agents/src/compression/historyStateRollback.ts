@@ -35,13 +35,17 @@ export function captureHistoryState(
  * `addBatch`, and adds queued under the compression lock and replayed when it
  * is released) announces the exact entries it commits; a compression applies
  * its rewrite through `replaceAll`, which announces none. Entries announced
- * during the window are therefore independent of the rewrite, by identity.
+ * during the window are therefore independent of the rewrite, by identity,
+ * whether or not the rewrite later removed them.
  */
 export interface IndependentWrites {
-  /** Stops watching; call exactly once when the rewrite attempt is over. */
+  /**
+   * Stops watching. Call once the rollback has run: writers queued before the
+   * rollback commit before it starts, and must still be seen.
+   */
   stop(): void;
-  /** The announced entries that are still part of the history. */
-  surviving(history: readonly IContent[]): IContent[];
+  /** Every entry announced so far, in announcement order, without repeats. */
+  announced(): IContent[];
 }
 
 export function watchIndependentWrites(
@@ -61,29 +65,14 @@ export function watchIndependentWrites(
       historyService.off('contentAdded', single);
       historyService.off('contentBatchAdded', batch);
     },
-    surviving: (history) => history.filter((content) => announced.has(content)),
+    announced: () => [...announced],
   };
 }
 
-/**
- * Puts the snapshot back. Entries other writers committed during the attempt
- * (`independent`) that the snapshot does not hold are appended after it, in
- * the order they now appear, so a rollback never drops another writer's turn.
- */
-export async function restoreHistoryState(
+function restoreAnchorAndBaseline(
   deps: ProviderContentEnforcementDeps,
   snapshot: HistoryStateSnapshot,
-  independent: readonly IContent[] = [],
-): Promise<void> {
-  const restored = new Set(snapshot.history);
-  await deps.historyService.replaceAll(
-    [
-      ...snapshot.history,
-      ...independent.filter((content) => !restored.has(content)),
-    ],
-    deps.runtimeContext.state.model,
-    { origin: deps.historyOrigin },
-  );
+): void {
   if (snapshot.cacheAnchorSeq === 0) {
     deps.historyService.resetCacheAnchorSeq();
   } else {
@@ -92,20 +81,52 @@ export async function restoreHistoryState(
   deps.restorePromptTokenBaseline(snapshot.promptTokenBaseline);
 }
 
+/** Puts the snapshot back exactly. */
+export async function restoreHistoryState(
+  deps: ProviderContentEnforcementDeps,
+  snapshot: HistoryStateSnapshot,
+): Promise<void> {
+  await deps.historyService.replaceAll(
+    snapshot.history,
+    deps.runtimeContext.state.model,
+    { origin: deps.historyOrigin },
+  );
+  restoreAnchorAndBaseline(deps, snapshot);
+}
+
 function sameHistory(
   current: readonly IContent[],
-  snapshot: readonly IContent[],
+  expected: readonly IContent[],
 ): boolean {
   return (
-    current.length === snapshot.length &&
-    current.every((content, index) => content === snapshot[index])
+    current.length === expected.length &&
+    current.every((content, index) => content === expected[index])
   );
 }
 
+/** The snapshot followed by every independent entry it does not hold. */
+function snapshotWithIndependentWrites(
+  snapshot: HistoryStateSnapshot,
+  independent: readonly IContent[],
+): IContent[] {
+  const held = new Set(snapshot.history);
+  return [
+    ...snapshot.history,
+    ...independent.filter((content) => !held.has(content)),
+  ];
+}
+
+/** Thrown inside the queued transform to commit nothing. */
+class HistoryUntouched extends Error {}
+
 /**
  * Gives back the state a rewrite that did not complete may have left behind,
- * keeping what other writers committed meanwhile. Nothing is written when the
- * rewrite changed nothing, so a compression that was merely skipped never
+ * keeping what other writers committed meanwhile, including entries the failed
+ * rewrite itself removed. The history is read, compared and replaced as ONE
+ * operation inside the history's mutation queue, so a write queued before the
+ * rollback has committed, and is visible to it, before it decides anything.
+ * Nothing is written when the history already equals the snapshot plus the
+ * independent entries, so a compression that was merely skipped never
  * re-stamps the history. The prompt-token baseline is restored on its own
  * because a rewrite can reset it without touching history.
  */
@@ -114,16 +135,31 @@ export async function rollbackHistoryState(
   snapshot: HistoryStateSnapshot,
   writes: IndependentWrites,
 ): Promise<void> {
-  const current = deps.historyService.getRawHistory();
-  const independent = writes.surviving(current);
-  const ownEntries = current.filter(
-    (content) => !independent.includes(content),
-  );
-  const historyUntouched =
-    sameHistory(ownEntries, snapshot.history) &&
-    deps.historyService.getCacheAnchorSeq() === snapshot.cacheAnchorSeq;
-  if (!historyUntouched) {
-    await restoreHistoryState(deps, snapshot, independent);
+  let untouched = false;
+  try {
+    await deps.historyService.transformAll(
+      (current) => {
+        const target = snapshotWithIndependentWrites(
+          snapshot,
+          writes.announced(),
+        );
+        if (
+          sameHistory(current, target) &&
+          deps.historyService.getCacheAnchorSeq() === snapshot.cacheAnchorSeq
+        ) {
+          throw new HistoryUntouched();
+        }
+        return target;
+      },
+      deps.runtimeContext.state.model,
+      { origin: deps.historyOrigin },
+    );
+  } catch (error) {
+    if (!(error instanceof HistoryUntouched)) throw error;
+    untouched = true;
+  }
+  if (!untouched) {
+    restoreAnchorAndBaseline(deps, snapshot);
     return;
   }
   if (deps.getPromptTokenBaseline() !== snapshot.promptTokenBaseline) {

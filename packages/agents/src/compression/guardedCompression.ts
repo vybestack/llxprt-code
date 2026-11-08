@@ -76,25 +76,24 @@ export async function runGuardedCompression(
 ): Promise<Error | undefined> {
   const snapshot = captureHistoryState(deps);
   const writes = watchIndependentWrites(deps.historyService);
-  let attempt: CompressionAttempt;
   try {
-    attempt = await attemptCompression(deps, promptId);
+    const attempt = await attemptCompression(deps, promptId);
+    if (attempt.failure === undefined) {
+      return undefined;
+    }
+    try {
+      await rollbackHistoryState(deps, snapshot, writes);
+    } catch (rollbackError) {
+      throw new AggregateError(
+        [attempt.failure, normalizeError(rollbackError)],
+        'Auto compression failed and its history rollback also failed',
+      );
+    }
+    if (isAbortLikeError(attempt.thrown)) {
+      throw attempt.thrown;
+    }
+    return attempt.failure;
   } finally {
     writes.stop();
   }
-  if (attempt.failure === undefined) {
-    return undefined;
-  }
-  try {
-    await rollbackHistoryState(deps, snapshot, writes);
-  } catch (rollbackError) {
-    throw new AggregateError(
-      [attempt.failure, normalizeError(rollbackError)],
-      'Auto compression failed and its history rollback also failed',
-    );
-  }
-  if (isAbortLikeError(attempt.thrown)) {
-    throw attempt.thrown;
-  }
-  return attempt.failure;
 }
