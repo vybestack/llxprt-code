@@ -13,6 +13,7 @@ import type {
 import { invalidateResponsesStatefulChainForRetainedRewrite } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { RequestMediaByteOverflowError } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { PendingMediaBudgetError } from './pendingMediaBudgetError.js';
+import { protectedRegionStart } from './pendingBoundary.js';
 
 /**
  * Fraction of the request media budget a retirement batch retires down to.
@@ -212,81 +213,6 @@ export function hasCountedMedia(contents: readonly IContent[]): boolean {
   );
 }
 
-const MAX_COMPARE_DEPTH = 64;
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/**
- * Structural equality for serializable block data. Depth is bounded so a
- * cyclic payload can never be proven equal: unproven means fail closed.
- */
-function sameValue(left: unknown, right: unknown, depth = 0): boolean {
-  if (left === right) return true;
-  if (depth > MAX_COMPARE_DEPTH) return false;
-  if (Array.isArray(left) && Array.isArray(right)) {
-    return (
-      left.length === right.length &&
-      left.every((item, index) => sameValue(item, right[index], depth + 1))
-    );
-  }
-  if (isPlainRecord(left) && isPlainRecord(right)) {
-    const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-    return [...keys].every((key) =>
-      sameValue(left[key], right[key], depth + 1),
-    );
-  }
-  return false;
-}
-
-function samePendingContent(actual: IContent, declared: IContent): boolean {
-  return (
-    actual === declared ||
-    (actual.speaker === declared.speaker &&
-      sameValue(actual.blocks, declared.blocks))
-  );
-}
-
-/** True when the contents tail carries exactly the declared pending region. */
-export function isPendingRegionProven(
-  contents: readonly IContent[],
-  pending: readonly IContent[] | undefined,
-): boolean {
-  if (pending === undefined) return false;
-  const splitAt = contents.length - pending.length;
-  return (
-    splitAt >= 0 &&
-    contents
-      .slice(splitAt)
-      .every((content, index) => samePendingContent(content, pending[index]))
-  );
-}
-
-/**
- * Index where the region retirement must never touch begins. A proven tail
- * is exactly the declared pending region. When the boundary is unproven (it
- * is undefined, or a hook or normalization rewrote the tail) the newest
- * content is protected, plus everything from the last content that still
- * carries the declared first pending item, so a hook that appended items
- * after the user's turn cannot cost the user their own attachment.
- */
-export function protectedRegionStart(
-  contents: readonly IContent[],
-  pending: readonly IContent[] | undefined,
-): number {
-  if (pending === undefined) return Math.max(0, contents.length - 1);
-  if (isPendingRegionProven(contents, pending)) {
-    return contents.length - pending.length;
-  }
-  const newest = Math.max(0, contents.length - 1);
-  if (pending.length === 0) return newest;
-  for (let index = newest; index >= 0; index -= 1) {
-    if (samePendingContent(contents[index], pending[0])) return index;
-  }
-  return newest;
-}
-
 /**
  * Request view of an already composed envelope with the oldest historical
  * images retired. The envelope's pending contents are the authority. The tail
@@ -309,7 +235,18 @@ export function retireEnvelopeImages(
   const history = envelope.contents.slice(0, splitAt);
   const tail = envelope.contents.slice(splitAt);
   const retired = retireHistoricalImages(history, tail, budgetBytes);
-  return retired === history ? envelope.contents : [...retired, ...tail];
+  if (retired === history) return envelope.contents;
+  // The history prefix dropped its own stale Responses parents; a parent in
+  // the protected tail still continues the server-side chain that holds the
+  // original pixels, so the complete rejoined view is checked from the first
+  // rewritten entry. Only the view's copies lose markers.
+  const firstRewritten = retired.findIndex(
+    (content, index) => content.blocks !== history[index].blocks,
+  );
+  return invalidateResponsesStatefulChainForRetainedRewrite(
+    [...retired, ...tail],
+    firstRewritten,
+  );
 }
 
 /** Encoded bytes of every media block the request resolver would count. */

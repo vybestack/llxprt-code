@@ -31,7 +31,10 @@ import { AnthropicProvider } from '@vybestack/llxprt-code-providers';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createHistoryRuntimeFixture } from '../../core/__tests__/history-runtime-fixture.js';
-import { preparePromptEnvelopeAfterEnforcement } from '../../core/promptEnvelopeSendSeam.js';
+import {
+  createPromptEnvelopePreparer,
+  preparePromptEnvelopeAfterEnforcement,
+} from '../../core/promptEnvelopeSendSeam.js';
 import { ProviderContentEnforcer } from '../providerContentEnforcement.js';
 
 export const MODEL = 'claude-sonnet-4-20250514';
@@ -163,6 +166,8 @@ export class RetirementSession {
   compressionRuns = 0;
   /** When set, the HTTP boundary fails every request with this error. */
   transportFailure: Error | undefined;
+  /** Context window in tokens the enforcer holds requests to. */
+  contextLimit = 1_000_000;
   private readonly unbound = new AnthropicProvider('test-key', BASE_URL);
   private readonly provider: AnthropicProvider;
   private readonly options: ReturnType<typeof createProviderCallOptions>;
@@ -296,7 +301,7 @@ export class RetirementSession {
       history: this.history,
       policy: {
         compressionThreshold: 0.8,
-        contextLimit: 1_000_000,
+        contextLimit: this.contextLimit,
         preserveThreshold: 0.2,
         telemetry: { enabled: false, target: null },
         'reasoning.includeInContext': true,
@@ -368,6 +373,35 @@ export class RetirementSession {
       await preparer.releaseUnused();
     }
     return { contents };
+  }
+
+  /**
+   * The provider compression callback path: recomposes history with the
+   * pending region through the enforcer, then proves the real provider
+   * projection accepts the returned contents.
+   */
+  async recomposeViaCallback(pending: IContent[]): Promise<IContent[]> {
+    const preparer = createPromptEnvelopePreparer(
+      this.provider,
+      (candidate) => ({ ...this.options, contents: candidate }),
+      tokenizerFactory,
+    );
+    try {
+      const contents = await this.enforcerFor(
+        async (candidate) =>
+          (await preparer.prepare(candidate)).estimate?.estimatedPromptTokens ??
+          1,
+      ).compressAndRecompose(
+        pending,
+        'prompt-callback',
+        undefined,
+        this.provider,
+      );
+      await preparer.prepare(contents);
+      return contents;
+    } finally {
+      await preparer.releaseUnused();
+    }
   }
 
   /** Commits a human turn and its answer to canonical history. */

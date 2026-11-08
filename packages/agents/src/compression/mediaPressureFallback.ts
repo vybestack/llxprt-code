@@ -16,10 +16,12 @@ import {
 } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
   explainPendingOverflow,
-  isPendingRegionProven,
-  protectedRegionStart,
   retireEveryHistoricalImage,
 } from './historicalImageRetirement.js';
+import {
+  isPendingRegionProven,
+  protectedRegionStart,
+} from './pendingBoundary.js';
 import { PendingMediaBudgetError } from './pendingMediaBudgetError.js';
 
 /**
@@ -51,8 +53,17 @@ export interface MediaPressureFallbackInput {
   readonly logger: DebugLogger;
   /** The media budget in force; zero keeps the reject-any-media policy. */
   readonly budgetBytes: number;
-  /** Projects a candidate request; rejects with the typed overflow. */
-  readonly project: (contents: IContent[]) => Promise<unknown>;
+  /**
+   * Projects a candidate request to its token count; rejects with the typed
+   * overflow.
+   */
+  readonly project: (contents: IContent[]) => Promise<number>;
+}
+
+/** The relieved request and its token projection. */
+export interface RelievedRequest {
+  readonly contents: IContent[];
+  readonly projected: number;
 }
 
 /**
@@ -60,6 +71,8 @@ export interface MediaPressureFallbackInput {
  * outside the protected region with its retirement note in the request view,
  * then project exactly once more. Media pressure from history therefore never
  * ends a turn. Bounded: it never retries an unchanged request and never loops.
+ * The caller still owes the relieved request the context-window checks, which
+ * is why the projection is returned.
  *
  * Errors that remain are the ones the request itself cannot drop: the
  * protected region alone over budget raises {@link PendingMediaBudgetError};
@@ -68,7 +81,7 @@ export interface MediaPressureFallbackInput {
  */
 export async function relieveMediaPressure(
   input: MediaPressureFallbackInput,
-): Promise<IContent[]> {
+): Promise<RelievedRequest> {
   if (input.budgetBytes <= 0) {
     throw input.error;
   }
@@ -87,7 +100,7 @@ export async function relieveMediaPressure(
     throw explainPendingOverflow(input.error, protectedRegion);
   }
   try {
-    await input.project(retired);
+    return { contents: retired, projected: await input.project(retired) };
   } catch (error) {
     if (!isRequestByteOverflowError(error)) {
       throw error;
@@ -97,5 +110,4 @@ export async function relieveMediaPressure(
       ? explained
       : input.error;
   }
-  return retired;
 }

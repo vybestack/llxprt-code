@@ -48,9 +48,13 @@ and the loop ends.
 
 ## Required behavior
 
-- Media pressure from history must never end a turn. The request is sent with
-  older media replaced by the existing retirement notes in the request view
-  only; canonical history and stored media are untouched.
+- History IMAGE pressure never ends a turn. The request is sent with older
+  images replaced by the existing retirement notes in the request view only;
+  canonical history and stored media are untouched. The guarantee is about
+  images. Historical NON-image media (PDF, audio) cannot be dropped by
+  retirement, so when it alone keeps the request over the media budget or the
+  native body cap, the typed byte error can still surface (for example
+  `RequestMediaByteOverflowError`).
 - Only media that the request itself cannot drop may produce an error:
   `PendingMediaBudgetError` when the declared pending region alone exceeds the
   budget. When the pending boundary is unknown, the newest content is kept and
@@ -115,10 +119,10 @@ the `provider-content-enforcement-byte-pressure` and
 ## Implementation notes
 
 - `retireEnvelopeImages` no longer turns retirement off for an unproven
-  boundary. `protectedRegionStart` (historicalImageRetirement.ts) protects the
-  proven pending tail; otherwise the newest content, extended back to the last
-  content that still equals the first declared pending item so a hook that
-  appended items after the user's turn cannot cost the user an attachment.
+  boundary. `protectedRegionStart` (now in pendingBoundary.ts) protects the
+  proven pending tail; otherwise it locates the declared pending items by
+  stable identity (see Review round 2) and protects from the earliest one
+  found to the end, or only the newest content when none is identified.
   Everything older is eligible for the normal oldest-first, 75% retirement.
 - `relieveMediaPressure` (mediaPressureFallback.ts) is the final fallback. It
   runs at every exit where a relievable byte overflow (media or body, not
@@ -133,7 +137,75 @@ the `provider-content-enforcement-byte-pressure` and
 - After a failed compression the fallback relieves the pre-compression request
   rather than history the failed compression may have half rewritten. After a
   completed compression it recomposes from the curated history.
-- `compressAndRecompose` (provider compression callback) is unchanged: it
-  already recomposes through `recomposeProviderContents`, which re-applies
-  retirement, so retired pixels never return. It has no media fallback of its
-  own.
+- `compressAndRecompose` (provider compression callback) recomposes through
+  `recomposeProviderContents`, which re-applies retirement, so retired pixels
+  never return. Review round 2 gave it the same bounded media relief (below).
+
+## Review round 2
+
+An independent reviewer reproduced six gaps through the public API. Each has a
+failing behavioral regression test that was run red before the fix.
+
+1. **The fallback skipped token-limit enforcement.** `relieveMediaPressure`
+   (mediaPressureFallback.ts) now returns the relieved contents together with
+   their token projection. The enforcer continues the existing bounded
+   escalation (density, compression, truncation) on that state through
+   `enforceBeyondInitialProjection`, run on an enforcer constructed with
+   `retiresAllHistoricalImages`. That flag makes every recomposition retire all
+   historical images, so retired pixels never come back, and the continuation
+   never enters `enforce`, so there is no second byte pass and no loop. An
+   unknown boundary over the limit throws `buildUnrecoverableBoundaryError`;
+   the ladder ends in the context overflow error. A request is never returned
+   over the limit.
+2. **`protectedRegionStart` guessed from equal content.** The boundary now
+   lives in pendingBoundary.ts. A proven tail is unchanged. Otherwise each
+   declared pending item is located from the newest content backwards, in
+   order, by stable identity: metadata `id`, `turnId`, `promptId`, and media
+   identity (the `contentId` of a reference block, the payload of an inline
+   block). Conflicting provenance disproves identity even when the same image
+   appears again, and a shared turn does not vouch for a different attachment
+   set. Equal text is never proof. The region starts at the earliest identified
+   item and runs to the end, so hook-added items stay protected; with no
+   identified item only the newest content is protected.
+3. **A failed compression could send half-rewritten history.** The byte
+   recovery path now classifies the compression outcome (`runCompression`:
+   exception, FAILED, NOOP, SKIPPED or confirmed COMPRESSED) before any
+   projection. Anything but COMPRESSED relieves the saved pre-compression
+   envelope. History is recomposed only after a confirmed COMPRESSED. Abort
+   propagation is preserved.
+4. **Retirement left a stale Responses parent in the protected tail.**
+   `retireEnvelopeImages` now runs `invalidateResponsesStatefulChainForRetainedRewrite`
+   over the complete rejoined view, starting at the first rewritten entry, so a
+   stored parent in the tail no longer continues the server-side chain that
+   holds the original pixels. Only the view's copies lose markers; canonical
+   entries keep them. The fallback's `retireEveryHistoricalImage` already
+   rejoins before invalidating and is covered by a test. The providers package
+   does not export `computeStatefulConversation`, so the tests assert on the
+   view the provider receives: no AI entry that can serve as a parent remains.
+5. **One exit threw without the fallback.** The `!compressionCanRelieve` branch
+   classifies with the same `protectedRegionStart` boundary retirement uses
+   and routes through the fallback. The fallback itself keeps the two final
+   outcomes: the protected region alone over budget gives
+   `PendingMediaBudgetError`, and a zero budget keeps the reject-any-media
+   policy.
+6. **The compression callback had no media relief.** `compressAndRecompose`
+   repeats once on the retire-all enforcer when a relievable byte overflow
+   escapes and history holds an image to retire, under the same guard-derived
+   limits. A pending-only overflow becomes `PendingMediaBudgetError`; token
+   limits are validated by the same escalation. To stay under the 800-line cap
+   the context-limit computation moved to enforcementLimits.ts and the overflow
+   error builders to overflowReduction.ts.
+
+Remaining by design: historical non-image media can still surface the typed
+byte error, and when a failed compression half-rewrote history, a relieved
+request that is still over the context window escalates from the curated
+history as it stands, as any compression failure already does.
+
+Regression tests (all run red before their fix):
+
+- `historical-image-retirement.pending-identity.test.ts`: findings 2 and 4
+  (identity of rewritten pending items, stale Responses parent in the tail,
+  fallback retirement path).
+- `provider-content-enforcement.media-relief.test.ts`: findings 1, 2 (false
+  pending overflow through the production seam), 3, 5 and 6, including the
+  32,000,000 byte body cap through the compression callback.
