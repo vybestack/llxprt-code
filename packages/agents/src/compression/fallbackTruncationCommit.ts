@@ -5,54 +5,28 @@
  */
 
 import { invalidateResponsesStatefulChain } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderContentEnforcementDeps } from './providerContentEnforcement.js';
+import {
+  captureHistoryState,
+  rollbackHistoryState,
+  watchIndependentWrites,
+  type HistoryStateSnapshot,
+  type IndependentWrites,
+} from './historyStateRollback.js';
 
 function normalizeError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-interface FallbackStateSnapshot {
-  readonly history: IContent[];
-  readonly cacheAnchorSeq: number;
-  readonly promptTokenBaseline: number | null;
-}
-
-function captureFallbackState(
-  deps: ProviderContentEnforcementDeps,
-): FallbackStateSnapshot {
-  return {
-    history: [...deps.historyService.getRawHistory()],
-    cacheAnchorSeq: deps.historyService.getCacheAnchorSeq(),
-    promptTokenBaseline: deps.getPromptTokenBaseline(),
-  };
-}
-
-async function restoreFallbackState(
-  deps: ProviderContentEnforcementDeps,
-  snapshot: FallbackStateSnapshot,
-): Promise<void> {
-  await deps.historyService.replaceAll(
-    [...snapshot.history],
-    deps.runtimeContext.state.model,
-    { origin: deps.historyOrigin },
-  );
-  if (snapshot.cacheAnchorSeq === 0) {
-    deps.historyService.resetCacheAnchorSeq();
-  } else {
-    deps.historyService.setCacheAnchorSeq(snapshot.cacheAnchorSeq);
-  }
-  deps.restorePromptTokenBaseline(snapshot.promptTokenBaseline);
-}
-
 async function restoreRejectedFallback(
   deps: ProviderContentEnforcementDeps,
-  snapshot: FallbackStateSnapshot,
+  snapshot: HistoryStateSnapshot,
+  writes: IndependentWrites,
   fallbackError: unknown,
 ): Promise<Error> {
   const failure = normalizeError(fallbackError);
   try {
-    await restoreFallbackState(deps, snapshot);
+    await rollbackHistoryState(deps, snapshot, writes);
     return failure;
   } catch (rollbackError) {
     return new AggregateError(
@@ -65,7 +39,8 @@ async function restoreRejectedFallback(
 /**
  * Executes fallback truncation and commits its candidate history atomically.
  * The existing history remains untouched unless the complete candidate is
- * accepted and its token accounting succeeds.
+ * accepted and its token accounting succeeds. A rejected candidate is rolled
+ * back to the snapshot plus whatever other writers committed meanwhile.
  */
 export async function executeFallbackTruncation(
   deps: ProviderContentEnforcementDeps,
@@ -75,7 +50,8 @@ export async function executeFallbackTruncation(
   truncationApplied: boolean;
   truncationFailure?: Error;
 }> {
-  const snapshot = captureFallbackState(deps);
+  const snapshot = captureHistoryState(deps);
+  const writes = watchIndependentWrites(deps.historyService);
   let truncationFailure: Error | undefined;
   let fallbackSucceeded = false;
   const candidate = { installed: false, committed: false };
@@ -102,7 +78,7 @@ export async function executeFallbackTruncation(
     }
   } catch (fallbackError) {
     truncationFailure = candidate.installed
-      ? await restoreRejectedFallback(deps, snapshot, fallbackError)
+      ? await restoreRejectedFallback(deps, snapshot, writes, fallbackError)
       : normalizeError(fallbackError);
     candidate.committed = false;
     deps.logger.warn(
@@ -111,6 +87,7 @@ export async function executeFallbackTruncation(
       truncationFailure,
     );
   }
+  writes.stop();
   if (fallbackSucceeded && !candidate.committed) {
     deps.logger.warn(
       () =>

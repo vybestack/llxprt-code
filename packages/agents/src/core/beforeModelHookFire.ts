@@ -25,6 +25,12 @@ import { applyRequestModifications } from './streamRequestHelpers.js';
 export interface BeforeModelHookFireResult {
   contents: IContent[];
   pendingContents: IContent[] | undefined;
+  /**
+   * The user's original pending items, whatever the hook did. They identify
+   * the user's own fragments for media protection even when `pendingContents`
+   * is undefined (unrecoverable boundary); they never make compression safe.
+   */
+  protectedContents: IContent[];
 }
 
 /** Inputs to fireBeforeModelHook. */
@@ -63,6 +69,7 @@ export async function fireBeforeModelHook(
   // the pre-extraction StreamProcessor ordering).
   const passthrough = (): BeforeModelHookFireResult => ({
     contents: requestContents,
+    protectedContents: pendingUserIContents,
     pendingContents: resolvePendingBoundaryFromHook(
       requestContents,
       requestContents,
@@ -100,5 +107,9 @@ export async function fireBeforeModelHook(
     log,
     snapshot,
   );
-  return { contents, pendingContents };
+  return {
+    contents,
+    pendingContents,
+    protectedContents: pendingUserIContents,
+  };
 }

@@ -31,8 +31,14 @@ import { AnthropicProvider } from '@vybestack/llxprt-code-providers';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createHistoryRuntimeFixture } from '../../core/__tests__/history-runtime-fixture.js';
-import { preparePromptEnvelopeAfterEnforcement } from '../../core/promptEnvelopeSendSeam.js';
-import { ProviderContentEnforcer } from '../providerContentEnforcement.js';
+import {
+  createPromptEnvelopePreparer,
+  preparePromptEnvelopeAfterEnforcement,
+} from '../../core/promptEnvelopeSendSeam.js';
+import {
+  ProviderContentEnforcer,
+  type CompressionGuardInfo,
+} from '../providerContentEnforcement.js';
 
 export const MODEL = 'claude-sonnet-4-20250514';
 export const BASE_URL = 'https://api.anthropic.com';
@@ -146,6 +152,16 @@ export async function rejection(work: Promise<unknown>): Promise<unknown> {
   throw new Error('Expected operation to reject');
 }
 
+/** How a test describes the request envelope to the production send seam. */
+export interface DeclaredRequest {
+  /** The pending region the envelope declares; undefined is unrecoverable. */
+  readonly pending: IContent[] | undefined;
+  /** The user's original turn, carried when the boundary is unrecoverable. */
+  readonly protectedContents?: IContent[];
+  /** The request as a BeforeModel hook left it; composed from history if absent. */
+  readonly contents?: IContent[];
+}
+
 export interface SentRequest {
   readonly body: string;
   readonly contentLength: string | null;
@@ -163,6 +179,8 @@ export class RetirementSession {
   compressionRuns = 0;
   /** When set, the HTTP boundary fails every request with this error. */
   transportFailure: Error | undefined;
+  /** Context window in tokens the enforcer holds requests to. */
+  contextLimit = 1_000_000;
   private readonly unbound = new AnthropicProvider('test-key', BASE_URL);
   private readonly provider: AnthropicProvider;
   private readonly options: ReturnType<typeof createProviderCallOptions>;
@@ -170,11 +188,20 @@ export class RetirementSession {
   private readonly originalFetch = globalThis.fetch;
   private compression: (history: HistoryService) => Promise<void> = () =>
     Promise.reject(new Error('compression must not run'));
+  private compressionOutcome = PerformCompressionResult.COMPRESSED;
+  private fallback: (
+    history: HistoryService,
+    applyResult: (newHistory: IContent[]) => Promise<void>,
+  ) => Promise<boolean> = () => Promise.resolve(false);
 
   constructor(
     private readonly directory: string,
-    private readonly requestMediaBudgetBytes: number | undefined,
+    requestMediaBudgetBytes: number | undefined,
     quotaBytes: number = 256 * 1024 * 1024,
+    /** Budget the enforcer retires against; defaults to the provider's. */
+    private readonly enforcerBudgetBytes:
+      | number
+      | undefined = requestMediaBudgetBytes,
   ) {
     this.store = new LocalMediaStore({
       rootDirectory: join(this.directory, 'media'),
@@ -245,6 +272,27 @@ export class RetirementSession {
   }
 
   /**
+   * A truncation fallback: it receives the history and the commit callback the
+   * enforcer supplies, and reports whether it succeeded. The default declines.
+   */
+  useFallback(
+    fallback: (
+      history: HistoryService,
+      applyResult: (newHistory: IContent[]) => Promise<void>,
+    ) => Promise<boolean>,
+  ): void {
+    this.fallback = fallback;
+  }
+
+  /**
+   * The result the compression workflow reports without running (for example
+   * a cooldown skip). Defaults to COMPRESSED after running the callback.
+   */
+  useCompressionOutcome(outcome: PerformCompressionResult): void {
+    this.compressionOutcome = outcome;
+  }
+
+  /**
    * An image whose stored bytes are not in this session's media store, as
    * after store loss: the reference is valid metadata but cannot be read.
    */
@@ -283,7 +331,7 @@ export class RetirementSession {
       history: this.history,
       policy: {
         compressionThreshold: 0.8,
-        contextLimit: 1_000_000,
+        contextLimit: this.contextLimit,
         preserveThreshold: 0.2,
         telemetry: { enabled: false, target: null },
         'reasoning.includeInContext': true,
@@ -299,15 +347,19 @@ export class RetirementSession {
       ensureDensityOptimized: () => Promise.resolve(),
       performCompression: async () => {
         this.compressionRuns += 1;
+        if (this.compressionOutcome !== PerformCompressionResult.COMPRESSED) {
+          return this.compressionOutcome;
+        }
         await this.compression(this.history);
         return PerformCompressionResult.COMPRESSED;
       },
-      performFallbackCompression: () => Promise.resolve(false),
+      performFallbackCompression: (_promptId, applyResult) =>
+        this.fallback(this.history, applyResult),
       getPromptTokenBaseline: () => null,
       resetPromptTokenBaseline: () => undefined,
       restorePromptTokenBaseline: () => undefined,
       estimateFinalizedPromptTokens: estimate,
-      requestMediaBudgetBytes: this.requestMediaBudgetBytes,
+      requestMediaBudgetBytes: this.enforcerBudgetBytes,
     });
   }
 
@@ -318,12 +370,15 @@ export class RetirementSession {
   async send(
     pending: IContent[],
     drain: boolean = true,
+    declared: DeclaredRequest = { pending },
   ): Promise<{ contents: IContent[] }> {
-    const composed = buildProviderContent(
-      this.history.getCurated(),
-      pending,
-      DebugLogger.getLogger('test:issue3984:compose'),
-    );
+    const composed =
+      declared.contents ??
+      buildProviderContent(
+        this.history.getCurated(),
+        pending,
+        DebugLogger.getLogger('test:issue3984:compose'),
+      );
     const { contents, prepared, preparer } =
       await preparePromptEnvelopeAfterEnforcement({
         provider: this.provider,
@@ -332,7 +387,13 @@ export class RetirementSession {
         buildOptions: (candidate) => ({ ...this.options, contents: candidate }),
         enforce: (candidate, estimate) =>
           this.enforcerFor(estimate).enforce(
-            { contents: candidate, pendingContents: pending },
+            {
+              contents: candidate,
+              pendingContents: declared.pending,
+              ...(declared.protectedContents === undefined
+                ? {}
+                : { protectedContents: declared.protectedContents }),
+            },
             'prompt-3984',
             this.provider,
           ),
@@ -350,6 +411,54 @@ export class RetirementSession {
       await preparer.releaseUnused();
     }
     return { contents };
+  }
+
+  /**
+   * The provider compression callback path: recomposes history with the
+   * pending region through the enforcer, then proves the real provider
+   * projection accepts the returned contents.
+   */
+  async recomposeViaCallback(
+    pending: IContent[],
+    /** What the context guard measured; absent when no guard is involved. */
+    guard?: CompressionGuardInfo,
+    /** The request the provider handed its callback; absent for the legacy call. */
+    original?: IContent[],
+    /** Replaces the projection-based token estimator (a tokenizer boundary). */
+    estimate?: (contents: IContent[]) => Promise<number>,
+  ): Promise<IContent[]> {
+    const preparer = createPromptEnvelopePreparer(
+      this.provider,
+      (candidate) => ({ ...this.options, contents: candidate }),
+      tokenizerFactory,
+    );
+    try {
+      const contents = await this.enforcerFor(
+        estimate ??
+          (async (candidate) =>
+            (await preparer.prepare(candidate)).estimate
+              ?.estimatedPromptTokens ?? 1),
+      ).compressAndRecompose(
+        pending,
+        'prompt-callback',
+        guard,
+        this.provider,
+        original,
+      );
+      await preparer.prepare(contents);
+      return contents;
+    } finally {
+      await preparer.releaseUnused();
+    }
+  }
+
+  /** The request a provider would receive: curated history plus `pending`. */
+  compose(pending: IContent[]): IContent[] {
+    return buildProviderContent(
+      this.history.getCurated(),
+      pending,
+      DebugLogger.getLogger('test:issue3984:compose'),
+    );
   }
 
   /** Commits a human turn and its answer to canonical history. */

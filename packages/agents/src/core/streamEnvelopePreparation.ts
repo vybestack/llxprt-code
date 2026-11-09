@@ -7,6 +7,7 @@
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
+import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
@@ -16,10 +17,16 @@ type BuildOptions = Parameters<
   typeof preparePromptEnvelopeAfterEnforcement
 >[0]['buildOptions'];
 
+/** The pending-region facts of an envelope, as resolved after the hook. */
+export type StreamPendingRegion = Pick<
+  ProviderContentEnvelope,
+  'pendingContents' | 'protectedContents'
+>;
+
 export function prepareStreamEnvelope(
   provider: RuntimeProvider,
   contents: IContent[],
-  pendingContents: IContent[] | undefined,
+  pendingRegion: StreamPendingRegion,
   buildOptions: BuildOptions,
   compressionHandler: CompressionHandler,
   promptId: string,
@@ -37,7 +44,7 @@ export function prepareStreamEnvelope(
     tokenizerFactory,
     enforce: (contents, estimate) =>
       compressionHandler.enforceProviderContents(
-        { contents, pendingContents },
+        { contents, ...pendingRegion },
         promptId,
         provider,
         estimate,

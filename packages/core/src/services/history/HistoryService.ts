@@ -41,6 +41,7 @@ import {
   type ChronologyTraceEntry,
 } from './historyChronology.js';
 import { HistoryServiceCore } from './HistoryServiceCore.js';
+import { notifyObservers } from './historyMutationFailure.js';
 import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
 
 export type {
@@ -193,6 +194,9 @@ export class HistoryService extends HistoryServiceCore {
       }
       throw error;
     }
+    notifyObservers(this.logger, 'toolResponseReplaced', () =>
+      this.emit('toolResponseReplaced', oldHistory, this.history),
+    );
     return true;
   }
 

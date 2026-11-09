@@ -159,6 +159,20 @@ function seedImages(history: HistoryService): void {
   history.add(textTurn('ai', 'seen b'));
 }
 
+/** Earlier non-image media: nothing the request view may retire. */
+function seedDocuments(history: HistoryService): void {
+  history.add(pdfTurn('a', 400));
+  history.add(textTurn('ai', 'read a'));
+  history.add(pdfTurn('b', 400));
+  history.add(textTurn('ai', 'read b'));
+}
+
+function mediaCount(contents: readonly IContent[]): number {
+  return contents.flatMap((content) =>
+    content.blocks.filter((block) => block.type === 'media'),
+  ).length;
+}
+
 async function rejection(work: Promise<unknown>): Promise<unknown> {
   try {
     await work;
@@ -195,13 +209,33 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
     expect(h.compressionRuns()).toBe(1);
   });
 
-  it('surfaces the typed byte error when compression changes nothing', async () => {
+  it('retires every historical image and keeps the pending one when compression changes nothing (issue #4000)', async () => {
     const h = harness(() => Promise.resolve(PerformCompressionResult.NOOP));
     seedImages(h.history);
     await h.history.waitForTokenUpdates();
 
+    const result = await h.enforcer.enforce(h.envelope([imageTurn('p')]), 'p3');
+
+    expect([mediaCount(result), h.compressionRuns()]).toStrictEqual([1, 1]);
+  });
+
+  it('retires every historical image and keeps the pending one when compression itself fails (issue #4000)', async () => {
+    const h = harness(() => Promise.reject(new Error('summarizer offline')));
+    seedImages(h.history);
+    await h.history.waitForTokenUpdates();
+
+    const result = await h.enforcer.enforce(h.envelope([imageTurn('p')]), 'p4');
+
+    expect([mediaCount(result), h.compressionRuns()]).toStrictEqual([1, 1]);
+  });
+
+  it('surfaces the typed byte error when compression changes nothing and only non-image media remains', async () => {
+    const h = harness(() => Promise.resolve(PerformCompressionResult.NOOP));
+    seedDocuments(h.history);
+    await h.history.waitForTokenUpdates();
+
     const error = await rejection(
-      h.enforcer.enforce(h.envelope([imageTurn('p')]), 'p3'),
+      h.enforcer.enforce(h.envelope([imageTurn('p')]), 'p3-docs'),
     );
 
     expect([
@@ -210,13 +244,13 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
     ]).toStrictEqual([true, 1]);
   });
 
-  it('surfaces the typed byte error when compression itself fails', async () => {
+  it('surfaces the typed byte error when compression itself fails and only non-image media remains', async () => {
     const h = harness(() => Promise.reject(new Error('summarizer offline')));
-    seedImages(h.history);
+    seedDocuments(h.history);
     await h.history.waitForTokenUpdates();
 
     const error = await rejection(
-      h.enforcer.enforce(h.envelope([imageTurn('p')]), 'p4'),
+      h.enforcer.enforce(h.envelope([imageTurn('p')]), 'p4-docs'),
     );
 
     expect([
@@ -227,7 +261,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
 
   it('does not relabel the byte overflow as a token projection failure', async () => {
     const h = harness(() => Promise.resolve(PerformCompressionResult.NOOP));
-    seedImages(h.history);
+    seedDocuments(h.history);
     await h.history.waitForTokenUpdates();
 
     const error = await rejection(
@@ -283,13 +317,30 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
       expect([result.length, h.compressionRuns()]).toStrictEqual([2, 1]);
     });
 
-    it('surfaces the typed body error unlabelled when compression changes nothing', async () => {
+    it('retires every historical image when compression changes nothing and the body stays over the cap (issue #4000)', async () => {
       const history = new HistoryService();
       const h = harness(
         () => Promise.resolve(PerformCompressionResult.NOOP),
         bodyEstimate(history),
       );
       seedImages(h.history);
+      await h.history.waitForTokenUpdates();
+
+      const result = await h.enforcer.enforce(
+        h.envelope([imageTurn('p')]),
+        'body-2-images',
+      );
+
+      expect([mediaCount(result), h.compressionRuns()]).toStrictEqual([1, 1]);
+    });
+
+    it('surfaces the typed body error unlabelled when compression changes nothing and only non-image media remains', async () => {
+      const history = new HistoryService();
+      const h = harness(
+        () => Promise.resolve(PerformCompressionResult.NOOP),
+        bodyEstimate(history),
+      );
+      seedDocuments(h.history);
       await h.history.waitForTokenUpdates();
 
       const error = await rejection(
@@ -360,7 +411,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
     expect([error, h.compressionRuns()]).toStrictEqual([aborted, 1]);
   });
 
-  it('does not treat a compression that fails but leaves a fitting request as success', async () => {
+  it('relieves the pre-compression request, not half-rewritten history, when compression fails midway (issue #4000)', async () => {
     const h = harness(async (history) => {
       history.clear();
       history.add(textTurn('ai', 'partial summary'));
@@ -370,11 +421,25 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
     seedImages(h.history);
     await h.history.waitForTokenUpdates();
 
-    const error = await rejection(
-      h.enforcer.enforce(h.envelope([imageTurn('p')]), 'p-partial'),
+    const result = await h.enforcer.enforce(
+      h.envelope([imageTurn('p')]),
+      'p-partial',
     );
 
-    expect(error instanceof RequestMediaByteOverflowError).toBe(true);
+    const texts = result.flatMap((content) =>
+      content.blocks.flatMap((block) =>
+        block.type === 'text' ? [block.text] : [],
+      ),
+    );
+    expect({
+      media: mediaCount(result),
+      keepsEarlierConversation: texts.includes('seen a'),
+      usesPartialSummary: texts.includes('partial summary'),
+    }).toStrictEqual({
+      media: 1,
+      keepsEarlierConversation: true,
+      usesPartialSummary: false,
+    });
   });
 
   it('does not compress when the request is aborted', async () => {
@@ -388,34 +453,23 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
     expect(h.compressionRuns()).toBe(0);
   });
 
-  it('does not attempt compression when the pending boundary is unrecoverable', async () => {
+  it('retires historical images without compressing when the pending boundary is unrecoverable (issue #4000)', async () => {
     const h = harness(summarizeHistory);
     seedImages(h.history);
     await h.history.waitForTokenUpdates();
 
-    const error = await rejection(
-      h.enforcer.enforce(
-        {
-          contents: [...h.history.getCurated(), imageTurn('p')],
-          pendingContents: undefined,
-        },
-        'p9',
-      ),
+    const result = await h.enforcer.enforce(
+      {
+        contents: [...h.history.getCurated(), imageTurn('p')],
+        pendingContents: undefined,
+      },
+      'p9',
     );
 
-    expect([
-      error instanceof RequestMediaByteOverflowError,
-      h.compressionRuns(),
-    ]).toStrictEqual([true, 0]);
+    expect([mediaCount(result), h.compressionRuns()]).toStrictEqual([1, 0]);
   });
 
   describe('with historical image retirement enabled', () => {
-    function mediaBlocks(contents: readonly IContent[]): number {
-      return contents.flatMap((content) =>
-        content.blocks.filter((block) => block.type === 'media'),
-      ).length;
-    }
-
     function noteCount(contents: readonly IContent[]): number {
       return contents.flatMap((content) =>
         content.blocks.filter(
@@ -438,7 +492,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
       );
 
       expect({
-        media: mediaBlocks(result),
+        media: mediaCount(result),
         notes: noteCount(result),
         compressionRuns: h.compressionRuns(),
         canonicalUnchanged: JSON.stringify(h.history.getAll()) === before,
@@ -535,29 +589,27 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
         'r7',
       );
 
-      expect([h.compressionRuns(), mediaBlocks(result)]).toStrictEqual([1, 1]);
+      expect([h.compressionRuns(), mediaCount(result)]).toStrictEqual([1, 1]);
     });
 
-    it('does not guess a pending boundary when it is undefined', async () => {
+    it('protects only the newest content and retires older images when the pending boundary is undefined (issue #4000)', async () => {
       const h = harness(summarizeHistory, undefined, BYTE_BUDGET);
       seedImages(h.history);
       await h.history.waitForTokenUpdates();
 
-      const error = await rejection(
-        h.enforcer.enforce(
-          {
-            contents: [...h.history.getCurated(), imageTurn('p')],
-            pendingContents: undefined,
-          },
-          'r3',
-        ),
+      const result = await h.enforcer.enforce(
+        {
+          contents: [...h.history.getCurated(), imageTurn('p')],
+          pendingContents: undefined,
+        },
+        'r3',
       );
 
-      expect([
-        error instanceof RequestMediaByteOverflowError,
-        error instanceof PendingMediaBudgetError,
-        h.compressionRuns(),
-      ]).toStrictEqual([true, false, 0]);
+      expect({
+        media: mediaCount(result),
+        notes: noteCount(result),
+        compressionRuns: h.compressionRuns(),
+      }).toStrictEqual({ media: 1, notes: 2, compressionRuns: 0 });
     });
 
     it('leaves non-image media alone and still lets one compression pass relieve it', async () => {
@@ -584,7 +636,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
 
       expect({
         compressionRuns: h.compressionRuns(),
-        remainingMedia: mediaBlocks(result),
+        remainingMedia: mediaCount(result),
       }).toStrictEqual({ compressionRuns: 1, remainingMedia: 1 });
     });
 
@@ -636,9 +688,9 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
 
       expect({
         compressionRuns: h.compressionRuns(),
-        media: mediaBlocks(result),
+        media: mediaCount(result),
         notes: noteCount(result),
-        canonicalImages: mediaBlocks(h.history.getAll()),
+        canonicalImages: mediaCount(h.history.getAll()),
       }).toStrictEqual({
         compressionRuns: 1,
         media: 1,
@@ -692,7 +744,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
       );
 
       expect({
-        media: mediaBlocks(result),
+        media: mediaCount(result),
         notes: noteCount(result),
       }).toStrictEqual({
         media: 1,

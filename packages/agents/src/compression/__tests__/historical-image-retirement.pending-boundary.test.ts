@@ -6,8 +6,9 @@
  * Issue #3984: the request-view retirement trusts the pending region only when
  * the envelope proves it. A hook may append items after the original pending
  * region or rewrite its blocks; the envelope's pending contents are then the
- * authority and the contents tail must carry exactly those blocks. Anything
- * unproven fails closed: nothing is retired and nothing is guessed.
+ * authority and the contents tail must carry exactly those blocks. When the
+ * boundary is unproven (issue #4000) the newest content stays protected and
+ * everything older is eligible, so history media pressure never ends a turn.
  */
 
 import { describe, expect, it } from 'bun:test';
@@ -85,7 +86,7 @@ describe('retireEnvelopeImages pending boundary proof (issue #3984)', () => {
     expect(imageData(result)).toContain(dataOf('p'));
   });
 
-  it('retires nothing when the contents tail is not the envelope pending region', () => {
+  it('retires older images and keeps the located pending region when a hook appended an item after it', () => {
     const history = [imageTurn('a'), aiTurn('seen a'), imageTurn('b')];
     const envelope: ProviderContentEnvelope = {
       contents: [...history, imageTurn('p'), imageTurn('h')],
@@ -94,10 +95,13 @@ describe('retireEnvelopeImages pending boundary proof (issue #3984)', () => {
 
     const result = retireEnvelopeImages(envelope, BUDGET);
 
-    expect(result).toBe(envelope.contents);
+    expect({
+      kept: imageData(result),
+      notes: noteCount(result),
+    }).toStrictEqual({ kept: [dataOf('p'), dataOf('h')], notes: 2 });
   });
 
-  it('retires nothing when a hook rewrote the pending blocks but the envelope still names the old ones', () => {
+  it('protects only the newest content when a hook rewrote the pending blocks, and retires older images', () => {
     const history = [imageTurn('a'), aiTurn('seen a'), imageTurn('b')];
     const envelope: ProviderContentEnvelope = {
       contents: [...history, imageTurn('p', 'rewritten by hook')],
@@ -106,7 +110,10 @@ describe('retireEnvelopeImages pending boundary proof (issue #3984)', () => {
 
     const result = retireEnvelopeImages(envelope, BUDGET);
 
-    expect([result, noteCount(result)]).toStrictEqual([envelope.contents, 0]);
+    expect({
+      kept: imageData(result),
+      notes: noteCount(result),
+    }).toStrictEqual({ kept: [dataOf('p')], notes: 2 });
   });
 
   it('preserves the latest hook-rewritten pending when the envelope names the rewritten blocks', () => {
@@ -174,7 +181,26 @@ describe('retireEnvelopeImages pending boundary proof (issue #3984)', () => {
     });
   });
 
-  it('does not retire when the pending boundary is unrecoverable', () => {
+  it('protects the newest content and retires older images when the pending boundary is unrecoverable', () => {
+    const contents = [
+      imageTurn('a'),
+      aiTurn('seen a'),
+      imageTurn('b'),
+      imageTurn('c'),
+    ];
+
+    const result = retireEnvelopeImages(
+      { contents, pendingContents: undefined },
+      BUDGET,
+    );
+
+    expect({
+      kept: imageData(result),
+      notes: noteCount(result),
+    }).toStrictEqual({ kept: [dataOf('c')], notes: 2 });
+  });
+
+  it('leaves contents untouched when the pending boundary is unrecoverable and the budget holds', () => {
     const contents = [imageTurn('a'), aiTurn('seen a'), imageTurn('b')];
 
     const result = retireEnvelopeImages(
@@ -185,7 +211,7 @@ describe('retireEnvelopeImages pending boundary proof (issue #3984)', () => {
     expect(result).toBe(contents);
   });
 
-  it('fails closed on a cyclic pending payload it cannot compare instead of looping', () => {
+  it('treats a cyclic pending payload it cannot compare as unproven instead of looping, protecting only the newest content', () => {
     const toolTurn = (): IContent => {
       const cyclic: Record<string, unknown> = { name: 'tool' };
       cyclic.self = cyclic;
@@ -213,7 +239,7 @@ describe('retireEnvelopeImages pending boundary proof (issue #3984)', () => {
       BUDGET,
     );
 
-    expect(imageData(result)).toHaveLength(3);
+    expect(imageData(result)).toStrictEqual([dataOf('c')]);
   });
 });
 

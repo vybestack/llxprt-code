@@ -65,3 +65,20 @@ export async function finalizeMutationEffects(
     throw new AggregateError(failures, 'History mutation finalization failed');
   }
 }
+
+/**
+ * Announces a mutation outcome to observers. A failing observer must not
+ * replace the outcome being announced (a committed replacement, or the failure
+ * that caused a reversion), so its failure is logged instead.
+ */
+export function notifyObservers(
+  logger: { debug(message: string, detail: unknown): void },
+  event: string,
+  notify: () => void,
+): void {
+  try {
+    notify();
+  } catch (error: unknown) {
+    logger.debug(`${event} listener failed`, error);
+  }
+}
