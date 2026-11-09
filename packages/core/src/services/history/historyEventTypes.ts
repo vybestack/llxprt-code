@@ -33,6 +33,29 @@ export interface HistoryServiceEventEmitter {
     event: 'contentBatchAdded',
     listener: (contents: readonly IContent[]) => void,
   ): this;
+  /**
+   * A batch announced through `contentBatchAdded` was reverted because a later
+   * step of the same mutation failed (a finalizer or another listener). Its
+   * entries are no longer in the history. Never emitted for a batch that failed
+   * before it was published or one that committed.
+   */
+  on(
+    event: 'contentBatchRolledBack',
+    listener: (contents: readonly IContent[]) => void,
+  ): this;
+  /**
+   * A single tool-response block was replaced in place. `previous` and `next`
+   * are the whole history before and after, with the same length: entries that
+   * differ by identity are the ones the replacement rewrote (the replaced entry
+   * and any entry whose stored-parent marker it invalidated).
+   */
+  on(
+    event: 'toolResponseReplaced',
+    listener: (
+      previous: readonly IContent[],
+      next: readonly IContent[],
+    ) => void,
+  ): this;
   on(event: 'compressionStarted', listener: (origin?: object) => void): this;
   on(
     event: 'compressionLockReleased',
@@ -49,6 +72,12 @@ export interface HistoryServiceEventEmitter {
   emit(event: 'tokensUpdated', eventData: TokensUpdatedEvent): boolean;
   emit(event: 'contentAdded', content: IContent, origin?: object): boolean;
   emit(event: 'contentBatchAdded', contents: readonly IContent[]): boolean;
+  emit(event: 'contentBatchRolledBack', contents: readonly IContent[]): boolean;
+  emit(
+    event: 'toolResponseReplaced',
+    previous: readonly IContent[],
+    next: readonly IContent[],
+  ): boolean;
   emit(event: 'compressionStarted', origin?: object): boolean;
   emit(event: 'compressionLockReleased', origin?: object): boolean;
   emit(
@@ -68,6 +97,17 @@ export interface HistoryServiceEventEmitter {
   off(
     event: 'contentBatchAdded',
     listener: (contents: readonly IContent[]) => void,
+  ): this;
+  off(
+    event: 'contentBatchRolledBack',
+    listener: (contents: readonly IContent[]) => void,
+  ): this;
+  off(
+    event: 'toolResponseReplaced',
+    listener: (
+      previous: readonly IContent[],
+      next: readonly IContent[],
+    ) => void,
   ): this;
   off(event: 'compressionStarted', listener: (origin?: object) => void): this;
   off(

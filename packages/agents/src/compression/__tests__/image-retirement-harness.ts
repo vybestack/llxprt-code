@@ -189,6 +189,10 @@ export class RetirementSession {
   private compression: (history: HistoryService) => Promise<void> = () =>
     Promise.reject(new Error('compression must not run'));
   private compressionOutcome = PerformCompressionResult.COMPRESSED;
+  private fallback: (
+    history: HistoryService,
+    applyResult: (newHistory: IContent[]) => Promise<void>,
+  ) => Promise<boolean> = () => Promise.resolve(false);
 
   constructor(
     private readonly directory: string,
@@ -268,6 +272,19 @@ export class RetirementSession {
   }
 
   /**
+   * A truncation fallback: it receives the history and the commit callback the
+   * enforcer supplies, and reports whether it succeeded. The default declines.
+   */
+  useFallback(
+    fallback: (
+      history: HistoryService,
+      applyResult: (newHistory: IContent[]) => Promise<void>,
+    ) => Promise<boolean>,
+  ): void {
+    this.fallback = fallback;
+  }
+
+  /**
    * The result the compression workflow reports without running (for example
    * a cooldown skip). Defaults to COMPRESSED after running the callback.
    */
@@ -336,7 +353,8 @@ export class RetirementSession {
         await this.compression(this.history);
         return PerformCompressionResult.COMPRESSED;
       },
-      performFallbackCompression: () => Promise.resolve(false),
+      performFallbackCompression: (_promptId, applyResult) =>
+        this.fallback(this.history, applyResult),
       getPromptTokenBaseline: () => null,
       resetPromptTokenBaseline: () => undefined,
       restorePromptTokenBaseline: () => undefined,

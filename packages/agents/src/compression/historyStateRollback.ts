@@ -36,7 +36,12 @@ export function captureHistoryState(
  * is released) announces the exact entries it commits; a compression applies
  * its rewrite through `replaceAll`, which announces none. Entries announced
  * during the window are therefore independent of the rewrite, by identity,
- * whether or not the rewrite later removed them.
+ * whether or not the rewrite later removed them. A batch the history announced
+ * and then reverted itself (`contentBatchRolledBack`) never committed, so its
+ * entries are dropped again: restoring them would resurrect a write that
+ * failed. In-place tool-response truncations by other writers
+ * (`toolResponseReplaced`) are tracked the same way: they rewrite entries the
+ * snapshot holds, and the rollback keeps them.
  */
 export interface IndependentWrites {
   /**
@@ -46,26 +51,60 @@ export interface IndependentWrites {
   stop(): void;
   /** Every entry announced so far, in announcement order, without repeats. */
   announced(): IContent[];
+  /**
+   * The entry as other writers left it: an entry whose tool response another
+   * writer truncated in place (`replaceToolResponseBlock`) maps to its
+   * replacement, through any number of such edits; any other entry maps to
+   * itself.
+   */
+  current(content: IContent): IContent;
 }
 
 export function watchIndependentWrites(
   historyService: HistoryService,
 ): IndependentWrites {
   const announced = new Set<IContent>();
+  const replacements = new Map<IContent, IContent>();
   const single = (content: IContent): void => {
     announced.add(content);
   };
   const batch = (contents: readonly IContent[]): void => {
     contents.forEach((content) => announced.add(content));
   };
+  const reverted = (contents: readonly IContent[]): void => {
+    contents.forEach((content) => announced.delete(content));
+  };
+  const replaced = (
+    previous: readonly IContent[],
+    next: readonly IContent[],
+  ): void => {
+    previous.forEach((entry, index) => {
+      if (next[index] !== entry) replacements.set(entry, next[index]);
+    });
+  };
   historyService.on('contentAdded', single);
   historyService.on('contentBatchAdded', batch);
+  historyService.on('contentBatchRolledBack', reverted);
+  historyService.on('toolResponseReplaced', replaced);
   return {
     stop: () => {
       historyService.off('contentAdded', single);
       historyService.off('contentBatchAdded', batch);
+      historyService.off('contentBatchRolledBack', reverted);
+      historyService.off('toolResponseReplaced', replaced);
     },
     announced: () => [...announced],
+    current: (content) => {
+      let entry = content;
+      for (
+        let next = replacements.get(entry);
+        next !== undefined;
+        next = replacements.get(entry)
+      ) {
+        entry = next;
+      }
+      return entry;
+    },
   };
 }
 
@@ -81,19 +120,6 @@ function restoreAnchorAndBaseline(
   deps.restorePromptTokenBaseline(snapshot.promptTokenBaseline);
 }
 
-/** Puts the snapshot back exactly. */
-export async function restoreHistoryState(
-  deps: ProviderContentEnforcementDeps,
-  snapshot: HistoryStateSnapshot,
-): Promise<void> {
-  await deps.historyService.replaceAll(
-    snapshot.history,
-    deps.runtimeContext.state.model,
-    { origin: deps.historyOrigin },
-  );
-  restoreAnchorAndBaseline(deps, snapshot);
-}
-
 function sameHistory(
   current: readonly IContent[],
   expected: readonly IContent[],
@@ -104,16 +130,19 @@ function sameHistory(
   );
 }
 
-/** The snapshot followed by every independent entry it does not hold. */
+/**
+ * The snapshot followed by every independent entry it does not hold, each as
+ * other writers left it.
+ */
 function snapshotWithIndependentWrites(
   snapshot: HistoryStateSnapshot,
-  independent: readonly IContent[],
+  writes: IndependentWrites,
 ): IContent[] {
   const held = new Set(snapshot.history);
   return [
     ...snapshot.history,
-    ...independent.filter((content) => !held.has(content)),
-  ];
+    ...writes.announced().filter((content) => !held.has(content)),
+  ].map((content) => writes.current(content));
 }
 
 /** Thrown inside the queued transform to commit nothing. */
@@ -139,10 +168,7 @@ export async function rollbackHistoryState(
   try {
     await deps.historyService.transformAll(
       (current) => {
-        const target = snapshotWithIndependentWrites(
-          snapshot,
-          writes.announced(),
-        );
+        const target = snapshotWithIndependentWrites(snapshot, writes);
         if (
           sameHistory(current, target) &&
           deps.historyService.getCacheAnchorSeq() === snapshot.cacheAnchorSeq

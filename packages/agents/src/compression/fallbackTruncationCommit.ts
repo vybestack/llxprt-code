@@ -8,8 +8,10 @@ import { invalidateResponsesStatefulChain } from '@vybestack/llxprt-code-core/se
 import type { ProviderContentEnforcementDeps } from './providerContentEnforcement.js';
 import {
   captureHistoryState,
-  restoreHistoryState,
+  rollbackHistoryState,
+  watchIndependentWrites,
   type HistoryStateSnapshot,
+  type IndependentWrites,
 } from './historyStateRollback.js';
 
 function normalizeError(error: unknown): Error {
@@ -19,11 +21,12 @@ function normalizeError(error: unknown): Error {
 async function restoreRejectedFallback(
   deps: ProviderContentEnforcementDeps,
   snapshot: HistoryStateSnapshot,
+  writes: IndependentWrites,
   fallbackError: unknown,
 ): Promise<Error> {
   const failure = normalizeError(fallbackError);
   try {
-    await restoreHistoryState(deps, snapshot);
+    await rollbackHistoryState(deps, snapshot, writes);
     return failure;
   } catch (rollbackError) {
     return new AggregateError(
@@ -36,7 +39,8 @@ async function restoreRejectedFallback(
 /**
  * Executes fallback truncation and commits its candidate history atomically.
  * The existing history remains untouched unless the complete candidate is
- * accepted and its token accounting succeeds.
+ * accepted and its token accounting succeeds. A rejected candidate is rolled
+ * back to the snapshot plus whatever other writers committed meanwhile.
  */
 export async function executeFallbackTruncation(
   deps: ProviderContentEnforcementDeps,
@@ -47,6 +51,7 @@ export async function executeFallbackTruncation(
   truncationFailure?: Error;
 }> {
   const snapshot = captureHistoryState(deps);
+  const writes = watchIndependentWrites(deps.historyService);
   let truncationFailure: Error | undefined;
   let fallbackSucceeded = false;
   const candidate = { installed: false, committed: false };
@@ -73,7 +78,7 @@ export async function executeFallbackTruncation(
     }
   } catch (fallbackError) {
     truncationFailure = candidate.installed
-      ? await restoreRejectedFallback(deps, snapshot, fallbackError)
+      ? await restoreRejectedFallback(deps, snapshot, writes, fallbackError)
       : normalizeError(fallbackError);
     candidate.committed = false;
     deps.logger.warn(
@@ -82,6 +87,7 @@ export async function executeFallbackTruncation(
       truncationFailure,
     );
   }
+  writes.stop();
   if (fallbackSucceeded && !candidate.committed) {
     deps.logger.warn(
       () =>

@@ -145,6 +145,47 @@ function isRewriteOf(actual: IContent, declared: DeclaredItem): boolean {
 }
 
 /**
+ * True when `actual` carries the declared item's provenance: it agrees on at
+ * least one of metadata id, turn id and prompt id, and contradicts none. Text
+ * and attachments play no part, so this never claims content the item merely
+ * resembles.
+ */
+function carriesProvenanceOf(actual: IContent, declared: IContent): boolean {
+  if (actual.speaker !== declared.speaker) return false;
+  let agrees = false;
+  for (const key of PROVENANCE_KEYS) {
+    const mine = provenance(actual, key);
+    const theirs = provenance(declared, key);
+    if (mine === undefined || theirs === undefined) continue;
+    if (mine !== theirs) return false;
+    agrees = true;
+  }
+  return agrees;
+}
+
+/**
+ * Moves the start of the item's region back over the contiguous run of
+ * contents that carry its provenance. The attachment search can stop too late:
+ * a hook that duplicated an image into a later fragment satisfies the count on
+ * its own, and the earlier fragment of the same turn would be left outside.
+ * The run ends at the first content without the provenance.
+ */
+function extendOverSameProvenance(
+  contents: readonly IContent[],
+  item: DeclaredItem,
+  start: number,
+): number {
+  let earliest = start;
+  while (
+    earliest > 0 &&
+    carriesProvenanceOf(contents[earliest - 1], item.content)
+  ) {
+    earliest -= 1;
+  }
+  return earliest;
+}
+
+/**
  * True when `candidate` is a fragment of `item` that matters to the search.
  * The first fragment found is any rewrite of the item; each later one must
  * also carry an attachment occurrence of the item not yet placed, so an
@@ -176,7 +217,8 @@ function placeOccurrence(
  * Index of the earliest fragment of `item` at or before `searchFrom`. A hook
  * may split one declared item into several contents, so the newest match is
  * not enough: the search continues backwards until every attachment occurrence
- * of the item is placed.
+ * of the item is placed, then over any contiguous fragments of the same
+ * provenance.
  */
 function earliestFragment(
   contents: readonly IContent[],
@@ -196,7 +238,9 @@ function earliestFragment(
       mediaIdentities(candidate).forEach((id) => placeOccurrence(unplaced, id));
     }
   }
-  return earliest;
+  return earliest === undefined
+    ? undefined
+    : extendOverSameProvenance(contents, item, earliest);
 }
 
 /**

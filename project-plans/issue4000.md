@@ -525,3 +525,140 @@ keeps both copies (declared boundary, carried `protectedContents`, and the
 production send seam with one stored reference repeated); an older history copy
 beyond the occurrence count is still retired; a single content carrying both
 copies keeps both (guard, green before and after).
+
+## CodeRabbit round 3 (PR #4015)
+
+Six review threads, each verified against the code before acting. Every FIXED
+thread has a regression test that was run red before the fix and green after.
+The maintainer decided the handling of each thread up front.
+
+### R1 (Major) FIXED: a committed compression is never rolled back
+
+Verified: the session journal writes its `compressed` record from the history's
+`compressionEnded` event (RecordingIntegration.ts:348-356 calls
+`SessionRecordingService.recordCompressed`). `CompressionHandler.performCompression`
+emits it from `endCompression` in its `finally` (CompressionHandler.ts:650-660),
+before token settlement (`waitForTokenUpdates`) and telemetry
+(`recordCompressionTelemetry`). A failure in either step made
+`runGuardedCompression` restore the pre-compression history while the journal
+kept the `compressed` record, so a resume replayed a different history than the
+live one.
+
+Fix (guardedCompression.ts): the guard watches `compressionEnded` (same origin
+rule as the journal: an event without an origin, a guard without one, or equal
+origins). Once it fired the compression counts as committed: a later failure is
+logged and the compression is treated as done, so the request recomposes from
+the compressed history. Cancellation after the commit is still rethrown, without
+a rollback. A compression that never ended (anchor failure inside the apply
+callback, a partial rewrite) is rolled back as before.
+
+Tests (`provider-content-enforcement.committed-compression.test.ts`, real
+RecordingIntegration and SessionRecordingService writing JSONL, replayed by the
+real ReplayEngine; red: `ContextOverflowError`, live history back at the
+pre-compression state while the replayed journal held the summary): the request
+is sent from the compressed history and live history equals the replayed
+journal; an abort after the commit propagates and keeps the compressed history;
+a rewrite whose compression never ended is still rolled back and matches the
+journal (green before and after).
+
+### R2 (Minor) FIXED: reverted batches are not resurrected
+
+Verified in HistoryServiceCore.ts `commitHistoryMutation`: after
+`this.history = nextHistory` the mutation emits `contentBatchAdded`, then runs
+`afterPublication` and `finalizeMutationEffects`; a failure there (or a throwing
+listener) restores `previousHistory` (catch block). The watcher had already
+recorded the announced entries, so the rollback re-inserted a batch that the
+history itself had reverted.
+
+Fix: the core emits a documented `contentBatchRolledBack` event (same entries)
+when it reverts a published batch, swallowing listener failures so the original
+error is preserved (historyEventTypes.ts, HistoryServiceCore.ts, shared
+`notifyObservers` in historyMutationFailure.ts). `watchIndependentWrites` drops those entries.
+Committed entries that a failed rewrite removed are still restored.
+
+Tests: `HistoryService.batch.test.ts` (event after a finalizer failure; none for
+a batch that never published or committed; a failing listener keeps the original
+error; red: no event) and
+`provider-content-enforcement.rolled-back-batch.test.ts` (red: the reverted
+entry was restored; the committed one must also survive).
+
+Not covered: a single `add` whose `contentAdded` listener throws is popped by
+`addInternal` (HistoryServiceCore.ts, the synchronous path); that case is not
+announced. The thread concerns batches, and a throwing listener on the
+synchronous path has no committed state to protect.
+
+### R3 (Major) FIXED: a rejected fallback truncation keeps independent writes
+
+Verified: `restoreRejectedFallback` called `restoreHistoryState`, a plain
+`replaceAll(snapshot)`, which dropped entries committed after the snapshot.
+
+Fix (fallbackTruncationCommit.ts): `executeFallbackTruncation` watches
+independent writes and restores through `rollbackHistoryState` (the queued
+`transformAll` rollback). `restoreHistoryState` had no other caller and is
+removed. The harness gained `useFallback`.
+
+Tests (`provider-content-enforcement.rejected-fallback.test.ts`; red: both
+entries missing): an `addBatch` before the candidate is installed (removed by
+the candidate) and one after both survive, the candidate does not; with no other
+writer the snapshot is restored exactly.
+
+### R4 (Minor) FIXED: independent `replaceToolResponseBlock` edits survive
+
+Verified: the only callers are `truncateLargestToolResponses` and
+`truncateOversizedToolResponsesUnified` (toolResultTruncator.ts:239, 508), reached
+from `ProviderContentEnforcer.enforceTruncation` and
+`PendingContextWindowEnforcer`. Inside one send they run after the guarded
+compression returned. But concurrent sends on one conversation are intended
+behavior (chatSession.ts:650-653), each runs its own enforcement, and
+`replaceToolResponseBlock` is a public history mutation on the shared
+`HistoryService`. Another send can therefore commit a truncation while this
+send's guarded compression is in flight, and the rollback reverted it.
+
+Fix: `HistoryService.replaceToolResponseBlock` emits `toolResponseReplaced`
+(history before and after, same length) once a replacement has committed;
+listener failures are swallowed so a committed replacement is never reported as
+failed. The watcher maps each rewritten entry (the replaced one and any entry
+whose stored-parent marker was invalidated) to its replacement, and the rollback
+applies that mapping to the snapshot and the independent entries.
+
+Tests: `HistoryService.replaceToolResponseBlock.test.ts` (announcement; none for
+a refused, identical or failed replacement; a failing listener keeps the commit)
+and `provider-content-enforcement.rollback-tool-replacement.test.ts` (red: the
+other send's truncation was reverted and the enforcer wrote its own stub): kept
+when the failed rewrite removed it, and kept when the failed compression changed
+nothing else.
+
+### R5 (Minor) DECLINED: over-protection after a hook removed duplicates
+
+Confirmed: with a declared item carrying an image N times and a hook that keeps
+fewer copies, the unplaced count lets the backwards search reach older
+unlabeled copies of the same image (`isRewriteOf` accepts shared media without
+conflicting provenance), so they are protected and a request that would fit
+after the hook can end in `PendingMediaBudgetError`. The boundary cannot tell a
+duplicate the hook dropped from an older paste of the same image. Guessing the
+other way would silently retire a possibly current-turn image. Over-protection
+fails safe with an explicit, typed error and nothing is lost. Behavior is
+unchanged.
+
+Test (`historical-image-retirement.over-protection.test.ts`, passes before and
+after): three declared copies, one left by the hook, two older unlabeled copies
+in history give `PendingMediaBudgetError` and nothing is sent.
+
+### R6 (Minor) FIXED: provenance extension for a duplicated fragment image
+
+Verified: a hook that splits an item and duplicates its image into the later
+fragment satisfies the occurrence count on that fragment, and the search stopped
+before the earlier fragment, which could then be retired (unsafe direction).
+
+Fix (pendingBoundary.ts): after the attachment search, the region keeps
+extending backwards over contiguous contents of the same speaker that carry the
+declared item's provenance (metadata `id`, `turnId` or `promptId` agreeing on at
+least one and conflicting on none), and stops at the first content that does
+not. Text is never compared; conflicting provenance never extends.
+
+Tests (`historical-image-retirement.provenance-extension.test.ts`; red: the
+earlier fragment's image was retired, two notes instead of one): same turn,
+unknown boundary with carried contents, prompt id, older history of another turn
+is not pulled in, and the run stops at the first content without the
+provenance. The pending-identity, split-pending and repeated-pending suites stay
+green unchanged.

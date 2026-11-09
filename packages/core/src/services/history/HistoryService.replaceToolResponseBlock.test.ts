@@ -663,4 +663,87 @@ describe('HistoryService.replaceToolResponseBlock', () => {
     // replacement content, corrupting downstream compression/threshold logic.
     expect(service.getTotalTokens()).toBe(tokensBefore);
   });
+
+  describe('toolResponseReplaced announcement', () => {
+    const replacement = (result: string): ToolResponseBlock => ({
+      type: 'tool_response',
+      callId: 'call-1',
+      toolName: 'read_file',
+      result,
+    });
+
+    it('announces the history before and after a committed replacement', async () => {
+      const stored = makeStoredAiEntry('resp-announce');
+      const response = makeToolResponseEntry('call-1', 'read_file', 'original');
+      const bystander = makeTextEntry('human', 'untouched');
+      service.add(stored);
+      service.add(response);
+      service.add(bystander);
+      await service.waitForTokenUpdates();
+      const announced: Array<{
+        previous: IContent[];
+        next: IContent[];
+      }> = [];
+      service.on('toolResponseReplaced', (previous, next) => {
+        announced.push({ previous: [...previous], next: [...next] });
+      });
+
+      const replaced = await service.replaceToolResponseBlock(
+        1,
+        0,
+        replacement('stub'),
+      );
+
+      expect(replaced).toBe(true);
+      expect(announced).toHaveLength(1);
+      expect(announced[0].previous).toStrictEqual([
+        stored,
+        response,
+        bystander,
+      ]);
+      expect(announced[0].next).toStrictEqual([...service.getRawHistory()]);
+      expect(announced[0].next[1]).not.toBe(response);
+      expect(announced[0].next[2]).toBe(bystander);
+    });
+
+    it('announces nothing when the replacement is refused, identical or fails', async () => {
+      service.add(makeToolResponseEntry('call-1', 'read_file', 'original'));
+      await service.waitForTokenUpdates();
+      const announced: number[] = [];
+      service.on('toolResponseReplaced', () => {
+        announced.push(1);
+      });
+
+      await service.replaceToolResponseBlock(0, 0, replacement('original'));
+      await service.replaceToolResponseBlock(5, 0, replacement('stub'));
+      const failing = (): void => {
+        throw new Error('listener failure');
+      };
+      service.on('tokensUpdated', failing);
+      await expect(
+        service.replaceToolResponseBlock(0, 0, replacement('stub')),
+      ).rejects.toThrow('listener failure');
+
+      expect(announced).toStrictEqual([]);
+    });
+
+    it('keeps the committed replacement when an announcement listener fails', async () => {
+      service.add(makeToolResponseEntry('call-1', 'read_file', 'original'));
+      await service.waitForTokenUpdates();
+      service.on('toolResponseReplaced', () => {
+        throw new Error('announcement listener failed');
+      });
+
+      const replaced = await service.replaceToolResponseBlock(
+        0,
+        0,
+        replacement('stub'),
+      );
+
+      expect(replaced).toBe(true);
+      expect(
+        (service.getRawHistory()[0].blocks[0] as ToolResponseBlock).result,
+      ).toBe('stub');
+    });
+  });
 });

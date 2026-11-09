@@ -203,6 +203,70 @@ describe('HistoryService atomic batch publication', () => {
     expect(tokenDeltas[0]).toBe(history.getTotalTokens());
   });
 
+  it('announces a published batch that is then reverted, with the same entries', async () => {
+    const history = new HistoryService();
+    const published: IContent[][] = [];
+    const reverted: IContent[][] = [];
+    history.on('contentBatchAdded', (contents) => {
+      published.push([...contents]);
+    });
+    history.on('contentBatchRolledBack', (contents) => {
+      reverted.push([...contents]);
+    });
+    history.registerBatchParticipant(() => ({
+      publish: () => undefined,
+      rollback: () => undefined,
+      finalize: () => {
+        throw new Error('finalizer failed after publication');
+      },
+    }));
+    const batch = [createUserMessage('first'), createUserMessage('second')];
+
+    await expect(history.addBatch(batch)).rejects.toThrow(
+      'finalizer failed after publication',
+    );
+
+    expect(history.getAll()).toStrictEqual([]);
+    expect(published).toStrictEqual([batch]);
+    expect(reverted).toStrictEqual([batch]);
+  });
+
+  it('announces no reversion for a batch that never published or that committed', async () => {
+    const history = new HistoryService();
+    const reverted: IContent[][] = [];
+    history.on('contentBatchRolledBack', (contents) => {
+      reverted.push([...contents]);
+    });
+    const unregister = history.registerBatchParticipant(() => {
+      throw new Error('persistence staging failed');
+    });
+
+    await expect(
+      history.addBatch([createUserMessage('never published')]),
+    ).rejects.toThrow('persistence staging failed');
+    unregister();
+    await history.addBatch([createUserMessage('committed')]);
+
+    expect(reverted).toStrictEqual([]);
+    expect(history.getAll().map(textOf)).toStrictEqual(['committed']);
+  });
+
+  it('keeps the original failure when a reversion listener fails', async () => {
+    const history = new HistoryService();
+    history.on('contentBatchRolledBack', () => {
+      throw new Error('reversion listener failed');
+    });
+    history.on('contentBatchAdded', () => {
+      throw new Error('batch listener failed');
+    });
+
+    await expect(
+      history.addBatch([createUserMessage('first')]),
+    ).rejects.toThrow('batch listener failed');
+
+    expect(history.getAll()).toStrictEqual([]);
+  });
+
   it('serializes a concurrent add after the complete batch', async () => {
     const history = new HistoryService();
     const tokenizer = controlledTokenizerFactory();
