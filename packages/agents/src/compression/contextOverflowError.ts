@@ -71,3 +71,16 @@ export function buildContextOverflowError({
     Math.max(0, marginAdjustedLimit - completionBudget),
   );
 }
+
+export function buildUnrecoverableBoundaryError(
+  projected: number,
+  marginAdjustedLimit: number,
+): Error {
+  return new Error(
+    'Context overflow requires compression, but the pending-content boundary is unrecoverable: ' +
+      'a BeforeModel hook replaced or restructured the conversation contents, and no usable ' +
+      'llm_request_boundary metadata was available, so compression cannot safely recompose the pending region. ' +
+      'Consider reducing the context size, or have the hook supply valid llm_request_boundary metadata. ' +
+      `Projected ${projected} exceeds safety-adjusted limit ${marginAdjustedLimit}.`,
+  );
+}

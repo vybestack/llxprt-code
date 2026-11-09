@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import {
+  buildProviderContent,
+  type ProviderContentEnvelope,
+} from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type {
   ContentBlock,
   IContent,
@@ -13,6 +17,7 @@ import type {
 import { invalidateResponsesStatefulChainForRetainedRewrite } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { RequestMediaByteOverflowError } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { PendingMediaBudgetError } from './pendingMediaBudgetError.js';
+import { envelopeProtectedStart } from './pendingBoundary.js';
 
 /**
  * Fraction of the request media budget a retirement batch retires down to.
@@ -146,6 +151,20 @@ export function retireHistoricalImages(
   }
   if (total > budgetBytes) retireOldest(history.length);
 
+  return renderRetirement(history, retired);
+}
+
+/**
+ * Request view of `history` with the given image slots replaced by their
+ * retirement notes, or `history` itself when nothing retires. A stored
+ * Responses parent no longer describes the rewritten prefix, so the view must
+ * not offer it as a continuation point; only the view's own copies lose the
+ * marker and canonical entries keep it.
+ */
+function renderRetirement(
+  history: IContent[],
+  retired: ReadonlyMap<string, ImageSlot>,
+): IContent[] {
   if (retired.size === 0) return history;
   const view = history.map((content, contentIndex) => {
     const blocks = content.blocks.map((block, blockIndex): ContentBlock => {
@@ -158,13 +177,37 @@ export function retireHistoricalImages(
       ? { ...content, blocks }
       : content;
   });
-  // A stored Responses parent no longer describes the rewritten prefix, so the
-  // view must not offer it as a continuation point. Only the view's own copies
-  // lose the marker; canonical entries keep it.
   const firstRetired = Math.min(
     ...[...retired.values()].map((slot) => slot.contentIndex),
   );
   return invalidateResponsesStatefulChainForRetainedRewrite(view, firstRetired);
+}
+
+/**
+ * Last-resort request view for media pressure that normal retirement did not
+ * relieve: every image in `contents` before `protectedStart` is replaced by
+ * its retirement note. Non-image and URL media stay, and the protected region
+ * is never touched. Returns `contents` itself when no image retires.
+ */
+export function retireEveryHistoricalImage(
+  contents: IContent[],
+  protectedStart: number,
+): IContent[] {
+  const retired = new Map<string, ImageSlot>();
+  contents.slice(0, protectedStart).forEach((content, contentIndex) => {
+    content.blocks.forEach((block, blockIndex) => {
+      const bytes = countedBytes(block);
+      if (bytes !== undefined && block.type === 'media' && isImage(block)) {
+        retired.set(`${contentIndex}:${blockIndex}`, {
+          contentIndex,
+          blockIndex,
+          bytes,
+          block,
+        });
+      }
+    });
+  });
+  return renderRetirement(contents, retired);
 }
 
 /** True when any content carries media the resolver would count. */
@@ -174,74 +217,113 @@ export function hasCountedMedia(contents: readonly IContent[]): boolean {
   );
 }
 
-const MAX_COMPARE_DEPTH = 64;
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/**
- * Structural equality for serializable block data. Depth is bounded so a
- * cyclic payload can never be proven equal: unproven means fail closed.
- */
-function sameValue(left: unknown, right: unknown, depth = 0): boolean {
-  if (left === right) return true;
-  if (depth > MAX_COMPARE_DEPTH) return false;
-  if (Array.isArray(left) && Array.isArray(right)) {
-    return (
-      left.length === right.length &&
-      left.every((item, index) => sameValue(item, right[index], depth + 1))
-    );
-  }
-  if (isPlainRecord(left) && isPlainRecord(right)) {
-    const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-    return [...keys].every((key) =>
-      sameValue(left[key], right[key], depth + 1),
-    );
-  }
-  return false;
-}
-
-function samePendingContent(actual: IContent, declared: IContent): boolean {
-  return (
-    actual === declared ||
-    (actual.speaker === declared.speaker &&
-      sameValue(actual.blocks, declared.blocks))
-  );
-}
-
 /**
  * Request view of an already composed envelope with the oldest historical
  * images retired. The envelope's pending contents are the authority. The tail
  * of the contents is trusted as that region only when it carries exactly the
  * declared speakers and blocks (the provider pipeline clones content, so
- * identity alone cannot be required). Anything else, such as appended hook
- * items the envelope does not name, rewritten pending blocks, or a payload
- * that cannot be compared, is unproven: nothing retires and nothing is
- * guessed. The envelope's own array is returned when nothing retires so a
- * projection prepared for it stays valid.
+ * identity alone cannot be required). Otherwise the boundary is unproven and
+ * {@link envelopeProtectedStart} protects the newest content; media pressure
+ * from older history must never end the turn (issue #4000). The envelope's
+ * own array is returned when nothing retires so a projection prepared for it
+ * stays valid.
  */
 export function retireEnvelopeImages(
   envelope: ProviderContentEnvelope,
   budgetBytes: number,
 ): IContent[] {
-  const pending = envelope.pendingContents;
-  if (pending === undefined) {
-    return envelope.contents;
-  }
-  const splitAt = envelope.contents.length - pending.length;
-  if (splitAt < 0) {
-    return envelope.contents;
-  }
-  const tail = envelope.contents.slice(splitAt);
-  if (
-    !tail.every((content, index) => samePendingContent(content, pending[index]))
-  ) {
-    return envelope.contents;
-  }
+  const splitAt = envelopeProtectedStart(envelope);
   const history = envelope.contents.slice(0, splitAt);
+  const tail = envelope.contents.slice(splitAt);
   const retired = retireHistoricalImages(history, tail, budgetBytes);
-  return retired === history ? envelope.contents : [...retired, ...tail];
+  if (retired === history) return envelope.contents;
+  // The history prefix dropped its own stale Responses parents; a parent in
+  // the protected tail still continues the server-side chain that holds the
+  // original pixels, so the complete rejoined view is checked from the first
+  // rewritten entry. Only the view's copies lose markers.
+  const firstRewritten = retired.findIndex(
+    (content, index) => content.blocks !== history[index].blocks,
+  );
+  return invalidateResponsesStatefulChainForRetainedRewrite(
+    [...retired, ...tail],
+    firstRewritten,
+  );
+}
+
+function sameBlock(left: ContentBlock, right: ContentBlock): boolean {
+  if (left === right) return true;
+  if (left.type !== right.type) return false;
+  return (
+    left.type !== 'text' || (right.type === 'text' && left.text === right.text)
+  );
+}
+
+/**
+ * Index of the first entry whose blocks differ between two compositions of the
+ * same request, or 0 when they cannot be aligned. Retirement only swaps
+ * blocks inside entries, so both compositions normalize identically and the
+ * first difference is exactly where the request view starts to diverge from
+ * what a stored Responses parent holds server-side.
+ */
+function firstRewrittenIndex(
+  original: readonly IContent[],
+  rewritten: readonly IContent[],
+): number {
+  if (original.length !== rewritten.length) return 0;
+  const index = rewritten.findIndex(
+    (content, position) =>
+      content.blocks.length !== original[position].blocks.length ||
+      content.blocks.some(
+        (block, blockIndex) =>
+          !sameBlock(block, original[position].blocks[blockIndex]),
+      ),
+  );
+  return Math.max(0, index);
+}
+
+/**
+ * The composed request view with Responses parents invalidated from the first
+ * entry retirement rewrote. A stored parent before every retired image keeps
+ * the server-side chain valid, because everything after it, retirement notes
+ * included, is sent as new input. Only the view's copies lose markers.
+ */
+export function invalidateParentsFromFirstRetirement(
+  original: readonly IContent[],
+  retired: IContent[],
+): IContent[] {
+  return invalidateResponsesStatefulChainForRetainedRewrite(
+    retired,
+    firstRewrittenIndex(original, retired),
+  );
+}
+
+/**
+ * The provider-ready request for `curated` history and the pending region
+ * with historical images retired (all of them, or oldest first to the budget).
+ * Parent markers are invalidated over the fully rejoined request, pending tail
+ * included, and only the request view's copies lose them. The unretired
+ * composition is built only when retirement changed something.
+ */
+export function composeRetiredRequest(
+  input: {
+    readonly curated: IContent[];
+    readonly pending: IContent[];
+    readonly retireAll: boolean;
+    readonly budgetBytes: number;
+  },
+  logger: DebugLogger,
+): IContent[] {
+  const { curated, pending } = input;
+  const history = input.retireAll
+    ? retireEveryHistoricalImage(curated, curated.length)
+    : retireHistoricalImages(curated, pending, input.budgetBytes);
+  const composed = buildProviderContent(history, pending, logger);
+  return history === curated
+    ? composed
+    : invalidateParentsFromFirstRetirement(
+        buildProviderContent(curated, pending, logger),
+        composed,
+      );
 }
 
 /** Encoded bytes of every media block the request resolver would count. */

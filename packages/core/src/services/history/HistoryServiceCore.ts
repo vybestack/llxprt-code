@@ -15,7 +15,10 @@
  */
 
 import { validateHistoryBatch } from './history-batch-validation.js';
-import { finalizeMutationEffects } from './historyMutationFailure.js';
+import {
+  finalizeMutationEffects,
+  notifyObservers,
+} from './historyMutationFailure.js';
 import { retainContentOrigins } from './historyOrigin.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
 import {
@@ -987,6 +990,11 @@ export abstract class HistoryServiceCore
         this.invalidatePendingSyncs();
         this.history = previousHistory;
         this.totalTokens = previousTokens;
+        if (publication !== undefined) {
+          notifyObservers(this.logger, 'contentBatchRolledBack', () =>
+            this.emit('contentBatchRolledBack', publication.contents),
+          );
+        }
       }
       this.restoreChronology(chronology);
       const rollbackFailures = await this.rollbackMutationEffects(effects);
