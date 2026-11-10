@@ -119,6 +119,10 @@ export async function captureBrokerDebugLines(
   return { lines, error };
 }
 
+/**
+ * Runs the child fixture with the recording gh on PATH, bounded by a timeout
+ * and the test's abort signal, and records its exit so cleanup can await it.
+ */
 function spawnChild(
   request: ChildRequest,
   shim: CwdShim,

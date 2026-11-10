@@ -56,10 +56,15 @@ function shq(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
+/** Serializes a canned gh reply as a shell-quoted JSON literal. */
 function replyJson(value: unknown): string {
   return shq(JSON.stringify(value));
 }
 
+/**
+ * Builds the recording gh script: it logs its working directory, runs real
+ * git, and fails on any git error except the tolerated non-repository case.
+ */
 function shimScript(capturePath: string, options: CwdShimOptions): string {
   const lines = [
     '#!/bin/sh',

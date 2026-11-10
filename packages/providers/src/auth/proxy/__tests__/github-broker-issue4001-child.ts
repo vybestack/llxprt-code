@@ -34,6 +34,7 @@ const requestSchema = z.object({
   tmpdirState: z.literal('inaccessible').optional(),
 });
 
+/** Parses and validates the JSON request passed on the command line. */
 function parseRequest(raw: string | undefined): z.infer<typeof requestSchema> {
   if (raw === undefined) throw new Error('missing request argument');
   return requestSchema.parse(JSON.parse(raw));
@@ -76,11 +77,16 @@ function lockTmpdir(): string {
   return locked;
 }
 
+/** Restores permissions on a locked directory and removes it. */
 function removeLocked(locked: string): void {
   chmodSync(locked, 0o700);
   rmSync(locked, { recursive: true, force: true });
 }
 
+/**
+ * Puts the process into the requested cwd/tmpdir state, runs the real
+ * executeGitHubOp, and prints the outcome as one JSON line.
+ */
 async function main(): Promise<void> {
   const request = parseRequest(process.argv[2]);
   const scratchRoot = tmpdir();
