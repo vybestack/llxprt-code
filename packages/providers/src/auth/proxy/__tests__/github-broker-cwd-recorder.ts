@@ -9,13 +9,18 @@
  * respect to its working directory.
  *
  * The shim records the directory it was started in, then runs a real `git`
- * command. When the inherited directory has been deleted that command dies
- * with "Unable to read current working directory", and the shim reports it
- * the way gh does ("failed to run git: ..."), so a deleted cwd fails here
- * for the same reason it fails in production. Any other git outcome (for
- * example "not a git repository" in a neutral directory) is ignored,
- * matching `gh pr create --repo/--head/--base`, which needs a readable cwd
- * but not a repository.
+ * command (`git rev-parse --is-inside-work-tree`). When the inherited
+ * directory has been deleted that command dies with "Unable to read current
+ * working directory", and the shim reports it the way gh does ("failed to
+ * run git: ..."), so a deleted cwd fails here for the same reason it fails
+ * in production.
+ *
+ * Git failures are fatal (non-zero exit, git's stderr) with exactly one
+ * exception: "not a git repository" is accepted when the request names its
+ * repository explicitly (GH_REPO) and, for `pr create`, its head branch.
+ * That is the only situation in which real gh does not need a checkout. A
+ * missing git binary or any other git error never passes silently, and the
+ * shim never claims repository inference works outside a real repository.
  *
  * The shim is a POSIX shell script; suites using it skip on Windows.
  *
@@ -61,12 +66,26 @@ function shimScript(capturePath: string, options: CwdShimOptions): string {
     'cwd=$(pwd -P 2>/dev/null)',
     `[ -n "$cwd" ] || cwd=${shq(CWD_UNREADABLE)}`,
     `printf '%s\\n' "$cwd" >> ${shq(capturePath)}`,
-    'out=$(git rev-parse --show-toplevel 2>&1)',
-    'case "$out" in',
-    '  *"Unable to read current working directory"*)',
-    '    echo "failed to run git: $out" >&2',
-    '    exit 1 ;;',
-    'esac',
+    'out=$(git rev-parse --is-inside-work-tree 2>&1)',
+    'rc=$?',
+    'if [ "$rc" -ne 0 ]; then',
+    '  has_head=0',
+    '  for arg in "$@"; do [ "$arg" = "--head" ] && has_head=1; done',
+    '  needs_head=0',
+    '  [ "$1 $2" = "pr create" ] && needs_head=1',
+    '  case "$out" in',
+    '    *"not a git repository"*)',
+    '      if [ -n "$GH_REPO" ] && { [ "$needs_head" -eq 0 ] || [ "$has_head" -eq 1 ]; }; then',
+    '        :',
+    '      else',
+    '        echo "failed to run git: $out" >&2',
+    '        exit 1',
+    '      fi ;;',
+    '    *)',
+    '      echo "failed to run git: $out" >&2',
+    '      exit 1 ;;',
+    '  esac',
+    'fi',
   ];
   if (options.failWith !== undefined) {
     lines.push(`echo ${shq(options.failWith)} >&2`, 'exit 1');

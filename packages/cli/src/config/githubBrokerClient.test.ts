@@ -106,7 +106,9 @@ describe('CLI GitHub broker working directory (issue #4001)', () => {
           const result = await withGhOnPath(shim.binDir, () =>
             client.runOperation(
               'pr.create',
-              prParams,
+              // The workspace is not a repository, so the request names its
+              // repository and head explicitly, as gh requires there.
+              { ...prParams, repo: 'owner/name' },
               new AbortController().signal,
               { workingDirectory: workspace },
             ),

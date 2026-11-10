@@ -39,6 +39,7 @@ import type {
 import { OP_REGISTRY, validateParams } from './github-broker-ops.js';
 import { withBodyFiles } from './github-broker-body-file.js';
 import {
+  assertNoCheckoutNeeded,
   resolveGhWorkingDirectory,
   type GitHubExecOptions,
 } from './github-broker-cwd.js';
@@ -442,10 +443,12 @@ export async function executeGitHubOp(
   // #4001: resolve the gh working directory once, after validation, so every
   // step of a multi-step op runs in the same existing directory and an
   // unusable cwd fails before any gh process is spawned.
-  const cwd = await resolveGhWorkingDirectory(
+  const directory = await resolveGhWorkingDirectory(
     options,
     repoTarget !== undefined,
   );
+  assertNoCheckoutNeeded(op, opParams, directory);
+  const { cwd } = directory;
 
   // Resolves parsed output and throws on failure, so multi-step ops read as
   // straight-line code and a failed step aborts the sequence.

@@ -26,93 +26,25 @@
  * @issue 4001
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
-import { execFile } from 'node:child_process';
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { describe, expect, it } from 'bun:test';
+import { realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
-import { z } from 'zod';
-import { DebugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import { join } from 'node:path';
 import { executeGitHubOp } from '../github-broker.js';
+import { PR_URL, withGhOnPath } from './github-broker-cwd-recorder.js';
 import {
-  PR_URL,
-  makeCwdShim,
-  pathWithShim,
-  withGhOnPath,
-  type CwdShim,
-  type CwdShimOptions,
-} from './github-broker-cwd-recorder.js';
+  captureBrokerDebugLines,
+  expectSuccess,
+  useIssue4001Fixtures,
+} from './github-broker-issue4001-fixtures.js';
 
-const execFileAsync = promisify(execFile);
 const SIGNAL = new AbortController().signal;
-const CHILD_SCRIPT = join(
-  dirname(fileURLToPath(import.meta.url)),
-  'github-broker-issue4001-child.ts',
-);
 
 const PR_PARAMS = { title: 'T', body: 'B', base: 'main', head: 'feature' };
 const REPO = 'owner/name';
 
-const childOutputSchema = z.object({
-  cwdReadable: z.boolean(),
-  outcome: z.union([
-    z.object({ ok: z.literal(true), result: z.record(z.unknown()) }),
-    z.object({ ok: z.literal(false), code: z.string(), message: z.string() }),
-  ]),
-});
-type ChildOutput = z.infer<typeof childOutputSchema>;
-
-interface ChildRequest {
-  readonly op: string;
-  readonly params: Record<string, unknown>;
-  readonly workingDirectory?: string;
-}
-
-const cleanups: Array<() => Promise<void>> = [];
-
-async function newShim(options?: CwdShimOptions): Promise<CwdShim> {
-  const shim = await makeCwdShim(options);
-  cleanups.push(shim.cleanup);
-  return shim;
-}
-
-async function newDir(prefix: string): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), prefix));
-  cleanups.push(() => rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
-/**
- * Runs the real executeGitHubOp in a child whose own cwd was deleted before
- * the call, with the shim on the child's PATH.
- */
-async function runWithDeletedCwd(
-  shim: CwdShim,
-  request: ChildRequest,
-): Promise<ChildOutput> {
-  const { stdout } = await execFileAsync(
-    process.execPath,
-    [CHILD_SCRIPT, JSON.stringify(request)],
-    { env: { ...process.env, PATH: pathWithShim(shim.binDir) } },
-  );
-  return childOutputSchema.parse(JSON.parse(stdout.trim()));
-}
-
-function expectSuccess(output: ChildOutput): Record<string, unknown> {
-  if (!output.outcome.ok) {
-    throw new Error(
-      `expected success, got ${output.outcome.code}: ${output.outcome.message}`,
-    );
-  }
-  return output.outcome.result;
-}
-
 describe('issue #4001: gh runs in an existing working directory', () => {
-  afterEach(async () => {
-    await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
-  });
+  const { newShim, newDir, newRepoDir, runInChild } = useIssue4001Fixtures();
 
   describe.skipIf(process.platform === 'win32')(
     'recording gh shim (POSIX)',
@@ -121,7 +53,7 @@ describe('issue #4001: gh runs in an existing working directory', () => {
         it('runs pr.create in a neutral existing directory when repo is explicit', async () => {
           const shim = await newShim();
 
-          const output = await runWithDeletedCwd(shim, {
+          const output = await runInChild(shim, {
             op: 'pr.create',
             params: { ...PR_PARAMS, repo: REPO },
           });
@@ -135,9 +67,9 @@ describe('issue #4001: gh runs in an existing working directory', () => {
 
         it('runs in the session workspace directory when one is supplied', async () => {
           const shim = await newShim();
-          const workspace = await newDir('gh4001-workspace-');
+          const workspace = await newRepoDir('gh4001-workspace-');
 
-          const output = await runWithDeletedCwd(shim, {
+          const output = await runInChild(shim, {
             op: 'pr.create',
             params: PR_PARAMS,
             workingDirectory: workspace,
@@ -152,7 +84,7 @@ describe('issue #4001: gh runs in an existing working directory', () => {
         it('fails with a structured error, without spawning gh, when no repo and no workspace are available', async () => {
           const shim = await newShim();
 
-          const output = await runWithDeletedCwd(shim, {
+          const output = await runInChild(shim, {
             op: 'pr.create',
             params: PR_PARAMS,
           });
@@ -173,7 +105,7 @@ describe('issue #4001: gh runs in an existing working directory', () => {
             'does-not-exist',
           );
 
-          const output = await runWithDeletedCwd(shim, {
+          const output = await runInChild(shim, {
             op: 'pr.create',
             params: { ...PR_PARAMS, repo: REPO },
             workingDirectory: missing,
@@ -192,7 +124,7 @@ describe('issue #4001: gh runs in an existing working directory', () => {
             'does-not-exist',
           );
 
-          const output = await runWithDeletedCwd(shim, {
+          const output = await runInChild(shim, {
             op: 'pr.create',
             params: PR_PARAMS,
             workingDirectory: missing,
@@ -207,7 +139,7 @@ describe('issue #4001: gh runs in an existing working directory', () => {
         it('runs every step of a multi-step op in the same neutral directory', async () => {
           const shim = await newShim();
 
-          const output = await runWithDeletedCwd(shim, {
+          const output = await runInChild(shim, {
             op: 'issue.edit',
             params: { number: 1, addLabel: ['x'], type: 'Bug', repo: REPO },
           });
@@ -252,7 +184,7 @@ describe('issue #4001: gh runs in an existing working directory', () => {
 
         it('prefers an existing workspace directory over the process cwd', async () => {
           const shim = await newShim();
-          const workspace = await newDir('gh4001-workspace-');
+          const workspace = await newRepoDir('gh4001-workspace-');
 
           await withGhOnPath(shim.binDir, () =>
             executeGitHubOp('pr.create', PR_PARAMS, SIGNAL, {
@@ -323,32 +255,18 @@ describe('issue #4001: gh runs in an existing working directory', () => {
         it('records the resolved cwd in the failure debug line', async () => {
           const shim = await newShim({ failWith: 'gh blew up 4001' });
           const workspace = await newDir('gh4001-workspace-');
-          const lines: string[] = [];
-          const original = DebugLogger.prototype.debug;
-          DebugLogger.prototype.debug = function patched(
-            this: DebugLogger,
-            messageOrFn: string | (() => string),
-          ): void {
-            if (this.namespace !== 'llxprt:github:broker') return;
-            lines.push(
-              typeof messageOrFn === 'function' ? messageOrFn() : messageOrFn,
-            );
-          };
-          try {
-            await expect(
-              withGhOnPath(shim.binDir, () =>
-                executeGitHubOp(
-                  'issue.comment',
-                  { number: 1, body: 'x', repo: REPO },
-                  SIGNAL,
-                  { workingDirectory: workspace },
-                ),
+          const { lines, error } = await captureBrokerDebugLines(() =>
+            withGhOnPath(shim.binDir, () =>
+              executeGitHubOp(
+                'issue.comment',
+                { number: 1, body: 'x', repo: REPO },
+                SIGNAL,
+                { workingDirectory: workspace },
               ),
-            ).rejects.toThrow('gh blew up 4001');
-          } finally {
-            DebugLogger.prototype.debug = original;
-          }
+            ),
+          );
 
+          expect(String(error)).toContain('gh blew up 4001');
           expect(lines).toHaveLength(1);
           expect(lines[0]).toContain(`cwd=${workspace}`);
         });

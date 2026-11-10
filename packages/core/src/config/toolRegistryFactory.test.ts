@@ -39,7 +39,10 @@ import {
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
 import { Config } from './config.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import {
+  ToolErrorType,
+  type GitHubReportOperations,
+} from '@vybestack/llxprt-code-tools';
 
 describe('tool registry assembly', () => {
   const createFilesystem = installTestWorkspaceFilesystem();
@@ -598,6 +601,53 @@ describe('tool registry assembly', () => {
       expect(records[0].isRegistered).toBe(true);
     });
   });
+  describe('github tool working directory (issue #4001)', () => {
+    /**
+     * The session workspace the github tool hands to the broker is the
+     * config's target directory (the workspace root), never the separate
+     * cwd. The two differ here so reading the wrong accessor fails.
+     */
+    it('passes the config target directory, not its cwd, to the report port', async () => {
+      const targetDir = await fs.promises.mkdtemp(
+        path.join(os.tmpdir(), 'registry-github-target-'),
+      );
+      const cwd = await fs.promises.mkdtemp(
+        path.join(os.tmpdir(), 'registry-github-cwd-'),
+      );
+      const seen: unknown[] = [];
+      const record: GitHubReportOperations['readReport'] = async (
+        _op,
+        _params,
+        _signal,
+        options,
+      ) => {
+        seen.push(options);
+        return { ok: true };
+      };
+      try {
+        const { registry } = await assembleFixtureToolRegistry(
+          createHost({ noCoreTools: true }),
+          createConfigBoundary({ targetDir, cwd }),
+          new MessageBus(),
+          undefined,
+          undefined,
+          { readReport: record, submitReport: record },
+        );
+
+        const tool = registry.getTool('github');
+        if (tool === undefined) throw new Error('github tool not registered');
+        await tool
+          .build({ op: 'issue.view', number: 1 })
+          .execute(new AbortController().signal);
+
+        expect(seen).toStrictEqual([{ workingDirectory: targetDir }]);
+      } finally {
+        await fs.promises.rm(targetDir, { recursive: true, force: true });
+        await fs.promises.rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+
   async function assembleFixtureToolRegistry(
     host: ReturnType<typeof createHost>,
     config: Config,
@@ -608,6 +658,7 @@ describe('tool registry assembly', () => {
       messageBus: MessageBus,
     ) => TaskToolRegistration,
     imageOperation?: ImageOperationRunner,
+    githubReports?: GitHubReportOperations,
   ): Promise<
     Awaited<ReturnType<typeof createToolRegistry>> & {
       workspacePaths: WorkspacePathOperations;
@@ -648,6 +699,7 @@ describe('tool registry assembly', () => {
         },
         registration: registration?.(config, settingsOwner, messageBus),
         imageOperation,
+        githubReports,
       })),
       workspacePaths: root.paths,
     };

@@ -8,18 +8,63 @@ import { describe, expect, it } from 'bun:test';
 import { createServer } from 'node:http';
 import { json } from 'node:stream/consumers';
 import { once } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { executeGitHubOp } from '@vybestack/llxprt-code-providers/auth.js';
 
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import type { Agent } from '../agent.js';
 import type { AgentConfig } from '../config-types.js';
 
 import { createAgent } from '../createAgent.js';
+const PR_URL = 'https://github.com/owner/name/pull/7';
+
+/**
+ * A `gh` on PATH that records the physical directory it was started in and
+ * prints a pull request URL. Only the cwd matters here; the broker's own
+ * argv and cwd handling are covered in the providers suite.
+ */
+async function recordingGh(): Promise<{
+  readonly readCwds: () => Promise<string[]>;
+  readonly withOnPath: <T>(run: () => Promise<T>) => Promise<T>;
+  readonly cleanup: () => Promise<void>;
+}> {
+  const base = await mkdtemp(join(tmpdir(), 'gh4001-agent-'));
+  const binDir = join(base, 'bin');
+  const capture = join(base, 'cwd.log');
+  await mkdir(binDir);
+  await writeFile(
+    join(binDir, 'gh'),
+    `#!/bin/sh\npwd -P >> '${capture}'\necho '${PR_URL}'\n`,
+    { mode: 0o755 },
+  );
+  return {
+    readCwds: async () =>
+      (await readFile(capture, 'utf8')).split('\n').filter(Boolean),
+    withOnPath: async (run) => {
+      const saved = process.env.PATH;
+      process.env.PATH = `${binDir}:${saved ?? ''}`;
+      try {
+        return await run();
+      } finally {
+        process.env.PATH = saved;
+      }
+    },
+    cleanup: () => rm(base, { recursive: true, force: true }),
+  };
+}
+
 function barrier(): { promise: Promise<void>; release(): void } {
   let release = (): void => {
     throw new Error('Uninitialized barrier');
@@ -267,15 +312,63 @@ describe('explicit host GitHub broker ownership', () => {
       expect(received).toStrictEqual([
         {
           op: 'issue.view',
-          options: { workingDirectory: config.getWorkingDir() },
+          options: { workingDirectory: config.getTargetDir() },
         },
         {
           op: 'issue.create',
-          options: { workingDirectory: config.getWorkingDir() },
+          options: { workingDirectory: config.getTargetDir() },
         },
       ]);
     });
   });
+
+  /**
+   * Drives the real broker dispatch (executeGitHubOp, the same function the
+   * CLI's host client calls) from the agent's github tool, with a recording gh
+   * on PATH. The directory gh actually started in is what the user sees, so
+   * that is what is asserted; it must be the session directory, not the
+   * process cwd that gh would otherwise inherit.
+   */
+  it.skipIf(process.platform === 'win32')(
+    'runs gh in the session target directory, not the process cwd, through the real broker (issue #4001)',
+    async () => {
+      const gh = await recordingGh();
+      const hostClient: GitHubBrokerClient = {
+        runOperation: (op, params, signal, options) =>
+          executeGitHubOp(op, params, signal, options),
+      };
+      try {
+        await withConfig(async (config) => {
+          const agent = await build(config, hostClient);
+          try {
+            const result = await gh.withOnPath(() =>
+              github(agent).buildAndExecute(
+                {
+                  op: 'pr.create',
+                  title: 'from the session directory',
+                  body: 'body',
+                  base: 'main',
+                  head: 'feature',
+                  repo: 'owner/name',
+                },
+                new AbortController().signal,
+              ),
+            );
+            expect(result.error).toBeUndefined();
+            expect(String(result.llmContent)).toContain(PR_URL);
+          } finally {
+            await agent.dispose();
+          }
+
+          const sessionDirectory = await realpath(config.getTargetDir());
+          expect(sessionDirectory).not.toBe(await realpath(process.cwd()));
+          expect(await gh.readCwds()).toStrictEqual([sessionDirectory]);
+        });
+      } finally {
+        await gh.cleanup();
+      }
+    },
+  );
 
   it('keeps caller authorization live and rejects malformed operations before reaching the server', async () => {
     await withConfig(async (config) => {
