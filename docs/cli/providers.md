@@ -131,6 +131,30 @@ llxprt --provider openai --base-url https://my-company-proxy.example.com/v1/ --m
 
 This is useful for corporate proxies, self-hosted inference servers, or any OpenAI-compatible endpoint.
 
+### Hosted OpenAI-compatible endpoints (Chat Completions)
+
+For a hosted endpoint that implements the OpenAI Chat Completions API, keep the
+built-in `openai` provider and use the endpoint's `/v1` API root as the base URL.
+The base URL is not the full `/v1/chat/completions` request path. For example,
+PZERO publishes its models at `https://api.pzero.studio/v1/models`; its default
+text model is `deepseek-v4-flash`:
+
+```bash
+llxprt --provider openai --base-url https://api.pzero.studio/v1 --model deepseek-v4-flash
+```
+
+Set an API key issued by the service before starting LLxprt. Supply it in
+`OPENAI_API_KEY` or store it under the `openai` provider with `/key save openai`
+(the key is sent as a Bearer token). A missing or invalid key can cause an
+authentication error even if the service's model catalog is public.
+Do not add the `openai/` prefix to the model id: that prefix is used by LiteLLM,
+not by LLxprt's `openai` provider.
+
+Use Chat Completions for agent tools on endpoints that do not support the
+Responses API. `openaiResponsesEnabled` is disabled by default; leave it disabled
+for such a host. It can also be set explicitly to `false` in `settings.json` if
+it was enabled previously.
+
 ## Creating Your Own Provider Alias
 
 If you frequently use a provider that isn't built in, or a custom endpoint, save it as an alias so you don't have to reconfigure each time.
