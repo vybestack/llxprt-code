@@ -19,7 +19,10 @@
  * @pseudocode 003-github-broker.md lines 01-11
  */
 
-import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
+import type {
+  GitHubBrokerClient,
+  GitHubOperationOptions,
+} from '@vybestack/llxprt-code-tools';
 import type { ProxySocketClient } from '@vybestack/llxprt-code-auth';
 import {
   type CredentialAuthority,
@@ -36,7 +39,9 @@ const GITHUB_OP_TIMEOUT_MS = 3_600_000;
 
 /**
  * Routes an operation over the credential socket. Used only in a sandbox,
- * where no GitHub credential exists in the container.
+ * where no GitHub credential exists in the container. The session workspace
+ * directory is a host path and is deliberately not sent: the host-side broker
+ * resolves its own working directory (#4001).
  *
  * @plan PLAN-20260731-GHBROKER.P15
  * @requirement REQ-001, REQ-003
@@ -88,8 +93,9 @@ class HostGitHubBrokerClient implements GitHubBrokerClient {
     op: string,
     params: Record<string, unknown>,
     signal: AbortSignal,
+    options?: GitHubOperationOptions,
   ): Promise<Record<string, unknown>> {
-    return executeGitHubOp(op, params, signal);
+    return executeGitHubOp(op, params, signal, options);
   }
 }
 
