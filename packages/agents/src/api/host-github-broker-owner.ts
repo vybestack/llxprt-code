@@ -4,8 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
-import type { GitHubReportOperations } from '@vybestack/llxprt-code-tools';
+import type {
+  GitHubBrokerClient,
+  GitHubOperationOptions,
+  GitHubReportOperations,
+} from '@vybestack/llxprt-code-tools';
 import {
   GITHUB_MUTATING_OPS,
   validateGithubOpParams,
@@ -38,12 +41,14 @@ export class HostGitHubBrokerOwner {
       op: string,
       params: Record<string, unknown>,
       signal: AbortSignal,
-    ) => this.run(false, op, params, signal),
+      options?: GitHubOperationOptions,
+    ) => this.run(false, op, params, signal, options),
     submitReport: (
       op: string,
       params: Record<string, unknown>,
       signal: AbortSignal,
-    ) => this.run(true, op, params, signal),
+      options?: GitHubOperationOptions,
+    ) => this.run(true, op, params, signal, options),
   });
 
   constructor(
@@ -56,6 +61,7 @@ export class HostGitHubBrokerOwner {
     op: string,
     params: Record<string, unknown>,
     signal: AbortSignal,
+    options?: GitHubOperationOptions,
   ): Promise<Record<string, unknown>> {
     this.cancellation.signal.throwIfAborted();
     const validation = validateGithubOpParams(op, params);
@@ -68,7 +74,7 @@ export class HostGitHubBrokerOwner {
     combined.throwIfAborted();
     const operation = Promise.resolve().then(() => {
       combined.throwIfAborted();
-      return this.client.runOperation(op, params, combined);
+      return this.client.runOperation(op, params, combined, options);
     });
     this.accepted.add(operation);
     void operation.then(

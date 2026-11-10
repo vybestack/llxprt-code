@@ -39,6 +39,11 @@ import type {
 import { OP_REGISTRY, validateParams } from './github-broker-ops.js';
 import { withBodyFiles } from './github-broker-body-file.js';
 import {
+  assertNoCheckoutNeeded,
+  resolveGhWorkingDirectory,
+  type GitHubExecOptions,
+} from './github-broker-cwd.js';
+import {
   assertNoPartialSuccess,
   classifyStderr,
   mapGraphQLErrorType,
@@ -159,8 +164,12 @@ type GhResult = GhSuccess | GhFailure;
  * `GH_REPO` stays unset so gh's documented current-repository resolution
  * keeps working for repo-less ops.
  *
+ * `cwd` is always explicit (#4001): the child must never inherit the LLxprt
+ * process's working directory, which `git` (run by gh) cannot use once it has
+ * been deleted. The dispatcher resolves it once per operation.
+ *
  * A failed invocation additionally emits one debug log line with the final
- * argv, the repo target in effect, and the failure message, with the whole
+ * argv, the repo target in effect, the cwd, and the failure message, with the whole
  * composed line token-redacted (argv inlines caller free text, so
  * redaction cannot stop at the message); a recurrence of a dropped-repo
  * failure is then readable from the debug log instead of invisible
@@ -174,7 +183,8 @@ type GhResult = GhSuccess | GhFailure;
 async function runGh(
   argv: readonly string[],
   signal: AbortSignal,
-  options?: {
+  options: {
+    cwd: string;
     rawOutput?: boolean;
     tolerateNonZeroExit?: boolean;
     repoTarget?: string;
@@ -184,17 +194,18 @@ async function runGh(
   // Deliberately NOT a PASSTHROUGH entry: an ambient GH_REPO from the
   // caller's shell must never leak into the child env. The value is set
   // only when the dispatcher derived it from validated op params.
-  if (options?.repoTarget !== undefined) {
+  if (options.repoTarget !== undefined) {
     env.GH_REPO = options.repoTarget;
   }
-  const rawOutput = options?.rawOutput === true;
-  const tolerateNonZeroExit = options?.tolerateNonZeroExit === true;
+  const rawOutput = options.rawOutput === true;
+  const tolerateNonZeroExit = options.tolerateNonZeroExit === true;
   try {
     const { stdout } = await execFileAsync('gh', [...argv], {
       shell: false,
       signal,
       maxBuffer: MAX_BUFFER,
       env,
+      cwd: options.cwd,
     });
     const json = rawOutput ? stdout : parseJsonSafe(stdout);
     return { kind: 'success', json };
@@ -212,8 +223,8 @@ async function runGh(
     logger.debug(() =>
       redactTokenShaped(
         `gh invocation failed. argv=${JSON.stringify(argv)} repoTarget=${
-          options?.repoTarget ?? REPO_TARGET_ABSENT
-        } error=${failure.error.message}`,
+          options.repoTarget ?? REPO_TARGET_ABSENT
+        } cwd=${options.cwd} error=${failure.error.message}`,
       ),
     );
     return failure;
@@ -378,6 +389,11 @@ function tryGraphQLError(stdout: string): BrokerError | null {
  * them drift, and the sandboxed path is the one that carries the security
  * properties, so it must not be the rarely-exercised branch.
  *
+ * `options` carries host-side context that is never part of the op params:
+ * the session workspace directory the gh children should run in (#4001).
+ * The socket handler passes none, so a sandboxed call resolves its cwd from
+ * the host process alone.
+ *
  * Throws a BrokerErrorException carrying a structured code; callers
  * translate that into whatever their transport needs.
  *
@@ -389,6 +405,7 @@ export async function executeGitHubOp(
   op: string,
   opParams: Record<string, unknown>,
   signal: AbortSignal,
+  options?: GitHubExecOptions,
 ): Promise<Record<string, unknown>> {
   if (!Object.prototype.hasOwnProperty.call(OP_REGISTRY, op)) {
     throw brokerError('UNKNOWN_OP', `Unknown operation: ${op}`);
@@ -423,12 +440,22 @@ export async function executeGitHubOp(
       ? opParams.repo
       : undefined;
 
+  // #4001: resolve the gh working directory once, after validation, so every
+  // step of a multi-step op runs in the same existing directory and an
+  // unusable cwd fails before any gh process is spawned.
+  const directory = await resolveGhWorkingDirectory(
+    options,
+    repoTarget !== undefined,
+  );
+  assertNoCheckoutNeeded(op, opParams, directory);
+  const { cwd } = directory;
+
   // Resolves parsed output and throws on failure, so multi-step ops read as
   // straight-line code and a failed step aborts the sequence.
   const run: GhRunner = async (argv, options) => {
-    // repoTarget is merged ON TOP of what the op module passed so op
-    // options (rawOutput, tolerateNonZeroExit) pass through untouched.
-    const outcome = await runGh(argv, signal, { ...options, repoTarget });
+    // repoTarget and cwd are merged ON TOP of what the op module passed so
+    // op options (rawOutput, tolerateNonZeroExit) pass through untouched.
+    const outcome = await runGh(argv, signal, { ...options, repoTarget, cwd });
     if (outcome.kind === 'failure') {
       throw new BrokerErrorException(
         descriptor.augmentError !== undefined
@@ -456,6 +483,7 @@ export async function executeGitHubOp(
       rawOutput: descriptor.rawOutput === true,
       tolerateNonZeroExit: descriptor.tolerateNonZeroExit === true,
       repoTarget,
+      cwd,
     }),
   );
   if (result.kind === 'failure') {
