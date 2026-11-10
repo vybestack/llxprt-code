@@ -32,7 +32,10 @@ import {
   type LiveOutputUpdate,
 } from './tools.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
-import type { GitHubReportOperations } from '../interfaces/github-report-operations.js';
+import type {
+  GitHubOperationOptions,
+  GitHubReportOperations,
+} from '../interfaces/github-report-operations.js';
 import {
   GITHUB_OP_SPECS,
   GITHUB_SUPPORTED_OPS,
@@ -58,6 +61,7 @@ export interface GitHubBrokerClient {
     op: string,
     params: Record<string, unknown>,
     signal: AbortSignal,
+    options?: GitHubOperationOptions,
   ): Promise<Record<string, unknown>>;
 }
 
@@ -386,6 +390,7 @@ export class GithubToolInvocation extends BaseToolInvocation<
     private readonly reports: GitHubReportOperations,
     params: GithubToolParams,
     messageBus?: IToolMessageBus,
+    private readonly getWorkingDirectory?: () => string | undefined,
   ) {
     super(params, messageBus, GithubTool.Name, 'GitHub');
   }
@@ -475,7 +480,15 @@ export class GithubToolInvocation extends BaseToolInvocation<
       const execute = MUTATING_OPS.has(op)
         ? this.reports.submitReport
         : this.reports.readReport;
-      const data = await execute(op, rest, signal);
+      // #4001: the session workspace is host knowledge, read at call time and
+      // passed beside the params so the model can never supply it.
+      const workingDirectory = this.getWorkingDirectory?.();
+      const data = await execute(
+        op,
+        rest,
+        signal,
+        workingDirectory === undefined ? undefined : { workingDirectory },
+      );
       const json = JSON.stringify(data, null, 2);
       return {
         llmContent: json,
@@ -527,6 +540,7 @@ export class GithubTool extends BaseDeclarativeTool<
   constructor(
     private readonly reports: GitHubReportOperations,
     messageBus?: IToolMessageBus,
+    private readonly getWorkingDirectory?: () => string | undefined,
   ) {
     super(
       GithubTool.Name,
@@ -560,6 +574,11 @@ export class GithubTool extends BaseDeclarativeTool<
     params: GithubToolParams,
     messageBus?: IToolMessageBus,
   ): ToolInvocation<GithubToolParams, ToolResult> {
-    return new GithubToolInvocation(this.reports, params, messageBus);
+    return new GithubToolInvocation(
+      this.reports,
+      params,
+      messageBus,
+      this.getWorkingDirectory,
+    );
   }
 }

@@ -242,6 +242,41 @@ describe('explicit host GitHub broker ownership', () => {
     });
   }
 
+  it('hands the session workspace directory to the broker client for reads and writes (issue #4001)', async () => {
+    await withConfig(async (config) => {
+      const received: Array<{ op: string; options: unknown }> = [];
+      const client: GitHubBrokerClient = {
+        runOperation: async (op, _params, _signal, options) => {
+          received.push({ op, options });
+          return { number: 1 };
+        },
+      };
+      const agent = await build(config, client);
+      try {
+        await github(agent).buildAndExecute(
+          { op: 'issue.view', number: 1 },
+          new AbortController().signal,
+        );
+        await github(agent).buildAndExecute(
+          { op: 'issue.create', title: 'from workspace' },
+          new AbortController().signal,
+        );
+      } finally {
+        await agent.dispose();
+      }
+      expect(received).toStrictEqual([
+        {
+          op: 'issue.view',
+          options: { workingDirectory: config.getWorkingDir() },
+        },
+        {
+          op: 'issue.create',
+          options: { workingDirectory: config.getWorkingDir() },
+        },
+      ]);
+    });
+  });
+
   it('keeps caller authorization live and rejects malformed operations before reaching the server', async () => {
     await withConfig(async (config) => {
       const wire = await reportWire();
