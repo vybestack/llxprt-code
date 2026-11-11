@@ -37,7 +37,7 @@ class CodexProvider extends OpenAIResponsesProvider {
 
   constructor() {
     super(
-      'codex-api-key',
+      'codex-token',
       'https://chatgpt.com/backend-api/codex',
       undefined,
       codexOAuthManager as unknown as OAuthManager,
@@ -115,7 +115,14 @@ describe('Responses source route with Codex over the WebSocket', () => {
     rows: ProviderRequestRows | ReturnType<typeof requestSelection>,
   ): GenerateChatOptions {
     const base = setup.options(rows);
-    return { ...base, resolved: { ...base.resolved, model: 'gpt-5.6-sol' } };
+    return {
+      ...base,
+      resolved: {
+        ...base.resolved,
+        model: 'gpt-5.6-sol',
+        authToken: 'codex-token',
+      },
+    };
   }
 
   it('sends the same frame and handshake as the array route', async () => {

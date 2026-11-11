@@ -92,7 +92,10 @@ import { executeImageDimensionRecovery } from './AnthropicImageRecovery.js';
 import { findRequestCommitState } from '../retryRequestContext.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { providerRowsOf } from '../utils/providerRows.js';
-import { resolveRowsMedia } from '../openai-responses/responses-row-media.js';
+import {
+  resolveRowsMedia,
+  ResponsesMediaBudget,
+} from '../openai-responses/responses-row-media.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
 import {
@@ -738,12 +741,13 @@ export class AnthropicProvider extends BaseProvider {
     const media = this.captureMedia(options);
     const signal = getRequestSignal(options);
     const requestRows = await providerRowsOf(options);
+    const budget = new ResponsesMediaBudget(media.aggregateBudgetBytes);
     const spooled = await prepareAnthropicRequestRows(
       this.planParams(options, isOAuth, authToken),
       requestRows,
       (rows) =>
         resolveRowsMedia(rows, media, mediaRequest, signal, requestRows.native),
-      { recoveryBudget },
+      { recoveryBudget, includeMedia: (row) => budget.include(row) },
     );
     await registerAnthropicRequestCleanup(mediaRequest, spooled);
     return spooled;
@@ -873,6 +877,7 @@ export class AnthropicProvider extends BaseProvider {
       const authToken = await this.resolveProjectionAuthToken(normalized);
       const isOAuth = this.classifyOAuthToken(authToken);
       const requestRows = await providerRowsOf(normalized);
+      const budget = new ResponsesMediaBudget(media.aggregateBudgetBytes);
       const spooled = await prepareAnthropicRequestRows(
         this.planParams(normalized, isOAuth, authToken),
         requestRows,
@@ -884,7 +889,7 @@ export class AnthropicProvider extends BaseProvider {
             signal,
             requestRows.native,
           ),
-        { estimate: true },
+        { estimate: true, includeMedia: (row) => budget.include(row) },
       );
       await registerAnthropicRequestCleanup(mediaRequest, spooled);
       const { estimate } = spooled;

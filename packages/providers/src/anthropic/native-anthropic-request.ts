@@ -6,6 +6,7 @@ import {
   callerOwnedPurgeCache,
 } from './caller-owned-anthropic.js';
 import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { readAnthropicMediaLedger } from './anthropic-media-ledger.js';
 import { unsupportedMediaOfRow } from '../utils/mediaUtils.js';
 import {
@@ -108,6 +109,7 @@ export type PreparedAnthropicRequest = NativeAnthropicRequest;
 export interface AnthropicRequestOptions {
   readonly estimate?: boolean;
   readonly recoveryBudget?: ImageDimensionBudget;
+  readonly includeMedia?: (row: IContent) => void;
 }
 
 function nativeSettings(
@@ -200,7 +202,10 @@ function assertNativeBodyLength(
   baseURL: string | undefined,
 ): void {
   const limit = resolveAnthropicRequestBodyLimitBytes(baseURL);
-  if (length > limit) throw new RequestBodyByteOverflowError(length, limit);
+  if (length <= limit) return;
+  if (limit === DEFAULT_HTTP_JSON_ENVELOPE_BYTES)
+    throw envelopeTooLargeError(limit, length);
+  throw new RequestBodyByteOverflowError(length, limit);
 }
 
 async function requestFromEngine(
@@ -401,19 +406,17 @@ async function requestFromStored(
 async function preflightNativeMedia(
   params: AnthropicPlanParams,
   indexed: IndexedJournalRequestSnapshot,
-  mediaStage: MediaStage | undefined,
+  includeMedia: AnthropicRequestOptions['includeMedia'],
 ): Promise<void> {
-  if (mediaStage !== undefined) {
-    const mediaRows = async function* () {
-      for await (const row of indexed.openMediaRows(
-        getRequestSignal(params.options),
-      ))
-        yield { ...row.header, blocks: row.media.map(({ block }) => block) };
-    };
-    for await (const _row of mediaStage(mediaRows())) {
-      // Resolve one media row before SDK body consumption can wrap its failure.
-    }
-  }
+  if (includeMedia === undefined) return;
+  // Projection must count metadata without reading blobs or reserving history media.
+  for await (const row of indexed.openMediaRows(
+    getRequestSignal(params.options),
+  ))
+    includeMedia({
+      ...row.header,
+      blocks: row.media.map(({ block }) => block),
+    });
 }
 
 async function prepareNativeAnthropicRequest(
@@ -428,7 +431,7 @@ async function prepareNativeAnthropicRequest(
     throw new Error('Native Anthropic requires journal rows');
   const plan = planAnthropicRequest(params);
   const settings = nativeSettings(params, plan);
-  await preflightNativeMedia(params, native.indexed, mediaStage);
+  await preflightNativeMedia(params, native.indexed, options.includeMedia);
   const envelope = buildRequestEnvelope(plan, params);
   const { messages: _messages, ...small } = envelope;
   const policy = {
