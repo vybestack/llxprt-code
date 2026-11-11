@@ -527,6 +527,27 @@ function tokenizeInlineMarkdown(
   let match;
 
   while ((match = inlineRegex.exec(text)) !== null) {
+    const fullMatch = match[0];
+    const key = `m-${match.index}`;
+    let renderedNode: React.ReactNode | null = null;
+
+    try {
+      renderedNode = renderMatchedNode(
+        fullMatch,
+        key,
+        baseColor,
+        text,
+        match.index,
+        inlineRegex.lastIndex,
+      );
+    } catch (e) {
+      debugLogger.error('Error parsing inline markdown part:', fullMatch, e);
+    }
+
+    if (renderedNode === null) {
+      continue;
+    }
+
     if (match.index > lastIndex) {
       nodes.push(
         processPlainTextForLinks(
@@ -540,31 +561,7 @@ function tokenizeInlineMarkdown(
       );
     }
 
-    const fullMatch = match[0];
-    let renderedNode: React.ReactNode = null;
-    const key = `m-${match.index}`;
-
-    try {
-      renderedNode = renderMatchedNode(
-        fullMatch,
-        key,
-        baseColor,
-        text,
-        match.index,
-        inlineRegex.lastIndex,
-      );
-    } catch (e) {
-      debugLogger.error('Error parsing inline markdown part:', fullMatch, e);
-      renderedNode = null;
-    }
-
-    nodes.push(
-      renderedNode ?? (
-        <Text key={key} color={baseColor}>
-          {fullMatch}
-        </Text>
-      ),
-    );
+    nodes.push(renderedNode);
     lastIndex = inlineRegex.lastIndex;
   }
 
