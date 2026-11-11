@@ -325,30 +325,42 @@ describe('KeyringTokenStore advisory lock behavior', () => {
     expect(Date.now() - start).toBeGreaterThanOrEqual(100);
   });
 
-  it('bounds a stalled auth-lock waiter callback by the acquisition deadline', async () => {
+  it('settles a stalled waiter at its deadline after owner metadata setup', async () => {
     const lockFile = path.join(lockDir, 'codex-auth.lock');
     await fs.mkdir(lockDir, { recursive: true });
-    await fs.writeFile(
-      lockFile,
-      JSON.stringify({
-        version: 1,
-        ownerToken: 'live-owner',
-        pid: process.pid,
-        hostname: os.hostname(),
-        startTimeMs: Date.now() - process.uptime() * 1000,
-      }),
-      { mode: 0o600 },
-    );
-    const store = createStore();
-    const start = Date.now();
+    const liveOwner = JSON.stringify({
+      version: 1,
+      ownerToken: 'live-owner',
+      pid: process.pid,
+      hostname: os.hostname(),
+      startTimeMs: Date.now() - process.uptime() * 1000,
+    });
+    await fs.writeFile(lockFile, liveOwner, { mode: 0o600 });
 
-    const acquired = await store.acquireAuthLock('codex', {
+    let callbackEntered!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      callbackEntered = resolve;
+    });
+    let finishCallback!: (value: boolean) => void;
+    const callback = new Promise<boolean>((resolve) => {
+      finishCallback = resolve;
+    });
+    const store = createStore(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      return buildOwnerMetadata(Date.now() - process.uptime() * 1000);
+    });
+    const acquisition = store.acquireAuthLock('codex', {
       waitMs: 100,
-      onWait: () => new Promise<boolean>(() => undefined),
+      onWait: () => {
+        callbackEntered();
+        return callback;
+      },
     });
 
-    expect(acquired).toBe(false);
-    expect(Date.now() - start).toBeLessThan(500);
+    await entered;
+    await expect(acquisition).resolves.toBe(false);
+    expect(await fs.readFile(lockFile, 'utf8')).toBe(liveOwner);
+    finishCallback(true);
   });
 
   it('keeps auth and refresh lock namespaces independent', async () => {
