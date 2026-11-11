@@ -31,12 +31,14 @@ void vi.mock('node:util', () => ({
 void vi.mock('util', () => ({
   promisify: vi.fn().mockReturnValue(mockedExec),
 }));
+const realOs = { ...(await import('node:os')) };
 const mockedOs = {
-  platform: vi.fn(),
-  homedir: vi.fn(),
+  ...realOs,
+  platform: vi.fn(realOs.platform),
+  homedir: vi.fn(realOs.homedir),
 };
-void vi.mock('node:os', () => ({ default: mockedOs, ...mockedOs }));
-void vi.mock('os', () => ({ default: mockedOs, ...mockedOs }));
+void vi.mock('node:os', () => ({ ...mockedOs, default: mockedOs }));
+void vi.mock('os', () => ({ ...mockedOs, default: mockedOs }));
 
 // `process-utils.js` calls `promisify(exec)` at module scope, so it must be
 // loaded only after the module mocks above are registered. A static import
