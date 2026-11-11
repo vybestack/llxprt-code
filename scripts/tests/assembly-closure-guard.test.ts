@@ -5,7 +5,10 @@
  */
 import { describe, expect, it } from 'bun:test';
 import ts from 'typescript';
-import { findAssemblyClosureViolations } from '../assembly-closure-guard.js';
+import {
+  assertAssemblyClassInventory,
+  findAssemblyClosureViolations,
+} from '../assembly-closure-guard.js';
 
 const FIXTURE_FILE = '/fixture/assembly.ts';
 const FIXTURE_PRELUDE = `
@@ -47,6 +50,18 @@ function fixtureViolations(
 }
 
 describe('assembly closure guard fixtures', () => {
+  it('fails when the configured assembly inventory names a missing class', () => {
+    const source = ts.createSourceFile(
+      FIXTURE_FILE,
+      'class PresentAssembly {}',
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    expect(() =>
+      assertAssemblyClassInventory([source], new Set(['MissingAssembly'])),
+    ).toThrow('Unresolved assembly classes: MissingAssembly');
+  });
+
   it('rejects a bound method passed to AgentImpl from an assembly method', () => {
     const violations = fixtureViolations(`
       class PreferredAgentAssembly {
