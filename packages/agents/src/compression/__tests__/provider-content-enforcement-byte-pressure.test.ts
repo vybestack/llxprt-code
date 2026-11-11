@@ -151,9 +151,9 @@ async function rejection(work: Promise<unknown>): Promise<unknown> {
 }
 
 describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
-  afterEach(() => {
+  afterEach(async () => {
     for (const { session, directory } of sessions.splice(0).reverse()) {
-      session.dispose();
+      await session.dispose();
       rmSync(directory, { recursive: true, force: true });
     }
   });

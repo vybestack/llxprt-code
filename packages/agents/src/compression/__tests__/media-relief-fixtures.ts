@@ -85,7 +85,7 @@ export function useReliefConversation(prefix: string): ReliefConversation {
     nextFill = 1;
   });
   afterEach(async () => {
-    current?.dispose();
+    await current?.dispose();
     await rm(directory, { recursive: true, force: true });
   });
 

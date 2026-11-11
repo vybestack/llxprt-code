@@ -72,7 +72,7 @@ describe('history media relief keeps the other limits (issue #4000 review round 
     budget: number | undefined,
     enforcerBudget: number | undefined = budget,
   ): Promise<void> {
-    session.dispose();
+    await session.dispose();
     session = new RetirementSession(
       directory,
       budget,
@@ -110,7 +110,7 @@ describe('history media relief keeps the other limits (issue #4000 review round 
     nextFill = 1;
   });
   afterEach(async () => {
-    session.dispose();
+    await session.dispose();
     await rm(directory, { recursive: true, force: true });
   });
 

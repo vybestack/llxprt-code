@@ -496,6 +496,7 @@ async function facadeCallback5(): Promise<void> {
   expect(harness.performCompression).toHaveBeenCalledWith('prompt-p26-2', {
     bypassCooldown: true,
     trigger: 'auto',
+    onCommitted: expect.any(Function),
   });
   estimateSpy.mockRestore();
 }

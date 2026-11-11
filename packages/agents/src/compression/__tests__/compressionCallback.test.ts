@@ -10,7 +10,7 @@ import { chatSessionPorts } from '../../core/chatSessionPorts.js';
  */
 
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompressionCallback } from '@vybestack/llxprt-code-providers';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
@@ -21,8 +21,12 @@ import {
   makeUserMessage,
 } from '../../core/__tests__/chatSession-density-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
+import { setupHistoryServices } from './support/history-lifetime.js';
+import { buildHandlerHarness } from './support/handler-harness.js';
 
 import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
+
+const createHistory = setupHistoryServices();
 
 function expectCapturedCallback(
   callback: CompressionCallback | null,
@@ -386,6 +390,37 @@ describe('CompressionHandler.enforceProviderSource - compression callback attach
     facadeCallback7,
   );
 
+  it('notifies onCommitted only after the real truncation is published', async () => {
+    const history = createHistory();
+    for (let index = 0; index < 12; index++) {
+      history.add(makeUserMessage(`turn ${index} ${'context '.repeat(80)}`));
+      history.add(makeAiText(`answer ${index}`));
+    }
+    await history.waitForTokenUpdates();
+    const tokensBefore = history.getTotalTokens();
+    const runtime = buildRuntimeContext(history, {
+      compressionStrategy: 'top-down-truncation',
+      contextLimit: 1000,
+    });
+    const harness = buildHandlerHarness(history, runtime);
+    harness.performCompression.mockRestore();
+    const committedTokens: number[] = [];
+    const result = await harness.handler.performCompression(
+      'commit-notification',
+      {
+        bypassCooldown: true,
+        trigger: 'auto',
+        onCommitted: () => {
+          committedTokens.push(history.getTotalTokens());
+        },
+      },
+    );
+    expect(result).toBe(PerformCompressionResult.COMPRESSED);
+    expect(committedTokens).toStrictEqual([history.getTotalTokens()]);
+    expect(committedTokens[0]).toBeGreaterThan(0);
+    expect(committedTokens[0]).toBeLessThan(tokensBefore);
+  });
+
   it(
     'preserves a pending matching tool response without duplicating history',
     facadeCallback8,
@@ -394,7 +429,7 @@ describe('CompressionHandler.enforceProviderSource - compression callback attach
 
 function facadeCallback0(): void {
   vi.clearAllMocks();
-  historyService = new HistoryService();
+  historyService = createHistory();
   mockContentGenerator = buildMockContentGenerator();
 }
 
@@ -573,6 +608,7 @@ async function facadeCallback7(): Promise<void> {
   expect(performCompression).toHaveBeenCalledWith('test-prompt', {
     bypassCooldown: true,
     trigger: 'auto',
+    onCommitted: expect.any(Function),
   });
 }
 
@@ -585,7 +621,7 @@ async function facadeCallback8(): Promise<void> {
 
 describe('compression callback property admission', () => {
   it('ignores non-callable setCompressionCallback properties', async () => {
-    const history = new HistoryService();
+    const history = createHistory();
     history.add(makeUserMessage('test'));
     const runtime = buildRuntimeContext(history, {
       contextLimit: 131134,

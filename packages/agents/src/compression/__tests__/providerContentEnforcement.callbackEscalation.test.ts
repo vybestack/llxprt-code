@@ -19,15 +19,19 @@ import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/cor
  */
 
 import { describe, it, expect, vi } from 'bun:test';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
+import { setupHistoryServices } from './support/history-lifetime.js';
+
 import { buildHandlerHarness } from './support/handler-harness.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
 import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
 import type { CompressionCallback } from '@vybestack/llxprt-code-providers';
+
+const createHistory = setupHistoryServices();
 
 const MODEL = 'test-model';
 const HISTORY_MESSAGES = 14;
@@ -138,7 +142,7 @@ async function buildGuardedHarness(
   options: { compression: 'noop' | 'underdeliver' },
   consume: (harness: GuardedHarness) => Promise<void>,
 ): Promise<void> {
-  const historyService = new HistoryService();
+  const historyService = createHistory();
   const runtimeContext = buildRuntimeContext(historyService, {
     contextLimit: SESSION_CONTEXT_LIMIT,
     compressionThreshold: 0.8,
@@ -283,7 +287,7 @@ describe('CompressionHandler compression-callback escalation (issue #3499)', () 
 
   it('T4: converges against the handler own limits when no guard info is supplied', async () => {
     const contextLimit = 6_000;
-    const historyService = new HistoryService();
+    const historyService = createHistory();
     const runtimeContext = buildRuntimeContext(historyService, {
       contextLimit,
       compressionThreshold: 0.8,
@@ -319,7 +323,7 @@ describe('CompressionHandler compression-callback escalation (issue #3499)', () 
 
 describe('empty source guard boundary', () => {
   it('T4: keeps an empty pending boundary a no-op regardless of guard facts', async () => {
-    const history = new HistoryService();
+    const history = createHistory();
     const runtime = buildRuntimeContext(history, {
       contextLimit: SESSION_CONTEXT_LIMIT,
     });

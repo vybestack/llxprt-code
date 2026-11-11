@@ -34,6 +34,10 @@ import {
 } from '../../core/source-pending-selection.js';
 import { enforceProviderSourceSelectionForTest } from './support/enforce-provider-source.js';
 import {
+  buildSourceProviderChatOptions,
+  enforceAndStreamSourcePromptEnvelopeRetries,
+} from '../../core/promptEnvelopeSendSeam.js';
+import {
   toolRankingRow,
   digestRows,
 } from './tool-truncation-stream-helpers.js';
@@ -259,4 +263,37 @@ export function enforceFallback(harness: FallbackHarness): Promise<IContent[]> {
     harness.estimate,
     harness.openSelection,
   );
+}
+
+/** Drives enforcement through the product send seam, with only transport stubbed. */
+export async function sendFallback(
+  harness: FallbackHarness,
+  onSend: () => void,
+): Promise<void> {
+  const source = inMemoryRequestSelection([]);
+  const response = await enforceAndStreamSourcePromptEnvelopeRetries({
+    provider: {
+      name: 'fallback-send-boundary',
+      getModels: async () => [],
+      async *generateChatCompletion(): AsyncGenerator<IContent, void, unknown> {
+        onSend();
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'sent' }] };
+      },
+    },
+    source,
+    buildOptions: (candidate) =>
+      buildSourceProviderChatOptions(
+        candidate,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ),
+    enforce: async () =>
+      inMemoryRequestSelection(await enforceFallback(harness)),
+    fallbackEstimate: async () => 1,
+    shouldRetryOnError: () => false,
+  });
+  for await (const row of response) void row;
 }

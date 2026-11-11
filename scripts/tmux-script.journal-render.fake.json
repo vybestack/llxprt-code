@@ -53,7 +53,7 @@
     {
       "type": "waitFor",
       "scope": "scrollback",
-      "contains": "Parallel B",
+      "contains": "RENDER_PARALLEL_B",
       "timeoutMs": 30000
     },
     {

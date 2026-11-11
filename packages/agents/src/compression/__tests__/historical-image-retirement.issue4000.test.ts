@@ -107,7 +107,7 @@ describe('history media pressure never ends a turn (issue #4000)', () => {
     budget: number | undefined,
     enforcerBudget: number | undefined = budget,
   ): Promise<void> {
-    session.dispose();
+    await session.dispose();
     session = new RetirementSession(
       directory,
       budget,
@@ -122,7 +122,7 @@ describe('history media pressure never ends a turn (issue #4000)', () => {
     nextFill = 1;
   });
   afterEach(async () => {
-    session.dispose();
+    await session.dispose();
     await rm(directory, { recursive: true, force: true });
   });
 

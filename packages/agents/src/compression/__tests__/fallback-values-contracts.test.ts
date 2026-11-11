@@ -17,7 +17,7 @@ import {
 } from '../pendingWindowFallback.js';
 import type { ProviderFallbackCandidate } from '../providerFallbackCandidate.js';
 import {
-  enforceFallback,
+  sendFallback,
   fallbackCandidate,
   fallbackHarness,
 } from './provider-fallback-disk-helpers.js';
@@ -46,6 +46,10 @@ async function enforceRollback(
       const rows = new DetachedHistoryJournal(owners);
       try {
         rows.append(fallbackCandidate());
+        const abort = new DOMException(
+          'cancelled after installation',
+          'AbortError',
+        );
         const harness = fallbackHarness(
           history,
           async (_prompt, install) => {
@@ -59,20 +63,24 @@ async function enforceRollback(
             if (failure === 'duplicate')
               await install({ rows, start: 0, hasPendingRows: true });
             if (failure === 'reject') throw new Error('fallback rejected');
-            if (failure === 'cancel')
-              throw new DOMException(
-                'cancelled after installation',
-                'AbortError',
-              );
+            if (failure === 'cancel') throw abort;
             return failure !== 'false';
           },
           { resetFails: failure === 'baseline' },
         );
-        let message = 'post-truncation stage';
+        let message =
+          failure === 'cancel' ? abort.message : 'post-truncation stage';
         if (failure === 'missing')
           message = 'without providing candidate history';
         if (failure === 'duplicate') message = 'only be installed once';
-        await expect(enforceFallback(harness)).rejects.toThrow(message);
+        let providerSends = 0;
+        const request = sendFallback(harness, () => {
+          providerSends++;
+        });
+        await expect(request).rejects.toThrow(message);
+        const error = await rejectedValue(request.then(() => {}));
+        expect(error === abort).toBe(failure === 'cancel');
+        expect(providerSends).toBe(0);
         await history.waitForCommit();
         expect(await detachedDurableDigest(recorder)).toStrictEqual(before);
         expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
@@ -186,6 +194,32 @@ async function pendingQueued(size: number): Promise<number> {
 }
 
 describe('fallback value compensation and pending chronology', () => {
+  it('sends an accepted fallback through the production transport boundary', async () => {
+    await withValueTransformFixture(async ({ history, owners }) => {
+      await history.detachedValues.replace(transformFixtureRows(3));
+      const rows = new DetachedHistoryJournal(owners);
+      try {
+        rows.append(fallbackCandidate());
+        const harness = fallbackHarness(
+          history,
+          async (_prompt, install) => {
+            await install({ rows, start: 0, hasPendingRows: true });
+            return true;
+          },
+          { fits: true },
+        );
+        let providerSends = 0;
+        await sendFallback(harness, () => {
+          providerSends++;
+        });
+        expect(providerSends).toBe(1);
+        expect(harness.baseline()).toBeNull();
+      } finally {
+        rows.close();
+      }
+    });
+  });
+
   for (const size of [65]) {
     for (const failure of failures)
       it(`restores ${size} complete media/tool/provider rows after ${failure}`, async () => {

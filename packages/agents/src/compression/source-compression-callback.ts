@@ -73,6 +73,7 @@ export function createSourceCompressionCallback<
   S extends ProviderRequestSelection,
 >(deps: SourceCompressionCallbackDeps<S>): RuntimeCompressionCallback {
   return async (guard) => {
+    if (deps.candidate.value.count === 0) return deps.candidate.value;
     try {
       const calibrated =
         guard === undefined

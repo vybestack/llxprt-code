@@ -1,12 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
 import { transformFixtureRows } from '@vybestack/llxprt-code-core/services/history/__tests__/support/transform-value-fixtures-test-helpers.js';
 import { withNativeValueFixture } from './support/native-value-fixture.js';
 import { compressionValueDigest } from './compression-value-fixture.js';
 import {
   fallbackHarness,
-  enforceFallback,
+  sendFallback,
   fallbackCandidate,
 } from './provider-fallback-disk-helpers.js';
 import { publishProviderFallbackCandidate } from '../providerFallbackCandidate.js';
@@ -36,6 +37,10 @@ describe('native persisted fallback value compensation', () => {
         const rows = new DetachedHistoryJournal(owners);
         try {
           rows.append(fallbackCandidate());
+          const abort = new DOMException(
+            'cancelled after installation',
+            'AbortError',
+          );
           const harness = fallbackHarness(
             history,
             async (_prompt, install) => {
@@ -44,20 +49,24 @@ describe('native persisted fallback value compensation', () => {
               if (failure === 'duplicate')
                 await install({ rows, start: 0, hasPendingRows: true });
               if (failure === 'reject') throw new Error('fallback rejected');
-              if (failure === 'cancel')
-                throw new DOMException(
-                  'cancelled after installation',
-                  'AbortError',
-                );
+              if (failure === 'cancel') throw abort;
               return failure !== 'false';
             },
             { resetFails: failure === 'baseline' },
           );
-          let message = 'post-truncation stage';
+          let message =
+            failure === 'cancel' ? abort.message : 'post-truncation stage';
           if (failure === 'missing')
             message = 'without providing candidate history';
           if (failure === 'duplicate') message = 'only be installed once';
-          await expect(enforceFallback(harness)).rejects.toThrow(message);
+          let providerSends = 0;
+          const request = sendFallback(harness, () => {
+            providerSends++;
+          });
+          await expect(request).rejects.toThrow(message);
+          const error = await rejectedValue(request.then(() => {}));
+          expect(error === abort).toBe(failure === 'cancel');
+          expect(providerSends).toBe(0);
           expect(await durable()).toStrictEqual(before);
           expect(
             await compressionValueDigest(history.streamRawHistory()),

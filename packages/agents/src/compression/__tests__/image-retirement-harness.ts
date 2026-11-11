@@ -273,8 +273,10 @@ export class RetirementSession {
     });
   }
 
-  dispose(): void {
+  async dispose(): Promise<void> {
     globalThis.fetch = this.originalFetch;
+    await this.history.dispose();
+    await this.store.close();
   }
 
   /** Runs a real compression callback; the default refuses to run. */

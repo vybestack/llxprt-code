@@ -40,5 +40,6 @@ export async function rollbackHistoryState(
   await snapshot.restore();
   if (snapshot.cacheAnchorSeq === 0) deps.historyService.resetCacheAnchorSeq();
   else deps.historyService.setCacheAnchorSeq(snapshot.cacheAnchorSeq);
-  deps.restorePromptTokenBaseline(snapshot.promptTokenBaseline);
+  if (deps.getPromptTokenBaseline() !== snapshot.promptTokenBaseline)
+    deps.restorePromptTokenBaseline(snapshot.promptTokenBaseline);
 }

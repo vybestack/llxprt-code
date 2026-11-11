@@ -53,7 +53,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
     session = new RetirementSession(directory, undefined);
   });
   afterEach(async () => {
-    session.dispose();
+    await session.dispose();
     await rm(directory, { recursive: true, force: true });
   });
 
@@ -154,7 +154,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
   });
 
   it('keeps an explicit 15 MiB-equal budget identical to the default', async () => {
-    session.dispose();
+    await session.dispose();
     session = new RetirementSession(directory, FIFTEEN_MIB);
     const { images, newest } = await seedIncident();
 
@@ -165,7 +165,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
   });
 
   it('fails with the typed byte error, not silent dropping, for an explicit zero budget', async () => {
-    session.dispose();
+    await session.dispose();
     session = new RetirementSession(directory, 0);
     const { newest } = await seedIncident();
 
