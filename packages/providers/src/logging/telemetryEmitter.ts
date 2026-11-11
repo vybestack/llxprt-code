@@ -16,7 +16,6 @@ import {
   ApiResponseEvent,
   ConversationResponseEvent,
 } from '@vybestack/llxprt-code-core/telemetry/types.js';
-import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import type { TokenCounts } from './tokenCounts.js';
 
 export type ResponseTokenCounts = TokenCounts & {
@@ -187,13 +186,16 @@ export async function writeConversationLog(
   );
   config.recordConversationResponse(event);
 
-  const fileWriter = getConversationFileWriter(config.conversationLogPath);
-  await fileWriter.writeResponse(ctx.providerName, redactedContent, {
-    conversationId: ctx.conversationId,
-    turnNumber: ctx.turnNumber,
-    promptId,
-    duration,
-    success,
-    error: error != null ? String(error) : undefined,
-  });
+  await config.conversationFileWriter.writeResponse(
+    ctx.providerName,
+    redactedContent,
+    {
+      conversationId: ctx.conversationId,
+      turnNumber: ctx.turnNumber,
+      promptId,
+      duration,
+      success,
+      error: error != null ? String(error) : undefined,
+    },
+  );
 }

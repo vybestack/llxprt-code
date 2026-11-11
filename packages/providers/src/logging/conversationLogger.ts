@@ -13,7 +13,6 @@
 import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { ConversationRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
-import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import type { ProviderToolset } from '../IProvider.js';
 import type { ConversationDataRedactor } from './ConfigBasedRedactor.js';
 
@@ -59,14 +58,17 @@ export async function logConversationRequestEntry(
 
   config.recordConversationRequest(event);
 
-  const fileWriter = getConversationFileWriter(config.conversationLogPath);
-  await fileWriter.writeRequest(ctx.providerName, redactedContent, {
-    conversationId: ctx.conversationId,
-    turnNumber: ctx.turnNumber,
-    promptId: resolvedPromptId,
-    tools: redactedTools,
-    toolFormat: 'default',
-  });
+  await config.conversationFileWriter.writeRequest(
+    ctx.providerName,
+    redactedContent,
+    {
+      conversationId: ctx.conversationId,
+      turnNumber: ctx.turnNumber,
+      promptId: resolvedPromptId,
+      tools: redactedTools,
+      toolFormat: 'default',
+    },
+  );
 }
 
 /** Log a tool call event to disk with optional redaction. */
@@ -102,15 +104,18 @@ export async function logToolCallEntry(
       }).function.parameters
     : (params as object);
 
-  const fileWriter = getConversationFileWriter(config.conversationLogPath);
-  await fileWriter.writeToolCall(ctx.providerName, toolName, {
-    conversationId: ctx.conversationId,
-    turnNumber: ctx.turnNumber,
-    params: redactedParams,
-    result,
-    duration,
-    success,
-    error: error != null ? String(error) : undefined,
-    gitStats,
-  });
+  await config.conversationFileWriter.writeToolCall(
+    ctx.providerName,
+    toolName,
+    {
+      conversationId: ctx.conversationId,
+      turnNumber: ctx.turnNumber,
+      params: redactedParams,
+      result,
+      duration,
+      success,
+      error: error != null ? String(error) : undefined,
+      gitStats,
+    },
+  );
 }

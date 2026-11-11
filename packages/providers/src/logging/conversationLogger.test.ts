@@ -6,21 +6,21 @@
 import { describe, expect, it } from 'bun:test';
 import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import type { ConversationRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
+import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { logConversationRequestEntry } from './conversationLogger.js';
 
 describe('conversation request tool persistence', () => {
   it('groups flat declarations only on output and preserves schemas and missing versus empty tools', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'issue3694-logger-'));
-    resetConversationFileWriterForTesting();
     const events: ConversationRequestEvent[] = [];
     try {
       const config: ProviderRequestDiagnostics = {
         conversationLoggingEnabled: true,
         conversationLogPath: dir,
+        conversationFileWriter: getConversationFileWriter(dir),
         redaction: {
           redactApiKeys: false,
           redactCredentials: false,
@@ -106,7 +106,6 @@ describe('conversation request tool persistence', () => {
       expect(entries[2]).not.toHaveProperty('context.tools');
       expect(events[2].redacted_tools).toBeUndefined();
     } finally {
-      resetConversationFileWriterForTesting();
       await rm(dir, { recursive: true, force: true });
     }
   });
