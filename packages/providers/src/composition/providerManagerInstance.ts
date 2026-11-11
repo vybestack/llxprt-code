@@ -353,6 +353,12 @@ function resolveOpenaiSettings(
       GOOGLE_APPLICATION_CREDENTIALS:
         process.env.GOOGLE_APPLICATION_CREDENTIALS,
       GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+      HOME: process.env.HOME,
+      APPDATA: process.env.APPDATA,
+      GCE_METADATA_IP: process.env.GCE_METADATA_IP,
+      GCE_METADATA_HOST: process.env.GCE_METADATA_HOST,
+      METADATA_SERVER_DETECTION: process.env.METADATA_SERVER_DETECTION,
+      GOOGLE_CLOUD_QUOTA_PROJECT: process.env.GOOGLE_CLOUD_QUOTA_PROJECT,
     }),
     enableTextToolCallParsing:
       (settingsData.enableTextToolCallParsing as boolean | undefined) ?? false,

@@ -115,6 +115,12 @@ function createProviderWithRuntimeSettings(): GeminiProvider {
         GOOGLE_CLOUD_LOCATION: process.env.GOOGLE_CLOUD_LOCATION,
         GOOGLE_APPLICATION_CREDENTIALS:
           process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        HOME: process.env.HOME,
+        APPDATA: process.env.APPDATA,
+        GCE_METADATA_IP: process.env.GCE_METADATA_IP,
+        GCE_METADATA_HOST: process.env.GCE_METADATA_HOST,
+        METADATA_SERVER_DETECTION: process.env.METADATA_SERVER_DETECTION,
+        GOOGLE_CLOUD_QUOTA_PROJECT: process.env.GOOGLE_CLOUD_QUOTA_PROJECT,
       },
     },
     injectedClientFactory,
