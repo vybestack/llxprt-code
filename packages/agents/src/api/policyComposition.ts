@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { acquireSessionClient } from '../session/session-client-binding.js';
 import type {
   CredentialAuthority,
@@ -45,12 +46,14 @@ import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import type { CreatedSessionMcpPort } from './mcpRuntimePorts.js';
 
 export async function assembleOwnedMcpRuntime(
+  requestFetch: NetworkFetch,
   config: Config,
   options: McpAssemblyOptions & McpTransferHandoff,
   policy: RuntimePolicyOwner,
   settingsOwner: SessionSettingsOwner,
 ): Promise<McpRuntimeOwner> {
   return assembleMcpRuntime(
+    requestFetch,
     config,
     options,
     { kind: 'supplied', owner: policy, ownership: 'runtime' },

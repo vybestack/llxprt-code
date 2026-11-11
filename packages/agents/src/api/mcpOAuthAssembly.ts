@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type {
   SessionMcpSettingsReads,
   SessionSettingsOwner,
@@ -96,6 +97,7 @@ function requireCallerWorkspaceRoots(options: McpAssemblyOptions): void {
 }
 
 export async function assembleMcpRuntime(
+  requestFetch: NetworkFetch,
   config: Config,
   options: McpAssemblyOptions &
     McpTransferHandoff & { readonly trustCleanup?: () => Promise<void> },
@@ -130,6 +132,7 @@ export async function assembleMcpRuntime(
         openBrowser: options.mcpHost?.openBrowser ?? openBrowserSecurely,
       },
       config,
+      requestFetch,
       managerFactory: McpClientManager,
       extensionLoader: { kind: 'none' },
       policy,

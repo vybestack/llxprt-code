@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 import type { MCPServerConfig, McpExtensionConfig } from '../config/index.js';
 import type {
@@ -350,6 +351,7 @@ export function removeMcpServerArtifacts(
 }
 
 export function createConfiguredMcpClient(
+  requestFetch: NetworkFetch,
   oauth: McpOAuthBinding,
   approvalPolicy: McpApprovalPolicy,
   version: string,
@@ -364,6 +366,7 @@ export function createConfiguredMcpClient(
   onStatus: (status: MCPServerStatus, requiresOAuth: boolean) => void,
 ): McpClient {
   return new McpClient(
+    requestFetch,
     oauth,
     approvalPolicy,
     name,

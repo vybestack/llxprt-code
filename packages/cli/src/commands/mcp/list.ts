@@ -5,6 +5,11 @@
  */
 
 // File for 'llxprt mcp list' command
+import {
+  OwnedFetch,
+  type NetworkFetch,
+} from '@vybestack/llxprt-code-core/utils/fetch.js';
+import { resolveProxy } from '../../config/configBuilder.js';
 import type { CommandModule } from 'yargs';
 import { loadSettings } from '../../config/settings.js';
 import { exitCli } from '../utils.js';
@@ -65,6 +70,7 @@ function toFailureReason(error: unknown): string {
 }
 
 async function testMCPConnection(
+  requestFetch: NetworkFetch,
   tokenStorage: MCPOAuthTokenStorage,
   serverName: string,
   config: MCPServerConfig,
@@ -79,6 +85,7 @@ async function testMCPConnection(
   try {
     // Use the same transport creation logic as core
     transport = await createTransport(
+      requestFetch,
       tokenStorage,
       serverName,
       config,
@@ -115,6 +122,7 @@ async function testMCPConnection(
 }
 
 async function getServerStatus(
+  requestFetch: NetworkFetch,
   tokenStorage: MCPOAuthTokenStorage,
   serverName: string,
   server: MCPServerConfig,
@@ -122,6 +130,7 @@ async function getServerStatus(
 ): Promise<ServerStatusResult> {
   // Test all server types by attempting actual connection
   return testMCPConnection(
+    requestFetch,
     tokenStorage,
     serverName,
     server,
@@ -129,7 +138,18 @@ async function getServerStatus(
   );
 }
 
-export async function listMcpServers(): Promise<void> {
+export async function listMcpServers(cliProxy?: string): Promise<void> {
+  const network = new OwnedFetch(resolveProxy(cliProxy));
+  try {
+    await listMcpServersWithFetch(network.fetch);
+  } finally {
+    await network.dispose();
+  }
+}
+
+async function listMcpServersWithFetch(
+  requestFetch: NetworkFetch,
+): Promise<void> {
   const contributions = await loadInstalledRuntimePlugins();
   const authFactories = buildMcpAuthFactoryRegistry(
     contributions.getMcpAuthFactories().map((entry) => entry.contribution),
@@ -151,6 +171,7 @@ export async function listMcpServers(): Promise<void> {
     const server = mcpServers[serverName];
 
     const { status, failureReason } = await getServerStatus(
+      requestFetch,
       tokenStorage,
       serverName,
       server,
@@ -202,8 +223,10 @@ export async function listMcpServers(): Promise<void> {
 export const listCommand: CommandModule = {
   command: 'list',
   describe: 'List all configured MCP servers',
-  handler: async () => {
-    await listMcpServers();
+  handler: async (argv) => {
+    await listMcpServers(
+      typeof argv.proxy === 'string' ? argv.proxy : undefined,
+    );
     await exitCli();
   },
 };

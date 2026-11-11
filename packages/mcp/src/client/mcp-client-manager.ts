@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 import type { MCPServerConfig, McpExtensionConfig } from '../config/index.js';
 import type { McpOAuthBinding } from '../auth/index.js';
@@ -121,9 +122,9 @@ export class McpClientManager {
     AbortController
   >();
   private readonly emitFeedback: HostFeedbackSink;
-  private readonly oauth: McpOAuthBinding;
   constructor(
-    oauth: McpOAuthBinding,
+    private readonly requestFetch: NetworkFetch,
+    private readonly oauth: McpOAuthBinding,
     private readonly approvalPolicy: McpApprovalPolicy,
     private readonly clientVersion: string,
     private readonly toolRegistry: McpToolPublication,
@@ -328,6 +329,7 @@ export class McpClientManager {
 
   private createClient(name: string, config: MCPServerConfig): McpClient {
     const client = createConfiguredMcpClient(
+      this.requestFetch,
       this.oauth,
       this.approvalPolicy,
       this.clientVersion,

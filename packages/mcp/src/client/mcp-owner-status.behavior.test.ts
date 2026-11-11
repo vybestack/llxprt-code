@@ -34,6 +34,7 @@ function createManager(
     isTrusted: () => true,
   });
   return new McpClientManager(
+    (input, init) => globalThis.fetch(input, init),
     createTestOAuthBinding(),
     unsupportedApprovalPolicy(),
     'test',

@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
@@ -92,6 +93,7 @@ export class McpClient {
 
   private readonly emitFeedback: HostFeedbackSink;
   constructor(
+    private readonly requestFetch: NetworkFetch,
     oauth: McpOAuthBinding,
     private readonly approvalPolicy: Host.McpApprovalPolicy,
     private readonly serverName: string,
@@ -112,7 +114,7 @@ export class McpClient {
   ) {
     this.emitFeedback = captureHostFeedback(feedback);
     this.oauthOperations = new McpOAuthOperations(
-      bindMcpOAuthCapabilities(oauth),
+      bindMcpOAuthCapabilities(this.requestFetch, oauth),
     );
   }
 
@@ -138,6 +140,7 @@ export class McpClient {
     let connectedClient: Client | undefined;
     try {
       const client = await connectToMcpServer(
+        this.requestFetch,
         this.clientVersion,
         this.serverName,
         this.serverConfig,

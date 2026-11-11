@@ -104,6 +104,7 @@ async function connectClient(
   const client = new Client({ name: 'held-delete-test', version: '0' });
   await client.connect(
     createJoiningTransport(
+      (input, init) => globalThis.fetch(input, init),
       (fetch) => new StreamableHTTPClientTransport(url, { fetch }),
       signal,
     ),

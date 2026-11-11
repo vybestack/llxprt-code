@@ -233,6 +233,7 @@ describe('mcp-client', () => {
     config: Config,
   ): McpClient =>
     new McpClient(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       'test-server',

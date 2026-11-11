@@ -7,6 +7,11 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { createServer, type Server } from 'node:http';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import {
+  startLocalForwardProxy,
+  type LocalForwardProxy,
+} from '@vybestack/llxprt-code-test-utils/network/local-forward-proxy.js';
 import { createJoiningTransport } from './mcp-connection-lifetime.js';
 
 interface SessionServer {
@@ -15,6 +20,7 @@ interface SessionServer {
 }
 
 const servers: Server[] = [];
+const proxies: LocalForwardProxy[] = [];
 
 async function startSessionServer(
   deleteStatus: number,
@@ -57,6 +63,7 @@ async function startSessionServer(
 
 async function openSession(url: URL): Promise<StreamableHTTPClientTransport> {
   const transport = createJoiningTransport(
+    (input, init) => globalThis.fetch(input, init),
     (fetch) => new StreamableHTTPClientTransport(url, { fetch }),
   );
   await transport.start();
@@ -75,6 +82,7 @@ async function openSession(url: URL): Promise<StreamableHTTPClientTransport> {
 
 describe('createJoiningTransport session termination', () => {
   afterEach(async () => {
+    await Promise.all(proxies.splice(0).map((proxy) => proxy.close()));
     await Promise.all(
       servers.splice(0).map(
         (server) =>
@@ -124,9 +132,51 @@ describe('createJoiningTransport session termination', () => {
     ).rejects.toThrow('MCP transport is closed');
   });
 
+  it('sends the MCP initialize request through its configured root proxy', async () => {
+    const server = await startSessionServer(200);
+    const proxy = await startLocalForwardProxy({
+      '127.0.0.1': async (request) => {
+        const target = new URL(request.path, server.url);
+        return fetch(target, {
+          method: request.method,
+          headers: request.headers,
+          ...(request.body.length === 0 ? {} : { body: request.body }),
+        });
+      },
+    });
+    proxies.push(proxy);
+    const network = new OwnedFetch(proxy.url);
+
+    const transport = createJoiningTransport(
+      network.fetch,
+      (fetch) => new StreamableHTTPClientTransport(server.url, { fetch }),
+    );
+    try {
+      await transport.start();
+      await transport.send({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: { name: 'proxy-test', version: '0' },
+        },
+      });
+
+      expect(
+        proxy.requests.filter((request) => request.method === 'POST'),
+      ).toHaveLength(1);
+      await transport.close();
+    } finally {
+      await network.dispose();
+    }
+  });
+
   it('sends no DELETE when no session was established', async () => {
     const server = await startSessionServer(200);
     const transport = createJoiningTransport(
+      (input, init) => globalThis.fetch(input, init),
       (fetch) => new StreamableHTTPClientTransport(server.url, { fetch }),
     );
     await transport.start();

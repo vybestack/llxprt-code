@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 import {
   defaultFeedbackSink,
@@ -147,6 +148,7 @@ Update your configuration to use:
 }
 
 async function resolveWwwAuthenticateHeader(
+  requestFetch: NetworkFetch,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   errorString: string,
@@ -158,13 +160,18 @@ async function resolveWwwAuthenticateHeader(
     debugLogger.log(
       `No www-authenticate header in error, trying to fetch it from server...`,
     );
-    wwwAuthenticate = await fetchWwwAuthenticateHeader(mcpServerConfig, signal);
+    wwwAuthenticate = await fetchWwwAuthenticateHeader(
+      requestFetch,
+      mcpServerConfig,
+      signal,
+    );
   }
 
   return wwwAuthenticate;
 }
 
 async function retryWithWwwAuthenticate(
+  requestFetch: NetworkFetch,
   mcpClient: Client,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
@@ -186,6 +193,7 @@ async function retryWithWwwAuthenticate(
 
   if (oauthSuccess) {
     return connectWithOAuthToken(
+      requestFetch,
       owner.tokenStorage,
       mcpClient,
       mcpServerName,
@@ -203,6 +211,7 @@ async function retryWithWwwAuthenticate(
 }
 
 async function retryWithOAuthDiscovery(
+  requestFetch: NetworkFetch,
   mcpClient: Client,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
@@ -217,6 +226,7 @@ async function retryWithOAuthDiscovery(
 
   if (!shouldTryDiscovery) {
     await showAuthRequiredMessage(
+      requestFetch,
       owner.tokenStorage,
       mcpServerName,
       signal,
@@ -236,6 +246,7 @@ async function retryWithOAuthDiscovery(
     );
     if (oauthSuccess) {
       return connectWithOAuthToken(
+        requestFetch,
         owner.tokenStorage,
         mcpClient,
         mcpServerName,
@@ -257,6 +268,7 @@ async function retryWithOAuthDiscovery(
 }
 
 async function trySSEFallback(
+  requestFetch: NetworkFetch,
   owner: McpOAuthOperations,
   mcpClient: Client,
   mcpServerName: string,
@@ -270,6 +282,7 @@ async function trySSEFallback(
   );
   try {
     await connectWithSSETransport(
+      requestFetch,
       mcpClient,
       mcpServerConfig,
       undefined,
@@ -281,12 +294,14 @@ async function trySSEFallback(
     if (isAuthenticationError(fallbackError)) {
       onRequiresOAuth?.();
       const storedToken = await getStoredOAuthToken(
+        requestFetch,
         owner.tokenStorage,
         mcpServerName,
         signal,
       );
       if (storedToken) {
         await connectWithSSETransport(
+          requestFetch,
           mcpClient,
           mcpServerConfig,
           storedToken,
@@ -295,6 +310,7 @@ async function trySSEFallback(
         return mcpClient;
       }
       await showAuthRequiredMessage(
+        requestFetch,
         owner.tokenStorage,
         mcpServerName,
         signal,
@@ -306,6 +322,7 @@ async function trySSEFallback(
 }
 
 async function handleAuthenticationError(
+  requestFetch: NetworkFetch,
   mcpClient: Client,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
@@ -317,6 +334,7 @@ async function handleAuthenticationError(
   const shouldTriggerOAuth = mcpServerConfig.oauth?.enabled;
   if (shouldTriggerOAuth !== true) {
     await showAuthRequiredMessage(
+      requestFetch,
       owner.tokenStorage,
       mcpServerName,
       signal,
@@ -325,6 +343,7 @@ async function handleAuthenticationError(
   }
 
   const wwwAuthenticate = await resolveWwwAuthenticateHeader(
+    requestFetch,
     mcpServerName,
     mcpServerConfig,
     errorString,
@@ -333,6 +352,7 @@ async function handleAuthenticationError(
 
   if (wwwAuthenticate) {
     return retryWithWwwAuthenticate(
+      requestFetch,
       mcpClient,
       mcpServerName,
       mcpServerConfig,
@@ -343,6 +363,7 @@ async function handleAuthenticationError(
   }
 
   return retryWithOAuthDiscovery(
+    requestFetch,
     mcpClient,
     mcpServerName,
     mcpServerConfig,
@@ -353,6 +374,7 @@ async function handleAuthenticationError(
 }
 
 async function handleConnectionError(
+  requestFetch: NetworkFetch,
   mcpClient: Client,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
@@ -367,12 +389,14 @@ async function handleConnectionError(
   if (isAuthenticationError(error)) {
     onRequiresOAuth?.();
     const storedToken = await getStoredOAuthToken(
+      requestFetch,
       owner.tokenStorage,
       mcpServerName,
       signal,
     );
     if (storedToken) {
       await retryWithOAuth(
+        requestFetch,
         mcpClient,
         mcpServerName,
         mcpServerConfig,
@@ -383,6 +407,7 @@ async function handleConnectionError(
       return mcpClient;
     }
     await showAuthRequiredMessage(
+      requestFetch,
       owner.tokenStorage,
       mcpServerName,
       signal,
@@ -397,6 +422,7 @@ async function handleConnectionError(
     mcpServerConfig.url
   ) {
     const sseResult = await trySSEFallback(
+      requestFetch,
       owner,
       mcpClient,
       mcpServerName,
@@ -413,6 +439,7 @@ async function handleConnectionError(
   const errorString = String(error);
   if (isAuthenticationError(error) && hasNetworkTransport(mcpServerConfig)) {
     return handleAuthenticationError(
+      requestFetch,
       mcpClient,
       mcpServerName,
       mcpServerConfig,
@@ -430,6 +457,7 @@ async function handleConnectionError(
  * Creates and connects an MCP client to a server based on the provided configuration.
  */
 async function connectToMcpServerOperation(
+  requestFetch: NetworkFetch,
   clientVersion: string,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
@@ -446,6 +474,7 @@ async function connectToMcpServerOperation(
 
   try {
     const transportPromise = createTransport(
+      requestFetch,
       owner.tokenStorage,
       mcpServerName,
       mcpServerConfig,
@@ -484,6 +513,7 @@ async function connectToMcpServerOperation(
       throw abortError(error);
     }
     const recoveryPromise = handleConnectionError(
+      requestFetch,
       mcpClient,
       mcpServerName,
       mcpServerConfig,
@@ -506,6 +536,7 @@ async function connectToMcpServerOperation(
 }
 
 export async function connectToMcpServer(
+  requestFetch: NetworkFetch,
   clientVersion: string,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
@@ -529,6 +560,7 @@ export async function connectToMcpServer(
     : controller.signal;
   try {
     return await connectToMcpServerOperation(
+      requestFetch,
       clientVersion,
       mcpServerName,
       mcpServerConfig,

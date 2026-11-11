@@ -126,6 +126,7 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -177,6 +178,7 @@ describe('mcp-client', () => {
         {} as SdkClientStdioLib.StdioClientTransport,
       );
       const client = new McpClient(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -255,6 +257,7 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -302,6 +305,7 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -350,6 +354,7 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -405,6 +410,7 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -474,6 +480,7 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',

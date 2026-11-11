@@ -9,7 +9,6 @@ import {
   it,
   afterEach,
   beforeEach,
-  spyOn,
 } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
@@ -22,6 +21,7 @@ import { get } from 'node:http';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { installMcpNetwork } from './helpers/mcp-network.js';
 
 function gate(): { promise: Promise<void>; release: () => void } {
   let release = (): void => {};
@@ -122,13 +122,13 @@ describe('connected MCP disposal', () => {
   it('stops owned connected MCP before joining a manual authentication request', async () => {
     const entered = gate();
     const released = gate();
-    const agent = await connectedAgent();
-    await awaitReadiness(agent);
-    const network = spyOn(globalThis, 'fetch').mockImplementation(async () => {
+    const restoreNetwork = installMcpNetwork(async () => {
       entered.release();
       await released.promise;
       return new Response(null, { status: 401 });
     });
+    const agent = await connectedAgent();
+    await awaitReadiness(agent);
     let authentication: Promise<unknown> | undefined;
     let disposal: Promise<void> | undefined;
     try {
@@ -153,7 +153,7 @@ describe('connected MCP disposal', () => {
       await authentication;
       await disposal;
       await agent.dispose();
-      network.mockRestore();
+      restoreNetwork();
     }
   }, 30000);
 

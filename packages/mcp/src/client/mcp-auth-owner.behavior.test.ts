@@ -248,7 +248,7 @@ describe('automatic helper with real browser callback and token persistence', ()
     };
     let browsersA = 0;
     const a = new McpOAuthOperations(
-      bindMcpOAuthCapabilities({
+      bindMcpOAuthCapabilities((input, init) => globalThis.fetch(input, init), {
         tokenStorage: new MCPOAuthTokenStorage(storeA),
         openBrowser: async (url) => {
           browsersA++;
@@ -257,7 +257,7 @@ describe('automatic helper with real browser callback and token persistence', ()
       }),
     );
     const b = new McpOAuthOperations(
-      bindMcpOAuthCapabilities({
+      bindMcpOAuthCapabilities((input, init) => globalThis.fetch(input, init), {
         tokenStorage: new MCPOAuthTokenStorage(store),
         openBrowser,
       }),

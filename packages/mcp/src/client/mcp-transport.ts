@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -150,6 +151,7 @@ function createAuthProvider(
  * Create a transport for URL based servers (remote servers).
  */
 function createUrlTransport(
+  requestFetch: NetworkFetch,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   transportOptions:
@@ -167,6 +169,7 @@ function createUrlTransport(
       );
     }
     return createJoiningTransport(
+      requestFetch,
       (fetch) =>
         new StreamableHTTPClientTransport(new URL(httpUrl), {
           ...transportOptions,
@@ -180,6 +183,7 @@ function createUrlTransport(
   if (url && mcpServerConfig.type) {
     if (mcpServerConfig.type === 'sse') {
       return createJoiningTransport(
+        requestFetch,
         (fetch) =>
           new SSEClientTransport(new URL(url), {
             ...transportOptions,
@@ -189,6 +193,7 @@ function createUrlTransport(
       );
     }
     return createJoiningTransport(
+      requestFetch,
       (fetch) =>
         new StreamableHTTPClientTransport(new URL(url), {
           ...transportOptions,
@@ -201,6 +206,7 @@ function createUrlTransport(
   // Priority 4: url without type (default to HTTP)
   if (url) {
     return createJoiningTransport(
+      requestFetch,
       (fetch) =>
         new StreamableHTTPClientTransport(new URL(url), {
           ...transportOptions,
@@ -217,6 +223,7 @@ function createUrlTransport(
  * Create a transport with OAuth token for the given server configuration.
  */
 export async function createTransportWithOAuth(
+  requestFetch: NetworkFetch,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   accessToken: string,
@@ -237,6 +244,7 @@ export async function createTransportWithOAuth(
 
     if (httpUrl) {
       return createJoiningTransport(
+        requestFetch,
         (fetch) =>
           new StreamableHTTPClientTransport(new URL(httpUrl), {
             ...transportOptions,
@@ -249,6 +257,7 @@ export async function createTransportWithOAuth(
     if (url && mcpServerConfig.type) {
       if (mcpServerConfig.type === 'sse') {
         return createJoiningTransport(
+          requestFetch,
           (fetch) =>
             new SSEClientTransport(new URL(url), {
               ...transportOptions,
@@ -258,6 +267,7 @@ export async function createTransportWithOAuth(
         );
       }
       return createJoiningTransport(
+        requestFetch,
         (fetch) =>
           new StreamableHTTPClientTransport(new URL(url), {
             ...transportOptions,
@@ -269,6 +279,7 @@ export async function createTransportWithOAuth(
 
     if (url) {
       return createJoiningTransport(
+        requestFetch,
         (fetch) =>
           new StreamableHTTPClientTransport(new URL(url), {
             ...transportOptions,
@@ -291,6 +302,7 @@ export async function createTransportWithOAuth(
  * Get stored OAuth token for a server.
  */
 export async function getStoredOAuthToken(
+  requestFetch: NetworkFetch,
   tokenStorage: MCPOAuthTokenStorage,
   serverName: string,
   signal?: AbortSignal,
@@ -300,6 +312,7 @@ export async function getStoredOAuthToken(
   );
   if (!credentials) return null;
   return MCPOAuthProvider.getValidToken(
+    requestFetch,
     tokenStorage,
     serverName,
     {
@@ -313,6 +326,7 @@ export async function getStoredOAuthToken(
  * Create an SSE transport with optional OAuth Bearer token in headers.
  */
 export function createSSETransportWithAuth(
+  requestFetch: NetworkFetch,
   config: MCPServerConfig,
   accessToken?: string | null,
   signal?: AbortSignal,
@@ -325,6 +339,7 @@ export function createSSETransportWithAuth(
   }
   const url = config.httpUrl ?? config.url!;
   return createJoiningTransport(
+    requestFetch,
     (fetch) =>
       new SSEClientTransport(new URL(url), {
         ...{
@@ -366,6 +381,7 @@ function validateNoUrlAuthProvider(mcpServerConfig: MCPServerConfig): void {
 }
 
 async function resolveOAuthHeaders(
+  requestFetch: NetworkFetch,
   tokenStorage: MCPOAuthTokenStorage,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
@@ -390,6 +406,7 @@ async function resolveOAuthHeaders(
   }
 
   const oauthResult = await resolveAccessToken(
+    requestFetch,
     tokenStorage,
     mcpServerName,
     mcpServerConfig,
@@ -403,6 +420,7 @@ async function resolveOAuthHeaders(
 }
 
 async function resolveAccessToken(
+  requestFetch: NetworkFetch,
   tokenStorage: MCPOAuthTokenStorage,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
@@ -413,6 +431,7 @@ async function resolveAccessToken(
 
   if (hasOAuthConfig && mcpServerConfig.oauth) {
     accessToken = await MCPOAuthProvider.getValidToken(
+      requestFetch,
       tokenStorage,
       mcpServerName,
       mcpServerConfig.oauth,
@@ -436,6 +455,7 @@ async function resolveAccessToken(
 
     if (credentials) {
       accessToken = await MCPOAuthProvider.getValidToken(
+        requestFetch,
         tokenStorage,
         mcpServerName,
         {
@@ -461,6 +481,7 @@ async function resolveAccessToken(
 }
 
 async function createUrlBasedTransport(
+  requestFetch: NetworkFetch,
   tokenStorage: MCPOAuthTokenStorage,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
@@ -468,6 +489,7 @@ async function createUrlBasedTransport(
   getAuthProviderFactory?: McpAuthFactoryRegistry['getAuthProviderFactory'],
 ): Promise<Transport> {
   const { headers, authProvider } = await resolveOAuthHeaders(
+    requestFetch,
     tokenStorage,
     mcpServerName,
     mcpServerConfig,
@@ -483,6 +505,7 @@ async function createUrlBasedTransport(
   };
 
   return createUrlTransport(
+    requestFetch,
     mcpServerName,
     mcpServerConfig,
     transportOptions,
@@ -495,6 +518,7 @@ async function createUrlBasedTransport(
  * Visible for Testing.
  */
 export async function createTransport(
+  requestFetch: NetworkFetch,
   tokenStorage: MCPOAuthTokenStorage,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
@@ -509,6 +533,7 @@ export async function createTransport(
 
   if (mcpServerConfig.httpUrl || mcpServerConfig.url) {
     return createUrlBasedTransport(
+      requestFetch,
       tokenStorage,
       mcpServerName,
       mcpServerConfig,

@@ -156,6 +156,7 @@ function createHarness(options: {
     },
   } as Config;
   const client = new McpClient(
+    (input, init) => globalThis.fetch(input, init),
     createTestOAuthBinding(),
     unsupportedApprovalPolicy(),
     'test-server',

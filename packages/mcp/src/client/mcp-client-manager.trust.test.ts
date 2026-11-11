@@ -121,6 +121,7 @@ describe('McpClientManager trust transitions', () => {
       });
       const toolRegistry = createToolRegistry(config);
       const manager = new McpClientManager(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         CLIENT_VERSION,
@@ -213,6 +214,7 @@ describe('McpClientManager trust transitions', () => {
         (name) => removeArtifactsWithServerAFailure(events, name),
       );
       const manager = new McpClientManager(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         CLIENT_VERSION,
@@ -360,6 +362,7 @@ describe('McpClientManager trust transitions', () => {
         };
         installCleanupFailure[failingRegistry]();
         const manager = new McpClientManager(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding(),
           unsupportedApprovalPolicy(),
           CLIENT_VERSION,
@@ -410,6 +413,7 @@ describe('McpClientManager trust transitions', () => {
       const toolRegistry = createToolRegistry(config);
       const removeTools = vi.spyOn(toolRegistry, 'removeMcpToolsByServer');
       const manager = new McpClientManager(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         CLIENT_VERSION,
@@ -488,6 +492,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({});
       const toolRegistry = createToolRegistry(config);
       const manager = new McpClientManager(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         CLIENT_VERSION,
@@ -539,6 +544,7 @@ describe('McpClientManager trust transitions', () => {
         },
       );
       const manager = new McpClientManager(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         CLIENT_VERSION,
@@ -675,6 +681,7 @@ describe('McpClientManager trust transitions', () => {
       const toolRegistry = createToolRegistry(config);
       const removeTools = vi.spyOn(toolRegistry, 'removeMcpToolsByServer');
       const manager = new McpClientManager(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         CLIENT_VERSION,

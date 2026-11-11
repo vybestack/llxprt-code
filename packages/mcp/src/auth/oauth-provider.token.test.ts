@@ -50,7 +50,8 @@ function createIssuerMetadataDiscovery(
   matchingIssuer: string,
   metadata: OAuthAuthorizationServerMetadata,
 ): typeof OAuthUtils.discoverAuthorizationServerMetadata {
-  return async (issuer) => (issuer === matchingIssuer ? metadata : null);
+  return async (_requestFetch, issuer) =>
+    issuer === matchingIssuer ? metadata : null;
 }
 
 describe('MCPOAuthProvider', () => {
@@ -58,7 +59,7 @@ describe('MCPOAuthProvider', () => {
   let getCredentialsSpy: ReturnType<typeof vi.spyOn>;
   let deleteCredentialsSpy: ReturnType<typeof vi.spyOn>;
   let isTokenExpiredSpy: ReturnType<typeof vi.spyOn>;
-  let tokenStorage: Parameters<typeof MCPOAuthProvider.getValidToken>[0];
+  let tokenStorage: Parameters<typeof MCPOAuthProvider.getValidToken>[1];
 
   beforeEach(() => {
     const spies = setupOAuthTestSpies(mockOpenBrowserSecurely);
@@ -96,6 +97,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.refreshAccessToken(
+        (input, init) => globalThis.fetch(input, init),
         mockConfig,
         'old_refresh_token',
         'https://auth.example.com/token',
@@ -126,6 +128,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       await MCPOAuthProvider.refreshAccessToken(
+        (input, init) => globalThis.fetch(input, init),
         mockConfig,
         'refresh_token',
         'https://auth.example.com/token',
@@ -147,6 +150,7 @@ describe('MCPOAuthProvider', () => {
 
       await expect(
         MCPOAuthProvider.refreshAccessToken(
+          (input, init) => globalThis.fetch(input, init),
           mockConfig,
           'invalid_refresh_token',
           'https://auth.example.com/token',
@@ -171,6 +175,7 @@ describe('MCPOAuthProvider', () => {
       isTokenExpiredSpy.mockReturnValue(false);
 
       const result = await MCPOAuthProvider.getValidToken(
+        (input, init) => globalThis.fetch(input, init),
         tokenStorage,
         'test-server',
         mockConfig,
@@ -208,6 +213,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.getValidToken(
+        (input, init) => globalThis.fetch(input, init),
         tokenStorage,
         'test-server',
         mockConfig,
@@ -227,6 +233,7 @@ describe('MCPOAuthProvider', () => {
       getCredentialsSpy.mockResolvedValue(null);
 
       const result = await MCPOAuthProvider.getValidToken(
+        (input, init) => globalThis.fetch(input, init),
         tokenStorage,
         'test-server',
         mockConfig,
@@ -258,6 +265,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.getValidToken(
+        (input, init) => globalThis.fetch(input, init),
         tokenStorage,
         'test-server',
         mockConfig,
@@ -287,6 +295,7 @@ describe('MCPOAuthProvider', () => {
       isTokenExpiredSpy.mockReturnValue(true);
 
       const result = await MCPOAuthProvider.getValidToken(
+        (input, init) => globalThis.fetch(input, init),
         tokenStorage,
         'test-server',
         mockConfig,
@@ -335,6 +344,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       await MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: createTestOAuthBinding().tokenStorage,
           openBrowser: mockOpenBrowserSecurely,
@@ -396,6 +406,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       await MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: createTestOAuthBinding().tokenStorage,
           openBrowser: mockOpenBrowserSecurely,
@@ -465,6 +476,7 @@ describe('MCPOAuthProvider', () => {
       };
 
       await MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: createTestOAuthBinding().tokenStorage,
           openBrowser: mockOpenBrowserSecurely,
@@ -530,6 +542,7 @@ describe('MCPOAuthProvider', () => {
       };
 
       await MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: createTestOAuthBinding().tokenStorage,
           openBrowser: mockOpenBrowserSecurely,
@@ -627,6 +640,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       await MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: createTestOAuthBinding().tokenStorage,
           openBrowser: mockOpenBrowserSecurely,
@@ -723,6 +737,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       await MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: createTestOAuthBinding().tokenStorage,
           openBrowser: mockOpenBrowserSecurely,
@@ -772,6 +787,7 @@ describe('MCPOAuthProvider', () => {
 
       await expect(
         MCPOAuthProvider.authenticate(
+          (input, init) => globalThis.fetch(input, init),
           {
             tokenStorage: createTestOAuthBinding().tokenStorage,
             openBrowser: mockOpenBrowserSecurely,
@@ -798,6 +814,7 @@ describe('MCPOAuthProvider', () => {
       // Access the static private method on the class itself
       const providerWithAccess = MCPOAuthProvider as unknown as {
         discoverAuthServerMetadataForRegistration: (
+          requestFetch: import('@vybestack/llxprt-code-core/utils/fetch.js').NetworkFetch,
           authorizationUrl: string,
         ) => Promise<{
           issuerUrl: string;
@@ -818,16 +835,17 @@ describe('MCPOAuthProvider', () => {
       vi.spyOn(
         OAuthUtils,
         'discoverAuthorizationServerMetadata',
-      ).mockImplementation(async (issuer) => {
+      ).mockImplementation(async (requestFetch, issuer) => {
         attempts.push(issuer);
         return createIssuerMetadataDiscovery(
           'https://auth.okta.local/oauth2/default',
           oktaMetadata,
-        )(issuer);
+        )(requestFetch, issuer);
       });
 
       const result =
         await providerWithAccess.discoverAuthServerMetadataForRegistration(
+          (input, init) => globalThis.fetch(input, init),
           'https://auth.okta.local/oauth2/default/v1/authorize',
         );
 

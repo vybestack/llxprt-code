@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
@@ -98,6 +99,7 @@ export async function connectClient(
 }
 
 export function createJoiningTransport<T extends Transport>(
+  requestFetch: NetworkFetch,
   create: (fetch: FetchLike) => T,
   signal?: AbortSignal,
 ): T {
@@ -118,13 +120,13 @@ export function createJoiningTransport<T extends Transport>(
   };
   const ownedFetch: FetchLike = (url, init) =>
     track(async () => {
-      const requestSignal = init?.signal
+      const signal = init?.signal
         ? AbortSignal.any([lifetime, init.signal])
         : lifetime;
-      const response = await fetch(url, { ...init, signal: requestSignal });
-      if (requestSignal.aborted) {
+      const response = await requestFetch(url, { ...init, signal });
+      if (signal.aborted) {
         await response.body?.cancel();
-        requestSignal.throwIfAborted();
+        signal.throwIfAborted();
       }
       trackEventStream(response, track, streams);
       return response;

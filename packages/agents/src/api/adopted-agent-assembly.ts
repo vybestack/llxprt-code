@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { acquireRootNetwork } from './root-network.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type {
   Config,
   ContentGenerator,
@@ -222,7 +224,7 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     return runtimeId;
   }
 
-  #adoptConstructMcp(): Promise<AdoptedMcpPort> {
+  #adoptConstructMcp(requestFetch: NetworkFetch): Promise<AdoptedMcpPort> {
     const feedback = defaultFeedbackSink;
     return McpRuntimeOwner.create(
       {
@@ -234,6 +236,7 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
           openBrowser: openBrowserSecurely,
         },
         config: this.#config,
+        requestFetch,
         managerFactory: McpClientManager,
         extensionLoader: { kind: 'none' },
         policy: { kind: 'none' },
@@ -261,12 +264,18 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     runtimeId: string,
     fakeResponses: string | undefined,
   ): Promise<Agent> {
-    const mcp = await this.#adoptConstructMcp();
+    let mcp: AdoptedMcpPort | undefined;
     let media: SessionMediaOwner | undefined;
     let providers: AdoptedProviderAssembly;
     try {
+      const network = acquireRootNetwork(
+        this.#release,
+        this.#config.getProxy(),
+      );
+      mcp = await this.#adoptConstructMcp(network.fetch);
       media = acquireAdoptedMedia(this.#config);
       providers = new AdoptedProviderAssembly(
+        network.fetch,
         adoption,
         {
           runtimeId,
@@ -281,7 +290,7 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
       return cleanupFailedAdoption(
         primary,
         () => this.#release.rollback(),
-        () => mcp.dispose(),
+        mcp?.dispose.bind(mcp),
         media === undefined ? undefined : media.dispose.bind(media),
         undefined,
       );
@@ -301,6 +310,7 @@ class AdoptedProviderAssembly {
   readonly #content: RuntimeContentGeneratorFactory<ContentGenerator>;
 
   constructor(
+    requestFetch: NetworkFetch,
     private readonly adoption: AdoptionSessionInput,
     private readonly runtime: AdoptedConstructionResources,
     private readonly mcp: AdoptedMcpPort,
@@ -315,15 +325,19 @@ class AdoptedProviderAssembly {
       proxy: config.getProxy(),
       scopeIds: [runtimeId, config.getSessionId()],
     });
-    const manager = acquireRuntimeProviderManager(this.runtime.release, {
-      files,
-      proxy: config.getProxy(),
-      config,
-      settings: adoption.settingsService,
-      settingsOwner,
-      context: adoptionProviderContext(runtimeId),
-      authority: adoption.credentialAuthority,
-    });
+    const manager = acquireRuntimeProviderManager(
+      this.runtime.release,
+      {
+        files,
+        proxy: config.getProxy(),
+        config,
+        settings: adoption.settingsService,
+        settingsOwner,
+        context: adoptionProviderContext(runtimeId),
+        authority: adoption.credentialAuthority,
+      },
+      requestFetch,
+    );
     const oauth = acquireRuntimeOAuth(this.runtime.release, {
       provider: {
         getProviderByName: (name) => manager.getProviderByName(name),

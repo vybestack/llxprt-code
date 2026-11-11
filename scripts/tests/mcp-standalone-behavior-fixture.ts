@@ -44,6 +44,7 @@ async function stdioBehavior(): Promise<void> {
     }),
   }));
   const client = new McpClient(
+    (input, init) => globalThis.fetch(input, init),
     { tokenStorage: createStorage(), openBrowser: defaultBrowserLauncher },
     unsupportedApprovalPolicy(),
     'local',
@@ -173,6 +174,7 @@ async function authBehavior(unavailableHost: boolean): Promise<void> {
     events.once('oauth-display-message', resolve);
   });
   const operation = MCPOAuthProvider.authenticate(
+    (input, init) => globalThis.fetch(input, init),
     { tokenStorage: createStorage(), openBrowser },
     'standalone',
     {

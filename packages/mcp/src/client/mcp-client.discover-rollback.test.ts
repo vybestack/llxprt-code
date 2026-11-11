@@ -105,6 +105,7 @@ async function createRollbackHarness(failingCleanup: CleanupName) {
   } as unknown as ToolRegistry;
   const config = { isTrustedFolder: () => true } as Config;
   const client = new McpClient(
+    (input, init) => globalThis.fetch(input, init),
     createTestOAuthBinding(),
     unsupportedApprovalPolicy(),
     'test-server',
