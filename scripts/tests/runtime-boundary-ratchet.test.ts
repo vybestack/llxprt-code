@@ -89,7 +89,7 @@ describe('strict runtime boundary enforcement after ratchet retirement', () => {
       'packages/demo/src/assembly.ts',
       `
       function publishAgentFacade(input: unknown): unknown { return input; }
-      export class ForegroundAgentAssembly {
+      export class ForegroundAssembly {
         publish(): unknown { return publishAgentFacade(() => 1); }
       }
       `,
@@ -236,7 +236,7 @@ describe('strict runtime boundary enforcement after ratchet retirement', () => {
     expect(result.findings.map((f) => f.rule)).toEqual(['async-local-storage']);
   });
 
-  it('does not treat writes to ambient platform globals as module state', () => {
+  it('rejects writes to process.env in runtime code', () => {
     put(
       'packages/demo/src/runtime/ambient.d.ts',
       'declare var process: { env: Record<string, string | undefined> };',
@@ -246,9 +246,13 @@ describe('strict runtime boundary enforcement after ratchet retirement', () => {
       '/// <reference path="./ambient.d.ts" />\nexport function configure(project: string): void { process.env.PROJECT = project; }',
     );
     const result = audit();
-    expect(
-      result.findings.filter((finding) => finding.rule === 'module-mutation'),
-    ).toEqual([]);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        file: 'packages/demo/src/runtime/env.ts',
+        rule: 'process-environment-mutation',
+      }),
+    );
+    expect(result.exitCode).toBe(1);
   });
 
   it('fails for writes to globalThis runtime storage', () => {

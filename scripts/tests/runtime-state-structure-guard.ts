@@ -38,6 +38,7 @@ export interface RuntimeStateFinding {
   readonly kind:
     | 'mutable-state'
     | 'module-mutation'
+    | 'process-environment-mutation'
     | 'async-local-storage'
     | 'stale-immutable-allowance';
   readonly line: number;
@@ -623,6 +624,32 @@ function targetsGlobalThis(node: ts.Node, checker: ts.TypeChecker): boolean {
   );
 }
 
+function targetsProcessEnvironment(
+  node: ts.Node,
+  checker: ts.TypeChecker,
+): boolean {
+  const target = mutationTarget(node);
+  if (!target) return false;
+  let current = unwrap(target);
+  let addressesEnvironment = false;
+  while (
+    ts.isPropertyAccessExpression(current) ||
+    ts.isElementAccessExpression(current)
+  ) {
+    addressesEnvironment ||= accessedMember(current) === 'env';
+    current = unwrap(current.expression);
+  }
+  if (
+    !addressesEnvironment ||
+    !ts.isIdentifier(current) ||
+    current.text !== 'process'
+  )
+    return false;
+  return (checker.getSymbolAtLocation(current)?.declarations ?? []).every(
+    (declaration) => declaration.getSourceFile().isDeclarationFile,
+  );
+}
+
 function isolatedSource(
   filename: string,
   source: string,
@@ -766,22 +793,23 @@ export function scanRuntimeStateStructure(
     if (allowance) usedAllowances.add(allowance);
     else report(node, 'mutable-state', declaration);
   }
-  function visit(node: ts.Node): void {
+  function checkAlsConstructor(node: ts.Node): void {
     if (
-      ts.isNewExpression(node) &&
-      isAlsConstructor(node.expression, checker)
-    ) {
-      const declaration = declarationName(node);
-      if (
-        !allowlist.some(
-          (entry) =>
-            entry.file === filename &&
-            entry.declaration === declaration &&
-            entry.reason.trim().length > 0,
-        )
-      )
-        report(node, 'async-local-storage', declaration);
-    }
+      !ts.isNewExpression(node) ||
+      !isAlsConstructor(node.expression, checker)
+    )
+      return;
+    const declaration = declarationName(node);
+    const allowed = allowlist.some(
+      (entry) =>
+        entry.file === filename &&
+        entry.declaration === declaration &&
+        entry.reason.trim().length > 0,
+    );
+    if (!allowed) report(node, 'async-local-storage', declaration);
+  }
+  function visit(node: ts.Node): void {
+    checkAlsConstructor(node);
     if (ts.isExportAssignment(node) && !node.isExportEquals) {
       const mutable =
         containsMutableConstruction(node.expression, checker) ||
@@ -790,6 +818,8 @@ export function scanRuntimeStateStructure(
     }
     if (targetsGlobalThis(node, checker))
       report(node, 'module-mutation', 'globalThis');
+    if (targetsProcessEnvironment(node, checker))
+      report(node, 'process-environment-mutation', 'process.env');
     if (ts.isVariableDeclaration(node) && isModuleOwned(node))
       checkModuleVariable(node);
     if (

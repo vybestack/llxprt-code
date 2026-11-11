@@ -128,8 +128,8 @@ export const productionPolicy: AuditPolicy = {
     ...productionPlugins.map((pkg) => `${pkg}/src`),
   ],
   stateRootDiscovery: {
-    directoryNames: ['runtime', 'api', 'settings'],
-    files: [cliContext, 'packages/a2a-server/src/http/request-cancellation.ts'],
+    directoryNames: [],
+    allProductionSources: true,
   },
   services: [
     {
@@ -221,10 +221,7 @@ export const productionPolicy: AuditPolicy = {
     {
       file: 'packages/agents/src/api/createAgent.ts',
       functionName: 'createAgent',
-    },
-    {
-      file: 'packages/agents/src/api/createAgent.ts',
-      functionName: 'assembleFacade',
+      issueNumber: 3979,
     },
   ],
   ambientSources: [
@@ -647,6 +644,24 @@ function assertCoverage(
   }
 }
 
+function normalizeFindings(
+  workspace: string,
+  findings: ReadonlyArray<Omit<AuditFinding, 'owner'>>,
+): AuditFinding[] {
+  return unique(findings)
+    .map((finding) => {
+      const file = relative(workspace, finding.file).split(sep).join('/');
+      return { ...finding, file, owner: file.split('/')[1] ?? 'workspace' };
+    })
+    .sort(
+      (a, b) =>
+        a.file.localeCompare(b.file) ||
+        a.line - b.line ||
+        a.column - b.column ||
+        a.rule.localeCompare(b.rule),
+    );
+}
+
 export function auditRuntimeStateBoundary(
   workspaceDirectory: string,
   policy: AuditPolicy = productionPolicy,
@@ -662,6 +677,12 @@ export function auditRuntimeStateBoundary(
   if (selection.gaps.length) throw new Error(selection.gaps.join('\n'));
   const files = selection.files;
   if (!files.length) throw new Error('No production sources discovered');
+  for (const entry of policy.assembly) {
+    if (!files.includes(workspacePath(workspace, entry.file)))
+      throw new Error(
+        `Unresolved assembly exemption file: ${entry.file}#${entry.functionName}`,
+      );
+  }
   const absentAmbientSources = absentCurrentAmbientExports(workspace, policy);
   const candidates = new Map(
     [
@@ -695,22 +716,11 @@ export function auditRuntimeStateBoundary(
   const ambientFindings = scans.flatMap((scan) => scan.ambientFindings);
   assertCoverage(workspace, policy, files, programs, absentAmbientSources);
   const stateFindings = scanState(workspace, policy, files);
-  const findings: AuditFinding[] = unique([
+  const findings = normalizeFindings(workspace, [
     ...stateFindings,
     ...shapeFindings,
     ...ambientFindings,
-  ])
-    .map((finding) => {
-      const file = relative(workspace, finding.file).split(sep).join('/');
-      return { ...finding, file, owner: file.split('/')[1] ?? 'workspace' };
-    })
-    .sort(
-      (a, b) =>
-        a.file.localeCompare(b.file) ||
-        a.line - b.line ||
-        a.column - b.column ||
-        a.rule.localeCompare(b.rule),
-    );
+  ]);
   const countsByOwner = groupFindings(findings);
   return {
     discovery: selection.inventory,

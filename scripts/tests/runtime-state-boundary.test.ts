@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import {
   auditRuntimeStateBoundary,
   discoverProductionSources,
@@ -17,10 +17,14 @@ import {
 const evidence = join(tmpdir(), 'llxprt-structural-audit-per-package');
 let workspace: string;
 function put(file: string, text: string): void {
-  const path = join(workspace, file);
+  const path = resolve(workspace, file);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, text);
 }
+
+const packageSource = (file: string) => join('packages/demo/src', file);
+const assemblyFile = 'packages/demo/src/assembly.ts';
+
 const policy: AuditPolicy = {
   compilerConfig: 'tsconfig.json',
   sourceRoots: ['packages/demo/src'],
@@ -32,7 +36,7 @@ const policy: AuditPolicy = {
   ],
   configs: [{ file: 'packages/demo/src/services.ts', exportName: 'Config' }],
   assembly: [
-    { file: 'packages/demo/src/assembly.ts', functionName: 'assemble' },
+    { file: assemblyFile, functionName: 'assemble', issueNumber: 3979 },
   ],
   ambientSources: [
     { file: 'packages/demo/src/services.ts', exportName: 'active' },
@@ -68,6 +72,7 @@ beforeEach(() => {
     export function active(): Settings { return new Settings(); }
   `,
   );
+  put('packages/demo/src/assembly.ts', 'export function assemble(): void {}');
 });
 afterEach(() => rmSync(workspace, { recursive: true, force: true }));
 
@@ -88,8 +93,9 @@ describe('runtime boundary production runner', () => {
         file.slice(workspace.length + 1),
       ),
     ).toEqual([
-      join('packages', 'demo', 'src', 'nested', 'worker.ts'),
-      join('packages', 'demo', 'src', 'services.ts'),
+      packageSource('assembly.ts'),
+      packageSource('nested/worker.ts'),
+      packageSource('services.ts'),
     ]);
   });
 

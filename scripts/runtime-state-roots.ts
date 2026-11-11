@@ -33,6 +33,7 @@ import { workspacePath } from './runtime-state-scan.js';
 export interface StateRootDiscovery {
   /** Directory names that hold runtime state, anywhere under a source root. */
   readonly directoryNames: readonly string[];
+  readonly allProductionSources?: boolean;
   /** Files that hold runtime state outside such a directory. */
   readonly files?: readonly string[];
 }
@@ -143,8 +144,26 @@ export function deriveStateRoots(
   sourceRoots: readonly string[],
   discovery: StateRootDiscovery,
 ): StateRoots {
-  if (!discovery.directoryNames.length)
+  if (!discovery.directoryNames.length && !discovery.allProductionSources)
     throw new Error('Runtime state discovery names no directory');
+  if (discovery.allProductionSources) {
+    const missing = sourceRoots.filter(
+      (sourceRoot) => !existsSync(workspacePath(workspace, sourceRoot)),
+    );
+    if (missing.length)
+      throw new Error(
+        `Runtime source roots do not exist: ${missing.join(', ')}`,
+      );
+    const mutableRoots = [...new Set(sourceRoots)].sort();
+    return {
+      mutableRoots,
+      alsRoots: [
+        ...new Set(
+          mutableRoots.map((root) => packageSourceScope(workspace, root)),
+        ),
+      ].sort(),
+    };
+  }
   const names = new Set(discovery.directoryNames);
   const directories = new Set<string>();
   for (const sourceRoot of sourceRoots)

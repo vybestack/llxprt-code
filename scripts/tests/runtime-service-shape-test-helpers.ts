@@ -33,7 +33,9 @@ export const options: RuntimeServiceShapeOptions = {
     exportName,
   })),
   configs: [{ file: 'services.ts', exportName: 'Config' }],
-  assembly: [{ file: 'agents/assembly.ts', functionName: 'assemble' }],
+  assembly: [
+    { file: 'agents/assembly.ts', functionName: 'assemble', issueNumber: 3979 },
+  ],
 };
 export const imports = `import { Scheduler, Context, Provider, Config } from './services.js';\n`;
 export function scan(

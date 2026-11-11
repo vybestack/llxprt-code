@@ -116,7 +116,9 @@ export function other(bag: { clock: Clock; session: Session }): void {}`;
             exportName,
           })),
           configs: [{ file, exportName: 'Config' }],
-          assembly: [{ file: assemblyFile, functionName: 'assemble' }],
+          assembly: [
+            { file: assemblyFile, functionName: 'assemble', issueNumber: 3979 },
+          ],
         },
         [file],
       );

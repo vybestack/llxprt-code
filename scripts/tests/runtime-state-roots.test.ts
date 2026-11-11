@@ -11,6 +11,7 @@ import {
   auditRuntimeStateBoundary,
   type AuditPolicy,
 } from '../check-runtime-state-boundary.js';
+import { scanState } from '../runtime-state-scan.js';
 
 const evidence = resolve(
   import.meta.dir,
@@ -31,6 +32,7 @@ const discoveryPolicy: AuditPolicy = {
   sourceRoots: ['packages/demo/src'],
   stateRootDiscovery: {
     directoryNames: ['runtime', 'api', 'settings'],
+    allProductionSources: true,
   },
   services: [],
   configs: [],
@@ -142,12 +144,65 @@ describe('discovered roots feed the audit', () => {
     },
   );
 
-  it('leaves module state outside the state directories unreported', () => {
+  it('reports module state outside runtime-named directories', () => {
+    put('packages/demo/src/ownership/state.ts', mutableTable);
+    const result = auditRuntimeStateBoundary(workspace, discoveryPolicy);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        file: 'packages/demo/src/ownership/state.ts',
+        rule: 'mutable-state',
+      }),
+    );
+    expect(result.exitCode).toBe(1);
+  });
+
+  it('reports AsyncLocalStorage outside runtime-named directories', () => {
+    put(
+      'packages/demo/src/ownership/scope.ts',
+      "import { AsyncLocalStorage } from 'node:async_hooks'; export const scope = new AsyncLocalStorage<string>();",
+    );
+    const result = auditRuntimeStateBoundary(workspace, discoveryPolicy);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        file: 'packages/demo/src/ownership/scope.ts',
+        rule: 'async-local-storage',
+      }),
+    );
+    expect(result.exitCode).toBe(1);
+  });
+
+  it('scans module state at the production source root', () => {
     put('packages/demo/src/runtime/state.ts', 'export const value = 1;');
     put('packages/demo/src/notes.ts', mutableTable);
     const result = auditRuntimeStateBoundary(workspace, discoveryPolicy);
     expect(result.compilerDiagnostics).toEqual([]);
-    expect(result.findings).toEqual([]);
-    expect(result.exitCode).toBe(0);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        file: 'packages/demo/src/notes.ts',
+        rule: 'mutable-state',
+      }),
+    );
+    expect(result.exitCode).toBe(1);
+  });
+
+  it('excludes test and fixture files from expanded state and ALS scans', () => {
+    const fixtureFiles = [
+      'packages/demo/src/state.test.ts',
+      'packages/demo/src/state.spec.ts',
+      'packages/demo/src/__tests__/state.ts',
+      'packages/demo/src/fixtures/state.ts',
+    ];
+    for (const file of fixtureFiles)
+      put(
+        file,
+        `${mutableTable}\nimport { AsyncLocalStorage } from 'node:async_hooks';\nnew AsyncLocalStorage();`,
+      );
+    expect(
+      scanState(
+        workspace,
+        discoveryPolicy,
+        fixtureFiles.map((file) => resolve(workspace, file)),
+      ),
+    ).toEqual([]);
   });
 });
