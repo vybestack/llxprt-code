@@ -50,7 +50,10 @@ import type { dumpSDKRequestContext } from '../utils/dumpSDKContext.js';
 import { redactSensitiveHeaders, type DumpMode } from '../utils/dumpContext.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
-import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import {
+  RequestMediaResolutionError,
+  type ResolvedMediaRequest,
+} from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { ProgressiveJsonBody } from '../utils/progressive-json-body.js';
 
 export {
@@ -366,16 +369,18 @@ async function fetchResponse(
   try {
     return await requestFetch(params.responsesURL, requestInit);
   } catch (error) {
+    const failure =
+      requestBody.failure === undefined ? error : requestBody.failure.error;
     try {
-      await requestBody.dispose(error);
+      await requestBody.dispose(failure);
     } catch (disposalError) {
       throw transportCleanupError(
-        error,
+        failure,
         disposalError,
         'OpenAI Responses fetch and request cleanup failed',
       );
     }
-    throw error;
+    throw failure;
   }
 }
 
@@ -447,7 +452,10 @@ async function handleStreamRetry(
   abortSignal: AbortSignal | undefined,
   deps: ResponsesExecutorDeps,
 ): Promise<number> {
-  if (error instanceof Error && error.name === 'AbortError') {
+  if (
+    error instanceof RequestMediaResolutionError ||
+    (error instanceof Error && error.name === 'AbortError')
+  ) {
     throw error;
   }
   // A definite HTTP status is authoritative. Falling back to message-substring

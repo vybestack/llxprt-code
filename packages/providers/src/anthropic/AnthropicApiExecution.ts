@@ -24,6 +24,7 @@ import {
   type BoundedJsonHttpBody,
 } from '../utils/boundedJsonBody.js';
 import type { NativeAnthropicBody } from './native-anthropic-request.js';
+import { withChatHttpBody } from '../utils/chat-http-body.js';
 import { RequestBodyByteOverflowError } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
   shouldDumpSDKContext,
@@ -255,23 +256,16 @@ export function createSpooledAnthropicApiCall(
   customHeaders: Record<string, string>,
   signal?: AbortSignal,
 ): AnthropicApiCall {
-  return async () => {
-    const handle = spool.openStream();
-    try {
-      return await postMessages(
+  return () =>
+    withChatHttpBody(spool, (stream, byteLength) =>
+      postMessages(
         client,
-        {
-          stream: handle.stream,
-          byteLength: spool.byteLength,
-        },
+        { stream, byteLength },
         streaming,
         customHeaders,
         signal,
-      );
-    } finally {
-      await handle.dispose();
-    }
-  };
+      ),
+    );
 }
 
 /**

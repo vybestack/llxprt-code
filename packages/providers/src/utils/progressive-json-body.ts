@@ -52,6 +52,31 @@ function assertServedLength(
   }
 }
 
+export interface ProgressiveJsonStream extends BoundedJsonStream {
+  readonly failure: { readonly error: unknown } | undefined;
+}
+
+function forwardStream(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  dispose: BoundedJsonStream['dispose'],
+): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller): Promise<void> {
+        try {
+          const next = await reader.read();
+          if (next.done) controller.close();
+          else controller.enqueue(next.value);
+        } catch (error) {
+          controller.error(error);
+        }
+      },
+      cancel: dispose,
+    },
+    { highWaterMark: 0 },
+  );
+}
+
 export class ProgressiveJsonBody {
   private disposed = false;
   private readonly handles = new Set<BoundedJsonStream>();
@@ -76,9 +101,10 @@ export class ProgressiveJsonBody {
     return bytes()[Symbol.asyncIterator]();
   }
 
-  createStreamHandle(): BoundedJsonStream {
+  createStreamHandle(): ProgressiveJsonStream {
     if (this.disposed) throw new Error('JSON request body was disposed');
     let iterator: AsyncIterator<Uint8Array> | undefined = this.openIterator();
+    let failure: ProgressiveJsonStream['failure'];
     const declared = this.byteLength;
     let total = 0;
     let stopped = false;
@@ -115,10 +141,12 @@ export class ProgressiveJsonBody {
             }
             controller.enqueue(next.value);
           } catch (error) {
+            failure = { error };
             try {
               await close();
             } catch (cleanupError) {
-              controller.error(new AggregateError([error, cleanupError]));
+              failure = { error: new AggregateError([error, cleanupError]) };
+              controller.error(failure.error);
               return;
             }
             controller.error(error);
@@ -133,22 +161,14 @@ export class ProgressiveJsonBody {
       if (!stopped) await reader.cancel(reason);
       await close();
     };
-    const stream = new ReadableStream<Uint8Array>(
-      {
-        async pull(controller): Promise<void> {
-          try {
-            const next = await reader.read();
-            if (next.done) controller.close();
-            else controller.enqueue(next.value);
-          } catch (error) {
-            controller.error(error);
-          }
-        },
-        cancel: dispose,
+    const stream = forwardStream(reader, dispose);
+    const handle: ProgressiveJsonStream = {
+      stream,
+      dispose,
+      get failure() {
+        return failure;
       },
-      { highWaterMark: 0 },
-    );
-    const handle = { stream, dispose };
+    };
     this.handles.add(handle);
     return handle;
   }

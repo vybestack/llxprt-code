@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { RequestMediaResolutionError } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { isTimeoutError } from './loadBalancing/streamTimeout.js';
 import { isStreamTimeoutError } from './providerErrorObservation.js';
 import {
@@ -280,6 +281,8 @@ export function decodeRetryFailure(error: unknown): RetryFailure {
   // Retry-After header walk) degrades to an unknown failure instead of
   // propagating outward and masking the real error.
   try {
+    if (error instanceof RequestMediaResolutionError)
+      return { phase: 'protocol', kind: 'invalid_request', cause: error };
     const classification = classifyRetryError(error);
     const providerCode = getProviderCode(error);
     const identity = resolveFailureIdentity(
