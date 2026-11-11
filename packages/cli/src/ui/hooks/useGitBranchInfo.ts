@@ -38,10 +38,10 @@ const GIT_WATCH_POLL_MS = 3000;
 export { FETCH_DEBOUNCE_MS, GIT_WATCH_POLL_MS };
 
 /**
- * `git status --porcelain` can exceed `exec`'s 1 MiB default buffer on very
- * large trees, which would error out and misread a dirty tree as clean (no
- * star). A larger buffer plus a timeout keep one slow or hung git invocation
- * from wedging the in-flight refresh guard.
+ * `git --no-optional-locks status --porcelain` can exceed `exec`'s 1 MiB
+ * default buffer on very large trees, which would error out and misread a dirty
+ * tree as clean (no star). A larger buffer plus a timeout keep one slow or
+ * hung git invocation from wedging the in-flight refresh guard.
  */
 const GIT_EXEC_MAX_BUFFER = 20 * 1024 * 1024;
 const GIT_EXEC_TIMEOUT_MS = 10_000;
@@ -53,8 +53,9 @@ function gitExecOptions(cwd: string) {
 export interface GitBranchInfo {
   branchName: string | undefined;
   /**
-   * True when `git status --porcelain` reports any change in `cwd`. Tracked
-   * modifications, staged changes, and untracked files all count as dirty,
+   * True when `git --no-optional-locks status --porcelain` reports any change
+   * in `cwd`. Tracked modifications, staged changes, and untracked files all
+   * count as dirty,
    * matching the shell-prompt convention. Errors (non-git directory) are not
    * dirty.
    */
@@ -65,6 +66,21 @@ export interface GitBranchInfo {
 export interface GitInfoResult {
   branchName: string | undefined;
   isDirty: boolean;
+}
+
+export function fetchGitStatus(
+  cwd: string,
+  onResult: (isDirty: boolean) => void,
+): void {
+  // A background poll must never take the index lock or rewrite the index,
+  // which would also re-trigger the `.git/index` watcher.
+  exec(
+    'git --no-optional-locks status --porcelain',
+    gitExecOptions(cwd),
+    (error, stdout) => {
+      onResult(!error && stdout.toString().trim() !== '');
+    },
+  );
 }
 
 /**
@@ -80,7 +96,6 @@ function fetchGitInfo(
   let branchName: string | undefined;
   let isDirty = false;
   let branchFailed = false;
-  let statusFailed = false;
   let branchSettled = false;
   let statusSettled = false;
 
@@ -88,7 +103,7 @@ function fetchGitInfo(
     if (!branchSettled || !statusSettled) return;
     onResult({
       branchName: branchFailed ? undefined : branchName,
-      isDirty: statusFailed ? false : isDirty,
+      isDirty,
     });
   };
 
@@ -121,10 +136,9 @@ function fetchGitInfo(
       );
     },
   );
-  exec('git status --porcelain', gitExecOptions(cwd), (error, stdout) => {
+  fetchGitStatus(cwd, (dirty) => {
     statusSettled = true;
-    if (error) statusFailed = true;
-    else isDirty = stdout.toString().trim() !== '';
+    isDirty = dirty;
     settle();
   });
 }
