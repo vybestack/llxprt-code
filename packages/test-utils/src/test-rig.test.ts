@@ -18,6 +18,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { restoreEnv, setEnv } from './env-test-helpers.js';
 import { TestRig } from './test-rig.js';
 import { readLedger } from './model-request-ledger.js';
+import { spawnRunWithTimeout } from './process-run.js';
 
 /** Resolves with the bound port only once the server is accepting connections. */
 async function listenOnLoopback(server: Server): Promise<number> {
@@ -146,7 +147,11 @@ describe('TestRig setup and cleanup behavior', () => {
     setEnv('LLXPRT_CONTEXT_LIMIT', '32768');
     setEnv('LLXPRT_MAX_OUTPUT_TOKENS', '8192');
 
-    const requests: Array<{ path: string | undefined; body: string }> = [];
+    const requests: Array<{
+      path: string | undefined;
+      body: string;
+      receivedAt: string;
+    }> = [];
     const server = createServer((request, response) => {
       const chunks: Buffer[] = [];
       request.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -154,6 +159,7 @@ describe('TestRig setup and cleanup behavior', () => {
         requests.push({
           path: request.url,
           body: Buffer.concat(chunks).toString(),
+          receivedAt: new Date().toISOString(),
         });
         const chunk = JSON.stringify({
           id: 'chatcmpl-local-profile-test',
@@ -175,37 +181,53 @@ describe('TestRig setup and cleanup behavior', () => {
       setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${port}/v1`);
       const rig = new TestRig();
       rig.setup('real CLI local model E2E profile');
-
-      await rig.run({ args: 'Respond with OK', timeoutMs: 20_000 });
-
-      const completionRequest = requests.find(
-        (request) => request.path === '/v1/chat/completions',
+      const profilePath = join(
+        requireTestDir(rig.testDir),
+        '.llxprt',
+        'profiles',
+        'local-model-e2e.json',
       );
-      expect({
-        path: completionRequest?.path,
-        model:
-          completionRequest === undefined
-            ? undefined
-            : JSON.parse(completionRequest.body).model,
-        reasoningEffort:
-          completionRequest === undefined
-            ? undefined
-            : JSON.parse(completionRequest.body).reasoning_effort,
-        temperature:
-          completionRequest === undefined
-            ? undefined
-            : JSON.parse(completionRequest.body).temperature,
-        seed:
-          completionRequest === undefined
-            ? undefined
-            : JSON.parse(completionRequest.body).seed,
-      }).toStrictEqual({
-        path: '/v1/chat/completions',
-        model: 'qwen3.5:2b',
-        reasoningEffort: 'none',
-        temperature: 0,
-        seed: 20260101,
-      });
+
+      try {
+        await rig.run({ args: 'Respond with OK', timeoutMs: 20_000 });
+
+        const completionRequest = requests.find(
+          (request) => request.path === '/v1/chat/completions',
+        );
+        expect({
+          path: completionRequest?.path,
+          model:
+            completionRequest === undefined
+              ? undefined
+              : JSON.parse(completionRequest.body).model,
+          reasoningEffort:
+            completionRequest === undefined
+              ? undefined
+              : JSON.parse(completionRequest.body).reasoning_effort,
+          temperature:
+            completionRequest === undefined
+              ? undefined
+              : JSON.parse(completionRequest.body).temperature,
+          seed:
+            completionRequest === undefined
+              ? undefined
+              : JSON.parse(completionRequest.body).seed,
+        }).toStrictEqual({
+          path: '/v1/chat/completions',
+          model: 'qwen3.5:2b',
+          reasoningEffort: 'none',
+          temperature: 0,
+          seed: 20260101,
+        });
+      } catch (error) {
+        const capture = rig.getLastRunCapture();
+        throw new Error(
+          `Generated local-model profile CLI test failed: ${String(error)}\n` +
+            `profile=${profilePath}\n` +
+            `requests=${JSON.stringify(requests.map(({ path, receivedAt }) => ({ path, receivedAt })))}\n` +
+            `lastRunCapture=${JSON.stringify(capture)}`,
+        );
+      }
     } finally {
       server.closeAllConnections();
       server.close();
@@ -464,6 +486,33 @@ describe('TestRig setup and cleanup behavior', () => {
     await rig.run({ args: 'test prompt' }).catch(() => {});
 
     expect(existsSync(ledgerPath)).toBe(false);
+  });
+
+  it('includes child output when a process times out', async () => {
+    const root = createRoot();
+    const context = {
+      command: process.execPath,
+      commandArgs: [
+        '-e',
+        "process.stdout.write('stdout-begin-marker' + 'x'.repeat(5000) + ' stdout tail'); process.stderr.write('stderr-begin-marker' + 'y'.repeat(5000) + ' stderr tail'); setInterval(() => {}, 1000)",
+      ],
+      testDir: root,
+      childEnv: { LLXPRT_FAKE_RESPONSES: 'test-fixture' },
+    };
+
+    const timeoutMessage = await spawnRunWithTimeout(
+      context,
+      {},
+      false,
+      (stdout) => stdout,
+      50,
+    ).catch((error: unknown) => String(error));
+
+    expect(timeoutMessage).toContain('stdout tail');
+    expect(timeoutMessage).toContain('stderr tail');
+    expect(timeoutMessage).not.toContain('stdout-begin-marker');
+    expect(timeoutMessage).not.toContain('stderr-begin-marker');
+    expect(timeoutMessage.length).toBeLessThan(8_200);
   });
 
   it('uses a per-run deadline without changing the default TestRig timeout', async () => {
