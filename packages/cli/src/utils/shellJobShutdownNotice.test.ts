@@ -275,6 +275,15 @@ function countNotices(stderr: string): number {
   return stderr.split('Shutting down with').length - 1;
 }
 
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error instanceof Error && 'code' in error && error.code === 'EPERM';
+  }
+}
+
 async function waitForGroupAbsence(pid: number): Promise<boolean> {
   const deadline = Date.now() + 8000;
   while (Date.now() < deadline) {
@@ -297,6 +306,7 @@ async function waitForGroupAbsence(pid: number): Promise<boolean> {
 
 describe('registerShellJobShutdownNotice', () => {
   let managers: ShellJobManager[] = [];
+  let managerDirs = new Map<ShellJobManager, string>();
   let baseDirs: string[] = [];
   let stderrChunks: string[] = [];
   let stderrWriteCalls = 0;
@@ -314,6 +324,19 @@ describe('registerShellJobShutdownNotice', () => {
     } catch (error) {
       failures.push(error);
     }
+    const knownChildPids = new Map<string, number[]>();
+    for (const manager of managers) {
+      const dir = managerDirs.get(manager);
+      if (dir !== undefined)
+        knownChildPids.set(
+          dir,
+          manager
+            .getRunningJobs()
+            .flatMap((job) =>
+              typeof job.pid === 'number' && job.pid > 0 ? [job.pid] : [],
+            ),
+        );
+    }
     for (const manager of managers) {
       try {
         await manager.dispose();
@@ -322,11 +345,21 @@ describe('registerShellJobShutdownNotice', () => {
       }
     }
     managers = [];
+    managerDirs = new Map();
     for (const dir of baseDirs) {
       try {
         fs.rmSync(dir, { recursive: true, force: true });
       } catch (error) {
-        failures.push(error);
+        const pids = (knownChildPids.get(dir) ?? []).filter(isProcessAlive);
+        const pidDetails =
+          pids.length === 0
+            ? 'no child PIDs were recorded'
+            : `known child PID(s): ${pids.join(', ')}`;
+        failures.push(
+          new Error(
+            `Could not remove fixture directory ${dir} (${pidDetails}): ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
       }
     }
     baseDirs = [];
@@ -355,6 +388,7 @@ describe('registerShellJobShutdownNotice', () => {
     baseDirs.push(baseDir);
     const manager = new ShellJobManager({ baseDir, maxBackgroundJobs });
     managers.push(manager);
+    managerDirs.set(manager, baseDir);
     return manager;
   }
 

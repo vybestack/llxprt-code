@@ -47,6 +47,10 @@ import {
   type SpawnedProcess,
 } from './shellJobSpawn.js';
 import { spawnShellJobGroup, type ShellJobGroup } from './shellJobGroup.js';
+import {
+  ShellJobDisposalError,
+  type SurvivorInfo,
+} from './shellJobDisposalError.js';
 
 export type {
   ShellJob,
@@ -84,37 +88,8 @@ export function survivorNeedsReap(entry: SurvivorEntry): boolean {
   return childIsRunning(entry.child);
 }
 
-/**
- * Structured information about a surviving process tree that dispose() could
- * not kill. Each entry carries the job id, its pid, and the exact remediation
- * command a human can run to force-kill the tree.
- */
-export interface SurvivorInfo {
-  readonly id: string;
-  readonly pid: number | undefined;
-  readonly remediation: string;
-}
-
-/**
- * Thrown by {@link ShellJobManager.dispose} when one or more Windows process
- * trees could not be killed after bounded retry. The error carries the
- * surviving job ids, their pids, and the exact `taskkill /T /F /PID <pid>`
- * remediation command for each so the caller (or human operator) can act.
- */
-export class ShellJobDisposalError extends Error {
-  readonly survivors: readonly SurvivorInfo[];
-
-  constructor(survivors: readonly SurvivorInfo[]) {
-    const lines = survivors
-      .map((s) => `  job ${s.id} (pid ${s.pid}): ${s.remediation}`)
-      .join('\n');
-    super(
-      `dispose() could not kill ${survivors.length} surviving process tree(s):\n${lines}`,
-    );
-    this.name = 'ShellJobDisposalError';
-    this.survivors = survivors;
-  }
-}
+export { ShellJobDisposalError } from './shellJobDisposalError.js';
+export type { SurvivorInfo } from './shellJobDisposalError.js';
 
 /**
  * Manages background shell jobs with a self-signalling POSIX group supervisor.
@@ -154,13 +129,17 @@ export class ShellJobManager {
   private readonly notificationErrors: unknown[] = [];
   private readonly posixGroups = new Map<string, ShellJobGroup>();
   private ownershipLost = false;
+  private readonly windowsKills = new Set<Promise<TaskkillResult>>();
+  private readonly windowsKillFailures: Error[] = [];
   private readonly groupErrors: unknown[] = [];
+  private readonly terminationPlatform: NodeJS.Platform;
 
   constructor(options?: {
     maxBackgroundJobs?: number;
     logMaxBytes?: number;
     baseDir?: string;
     taskkillImpl?: (pid: number) => Promise<TaskkillResult>;
+    terminationPlatform?: NodeJS.Platform;
   }) {
     this.emitter = new EventEmitter();
     this.emitter.setMaxListeners(50);
@@ -170,6 +149,7 @@ export class ShellJobManager {
     this.logMaxBytes = options?.logMaxBytes ?? DEFAULT_LOG_MAX_BYTES;
     this.logStore = new ShellJobLogStore(options?.baseDir);
     this.taskkillImpl = options?.taskkillImpl ?? boundedTaskkill;
+    this.terminationPlatform = options?.terminationPlatform ?? os.platform();
   }
 
   setMaxBackgroundJobs(max: number): void {
@@ -543,7 +523,7 @@ export class ShellJobManager {
 
     this.sendTermAndEscalate(ctx);
 
-    if (os.platform() === 'win32') {
+    if (this.terminationPlatform === 'win32') {
       await this.awaitBoundedCancel(ctx);
     } else {
       await ctx.record.terminalPromise;
@@ -579,16 +559,28 @@ export class ShellJobManager {
   private sendTermAndEscalate(ctx: ShellJobContext): void {
     const { record } = ctx;
     const pid = record.pid;
-    if (os.platform() === 'win32') {
+    if (this.terminationPlatform === 'win32') {
       // Guard against PID reuse: only kill if the ORIGINAL child is still
       // running, so a pid that was reused by an unrelated process is never
       // targeted.
       if (childIsRunning(record.child)) {
-        void this.safeWindowsKill(pid);
+        void this.startWindowsKill(pid);
       }
       return;
     }
     this.posixGroups.get(record.id)?.stop();
+  }
+
+  private startWindowsKill(pid: number | undefined): Promise<TaskkillResult> {
+    const reportFailure = this.disposalPromise !== null;
+    const kill = this.safeWindowsKill(pid);
+    this.windowsKills.add(kill);
+    void kill.then((result) => {
+      this.windowsKills.delete(kill);
+      if (reportFailure && !result.ok && result.error !== undefined)
+        this.windowsKillFailures.push(result.error);
+    });
+    return kill;
   }
 
   get(id: string): ShellJob | undefined {
@@ -752,6 +744,7 @@ export class ShellJobManager {
     const results = await Promise.allSettled([
       ...cancelPromises,
       ...Array.from(this.posixGroups.values(), (group) => group.drained),
+      ...this.windowsKills,
     ]);
     const failures = results.flatMap((result) =>
       result.status === 'rejected' ? [result.reason] : [],
@@ -772,7 +765,7 @@ export class ShellJobManager {
     // Reconcile any jobs that somehow didn't reach terminal.
     for (const ctx of this.jobs.values()) {
       if (ctx.record.state === 'running') {
-        if (os.platform() === 'win32') {
+        if (this.terminationPlatform === 'win32') {
           this.survivors.set(ctx.record.id, {
             child: ctx.record.child,
             pid: ctx.record.pid,
@@ -791,10 +784,11 @@ export class ShellJobManager {
     // for tracking so a live process tree is never orphaned without ownership.
     // Total time is bounded: one kill cycle plus short verification delays.
     let remainingSurvivors: SurvivorInfo[] = [];
-    if (os.platform() === 'win32') {
+    if (this.terminationPlatform === 'win32') {
       remainingSurvivors = await this.reapSurvivorsBounded();
     }
 
+    const killFailures = this.windowsKillFailures.splice(0);
     if (remainingSurvivors.length > 0) {
       // Retain survivor log files, log-store tracking entries, and job records
       // so the failure is diagnosable and the log is not yanked out from under
@@ -806,11 +800,16 @@ export class ShellJobManager {
           this.jobs.delete(id);
         }
       }
-      throw new ShellJobDisposalError(remainingSurvivors);
+      throw new ShellJobDisposalError(remainingSurvivors, killFailures);
     }
 
     await this.logStore.destroy();
     this.jobs.clear();
+    if (killFailures.length > 0)
+      throw new AggregateError(
+        killFailures,
+        'Windows process tree termination failed during disposal',
+      );
   }
 
   /**
@@ -854,7 +853,7 @@ export class ShellJobManager {
 
     await Promise.all(
       liveEntries.map(async ([id, entry]) => {
-        await this.safeWindowsKill(entry.pid);
+        await this.startWindowsKill(entry.pid);
         if (!childIsRunning(entry.child)) {
           this.survivors.delete(id);
         }
@@ -907,7 +906,7 @@ export class ShellJobManager {
     if (this.capPollTimer !== null) {
       return;
     }
-    if (os.platform() === 'win32') {
+    if (this.terminationPlatform === 'win32') {
       // Windows path needs async taskkill with survivor recording, so the
       // poll callback awaits.
       this.capPollTimer = setInterval(() => {
@@ -1006,7 +1005,7 @@ export class ShellJobManager {
           child: ctx.record.child,
           pid: ctx.record.pid,
         });
-        await this.safeWindowsKill(ctx.record.pid);
+        await this.startWindowsKill(ctx.record.pid);
       }
       ctx.record.phase = null;
       this.finalizeJob(ctx, 'failed', {
