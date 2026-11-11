@@ -128,8 +128,9 @@ export async function* chunkIds(
     const block = decodeChunkBlock(await chunkValue(access, entry.rowRef));
     const index = ordinal++;
     if (
-      block.type !== ROW_BLOCK_TYPE.tool_call &&
-      block.type !== ROW_BLOCK_TYPE.tool_response
+      !block.ended ||
+      (block.type !== ROW_BLOCK_TYPE.tool_call &&
+        block.type !== ROW_BLOCK_TYPE.tool_response)
     )
       continue;
     if (block.named !== true) {

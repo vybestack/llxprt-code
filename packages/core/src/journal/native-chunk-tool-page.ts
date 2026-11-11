@@ -23,13 +23,24 @@ export async function readChunkToolPage(
     return ordinal >= start && ordinal < start + count ? [index] : [];
   });
   const blocks: Uint8Array[] = [];
-  for (const index of selected)
+  const completed: number[] = [];
+  const completedTools = new Set(ids.header.ids.map((id) => id.block));
+  for (const index of selected) {
+    const type = ids.header.blocks[index].type;
+    if (
+      (type === ROW_BLOCK_TYPE.tool_call ||
+        type === ROW_BLOCK_TYPE.tool_response) &&
+      !completedTools.has(index)
+    )
+      continue;
     blocks.push(await readStoredBlock(access, entry, index, ids));
+    completed.push(index);
+  }
   return decodeStoredRow({
     ...metadata,
     header: {
       ...metadata.header,
-      blocks: selected.map((index) => ids.header.blocks[index]),
+      blocks: completed.map((index) => ids.header.blocks[index]),
     },
     blocks,
   });

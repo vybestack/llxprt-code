@@ -753,11 +753,9 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
           this.cursor = cursor;
           return cursor;
         },
-        (error: unknown): NativeJournalCursor | null => {
-          if (gen === this.generation && !this.closed) {
-            this.error = errorMessage(error);
-          }
-          return null;
+        (error: unknown): null => {
+          if (this.isStale(gen)) return null;
+          throw error;
         },
       );
     }
