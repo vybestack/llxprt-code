@@ -27,7 +27,7 @@ import type {
 import {
   refreshTokenUnderLock,
   RefreshLockReleases,
-  performDiskCheckUnderLock,
+  performDiskCheck,
   type RefreshErrorPolicy,
 } from './token-refresh-helper.js';
 import {
@@ -433,11 +433,12 @@ export class TokenAccessCoordinator {
     providerName: string,
     explicitBucket: boolean,
     requestMetadata: OAuthTokenRequestMetadata | undefined,
+    signal?: AbortSignal,
   ): Promise<OAuthToken | null> {
     if (explicitBucket) {
       return null;
     }
-    return this.peekOtherProfileBuckets(providerName, requestMetadata);
+    return this.peekOtherProfileBuckets(providerName, requestMetadata, signal);
   }
 
   // --------------------------------------------------------------------------
@@ -529,6 +530,7 @@ export class TokenAccessCoordinator {
       providerName,
       explicitBucket,
       effectiveMetadata,
+      signal,
     );
     if (peekResult !== null) {
       return peekResult;
@@ -627,9 +629,14 @@ export class TokenAccessCoordinator {
     );
 
     // @fix issue1262 & issue1195: Before triggering OAuth, check disk with lock
-    const diskCheckResult = await this.performDiskCheck(
+    const diskCheckResult = await performDiskCheck(
       providerName,
       bucketToCheck,
+      this.tokenStore,
+      this.providerRegistry,
+      this.proactiveRenewalManager,
+      this.refreshLockReleases,
+      signal,
     );
     if (diskCheckResult !== undefined) {
       return diskCheckResult;
@@ -658,6 +665,7 @@ export class TokenAccessCoordinator {
   private async peekOtherProfileBuckets(
     providerName: string,
     requestMetadata: OAuthTokenRequestMetadata | undefined,
+    signal?: AbortSignal,
   ): Promise<OAuthToken | null> {
     const profileBuckets = await this.getProfileBuckets(
       providerName,
@@ -675,12 +683,14 @@ export class TokenAccessCoordinator {
     );
 
     for (const peekBucket of profileBuckets) {
+      signal?.throwIfAborted();
       if (peekBucket === alreadyTriedBucket) continue;
       try {
         const peekToken = await this.tokenStore.getToken(
           providerName,
           peekBucket,
         );
+        signal?.throwIfAborted();
         if (peekToken && peekToken.expiry > thirtySecondsFromNow) {
           logger.debug(
             () =>
@@ -699,6 +709,7 @@ export class TokenAccessCoordinator {
           return peekToken;
         }
       } catch (peekError) {
+        if (signal?.aborted === true) throw peekError;
         // Unusable for every bucket, not just this one: continuing the loop
         // would swallow it once per bucket and end in a false "no token".
         rethrowIfStoreOutage(peekError);
@@ -713,64 +724,6 @@ export class TokenAccessCoordinator {
         `[issue1616] No valid token found in any bucket for ${providerName}, falling through to OAuth`,
     );
     return null;
-  }
-
-  /**
-   * Disk-check with refresh lock before triggering OAuth (issue1262/1195/1317).
-   * Returns:
-   *  - token   → valid token found, return it
-   *  - null    → no valid token and refresh attempted/failed, caller should NOT trigger auth
-   *  - undefined → lock missed or no useful disk token; caller continues to auth
-   */
-  private async performDiskCheck(
-    providerName: string,
-    bucketToCheck: string | undefined,
-  ): Promise<OAuthToken | null | undefined> {
-    const lockAcquired = await this.tokenStore.acquireRefreshLock(
-      providerName,
-      { waitMs: 5000, bucket: bucketToCheck },
-    );
-
-    if (lockAcquired) {
-      try {
-        return await performDiskCheckUnderLock(
-          providerName,
-          bucketToCheck,
-          this.tokenStore,
-          this.providerRegistry,
-        );
-      } finally {
-        await this.refreshLockReleases.release(providerName, bucketToCheck);
-      }
-    }
-
-    // Couldn't acquire lock — check disk anyway (best-effort, treat failures as cache miss)
-    let diskToken: OAuthToken | null = null;
-    try {
-      diskToken = await this.tokenStore.getToken(providerName, bucketToCheck);
-    } catch (error) {
-      rethrowIfStoreOutage(error);
-      logger.debug(
-        `[issue1262/1195] Disk fallback read failed for ${providerName}:`,
-        error,
-      );
-      return undefined;
-    }
-    const thirtySecondsFromNow = Math.floor(Date.now() / 1000) + 30;
-    if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
-      logger.debug(
-        () =>
-          `[issue1262/1195] Found valid token on disk after lock timeout for ${providerName}`,
-      );
-      this.proactiveRenewalManager.scheduleProactiveRenewal(
-        providerName,
-        bucketToCheck,
-        diskToken,
-      );
-      return diskToken;
-    }
-
-    return undefined; // continue to auth
   }
 
   private async triggerAuthFlow(

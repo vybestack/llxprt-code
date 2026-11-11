@@ -35,6 +35,9 @@ describe('session client stop admission', () => {
       finished = true;
     });
     try {
+      await expect(
+        built.agent.sessionClient.fetch('http://127.0.0.1:1/late'),
+      ).rejects.toThrow('Auxiliary generation is closed');
       await expect(built.agent.generateEmbedding(['late'])).rejects.toThrow(
         /closed/,
       );
@@ -42,8 +45,21 @@ describe('session client stop admission', () => {
         'Session settings owner is closed',
       );
       await expect(built.agent.generate('late')).rejects.toThrow(/closed/);
+      await expect(built.agent.compress()).rejects.toThrow(/closed/i);
       expect(built.agent.dispose()).toBe(closing);
       await Promise.resolve();
+      await expect(built.agent.profiles.load('after-dispose')).rejects.toThrow(
+        /disposed|closed/i,
+      );
+      await expect(
+        built.agent.profiles.applySnapshot({
+          version: 1,
+          provider: 'fake',
+          model: 'after-dispose',
+          modelParams: {},
+          ephemeralSettings: {},
+        }),
+      ).rejects.toThrow(/disposed|closed/i);
       expect(finished).toBe(false);
       release.release();
       expect(await ready).toBeInstanceOf(Error);

@@ -83,7 +83,7 @@ export function assembleSessionAuthentication(
     isAvailable: () => true,
     discoverBuckets: (logger) => discoverProviderBuckets(oauth, logger),
     ...storedTokenOperations((provider, bucket) =>
-      oauth.getTokenStore().getToken(provider, bucket),
+      oauth.readStoredToken(provider, bucket),
     ),
     hasCodexToken: async () => (await oauth.getToken('codex')) !== null,
     attachProviderMessages: (callback) =>

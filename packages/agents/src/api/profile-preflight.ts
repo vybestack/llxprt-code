@@ -275,11 +275,13 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     return this.#settings.exportForStateSnapshot();
   }
   load(name: string): ReturnType<AgentProfileApplication['load']> {
+    this.#assertOpen();
     return (this.#profiles ?? notPrepared()).load(name);
   }
   applySnapshot(
     ...args: Parameters<AgentProfileApplication['applySnapshot']>
   ): ReturnType<AgentProfileApplication['applySnapshot']> {
+    this.#assertOpen();
     return (this.#profiles ?? notPrepared()).applySnapshot(...args);
   }
   isApplying(): boolean {
@@ -719,6 +721,7 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     this.#phase = 'closed';
     this.#closing = Promise.resolve().then(async () => {
       await Promise.allSettled([this.#preparation]);
+      await this.#profiles?.cancelAndJoin();
       const actions: Array<() => void | Promise<void>> = [];
       if (
         this.#foregroundPending !== undefined &&

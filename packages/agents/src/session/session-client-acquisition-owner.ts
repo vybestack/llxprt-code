@@ -143,6 +143,15 @@ export class SessionClientAcquisitionOwner {
   get fetch(): NetworkFetch {
     return this.factories.manager.fetchNetwork;
   }
+  fetchWithLifetime(
+    input: Parameters<NetworkFetch>[0],
+    init?: Parameters<NetworkFetch>[1],
+  ): ReturnType<NetworkFetch> {
+    return this.auxiliary.run(
+      (signal) => this.fetch(input, { ...init, signal }),
+      init?.signal ?? undefined,
+    );
+  }
   async initializeInitialClientBinding(): Promise<void> {
     if (!this.initialBindingComplete) {
       await initializeClientBinding(
