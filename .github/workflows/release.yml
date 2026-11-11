@@ -61,16 +61,426 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify_preflight:
+    name: Release static verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    if: github.repository == 'vybestack/llxprt-code' && inputs.force_skip_tests != true
+    steps:
+      - name: Checkout code
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+        with:
+          ref: ${{ github.sha }}
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - name: Setup Bun
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6'
+        with:
+          bun-version-file: '.bun-version'
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Link Bun runtime and apply dependency patches
+        run: |
+          node scripts/link-bun-runtime.ts
+          node scripts/postinstall.cjs
+      - name: Fix rollup platform dependency
+        run: npm install @rollup/rollup-linux-x64-gnu@4.59.0 --no-save --ignore-scripts
+      - name: Run static preflight checks
+        run: |
+          npm run format
+          npm run build
+          npm run lint:ci
+          npm run typecheck
+          npm run lint:agents-api-surface
+
+  verify_shards:
+    name: Release tests (${{ matrix.shard }} ${{ matrix.partition }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: github.repository == 'vybestack/llxprt-code' && inputs.force_skip_tests != true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: cli
+            partition: 1of3
+          - shard: cli
+            partition: 2of3
+          - shard: cli
+            partition: 3of3
+          - shard: agents
+            partition: 1of1
+          - shard: providers
+            partition: 1of1
+          - shard: core
+            partition: 1of1
+          - shard: rest
+            partition: 1of1
+          - shard: scripts
+            partition: 1of1
+    steps:
+      - name: Checkout code
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - name: Setup Bun
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6'
+        with:
+          bun-version-file: '.bun-version'
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Link Bun runtime and apply dependency patches
+        run: |
+          node scripts/link-bun-runtime.ts
+          node scripts/postinstall.cjs
+      - name: Fix rollup platform dependency
+        run: npm install @rollup/rollup-linux-x64-gnu@4.59.0 --no-save --ignore-scripts
+      - name: Install runtime plugin dependencies
+        if: matrix.shard == 'cli' || matrix.shard == 'providers' || matrix.shard == 'scripts'
+        run: |
+          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
+            (cd "$plugin" && bun install --omit=peer)
+          done
+      - name: Build project (agents and scripts shards)
+        if: matrix.shard == 'agents' || matrix.shard == 'scripts'
+        run: npm run build
+      - name: Verify test shard completeness
+        run: npm run lint:test-shards
+      - name: Prepare agents API surface for test shard
+        if: matrix.shard == 'agents'
+        run: npm run lint:agents-api-surface
+      - name: Run shard tests
+        env:
+          NO_COLOR: true
+          CI: true
+          LLXPRT_CLI_TEST_PARTITION: ${{ matrix.partition }}
+          LLXPRT_SKIP_IMAGE_HARNESS: 'true'
+        run: bun scripts/test.ts --shard "${{ matrix.shard }}"
+      - name: Smoke test CLI entry
+        if: matrix.shard == 'cli'
+        run: ./packages/cli/bin/llxprt --version
+
+  integration:
+    name: Release integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: github.repository == 'vybestack/llxprt-code' && inputs.force_skip_tests != true
+    steps:
+      - name: Checkout code
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - name: Setup Bun
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6'
+        with:
+          bun-version-file: '.bun-version'
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Link Bun runtime and apply dependency patches
+        run: |
+          node scripts/link-bun-runtime.ts
+          node scripts/postinstall.cjs
+      - name: Install runtime plugin dependencies
+        run: |
+          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
+            (cd "$plugin" && bun install --omit=peer)
+          done
+      - name: Set up local Gemma model
+        uses: './.github/actions/setup-local-gemma'
+      - name: Run Integration Tests
+        run: npm run test:integration:sandbox:none
+        env:
+          GIT_CEILING_DIRECTORIES: '${{ github.workspace }}/.integration-tests'
+          LLXPRT_FORCE_FILE_STORAGE: 'true'
+          LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/release-model-ledger.jsonl'
+      - name: Capture release model diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          diagnostics="$RUNNER_TEMP/release-diagnostics"
+          mkdir -p "$diagnostics"
+          date --utc --iso-8601=seconds > "$diagnostics/captured-at.txt"
+          for source in /proc/cpuinfo /proc/loadavg /proc/meminfo /proc/stat; do
+            if [[ -r "$source" ]]; then
+              cp "$source" "$diagnostics/$(basename "$source").txt"
+            fi
+          done
+          if [[ -r /sys/fs/cgroup/cpu.stat ]]; then
+            cp /sys/fs/cgroup/cpu.stat "$diagnostics/cgroup-cpu-stat.txt"
+          fi
+          if [[ -r /sys/fs/cgroup/cpu.max ]]; then
+            cp /sys/fs/cgroup/cpu.max "$diagnostics/cgroup-cpu-max.txt"
+          fi
+          for source in \
+            "$RUNNER_TEMP/ollama-server.log" \
+            "$RUNNER_TEMP/release-model-ledger.jsonl"; do
+            if [[ -f "$source" ]]; then
+              cp "$source" "$diagnostics/"
+            fi
+          done
+      - name: Upload release model diagnostics
+        if: always()
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        with:
+          name: release-model-diagnostics-${{ github.run_id }}
+          path: ${{ runner.temp }}/release-diagnostics/
+          if-no-files-found: error
+          retention-days: 14
+
+  prepare_artifact:
+    name: Prepare versioned sandbox input artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    if: github.repository == 'vybestack/llxprt-code'
+    outputs:
+      source_sha: ${{ steps.metadata.outputs.source_sha }}
+      release_version: ${{ steps.metadata.outputs.release_version }}
+      release_tag: ${{ steps.metadata.outputs.release_tag }}
+      npm_tag: ${{ steps.metadata.outputs.npm_tag }}
+      image_labels: ${{ steps.image_metadata.outputs.labels }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+    steps:
+      - name: Checkout code
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - name: Setup Bun
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6'
+        with:
+          bun-version-file: '.bun-version'
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Link Bun runtime and apply dependency patches
+        run: |
+          node scripts/link-bun-runtime.ts
+          node scripts/postinstall.cjs
+      - name: Determine artifact version
+        id: metadata
+        env:
+          IS_NIGHTLY: ${{ github.event_name == 'schedule' || inputs.create_nightly_release }}
+          IS_PREVIEW: ${{ inputs.create_preview_release }}
+          MANUAL_VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          VERSION_JSON=$(bun scripts/get-release-version.ts)
+          {
+            echo "source_sha=$SOURCE_SHA"
+            echo "release_version=$(echo "$VERSION_JSON" | jq -r .releaseVersion)"
+            echo "release_tag=$(echo "$VERSION_JSON" | jq -r .releaseTag)"
+            echo "npm_tag=$(echo "$VERSION_JSON" | jq -r .npmTag)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Extract shared sandbox image labels
+        id: image_metadata
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
+        with:
+          images: ghcr.io/${{ github.repository }}/sandbox
+          tags: |
+            type=raw,value=${{ steps.metadata.outputs.release_version }}
+            type=raw,value=latest,enable=${{ github.event_name != 'schedule' && inputs.create_nightly_release != true }}
+      - name: Version and bind release packages
+        env:
+          RELEASE_VERSION: ${{ steps.metadata.outputs.release_version }}
+        run: |
+          npm run release:version "$RELEASE_VERSION"
+          bun scripts/bind-release-deps.ts
+      - name: Build and pack versioned sandbox inputs
+        env:
+          RELEASE_VERSION: ${{ steps.metadata.outputs.release_version }}
+        run: |
+          npm run build:packages
+          npm run prepare:package
+          mkdir -p packages/tools/dist packages/cli/dist packages/storage/dist packages/auth/dist packages/settings/dist packages/telemetry/dist packages/ide-integration/dist packages/policy/dist packages/mcp/dist packages/core/dist packages/providers/dist packages/agents/dist packages/zed-acp/dist
+          npm pack -w @vybestack/llxprt-code-tools --pack-destination ./packages/tools/dist
+          npm pack -w @vybestack/llxprt-code-storage --pack-destination ./packages/storage/dist
+          npm pack -w @vybestack/llxprt-code-auth --pack-destination ./packages/auth/dist
+          npm pack -w @vybestack/llxprt-code-settings --pack-destination ./packages/settings/dist
+          npm pack -w @vybestack/llxprt-code-telemetry --pack-destination ./packages/telemetry/dist
+          npm pack -w @vybestack/llxprt-code-ide-integration --pack-destination ./packages/ide-integration/dist
+          npm pack -w @vybestack/llxprt-code-policy --pack-destination ./packages/policy/dist
+          npm pack -w @vybestack/llxprt-code-mcp --pack-destination ./packages/mcp/dist
+          npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist
+          npm pack -w @vybestack/llxprt-code-providers --pack-destination ./packages/providers/dist
+          npm pack -w @vybestack/llxprt-code-agents --pack-destination ./packages/agents/dist
+          npm pack -w @vybestack/llxprt-code-zed-acp --pack-destination ./packages/zed-acp/dist
+          npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist
+          tar -czf "$RUNNER_TEMP/sandbox-release-inputs.tgz" packages/*/dist/*.tgz
+      - name: Upload versioned sandbox input artifact
+        id: upload
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        with:
+          name: sandbox-release-inputs-${{ github.run_id }}
+          path: ${{ runner.temp }}/sandbox-release-inputs.tgz
+          if-no-files-found: error
+
+  candidate_amd64:
+    name: Build and smoke linux/amd64 candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: prepare_artifact
+    if: github.repository == 'vybestack/llxprt-code' && inputs.publish_vscode_only != true && inputs.dry_run != true
+    outputs:
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      image_sha256: ${{ steps.image.outputs.sha256 }}
+      input_artifact_digest: ${{ needs.prepare_artifact.outputs.artifact_digest }}
+      source_sha: ${{ needs.prepare_artifact.outputs.source_sha }}
+      release_version: ${{ needs.prepare_artifact.outputs.release_version }}
+    steps:
+      - name: Checkout source SHA
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+        with:
+          ref: ${{ needs.prepare_artifact.outputs.source_sha }}
+      - name: Download shared versioned sandbox inputs
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: sandbox-release-inputs-${{ github.run_id }}
+      - name: Restore sandbox input tarballs
+        run: tar -xzf sandbox-release-inputs.tgz -C .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+      - name: Build amd64 candidate image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: .
+          push: false
+          load: true
+          platforms: linux/amd64
+          tags: llxprt-sandbox:candidate-amd64
+          labels: ${{ needs.prepare_artifact.outputs.image_labels }}
+          build-args: CLI_VERSION_ARG=${{ needs.prepare_artifact.outputs.release_version }}
+      - name: Setup Bun for image smoke
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6'
+        with:
+          bun-version-file: '.bun-version'
+      - name: Smoke test amd64 candidate
+        run: bun scripts/sandbox-image-probe.ts --engine docker --image llxprt-sandbox:candidate-amd64 --platform linux/amd64
+      - name: Export candidate image and calculate digest
+        id: image
+        run: |
+          docker save llxprt-sandbox:candidate-amd64 -o "$RUNNER_TEMP/candidate-amd64.tar"
+          sha256sum "$RUNNER_TEMP/candidate-amd64.tar" | tee "$RUNNER_TEMP/candidate-amd64.tar.sha256"
+          echo "sha256=$(cut -d' ' -f1 "$RUNNER_TEMP/candidate-amd64.tar.sha256")" >> "$GITHUB_OUTPUT"
+      - name: Upload amd64 candidate image
+        id: upload
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        with:
+          name: sandbox-candidate-amd64-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/candidate-amd64.tar
+            ${{ runner.temp }}/candidate-amd64.tar.sha256
+          if-no-files-found: error
+
+  candidate_arm64:
+    name: Build and smoke linux/arm64 candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: prepare_artifact
+    if: github.repository == 'vybestack/llxprt-code' && inputs.publish_vscode_only != true && inputs.dry_run != true
+    outputs:
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      image_sha256: ${{ steps.image.outputs.sha256 }}
+      input_artifact_digest: ${{ needs.prepare_artifact.outputs.artifact_digest }}
+      source_sha: ${{ needs.prepare_artifact.outputs.source_sha }}
+      release_version: ${{ needs.prepare_artifact.outputs.release_version }}
+    steps:
+      - name: Checkout source SHA
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+        with:
+          ref: ${{ needs.prepare_artifact.outputs.source_sha }}
+      - name: Download shared versioned sandbox inputs
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: sandbox-release-inputs-${{ github.run_id }}
+      - name: Restore sandbox input tarballs
+        run: tar -xzf sandbox-release-inputs.tgz -C .
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+      - name: Build arm64 candidate image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: .
+          push: false
+          load: true
+          platforms: linux/arm64
+          tags: llxprt-sandbox:candidate-arm64
+          labels: ${{ needs.prepare_artifact.outputs.image_labels }}
+          build-args: CLI_VERSION_ARG=${{ needs.prepare_artifact.outputs.release_version }}
+      - name: Setup Bun for image smoke
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6'
+        with:
+          bun-version-file: '.bun-version'
+      - name: Smoke test arm64 candidate
+        run: bun scripts/sandbox-image-probe.ts --engine docker --image llxprt-sandbox:candidate-arm64 --platform linux/arm64
+      - name: Export candidate image and calculate digest
+        id: image
+        run: |
+          docker save llxprt-sandbox:candidate-arm64 -o "$RUNNER_TEMP/candidate-arm64.tar"
+          sha256sum "$RUNNER_TEMP/candidate-arm64.tar" | tee "$RUNNER_TEMP/candidate-arm64.tar.sha256"
+          echo "sha256=$(cut -d' ' -f1 "$RUNNER_TEMP/candidate-arm64.tar.sha256")" >> "$GITHUB_OUTPUT"
+      - name: Upload arm64 candidate image
+        id: upload
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        with:
+          name: sandbox-candidate-arm64-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/candidate-arm64.tar
+            ${{ runner.temp }}/candidate-arm64.tar.sha256
+          if-no-files-found: error
+
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    needs:
+      - verify_preflight
+      - verify_shards
+      - integration
+      - prepare_artifact
+      - candidate_amd64
+      - candidate_arm64
+    if: >-
+      always() && github.repository == 'vybestack/llxprt-code' &&
+      needs.prepare_artifact.result == 'success' &&
+      (inputs.force_skip_tests == true ||
+       (needs.verify_preflight.result == 'success' && needs.verify_shards.result == 'success' && needs.integration.result == 'success')) &&
+      (inputs.publish_vscode_only == true || inputs.dry_run == true ||
+       (needs.candidate_amd64.result == 'success' && needs.candidate_arm64.result == 'success'))
     environment:
       name: production-release
       url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.RELEASE_TAG }}
     env:
       REGISTRY: ghcr.io
       SANDBOX_IMAGE_NAME: ${{ github.repository }}/sandbox
-    if: github.repository == 'vybestack/llxprt-code'
+      SOURCE_SHA: ${{ needs.prepare_artifact.outputs.source_sha }}
+      RELEASE_VERSION: ${{ needs.prepare_artifact.outputs.release_version }}
+      INPUT_ARTIFACT_DIGEST: ${{ needs.prepare_artifact.outputs.artifact_digest }}
+      AMD64_ARTIFACT_DIGEST: ${{ needs.candidate_amd64.outputs.artifact_digest }}
+      ARM64_ARTIFACT_DIGEST: ${{ needs.candidate_arm64.outputs.artifact_digest }}
+      AMD64_INPUT_ARTIFACT_DIGEST: ${{ needs.candidate_amd64.outputs.input_artifact_digest }}
+      ARM64_INPUT_ARTIFACT_DIGEST: ${{ needs.candidate_arm64.outputs.input_artifact_digest }}
+      AMD64_SOURCE_SHA: ${{ needs.candidate_amd64.outputs.source_sha }}
+      ARM64_SOURCE_SHA: ${{ needs.candidate_arm64.outputs.source_sha }}
+      AMD64_RELEASE_VERSION: ${{ needs.candidate_amd64.outputs.release_version }}
+      ARM64_RELEASE_VERSION: ${{ needs.candidate_arm64.outputs.release_version }}
     permissions:
       contents: write
       packages: write
@@ -169,19 +579,18 @@ jobs:
         run: |
           npm install @rollup/rollup-linux-x64-gnu@4.59.0 --no-save --ignore-scripts || true
 
-      - name: Get the version
+      - name: Reuse versioned artifact metadata
         id: version
-        run: |
-          VERSION_JSON=$(bun scripts/get-release-version.ts)
-          {
-            echo "RELEASE_TAG=$(echo "$VERSION_JSON" | jq -r .releaseTag)"
-            echo "RELEASE_VERSION=$(echo "$VERSION_JSON" | jq -r .releaseVersion)"
-            echo "NPM_TAG=$(echo "$VERSION_JSON" | jq -r .npmTag)"
-          } >> "$GITHUB_OUTPUT"
         env:
-          IS_NIGHTLY: ${{ steps.vars.outputs.is_nightly }}
-          IS_PREVIEW: ${{ steps.vars.outputs.is_preview }}
-          MANUAL_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ needs.prepare_artifact.outputs.release_tag }}
+          RELEASE_VERSION: ${{ needs.prepare_artifact.outputs.release_version }}
+          NPM_TAG: ${{ needs.prepare_artifact.outputs.npm_tag }}
+        run: |
+          {
+            echo "RELEASE_TAG=$RELEASE_TAG"
+            echo "RELEASE_VERSION=$RELEASE_VERSION"
+            echo "NPM_TAG=$NPM_TAG"
+          } >> "$GITHUB_OUTPUT"
 
       # Scheduled nightlies can collide with a manual nightly that already
       # published the same commit + UTC-date version. npm versions are
@@ -214,198 +623,6 @@ jobs:
             echo "Patch/nightly/preview release detected (${RELEASE_VERSION}), skipping branch creation."
           fi
           echo "should_create_branch=${should_create_branch}" >> "$GITHUB_OUTPUT"
-
-      - name: Install pinned local Ollama runtime for release model checks
-        if: steps.duplicate_check.outputs.is_duplicate != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(uname -m)" = 'x86_64'
-          mkdir -p "$RUNNER_TEMP/ollama"
-          curl --fail --show-error --location --retry 3 \
-            'https://ollama.com/download/ollama-linux-amd64.tar.zst?version=0.31.1' \
-            -o "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
-          printf '%s  %s\n' 'd297381efc136451f6fabb9dd644a67f70fe51c16815a0c4a95ff0e327a3afb4' "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" | sha256sum --check -
-          tar --zstd --exclude='lib/ollama/cuda_v12/*' --exclude='lib/ollama/cuda_v13/*' --exclude='lib/ollama/vulkan/*' -xf "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" -C "$RUNNER_TEMP/ollama"
-          rm "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
-          echo "$RUNNER_TEMP/ollama/bin" >>"$GITHUB_PATH"
-          "$RUNNER_TEMP/ollama/bin/ollama" --version
-
-      - name: Select local Ollama CPU backend
-        if: steps.duplicate_check.outputs.is_duplicate != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! grep -qm1 '^vendor_id[[:space:]]*: GenuineIntel$' /proc/cpuinfo; then
-            echo 'Host is not Intel; leaving Ollama CPU variants untouched'
-            exit 0
-          fi
-          libdir="$RUNNER_TEMP/ollama/lib/ollama"
-          test -f "$libdir/libggml-cpu-haswell.so"
-          shopt -s nullglob
-          variants=("$libdir"/libggml-cpu-*.so)
-          (( ${#variants[@]} > 1 )) || { echo 'Expected multiple CPU variants in pinned Ollama runtime' >&2; exit 1; }
-          mkdir -p "$RUNNER_TEMP/ollama-disabled-cpu-backends"
-          for library in "${variants[@]}"; do
-            if [[ "$library" != "$libdir/libggml-cpu-haswell.so" ]]; then
-              mv "$library" "$RUNNER_TEMP/ollama-disabled-cpu-backends/"
-            fi
-          done
-
-      - name: Start pinned local Gemma model
-        if: steps.duplicate_check.outputs.is_duplicate != 'true'
-        env:
-          OLLAMA_HOST: '127.0.0.1:12644'
-          OLLAMA_CONTEXT_LENGTH: '32768'
-          OLLAMA_NUM_PARALLEL: '1'
-          OLLAMA_MODELS: '${{ runner.temp }}/ollama-models'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$OLLAMA_MODELS"
-          nohup ollama serve >"$RUNNER_TEMP/ollama-server.log" 2>&1 &
-          server_pid=$!
-          for _ in {1..60}; do
-            if curl --fail --silent "http://$OLLAMA_HOST/api/version"; then break; fi
-            kill -0 "$server_pid" 2>/dev/null || { cat "$RUNNER_TEMP/ollama-server.log" >&2; exit 1; }
-            sleep 2
-          done
-          curl --fail --silent "http://$OLLAMA_HOST/api/version" | jq -e '.version == "0.31.1"'
-          ollama pull gemma4:e2b-it-qat
-          curl --fail --silent "http://$OLLAMA_HOST/api/tags" | jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .digest == "07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c")'
-          df -h "$RUNNER_TEMP"
-      # Source-checkout CLI integration tests discover runtime plugins only
-      # after their plugin-local dependencies have been installed. Use the
-      # plugin lockfile's required Bun version, then restore the repository pin
-      # so preflight runs with the same Bun version as the rest of the project.
-      - name: Setup Bun for runtime plugin dependencies
-        if: steps.duplicate_check.outputs.is_duplicate != 'true'
-        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
-        with:
-          bun-version-file: '.bun-version'
-
-      - name: Install runtime plugin dependencies for preflight
-        if: steps.duplicate_check.outputs.is_duplicate != 'true'
-        run: |
-          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
-            (cd "$plugin" && bun install --omit=peer)
-          done
-
-      - name: Restore repository Bun version
-        if: steps.duplicate_check.outputs.is_duplicate != 'true'
-        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
-        with:
-          bun-version-file: '.bun-version'
-
-      - name: Verify local model CPU inference before release tests
-        if: steps.duplicate_check.outputs.is_duplicate != 'true'
-        shell: bash
-        env:
-          OLLAMA_HOST: '127.0.0.1:12644'
-        run: |
-          set -euo pipefail
-          curl --fail --show-error --silent --max-time 300 \
-            "http://$OLLAMA_HOST/api/generate" \
-            -H 'Content-Type: application/json' \
-            -d '{"model":"gemma4:e2b-it-qat","prompt":"Reply with one word.","stream":false,"think":false,"options":{"num_ctx":32768,"num_predict":16}}' \
-            -o "$RUNNER_TEMP/ollama-inference.json"
-          jq -e '.done == true and .error == null and (.response | length > 0)' "$RUNNER_TEMP/ollama-inference.json" || {
-            cat "$RUNNER_TEMP/ollama-inference.json" >&2
-            exit 1
-          }
-          curl --fail --show-error --silent "http://$OLLAMA_HOST/api/ps" |
-            jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .size_vram == 0)'
-
-      - name: Verify live Ollama CPU backend
-        if: steps.duplicate_check.outputs.is_duplicate != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          vendor="$(awk -F: '/^vendor_id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' /proc/cpuinfo)"
-          pid="$(pgrep -f "^$RUNNER_TEMP/ollama/lib/ollama/llama-server --model " | head -1)"
-          [[ -n "$pid" ]] || { echo 'Live llama-server process not found' >&2; exit 1; }
-          maps="/proc/$pid/maps"
-          [[ -r "$maps" ]] || { echo "Live llama-server maps are unavailable: $maps" >&2; exit 1; }
-          backends="$(grep -Eo '/[^ ]+/libggml-cpu(-[^ ]+)?\.so( \(deleted\))?' "$maps" | sort -u || true)"
-          [[ -n "$backends" ]] || { echo 'No mapped llama-server CPU backend' >&2; exit 1; }
-          if [[ "$vendor" == GenuineIntel ]]; then
-            expected="$RUNNER_TEMP/ollama/lib/ollama/libggml-cpu-haswell.so"
-            grep -Fxq "$expected" <<< "$backends" || { echo 'Expected haswell CPU library is not mapped' >&2; exit 1; }
-            while IFS= read -r backend; do [[ "$backend" == "$expected" ]] || { echo "Unexpected mapped CPU library: $backend" >&2; exit 1; }; done <<< "$backends"
-          elif [[ "$vendor" == AuthenticAMD ]]; then
-            echo "AMD native CPU backend: $backends"
-          else
-            echo "Unsupported CPU vendor: $vendor" >&2
-            exit 1
-          fi
-
-      - name: Run Preflight Checks
-        if: ${{ github.event.inputs.force_skip_tests != 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: bun scripts/preflight-ci.ts
-        env:
-          OPENAI_API_KEY: ollama-local-only
-          OPENAI_BASE_URL: http://127.0.0.1:12644/v1
-          LLXPRT_DEFAULT_MODEL: gemma4:e2b-it-qat
-          LLXPRT_DEFAULT_PROVIDER: openai
-          LLXPRT_AUTH_TYPE: none
-          LLXPRT_CONTEXT_LIMIT: '32768'
-          LLXPRT_MAX_OUTPUT_TOKENS: '8192'
-          LLXPRT_SKIP_IMAGE_HARNESS: 'true' # Avoid libspng flake on Linux runners (issue #816)
-
-      - name: Run Integration Tests
-        if: ${{ github.event.inputs.force_skip_tests != 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: |
-          npm run test:integration:sandbox:none
-          # Skipping Docker tests due to flakiness
-          # npm run test:integration:sandbox:docker
-        env:
-          OPENAI_API_KEY: ollama-local-only
-          OPENAI_BASE_URL: http://127.0.0.1:12644/v1
-          LLXPRT_DEFAULT_MODEL: gemma4:e2b-it-qat
-          LLXPRT_DEFAULT_PROVIDER: openai
-          LLXPRT_AUTH_TYPE: none
-          LLXPRT_CONTEXT_LIMIT: '32768'
-          LLXPRT_MAX_OUTPUT_TOKENS: '8192'
-          GIT_CEILING_DIRECTORIES: '${{ github.workspace }}/.integration-tests'
-          LLXPRT_FORCE_FILE_STORAGE: 'true'
-          LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/release-model-ledger.jsonl'
-
-      - name: Capture release model diagnostics
-        if: ${{ always() && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          diagnostics="$RUNNER_TEMP/release-diagnostics"
-          mkdir -p "$diagnostics"
-          date --utc --iso-8601=seconds > "$diagnostics/captured-at.txt"
-          for source in /proc/cpuinfo /proc/loadavg /proc/meminfo /proc/stat; do
-            if [[ -r "$source" ]]; then
-              cp "$source" "$diagnostics/$(basename "$source").txt"
-            fi
-          done
-          if [[ -r /sys/fs/cgroup/cpu.stat ]]; then
-            cp /sys/fs/cgroup/cpu.stat "$diagnostics/cgroup-cpu-stat.txt"
-          fi
-          if [[ -r /sys/fs/cgroup/cpu.max ]]; then
-            cp /sys/fs/cgroup/cpu.max "$diagnostics/cgroup-cpu-max.txt"
-          fi
-          for source in \
-            "$RUNNER_TEMP/ollama-server.log" \
-            "$RUNNER_TEMP/ollama-inference.json" \
-            "$RUNNER_TEMP/release-model-ledger.jsonl"; do
-            if [[ -f "$source" ]]; then
-              cp "$source" "$diagnostics/"
-            fi
-          done
-
-      - name: Upload release model diagnostics
-        if: ${{ always() && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # ratchet:actions/upload-artifact@v4
-        with:
-          name: release-model-diagnostics-${{ github.run_id }}
-          path: ${{ runner.temp }}/release-diagnostics/
-          if-no-files-found: error
-          retention-days: 14
 
       - name: Configure Git User
         if: ${{ steps.duplicate_check.outputs.is_duplicate != 'true' }}
@@ -497,6 +714,10 @@ jobs:
             exit 1
           fi
           echo "VSIX_PATH=$VSIX_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Set up local Gemma for release notes
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        uses: './.github/actions/setup-local-gemma'
 
       - name: Generate Release Notes
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
@@ -656,25 +877,6 @@ jobs:
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.GH_SECRET }}
 
-      - name: Prepare sandbox package tarballs
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: |
-          mkdir -p packages/tools/dist packages/cli/dist packages/storage/dist packages/auth/dist packages/settings/dist packages/telemetry/dist packages/ide-integration/dist packages/policy/dist packages/mcp/dist packages/core/dist packages/providers/dist packages/agents/dist
-          rm -f packages/tools/dist/vybestack-llxprt-code-tools-*.tgz packages/cli/dist/vybestack-llxprt-code-*.tgz packages/storage/dist/vybestack-llxprt-code-storage-*.tgz packages/auth/dist/vybestack-llxprt-code-auth-*.tgz packages/settings/dist/vybestack-llxprt-code-settings-*.tgz packages/telemetry/dist/vybestack-llxprt-code-telemetry-*.tgz packages/ide-integration/dist/vybestack-llxprt-code-ide-integration-*.tgz packages/policy/dist/vybestack-llxprt-code-policy-*.tgz packages/mcp/dist/vybestack-llxprt-code-mcp-*.tgz packages/core/dist/vybestack-llxprt-code-core-*.tgz packages/providers/dist/vybestack-llxprt-code-providers-*.tgz packages/agents/dist/vybestack-llxprt-code-agents-*.tgz
-          npm pack -w @vybestack/llxprt-code-tools --pack-destination ./packages/tools/dist
-          npm pack -w @vybestack/llxprt-code-storage --pack-destination ./packages/storage/dist
-          npm pack -w @vybestack/llxprt-code-auth --pack-destination ./packages/auth/dist
-          npm pack -w @vybestack/llxprt-code-settings --pack-destination ./packages/settings/dist
-          npm pack -w @vybestack/llxprt-code-telemetry --pack-destination ./packages/telemetry/dist
-          npm pack -w @vybestack/llxprt-code-policy --pack-destination ./packages/policy/dist
-          npm pack -w @vybestack/llxprt-code-mcp --pack-destination ./packages/mcp/dist
-          npm pack -w @vybestack/llxprt-code-ide-integration --pack-destination ./packages/ide-integration/dist
-          npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist
-          npm pack -w @vybestack/llxprt-code-providers --pack-destination ./packages/providers/dist
-          npm pack -w @vybestack/llxprt-code-agents --pack-destination ./packages/agents/dist
-          npm pack -w @vybestack/llxprt-code-zed-acp --pack-destination ./packages/zed-acp/dist
-          npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist
-
       - name: Log in to Container Registry
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # ratchet:docker/login-action@v4
@@ -693,81 +895,73 @@ jobs:
             type=raw,value=${{ steps.version.outputs.RELEASE_VERSION }}
             type=raw,value=latest,enable=${{ steps.vars.outputs.is_nightly != 'true' }}
 
-      - name: Set up Docker Buildx
+      - name: Download amd64 candidate image
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
         with:
-          driver: docker-container
+          name: sandbox-candidate-amd64-${{ github.run_id }}
+          path: ${{ runner.temp }}/candidate-amd64
 
-      # Emulation for the arm64 candidate smoke below (the runner itself is
-      # amd64). The CLI bundles platform-conditional natives (sharp,
-      # @lydell/node-pty-*, @napi-rs/keyring), so every published platform
-      # must actually be executed, not just built.
-      - name: Set up QEMU
+      - name: Download arm64 candidate image
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # ratchet:docker/setup-qemu-action@v4
-
-      - name: Build sandbox image candidate
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # ratchet:docker/build-push-action@v7
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
         with:
-          context: .
-          # Single-platform local build (load requires one platform): it
-          # exists to let the smoke gate validate the candidate before any
-          # tag is pushed. The push build below reuses these cached layers.
-          push: false
-          load: true
-          platforms: linux/amd64
-          tags: ${{ steps.sandbox_meta.outputs.tags }}
-          labels: ${{ steps.sandbox_meta.outputs.labels }}
-          build-args: |
-            CLI_VERSION_ARG=${{ steps.version.outputs.RELEASE_VERSION }}
+          name: sandbox-candidate-arm64-${{ github.run_id }}
+          path: ${{ runner.temp }}/candidate-arm64
 
-      # The image's npm tree layout can differ from any host install (nested
-      # vs hoisted deps), so the bundled CLI must be executed inside the
-      # built image before the release is announced. A missing
-      # undeclared-but-imported module only reproduces here (issue: sandbox
-      # CLI crashed with "Cannot find module '@ast-grep/napi'" while the same
-      # version worked on hosts).
-      - name: Smoke test sandbox image
+      - name: Verify and load candidate images
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         env:
-          SANDBOX_SMOKE_IMAGE: ${{ env.REGISTRY }}/${{ env.SANDBOX_IMAGE_NAME }}:${{ steps.version.outputs.RELEASE_VERSION }}
-        run: bun scripts/sandbox-image-probe.ts --engine docker --image "$SANDBOX_SMOKE_IMAGE" --platform linux/amd64
+          SOURCE_SHA: ${{ needs.prepare_artifact.outputs.source_sha }}
+          RELEASE_VERSION: ${{ needs.prepare_artifact.outputs.release_version }}
+          INPUT_ARTIFACT_DIGEST: ${{ needs.prepare_artifact.outputs.artifact_digest }}
+          AMD64_ARTIFACT_DIGEST: ${{ needs.candidate_amd64.outputs.artifact_digest }}
+          ARM64_ARTIFACT_DIGEST: ${{ needs.candidate_arm64.outputs.artifact_digest }}
+          AMD64_IMAGE_SHA256: ${{ needs.candidate_amd64.outputs.image_sha256 }}
+          ARM64_IMAGE_SHA256: ${{ needs.candidate_arm64.outputs.image_sha256 }}
+        run: |
+          set -euo pipefail
+          test "$SOURCE_SHA" = "${GITHUB_SHA}"
+          test "$AMD64_SOURCE_SHA" = "$SOURCE_SHA"
+          test "$ARM64_SOURCE_SHA" = "$SOURCE_SHA"
+          test "$RELEASE_VERSION" = "${{ steps.version.outputs.RELEASE_VERSION }}"
+          test "$AMD64_RELEASE_VERSION" = "$RELEASE_VERSION"
+          test "$ARM64_RELEASE_VERSION" = "$RELEASE_VERSION"
+          test -n "$INPUT_ARTIFACT_DIGEST"
+          test "$AMD64_INPUT_ARTIFACT_DIGEST" = "$INPUT_ARTIFACT_DIGEST"
+          test "$ARM64_INPUT_ARTIFACT_DIGEST" = "$INPUT_ARTIFACT_DIGEST"
+          test -n "$AMD64_ARTIFACT_DIGEST"
+          test -n "$ARM64_ARTIFACT_DIGEST"
+          test -n "$AMD64_IMAGE_SHA256"
+          test -n "$ARM64_IMAGE_SHA256"
+          cd "$RUNNER_TEMP/candidate-amd64"
+          sha256sum --check candidate-amd64.tar.sha256
+          printf '%s  %s\n' "$AMD64_IMAGE_SHA256" candidate-amd64.tar | sha256sum --check -
+          docker load --input candidate-amd64.tar
+          cd "$RUNNER_TEMP/candidate-arm64"
+          sha256sum --check candidate-arm64.tar.sha256
+          printf '%s  %s\n' "$ARM64_IMAGE_SHA256" candidate-arm64.tar | sha256sum --check -
+          docker load --input candidate-arm64.tar
 
-      # Second candidate for the other published platform; loading it under
-      # the same local tags replaces the amd64 image locally, which is fine
-      # because the push build below rebuilds both platforms from cache.
-      - name: Build sandbox image candidate (arm64)
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # ratchet:docker/build-push-action@v7
-        with:
-          context: .
-          push: false
-          load: true
-          platforms: linux/arm64
-          tags: ${{ steps.sandbox_meta.outputs.tags }}
-          labels: ${{ steps.sandbox_meta.outputs.labels }}
-          build-args: |
-            CLI_VERSION_ARG=${{ steps.version.outputs.RELEASE_VERSION }}
-
-      - name: Smoke test sandbox image (arm64)
+      - name: Publish tested sandbox candidates
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         env:
-          SANDBOX_SMOKE_IMAGE: ${{ env.REGISTRY }}/${{ env.SANDBOX_IMAGE_NAME }}:${{ steps.version.outputs.RELEASE_VERSION }}
-        run: bun scripts/sandbox-image-probe.ts --engine docker --image "$SANDBOX_SMOKE_IMAGE" --platform linux/arm64
-
-      - name: Build and push sandbox image
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # ratchet:docker/build-push-action@v7
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.sandbox_meta.outputs.tags }}
-          labels: ${{ steps.sandbox_meta.outputs.labels }}
-          build-args: |
-            CLI_VERSION_ARG=${{ steps.version.outputs.RELEASE_VERSION }}
+          SANDBOX_IMAGE: ${{ env.REGISTRY }}/${{ env.SANDBOX_IMAGE_NAME }}
+          RELEASE_VERSION: ${{ steps.version.outputs.RELEASE_VERSION }}
+          SANDBOX_TAGS: ${{ steps.sandbox_meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          amd64_tag="${SANDBOX_IMAGE}:${RELEASE_VERSION}-amd64"
+          arm64_tag="${SANDBOX_IMAGE}:${RELEASE_VERSION}-arm64"
+          docker tag llxprt-sandbox:candidate-amd64 "$amd64_tag"
+          docker tag llxprt-sandbox:candidate-arm64 "$arm64_tag"
+          docker push "$amd64_tag"
+          docker push "$arm64_tag"
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            docker manifest create "$tag" "$amd64_tag" "$arm64_tag"
+            docker manifest push "$tag"
+          done <<< "$SANDBOX_TAGS"
 
       - name: Create GitHub Release and Tag
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
@@ -946,3 +1140,37 @@ jobs:
           # a value carrying shell metacharacters cannot alter the script.
           RELEASE_TAG: ${{ steps.version.outputs.RELEASE_TAG || 'N/A' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+  report_gate_failure:
+    name: Report release gate failure
+    runs-on: ubuntu-latest
+    needs:
+      - verify_preflight
+      - verify_shards
+      - integration
+      - prepare_artifact
+      - candidate_amd64
+      - candidate_arm64
+    if: >-
+      always() && github.repository == 'vybestack/llxprt-code' &&
+      (needs.verify_preflight.result == 'failure' ||
+       needs.verify_shards.result == 'failure' ||
+       needs.integration.result == 'failure' ||
+       needs.prepare_artifact.result == 'failure' ||
+       needs.candidate_amd64.result == 'failure' ||
+       needs.candidate_arm64.result == 'failure')
+    permissions:
+      issues: write
+    steps:
+      - name: Create issue for failed release gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.prepare_artifact.outputs.release_tag || 'N/A' }}
+          SOURCE_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue create \
+            --repo "$GH_REPO" \
+            --title "Release verification failed for ${RELEASE_TAG}" \
+            --body "A release verification or candidate smoke gate failed for source ${SOURCE_SHA}. See ${RUN_URL} for details."
