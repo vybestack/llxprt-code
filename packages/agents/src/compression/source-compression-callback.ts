@@ -8,6 +8,7 @@ import {
   ProviderSourceEnforcer,
   type ProviderSourceLimits,
 } from './provider-source-enforcement.js';
+import { isRequestByteOverflowError } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { SourceCandidate } from './source-candidate.js';
 import {
   runSourceStages,
@@ -24,6 +25,7 @@ export interface SourceCompressionCallbackDeps<
   readonly getHistoryTokens: () => number;
   readonly stageActions: (limits: ProviderSourceLimits) => SourceStageActions;
   readonly warn: (message: string, error: unknown) => void;
+  readonly estimateByContents?: (source: S) => Promise<number>;
 }
 
 /**
@@ -35,17 +37,28 @@ export interface SourceCompressionCallbackDeps<
 async function guardLimits<S extends ProviderRequestSelection>(
   candidate: SourceCandidate<S>,
   guard: RuntimeCompressionGuardInfo,
-): Promise<ProviderSourceLimits> {
-  const overhead = Math.max(
-    0,
-    guard.estimatedTokens - (await candidate.estimate()),
-  );
-  const effectiveLimit = Math.max(1, guard.contextLimit - overhead);
+  estimateByContents: ((source: S) => Promise<number>) | undefined,
+): Promise<{ limits: ProviderSourceLimits; byContents: boolean }> {
+  let own: number;
+  let byContents = false;
+  try {
+    own = await candidate.estimate();
+  } catch (error) {
+    if (!isRequestByteOverflowError(error) || estimateByContents === undefined)
+      throw error;
+    own = await estimateByContents(candidate.value);
+    byContents = true;
+  }
+  const overhead = Math.max(0, guard.estimatedTokens - own);
+  const effectiveLimit = guard.contextLimit - overhead;
   return {
-    completionBudget: 0,
-    limit: guard.contextLimit,
-    marginAdjustedLimit: effectiveLimit,
-    compressionThreshold: effectiveLimit,
+    byContents,
+    limits: {
+      completionBudget: 0,
+      limit: guard.contextLimit,
+      marginAdjustedLimit: effectiveLimit,
+      compressionThreshold: effectiveLimit,
+    },
   };
 }
 
@@ -61,14 +74,21 @@ export function createSourceCompressionCallback<
 >(deps: SourceCompressionCallbackDeps<S>): RuntimeCompressionCallback {
   return async (guard) => {
     try {
-      const limits =
+      const calibrated =
         guard === undefined
-          ? deps.defaultLimits
-          : await guardLimits(deps.candidate, guard);
+          ? { limits: deps.defaultLimits, byContents: false }
+          : await guardLimits(deps.candidate, guard, deps.estimateByContents);
+      const { limits } = calibrated;
       await runSourceStages(
         new ProviderSourceEnforcer({
           limits,
-          estimate: () => deps.candidate.estimate(),
+          estimate: async () => {
+            const finalized = await deps.candidate.estimate();
+            return calibrated.byContents &&
+              deps.estimateByContents !== undefined
+              ? deps.estimateByContents(deps.candidate.value)
+              : finalized;
+          },
           getHistoryTokens: deps.getHistoryTokens,
         }),
         deps.stageActions(limits),

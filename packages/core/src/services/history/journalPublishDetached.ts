@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import { DebugLogger } from '../../debug/index.js';
+import type { HistoryBatchRowSource } from './history-batch-values.js';
+import { releaseRead } from '../../journal/pinLease.js';
 import { mergeRemovedInteriorSpans } from './contextRange.js';
 import { JournalDensitySpans } from './journalDensitySpans.js';
 import type {
@@ -22,6 +25,11 @@ import { snapshotRows } from './journalDetachedCapture.js';
 import { JournalDetachedPublication } from './journalDetachedPublication.js';
 import { pullFeed, type PullFeed } from './journalDetachedStream.js';
 import type { JournalHistoryStore } from './journalHistoryStore.js';
+
+interface PublicationCompletion {
+  finalized: boolean;
+  rollbackRows?: HistoryBatchRowSource;
+}
 
 type MediaFeed = PullFeed<MediaReferenceBlock, void>;
 
@@ -97,6 +105,20 @@ export async function publishDetachedOnJournal(
     throw new AggregateError(failures, 'Detached publication cleanup failed');
 }
 
+async function notifyRollback(
+  host: DetachedHistoryHost,
+  rows: HistoryBatchRowSource,
+): Promise<void> {
+  try {
+    await host.notifyRowsRolledBack?.(rows);
+  } catch (error) {
+    new DebugLogger('llxprt:history:service').debug(
+      'contentBatchRolledBack listener failed',
+      error,
+    );
+  }
+}
+
 async function publishOver(
   snapshot: VersionSnapshot,
   publication: JournalDetachedPublication,
@@ -122,7 +144,7 @@ async function publishOver(
   );
   const { candidate, media } = prepared;
   const scope = store.openPublication();
-  const completion = { finalized: false };
+  const completion: PublicationCompletion = { finalized: false };
   let derived: Parameters<DetachedHistoryHost['apply']> | undefined;
   let failure: { error: unknown } | undefined;
   try {
@@ -136,6 +158,9 @@ async function publishOver(
         appendOnly,
         completion,
       });
+      await store.observeIndependentReplacements(
+        candidate.independentReplacements,
+      );
       scope.close(true);
     } else {
       // An append that added nothing: let the media consumer end with no references.
@@ -156,8 +181,18 @@ async function publishOver(
       completion,
     });
     failure = { error: historyMutationFailure(error, failures) };
+    if (completion.rollbackRows !== undefined && !publication.durable)
+      await notifyRollback(host, completion.rollbackRows);
   } finally {
     scope.close(false);
+    await releaseRead(
+      {
+        close: async () => {
+          await completion.rollbackRows?.retire();
+        },
+      },
+      failure,
+    );
   }
   closeTask(task, failure);
 }
@@ -386,7 +421,7 @@ interface FinishInput {
   readonly effects: readonly PreparedHistoryBatchEffect[];
   readonly options: DetachedHistoryOptions;
   readonly appendOnly: boolean;
-  readonly completion: { finalized: boolean };
+  readonly completion: PublicationCompletion;
 }
 
 /** After the ack: observers and caller hooks run before media finalization. */
@@ -401,6 +436,9 @@ async function finishPublication(
   await store.settleFanout();
   const delta = candidate.tokens - previousTokens;
   if (options.publishBatch === true) {
+    completion.rollbackRows = await store.committedBatch(
+      appendOnly ? candidate.count : undefined,
+    );
     // One event, after the ack, over the committed version: observers never hear of rows a failed group dropped.
     await host.notifyRows(
       await store.committedBatch(appendOnly ? candidate.count : undefined),

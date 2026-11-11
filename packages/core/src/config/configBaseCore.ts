@@ -148,6 +148,7 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
 
   protected readonly continueOnFailedApiCall!: boolean;
   protected readonly imagePayloadBudgetBytes!: number;
+  protected readonly explicitImagePayloadBudgetBytes!: number | undefined;
   protected readonly enableShellOutputEfficiency!: boolean;
   protected readonly continueSession!: boolean | string;
   protected readonly disableYoloMode!: boolean;
@@ -499,6 +500,9 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   }
   getImagePayloadBudgetBytes(): number {
     return this.imagePayloadBudgetBytes;
+  }
+  getRequestImagePayloadBudgetOverrideBytes(): number | undefined {
+    return this.explicitImagePayloadBudgetBytes;
   }
   getEnableShellOutputEfficiency(): boolean {
     return this.enableShellOutputEfficiency;

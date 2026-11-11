@@ -150,6 +150,13 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
     contentId: string | undefined,
     work: () => Promise<T>,
   ): Promise<T> {
+    this.assertAccepting(operation, contentId);
+    return this.trackOperation(
+      this.enqueueExclusive(operation, contentId, work),
+    );
+  }
+
+  private assertAccepting(operation: string, contentId?: string): void {
     if (this.closing !== undefined) {
       throw new MediaStoreError(
         operation,
@@ -158,13 +165,12 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
       );
     }
     this.assertOpen(operation, contentId);
-    const pending = this.enqueueExclusive(operation, contentId, work);
+  }
+
+  // close() joins everything registered here, so in-flight work finishes first.
+  private trackOperation<T>(pending: Promise<T>): Promise<T> {
     this.operations.add(pending);
-    try {
-      return await pending;
-    } finally {
-      this.operations.delete(pending);
-    }
+    return pending.finally(() => this.operations.delete(pending));
   }
 
   private enqueueExclusive<T>(
@@ -266,8 +272,19 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
     return outcome.value;
   }
 
+  /**
+   * Reads and verifies an object without taking the store lock, the queue or
+   * the instance-lease check. Objects are immutable and content-addressed, and
+   * every read re-verifies type, length and digest, so a concurrent unlink
+   * yields either the complete bytes or a typed missing-object error. A read
+   * may observe an object published by a transaction that later rolls back, so
+   * success proves the bytes, not that the object is committed or reserved; use
+   * `reserveAndReadVerified` when the object must stay available. The read is
+   * still registered so `close()` joins it.
+   */
   async readObjectVerified(reference: MediaStoredObject): Promise<Uint8Array> {
-    return this.runExclusive('read verified', reference.contentId, () =>
+    this.assertAccepting('read verified', reference.contentId);
+    return this.trackOperation(
       this.readObjectVerifiedUnlocked(reference, 'read verified'),
     );
   }

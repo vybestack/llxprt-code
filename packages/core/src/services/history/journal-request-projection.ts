@@ -11,15 +11,19 @@ import {
   ROW_SPEAKER,
 } from '../../journal/rowRecord.js';
 import { encodeContentRow } from './journalRowCodec.js';
-import type { IContent } from './IContent.js';
+import type { TextBlock, IContent } from './IContent.js';
 import type { JournalResponseSource } from './journal-response-source.js';
 
 export interface JournalRequestProjection {
   readonly headerLabels?: readonly [] | readonly [bigint];
+  readonly blockReplacements?: ReadonlyMap<
+    bigint,
+    ReadonlyMap<number, TextBlock>
+  >;
   readonly label?: bigint;
   readonly removedBlock?: number;
   readonly removedRow?: boolean;
-  readonly readChangedRow?: () => Promise<IContent>;
+  readonly readChangedRow?: (snapshot: VersionSnapshot) => Promise<IContent>;
   readonly header: (row: IContent, label: bigint) => IContent;
 }
 
@@ -110,7 +114,7 @@ export class JournalProjectedSource implements JournalRequestBase {
     const label = this.projection.label;
     if (read === undefined || label === undefined)
       throw new Error('Projected request has no changed row');
-    const draft = encodeContentRow(await read(), { owner: 0 });
+    const draft = encodeContentRow(await read(this.snapshot), { owner: 0 });
     const encoded = encodeRowDraft(label, draft);
     return {
       header: encoded.header,
@@ -160,32 +164,84 @@ export class JournalProjectedSource implements JournalRequestBase {
   }
 
   async readIds(entry: RowEntry): Promise<RowIds> {
-    if (!this.selected(entry)) return this.snapshot.readIds(entry);
-    if (this.projection.removedRow === true) {
-      const ids = await this.snapshot.readIds(entry);
-      return {
-        ...ids,
-        header: { ...ids.header, flags: ids.header.flags & ~ROW_FLAG.curated },
-      };
-    }
-    const row = await this.changed();
-    return { header: row.header, rawIds: row.rawIds };
+    const ids =
+      this.selected(entry) && this.projection.removedRow !== true
+        ? await this.changed()
+        : await this.snapshot.readIds(entry);
+    const replacements = this.projection.blockReplacements?.get(entry.label);
+    return {
+      header: {
+        ...ids.header,
+        flags:
+          this.selected(entry) && this.projection.removedRow === true
+            ? ids.header.flags & ~ROW_FLAG.curated
+            : ids.header.flags,
+        blocks: ids.header.blocks.map((block, index) =>
+          replacements?.has(index) === true
+            ? { ...block, type: ROW_BLOCK_TYPE.text }
+            : block,
+        ),
+      },
+      rawIds: ids.rawIds,
+      ...('head' in ids ? { head: ids.head } : {}),
+    };
   }
 
-  readRow(entry: RowEntry): Promise<StoredRow> {
-    return this.selected(entry) ? this.changed() : this.snapshot.readRow(entry);
+  async readRow(entry: RowEntry): Promise<StoredRow> {
+    const row = this.selected(entry)
+      ? await this.changed()
+      : await this.snapshot.readRow(entry);
+    const replacements = this.projection.blockReplacements?.get(entry.label);
+    if (replacements === undefined) return row;
+    return {
+      ...row,
+      header: (await this.readIds(entry)).header,
+      blocks: row.blocks.map((bytes, index) => {
+        const replacement = replacements.get(index);
+        return replacement === undefined
+          ? bytes
+          : Buffer.from(JSON.stringify(replacement));
+      }),
+    };
   }
 
   async *blocks(entry: RowEntry): AsyncGenerator<DirectoryBlock> {
     if (!this.selected(entry)) {
-      yield* this.snapshot.blocks(entry);
+      for await (const block of this.snapshot.blocks(entry)) {
+        const replacement = this.projection.blockReplacements
+          ?.get(entry.label)
+          ?.get(block.ordinal);
+        if (replacement === undefined) yield block;
+        else {
+          const bytes = Buffer.from(JSON.stringify(replacement));
+          yield {
+            ordinal: block.ordinal,
+            type: ROW_BLOCK_TYPE.text,
+            length: bytes.byteLength,
+            normalizedJson: true,
+            async *parts() {
+              yield bytes;
+            },
+          };
+        }
+      }
       return;
     }
     const stored = await this.changed();
-    for (const [ordinal, bytes] of stored.blocks.entries())
+    for (const [ordinal, original] of stored.blocks.entries()) {
+      const replacement = this.projection.blockReplacements
+        ?.get(entry.label)
+        ?.get(ordinal);
+      const bytes =
+        replacement === undefined
+          ? original
+          : Buffer.from(JSON.stringify(replacement));
       yield {
         ordinal,
-        type: stored.header.blocks[ordinal].type,
+        type:
+          replacement === undefined
+            ? stored.header.blocks[ordinal].type
+            : ROW_BLOCK_TYPE.text,
         length: bytes.byteLength,
         normalizedJson: true,
         async *parts() {
@@ -193,6 +249,7 @@ export class JournalProjectedSource implements JournalRequestBase {
             yield bytes.subarray(offset, offset + 65536);
         },
       };
+    }
   }
 
   async readBlock(
@@ -200,6 +257,11 @@ export class JournalProjectedSource implements JournalRequestBase {
     index: number,
     ids?: RowIds,
   ): Promise<Uint8Array> {
+    const replacement = this.projection.blockReplacements
+      ?.get(entry.label)
+      ?.get(index);
+    if (replacement !== undefined)
+      return Buffer.from(JSON.stringify(replacement));
     return this.selected(entry)
       ? (await this.changed()).blocks[index]
       : this.snapshot.readBlock(entry, index, ids);

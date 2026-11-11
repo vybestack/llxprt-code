@@ -543,9 +543,10 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       const subagentPromise = new Promise<string[]>((resolve) => {
         resolveSubagents = resolve;
       });
+      const search = vi.fn().mockResolvedValue(['file.txt']);
       const mockFileSearch: FileSearch = {
         initialize: vi.fn().mockResolvedValue(undefined),
-        search: vi.fn().mockResolvedValue(['file.txt']),
+        search,
       };
       vi.spyOn(FileSearchFactory, 'create').mockReturnValue(mockFileSearch);
 
@@ -573,10 +574,17 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
         ),
       );
 
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+      // Wait for the search itself, the event that arms the search timeout,
+      // instead of assuming a fixed number of microtask turns is enough.
+      for (
+        let turns = 0;
+        turns < 1000 && search.mock.calls.length === 0;
+        turns++
+      ) {
+        await act(async () => {
+          await Promise.resolve();
+        });
+      }
       expect(mockFileSearch.search).toHaveBeenCalledWith(
         '',
         expect.any(Object),

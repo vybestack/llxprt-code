@@ -114,30 +114,75 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
   }
 
   /**
-   * Get account_id from Codex OAuth token
-   * @plan PLAN-20251213-ISSUE160.P03
+   * Resolve the credential for ONE Responses request.
+   *
+   * Codex sends the account id beside the bearer, and the two must come from
+   * the same stored credential. The admitted authorization result carries
+   * both, so the identity is never looked up separately: a second lookup could
+   * observe a different profile bucket, a rotated account, a logout or a
+   * transient storage miss than the bearer that was already resolved.
+   *
+   * A pre-resolved bearer that arrived without an identity (a caller-supplied
+   * plain token) cannot be paired from the admitted result. The only
+   * compatible pairing is a single read of the stored credential whose access
+   * token is EXACTLY that bearer; anything else fails closed rather than
+   * pairing a bearer with another credential's identity.
    */
-  protected async getCodexAccountId(): Promise<string> {
-    // Get OAuth manager from base config
-    const oauthManager = this.baseProviderConfig.oauthManager;
-    if (!oauthManager) {
-      throw new Error(
-        'Codex mode requires OAuth authentication with account_id - no OAuth manager available',
+  protected async resolveResponsesRequestCredential(): Promise<{
+    bearer: string;
+    accountId?: string;
+  }> {
+    // Only Codex pairs an identity with its bearer. Other modes keep the
+    // single-token seam that providers and tests already specialise.
+    if (!this.isCodexMode()) {
+      return { bearer: await this.getAuthTokenForPrompt() };
+    }
+    const credential = await this.getRequestCredentialForPrompt();
+    if (credential.token === '') {
+      return { bearer: '' };
+    }
+    if (credential.accountId !== undefined) {
+      return { bearer: credential.token, accountId: credential.accountId };
+    }
+    if (credential.identity === 'absent') {
+      // The admitted read already resolved the full stored credential and it
+      // has no identity. A second lookup could only find a different one.
+      throw this.unpairedCodexCredential(
+        'The stored Codex credential has no account identity.',
       );
     }
+    return this.pairLegacyBearerWithIdentity(credential.token);
+  }
 
-    // Get the full token from the OAuth manager
-    // getOAuthToken returns the full token object (with account_id preserved via passthrough)
-    const token = await oauthManager.getOAuthToken?.('codex');
-    if (!token) {
-      throw new Error(
-        'Codex mode requires OAuth authentication - no token available. Run /auth codex enable',
+  private unpairedCodexCredential(reason: string): Error {
+    return this.createRequestCredentialFailure(
+      'credential-not-found',
+      `${reason} Run /auth codex login to authenticate.`,
+    );
+  }
+
+  private async pairLegacyBearerWithIdentity(
+    bearer: string,
+  ): Promise<{ bearer: string; accountId: string }> {
+    const manager = this.baseProviderConfig.oauthManager;
+    const profileId = this.readActiveProfileId();
+    const stored = await manager?.getOAuthToken?.('codex', {
+      runtimeAuthScopeId: 'no-runtime',
+      providerId: 'codex',
+      ...(profileId === undefined ? {} : { profileId }),
+    });
+    if (stored == null || stored.access_token !== bearer) {
+      throw this.unpairedCodexCredential(
+        'The Codex bearer token could not be matched to a stored account identity.',
       );
     }
-
-    // Validate with Zod schema to get account_id
-    const validatedToken = CodexOAuthTokenSchema.parse(token);
-    return validatedToken.account_id;
+    const parsed = CodexOAuthTokenSchema.safeParse(stored);
+    if (!parsed.success || parsed.data.account_id === '') {
+      throw this.unpairedCodexCredential(
+        'The stored Codex credential has no account identity.',
+      );
+    }
+    return { bearer, accountId: parsed.data.account_id };
   }
 
   override getToolFormat(): ToolFormat {

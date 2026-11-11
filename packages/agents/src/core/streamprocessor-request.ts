@@ -35,6 +35,7 @@ export interface StreamRequestInput {
   readonly promptId: string;
   readonly userContent: IContent | IContent[];
   readonly semanticMediaPurge: SemanticMediaPurgeAttempt | undefined;
+  readonly requestMediaBudgetBytes?: number;
   readonly fallbackTools: PreparedRequest['requestPayload']['tools'];
   readonly buildRuntime: (
     extras: Record<string, unknown>,
@@ -148,6 +149,7 @@ async function diskRequest(
       recordingExecution: input.params.recordingExecution,
       hookOwner: hookOwnerOf(input.params),
       modelParameters: input.params.modelParameters,
+      requestMediaBudgetBytes: input.requestMediaBudgetBytes,
       historyOverride: streamSemanticPurgeRequest(
         input.semanticMediaPurge,
         input.params.config?.abortSignal,

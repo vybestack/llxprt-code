@@ -86,8 +86,10 @@ function buildDeps(
     requestBaseURL: CODEX_BASE_URL,
     requestHeaders: { 'X-Provider': 'p' },
     isCodexMode: () => true,
-    getCodexAccountId: async () => 'codex-account',
-    resolveAuthTokenForPrompt: async () => 'codex-token',
+    resolveRequestCredential: async () => ({
+      bearer: 'codex-token',
+      accountId: 'codex-account',
+    }),
     shouldRetryOnError: () => false,
     defaultModel: 'gpt-5.6-sol',
 

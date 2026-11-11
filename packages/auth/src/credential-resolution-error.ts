@@ -40,8 +40,22 @@ export interface CredentialResolutionErrorOptions {
   readonly remediation?: string;
 }
 
+/**
+ * A resolved bearer. `accountId` is the minimal account identity that belongs
+ * to `token` (never a refresh or ID token); it is present only when the
+ * credential source resolved both from the same stored credential.
+ * `identity: 'absent'` records that the source read the FULL stored credential
+ * and it has no account identity, which is different from a bearer-only source
+ * that never carried one. It holds no credential material.
+ */
+export interface ResolvedBearer {
+  readonly token: string;
+  readonly accountId?: string;
+  readonly identity?: 'absent';
+}
+
 export type CredentialResolutionResult =
-  | { readonly token: string }
+  | ResolvedBearer
   | {
       readonly token: null;
       readonly failure: CredentialResolutionError;

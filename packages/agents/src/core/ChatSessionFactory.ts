@@ -277,7 +277,7 @@ async function buildChatFromRuntime(
       }),
       config,
       runtimeBundle.runtimeContext.mediaResolver,
-      config.getImagePayloadBudgetBytes(),
+      config.getRequestImagePayloadBudgetOverrideBytes(),
       createHistoryProviderFileBindingStore(historyService),
       lifecycle,
       operations?.tryBucketFailover,

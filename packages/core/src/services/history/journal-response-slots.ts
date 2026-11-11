@@ -119,7 +119,8 @@ async function mediaFor(
     if (targetsPart(owner, part)) {
       media.push(
         ...source.indices.flatMap((index, block) =>
-          source.ids.header.blocks[index].type === ROW_BLOCK_TYPE.media
+          source.ids.header.blocks[index].type === ROW_BLOCK_TYPE.media ||
+          snapshot.isMediaReplacement?.(source.entry.label, index) === true
             ? [{ at: partPosition(source, block), orphan: false }]
             : [],
         ),
@@ -172,7 +173,9 @@ async function metadataFor(
     next.indices.every((index) => {
       const type = next.ids.header.blocks[index].type;
       return (
-        type === ROW_BLOCK_TYPE.tool_response || type === ROW_BLOCK_TYPE.media
+        type === ROW_BLOCK_TYPE.tool_response ||
+        type === ROW_BLOCK_TYPE.media ||
+        snapshot.isMediaReplacement?.(next.entry.label, index) === true
       );
     }) &&
     selected.every(

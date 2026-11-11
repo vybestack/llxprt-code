@@ -35,6 +35,7 @@ export interface DetachedHistoryAPI {
   host(): DetachedHistoryHost;
   withRollbackCheckpoint<T>(
     execute: (restore: () => Promise<void>) => Promise<T>,
+    preserveIndependentWrites?: boolean,
   ): Promise<T>;
   withCheckpoint<T>(
     execute: (checkpoint: HistoryCheckpoint) => Promise<T>,
@@ -85,11 +86,12 @@ export async function notifyDetachedRows(
   ownership: RowOwnership | undefined,
   source: HistoryBatchRowSource,
   publishContent = false,
+  event: 'contentBatchAdded' | 'contentBatchRolledBack' = 'contentBatchAdded',
 ): Promise<void> {
   const batch = new ObservedJournalBatch(source, ownership);
   let failure: { error: unknown } | undefined;
   try {
-    history.emit('contentBatchAdded', batch);
+    history.emit(event, batch);
     await batch.drain();
     if (publishContent) {
       for await (const row of batch.rows()) history.emit('contentAdded', row);
@@ -99,6 +101,20 @@ export async function notifyDetachedRows(
   }
   await releaseRead({ close: () => batch.retire() }, failure);
   if (failure !== undefined) throw failure.error;
+}
+
+function notifyRevertedRows(
+  history: HistoryServiceCore,
+  ownership: RowOwnership | undefined,
+  source: HistoryBatchRowSource,
+): Promise<void> {
+  return notifyDetachedRows(
+    history,
+    ownership,
+    source,
+    false,
+    'contentBatchRolledBack',
+  );
 }
 
 async function openSemanticPurge(
@@ -167,6 +183,8 @@ export function createDetachedHistoryAPI(
     notifyBatch: (addedTokens, rows, start) =>
       notifyDetachedBatch(history, ownership, addedTokens, rows, start),
     notifyRows: (rows) => notifyDetachedRows(history, ownership, rows),
+    notifyRowsRolledBack: (rows) =>
+      notifyRevertedRows(history, ownership, rows),
     notifyTokens: (addedTokens) => {
       history.emit('tokensUpdated', {
         totalTokens: history.getTotalTokens(),
@@ -185,8 +203,13 @@ export function createDetachedHistoryAPI(
   return {
     host,
     openSemanticPurgeSnapshot: () => openSemanticPurge(journal, host, enqueue),
-    withRollbackCheckpoint: (execute) =>
-      journal.withRollbackCheckpoint(host(), enqueue, execute),
+    withRollbackCheckpoint: (execute, preserveIndependentWrites) =>
+      journal.withRollbackCheckpoint(
+        host(),
+        enqueue,
+        execute,
+        preserveIndependentWrites,
+      ),
     withCheckpoint: (execute, signal) =>
       journal.withCheckpoint(host(), enqueue, execute, signal),
     append: (rows, model, options = {}) =>

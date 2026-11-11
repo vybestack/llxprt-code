@@ -229,10 +229,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       providerName: this.name,
       logger: new DebugLogger('llxprt:provider:openai'),
       isCodexMode: () => false,
-      getCodexAccountId: async () => {
-        throw new Error('Codex account ID not available for OpenAIProvider');
-      },
-      resolveAuthTokenForPrompt: async () => this.getAuthTokenForPrompt(),
+      resolveRequestCredential: async () => ({
+        bearer: await this.getAuthTokenForPrompt(),
+      }),
       shouldRetryOnError: (error) => this.shouldRetryResponse(error),
       getMediaTransportCapabilities: () =>
         this.name === 'openai'

@@ -106,8 +106,10 @@ function buildDeps(
     requestBaseURL: 'https://api.openai.com/v1',
     requestHeaders: undefined,
     isCodexMode: () => false,
-    getCodexAccountId: async () => 'codex-account',
-    resolveAuthTokenForPrompt: async () => '',
+    resolveRequestCredential: async () => ({
+      bearer: 'test-token',
+      accountId: 'codex-account',
+    }),
     shouldRetryOnError: () => true,
     defaultModel: 'gpt-5',
 

@@ -47,23 +47,26 @@ async function sessionHeaders(
     providerName: 'openai-responses',
     logger: new DebugLogger('compression-session-headers'),
     isCodexMode: () => true,
-    getCodexAccountId: async () => 'account',
-    resolveAuthTokenForPrompt: async () => 'token',
+    resolveRequestCredential: async () => ({
+      bearer: 'token',
+      accountId: 'account',
+    }),
     shouldRetryOnError: () => false,
     getUnallowedModelParameters: () => new Set<string>(),
   };
   return [
-    await buildResponsesHeaders(
-      'token',
+    buildResponsesHeaders(
+      { apiKey: 'token', accountId: 'account' },
       'application/json',
       true,
       request,
       deps,
     ),
-    await buildWebSocketHandshakeHeaders(
-      { apiKey: 'token', normalizedOptions: request },
-      deps,
-    ),
+    buildWebSocketHandshakeHeaders({
+      apiKey: 'token',
+      accountId: 'account',
+      normalizedOptions: request,
+    }),
   ];
 }
 

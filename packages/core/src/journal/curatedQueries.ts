@@ -5,6 +5,28 @@ import { ROW_FLAG } from './rowRecord.js';
 import { readRowTreeNode, type RowTreeRootRef } from './rowTreeReader.js';
 import { JournalFormatError } from './errors.js';
 
+/** Visits only subtrees that can contain counted media or images. */
+export async function* mediaRowEntries(
+  access: RecordAccess,
+  offset: number,
+): AsyncGenerator<RowEntry> {
+  const node = await readRowTreeNode(access, offset);
+  if (node.kind === 'leaf') {
+    for (const entry of node.entries) {
+      if (
+        (entry.flags & (ROW_FLAG.curated | ROW_FLAG.hasMedia)) ===
+        (ROW_FLAG.curated | ROW_FLAG.hasMedia)
+      )
+        yield entry;
+    }
+    return;
+  }
+  for (const slot of node.slots) {
+    if (slot.aggregate.mediaChars === 0 && slot.aggregate.imageRows === 0)
+      continue;
+    yield* mediaRowEntries(access, slot.childOffset);
+  }
+}
 async function curatedAfter(
   access: RecordAccess,
   offset: number,

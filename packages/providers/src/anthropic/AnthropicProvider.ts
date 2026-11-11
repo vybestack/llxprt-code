@@ -55,6 +55,7 @@ import {
 } from './AnthropicRequestPreparation.js';
 import {
   isAnthropicOAuthBaseURL,
+  resolveAnthropicRequestMediaBudgetBytes,
   ANTHROPIC_DEFAULT_BASE_URL,
 } from './AnthropicEndpointUtils.js';
 import { findAnthropicToolSchema } from './AnthropicToolSchema.js';
@@ -177,7 +178,10 @@ export class AnthropicProvider extends BaseProvider {
     return captureRequestMediaInput(
       options.metadata['logicalRequestId'],
       options.invocation.runtimeId,
-      this.requestMediaBudgetBytes,
+      resolveAnthropicRequestMediaBudgetBytes(
+        this.requestMediaBudgetBytes,
+        options.resolved.baseURL,
+      ),
       this.requestMediaResolver,
     );
   }

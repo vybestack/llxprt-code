@@ -10,6 +10,8 @@ import type { LocalMediaStore } from '../../storage/local-media-store.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
 import type { PinnedMediaLease } from '../../storage/history-media-release-gate.js';
+import type { JournalRequestProjection } from './journal-request-projection.js';
+import type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
 
 export function requestFormatSlot(
   snapshot: VersionSnapshot,
@@ -36,6 +38,9 @@ export type PrepareNativeRequestKimi = (
 export interface NativeProviderFormat {
   readonly mediaLease?: PinnedMediaLease;
   readonly indexed: IndexedJournalRequestSnapshot;
+  project(
+    projection: JournalRequestProjection,
+  ): Promise<ProviderRequestSnapshot>;
   withFormat<T>(
     registration: RowFormatRegistration,
     consume: (snapshot: VersionSnapshot) => T | Promise<T>,

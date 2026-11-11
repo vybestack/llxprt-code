@@ -84,8 +84,8 @@ export function classifyCompletedTools(tools: CompletedToolCall[]): {
  *
  * Enforces a cumulative image-payload budget to prevent HTTP 413 errors when
  * parallel tool calls each return large image data. Images that would exceed
- * the budget are omitted and replaced with a feedback message instructing the
- * model to re-read them individually.
+ * the budget are omitted and replaced with a feedback message that states the
+ * byte budget and the remedy (fewer images per batch, or a smaller image).
  */
 export function buildToolResponses(
   completedTools: CompletedToolCall[],
@@ -103,7 +103,10 @@ export function buildToolResponses(
 
   const { blocks: budgeted, omitted } = enforceImageBudget(blocks, budgetBytes);
   if (omitted.length > 0) {
-    budgeted.push({ type: 'text', text: buildOmissionFeedback(omitted) });
+    budgeted.push({
+      type: 'text',
+      text: buildOmissionFeedback(omitted, budgetBytes),
+    });
   }
   return budgeted;
 }

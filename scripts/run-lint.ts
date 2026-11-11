@@ -56,11 +56,14 @@ const PACKAGES_DIR = 'packages';
 const PACKAGES_IGNORE_PATTERN = `${PACKAGES_DIR}/*/**`;
 const LINT_TARGETS_ENV = 'LLXPRT_LINT_TARGETS';
 /**
- * Applied only to the per-package groups of a full run, whose targets are
- * derived from the filesystem. A package matching only ignored files is
- * legitimate there (eslint.config.js ignores `packages/lsp` wholesale) and
- * would otherwise be a hard error. Scoped targets and the rest-of-tree group
- * do not get this: an unmatched target there is a real misconfiguration.
+ * Applied only to targets that are known package directories on disk: the
+ * per-package groups of a full run and the scoped targets that name one. A
+ * package matching only ignored files is legitimate (eslint.config.js ignores
+ * `packages/lsp` wholesale, and CI's selector still selects it when only its
+ * ignored tests changed) and would otherwise be a hard error. Scoped targets
+ * that are not package directories and the rest-of-tree group do not get
+ * this: an unmatched target there is a real misconfiguration. The flag never
+ * skips linting of non-ignored files; it only tolerates an empty match.
  */
 const NO_ERROR_ON_UNMATCHED = '--no-error-on-unmatched-pattern';
 
@@ -92,7 +95,8 @@ export interface BuildCommandsParams {
    * Directories under `packages/` to partition a full run across, as paths
    * relative to the repo root (e.g. `packages/cli`). Supplied by the caller so
    * the builder stays pure and testable. An empty list means there is nothing
-   * to partition and a full run stays a single root invocation.
+   * to partition and a full run stays a single root invocation. A scoped run
+   * uses it only to recognise targets that are real package directories.
    */
   readonly packageDirs?: readonly string[];
   readonly heapMb?: number;
@@ -200,9 +204,17 @@ export function buildLintCommands({
   // Scoped run: one process per target, always including integration-tests
   // (deduplicated), so a scoped run never holds several package type programs
   // at once either. Scoped targets come from CI's affected-target selector, so
-  // an unmatched one is a stale or mistyped target and must still fail loudly.
+  // an unmatched one is a stale or mistyped target and must still fail loudly,
+  // unless it is an existing package directory whose files are all ignored.
+  const knownPackages = new Set(packageDirs);
   return scopedTargets(targets).map((target) =>
-    withEmittedIgnores(makeCommand(target, [target])),
+    withEmittedIgnores(
+      makeCommand(
+        target,
+        [target],
+        knownPackages.has(target) ? [NO_ERROR_ON_UNMATCHED] : [],
+      ),
+    ),
   );
 }
 
@@ -404,7 +416,7 @@ async function runLint(): Promise<void> {
       targets,
       forwardedArgs,
       cache,
-      packageDirs: targets === null ? readPackageDirs(repoRoot) : [],
+      packageDirs: readPackageDirs(repoRoot),
       emittedSiblings: compilerEmittedSiblings(repoRoot),
     }),
     cancellation.signal,

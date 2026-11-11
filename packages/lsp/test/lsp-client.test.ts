@@ -660,12 +660,17 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
     expect(diagnostics[0]?.message ?? '').toContain('\u30a8\u30e9\u30fc');
     expect(diagnostics[1]?.message ?? '').toContain('\u8b66\u544a');
   });
+  // The request timeout also bounds initialize, which spawns the fixture
+  // process. The fixture never answers the delayed method, so the timeout can
+  // be wide enough for startup under load without changing what is asserted.
+  const HOVER_REQUEST_TIMEOUT_MS = 1000;
+
   describe('LspClient request timeout', () => {
     it('rejects with LspRequestTimeoutError when request exceeds configured requestTimeoutMs', async () => {
       const client = createLspClient(
         createConfig(['--delay-request-method', 'textDocument/hover']),
         WORKSPACE_ROOT,
-        { requestTimeoutMs: 200 },
+        { requestTimeoutMs: HOVER_REQUEST_TIMEOUT_MS },
       );
       createdClients.push(client);
 
@@ -684,7 +689,7 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       const client = createLspClient(
         createConfig(['--delay-request-method', 'textDocument/hover']),
         WORKSPACE_ROOT,
-        { requestTimeoutMs: 150 },
+        { requestTimeoutMs: HOVER_REQUEST_TIMEOUT_MS },
       );
       createdClients.push(client);
 
@@ -705,9 +710,11 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
         expect(error).toBeInstanceOf(LspRequestTimeoutError);
         const timeoutError = error as LspRequestTimeoutError;
         expect(timeoutError.method).toBe('textDocument/hover');
-        expect(timeoutError.timeoutMs).toBe(150);
+        expect(timeoutError.timeoutMs).toBe(HOVER_REQUEST_TIMEOUT_MS);
         expect(timeoutError.message).toContain('textDocument/hover');
-        expect(timeoutError.message).toContain('150');
+        expect(timeoutError.message).toContain(
+          String(HOVER_REQUEST_TIMEOUT_MS),
+        );
         expect(timeoutError.name).toBe('LspRequestTimeoutError');
       }
     });
@@ -716,7 +723,7 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       const client = createLspClient(
         createConfig(['--delay-request-method', 'textDocument/hover']),
         WORKSPACE_ROOT,
-        { requestTimeoutMs: 200 },
+        { requestTimeoutMs: HOVER_REQUEST_TIMEOUT_MS },
       );
       createdClients.push(client);
 
@@ -737,7 +744,7 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       const client = createLspClient(
         createConfig(['--delay-request-method', 'textDocument/hover']),
         WORKSPACE_ROOT,
-        { requestTimeoutMs: 200 },
+        { requestTimeoutMs: HOVER_REQUEST_TIMEOUT_MS },
       );
       createdClients.push(client);
 
@@ -1014,21 +1021,25 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
     });
   });
 
+  const LATE_RESPONSE_REQUEST_TIMEOUT_MS = 1000;
+  const LATE_RESPONSE_DELAY_MS = 1500;
+
   describe('LspClient late response after timeout/abort', () => {
     it('late response arriving after timeout does not break subsequent requests', async () => {
       // Use both --delay-request-method and --delay-respond-ms so the server
-      // delays the hover response by 500ms (which will arrive after the 200ms
-      // timeout). The late response should be silently dropped and not affect
-      // subsequent requests.
+      // delays the hover response past the request timeout. The late response
+      // should be silently dropped and not affect subsequent requests. The
+      // request timeout also bounds initialize, which spawns the fixture
+      // process, so it is wide enough for startup on a loaded machine.
       const client = createLspClient(
         createConfig([
           '--delay-request-method',
           'textDocument/hover',
           '--delay-respond-ms',
-          '500',
+          String(LATE_RESPONSE_DELAY_MS),
         ]),
         WORKSPACE_ROOT,
-        { requestTimeoutMs: 200 },
+        { requestTimeoutMs: LATE_RESPONSE_REQUEST_TIMEOUT_MS },
       );
       createdClients.push(client);
 
@@ -1038,14 +1049,19 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
         'const x = 1;',
       );
 
-      // Hover times out after 200ms; the server will send a late response
-      // at ~500ms that should be ignored.
+      // Hover times out first; the server then sends a late response that
+      // should be ignored.
       await expect(
         client.hover(path.join(WORKSPACE_ROOT, 'src/late-resp.ts'), 0, 0),
       ).rejects.toThrow(LspRequestTimeoutError);
 
       // Wait for the late response to actually arrive
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          LATE_RESPONSE_DELAY_MS - LATE_RESPONSE_REQUEST_TIMEOUT_MS + 250,
+        ),
+      );
 
       // A subsequent request should work fine despite the late response
       const symbols = await client.documentSymbols(
@@ -1053,7 +1069,7 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       );
       expect(Array.isArray(symbols)).toBe(true);
       expect(client.isAlive()).toBe(true);
-    });
+    }, 15_000);
 
     it('late response arriving after abort does not break subsequent requests', async () => {
       const client = createLspClient(

@@ -34,6 +34,25 @@ function readPid(pidFilePath: string): number {
   return pid;
 }
 
+const CRASH_OBSERVATION_DEADLINE_MS = 3000;
+const CRASH_OBSERVATION_POLL_MS = 25;
+
+/**
+ * touchFile only observes the child for a short window, so the exit may be
+ * reported to the client after touchFile returns on a loaded machine. Poll
+ * the public liveness state until the crash is observed or the deadline passes.
+ */
+async function waitUntilNotAlive(
+  client: ReturnType<typeof createLspClient>,
+): Promise<void> {
+  const deadline = Date.now() + CRASH_OBSERVATION_DEADLINE_MS;
+  while (client.isAlive() && Date.now() < deadline) {
+    await new Promise((resolve) =>
+      setTimeout(resolve, CRASH_OBSERVATION_POLL_MS),
+    );
+  }
+}
+
 function isPidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -196,6 +215,7 @@ describe('LspClient integration with fake LSP server', () => {
       'const x = TYPE_ERROR',
     );
 
+    await waitUntilNotAlive(client);
     expect(client.isAlive()).toBe(false);
   });
 

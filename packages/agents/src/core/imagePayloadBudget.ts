@@ -15,7 +15,8 @@
  * This module provides pure utilities to measure the wire size of image
  * content across an ordered `ContentBlock[]` and enforce a conservative
  * cumulative budget, omitting over-budget images and producing actionable
- * feedback so the model can re-read them individually.
+ * feedback so the model can request fewer images per call, or a smaller
+ * version of an image that cannot fit under the budget on its own.
  *
  * The budget is measured on the **base64-encoded** string length, which is
  * the actual wire size sent in the JSON request payload (not the decoded
@@ -24,13 +25,20 @@
  * provider's hard request-size limit.
  */
 
-import type {
-  ContentBlock,
-  MediaBlock,
+import {
+  isMediaReferenceBlock,
+  type ContentBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '@vybestack/llxprt-code-core/config/configTypes.js';
 
 export { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES };
+
+/**
+ * Why an image was omitted. The remedy differs: aggregate overflow is fixed by
+ * reading fewer images per batch; an image larger than the whole budget can
+ * never fit and must be made smaller.
+ */
+export type OmissionReason = 'aggregate-budget' | 'exceeds-budget-alone';
 
 /**
  * Metadata for a single image that was omitted because the cumulative
@@ -39,10 +47,16 @@ export { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES };
 export interface OmittedImage {
   /** Name of the tool that produced the image, if known from context. */
   readonly toolName: string | undefined;
+  /** Call ID of the preceding `tool_response`, if any. */
+  readonly callId: string | undefined;
+  /** File label carried by the media block, if any. */
+  readonly filename: string | undefined;
   /** MIME type of the image, if available. */
   readonly mimeType: string | undefined;
-  /** Wire size (base64 string length) of the omitted image. */
+  /** Encoded wire size (base64 length) of the omitted image. */
   readonly sizeBytes: number;
+  /** Whether the batch overflowed or the image is oversize by itself. */
+  readonly reason: OmissionReason;
 }
 
 /**
@@ -57,9 +71,30 @@ export interface BudgetEnforcementResult {
   readonly totalImageBytes: number;
 }
 
+function isImageMimeType(mimeType: unknown): boolean {
+  return (
+    typeof mimeType === 'string' && mimeType.toLowerCase().startsWith('image/')
+  );
+}
+
 /**
- * Returns the wire size (base64 string length) of an image `MediaBlock`,
- * or 0 for non-image blocks.
+ * Returns the encoded (base64) wire size of an image `MediaBlock`, for both
+ * inline data and validated stored-media references, or 0 for anything that
+ * is not an image.
+ */
+export function getImageEncodedSize(block: ContentBlock): number {
+  if (block.type !== 'media' || !isImageMimeType(block.mimeType)) {
+    return 0;
+  }
+  if (isMediaReferenceBlock(block)) {
+    return block.normalizedBase64Length;
+  }
+  return getImageInlineDataSize(block);
+}
+
+/**
+ * Returns the wire size (base64 string length) of an inline image
+ * `MediaBlock`, or 0 for non-image blocks and stored-media references.
  */
 export function getImageInlineDataSize(block: ContentBlock): number {
   if (block.type !== 'media') {
@@ -68,8 +103,7 @@ export function getImageInlineDataSize(block: ContentBlock): number {
   if (
     typeof block.data === 'string' &&
     block.data.length > 0 &&
-    typeof block.mimeType === 'string' &&
-    block.mimeType.toLowerCase().startsWith('image/')
+    isImageMimeType(block.mimeType)
   ) {
     return block.data.length;
   }
@@ -86,8 +120,10 @@ export function getImageInlineDataSize(block: ContentBlock): number {
  *
  * Non-image blocks (text, tool_response, etc.) are always retained.
  *
- * The function tracks the most recent `tool_response` name so each
- * omitted image can be associated with the tool that produced it.
+ * The function tracks the most recent `tool_response` name and call ID so
+ * each omitted image can be associated with the call that produced it.  An
+ * omitted image is classified as exceeding the budget alone whenever its own
+ * size is above `budgetBytes`, even if the budget was already exhausted.
  */
 export function enforceImageBudget(
   blocks: ContentBlock[],
@@ -95,7 +131,7 @@ export function enforceImageBudget(
 ): BudgetEnforcementResult {
   if (!Number.isFinite(budgetBytes) || budgetBytes <= 0) {
     const retainedImageBytes = blocks.reduce(
-      (sum, block) => sum + getImageInlineDataSize(block),
+      (sum, block) => sum + getImageEncodedSize(block),
       0,
     );
     return { blocks, omitted: [], totalImageBytes: retainedImageBytes };
@@ -106,14 +142,16 @@ export function enforceImageBudget(
   let runningTotal = 0;
   let budgetExhausted = false;
   let currentToolName: string | undefined;
+  let currentCallId: string | undefined;
 
   for (const block of blocks) {
     if (block.type === 'tool_response') {
       currentToolName = block.toolName;
+      currentCallId = block.callId;
     }
 
-    const imageSize = getImageInlineDataSize(block);
-    if (imageSize === 0) {
+    const imageSize = getImageEncodedSize(block);
+    if (block.type !== 'media' || imageSize === 0) {
       result.push(block);
       continue;
     }
@@ -122,8 +160,12 @@ export function enforceImageBudget(
       budgetExhausted = true;
       omitted.push({
         toolName: currentToolName,
-        mimeType: (block as MediaBlock).mimeType,
+        callId: currentCallId,
+        filename: block.filename,
+        mimeType: block.mimeType,
         sizeBytes: imageSize,
+        reason:
+          imageSize > budgetBytes ? 'exceeds-budget-alone' : 'aggregate-budget',
       });
     } else {
       runningTotal += imageSize;
@@ -135,28 +177,81 @@ export function enforceImageBudget(
 }
 
 /**
+ * Feedback is model-visible text added to the request, so its size must not
+ * grow with the number of omitted images or the length of their labels. The
+ * omitted images themselves are never dropped from the accounting: the header
+ * count covers all of them and each category reports how many were not listed.
+ */
+const MAX_LISTED_PER_CATEGORY = 20;
+const MAX_LABEL_LENGTH = 64;
+
+function boundedLabel(label: string): string {
+  const characters = [...label];
+  return characters.length <= MAX_LABEL_LENGTH
+    ? label
+    : `${characters.slice(0, MAX_LABEL_LENGTH).join('')}...`;
+}
+
+function describeOmittedImage(img: OmittedImage): string {
+  const identity = [
+    img.filename === undefined || img.filename === ''
+      ? undefined
+      : `file ${boundedLabel(img.filename)}`,
+    img.toolName === undefined || img.toolName === ''
+      ? undefined
+      : `tool ${boundedLabel(img.toolName)}`,
+    img.callId === undefined || img.callId === ''
+      ? undefined
+      : `call ${boundedLabel(img.callId)}`,
+  ].filter((part): part is string => part !== undefined);
+  const subject = identity.length > 0 ? identity.join(', ') : 'unidentified';
+  return `- ${subject}: ${img.mimeType ?? 'unknown type'}, ${img.sizeBytes} encoded bytes`;
+}
+
+function describeOmittedImages(images: readonly OmittedImage[]): string {
+  const lines = images
+    .slice(0, MAX_LISTED_PER_CATEGORY)
+    .map(describeOmittedImage);
+  const unlisted = images.length - lines.length;
+  if (unlisted > 0) {
+    lines.push(`- and ${unlisted} more omitted images not listed`);
+  }
+  return lines.join('\n');
+}
+
+/**
  * Builds a human-readable feedback message for the model when images are
- * omitted due to the cumulative budget being exceeded.
+ * omitted due to the cumulative budget being exceeded.  Aggregate overflow and
+ * images that cannot fit alone get different remedies.
  */
 export function buildOmissionFeedback(
   omitted: readonly OmittedImage[],
+  budgetBytes: number,
 ): string {
-  const toolNames = [
-    ...new Set(
-      omitted
-        .map((img) => img.toolName)
-        .filter(
-          (name): name is string => typeof name === 'string' && name.length > 0,
-        ),
-    ),
-  ];
-  const toolList =
-    toolNames.length > 0 ? ` (tools: ${toolNames.join(', ')})` : '';
-
-  return (
-    `System: ${omitted.length} image(s) were omitted because the cumulative ` +
-    `image payload would exceed the request size limit${toolList}. ` +
-    `Please re-read the images one at a time or in smaller batches to stay ` +
-    `within the limit.`
+  const aggregate = omitted.filter((img) => img.reason === 'aggregate-budget');
+  const oversize = omitted.filter(
+    (img) => img.reason === 'exceeds-budget-alone',
   );
+
+  const sections = [
+    `System: ${omitted.length} image(s) were omitted because the encoded ` +
+      `image payload limit for one tool result batch is ${budgetBytes} bytes.`,
+  ];
+  if (aggregate.length > 0) {
+    sections.push(
+      `Omitted because the batch exceeded the limit:\n` +
+        `${describeOmittedImages(aggregate)}\n` +
+        `Request fewer images per call or read them in smaller batches ` +
+        `to stay within the limit.`,
+    );
+  }
+  if (oversize.length > 0) {
+    sections.push(
+      `Cannot fit alone (larger than the ${budgetBytes}-byte limit by ` +
+        `itself):\n${describeOmittedImages(oversize)}\n` +
+        `These images cannot fit alone. Provide a resized or cropped, ` +
+        `smaller version.`,
+    );
+  }
+  return sections.join('\n');
 }

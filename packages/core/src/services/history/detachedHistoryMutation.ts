@@ -86,6 +86,7 @@ export interface DetachedHistoryHost {
   ): Promise<void> | undefined;
   /** The published batch as one event, announced after its group is acked (journal store). */
   notifyRows(rows: HistoryBatchRowSource): void | Promise<void>;
+  notifyRowsRolledBack?(rows: HistoryBatchRowSource): Promise<void>;
   notifyTokens(tokensDelta: number): void;
   notifyRange(range: ReturnType<typeof buildContextRangeSnapshot>): void;
 }

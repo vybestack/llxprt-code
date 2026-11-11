@@ -38,6 +38,7 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     private readonly snapshot: VersionSnapshot,
     private readonly prepareFormat: PrepareNativeRequestFormat | undefined,
     private readonly prepareKimi: PrepareNativeRequestKimi | undefined,
+    project: NativeProviderFormat['project'],
     private readonly signal?: AbortSignal,
     private readonly ownership?: RowOwnership,
     mediaStore: LocalMediaStore | undefined = undefined,
@@ -58,6 +59,10 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
             ),
           }),
       indexed,
+      project: (projection) => {
+        this.requireOpen();
+        return project(projection);
+      },
       withFormat: (registration, consume) =>
         this.withFormat(registration, consume),
       withKimi: (consume) => this.withKimi(consume),
@@ -165,6 +170,32 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
         snapshot,
         prepareFormat,
         prepareKimi,
+        (overlay) => {
+          const pinned = snapshot.retain();
+          const blocks = new Map(projection?.blockReplacements);
+          for (const [label, replacements] of overlay.blockReplacements ?? []) {
+            blocks.set(
+              label,
+              new Map([...(blocks.get(label) ?? []), ...replacements]),
+            );
+          }
+          return JournalProviderRequestSnapshot.create(
+            pinned,
+            tail,
+            options,
+            {
+              ...projection,
+              ...overlay,
+              blockReplacements: blocks,
+              header: (row, label) =>
+                overlay.header(projection?.header(row, label) ?? row, label),
+            },
+            () => pinned.close(),
+            prepareFormat,
+            mediaStore,
+            prepareKimi,
+          );
+        },
         options.signal,
         options.ownership,
         mediaStore,

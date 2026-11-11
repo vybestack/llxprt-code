@@ -49,6 +49,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { replayableContents } from '../../utils/collectContents.js';
 import {
   AuthPrecedenceResolver,
+  type OAuthToken,
   type OAuthTokenRequestMetadata,
 } from '@vybestack/llxprt-code-auth';
 
@@ -61,6 +62,16 @@ class RecordingOAuthManager extends OAuthManager {
   ): Promise<string | null> {
     this.requests.push(metadata);
     return super.getToken(provider, metadata);
+  }
+
+  // Auth resolution reads the full credential through resolveToken so the
+  // bearer and its identity come from one result; record that request too.
+  override async resolveToken(
+    provider: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): Promise<OAuthToken | null> {
+    this.requests.push(metadata);
+    return super.resolveToken(provider, metadata);
   }
 }
 

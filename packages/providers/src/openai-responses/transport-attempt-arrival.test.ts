@@ -70,8 +70,10 @@ function deps(codex: boolean): ResponsesTestDeps {
     requestHeaders: undefined,
     defaultModel: 'gpt-5',
     isCodexMode: () => codex,
-    getCodexAccountId: async () => 'account',
-    resolveAuthTokenForPrompt: async () => 'token',
+    resolveRequestCredential: async () => ({
+      bearer: 'token',
+      accountId: 'account',
+    }),
     shouldRetryOnError: () => true,
     getUnallowedModelParameters: () => new Set<string>(),
   };

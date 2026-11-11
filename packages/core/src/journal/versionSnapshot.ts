@@ -38,6 +38,7 @@ import {
 } from './mistralMapping.js';
 import {
   nextCuratedEntry,
+  mediaRowEntries,
   curatedEntryAt,
   curatedEntryWithOrdinalAt,
 } from './curatedQueries.js';
@@ -530,6 +531,13 @@ export class VersionSnapshot {
       this.read.version?.aggregate.curated ?? 0,
       label,
     );
+  }
+
+  async *mediaEntries(): AsyncGenerator<RowEntry> {
+    this.requireOpen();
+    const root = this.rootRef();
+    if (root !== undefined)
+      yield* mediaRowEntries(this.read.access, root.offset);
   }
 
   /** The live rows in label order from index `from`. */

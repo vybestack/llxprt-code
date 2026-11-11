@@ -124,8 +124,10 @@ function createDeps(
     requestBaseURL: baseURL,
     requestHeaders: undefined,
     isCodexMode: () => false,
-    getCodexAccountId: async () => 'test-account',
-    resolveAuthTokenForPrompt: async () => 'test-token',
+    resolveRequestCredential: async () => ({
+      bearer: 'test-token',
+      accountId: 'test-account',
+    }),
     shouldRetryOnError: () => false,
     defaultModel: 'gpt-5.6-sol',
 

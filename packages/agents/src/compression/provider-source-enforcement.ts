@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import { isRequestByteOverflowError } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { isAbortLikeError } from './is-abort-like-error.js';
 import {
   INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
   computeHistoryTruncationTarget,
@@ -84,6 +86,8 @@ export class ProviderSourceEnforcer {
     try {
       return await this.deps.estimate();
     } catch (error: unknown) {
+      if (isRequestByteOverflowError(error) || isAbortLikeError(error))
+        throw error;
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(
         `Token projection failed at ${stage} stage during provider-content hard-limit enforcement: ${message}`,

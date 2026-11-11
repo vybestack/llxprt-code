@@ -8,11 +8,26 @@ import {
   assertRequestMediaBudget,
   DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
   RequestMediaResolutionError,
+  RequestMediaByteOverflowError,
   type RequestMediaReservations,
   type ResolvedMediaRequest,
 } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { resolveRequestMedia } from '../utils/request-media-resolution.js';
 
+function requestWideOverflow(
+  error: unknown,
+  used: number,
+  budget: number,
+): unknown {
+  return error instanceof RequestMediaByteOverflowError
+    ? new RequestMediaByteOverflowError(
+        error.contentId,
+        error.turnId,
+        used + error.totalBytes,
+        budget,
+      )
+    : error;
+}
 /** The captured media input of one request: id, aggregate budget and resolver. */
 export type RowsMediaInput = Omit<
   Parameters<typeof resolveRequestMedia>[0],
@@ -78,7 +93,11 @@ export class ResponsesMediaBudget {
           'metadata validation',
         );
     }
-    assertRequestMediaBudget([row], turnId, this.budget - this.used);
+    try {
+      assertRequestMediaBudget([row], turnId, this.budget - this.used);
+    } catch (error) {
+      throw requestWideOverflow(error, this.used, this.budget);
+    }
     this.used += rowMediaBytes(row);
   }
 }
@@ -135,13 +154,18 @@ export async function* resolveRowsMedia(
       }
     }
     if (bytes === 0) yield row;
-    else
-      yield* resolveRow(
-        row,
-        { ...media, reservations, lease },
-        remaining,
-        signal,
-      );
+    else {
+      try {
+        yield* resolveRow(
+          row,
+          { ...media, reservations, lease },
+          remaining,
+          signal,
+        );
+      } catch (error) {
+        throw requestWideOverflow(error, used - bytes, budget);
+      }
+    }
   }
 }
 

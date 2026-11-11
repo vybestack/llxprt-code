@@ -134,4 +134,16 @@ export interface ProviderContentEnvelope {
    * clear error if compression is required.
    */
   pendingContents: IContent[] | undefined;
+
+  /**
+   * The user's original pending items, carried when {@link pendingContents}
+   * is undefined because a BeforeModel hook left the boundary unrecoverable.
+   *
+   * It is not a compression boundary and never makes compression available.
+   * Media-pressure relief uses it only to recognize fragments of the user's
+   * own turn by stable identity, so images the user just attached are not
+   * retired as history. Optional: absent when the caller has no original
+   * pending items, in which case only the newest content is protected.
+   */
+  protectedContents?: IContent[];
 }

@@ -343,12 +343,14 @@ export abstract class JournalHistoryStoreMutations extends JournalHistoryStoreRe
     host: DetachedHistoryHost,
     enqueue: (execute: () => Promise<void>) => Promise<void>,
     execute: (restore: () => Promise<void>) => Promise<T>,
+    preserveIndependentWrites = false,
   ): Promise<T> {
     return withRollbackCheckpointOnJournal(
       this.operationStore,
       host,
       enqueue,
       execute,
+      preserveIndependentWrites,
     );
   }
 }

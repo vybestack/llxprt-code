@@ -63,6 +63,7 @@ export class JournalCandidate {
   readonly previews = new Map<number, string>();
   /** Rows pushed by the transform (rows appended, in append mode). */
   count = 0;
+  readonly independentReplacements = new Map<number, number>();
   readonly range = new ContextRangeAccumulator();
   private head = 0;
   private lastSeq = 0;
@@ -125,6 +126,7 @@ export class JournalCandidate {
           };
           await densitySpans.append(spanOf(entry, 'density-replaced'));
         }
+        this.independentReplacements.set(entrySeq(entry), this.count);
         await this.accept(row, owner);
       },
       removeValue: async (ordinal) => {

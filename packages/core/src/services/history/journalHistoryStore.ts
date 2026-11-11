@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { JournalIndependentWrites } from './journalIndependentWrites.js';
 import { journalDisplayCommands } from './journal-display-commands.js';
 import {
   responseArrivalOpener,
@@ -234,6 +235,27 @@ export class JournalHistoryStore
     | undefined;
   private restoreFailed = false;
   private ack: CommitAck | undefined;
+  private readonly independentWrites = new Set<JournalIndependentWrites>();
+
+  watchIndependentWrites(): JournalIndependentWrites {
+    const writes = new JournalIndependentWrites();
+    this.independentWrites.add(writes);
+    return writes;
+  }
+
+  async releaseIndependentWrites(
+    writes: JournalIndependentWrites,
+  ): Promise<void> {
+    this.independentWrites.delete(writes);
+    await writes.close();
+  }
+
+  async observeIndependentReplacements(
+    positions: ReadonlyMap<number, number>,
+  ): Promise<void> {
+    for (const writes of this.independentWrites)
+      await writes.replaced(positions, () => this.session.store.snapshot());
+  }
   private disposed = false;
   private disposal: Promise<void> | undefined;
   readonly checkpointLifetime = new JournalCheckpointLifetime();
@@ -756,6 +778,10 @@ export class JournalHistoryStore
           );
         }
         if (group.unchanged !== true) this.ack = group.ack;
+        for (const writes of this.independentWrites)
+          await writes.committed(group, edits, () =>
+            this.session.store.snapshot(),
+          );
         return group.ack;
       } finally {
         await group.close();

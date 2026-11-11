@@ -75,17 +75,19 @@ export async function dumpFinalizedRequest(
   try {
     if (transportActive) {
       dumpMetadata = {
-        headers: await buildWebSocketHandshakeHeaders(
-          { apiKey: requestContext.apiKey, normalizedOptions: options },
-          deps,
-        ),
+        headers: buildWebSocketHandshakeHeaders({
+          apiKey: requestContext.apiKey,
+          accountId: requestContext.accountId,
+          normalizedOptions: options,
+        }),
         transport: { type: 'websocket', frameType: 'response.create' },
       };
       baseURLForDump = toWebSocketDumpURL(requestContext.baseURL);
     } else {
-      dumpMetadata = await buildHttpDumpMetadata(
+      dumpMetadata = buildHttpDumpMetadata(
         {
           apiKey: requestContext.apiKey,
+          accountId: requestContext.accountId,
           isCodex: requestContext.isCodex,
           normalizedOptions: options,
         },
@@ -144,15 +146,20 @@ function dumpRequest(
  * way (executor -> dump): the dump has to record the exact headers the
  * handshake will send, and the executor needs the same values to perform it.
  */
-export async function buildWebSocketHandshakeHeaders(
-  params: Pick<StreamResponsesParams, 'apiKey' | 'normalizedOptions'>,
-  deps: ResponsesExecutorDeps,
-): Promise<Record<string, string>> {
+export function buildWebSocketHandshakeHeaders(
+  params: Pick<
+    StreamResponsesParams,
+    'apiKey' | 'accountId' | 'normalizedOptions'
+  >,
+): Record<string, string> {
+  if (params.accountId === undefined || params.accountId === '') {
+    throw new Error('Codex request has no account identity for its credential');
+  }
   const headers: Record<string, string> = {
     Authorization: `Bearer ${params.apiKey}`,
     ...params.normalizedOptions.headers,
   };
-  headers['ChatGPT-Account-ID'] = await deps.getCodexAccountId();
+  headers['ChatGPT-Account-ID'] = params.accountId;
   headers['originator'] = 'codex_cli_rs';
   const invocationSessionId = params.normalizedOptions.invocation.sessionId;
   const sessionId =

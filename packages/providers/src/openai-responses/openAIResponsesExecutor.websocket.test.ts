@@ -58,8 +58,10 @@ function buildDeps(
     requestBaseURL: CODEX_BASE_URL,
     requestHeaders: { 'X-Provider': 'p' },
     isCodexMode: () => true,
-    getCodexAccountId: async () => 'codex-account',
-    resolveAuthTokenForPrompt: async () => 'codex-token',
+    resolveRequestCredential: async () => ({
+      bearer: 'codex-token',
+      accountId: 'codex-account',
+    }),
     shouldRetryOnError: () => false,
     defaultModel: 'gpt-5.6-sol',
 
@@ -161,7 +163,7 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
     const primary = new Error('responses transport start failed');
     const cleanup = new Error('responses media release failed');
     const deps = buildDeps({
-      resolveAuthTokenForPrompt: () => Promise.reject(primary),
+      resolveRequestCredential: () => Promise.reject(primary),
     });
     const request = buildCodexWebSocketRequest(deps);
     const built = await buildDiskTextResponsesContext(request, deps);

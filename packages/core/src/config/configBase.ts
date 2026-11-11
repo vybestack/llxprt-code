@@ -91,6 +91,13 @@ export abstract class ConfigBase extends ConfigBaseCore {
     );
   }
 
+  override getRequestImagePayloadBudgetOverrideBytes(): number | undefined {
+    const explicit = this.initialSettings['image-payload-budget-bytes'];
+    return explicit === undefined
+      ? super.getRequestImagePayloadBudgetOverrideBytes()
+      : this.getImagePayloadBudgetBytes();
+  }
+
   override getMediaStoreQuotaByteLimit(): number {
     return this.resolveByteLimit(
       'media-store-quota-bytes',

@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { JournalIndependentWrites } from './journalIndependentWrites.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { JournalSession } from './journalSession.js';
 import type { JournalMirrors } from './journalMirrors.js';
@@ -169,27 +170,42 @@ export async function withRollbackCheckpointOnJournal<T>(
   host: DetachedHistoryHost,
   enqueue: Enqueue,
   execute: (restore: () => Promise<void>) => Promise<T>,
+  preserveIndependentWrites = false,
 ): Promise<T> {
-  const scope: { state?: DetachedState; mark?: JournalMark } = {};
+  const scope: {
+    state?: DetachedState;
+    mark?: JournalMark;
+    writes?: JournalIndependentWrites;
+    unchanged?: () => boolean;
+  } = {};
   await enqueue(async () => {
     await (
       await store.settledSnapshot(() => host.waitForTokenUpdates())
     ).close();
     scope.mark = store.captureCompensation();
     scope.state = host.snapshot();
+    const boundary = store.mutationMark();
+    scope.unchanged = () => store.isCurrentMutationMark(boundary);
+    if (preserveIndependentWrites)
+      scope.writes = store.watchIndependentWrites();
   });
   const restore = (): Promise<void> =>
     enqueue(async () => {
       const { mark, state } = scope;
       if (mark === undefined || state === undefined)
         throw new Error('Detached rollback checkpoint is closed');
+      if (preserveIndependentWrites && scope.unchanged?.() === true) return;
+      await host.waitForTokenUpdates();
+      await store.waitForCommit();
       const before = host.snapshot();
+      scope.writes?.pause();
       await restoreCheckpointVersion(store, host, mark);
       await store.waitForCommit();
       host.chronology.restore(state.chronology);
       host.apply(state.tokens, state.spans);
+      await scope.writes?.replay(store, host);
       host.notify(
-        state.tokens - before.tokens,
+        host.snapshot().tokens - before.tokens,
         store.contextRange(state.spans),
       );
     });
@@ -199,7 +215,12 @@ export async function withRollbackCheckpointOnJournal<T>(
     const { mark } = scope;
     scope.mark = undefined;
     scope.state = undefined;
-    if (mark !== undefined) await store.releaseCompensation(mark);
+    try {
+      if (scope.writes !== undefined)
+        await store.releaseIndependentWrites(scope.writes);
+    } finally {
+      if (mark !== undefined) await store.releaseCompensation(mark);
+    }
   }
 }
 

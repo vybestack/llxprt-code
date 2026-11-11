@@ -15,6 +15,7 @@ export interface JournalResponseSource {
   blocks?(entry: RowEntry): AsyncGenerator<DirectoryBlock>;
   readBlock(entry: RowEntry, index: number, ids?: RowIds): Promise<Uint8Array>;
   readMetadata(entry: RowEntry, ids?: RowIds): Promise<StoredRow>;
+  readonly isMediaReplacement?: (label: bigint, index: number) => boolean;
   readonly isTail?: (label: bigint) => boolean;
   readonly sameBlock?: (left: BlockPosition, right: BlockPosition) => boolean;
 }

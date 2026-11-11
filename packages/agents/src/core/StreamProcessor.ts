@@ -356,6 +356,7 @@ export class StreamProcessor {
       userContent,
       provider: this._bindProviderMediaAndFiles(provider),
       semanticMediaPurge,
+      requestMediaBudgetBytes: this.requestMediaBudgetBytes,
       fallbackTools: this.generationConfig.tools,
       buildRuntime: (extras) =>
         this.providerRuntimeBuilder('StreamProcessor.generateRequest', extras),

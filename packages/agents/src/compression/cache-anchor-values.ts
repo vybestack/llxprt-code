@@ -67,7 +67,7 @@ export async function applyCompressionValuesWithAnchor(
   start: number,
   model: string,
   top = 0,
-  options: DetachedHistoryOptions = {},
+  options: DetachedHistoryOptions & { readonly onCommitted?: () => void } = {},
 ): Promise<IContent | undefined> {
   options.signal?.throwIfAborted();
   if (top > candidate.length - start)
@@ -115,5 +115,6 @@ export async function applyCompressionValuesWithAnchor(
   );
   if (anchor === undefined) history.resetCacheAnchorSeq();
   else history.setCacheAnchorSeq(anchor);
+  options.onCommitted?.();
   return summary;
 }

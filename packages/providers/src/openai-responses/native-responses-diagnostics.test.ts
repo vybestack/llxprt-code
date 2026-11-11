@@ -22,8 +22,7 @@ const deps: ResponsesTestDeps = {
   requestHeaders: undefined,
   defaultModel: 'gpt-5.6',
   isCodexMode: () => false,
-  getCodexAccountId: async () => '',
-  resolveAuthTokenForPrompt: async () => 'test',
+  resolveRequestCredential: async () => ({ bearer: 'test' }),
   shouldRetryOnError: () => false,
   getUnallowedModelParameters: () => new Set(),
 };

@@ -264,8 +264,10 @@ function buildDeps(provider: TestableResponsesProvider): ResponsesTestDeps {
     requestBaseURL: 'https://api.openai.com/v1',
     requestHeaders: undefined,
     isCodexMode: () => false,
-    getCodexAccountId: async () => 'codex-account',
-    resolveAuthTokenForPrompt: async () => 'test-token',
+    resolveRequestCredential: async () => ({
+      bearer: 'test-token',
+      accountId: 'codex-account',
+    }),
     generateSyntheticCallId: () => 'call_synthetic_test',
     shouldRetryOnError: (error) => provider.retryDecision(error),
     defaultModel: 'gpt-5',

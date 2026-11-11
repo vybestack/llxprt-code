@@ -44,7 +44,7 @@ const originalFetch = global.fetch;
 class SocketCodexProvider extends OpenAIResponsesProvider {
   constructor(private readonly harness: SocketHarness) {
     super(
-      'codex-api-key',
+      'codex-token',
       CODEX_BASE_URL,
       undefined,
       buildCodexOAuthManager(),

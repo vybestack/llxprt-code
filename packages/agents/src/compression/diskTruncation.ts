@@ -123,7 +123,7 @@ export async function publishCandidate(
   start: number,
   model: string,
   top = 0,
-  options: DetachedHistoryOptions = {},
+  options: DetachedHistoryOptions & { readonly onCommitted?: () => void } = {},
   sourceOrdinalAt?: (
     position: number,
   ) => number | undefined | Promise<number | undefined>,
@@ -188,6 +188,7 @@ export async function publishCandidate(
   );
   if (anchor === undefined) history.resetCacheAnchorSeq();
   else history.setCacheAnchorSeq(anchor);
+  options.onCommitted?.();
   return summary;
 }
 
@@ -231,7 +232,7 @@ export async function runDiskTruncation(
         result.start,
         metadata.runtimeState.model,
         0,
-        { origin },
+        { origin, onCommitted: args[8]?.onCommitted },
         (position) => input.rows.sourceOrdinalAt(position),
       );
       return { outcome: 'applied', summary };
@@ -251,7 +252,7 @@ export async function runDiskTruncation(
         result.start,
         metadata.runtimeState.model,
         0,
-        { origin },
+        { origin, onCommitted: args[8]?.onCommitted },
         (position) => curated.sourceOrdinalAt(position),
       );
       return { outcome: 'applied', summary };

@@ -143,7 +143,7 @@ export function nativePurgeProviderRequest(
                 ? candidate.location.blockIndex
                 : undefined,
               removedRow: candidate.removed,
-              readChangedRow: () => readProjectedRow(snapshot, candidate),
+              readChangedRow: (held) => readProjectedRow(held, candidate),
             }),
         header: (row, label) => {
           const metadata = { ...row.metadata };

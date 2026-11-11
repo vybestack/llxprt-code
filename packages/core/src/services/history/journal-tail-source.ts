@@ -141,6 +141,7 @@ export class JournalTailSource implements JournalResponseSource {
     return (
       this.isTail(label) ||
       label === this.projection?.label ||
+      this.projection?.blockReplacements?.has(label) === true ||
       this.projection?.headerLabels?.some((header) => header === label) === true
     );
   }
@@ -151,9 +152,14 @@ export class JournalTailSource implements JournalResponseSource {
       : label;
   }
 
+  readonly isMediaReplacement = (label: bigint, index: number): boolean =>
+    this.projection?.blockReplacements?.get(label)?.has(index) === true;
+
   readonly isTail = (label: bigint): boolean => label >= this.firstLabel;
   readonly header = (row: IContent, entry: RowEntry): IContent =>
-    this.isTail(entry.label) ? row : (this.base.header?.(row, entry) ?? row);
+    this.isTail(entry.label)
+      ? (this.projection?.header(row, entry.label) ?? row)
+      : (this.base.header?.(row, entry) ?? row);
 
   hasPendingId(rawId: string): boolean {
     this.snapshot.requireOpen();
@@ -165,9 +171,14 @@ export class JournalTailSource implements JournalResponseSource {
     readonly maxRows: number;
   }> {
     const labels = new Set(this.projection?.headerLabels);
+    for (const label of this.projection?.blockReplacements?.keys() ?? [])
+      labels.add(label);
     let maxRows = this.tailRows.length + this.overlay.size + labels.size;
-    if (this.projection?.label !== undefined) {
-      const label = this.projection.label;
+    const changed = new Set(this.projection?.blockReplacements?.keys());
+    if (this.projection?.label !== undefined)
+      changed.add(this.projection.label);
+    for (const label of changed) {
+      if (this.isTail(label)) continue;
       labels.add(label);
       const entry = await this.snapshot.entryByLabel(label);
       if (entry === undefined)

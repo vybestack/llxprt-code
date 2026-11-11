@@ -35,13 +35,20 @@ import {
   admitProviderContents,
   type RequestRowsScope,
 } from './utils/requestRowsLease.js';
+import {
+  captureProviderDefaults,
+  type ProviderSettings,
+} from './utils/provider-settings.js';
+export type { ProviderSettings } from './utils/provider-settings.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
   CredentialResolutionError,
+  type CredentialResolutionErrorKind,
   type OAuthManager,
   type IProviderKeyStorage,
 } from '@vybestack/llxprt-code-auth';
+import { createCredentialResolutionError } from './utils/credentialResolutionError.js';
 import type { AuthPrecedenceResolver } from '@vybestack/llxprt-code-auth/precedence.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IProviderConfig } from './types/IProviderConfig.js';
@@ -69,10 +76,15 @@ import {
 } from './BaseProviderSettings.js';
 import type {
   ProviderTelemetryContext,
+  RequestCredential,
   ResolvedAuthToken,
   UserMemoryInput,
 } from './types/providerRuntime.js';
-import { resolveRuntimeAuthToken } from './utils/authToken.js';
+import {
+  resolveRuntimeAuthCredential,
+  resolveRuntimeAuthToken,
+  toRequestCredential,
+} from './utils/authToken.js';
 
 export interface BaseProviderConfig {
   // Basic provider config
@@ -425,13 +437,23 @@ export abstract class BaseProvider implements IProvider {
   }
 
   protected async getAuthTokenForPrompt(): Promise<string> {
+    return (await this.getRequestCredentialForPrompt()).token;
+  }
+
+  /**
+   * Resolve the credential for one prompt send as a single authorization
+   * result: the bearer and, when the credential source knows it, the account
+   * identity of that same credential. Providers that need an identity beside
+   * the bearer (Codex) use this rather than reading the store again.
+   */
+  protected async getRequestCredentialForPrompt(): Promise<RequestCredential> {
     const activeOptions = this.activeCallContext.getStore();
     if (activeOptions) {
-      const runtimeToken = await resolveRuntimeAuthToken(
+      const runtimeCredential = await resolveRuntimeAuthCredential(
         activeOptions.resolved.authToken,
       );
-      if (runtimeToken) {
-        return runtimeToken;
+      if (runtimeCredential?.token) {
+        return runtimeCredential;
       }
     }
 
@@ -442,14 +464,35 @@ export abstract class BaseProvider implements IProvider {
     const effectiveBaseURL =
       activeOptions?.resolved.baseURL ??
       this.computeBaseURL(this.owner.capturePolicy());
-    const token =
-      (await this.owner
-        .readAuthentication({
-          includeOAuth: this.isOAuthEligible(effectiveBaseURL),
-        })
-        .then((result) => result.token)) ?? '';
+    const result = await this.owner.readAuthentication({
+      includeOAuth: this.isOAuthEligible(effectiveBaseURL),
+    });
+    return result.token === null ? { token: '' } : toRequestCredential(result);
+  }
 
-    return token;
+  /**
+   * Builds a credential failure for the active call (falling back to minimal
+   * diagnostics outside one), for providers that validate a resolved
+   * credential after resolution.
+   */
+  protected createRequestCredentialFailure(
+    kind: CredentialResolutionErrorKind,
+    remediation: string,
+  ): CredentialResolutionError {
+    return createCredentialResolutionError(
+      this.activeCallContext.getStore(),
+      this.name,
+      { kind, remediation },
+    );
+  }
+
+  /** Profile of the active call, for reads that must match its credential. */
+  protected readActiveProfileId(): string | undefined {
+    const active = this.activeCallContext.getStore();
+    const explicit = active?.metadata['profileId'];
+    if (typeof explicit === 'string' && explicit !== '') return explicit;
+    const current = active?.invocation.getEphemeral('currentProfile');
+    return typeof current === 'string' && current !== '' ? current : undefined;
   }
 
   /**
@@ -972,6 +1015,11 @@ export abstract class BaseProvider implements IProvider {
           if (live.token === null) throw live.failure;
           return live.token;
         },
+        provideCredential: async () => {
+          const live = await readAuthentication(authInput);
+          if (live.token === null) throw live.failure;
+          return toRequestCredential(live);
+        },
       },
     };
   }
@@ -989,23 +1037,11 @@ export abstract class BaseProvider implements IProvider {
   }
 
   private captureProviderDefaults(): Record<string, unknown> {
-    const config = this.providerConfig;
-    return {
-      defaultModel: config?.defaultModel ?? this.getDefaultModel(),
-      baseUrl: config?.baseUrl ?? this.baseProviderConfig.baseURL,
-      temperature: config?.temperature,
-      maxTokens: config?.maxTokens,
-      streaming: config?.streaming,
-      timeout: config?.timeout,
-      openaiResponsesEnabled: config?.openaiResponsesEnabled,
-      providerSpecific: config?.providerSpecific,
-      ephemerals: config?.readConnectionPolicy?.(),
-      enableTextToolCallParsing: config?.enableTextToolCallParsing,
-      textToolCallModels: config?.textToolCallModels,
-      providerToolFormatOverrides: config?.providerToolFormatOverrides,
-      organizationId: config?.organizationId,
-      projectId: config?.projectId,
-    };
+    return captureProviderDefaults(
+      this.providerConfig,
+      this.baseProviderConfig.baseURL,
+      () => this.getDefaultModel(),
+    );
   }
 
   /**
@@ -1151,15 +1187,4 @@ export abstract class BaseProvider implements IProvider {
     }
     return getProviderCustomHeaders(this.providerConfig);
   }
-}
-
-export interface ProviderSettings {
-  enabled: boolean;
-  'auth-key'?: string;
-  'auth-keyfile'?: string;
-  baseUrl?: string;
-  model?: string;
-  maxTokens?: number;
-  temperature?: number;
-  [key: string]: unknown;
 }

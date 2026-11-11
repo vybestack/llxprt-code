@@ -23,6 +23,7 @@ export async function fallbackDisk(
   previous: HistoryDumpSource,
   primaryError: unknown,
   origin?: object,
+  onCommitted?: () => void,
 ): Promise<{
   readonly outcome: 'applied' | 'noop' | 'failed';
   readonly summary?: IContent;
@@ -39,7 +40,7 @@ export async function fallbackDisk(
       fallback.start,
       context.runtimeState.model,
       0,
-      { origin },
+      { origin, onCommitted },
     );
     return { outcome: 'applied', summary };
   } catch (fallbackError) {
@@ -78,6 +79,15 @@ function middleOutStrategy(transport: SummaryTransport): MiddleOutStrategy {
   );
 }
 
+function oneShotStrategy(transport: SummaryTransport): OneShotStrategy {
+  return new OneShotStrategy(
+    transport.mediaResolver,
+    transport.requestMediaBudgetBytes,
+    transport.providerFileBindings,
+    transport.providerFileLifecycle,
+  );
+}
+
 export function runDiskMiddleOut(
   transport: SummaryTransport,
   ...args: Parameters<typeof buildCompressionMetadata>
@@ -100,16 +110,12 @@ async function runDiskSummary(
   const metadata = await buildCompressionMetadata(...args);
   const history = args[3];
   const origin = args[8]?.historyOrigin;
+  const onCommitted = args[8]?.onCommitted;
   const input = await history.openCompressionInput();
   const previous = input.previous;
   const attempt = async (): Promise<DiskSummaryOutcome> => {
     const context = { ...metadata, history: input.rows };
-    const oneShot = new OneShotStrategy(
-      transport.mediaResolver,
-      transport.requestMediaBudgetBytes,
-      transport.providerFileBindings,
-      transport.providerFileLifecycle,
-    );
+    const oneShot = oneShotStrategy(transport);
     const strategy =
       name === 'middle-out' ? middleOutStrategy(transport) : oneShot;
     let result: SummaryOutput;
@@ -128,7 +134,14 @@ async function runDiskSummary(
         'Primary disk compression failed, attempting fallback truncation',
         primaryError,
       );
-      return fallbackDisk(context, history, previous, primaryError, origin);
+      return fallbackDisk(
+        context,
+        history,
+        previous,
+        primaryError,
+        origin,
+        onCommitted,
+      );
     }
     if (result.kind === 'noop') return { outcome: 'noop' };
     const summary = await applyCompressionValuesWithAnchor(
@@ -138,7 +151,7 @@ async function runDiskSummary(
       0,
       metadata.runtimeState.model,
       result.top,
-      { origin },
+      { origin, onCommitted },
     );
     return { outcome: 'applied', summary };
   };

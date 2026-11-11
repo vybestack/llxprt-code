@@ -110,7 +110,7 @@ type NativeEventArguments = Parameters<Parameters<EventEmitter['on']>[1]>;
 
 export type HistoryEventRegistration<Host> = <Event extends string | symbol>(
   event: Event,
-  listener: Event extends 'contentBatchAdded'
+  listener: Event extends 'contentBatchAdded' | 'contentBatchRolledBack'
     ? (contents: HistoryBatchEvent) => void
     : Event extends 'contentSealed'
       ? (row: SealedHistoryRow, origin?: object) => void
@@ -119,7 +119,7 @@ export type HistoryEventRegistration<Host> = <Event extends string | symbol>(
 
 export type HistoryEventEmission = <Event extends string | symbol>(
   event: Event,
-  ...args: Event extends 'contentBatchAdded'
+  ...args: Event extends 'contentBatchAdded' | 'contentBatchRolledBack'
     ? [contents: HistoryBatchEvent]
     : Event extends 'contentSealed'
       ? [row: SealedHistoryRow, origin?: object]

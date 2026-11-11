@@ -88,7 +88,7 @@ function buildCodexProviderWithOAuth(): OpenAIResponsesProvider {
   };
 
   return new OpenAIResponsesProvider(
-    'codex-api-key',
+    'codex-token',
     CODEX_BASE_URL,
     undefined,
     oauthManager as unknown as object,

@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { estimateTokens } from '../../utils/toolOutputLimiter.js';
+import {
+  journalRequestMediaRows,
+  type JournalRequestMediaRow,
+} from './journal-request-media-rows.js';
 import { measureTokenUsagePlan } from './token-usage-plan.js';
 import { HistoryReaderScope } from './historyReaderScope.js';
 import {
@@ -376,6 +380,41 @@ export class IndexedJournalRequestSnapshot {
     Object.freeze(block.originalObject);
     Object.freeze(block);
     this.mediaReferences.add(block);
+  }
+
+  /** Raw media rows only, with original block ordinals and no text payloads. */
+  openMediaRows(signal?: AbortSignal): AsyncGenerator<JournalRequestMediaRow> {
+    this.requireOpen();
+    return journalRequestMediaRows(
+      this.snapshot,
+      this.source,
+      () => this.requireOpen(),
+      signal,
+    );
+  }
+
+  async headerBefore(
+    label: bigint,
+    signal?: AbortSignal,
+  ): Promise<
+    { readonly label: bigint; readonly header: IContent } | undefined
+  > {
+    this.requireOpen();
+    let low = 0;
+    let high = this.count;
+    while (low < high) {
+      signal?.throwIfAborted();
+      const middle = Math.floor((low + high) / 2);
+      if ((await this.unitEntryAt(middle)).entry.label < label)
+        low = middle + 1;
+      else high = middle;
+    }
+    if (low === 0) return undefined;
+    const previous = await this.unitEntryAt(low - 1);
+    return {
+      label: previous.entry.label,
+      header: (await this.planAt(low - 1, signal)).header,
+    };
   }
 
   async readAt(index: number, signal?: AbortSignal): Promise<IContent> {

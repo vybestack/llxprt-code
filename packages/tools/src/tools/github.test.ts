@@ -281,6 +281,71 @@ describe('github tool', () => {
     });
 
     /**
+     * Issue #4001: gh must run in the session workspace, which the host
+     * knows and the model must not control. The directory travels beside the
+     * parameters, never inside them, and is read at call time.
+     *
+     * @issue 4001
+     */
+    it('hands the host workspace directory to the report port as an option, not a parameter', async () => {
+      const seen: Array<{
+        params: Record<string, unknown>;
+        options: unknown;
+      }> = [];
+      const record: GitHubReportOperations['readReport'] = async (
+        _op,
+        params,
+        _signal,
+        options,
+      ) => {
+        seen.push({ params, options });
+        return { ok: true };
+      };
+      let workspace = '/workspace/one';
+      const tool = new GithubTool(
+        { readReport: record, submitReport: record },
+        undefined,
+        () => workspace,
+      );
+
+      await tool
+        .build({ op: 'issue.view', number: 1 })
+        .execute(new AbortController().signal);
+      workspace = '/workspace/two';
+      await tool
+        .build({ op: 'issue.view', number: 2 })
+        .execute(new AbortController().signal);
+
+      expect(seen).toStrictEqual([
+        {
+          params: { number: 1 },
+          options: { workingDirectory: '/workspace/one' },
+        },
+        {
+          params: { number: 2 },
+          options: { workingDirectory: '/workspace/two' },
+        },
+      ]);
+    });
+
+    /**
+     * @issue 4001
+     */
+    it('does not let the model set the working directory', () => {
+      const tool = new GithubTool(stubClient());
+      expect(
+        tool.validateToolParams({
+          op: 'pr.create',
+          title: 't',
+          workingDirectory: '/etc',
+        }),
+      ).not.toBeNull();
+      expect(JSON.stringify(tool.parameterSchema)).not.toContain(
+        'workingDirectory',
+      );
+    });
+
+    /**
      * @plan PLAN-20260731-GHBROKER.P15
      * @requirement REQ-013
      */

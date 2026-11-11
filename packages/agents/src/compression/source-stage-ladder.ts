@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import { isRelievableMediaPressure } from './mediaPressureFallback.js';
+import { CompressionRollbackError } from './guardedCompression.js';
+import { isAbortLikeError } from './is-abort-like-error.js';
 import {
   buildContextOverflowError,
   buildUnrecoverableBoundaryError,
@@ -18,6 +21,9 @@ export interface SourceStageActions {
   compress(): Promise<PerformCompressionResult>;
   /** Rebuilds the pending-aware candidate from the durable journal, discarding the stale one. */
   replaceSource(): Promise<void>;
+  /** Retires historical image pixels in the request view without changing history. */
+  relieveMediaPressure?(): Promise<boolean>;
+  checkMediaPressure?(error: unknown): Promise<void>;
   /** Hard-limit fallback truncation; history, anchor and baseline roll back unless the whole candidate is accepted. */
   fallback(
     historyTarget: number | undefined,
@@ -43,6 +49,8 @@ async function compressAndReplace(
         `Auto compression did not complete during hard-limit enforcement (result: ${result})`,
       );
   } catch (error: unknown) {
+    if (isAbortLikeError(error) || error instanceof CompressionRollbackError)
+      throw error;
     result = PerformCompressionResult.FAILED;
     failure = normalizeFailure(error);
     actions.warn(
@@ -130,6 +138,7 @@ async function exhaustHardLimit(
   try {
     replacedCount = (await actions.truncateToolResponses()).replacedCount;
   } catch (error: unknown) {
+    if (isAbortLikeError(error)) throw error;
     toolFailure = normalizeFailure(error);
     actions.warn(
       '[CompressionHandler] Unified tool-response truncation failed during last-resort enforcement',
@@ -168,7 +177,7 @@ async function exhaustHardLimit(
  * `pendingRecoverable` is false only when a BeforeModel hook discarded the
  * pending boundary, matching the array route's unrecoverable-boundary rule.
  */
-export async function runSourceStages(
+async function runTokenStages(
   enforcer: ProviderSourceEnforcer,
   actions: SourceStageActions,
   pendingRecoverable: boolean,
@@ -191,4 +200,36 @@ export async function runSourceStages(
   const reduction = await compressWithRetry(enforcer, actions, dense.projected);
   if (reduction.assessment.next === 'send') return;
   await exhaustHardLimit(enforcer, actions, initial.projected, reduction);
+}
+
+/** One byte-recovery pass, followed by the same token-limit checks. */
+export async function runSourceStages(
+  enforcer: ProviderSourceEnforcer,
+  actions: SourceStageActions,
+  pendingRecoverable: boolean,
+): Promise<void> {
+  let compressionAttempts = 0;
+  const tracked = {
+    ...actions,
+    compress: () => {
+      compressionAttempts++;
+      return actions.compress();
+    },
+  };
+  try {
+    await runTokenStages(enforcer, tracked, pendingRecoverable);
+  } catch (error) {
+    if (
+      !isRelievableMediaPressure(error) ||
+      actions.relieveMediaPressure === undefined
+    )
+      throw error;
+    await actions.checkMediaPressure?.(error);
+    if (pendingRecoverable && compressionAttempts === 0) {
+      await compressAndReplace(tracked);
+    }
+    const changed = await actions.relieveMediaPressure();
+    if (!changed && compressionAttempts === 0) throw error;
+    await runTokenStages(enforcer, actions, pendingRecoverable);
+  }
 }

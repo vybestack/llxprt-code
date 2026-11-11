@@ -511,7 +511,9 @@ function registerStandardTools(
   // @plan PLAN-20260731-GHBROKER.P15
   // @requirement REQ-003, REQ-008
   if (githubReports !== undefined) {
-    registerCoreTool(GithubTool, githubReports, messageBusAdapter);
+    registerCoreTool(GithubTool, githubReports, messageBusAdapter, () =>
+      config.getTargetDir(),
+    );
   }
   registerCoreTool(TodoWrite, todoServiceAdapter, toolHostAdapter);
   registerCoreTool(TodoRead, todoServiceAdapter);

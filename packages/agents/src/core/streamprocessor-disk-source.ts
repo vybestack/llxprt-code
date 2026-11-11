@@ -1,5 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { responseTransportSource } from './response-transport-source.js';
+import { DEFAULT_REQUEST_MEDIA_BUDGET_BYTES } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import {
+  retireSourceImages,
+  assertSourcePendingMediaBudget,
+} from '../compression/source-image-retirement.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { StreamProcessorRuntime } from './chatSessionPorts.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -58,6 +63,7 @@ interface StreamDiskSourceInput {
   readonly recordingExecution?: AgentChatRecordingExecution;
   readonly hookOwner?: HookExecutionOwner;
   readonly modelParameters?: AdmittedModelParameters;
+  readonly requestMediaBudgetBytes?: number;
 }
 
 /** Raw pending input for recomposition, which is not the normalized output membership. */
@@ -109,6 +115,38 @@ async function submitSourcePrompt(
     input.runtime.state.model,
     input.recordingExecution?.historyOrigin,
   );
+}
+
+function sourceImageView(input: StreamDiskSourceInput) {
+  return async (
+    candidate: PendingAwareRequestSelection,
+    retireAll: boolean,
+    error?: unknown,
+  ): Promise<PendingAwareRequestSelection> => {
+    if (error !== undefined) {
+      await assertSourcePendingMediaBudget(
+        candidate,
+        Array.isArray(input.userContent)
+          ? input.userContent
+          : [input.userContent],
+        error,
+        input.signal,
+      );
+      return candidate;
+    }
+    const retired = await retireSourceImages(
+      candidate,
+      Array.isArray(input.userContent)
+        ? input.userContent
+        : [input.userContent],
+      input.requestMediaBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
+      retireAll,
+      input.signal,
+    );
+    return retired === candidate
+      ? candidate
+      : pendingAwareRequestSelection(retired, candidate.pendingSelection);
+  };
 }
 
 /** The product send. No request-wide content graph is fabricated or retained. */
@@ -183,6 +221,7 @@ export async function streamDiskSource(
             hookOwner,
             modelParameters: input.modelParameters,
           },
+          sourceImageView(input),
         ),
       onPrepared: input.onPrepared,
       send: input.send,

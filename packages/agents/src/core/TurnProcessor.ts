@@ -624,6 +624,7 @@ export class TurnProcessor {
       provider,
       promptId: prompt_id,
       userContents: userIContents,
+      requestMediaBudgetBytes: this.requestMediaBudgetBytes,
       semanticMediaPurge,
       tools: toolSelection.tools,
       signal,

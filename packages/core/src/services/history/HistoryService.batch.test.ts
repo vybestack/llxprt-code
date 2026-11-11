@@ -312,6 +312,96 @@ describe('HistoryService atomic batch publication', () => {
     const result = await batchCase6();
     expect(result.tokenDelta).toBe(result.totalTokens);
   });
+  it('announces a published batch that is then reverted, with the same entries', async () => {
+    const history = new HistoryService();
+    const published: Array<Promise<string[]>> = [];
+    const reverted: Array<Promise<string[]>> = [];
+    history.on('contentBatchAdded', (contents) => {
+      published.push(readBatch(contents, textOf));
+    });
+    history.on('contentBatchRolledBack', (contents) => {
+      reverted.push(readBatch(contents, textOf));
+    });
+    await history.registerMediaOwner({
+      adopt: () => undefined,
+      releaseAll: async () => undefined,
+      reconcile: async () => undefined,
+      prepareReplacement: () => ({
+        publish: () => undefined,
+        rollback: () => undefined,
+      }),
+      prepareReferenceAddition: () => ({
+        publish: () => undefined,
+        rollback: () => undefined,
+        finalize: () => {
+          throw new Error('finalizer failed after publication');
+        },
+      }),
+    });
+    const batch = [createUserMessage('first'), createUserMessage('second')];
+
+    await expect(history.addBatch(batch)).rejects.toThrow(
+      'finalizer failed after publication',
+    );
+
+    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+      expect(rows).toStrictEqual([]);
+    });
+    expect(await Promise.all(published)).toStrictEqual([batch.map(textOf)]);
+    expect(await Promise.all(reverted)).toStrictEqual([batch.map(textOf)]);
+  });
+
+  it('announces no reversion for a batch that never published or that committed', async () => {
+    const history = new HistoryService();
+    const reverted: Array<Promise<string[]>> = [];
+    history.on('contentBatchRolledBack', (contents) => {
+      reverted.push(readBatch(contents, textOf));
+    });
+    let rejectStaging = true;
+    await history.registerMediaOwner({
+      adopt: () => undefined,
+      releaseAll: async () => undefined,
+      reconcile: async () => undefined,
+      prepareReplacement: () => ({
+        publish: () => undefined,
+        rollback: () => undefined,
+      }),
+      prepareReferenceAddition: () => {
+        if (rejectStaging) throw new Error('persistence staging failed');
+        return { publish: () => undefined, rollback: () => undefined };
+      },
+    });
+
+    await expect(
+      history.addBatch([createUserMessage('never published')]),
+    ).rejects.toThrow('persistence staging failed');
+    rejectStaging = false;
+    await history.addBatch([createUserMessage('committed')]);
+
+    expect(await Promise.all(reverted)).toStrictEqual([]);
+    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+      expect(rows.map(textOf)).toStrictEqual(['committed']);
+    });
+  });
+
+  it('keeps the original failure when a reversion listener fails', async () => {
+    const history = new HistoryService();
+    history.on('contentBatchRolledBack', () => {
+      throw new Error('reversion listener failed');
+    });
+    history.on('contentBatchAdded', () => {
+      throw new Error('batch listener failed');
+    });
+
+    await expect(
+      history.addBatch([createUserMessage('first')]),
+    ).rejects.toThrow('batch listener failed');
+
+    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+      expect(rows).toStrictEqual([]);
+    });
+  });
+
   it('serializes a concurrent add after the complete batch', async () => {
     const result = await batchCase7();
     await collectRowsForAssertions(result.streamRawHistory(), async (rows) => {

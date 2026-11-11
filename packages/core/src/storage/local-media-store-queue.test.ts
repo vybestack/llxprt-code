@@ -209,7 +209,7 @@ describe('LocalMediaStore local contention', () => {
   });
 
   it.each(['same instance', 'same root', 'parent alias'])(
-    'reads verified bytes after a local wait longer than the acquisition budget: %s',
+    'reserves and reads verified bytes after a local wait longer than the acquisition budget: %s',
     async (mode): Promise<void> => {
       const store = createStore();
       const bytes = new Uint8Array([1, 2, 3]);
@@ -230,7 +230,9 @@ describe('LocalMediaStore local contention', () => {
 
       const results = await withHeldStore(store, () =>
         Promise.all(
-          Array.from({ length: 8 }, () => reader.readVerified(reference)),
+          Array.from({ length: 8 }, (_, index) =>
+            reader.reserveAndReadVerified(reference, `waiter-${index}`),
+          ),
         ),
       );
 
@@ -326,8 +328,8 @@ describe('LocalMediaStore local contention', () => {
 
     const results = await withHeldStore(holder, async () => {
       const reads = Promise.all([
-        reader.readVerified(reference),
-        reader.readVerified(reference),
+        reader.reserveAndReadVerified(reference, 'drain-owner-1'),
+        reader.reserveAndReadVerified(reference, 'drain-owner-2'),
       ]);
       let closed = false;
       const closing = reader.close().then(() => {

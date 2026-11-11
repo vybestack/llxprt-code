@@ -73,6 +73,17 @@ function waitForAbort<T>(
     }
   });
 }
+
+/** Reads a non-blank string field a stored token may carry. */
+function storedStringField(
+  token: OAuthToken,
+  field: string,
+): string | undefined {
+  if (!(field in token)) return undefined;
+  const value: unknown = Reflect.get(token, field);
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined;
+}
+
 /**
  * Shared per-bucket auth flight with participant-counted cancellation
  * ownership: the underlying flow is aborted only when no live participant
@@ -803,25 +814,27 @@ export class CodexOAuthProvider implements OAuthProvider {
         refreshToken,
         signal,
       );
-      const merged: CodexOAuthToken & Record<string, unknown> = {
-        ...(currentToken as CodexOAuthToken & Record<string, unknown>),
+      // A refresh response may omit id_token. The account then comes from the
+      // stored token; without either source the credential has no identity,
+      // so fail closed rather than persisting an account-less Codex token.
+      const accountId =
+        refreshedToken.account_id ??
+        storedStringField(currentToken, 'account_id');
+      if (accountId === undefined) {
+        this.logger.debug(
+          () => 'Token refresh has no account identity; re-auth required',
+        );
+        return null;
+      }
+      const idToken =
+        refreshedToken.id_token ?? storedStringField(currentToken, 'id_token');
+      const merged: CodexOAuthToken = {
+        ...currentToken,
         ...refreshedToken,
         refresh_token: refreshedToken.refresh_token ?? refreshToken,
+        account_id: accountId,
+        id_token: idToken,
       };
-
-      // Preserve account_id/id_token if refresh response omits them.
-      if (!merged.account_id && 'account_id' in currentToken) {
-        const accountId = (currentToken as { account_id?: string }).account_id;
-        if (accountId) {
-          merged.account_id = accountId;
-        }
-      }
-      if (!merged.id_token && 'id_token' in currentToken) {
-        const idToken = (currentToken as { id_token?: string }).id_token;
-        if (idToken) {
-          merged.id_token = idToken;
-        }
-      }
 
       return merged;
     } catch {

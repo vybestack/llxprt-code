@@ -397,6 +397,21 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   }
 
   /**
+   * Resolve the full OAuth token with exactly the semantics of `getToken`
+   * (same admission, disk/peek/refresh/authentication paths), so a caller can
+   * take the bearer and its account identity from one result.
+   * Delegates to TokenAccessCoordinator.
+   */
+  async resolveToken(
+    providerName: string,
+    bucket?: string | unknown,
+  ): Promise<OAuthToken | null> {
+    return this.foreground.accept((signal) =>
+      this.tokenAccessCoordinator.resolveToken(providerName, bucket, signal),
+    );
+  }
+
+  /**
    * Retrieve the stored OAuth token without refreshing it.
    * Delegates to TokenAccessCoordinator.
    */

@@ -32,7 +32,6 @@ import { recordingOnly } from '../transportArrival.js';
 import {
   resolveInvocationEphemerals,
   normalizeBaseURL,
-  resolveApiKey,
   createRequest,
   applyInstructionsAndTools,
   applyReasoningSettings,
@@ -77,13 +76,14 @@ export interface ResponsesExecutorDeps {
   readonly logger: DebugLogger;
   /** Whether the selected provider uses the Codex protocol. */
   readonly isCodexMode: () => boolean;
-  /** Resolve the Codex account ID for OAuth headers (Codex mode only). */
-  readonly getCodexAccountId: () => Promise<string>;
   /**
-   * Resolve the auth token used for the API call (may trigger OAuth for
-   * Codex). This is the single auth contract for the executor.
+   * Resolve the credential for one request (may trigger OAuth for Codex).
+   * This is the single auth contract for the executor: the bearer and, for
+   * Codex, the account identity that belongs to it. The executor calls it once
+   * per request and reuses the result for every transport attempt, fallback,
+   * retry and diagnostic of that request; nothing reads credentials again.
    */
-  readonly resolveAuthTokenForPrompt: () => Promise<string>;
+  readonly resolveRequestCredential: () => Promise<ResponsesRequestCredential>;
   /** Determine whether a streaming error is retryable (status-based). */
   readonly shouldRetryOnError: (error: Error | unknown) => boolean;
   readonly getMediaTransportCapabilities?: (
@@ -141,6 +141,13 @@ export interface ResponsesExecutorDeps {
   readonly isWebSocketTransportActive?: () => boolean;
 }
 
+/** One authorization result: a bearer and the identity it belongs to. */
+export interface ResponsesRequestCredential {
+  readonly bearer: string;
+  /** Account identity paired with `bearer`; required for Codex. */
+  readonly accountId?: string;
+}
+
 export interface PreparedResponsesRequestContext {
   readonly rawBaseURL: string;
   readonly isCodex: boolean;
@@ -176,6 +183,8 @@ export interface RebuildMode {
 
 export interface RequestContext extends PreparedResponsesRequestContext {
   readonly apiKey: string;
+  /** Identity paired with `apiKey` by the same credential resolution. */
+  readonly accountId?: string;
   readonly baseURL: string;
 }
 
@@ -236,6 +245,7 @@ export async function* executeOpenAIResponsesRequest(
         deps,
         invocationEphemerals,
         requestContext.rebuildFromRows,
+        requestCredential(requestContext),
       );
     },
   };
@@ -294,6 +304,7 @@ export async function* executeOpenAIResponsesRequest(
     rejectedParentId,
     recoverParentless,
     requestContext.rebuildFromRows,
+    requestCredential(requestContext),
   );
 }
 
@@ -323,6 +334,7 @@ async function* retryWithoutStatefulness(
   rejectedParentId: string,
   recoverParentless: boolean,
   rebuildFromRows: PreparedResponsesRequestContext['rebuildFromRows'],
+  credential: ResponsesRequestCredential,
 ): AsyncIterableIterator<IContent> {
   // Retire only the dead id, then rebuild. The retry therefore sends full
   // history with no parent, and — because the parent scan takes the NEWEST
@@ -342,6 +354,7 @@ async function* retryWithoutStatefulness(
     options,
     recoveryPrepared,
     deps,
+    credential,
   );
   // The recovery request is the one that actually reaches the model, so it is
   // the one worth seeing under `dumpcontext`.
@@ -401,6 +414,7 @@ async function buildStatelessTurn(
   deps: ResponsesExecutorDeps,
   invocationEphemerals: Record<string, unknown>,
   rebuildFromRows: PreparedResponsesRequestContext['rebuildFromRows'],
+  credential: ResponsesRequestCredential,
 ): Promise<StreamResponsesParams> {
   const prepared = await rebuildFromRows({
     forceStateless: true,
@@ -410,6 +424,7 @@ async function buildStatelessTurn(
     options,
     prepared,
     deps,
+    credential,
   );
   let dumpResult: Awaited<ReturnType<typeof dumpFinalizedRequest>>;
   try {
@@ -549,10 +564,28 @@ export async function buildResponsesRequestShell(
   }
 }
 
+function requestCredential(
+  context: RequestContext,
+): ResponsesRequestCredential {
+  return {
+    bearer: context.apiKey,
+    ...(context.accountId === undefined
+      ? {}
+      : { accountId: context.accountId }),
+  };
+}
+
+/**
+ * Builds the transport context for one request. `known` is the credential the
+ * request already resolved: recovery and fallback rebuilds pass it so the
+ * request keeps one authorization result instead of resolving a new one that a
+ * rotation or logout could have changed since.
+ */
 async function resolveResponsesTransportContext(
   options: ResponsesRequest,
   prepared: PreparedResponsesRequestContext,
   deps: ResponsesExecutorDeps,
+  known?: ResponsesRequestCredential,
 ): Promise<RequestContext> {
   try {
     const rawBaseURL = resolveResponsesBaseURL(options);
@@ -561,9 +594,13 @@ async function resolveResponsesTransportContext(
         `Projection/transport endpoint mismatch: the OpenAI Responses prompt envelope was prepared for "${prepared.rawBaseURL}" but transport resolved "${rawBaseURL}". A prepared envelope must be sent to the same endpoint it was estimated for (issue #2817 invariant: projection == transport).`,
       );
     }
+    const credential = known ?? (await resolveCredential(prepared, deps));
     return {
       ...prepared,
-      apiKey: await resolveApiKey(options, deps),
+      apiKey: credential.bearer,
+      ...(credential.accountId === undefined
+        ? {}
+        : { accountId: credential.accountId }),
       baseURL: normalizeBaseURL(prepared.rawBaseURL),
     };
   } catch (error) {
@@ -575,3 +612,33 @@ async function resolveResponsesTransportContext(
 }
 
 export { isResponsesPdfEnabled } from './responses-request-fields.js';
+async function resolveCredential(
+  prepared: PreparedResponsesRequestContext,
+  deps: ResponsesExecutorDeps,
+): Promise<ResponsesRequestCredential> {
+  const credential = await deps.resolveRequestCredential();
+  // Strict guard on the value that becomes the Authorization header:
+  // only forward a genuine non-empty string. Provider implementations
+  // can resolve to '' from deeper auth paths, and a defensive runtime
+  // typeof check ensures a non-string (undefined/null from a loosely
+  // typed implementation) is never injected into the header.
+  if (typeof credential.bearer !== 'string' || credential.bearer === '') {
+    throw new Error(
+      prepared.isCodex
+        ? 'Codex authentication required. Run /auth codex enable to authenticate.'
+        : 'OpenAI API key is required',
+    );
+  }
+  // A Codex request without the identity of its bearer must not reach the
+  // wire: pairing the bearer with an identity read from somewhere else is the
+  // account-mismatch failure this contract exists to prevent.
+  if (
+    prepared.isCodex &&
+    (typeof credential.accountId !== 'string' || credential.accountId === '')
+  ) {
+    throw new Error(
+      'Codex authentication is missing the account identity for its credential. Run /auth codex login to authenticate.',
+    );
+  }
+  return credential;
+}

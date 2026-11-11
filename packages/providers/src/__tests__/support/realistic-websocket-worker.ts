@@ -137,8 +137,11 @@ try {
     constructor() {
       super('test', endpoint, undefined, undefined, [], 'codex');
     }
-    protected override async getCodexAccountId(): Promise<string> {
-      return 'test-account';
+    protected override async getRequestCredentialForPrompt(): Promise<{
+      token: string;
+      accountId: string;
+    }> {
+      return { token: 'test', accountId: 'test-account' };
     }
     protected override createWebSocketTransport(): WebSocketTransport {
       return createCodexResponsesWebSocketTransport({

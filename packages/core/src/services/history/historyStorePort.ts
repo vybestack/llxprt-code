@@ -467,6 +467,7 @@ export interface HistoryStorePort {
     host: DetachedHistoryHost,
     enqueue: (execute: () => Promise<void>) => Promise<void>,
     execute: (restore: () => Promise<void>) => Promise<T>,
+    preserveIndependentWrites?: boolean,
   ): Promise<T>;
 
   dispose(beforeClose?: () => Promise<void>): Promise<void>;

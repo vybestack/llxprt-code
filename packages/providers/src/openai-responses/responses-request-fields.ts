@@ -2,7 +2,6 @@
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
 import type { ResponsesRequest } from './responses-request.js';
 import type { ResponsesInputBuildContext } from './OpenAIResponsesInputBuilder.js';
-import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { convertToolsToOpenAIResponses } from './schemaConverter.js';
 import {
   applyOpenAIResponsesReasoning,
@@ -19,34 +18,6 @@ export function resolveInvocationEphemerals(
   options: ResponsesRequest,
 ): Record<string, unknown> {
   return options.invocation.ephemerals;
-}
-
-export async function resolveApiKey(
-  options: ResponsesRequest,
-  deps: ResponsesExecutorDeps,
-): Promise<string> {
-  const promptAuthToken = await deps.resolveAuthTokenForPrompt();
-  // Strict guard on the value that becomes the Authorization header:
-  // only forward a genuine non-empty string. Provider implementations
-  // can resolve to '' from deeper auth paths, and a defensive runtime
-  // typeof check ensures a non-string (undefined/null from a loosely
-  // typed implementation) is never injected into the header.
-  if (typeof promptAuthToken === 'string' && promptAuthToken !== '') {
-    return promptAuthToken;
-  }
-  const runtimeToken = await resolveRuntimeAuthToken(
-    options.resolved.authToken,
-  );
-  if (typeof runtimeToken === 'string' && runtimeToken !== '') {
-    return runtimeToken;
-  }
-
-  const isCodex = deps.isCodexMode();
-  throw new Error(
-    isCodex
-      ? 'Codex authentication required. Run /auth codex enable to authenticate.'
-      : 'OpenAI API key is required',
-  );
 }
 
 export function isResponsesPdfEnabled(options: ResponsesRequest): boolean {

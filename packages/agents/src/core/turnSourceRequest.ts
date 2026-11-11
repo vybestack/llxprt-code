@@ -36,6 +36,7 @@ export interface TurnSourceRequestInput {
   readonly recordingExecution?: AgentChatRecordingExecution;
   readonly hookOwner?: HookExecutionOwner;
   readonly modelParameters?: AdmittedModelParameters;
+  readonly requestMediaBudgetBytes?: number;
   readonly log: (message: string) => void;
   readonly buildOptions: (
     contents: AsyncIterable<IContent>,
@@ -79,6 +80,7 @@ export async function sendTurnSource(
     recordingExecution: input.recordingExecution,
     hookOwner: input.hookOwner,
     modelParameters: input.modelParameters,
+    requestMediaBudgetBytes: input.requestMediaBudgetBytes,
     historyOverride: streamSemanticPurgeRequest(
       input.semanticMediaPurge,
       input.signal,

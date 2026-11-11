@@ -61,6 +61,7 @@ import {
   estimatePendingTokens,
   getCompletionBudget,
 } from './compressionBudgeting.js';
+import { runGuardedCompression } from './guardedCompression.js';
 import { ProviderContentEnforcer } from './providerContentEnforcement.js';
 import { clearCompressionCallback } from './providerCompressionCallback.js';
 import {
@@ -503,15 +504,21 @@ export class CompressionHandler {
         await this.historyService.waitForTokenUpdates();
       },
       compress: async () => {
-        const result = await this.performCompression(promptId, {
-          bypassCooldown: true,
-          trigger: 'auto',
-          ...owners,
-        });
-        await this.historyService.waitForTokenUpdates();
-        return result;
+        const failure = await runGuardedCompression(
+          {
+            ...this.fallbackTransactionDeps(owners),
+            historyOrigin: owners?.historyOrigin,
+            performCompression: (id, options) =>
+              this.performCompression(id, { ...options, ...owners }),
+          },
+          promptId,
+        );
+        if (failure !== undefined) throw failure;
+        return PerformCompressionResult.COMPRESSED;
       },
       replaceSource: () => candidate.replace(),
+      relieveMediaPressure: () => candidate.prepareView(true),
+      checkMediaPressure: (error) => candidate.checkMediaPressure(error),
       fallback: async (historyTarget) => {
         const outcome = await executeFallbackTransaction(
           this.fallbackTransactionDeps(owners),
@@ -552,6 +559,11 @@ export class CompressionHandler {
     pendingRecoverable: boolean,
     pending: SourcePendingRows,
     owners?: CompressionCallOwners,
+    projectView?: (
+      source: S,
+      retireAll: boolean,
+      error?: unknown,
+    ) => Promise<S>,
   ): Promise<S> {
     try {
       await this.historyService.waitForTokenUpdates();
@@ -563,7 +575,9 @@ export class CompressionHandler {
         source.native === undefined
           ? undefined
           : () => this.historyService.historyMutationGuard(),
+        projectView,
       );
+      await candidate.prepareView();
       const limits = this.sourceContextLimits(provider);
       const getHistoryTokens = () => this.historyService.getTotalTokens();
       if (typeof provider.setCompressionCallback === 'function')
@@ -571,6 +585,11 @@ export class CompressionHandler {
           createSourceCompressionCallback({
             candidate,
             defaultLimits: limits,
+            estimateByContents: (rows) =>
+              this.historyService.estimateTokensForContents(
+                { [Symbol.asyncIterator]: () => rows.openReader() },
+                this.ports.state.model,
+              ),
             pendingRecoverable,
             getHistoryTokens,
             stageActions: (active) =>
@@ -697,6 +716,7 @@ export class CompressionHandler {
     options?: {
       bypassCooldown?: boolean;
       trigger?: 'manual' | 'auto';
+      onCommitted?: () => void;
     } & CompressionCallOwners,
   ): Promise<PerformCompressionResult> {
     // Cooldown: skip compression if we have too many recent failures
@@ -747,6 +767,7 @@ export class CompressionHandler {
         options?.transcriptPathProvider,
         options?.modelParameters,
         options?.historyOrigin,
+        options?.onCommitted,
       );
     } finally {
       this.setSuppressDensityDirty(false);
@@ -855,6 +876,7 @@ export class CompressionHandler {
     transcriptPathProvider?: () => string | undefined,
     modelParameters?: AdmittedModelParameters,
     historyOrigin?: object,
+    onCommitted?: () => void,
   ): Promise<'applied' | 'noop' | 'failed'> {
     const strategyName = parseCompressionStrategyName(
       this.ports.ephemerals.compressionStrategy(),
@@ -868,7 +890,7 @@ export class CompressionHandler {
       this.activeTodosProvider,
       transcriptPathProvider ?? this.transcriptPathProvider,
       this.logger,
-      { modelParameters, historyOrigin },
+      { modelParameters, historyOrigin, onCommitted },
     ];
     const transport = {
       mediaResolver: this.mediaResolver,

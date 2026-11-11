@@ -304,7 +304,7 @@ describe('run-lint runner — scoped run is partitioned per target (A2, #3387)',
     expect(itCount).toBe(1);
   });
 
-  it('ignores packageDirs for a scoped run', async () => {
+  it('does not add unselected packageDirs as targets of a scoped run', async () => {
     const { buildLintCommands } = await loadRunner();
     const commands = buildLintCommands({
       targets: ['packages/core'],

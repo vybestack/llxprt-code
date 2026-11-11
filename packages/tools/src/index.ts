@@ -327,6 +327,7 @@ export {
   MAX_SHELL_TIMEOUT_SECONDS,
 } from './tools/shell-helpers.js';
 export type {
+  GitHubOperationOptions,
   GitHubReportOperation,
   GitHubReportOperations,
 } from './interfaces/github-report-operations.js';

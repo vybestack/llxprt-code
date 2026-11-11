@@ -59,8 +59,10 @@ describe('Responses native rebuilt envelope planning', () => {
         requestHeaders: undefined,
         defaultModel: 'gpt-5.6-sol',
         isCodexMode: () => true,
-        getCodexAccountId: async () => 'account',
-        resolveAuthTokenForPrompt: async () => 'token',
+        resolveRequestCredential: async () => ({
+          bearer: 'token',
+          accountId: 'account',
+        }),
         shouldRetryOnError: () => false,
         getUnallowedModelParameters: () => new Set<string>(),
         getWebSocketTransport: () => transport,

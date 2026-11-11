@@ -1,4 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  withHistoryState,
+  rollbackHistoryState,
+  type HistoryStateSnapshot,
+} from './historyStateRollback.js';
+import { isAbortLikeError } from './is-abort-like-error.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
@@ -26,32 +32,20 @@ export interface FallbackTransactionOutcome {
   readonly truncationFailure?: Error;
 }
 
-interface FallbackStateSnapshot {
-  readonly restoreHistory: () => Promise<void>;
-  readonly cacheAnchorSeq: number;
-  readonly promptTokenBaseline: number | null;
-}
-
 function normalizeError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
 async function restoreFallbackState(
   deps: FallbackTransactionDeps,
-  snapshot: FallbackStateSnapshot,
+  snapshot: HistoryStateSnapshot,
 ): Promise<void> {
-  await snapshot.restoreHistory();
-  if (snapshot.cacheAnchorSeq === 0) {
-    deps.historyService.resetCacheAnchorSeq();
-  } else {
-    deps.historyService.setCacheAnchorSeq(snapshot.cacheAnchorSeq);
-  }
-  deps.restorePromptTokenBaseline(snapshot.promptTokenBaseline);
+  await rollbackHistoryState(deps, snapshot);
 }
 
 async function restoreRejectedFallback(
   deps: FallbackTransactionDeps,
-  snapshot: FallbackStateSnapshot,
+  snapshot: HistoryStateSnapshot,
   fallbackError: unknown,
 ): Promise<Error> {
   const failure = normalizeError(fallbackError);
@@ -68,7 +62,7 @@ async function restoreRejectedFallback(
 
 async function executeCapturedFallback(
   deps: FallbackTransactionDeps,
-  snapshot: FallbackStateSnapshot,
+  snapshot: HistoryStateSnapshot,
   promptId: string,
   targetTokenCount: number | undefined,
 ): Promise<FallbackTransactionOutcome> {
@@ -114,6 +108,7 @@ async function executeCapturedFallback(
         '[CompressionHandler] Provider truncation fallback rejected during hard-limit enforcement',
       truncationFailure,
     );
+    if (isAbortLikeError(fallbackError)) throw fallbackError;
     if (fallbackError instanceof ProviderFallbackInvariantError)
       throw truncationFailure;
   }
@@ -134,15 +129,7 @@ export function executeFallbackTransaction(
   promptId: string,
   targetTokenCount: number | undefined,
 ): Promise<FallbackTransactionOutcome> {
-  const cacheAnchorSeq = deps.historyService.getCacheAnchorSeq();
-  const promptTokenBaseline = deps.getPromptTokenBaseline();
-  return deps.historyService.detachedValues.withRollbackCheckpoint(
-    (restoreHistory) =>
-      executeCapturedFallback(
-        deps,
-        { restoreHistory, cacheAnchorSeq, promptTokenBaseline },
-        promptId,
-        targetTokenCount,
-      ),
+  return withHistoryState(deps, (snapshot) =>
+    executeCapturedFallback(deps, snapshot, promptId, targetTokenCount),
   );
 }

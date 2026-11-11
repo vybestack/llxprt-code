@@ -24,11 +24,16 @@ const SAMPLING_PARAMETERS = {
 } as const;
 const ALLOWED_PARAMETER = { service_tier: 'priority' } as const;
 
+// The constructor bearer must equal the stored OAuth access token: the Codex
+// request path pairs a plain bearer with the account of the stored credential
+// whose access token is exactly that bearer.
+const CODEX_ACCESS_TOKEN = 'codex-access-token';
+
 const CODEX_OAUTH_MANAGER = {
-  getToken: async () => 'codex-access-token',
+  getToken: async () => CODEX_ACCESS_TOKEN,
   isAuthenticated: async () => true,
   getOAuthToken: async () => ({
-    access_token: 'codex-access-token',
+    access_token: CODEX_ACCESS_TOKEN,
     token_type: 'Bearer',
     expiry: Math.floor(Date.now() / 1000) + 3600,
     account_id: 'test-account-id',
@@ -50,7 +55,7 @@ function createCodexProvider(
 ): OpenAIResponsesProvider {
   return createOpenAIResponsesAliasProvider(
     entry,
-    'unused-api-key',
+    CODEX_ACCESS_TOKEN,
     undefined,
     {},
     CODEX_OAUTH_MANAGER,
