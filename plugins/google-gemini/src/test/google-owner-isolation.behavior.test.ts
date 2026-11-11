@@ -39,6 +39,14 @@ describe('Google authentication owner isolation', () => {
     const b = makeProvider();
     a.setRuntimeSettingsService(rootA().settings);
     b.setRuntimeSettingsService(rootB().settings);
+    const previousGeminiApiKey = process.env.GEMINI_API_KEY;
+    process.env.GEMINI_API_KEY = 'ambient-only-key';
+    try {
+      expect(b.isPaidMode()).toBe(false);
+    } finally {
+      if (previousGeminiApiKey === undefined) delete process.env.GEMINI_API_KEY;
+      else process.env.GEMINI_API_KEY = previousGeminiApiKey;
+    }
     const apply = async (
       root: ReturnType<typeof rootA>,
       project: string,
@@ -51,6 +59,7 @@ describe('Google authentication owner isolation', () => {
           streaming: 'disabled',
         }),
       );
+      root.settings.set('GOOGLE_CLOUD_QUOTA_PROJECT', `${project}-quota`);
     };
     const send = async (
       provider: GeminiProvider,
@@ -77,16 +86,37 @@ describe('Google authentication owner isolation', () => {
     await send(b, rootB());
     await send(a, rootA());
     expect(
-      clients.map(({ project, location, vertexai }) => ({
+      clients.map(({ project, location, vertexai, credentialEnvironment }) => ({
         project,
         location,
         vertexai,
+        quotaProject: credentialEnvironment?.quotaProject,
       })),
     ).toStrictEqual([
-      { project: 'project-a', location: 'us-central1', vertexai: true },
-      { project: 'project-b', location: 'europe-west4', vertexai: true },
-      { project: 'project-b', location: 'europe-west4', vertexai: true },
-      { project: 'project-a-next', location: 'asia-east1', vertexai: true },
+      {
+        project: 'project-a',
+        location: 'us-central1',
+        vertexai: true,
+        quotaProject: 'project-a-quota',
+      },
+      {
+        project: 'project-b',
+        location: 'europe-west4',
+        vertexai: true,
+        quotaProject: 'project-b-quota',
+      },
+      {
+        project: 'project-b',
+        location: 'europe-west4',
+        vertexai: true,
+        quotaProject: 'project-b-quota',
+      },
+      {
+        project: 'project-a-next',
+        location: 'asia-east1',
+        vertexai: true,
+        quotaProject: 'project-a-next-quota',
+      },
     ]);
     rootA().manager.dispose();
     await rootA().settingsOwner.dispose();
