@@ -9,7 +9,10 @@ import type {
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import {
+  RequestBodyByteOverflowError,
+  RequestMediaResolver,
+} from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import {
   buildHistoryCallOptions,
@@ -23,6 +26,8 @@ import {
 import type { HistoryCase } from './support/wireBodyHistories.js';
 import { nativeJournalSendFixture } from './support/journal-send-fixture.js';
 import { localWireHashSink } from './support/local-wire-hash-sink.js';
+import { providerStreamError } from './support/provider-stream-error.js';
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 
 const TEXT_BYTES = 40 * 1024 * 1024;
 const routeIds = [
@@ -92,7 +97,6 @@ async function verifyLargeSend(
   withImage: boolean,
 ): Promise<ProviderRequestSelection> {
   const media = withImage ? await mediaFixture() : undefined;
-  const expected = await oracle(route, media?.reference, media?.binding);
   const fixture = await nativeJournalSendFixture(
     (function* (): Generator<IContent> {
       yield row(media?.reference);
@@ -100,6 +104,11 @@ async function verifyLargeSend(
   );
   const sink = await localWireHashSink(route);
   try {
+    const expected = await oracle(
+      route.id === 'anthropic-cache-off' ? sink.route : route,
+      media?.reference,
+      media?.binding,
+    );
     const created = route.createProvider();
     const provider =
       media === undefined
@@ -151,5 +160,60 @@ describe('native journal 40 MiB production sends', () => {
         expect(() => selection.openReader()).toThrow('closed');
       }, 170000);
     }
+  }
+});
+
+describe('native Anthropic 40 MiB journal refusal', () => {
+  const route = routes.find((route) => route.id === 'anthropic-cache-off');
+  if (route === undefined) throw new Error('Missing native Anthropic route');
+  for (const withImage of [false, true]) {
+    it(`refuses 40 MiB text${withImage ? ' and a stored image reference' : ''} at api.anthropic.com before sending bytes`, async () => {
+      const media = withImage ? await mediaFixture() : undefined;
+      const fixture = await nativeJournalSendFixture(
+        (function* (): Generator<IContent> {
+          yield row(media?.reference);
+        })(),
+      );
+      const originalFetch = globalThis.fetch;
+      let networkSubmissions = 0;
+      globalThis.fetch = withFetchPreconnect(async (): Promise<Response> => {
+        networkSubmissions += 1;
+        return route.respond();
+      });
+      try {
+        const created = route.createProvider();
+        const provider =
+          media === undefined
+            ? created
+            : bindProviderMedia(
+                created,
+                media.binding.resolver,
+                media.binding.budgetBytes,
+              );
+        const error = await providerStreamError(
+          provider.generateChatCompletion(
+            buildHistoryCallOptions(
+              route,
+              shape,
+              'rows',
+              new SettingsService(),
+              fixture.selection,
+            ),
+          ),
+        );
+        expect(error).toBeInstanceOf(RequestBodyByteOverflowError);
+        if (!(error instanceof RequestBodyByteOverflowError)) throw error;
+        expect(error.limitBytes).toBe(32_000_000);
+        expect(error.totalBytes).toBeGreaterThan(TEXT_BYTES);
+        expect(networkSubmissions).toBe(0);
+        expect(
+          media?.binding.resolver.accounting().activeRequestCount ?? 0,
+        ).toBe(0);
+      } finally {
+        globalThis.fetch = originalFetch;
+        await fixture.close();
+      }
+      expect(() => fixture.selection.openReader()).toThrow('closed');
+    }, 170000);
   }
 });
