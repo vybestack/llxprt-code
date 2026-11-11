@@ -16,8 +16,10 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
   statSync,
@@ -60,22 +62,22 @@ it.each([
 );
 
 /**
- * Enumerates every packages/<pkg>/src source root dynamically so the guard
- * covers the whole monorepo; a package lacking a src/ directory makes
- * statSync throw (fail loud), it is not skipped.
+ * Enumerates package and plugin src roots dynamically so the guard covers
+ * production sources without a hardcoded project list.
  */
-function repoPackageSrcRoots(): string[] {
+function repoProductionSrcRoots(): string[] {
   const repoRoot = resolve(
     fileURLToPath(new URL('.', import.meta.url)),
     '..',
     '..',
   );
-  const packagesDir = join(repoRoot, 'packages');
   const roots: string[] = [];
-  for (const entry of readdirSync(packagesDir)) {
-    const candidate = join(packagesDir, entry, 'src');
-    if (statSync(candidate).isDirectory()) {
-      roots.push(candidate);
+  for (const directory of ['packages', 'plugins']) {
+    const parent = join(repoRoot, directory);
+    for (const entry of readdirSync(parent)) {
+      const candidate = join(parent, entry, 'src');
+      if (existsSync(candidate) && statSync(candidate).isDirectory())
+        roots.push(candidate);
     }
   }
   return roots.sort();
@@ -252,29 +254,51 @@ describe('ambient runtime symbols guard', () => {
     },
   );
 
-  it('ignores test and spec files even when they mention deleted symbols', () => {
+  it('scans spec files while excluding ordinary test files', () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), 'ambient-guard-fixture-'));
     try {
       const srcDir = join(fixtureRoot, 'src');
       mkdirSync(srcDir, { recursive: true });
       writeFileSync(
         join(srcDir, 'deletion-proof.test.ts'),
-        'const proof = "activateSettingsRuntimeContext";\n',
+        'const proof = "activateSettingsRuntimeContext";\\n',
+      );
+      writeFileSync(
+        join(srcDir, 'deletion-proof.spec.ts'),
+        'const proof = "activateSettingsRuntimeContext";\\n',
       );
 
       const result = scanForBannedAmbientSymbols([srcDir]);
 
-      // Test files are not scanned at all, so nothing counts as scanned and
-      // no violation is reported for the deleted-symbol mention.
-      expect(result.scannedFiles).toBe(0);
-      expect(result.violations).toEqual([]);
+      expect(result.scannedFiles).toBe(1);
+      expect(result.violations).toHaveLength(1);
+      expect(result.violations[0]?.file).toContain('deletion-proof.spec.ts');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects imports from retired ambient runtime modules without named symbols', () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'ambient-guard-import-'));
+    try {
+      const srcDir = join(fixtureRoot, 'src');
+      mkdirSync(srcDir, { recursive: true });
+      writeFileSync(
+        join(srcDir, 'consumer.ts'),
+        'import { unrelated } from "@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js";\\nvoid unrelated;\\n',
+      );
+
+      const result = scanForBannedAmbientSymbols([srcDir]);
+
+      expect(result.violations).toHaveLength(1);
+      expect(result.violations[0]?.text).toContain('runtimeAccessors');
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }
   });
 
   it('enumerates every package with a src directory (no hardcoded list)', () => {
-    const roots = repoPackageSrcRoots();
+    const roots = repoProductionSrcRoots();
     const packageNames = roots.map((root) => basename(dirname(root)));
 
     // Packages the pre-dynamic list missed must be covered.
@@ -293,10 +317,13 @@ describe('ambient runtime symbols guard', () => {
     for (const required of ['core', 'cli', 'providers', 'settings', 'auth']) {
       expect(packageNames).toContain(required);
     }
+    for (const required of ['google-gemini', 'google-mcp-auth']) {
+      expect(packageNames).toContain(required);
+    }
   });
 
   it('finds no banned ambient symbols in real production sources', () => {
-    const result = scanForBannedAmbientSymbols(repoPackageSrcRoots());
+    const result = scanForBannedAmbientSymbols(repoProductionSrcRoots());
 
     expect(result.scannedFiles).toBeGreaterThan(100);
     expect(
@@ -308,6 +335,17 @@ describe('ambient runtime symbols guard', () => {
         )
         .join('\n')}`,
     ).toEqual([]);
+  }, 15_000);
+
+  it('runs the ambient-symbol guard in CI', () => {
+    const manifest: { scripts: Record<string, string> } = JSON.parse(
+      readFileSync(resolve('package.json'), 'utf8'),
+    );
+    const workflow = readFileSync(resolve('.github/workflows/ci.yml'), 'utf8');
+    expect(manifest.scripts['check:ambient-runtime-symbols']).toBe(
+      'bun scripts/tests/ambient-runtime-symbols-guard.ts',
+    );
+    expect(workflow).toContain('npm run check:ambient-runtime-symbols');
   });
 
   it('keeps the banned list aligned with the deleted mechanisms', () => {

@@ -509,6 +509,9 @@ jobs:
         run: |-
           npm run check:runtime-boundary
 
+      - name: 'Run ambient runtime symbols guard (#3979)'
+        run: npm run check:ambient-runtime-symbols
+
       # ESLint cache is CI opt-in only (issue #2710). The exact key hashes
       # every linted source/config/type input so a changed cross-file type
       # producer invalidates the cache of its consumers. There are no
