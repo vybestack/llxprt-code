@@ -1294,49 +1294,52 @@ describe('Checkpoint direct-session identity selection', () => {
     }
   });
 
-  it('reaches the checkpoint persistence error with a valid direct-session home', () => {
-    const home = mkdtempSync(join(tmpdir(), 'issue3464-startup-order-'));
-    try {
-      const fixture = buildFixture(home);
-      const result = spawnSync(
-        process.execPath,
-        [
-          CLI_ENTRY,
-          '--yolo',
-          '--ide-mode',
-          'disable',
-          '--checkpointing',
-          '--provider',
-          'fake',
-          '--model',
-          'fake-model',
-          'version skew probe',
-        ],
-        {
-          cwd: fixture.repoRoot,
-          env: {
-            ...process.env,
-            HOME: join(fixture.storageRoot, 'direct-home'),
-            LLXPRT_CONFIG_HOME: join(fixture.storageRoot, 'config'),
-            LLXPRT_DATA_HOME: join(fixture.storageRoot, 'data'),
-            LLXPRT_CACHE_HOME: join(fixture.storageRoot, 'cache'),
-            LLXPRT_LOG_HOME: join(fixture.storageRoot, 'log'),
-            LLXPRT_FAKE_RESPONSES: fixture.responses,
-            SANDBOX: 'issue3464-version-skew',
+  it.skipIf(process.env.LLXPRT_SANDBOX !== 'false')(
+    'reaches the checkpoint persistence error with a valid direct-session home',
+    () => {
+      const home = mkdtempSync(join(tmpdir(), 'issue3464-startup-order-'));
+      try {
+        const fixture = buildFixture(home);
+        const result = spawnSync(
+          process.execPath,
+          [
+            CLI_ENTRY,
+            '--yolo',
+            '--ide-mode',
+            'disable',
+            '--checkpointing',
+            '--provider',
+            'fake',
+            '--model',
+            'fake-model',
+            'version skew probe',
+          ],
+          {
+            cwd: fixture.repoRoot,
+            env: {
+              ...process.env,
+              HOME: join(fixture.storageRoot, 'direct-home'),
+              LLXPRT_CONFIG_HOME: join(fixture.storageRoot, 'config'),
+              LLXPRT_DATA_HOME: join(fixture.storageRoot, 'data'),
+              LLXPRT_CACHE_HOME: join(fixture.storageRoot, 'cache'),
+              LLXPRT_LOG_HOME: join(fixture.storageRoot, 'log'),
+              LLXPRT_FAKE_RESPONSES: fixture.responses,
+              SANDBOX: 'issue3464-version-skew',
+            },
+            encoding: 'utf8',
+            timeout: AGENT_SESSION_TIMEOUT_MS,
+            maxBuffer: 50 * 1024 * 1024,
           },
-          encoding: 'utf8',
-          timeout: AGENT_SESSION_TIMEOUT_MS,
-          maxBuffer: 50 * 1024 * 1024,
-        },
-      );
-      expect(result.status).not.toBe(0);
-      expect(`${result.stdout ?? ''}\n${result.stderr ?? ''}`).toContain(
-        'persistent checkpoint store',
-      );
-    } finally {
-      rmSync(home, { recursive: true, force: true });
-    }
-  });
+        );
+        expect(result.status).not.toBe(0);
+        expect(`${result.stdout ?? ''}\n${result.stderr ?? ''}`).toContain(
+          'persistent checkpoint store',
+        );
+      } finally {
+        rmSync(home, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('uses the host identity and isolated home only for ordinary native Linux sessions', () => {
     const linuxArgs = ['run'];
