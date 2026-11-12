@@ -207,6 +207,7 @@ describe('MCP exported authenticate callback lifetime', () => {
       );
     });
     const result = MCPOAuthProvider.authenticate(
+      (input, init) => globalThis.fetch(input, init),
       {
         tokenStorage: createTestOAuthBinding().tokenStorage,
         openBrowser: createTestOAuthBinding().openBrowser,
@@ -252,6 +253,7 @@ describe('MCP exported authenticate callback lifetime', () => {
   it('baseline: denied callback preserves the exact error and closes the listener', async () => {
     const display = captureAuthorization();
     const result = MCPOAuthProvider.authenticate(
+      (input, init) => globalThis.fetch(input, init),
       {
         tokenStorage: createTestOAuthBinding().tokenStorage,
         openBrowser: createTestOAuthBinding().openBrowser,
@@ -284,6 +286,7 @@ describe('MCP exported authenticate callback lifetime', () => {
       }
     });
     const result = MCPOAuthProvider.authenticate(
+      (input, init) => globalThis.fetch(input, init),
       {
         tokenStorage: createTestOAuthBinding().tokenStorage,
         openBrowser: createTestOAuthBinding().openBrowser,
@@ -326,6 +329,7 @@ describe('MCP exported authenticate callback lifetime', () => {
 
   it('retained red: validation failure after listening releases the callback server and timer', async () => {
     const result = MCPOAuthProvider.authenticate(
+      (input, init) => globalThis.fetch(input, init),
       {
         tokenStorage: createTestOAuthBinding().tokenStorage,
         openBrowser: createTestOAuthBinding().openBrowser,
@@ -351,6 +355,7 @@ describe('MCP exported authenticate callback lifetime', () => {
   it('retained red: denied callback releases its five-minute deadline', async () => {
     const display = captureAuthorization();
     const result = MCPOAuthProvider.authenticate(
+      (input, init) => globalThis.fetch(input, init),
       {
         tokenStorage: createTestOAuthBinding().tokenStorage,
         openBrowser: createTestOAuthBinding().openBrowser,
@@ -378,6 +383,7 @@ describe('MCP exported authenticate callback lifetime', () => {
       throw failure;
     });
     const result = MCPOAuthProvider.authenticate(
+      (input, init) => globalThis.fetch(input, init),
       {
         tokenStorage: createTestOAuthBinding().tokenStorage,
         openBrowser: createTestOAuthBinding().openBrowser,
@@ -417,6 +423,7 @@ describe('MCP exported authenticate callback lifetime', () => {
         });
       });
       const result = MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: new MCPOAuthTokenStorage(store),
           openBrowser: createTestOAuthBinding().openBrowser,

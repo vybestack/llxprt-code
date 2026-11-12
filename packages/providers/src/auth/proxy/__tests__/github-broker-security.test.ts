@@ -128,31 +128,76 @@ function options(): CredentialProxyServerOptions {
  * did, rather than going through ProxySocketClient. Using the real client
  * would hide the very step the pentest exploited.
  */
+type RawExchangeCompletion = (
+  received: ReadonlyArray<Record<string, unknown>>,
+  socketClosed: boolean,
+) => boolean;
+
+const rejectedHandshake: RawExchangeCompletion = (received, socketClosed) =>
+  socketClosed ||
+  received.some((frame) => frame.op === 'handshake' && frame.ok === false);
+
+function authenticatedReplies(
+  expectedIds: readonly string[],
+): RawExchangeCompletion {
+  return (received) =>
+    received.some((frame) => frame.op === 'handshake' && frame.ok === true) &&
+    expectedIds.every((id) => received.some((frame) => frame.id === id));
+}
+
 async function rawExchange(
-  socketPath: string,
+  socketPath: string | { host: string; port: number },
   frames: Array<Record<string, unknown>>,
+  isComplete: RawExchangeCompletion,
 ): Promise<Array<Record<string, unknown>>> {
   return new Promise((resolve, reject) => {
     const received: Array<Record<string, unknown>> = [];
     const decoder = new FrameDecoder();
-    const socket = net.createConnection(socketPath);
-    const done = (): void => {
+    const socket =
+      typeof socketPath === 'string'
+        ? net.createConnection(socketPath)
+        : net.createConnection(socketPath.port, socketPath.host);
+    let settled = false;
+    const failureGuard = setTimeout(
+      () =>
+        finish(new Error('Timed out waiting for a complete proxy exchange')),
+      5000,
+    );
+    const finish = (error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(failureGuard);
       socket.destroy();
-      resolve(received);
+      if (error) {
+        reject(error);
+      } else {
+        resolve(received);
+      }
     };
+    const checkCompletion = (socketClosed = false): void => {
+      if (isComplete(received, socketClosed)) {
+        finish();
+      } else if (socketClosed) {
+        finish(
+          new Error('Proxy connection closed before expected replies arrived'),
+        );
+      }
+    };
+
     socket.on('connect', () => {
       for (const frame of frames) socket.write(encodeFrame(frame));
-      setTimeout(done, 300);
     });
     socket.on('data', (chunk: Buffer) => {
       try {
         received.push(...decoder.feed(chunk));
-      } catch {
-        // A decode failure is itself a valid observation; stop reading.
-        done();
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error(String(error)));
+        return;
       }
+      checkCompletion();
     });
-    socket.on('error', reject);
+    socket.on('close', () => checkCompletion(true));
+    socket.on('error', (error: Error) => finish(error));
   });
 }
 
@@ -176,9 +221,11 @@ describe('GitHub broker security regressions (#1954)', () => {
    * @requirement REQ-015
    */
   it('rejects the pentest handshake that carried no capability token', async () => {
-    const frames = await rawExchange(socketPath, [
-      { v: 2, op: 'handshake', payload: { minVersion: 1, maxVersion: 2 } },
-    ]);
+    const frames = await rawExchange(
+      socketPath,
+      [{ v: 2, op: 'handshake', payload: { minVersion: 1, maxVersion: 2 } }],
+      rejectedHandshake,
+    );
     expect(frames.length).toBeGreaterThan(0);
     expect(frames[0].ok).toBe(false);
     expect(frames[0].code).toBe('UNAUTHORIZED');
@@ -192,15 +239,19 @@ describe('GitHub broker security regressions (#1954)', () => {
    * @requirement REQ-003, REQ-015
    */
   it('refuses a github operation from an unauthenticated connection', async () => {
-    const frames = await rawExchange(socketPath, [
-      { v: 2, op: 'handshake', payload: { minVersion: 1, maxVersion: 2 } },
-      {
-        v: 2,
-        id: 'x1',
-        op: 'github',
-        payload: { op: 'issue.view', number: 1 },
-      },
-    ]);
+    const frames = await rawExchange(
+      socketPath,
+      [
+        { v: 2, op: 'handshake', payload: { minVersion: 1, maxVersion: 2 } },
+        {
+          v: 2,
+          id: 'x1',
+          op: 'github',
+          payload: { op: 'issue.view', number: 1 },
+        },
+      ],
+      rejectedHandshake,
+    );
     const success = frames.find((f) => f.ok === true);
     expect(success).toBeUndefined();
     for (const frame of frames) {
@@ -215,19 +266,23 @@ describe('GitHub broker security regressions (#1954)', () => {
    * @requirement REQ-015
    */
   it('still returns no key names to an authenticated sandbox connection', async () => {
-    const frames = await rawExchange(socketPath, [
-      {
-        v: 2,
-        op: 'handshake',
-        payload: {
-          minVersion: 1,
-          maxVersion: 2,
-          capabilityToken: CAPABILITY,
+    const frames = await rawExchange(
+      socketPath,
+      [
+        {
+          v: 2,
+          op: 'handshake',
+          payload: {
+            minVersion: 1,
+            maxVersion: 2,
+            capabilityToken: CAPABILITY,
+          },
         },
-      },
-      { v: 2, id: 'l1', op: 'list_api_keys', payload: {} },
-      { v: 2, id: 'h1', op: 'has_api_key', payload: { name: 'github-pat' } },
-    ]);
+        { v: 2, id: 'l1', op: 'list_api_keys', payload: {} },
+        { v: 2, id: 'h1', op: 'has_api_key', payload: { name: 'github-pat' } },
+      ],
+      authenticatedReplies(['l1', 'h1']),
+    );
     const list = frames.find((f) => f.id === 'l1');
     expect(list?.ok).toBe(true);
     expect((list?.data as { keys: string[] }).keys).toStrictEqual([]);
@@ -235,6 +290,59 @@ describe('GitHub broker security regressions (#1954)', () => {
     const has = frames.find((f) => f.id === 'h1');
     expect(has?.ok).toBe(false);
     expect(has?.code).toBe('FORBIDDEN');
+  });
+
+  it('waits for a reply delivered after 300 ms', async () => {
+    const delayedServer = net.createServer((socket) => {
+      socket.once('data', () => {
+        socket.write(
+          encodeFrame({
+            v: 2,
+            op: 'handshake',
+            ok: true,
+            data: { version: 2 },
+          }),
+        );
+        setTimeout(
+          () => socket.write(encodeFrame({ v: 2, id: 'slow1', ok: true })),
+          350,
+        );
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      delayedServer.once('error', reject);
+      delayedServer.listen(0, '127.0.0.1', resolve);
+    });
+    const address = delayedServer.address();
+    if (address === null || typeof address === 'string') {
+      throw new Error('Delayed test server did not bind a TCP port');
+    }
+
+    try {
+      const startedAt = performance.now();
+      const frames = await rawExchange(
+        { host: '127.0.0.1', port: address.port },
+        [
+          {
+            v: 2,
+            op: 'handshake',
+            payload: {
+              minVersion: 1,
+              maxVersion: 2,
+              capabilityToken: CAPABILITY,
+            },
+          },
+          { v: 2, id: 'slow1', op: 'delayed_test', payload: {} },
+        ],
+        authenticatedReplies(['slow1']),
+      );
+      expect(performance.now() - startedAt).toBeGreaterThanOrEqual(300);
+      expect(frames.some((frame) => frame.id === 'slow1')).toBe(true);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        delayedServer.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
   });
 
   /**
@@ -386,18 +494,22 @@ describe('handler dispatch is not prototype-reachable', () => {
    */
   it('rejects operations named after Object.prototype members', async () => {
     for (const op of ['toString', 'constructor', 'valueOf', '__proto__']) {
-      const frames = await rawExchange(socketPath, [
-        {
-          v: 2,
-          op: 'handshake',
-          payload: {
-            minVersion: 1,
-            maxVersion: 2,
-            capabilityToken: CAPABILITY,
+      const frames = await rawExchange(
+        socketPath,
+        [
+          {
+            v: 2,
+            op: 'handshake',
+            payload: {
+              minVersion: 1,
+              maxVersion: 2,
+              capabilityToken: CAPABILITY,
+            },
           },
-        },
-        { v: 2, id: `p-${op}`, op, payload: {} },
-      ]);
+          { v: 2, id: `p-${op}`, op, payload: {} },
+        ],
+        authenticatedReplies([`p-${op}`]),
+      );
       const reply = frames.find((f) => f.id === `p-${op}`);
       expect(reply?.ok).toBe(false);
       expect(reply?.code).toBe('INVALID_REQUEST');

@@ -9,6 +9,8 @@ import path from 'node:path';
 
 import * as configConstructor from './configConstructor.js';
 import { ConfigBase } from './configBase.js';
+import type { IGitStatsService } from '../services/git-stats-service.js';
+import { ConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 
 import type {
   MemorySettings,
@@ -62,6 +64,8 @@ export {
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 
 export class Config extends ConfigBase {
+  private gitStatsService: IGitStatsService | null = null;
+  private conversationFileWriter: ConversationFileWriter | undefined;
   readonly profileDirectory: string | undefined;
   readonly subagentDirectory: string | undefined;
   readonly initialWorkspaceTrust: boolean | undefined;
@@ -149,6 +153,21 @@ export class Config extends ConfigBase {
 
     // Check settings file
     return this.telemetrySettings.logConversations ?? false;
+  }
+
+  getConversationFileWriter(): ConversationFileWriter {
+    this.conversationFileWriter ??= new ConversationFileWriter(
+      this.getConversationLogPath(),
+    );
+    return this.conversationFileWriter;
+  }
+
+  setGitStatsService(service: IGitStatsService | null): void {
+    this.gitStatsService = service;
+  }
+
+  getGitStatsService(): IGitStatsService | null {
+    return this.gitStatsService;
   }
 
   getConversationLogPath(): string {

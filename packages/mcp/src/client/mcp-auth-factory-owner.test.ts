@@ -30,6 +30,7 @@ describe('MCP transport owner auth factory lookup', () => {
     const results = await Promise.allSettled(
       owners.map((owner) =>
         createTransport(
+          (input, init) => globalThis.fetch(input, init),
           binding.tokenStorage,
           'shared-server',
           server,
@@ -54,7 +55,13 @@ describe('MCP transport owner auth factory lookup', () => {
   it('rejects a selected custom provider without an injected factory', async () => {
     const binding = createTestOAuthBinding();
     await expect(
-      createTransport(binding.tokenStorage, 'missing-owner', server, false),
+      createTransport(
+        (input, init) => globalThis.fetch(input, init),
+        binding.tokenStorage,
+        'missing-owner',
+        server,
+        false,
+      ),
     ).rejects.toThrow(/no auth provider is registered/);
   });
 });

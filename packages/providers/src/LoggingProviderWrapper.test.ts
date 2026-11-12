@@ -33,7 +33,6 @@ import { SettingsService as SettingsServiceImpl } from '@vybestack/llxprt-code-s
 import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 // P06: intentional core deep import — verifies shim re-exports storage symbols correctly
 import { getConversationFileWriter as getFromCore } from '@vybestack/llxprt-code-core/storage/ConversationFileWriter.js';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
@@ -101,10 +100,6 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     );
     if (failures.length > 0)
       throw new AggregateError(failures, 'Wrapper test cleanup failed');
-  });
-
-  afterEach(() => {
-    resetConversationFileWriterForTesting();
   });
 
   it('writes request and response JSONL entries to disk', async () => {
@@ -196,12 +191,8 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it('core shim and storage return the same singleton instance', () => {
-    const storageWriter = getConversationFileWriter();
-    const coreWriter = getFromCore();
-
-    // Strict identity: both paths resolve to the same object
-    expect(coreWriter).toBe(storageWriter);
+  it('core shim re-exports the storage writer factory', () => {
+    expect(getFromCore).toBe(getConversationFileWriter);
   });
 
   it('logs error to observable array when write fails', async () => {

@@ -81,6 +81,7 @@ describe('mcp-client', () => {
     describe('should connect via httpUrl', () => {
       it('without headers', async () => {
         const transport = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -96,6 +97,7 @@ describe('mcp-client', () => {
 
       it('with headers', async () => {
         const transport = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -114,6 +116,7 @@ describe('mcp-client', () => {
     describe('should connect via url', () => {
       it('without headers defaults to HTTP transport', async () => {
         const transport = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -128,6 +131,7 @@ describe('mcp-client', () => {
 
       it('with headers defaults to HTTP transport', async () => {
         const transport = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -144,6 +148,7 @@ describe('mcp-client', () => {
 
       it('with type sse uses SSE transport', async () => {
         const transport = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -159,6 +164,7 @@ describe('mcp-client', () => {
 
       it('with type http uses HTTP transport', async () => {
         const transport = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -174,6 +180,7 @@ describe('mcp-client', () => {
 
       it('with type streamable-http uses HTTP transport (alias for http)', async () => {
         const transport = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -194,6 +201,7 @@ describe('mcp-client', () => {
         .mockReturnValue({} as SdkClientStdioLib.StdioClientTransport);
 
       await createTransport(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding().tokenStorage,
         'test-server',
         {
@@ -230,6 +238,7 @@ describe('mcp-client', () => {
         ]);
 
         const transport = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -255,6 +264,7 @@ describe('mcp-client', () => {
         ]);
 
         const transport = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -280,6 +290,7 @@ describe('mcp-client', () => {
         ]);
 
         const transport = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -308,6 +319,7 @@ describe('mcp-client', () => {
         ]);
 
         const transport = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -328,6 +340,7 @@ describe('mcp-client', () => {
       it('throws a terminal error naming the server and type for an unknown custom type', async () => {
         await expect(
           createTransport(
+            (input, init) => globalThis.fetch(input, init),
             createTestOAuthBinding().tokenStorage,
             'test-server',
             {
@@ -345,6 +358,7 @@ describe('mcp-client', () => {
         // oauth.enabled would previously route to the standard OAuth path;
         // the unknown custom type must remain terminal either way.
         const error = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -369,6 +383,7 @@ describe('mcp-client', () => {
       it('throws a terminal error naming the google plugin for google_credentials without a factory', async () => {
         await expect(
           createTransport(
+            (input, init) => globalThis.fetch(input, init),
             createTestOAuthBinding().tokenStorage,
             'test-server',
             {
@@ -388,6 +403,7 @@ describe('mcp-client', () => {
       it('throws a terminal error naming the google plugin for service_account_impersonation without a factory', async () => {
         await expect(
           createTransport(
+            (input, init) => globalThis.fetch(input, init),
             createTestOAuthBinding().tokenStorage,
             'test-server',
             {
@@ -415,6 +431,7 @@ describe('mcp-client', () => {
         ]);
 
         const error = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -449,6 +466,7 @@ describe('mcp-client', () => {
         ]);
 
         const error = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -485,6 +503,7 @@ describe('mcp-client', () => {
         ]);
 
         const error = await createTransport(
+          (input, init) => globalThis.fetch(input, init),
           createTestOAuthBinding().tokenStorage,
           'test-server',
           {
@@ -511,6 +530,7 @@ describe('mcp-client', () => {
       it('throws the Google Credentials missing-URL error without a factory', async () => {
         await expect(
           createTransport(
+            (input, init) => globalThis.fetch(input, init),
             createTestOAuthBinding().tokenStorage,
             'test-server',
             {
@@ -531,6 +551,7 @@ describe('mcp-client', () => {
       it('throws the ServiceAccountImpersonation missing-URL error without a factory', async () => {
         await expect(
           createTransport(
+            (input, init) => globalThis.fetch(input, init),
             createTestOAuthBinding().tokenStorage,
             'test-server',
             {
@@ -548,6 +569,7 @@ describe('mcp-client', () => {
       it('throws a generic missing-URL error for other custom types', async () => {
         await expect(
           createTransport(
+            (input, init) => globalThis.fetch(input, init),
             createTestOAuthBinding().tokenStorage,
             'test-server',
             {

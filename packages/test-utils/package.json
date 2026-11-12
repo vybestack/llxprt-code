@@ -59,6 +59,11 @@
       "bun": "./src/network/local-forward-proxy.ts",
       "import": "./dist/src/network/local-forward-proxy.js"
     },
+    "./network/test-utils/owned-fetch.js": {
+      "types": "./dist/src/network/test-utils/owned-fetch.d.ts",
+      "bun": "./src/network/test-utils/owned-fetch.ts",
+      "import": "./dist/src/network/test-utils/owned-fetch.js"
+    },
     "./windows-filesystem-denial.js": {
       "types": "./dist/src/windows-filesystem-denial.d.ts",
       "bun": "./src/windows-filesystem-denial.ts",

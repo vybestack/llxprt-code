@@ -151,7 +151,10 @@ function setupCommonMainMocks(
   }));
   void mock.module('./cliBootstrap.js', () => ({
     captureBootstrapEnvPath: () => null,
-    configureEarlyDebugLogging: onEarlyDebug,
+    configureCliDebugLogging: () => {
+      onEarlyDebug();
+      return {};
+    },
     createMemoizedStdinReader: () => async () => '',
     ensureStdinOrPromptProvided: async () => {},
     handleVersionAndHelpFlags: async () => {},
@@ -606,7 +609,7 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
     }));
     void mock.module('./cliBootstrap.js', () => ({
       captureBootstrapEnvPath: () => null,
-      configureEarlyDebugLogging: () => {},
+      configureCliDebugLogging: () => ({}),
       createMemoizedStdinReader: () => async () => '',
       // Track whether the guard is invoked.
       ensureStdinOrPromptProvided: async () => {

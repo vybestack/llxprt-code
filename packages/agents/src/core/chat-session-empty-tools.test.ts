@@ -27,9 +27,9 @@ import {
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ConversationRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
+import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -72,6 +72,7 @@ function conversationDiagnostics(
   return {
     conversationLoggingEnabled: true,
     conversationLogPath,
+    conversationFileWriter: getConversationFileWriter(conversationLogPath),
     redaction: {
       redactApiKeys: false,
       redactCredentials: false,
@@ -276,7 +277,6 @@ describe.each<Path>(['direct', 'stream', 'turn'])(
       async (origin) => {
         const dir = await mkdtemp(join(tmpdir(), 'issue3694-empty-origin-'));
         const events: ConversationRequestEvent[] = [];
-        resetConversationFileWriterForTesting();
         try {
           const { before, after, selection } = await send(
             path,
@@ -324,7 +324,6 @@ describe.each<Path>(['direct', 'stream', 'turn'])(
             expectedTools !== undefined,
           );
         } finally {
-          resetConversationFileWriterForTesting();
           await rm(dir, { recursive: true, force: true });
         }
       },

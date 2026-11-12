@@ -15,9 +15,7 @@ import ts from 'typescript';
 
 const ASSEMBLY_CLASSES: ReadonlySet<string> = new Set([
   'ForegroundAssembly',
-  'ForegroundAgentAssembly',
   'PreferredAgentAssembly',
-  'AdoptedSessionAssembly',
   'AdoptedAgentAssembly',
   'AgentActivationBootstrap',
 ]);
@@ -34,6 +32,23 @@ interface Violation {
   readonly column: number;
   readonly rule: 'declared-in-class' | 'assembly-closure';
   readonly detail: string;
+}
+export function assertAssemblyClassInventory(
+  files: readonly ts.SourceFile[],
+  expectedNames: ReadonlySet<string> = ASSEMBLY_CLASSES,
+): void {
+  const declaredNames = new Set(
+    files.flatMap((file) =>
+      file.statements.flatMap((statement) =>
+        ts.isClassDeclaration(statement) && statement.name
+          ? [statement.name.text]
+          : [],
+      ),
+    ),
+  );
+  const missing = [...expectedNames].filter((name) => !declaredNames.has(name));
+  if (missing.length)
+    throw new Error(`Unresolved assembly classes: ${missing.join(', ')}`);
 }
 
 function isFacadeFunctionName(name: string): boolean {
@@ -168,6 +183,12 @@ export function findAssemblyClosureViolations(
   program: ts.Program,
   files: readonly ts.SourceFile[],
 ): readonly Violation[] {
+  if (
+    files.some((file) =>
+      file.fileName.replaceAll('\\', '/').includes('/packages/agents/src/'),
+    )
+  )
+    assertAssemblyClassInventory(files);
   const checker = program.getTypeChecker();
   const violations: Violation[] = [];
   const report = (

@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type {
   IOAuthSettingsProvider,
   TokenStore,
@@ -83,8 +84,8 @@ export function acquireProviderFiles(
 export function acquireRuntimeProviderManager(
   release: AcquisitionRelease,
   inputs: ProviderManagerInputs,
+  requestFetch: NetworkFetch,
 ): ProviderManager {
-  const network = acquireRootNetwork(release, inputs.proxy);
   const manager = new ProviderManager(
     undefined,
     undefined,
@@ -96,7 +97,7 @@ export function acquireRuntimeProviderManager(
     undefined,
     inputs.settingsOwner,
   );
-  manager.bindNetworkFetch(network.fetch);
+  manager.bindNetworkFetch(requestFetch);
   release.acquire('manager', () => manager.dispose());
   const keys = inputs.authority.createProviderKeyStorage();
   release.acquire('manager', () => keys.close());
@@ -138,7 +139,11 @@ export function acquireProviderRuntime<T>(
   selection: ProviderOAuthInputs,
   complete: (manager: ProviderManager, oauth: OAuthManager) => T,
 ): T {
-  const manager = acquireRuntimeProviderManager(release, inputs);
+  const manager = acquireRuntimeProviderManager(
+    release,
+    inputs,
+    acquireRootNetwork(release, inputs.proxy).fetch,
+  );
   const oauth = acquireRuntimeOAuth(release, {
     provider: {
       getProviderByName: (name) => manager.getProviderByName(name),

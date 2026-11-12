@@ -108,6 +108,7 @@ export const createManager = (
   tools = createToolRegistry(config),
 ): McpClientManager =>
   new McpClientManager(
+    (input, init) => globalThis.fetch(input, init),
     createTestOAuthBinding(),
     unsupportedApprovalPolicy(),
     CLIENT_VERSION,

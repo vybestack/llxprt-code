@@ -102,6 +102,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: createTestOAuthBinding().tokenStorage,
           openBrowser: mockOpenBrowserSecurely,
@@ -216,6 +217,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: createTestOAuthBinding().tokenStorage,
           openBrowser: mockOpenBrowserSecurely,
@@ -301,6 +303,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: createTestOAuthBinding().tokenStorage,
           openBrowser: mockOpenBrowserSecurely,
@@ -397,6 +400,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: createTestOAuthBinding().tokenStorage,
           openBrowser: mockOpenBrowserSecurely,
@@ -515,6 +519,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: createTestOAuthBinding().tokenStorage,
           openBrowser: mockOpenBrowserSecurely,
@@ -564,6 +569,7 @@ describe('MCPOAuthProvider', () => {
 
       await expect(
         MCPOAuthProvider.authenticate(
+          (input, init) => globalThis.fetch(input, init),
           {
             tokenStorage: createTestOAuthBinding().tokenStorage,
             openBrowser: mockOpenBrowserSecurely,
@@ -605,6 +611,7 @@ describe('MCPOAuthProvider', () => {
 
       await expect(
         MCPOAuthProvider.authenticate(
+          (input, init) => globalThis.fetch(input, init),
           {
             tokenStorage: createTestOAuthBinding().tokenStorage,
             openBrowser: mockOpenBrowserSecurely,
@@ -655,6 +662,7 @@ describe('MCPOAuthProvider', () => {
 
       await expect(
         MCPOAuthProvider.authenticate(
+          (input, init) => globalThis.fetch(input, init),
           {
             tokenStorage: createTestOAuthBinding().tokenStorage,
             openBrowser: mockOpenBrowserSecurely,
@@ -686,6 +694,7 @@ describe('MCPOAuthProvider', () => {
 
       await expect(
         MCPOAuthProvider.authenticate(
+          (input, init) => globalThis.fetch(input, init),
           {
             tokenStorage: createTestOAuthBinding().tokenStorage,
             openBrowser: mockOpenBrowserSecurely,
@@ -747,6 +756,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       await MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: createTestOAuthBinding().tokenStorage,
           openBrowser: mockOpenBrowserSecurely,
@@ -805,6 +815,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       await MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: createTestOAuthBinding().tokenStorage,
           openBrowser: mockOpenBrowserSecurely,
@@ -864,6 +875,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       await MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: createTestOAuthBinding().tokenStorage,
           openBrowser: mockOpenBrowserSecurely,

@@ -16,6 +16,7 @@ export interface AmbientDelegationFinding {
   readonly file: string;
   readonly line: number;
   readonly column: number;
+  readonly declaration: string;
   readonly kind: 'argument' | 'receiver' | 'return' | 'call';
 }
 
@@ -80,6 +81,127 @@ function sourceSymbols(
   );
 }
 
+function isModuleVariable(
+  declaration: ts.Declaration | undefined,
+  file: ts.SourceFile,
+): declaration is ts.VariableDeclaration {
+  if (
+    !declaration ||
+    !ts.isVariableDeclaration(declaration) ||
+    declaration.getSourceFile() !== file
+  )
+    return false;
+  const list = declaration.parent;
+  if (!ts.isVariableDeclarationList(list)) return false;
+  const statement = list.parent;
+  return ts.isVariableStatement(statement) && statement.parent === file;
+}
+
+function moduleVariableDeclaration(
+  node: ts.Node,
+  file: ts.SourceFile,
+  checker: ts.TypeChecker,
+): ts.VariableDeclaration | undefined {
+  if (!ts.isIdentifier(node)) return undefined;
+  const declaration = checker.getSymbolAtLocation(node)?.valueDeclaration;
+  return isModuleVariable(declaration, file) ? declaration : undefined;
+}
+
+function hasModuleStoreReceiver(
+  node: ts.Node,
+  file: ts.SourceFile,
+  checker: ts.TypeChecker,
+): boolean {
+  if (moduleVariableDeclaration(node, file, checker)) return true;
+  return (
+    ts.forEachChild(node, (child) =>
+      hasModuleStoreReceiver(child, file, checker),
+    ) ?? false
+  );
+}
+
+function readsAmbientModuleState(
+  root: ts.Node,
+  file: ts.SourceFile,
+  checker: ts.TypeChecker,
+): boolean {
+  let readsState = false;
+  const inspect = (node: ts.Node): void => {
+    if (readsState || ts.isFunctionLike(node)) return;
+    const declaration = moduleVariableDeclaration(node, file, checker);
+    if (
+      declaration &&
+      ts.isVariableDeclarationList(declaration.parent) &&
+      !(declaration.parent.flags & ts.NodeFlags.Const)
+    )
+      readsState = true;
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === 'getStore' &&
+      hasModuleStoreReceiver(node.expression.expression, file, checker)
+    )
+      readsState = true;
+    ts.forEachChild(node, inspect);
+  };
+  inspect(root);
+  return readsState;
+}
+
+function returnsModuleState(
+  symbol: ts.Symbol,
+  declaration: ts.FunctionDeclaration,
+  file: ts.SourceFile,
+  checker: ts.TypeChecker,
+): boolean {
+  if (
+    declaration.parent !== file ||
+    !declaration.body ||
+    declaration.parameters.length !== 0
+  )
+    return false;
+  const signature = checker
+    .getTypeOfSymbolAtLocation(symbol, declaration)
+    .getCallSignatures()[0];
+  const returnType = signature
+    ? checker.getReturnTypeOfSignature(signature)
+    : undefined;
+  if (!returnType || !(returnType.flags & ts.TypeFlags.Object)) return false;
+  return declaration.body.statements.some(
+    (statement) =>
+      ts.isReturnStatement(statement) &&
+      !!statement.expression &&
+      readsAmbientModuleState(statement.expression, file, checker),
+  );
+}
+
+function structurallyAmbientSourcesInFile(
+  file: ts.SourceFile,
+  checker: ts.TypeChecker,
+): AmbientSource[] {
+  if (file.isDeclarationFile) return [];
+  const module = checker.getSymbolAtLocation(file);
+  if (!module) return [];
+  return checker.getExportsOfModule(module).flatMap((exported) => {
+    const symbol = unalias(checker, exported);
+    const hasAmbientSource = (symbol.declarations ?? []).some(
+      (declaration) =>
+        ts.isFunctionDeclaration(declaration) &&
+        returnsModuleState(symbol, declaration, file, checker),
+    );
+    return hasAmbientSource
+      ? [{ file: file.fileName, exportName: exported.name }]
+      : [];
+  });
+}
+
+function structurallyAmbientSources(program: ts.Program): AmbientSource[] {
+  const checker = program.getTypeChecker();
+  return program
+    .getSourceFiles()
+    .flatMap((file) => structurallyAmbientSourcesInFile(file, checker));
+}
+
 function callableDeclarations(
   ambient: ReadonlySet<ts.Symbol>,
   checker: ts.TypeChecker,
@@ -135,13 +257,44 @@ interface ReturnedValue {
  * Configure only service-bearing sources, not primitive observability accessors.
  * There are no assembly exemptions or automatic repository-wide assertions.
  */
+function namedCallableDeclaration(
+  node: ts.Node,
+): ts.NamedDeclaration | undefined {
+  if (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node))
+    return node;
+  if (ts.isFunctionExpression(node) || ts.isGetAccessorDeclaration(node))
+    return node;
+  return undefined;
+}
+
+function enclosingDeclaration(node: ts.Node): string {
+  let current: ts.Node | undefined = node;
+  while (current && !ts.isSourceFile(current)) {
+    const callable = namedCallableDeclaration(current);
+    if (callable?.name) return callable.name.getText();
+    if (ts.isConstructorDeclaration(current)) return 'constructor';
+    if (ts.isVariableDeclaration(current) && ts.isIdentifier(current.name))
+      return current.name.text;
+    if (ts.isCallExpression(current)) {
+      if (ts.isIdentifier(current.expression)) return current.expression.text;
+      if (ts.isPropertyAccessExpression(current.expression))
+        return current.expression.name.text;
+    }
+    current = current.parent;
+  }
+  return '<module>';
+}
+
 export function scanAmbientDelegation(
   program: ts.Program,
   sources: readonly ts.SourceFile[],
   ambientSources: readonly AmbientSource[],
 ): readonly AmbientDelegationFinding[] {
   const checker = program.getTypeChecker();
-  const ambient = sourceSymbols(program, ambientSources);
+  const ambient = sourceSymbols(program, [
+    ...ambientSources,
+    ...structurallyAmbientSources(program),
+  ]);
   const ambientDeclarations = callableDeclarations(ambient, checker);
   const bindings: Binding[] = [];
   const returns: ReturnedValue[] = [];
@@ -389,6 +542,7 @@ export function scanAmbientDelegation(
       file: file.fileName,
       line: location.line + 1,
       column: location.character + 1,
+      declaration: enclosingDeclaration(node),
       kind,
     });
   };

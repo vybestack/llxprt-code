@@ -407,11 +407,11 @@ describe('release automation rewrites plugin host peer ranges', () => {
     join(repoRoot, '.github', 'workflows', 'release.yml'),
     'utf8',
   );
-  const releaseSteps = jobSteps(
-    workflowJobOptional(parseWorkflowYaml(releaseYml), 'release'),
+  const preparationSteps = jobSteps(
+    workflowJobOptional(parseWorkflowYaml(releaseYml), 'prepare_artifact'),
   );
-  const versionStep = releaseSteps.find(
-    (step) => step.name === 'Version runtime plugin packages',
+  const versionStep = preparationSteps.find(
+    (step) => step.name === 'Version and bind release packages',
   );
 
   const TARGET_VERSION = '0.13.0';
@@ -461,7 +461,7 @@ describe('release automation rewrites plugin host peer ranges', () => {
 
   it('binds host peer ranges in the versioning step, after the npm version loop', () => {
     if (versionStep === undefined) {
-      throw new Error("missing step: 'Version runtime plugin packages'");
+      throw new Error("missing step: 'Version and bind release packages'");
     }
     const run = asString(versionStep.run);
     const versionLoopEnd = run.indexOf('done');
@@ -473,7 +473,7 @@ describe('release automation rewrites plugin host peer ranges', () => {
     // The bind consumes the same release version output the loop stamps
     // the plugin manifests with, so peers can never trail the version.
     expect(asRecord(versionStep.env)?.RELEASE_VERSION).toBe(
-      '${{ steps.version.outputs.RELEASE_VERSION }}',
+      '${{ steps.metadata.outputs.release_version }}',
     );
   });
 

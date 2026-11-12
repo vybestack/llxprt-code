@@ -149,6 +149,45 @@ describe('Preflight acquisition closure', () => {
     }
   });
 
+  it('releases owned credentials after profile retirement fails during disposal', async () => {
+    const config = await workspace();
+    const preflight = await AgentProfilePreflight.create(
+      { runtimeId: config.getSessionId() },
+      credentials().authority,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
+    const { trust, filesystem, memory } = await openHostWorkspace(config);
+    const retirementFailure = new Error('profile retirement failed');
+    try {
+      await preflight.preparePostConfiguration(
+        config,
+        filesystem,
+        memory,
+        trust,
+        () => trust.dispose(),
+      );
+      const profiles = preflight.captureProfileOperation();
+      profiles.cancelAndJoin = async () => {
+        throw retirementFailure;
+      };
+
+      const failure: unknown = await preflight
+        .dispose()
+        .catch((error: unknown) => error);
+      expect(failure).toBe(retirementFailure);
+      expect(credentials().snapshot()).toStrictEqual([1]);
+      expect(credentials().keySnapshot()).toStrictEqual([1]);
+    } finally {
+      await memory.dispose();
+      await filesystem.dispose();
+      await trust.dispose();
+      await config.dispose();
+    }
+  });
+
   async function openHostWorkspace(config: Config): Promise<{
     readonly trust: WorkspaceTrustLifecycle;
     readonly filesystem: WorkspaceFilesystemOwner;

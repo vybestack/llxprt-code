@@ -135,6 +135,7 @@ describe('MCP refresh and token cancellation', () => {
       const work =
         method === 'refresh'
           ? MCPOAuthProvider.refreshAccessToken(
+              (input, init) => globalThis.fetch(input, init),
               config,
               'refresh',
               original.tokenUrl!,
@@ -142,6 +143,7 @@ describe('MCP refresh and token cancellation', () => {
               controller.signal,
             )
           : MCPOAuthProvider.getValidToken(
+              (input, init) => globalThis.fetch(input, init),
               tokenStorage,
               'shared',
               config,
@@ -210,6 +212,7 @@ describe('MCP refresh and token cancellation', () => {
         });
         const work = observe(
           MCPOAuthProvider.getValidToken(
+            (input, init) => globalThis.fetch(input, init),
             tokenStorage,
             'shared',
             config,
@@ -263,6 +266,7 @@ describe('MCP refresh and token cancellation', () => {
       const work =
         phase === 'fetch' || phase === 'body'
           ? MCPOAuthProvider.refreshAccessToken(
+              (input, init) => globalThis.fetch(input, init),
               config,
               'refresh',
               original.tokenUrl!,
@@ -270,6 +274,7 @@ describe('MCP refresh and token cancellation', () => {
               controller.signal,
             )
           : MCPOAuthProvider.getValidToken(
+              (input, init) => globalThis.fetch(input, init),
               tokenStorage,
               'shared',
               config,
@@ -298,11 +303,23 @@ describe('MCP refresh and token cancellation', () => {
       return Response.json(rotated);
     });
     const workA = observe(
-      MCPOAuthProvider.getValidToken(tokenStorage, 'shared', config, a.signal),
+      MCPOAuthProvider.getValidToken(
+        (input, init) => globalThis.fetch(input, init),
+        tokenStorage,
+        'shared',
+        config,
+        a.signal,
+      ),
     );
     await entered.promise;
     const workB = observe(
-      MCPOAuthProvider.getValidToken(tokenStorage, 'shared', config, b.signal),
+      MCPOAuthProvider.getValidToken(
+        (input, init) => globalThis.fetch(input, init),
+        tokenStorage,
+        'shared',
+        config,
+        b.signal,
+      ),
     );
     await enteredB.promise;
     a.abort(reason);
@@ -331,6 +348,7 @@ describe('MCP refresh and token cancellation', () => {
     const before = Date.now();
     expect(
       await MCPOAuthProvider.getValidToken(
+        (input, init) => globalThis.fetch(input, init),
         tokenStorage,
         'shared',
         config,
@@ -363,6 +381,7 @@ describe('MCP refresh and token cancellation', () => {
     );
     expect(
       await MCPOAuthProvider.getValidToken(
+        (input, init) => globalThis.fetch(input, init),
         tokenStorage,
         'shared',
         config,
@@ -404,6 +423,7 @@ describe('MCP refresh and token cancellation', () => {
     try {
       const work = observe(
         MCPOAuthProvider.refreshAccessToken(
+          (input, init) => globalThis.fetch(input, init),
           config,
           'refresh',
           `http://127.0.0.1:${address.port}/token`,

@@ -61,15 +61,42 @@ function errorLeaves(error: unknown): unknown[] {
   return [error];
 }
 
+async function waitForBarrier<T>(
+  promise: Promise<T>,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out`)), 25000);
+  });
+  try {
+    return await Promise.race([promise, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function failKeyClose(
   authority: CredentialAuthority,
   failure: unknown,
   onClose?: () => void,
+  beforeAcquire?: () => void,
 ): () => void {
   const acquire = authority.createProviderKeyStorage.bind(authority);
   const capture = vi
     .spyOn(authority, 'createProviderKeyStorage')
     .mockImplementation(() => {
+      beforeAcquire?.();
+      const acquisitionDelay = Number(
+        process.env.LLXPRT_ACP_KEY_ACQUISITION_DELAY_MS ?? 0,
+      );
+      if (acquisitionDelay > 0)
+        Atomics.wait(
+          new Int32Array(new SharedArrayBuffer(4)),
+          0,
+          0,
+          acquisitionDelay,
+        );
       const keys = acquire();
       const close = keys.close.bind(keys);
       keys.close = () => {
@@ -197,7 +224,11 @@ describe('ACP live and durable release failures', () => {
       const keyClosed = new Promise<void>((resolve) => {
         closed = resolve;
       });
-      const restore = failKeyClose(credentials().authority, release, closed);
+      let closing: Promise<void> | undefined;
+      let signalShutdownRequested!: () => void;
+      const shutdownRequested = new Promise<void>((resolve) => {
+        signalShutdownRequested = resolve;
+      });
       const workspace = new ZedAgent(
         config,
         peer.connection,
@@ -208,9 +239,21 @@ describe('ACP live and durable release failures', () => {
         undefined,
         { credentialAuthority: credentials().authority },
       );
+      const restore = failKeyClose(
+        credentials().authority,
+        release,
+        closed,
+        closeBeforeConstruction
+          ? () => {
+              closing = workspace.disposeAll();
+              signalShutdownRequested();
+            }
+          : undefined,
+      );
       let primary: { readonly reason: unknown } | undefined;
       let released = false;
       let startupOutcome: Promise<unknown> = Promise.resolve();
+      let startupSettled = false;
       try {
         await peer.initialize();
         const sessionId = 'late-resumed-owner';
@@ -228,28 +271,27 @@ describe('ACP live and durable release failures', () => {
         } else {
           startup = workspace.resumeSession({ sessionId, cwd: directory });
         }
+        void startup.then(
+          () => {
+            startupSettled = true;
+          },
+          () => {
+            startupSettled = true;
+          },
+        );
         startupOutcome = Promise.allSettled([startup]);
-        if (!closeBeforeConstruction) await peer.whenUpdated();
-        const closing = workspace.disposeAll();
+        if (closeBeforeConstruction)
+          await waitForBarrier(
+            shutdownRequested,
+            'shutdown at key acquisition',
+          );
+        else await waitForBarrier(peer.whenUpdated(), 'session update');
+        closing ??= workspace.disposeAll();
         const outcome = Promise.allSettled([closing]);
         expect(new Set([closing, workspace.disposeAll()]).size).toBe(1);
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const deadline = new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () =>
-              reject(
-                new Error(
-                  'Constructed unpublished Session stayed live behind startup delivery',
-                ),
-              ),
-            1000,
-          );
-        });
-        try {
-          await Promise.race([keyClosed, deadline]);
-        } finally {
-          clearTimeout(timer);
-        }
+        await waitForBarrier(keyClosed, 'late credential key close');
+        expect(peer.isHoldingUpdates()).toBe(true);
+        expect(startupSettled).toBe(false);
         expect(credentials().keySnapshot()).toStrictEqual([1]);
         peer.releaseUpdates();
         const [[result]] = await Promise.all([outcome, startupOutcome]);

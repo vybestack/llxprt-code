@@ -3,7 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, spyOn } from 'bun:test';
+import { installMcpNetwork } from './helpers/mcp-network.js';
+import { describe, expect, it } from 'bun:test';
 import { get } from 'node:http';
 import { buildAgent } from './helpers/agentHarness.js';
 import {
@@ -60,7 +61,7 @@ describe('manual MCP authentication storage', () => {
         });
       },
     };
-    const network = spyOn(globalThis, 'fetch').mockImplementation(async () =>
+    const restoreNetwork = installMcpNetwork(async () =>
       Response.json({
         access_token: 'persisted-after-cancel',
         token_type: 'Bearer',
@@ -137,7 +138,7 @@ describe('manual MCP authentication storage', () => {
       await auth;
       await disposal;
       await built.cleanup();
-      network.mockRestore();
+      restoreNetwork();
     }
   }, 30000);
 });

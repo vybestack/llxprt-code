@@ -32,6 +32,7 @@ export interface RuntimeServiceShapeOptions {
   readonly assembly?: ReadonlyArray<{
     readonly file: string;
     readonly functionName: string;
+    readonly issueNumber: number;
   }>;
 }
 
@@ -44,6 +45,19 @@ export interface RuntimeServiceShapeFinding {
   readonly file: string;
   readonly line: number;
   readonly column: number;
+  readonly declaration: string;
+}
+
+function isNamedDeclaration(node: ts.Node): node is ts.NamedDeclaration {
+  return 'name' in node && node.name !== undefined;
+}
+
+function findingDeclaration(node: ts.Node): string {
+  if (ts.isIdentifier(node)) return node.text;
+  if (ts.isPropertyAccessExpression(node)) return node.name.text;
+  if (isNamedDeclaration(node) && node.name && ts.isIdentifier(node.name))
+    return node.name.text;
+  return '<anonymous>';
 }
 
 function resolveRoots(
@@ -304,6 +318,23 @@ export function scanRuntimeServiceProgram(
   options: RuntimeServiceShapeOptions,
   files: readonly string[],
 ): readonly RuntimeServiceShapeFinding[] {
+  for (const entry of options.assembly ?? []) {
+    if (!Number.isSafeInteger(entry.issueNumber) || entry.issueNumber < 1)
+      throw new Error(
+        `Assembly exemption must reference an issue: ${entry.file}#${entry.functionName}`,
+      );
+    const source = program.getSourceFile(compilerSourcePath(entry.file));
+    if (!source) continue;
+    const target = source.statements.find(
+      (statement): statement is ts.FunctionDeclaration =>
+        ts.isFunctionDeclaration(statement) &&
+        statement.name?.text === entry.functionName,
+    );
+    if (!target)
+      throw new Error(
+        `Unresolved assembly exemption: ${entry.file}#${entry.functionName}`,
+      );
+  }
   const diagnostics = ts.getPreEmitDiagnostics(program);
   if (diagnostics.length) {
     throw new Error(
@@ -324,16 +355,38 @@ export function scanRuntimeServiceProgram(
     checker,
     program,
   );
+  const runtimeCapabilities = new Set([...services, ...runtimeObjects]);
   const analyses: ServiceAnalyses = {
     services: analyze,
     merged: analyzeRuntimeObject,
   };
+  function directCapabilityBag(type: ts.Type, node: ts.Node): boolean {
+    if (type.getSymbol()?.declarations?.some(ts.isClassDeclaration))
+      return false;
+    const capabilities = type.getProperties().map((property) => {
+      const propertyType = checker.getTypeOfSymbolAtLocation(property, node);
+      const symbol = propertyType.getSymbol();
+      const identity = symbol && unalias(symbol, checker);
+      return identity && runtimeCapabilities.has(identity)
+        ? identity
+        : undefined;
+    });
+    return capabilities.some(
+      (left, index) =>
+        left !== undefined &&
+        capabilities
+          .slice(index + 1)
+          .some((right) => right !== undefined && left !== right),
+    );
+  }
   /**
    * Judges one declared position. A stored bag and a flattened aggregate are
    * both findings; a position the analysis could not finish is reported as a
    * limit so an undecided scan never passes silently.
    */
   function declaredVerdict(type: ts.Type, node: ts.Node): StoredVerdict {
+    if (directCapabilityBag(type, node))
+      return { bundle: true, incomplete: false };
     const merged = mergesServiceSurfaces(type, checker, analyses, node);
     if (merged.bundle) return merged;
     const stored = storedServiceVerdict(type, checker, analyze, node);
@@ -349,6 +402,8 @@ export function scanRuntimeServiceProgram(
    * before; the flattened aggregate rule is added on top.
    */
   function exposureVerdict(type: ts.Type, node: ts.Node): StoredVerdict {
+    if (directCapabilityBag(type, node))
+      return { bundle: true, incomplete: false };
     const merged = mergesServiceSurfaces(type, checker, analyses, node);
     if (merged.bundle) return merged;
     const exposed = analyze(type, node);
@@ -378,6 +433,7 @@ export function scanRuntimeServiceProgram(
         file,
         line: position.line + 1,
         column: position.character + 1,
+        declaration: findingDeclaration(node),
       });
     }
     function reportTypes(node: ts.Node, types: readonly ts.Type[]): void {

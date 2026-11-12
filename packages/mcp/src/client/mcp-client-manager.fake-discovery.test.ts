@@ -90,6 +90,7 @@ describe('McpClientManager fake discovery lifecycle', () => {
     );
     return {
       manager: new McpClientManager(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         '0.0.1',

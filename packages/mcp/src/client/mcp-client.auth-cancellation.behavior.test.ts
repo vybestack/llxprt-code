@@ -155,6 +155,7 @@ function createClient(
   return {
     tools,
     client: new McpClient(
+      (input, init) => globalThis.fetch(input, init),
       {
         ...createTestOAuthBinding(),
         tokenStorage: new MCPOAuthTokenStorage(store),

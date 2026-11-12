@@ -76,11 +76,12 @@ describe('connectToMcpServer with OAuth', () => {
 
   /** Connects the suite's standard server, varying only config and signal. */
   const connectTestServer = (
-    config: Parameters<typeof connectToMcpServer>[2],
+    config: Parameters<typeof connectToMcpServer>[3],
     signal?: AbortSignal,
     onRequiresOAuth?: () => void,
   ): ReturnType<typeof connectToMcpServer> =>
     connectToMcpServer(
+      (input, init) => globalThis.fetch(input, init),
       '0.0.1',
       'test-server',
       config,
@@ -446,6 +447,7 @@ describe('connectToMcpServer with OAuth', () => {
       // before the client.connect mock is ever reached
       await expect(
         connectToMcpServer(
+          (input, init) => globalThis.fetch(input, init),
           '0.0.1',
           'test-server',
           {},
@@ -465,6 +467,7 @@ describe('connectToMcpServer with OAuth', () => {
 
       await expect(
         connectToMcpServer(
+          (input, init) => globalThis.fetch(input, init),
           '0.0.1',
           'test-server',
           { command: 'test-command' },
@@ -501,6 +504,7 @@ describe('connectToMcpServer with OAuth', () => {
       ).mockReturnValue(mockTransport.close());
 
       await connectToMcpServer(
+        (input, init) => globalThis.fetch(input, init),
         '0.0.1',
         'test-server',
         { url: serverUrl },
@@ -642,6 +646,7 @@ describe('connectToMcpServer with OAuth', () => {
       // Should fail with 404, NOT attempt SSE fallback
       await expect(
         connectToMcpServer(
+          (input, init) => globalThis.fetch(input, init),
           '0.0.1',
           'test-server',
           { url: serverUrl, type: 'http' },
@@ -672,6 +677,7 @@ describe('connectToMcpServer with OAuth', () => {
         .mockResolvedValueOnce(undefined); // SSE fallback succeeds
 
       await connectToMcpServer(
+        (input, init) => globalThis.fetch(input, init),
         '0.0.1',
         'test-server',
         { url: 'http://test-server.com/mcp' },
@@ -828,6 +834,7 @@ describe('connectToMcpServer with OAuth', () => {
       );
 
       const mcpClient = new McpClient(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -867,6 +874,7 @@ describe('connectToMcpServer with OAuth', () => {
       );
 
       const mcpClient = new McpClient(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',

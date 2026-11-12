@@ -84,6 +84,7 @@ export function createManagerWithContext(
   resources: McpResourceRegistry,
 ): McpClientManager {
   return new McpClientManager(
+    (input, init) => globalThis.fetch(input, init),
     createTestOAuthBinding(),
     unsupportedApprovalPolicy(),
     '0.0.1',

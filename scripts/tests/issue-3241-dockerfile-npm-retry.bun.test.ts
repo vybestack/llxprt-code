@@ -8,29 +8,26 @@
  * Issue #3241: the nightly release died in "Build and push sandbox image"
  * when a transient `npm error code ECONNRESET` (mid-body connection reset on
  * the arm64 leg under QEMU) killed the single, un-retried
- * `npm install -g /tmp/*.tgz ...` layer. Nothing at any layer retried, so one
- * reset TCP connection aborted the entire release. The later
- * `npm install -g @vybestack/llxprt-ui` layer had the identical exposure.
+ * `npm install -g /tmp/*.tgz ...` layer. A transient registry reset could
+ * abort the entire release, so that transaction has a bounded retry. The UI
+ * install now seeds the ripgrep download cache from system rg and does not
+ * retry a GitHub download (issue #4018).
  *
  * These tests read the repository's actual root `Dockerfile` (no fixture, no
- * mock of the artifact under test) and prove both network installs now ride
- * out transient failures:
+ * mock of the artifact under test):
  *
  *   - Behavioral execution: each RUN script is extracted from the Dockerfile,
  *     every `/tmp/` path is remapped into a test-owned temp directory (the
  *     tarball script's remap count is asserted to be non-zero so the test
  *     fails loudly if the Dockerfile drifts away from /tmp — the raw script
  *     must never execute because it ends in `rm -f /tmp/*.tgz`), `npm` and
- *     `sleep` are replaced via PATH shims (network and timing are
- *     infrastructure), and the remapped script is executed with `/bin/sh`
- *     exactly as the Docker build would execute it. Simulated transient
- *     failures must be retried up to three install attempts; cache clean and
- *     tarball removal must happen only on the success path; exhaustion must
- *     fail the RUN.
- *   - Static invariants: both scripts carry the attempts bound (3) and a
- *     backoff sleep; the tarball install stays ONE npm transaction holding
- *     all 12 tarball globs; the cache-clean/rm chain stays gated on a
- *     successful install.
+ *     `sleep` are replaced via PATH shims, and the remapped script is executed
+ *     with `/bin/sh` exactly as the Docker build would execute it. The release
+ *     tarball install retries transient failures; the UI install runs once and
+ *     does not retry.
+ *   - Static invariants: the tarball install has a three-attempt bound and
+ *     backoff; it stays ONE npm transaction holding all 12 tarball globs. Cache
+ *     cleaning and tarball removal happen only after success.
  */
 
 import { describe, expect, it } from 'bun:test';
@@ -357,45 +354,42 @@ describePosixOnly(
 describePosixOnly(
   'issue #3241: Dockerfile @vybestack/llxprt-ui install RUN behavior',
   () => {
-    // The ui install references no /tmp paths, so there is no remap-count guard
-    // here; the install-count assertions below are what keep this from testing
-    // nothing. The remap in executeRunScript still applies defensively in case
-    // the script ever gains /tmp references.
-    it('recovers from two transient npm failures and cleans the cache', () => {
+    it('installs once without retrying and cleans the cache on success', () => {
       const result = executeRunScript({
         script: uiScript,
-        failFirstInstalls: 2,
+        failFirstInstalls: 0,
         withSentinelTarballs: false,
       });
 
       expect(result.exitCode).toBe(0);
-      expect(logEntryCount(result.log, 'install')).toBe(3);
+      expect(logEntryCount(result.log, 'install')).toBe(1);
       expect(logEntryCount(result.log, 'cache-clean')).toBe(1);
-      expect(logEntryCount(result.log, 'sleep')).toBeGreaterThanOrEqual(2);
+      expect(logEntryCount(result.log, 'sleep')).toBe(0);
     });
 
-    it('fails the build after three failed npm attempts without cleaning the cache', () => {
+    it('fails immediately without retrying or cleaning the cache', () => {
       const result = executeRunScript({
         script: uiScript,
-        failFirstInstalls: 99,
+        failFirstInstalls: 1,
         withSentinelTarballs: false,
       });
 
       expect(result.exitCode).toBe(1);
-      expect(logEntryCount(result.log, 'install')).toBe(3);
+      expect(logEntryCount(result.log, 'install')).toBe(1);
       expect(logEntryCount(result.log, 'cache-clean')).toBe(0);
+      expect(logEntryCount(result.log, 'sleep')).toBe(0);
     });
   },
 );
 
 describe('issue #3241: Dockerfile npm install retry invariants', () => {
-  it('wraps both installs in a bounded retry of three attempts with backoff sleep', () => {
+  it('wraps the tarball install in a bounded retry of three attempts with backoff sleep', () => {
     // Structural, not literal: the behavioral suites pin the observable
     // contract (exactly 3 installs, sleeps between retries, exit 1 on
     // exhaustion) via shims, but they are skipped on Windows — this static
     // suite is what proves the retry structure exists there. Whitespace-
     // tolerant regexes keep semantically equivalent refactors green.
-    for (const script of [tarballScript, uiScript]) {
+    for (const script of [tarballScript]) {
       expect(script).toMatch(/attempts=\$\(\(attempts \+ 1\)\)/);
       expect(script).toMatch(/\[ \\?"\$attempts\\?" -ge 3 \]/);
       expect(script).toMatch(/sleep [0-9]+/);
@@ -414,6 +408,6 @@ describe('issue #3241: Dockerfile npm install retry invariants', () => {
     expect(tarballScript).toMatch(
       /done\s*&&\s*npm cache clean --force\s*&&\s*rm -f \S+\/\*\.tgz/,
     );
-    expect(uiScript).toMatch(/done\s*&&\s*npm cache clean --force/);
+    expect(uiScript).toMatch(/npm install -g .*&&\s*npm cache clean --force/);
   });
 });

@@ -105,6 +105,7 @@ describe('McpClient resource refresh', () => {
     } as unknown as ToolRegistry,
   ): McpClient {
     return new McpClient(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       'test-server',

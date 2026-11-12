@@ -31,6 +31,7 @@ describe('runtime service shape guard', () => {
       expect(scan(imports + source)).toContainEqual(
         expect.objectContaining({
           rule: 'runtime-service-bundle',
+          declaration: 'Services',
           line: 2,
           column: 1,
         }),
@@ -116,7 +117,9 @@ export function other(bag: { clock: Clock; session: Session }): void {}`;
             exportName,
           })),
           configs: [{ file, exportName: 'Config' }],
-          assembly: [{ file: assemblyFile, functionName: 'assemble' }],
+          assembly: [
+            { file: assemblyFile, functionName: 'assemble', issueNumber: 3979 },
+          ],
         },
         [file],
       );

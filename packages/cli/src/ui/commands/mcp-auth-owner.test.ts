@@ -7,7 +7,8 @@
 import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import { describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+import { installMcpNetwork } from '../../../../agents/src/api/__tests__/helpers/mcp-network.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { createAgent } from '@vybestack/llxprt-code-agents';
@@ -32,20 +33,12 @@ describe('CLI MCP authentication', () => {
       release = resolve;
     });
     let signal: AbortSignal | null | undefined;
-    const network = spyOn(globalThis, 'fetch').mockImplementation(
-      Object.assign(
-        async (
-          _url: Parameters<typeof fetch>[0],
-          init: Parameters<typeof fetch>[1],
-        ) => {
-          signal = init?.signal;
-          enter();
-          await barrier;
-          return new Response(null, { status: 401 });
-        },
-        { preconnect: () => {} },
-      ),
-    );
+    const restoreNetwork = installMcpNetwork(async (_url, init) => {
+      signal = init?.signal;
+      enter();
+      await barrier;
+      return new Response(null, { status: 401 });
+    });
     // The agent is a Route C root (HTTP MCP servers on Route A and B use the
     // OS keychain); the slash-command runtime reads declarations from the
     // test's own Config.
@@ -121,7 +114,7 @@ describe('CLI MCP authentication', () => {
       await agent.dispose();
       await declarations.dispose();
       await rm(directory, { recursive: true, force: true });
-      network.mockRestore();
+      restoreNetwork();
     }
   }, 30000);
 });

@@ -4,6 +4,7 @@ import type { McpAuthFactoryRegistry } from './mcp-auth-factory.js';
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { NetworkFetch } from '@vybestack/llxprt-code-auth/network-fetch.js';
 
 import * as crypto from 'node:crypto';
 import { URL } from 'node:url';
@@ -86,12 +87,14 @@ interface PKCEParams {
 }
 
 async function applyWWWAuthenticateDiscovery(
+  requestFetch: NetworkFetch,
   wwwAuthenticate: string,
   mcpServerUrl: string,
   config: MCPOAuthConfig,
   signal?: AbortSignal,
 ): Promise<MCPOAuthConfig> {
   const discoveredConfig = await OAuthUtils.discoverOAuthFromWWWAuthenticate(
+    requestFetch,
     wwwAuthenticate,
     mcpServerUrl,
     signal,
@@ -110,6 +113,7 @@ async function applyWWWAuthenticateDiscovery(
 }
 
 async function applyAuthenticateHeaderDiscovery(
+  requestFetch: NetworkFetch,
   response: Response,
   mcpServerUrl: string,
   config: MCPOAuthConfig,
@@ -120,6 +124,7 @@ async function applyAuthenticateHeaderDiscovery(
     return config;
   }
   return applyWWWAuthenticateDiscovery(
+    requestFetch,
     wwwAuthenticate,
     mcpServerUrl,
     config,
@@ -135,6 +140,7 @@ export class MCPOAuthProvider {
    * Register a client dynamically with the OAuth server.
    */
   private static async registerClient(
+    requestFetch: NetworkFetch,
     registrationUrl: string,
     config: MCPOAuthConfig,
     redirectPort: number,
@@ -153,7 +159,7 @@ export class MCPOAuthProvider {
     };
 
     const response = await awaitOAuthOperation(signal, () =>
-      fetch(registrationUrl, {
+      requestFetch(registrationUrl, {
         signal,
         method: 'POST',
         headers: {
@@ -181,13 +187,15 @@ export class MCPOAuthProvider {
    * Discover OAuth configuration from an MCP server URL.
    */
   private static async discoverOAuthFromMCPServer(
+    requestFetch: NetworkFetch,
     mcpServerUrl: string,
     signal?: AbortSignal,
   ): Promise<MCPOAuthConfig | null> {
-    return OAuthUtils.discoverOAuthConfig(mcpServerUrl, signal);
+    return OAuthUtils.discoverOAuthConfig(requestFetch, mcpServerUrl, signal);
   }
 
   private static async discoverAuthServerMetadataForRegistration(
+    requestFetch: NetworkFetch,
     authorizationUrl: string,
     signal?: AbortSignal,
   ): Promise<{
@@ -242,6 +250,7 @@ export class MCPOAuthProvider {
     for (const issuer of attemptedIssuers) {
       debugLogger.debug(`   Trying issuer URL: ${issuer}`);
       const metadata = await OAuthUtils.discoverAuthorizationServerMetadata(
+        requestFetch,
         issuer,
         signal,
       );
@@ -362,6 +371,7 @@ export class MCPOAuthProvider {
    * Exchange authorization code for tokens.
    */
   private static async exchangeCodeForToken(
+    requestFetch: NetworkFetch,
     config: MCPOAuthConfig,
     code: string,
     codeVerifier: string,
@@ -403,7 +413,7 @@ export class MCPOAuthProvider {
     }
 
     const response = await awaitOAuthOperation(signal, () =>
-      fetch(config.tokenUrl!, {
+      requestFetch(config.tokenUrl!, {
         signal,
         method: 'POST',
         headers: {
@@ -441,6 +451,7 @@ export class MCPOAuthProvider {
    * Refresh an access token using a refresh token.
    */
   static async refreshAccessToken(
+    requestFetch: NetworkFetch,
     config: MCPOAuthConfig,
     refreshToken: string,
     tokenUrl: string,
@@ -481,7 +492,7 @@ export class MCPOAuthProvider {
     }
 
     const response = await awaitOAuthOperation(signal, () =>
-      fetch(tokenUrl, {
+      requestFetch(tokenUrl, {
         signal,
         method: 'POST',
         headers: {
@@ -521,6 +532,7 @@ export class MCPOAuthProvider {
    * Discover and apply OAuth configuration when no authorization URL is provided.
    */
   private static async discoverOAuthConfigIfNeeded(
+    requestFetch: NetworkFetch,
     serverName: string,
     config: MCPOAuthConfig,
     mcpServerUrl?: string,
@@ -540,7 +552,7 @@ export class MCPOAuthProvider {
         : { Accept: 'application/json' };
 
       const response = await awaitOAuthOperation(signal, () =>
-        fetch(mcpServerUrl, {
+        requestFetch(mcpServerUrl, {
           signal,
           method: 'HEAD',
           headers,
@@ -549,6 +561,7 @@ export class MCPOAuthProvider {
 
       if (response.status === 401 || response.status === 307) {
         config = await applyAuthenticateHeaderDiscovery(
+          requestFetch,
           response,
           mcpServerUrl,
           config,
@@ -569,6 +582,7 @@ export class MCPOAuthProvider {
     // If we still don't have OAuth config, try the standard discovery
     if (!config.authorizationUrl) {
       const discoveredConfig = await this.discoverOAuthFromMCPServer(
+        requestFetch,
         mcpServerUrl,
         signal,
       );
@@ -596,6 +610,7 @@ export class MCPOAuthProvider {
    * Perform dynamic client registration if no clientId is configured.
    */
   private static async ensureClientRegistration(
+    requestFetch: NetworkFetch,
     config: MCPOAuthConfig,
     redirectPort: number,
     signal?: AbortSignal,
@@ -616,6 +631,7 @@ export class MCPOAuthProvider {
       debugLogger.debug('→ Attempting dynamic client registration...');
       const { metadata: authServerMetadata } =
         await MCPOAuthProvider.discoverAuthServerMetadataForRegistration(
+          requestFetch,
           config.authorizationUrl,
           signal,
         );
@@ -624,6 +640,7 @@ export class MCPOAuthProvider {
 
     if (registrationUrl) {
       const clientRegistration = await this.registerClient(
+        requestFetch,
         registrationUrl,
         config,
         redirectPort,
@@ -775,6 +792,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
    * but no subsequent operation or successful return follows cancellation.
    */
   static async authenticate(
+    requestFetch: NetworkFetch,
     capabilities: McpOAuthBinding,
     serverName: string,
     config: MCPOAuthConfig,
@@ -785,6 +803,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
     const { openBrowser, tokenStorage } = capabilities;
     signal?.throwIfAborted();
     config = await this.discoverOAuthConfigIfNeeded(
+      requestFetch,
       serverName,
       { ...config },
       mcpServerUrl,
@@ -793,11 +812,10 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
     signal?.throwIfAborted();
 
     const pkceParams = this.generatePKCEParams();
-    const preferredPort = this.getPortFromUrl(config.redirectUri);
 
     const callbackServer = startOAuthCallbackServer(
       pkceParams.state,
-      preferredPort,
+      this.getPortFromUrl(config.redirectUri),
       signal,
     );
 
@@ -809,6 +827,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
       debugLogger.debug(`Callback server listening on port ${redirectPort}`);
 
       config = await this.ensureClientRegistration(
+        requestFetch,
         config,
         redirectPort,
         signal,
@@ -839,6 +858,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
     }
 
     const tokenResponse = await this.exchangeCodeForToken(
+      requestFetch,
       config,
       code,
       pkceParams.codeVerifier,
@@ -865,6 +885,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
    * Get a valid access token for an MCP server, refreshing if necessary.
    */
   static async getValidToken(
+    requestFetch: NetworkFetch,
     tokenStorage: Pick<
       MCPOAuthTokenStorage,
       'getCredentials' | 'saveToken' | 'deleteCredentials'
@@ -903,6 +924,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
         );
 
         const newTokenResponse = await this.refreshAccessToken(
+          requestFetch,
           config,
           token.refreshToken,
           credentials.tokenUrl,

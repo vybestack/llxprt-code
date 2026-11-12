@@ -390,6 +390,7 @@ class PreferredProviderAssembly {
     let disposeMcpRuntime = async (): Promise<void> => policyOwner.dispose();
     try {
       const mcpRuntime = await assembleOwnedMcpRuntime(
+        manager.fetchNetwork,
         config,
         {
           ...mcpOptions,

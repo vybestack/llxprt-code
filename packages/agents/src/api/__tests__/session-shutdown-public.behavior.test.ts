@@ -123,6 +123,94 @@ async function shellTranscript(
 }
 
 describe('public Agent coordinated shutdown', () => {
+  it('preserves Request cancellation before and during public session fetch', async () => {
+    const admitted = gate();
+    const disconnected = gate();
+    let requests = 0;
+    const server = createServer((request, response) => {
+      requests += 1;
+      if (request.url?.endsWith('/stream') === true) {
+        const chunks: Buffer[] = [];
+        request.on('data', (chunk: Buffer) => chunks.push(chunk));
+        request.on('end', () => response.end(Buffer.concat(chunks).toString()));
+        return;
+      }
+      if (
+        request.url?.endsWith('/already') === true ||
+        request.url?.endsWith('/null') === true
+      ) {
+        response.end('contacted');
+        return;
+      }
+      response.once('close', () => disconnected.release());
+      admitted.release();
+      setTimeout(() => response.end('completed'), 100);
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', resolve);
+    });
+    const address = server.address();
+    if (address === null || typeof address === 'string')
+      throw new Error('Missing request cancellation port');
+    const built = await buildAgent('plain-text.jsonl');
+    try {
+      const origin = `http://127.0.0.1:${address.port}`;
+      const alreadyAborted = new AbortController();
+      alreadyAborted.abort();
+      const alreadyResult = await built.agent.sessionClient
+        .fetch(
+          new Request(`${origin}/already`, { signal: alreadyAborted.signal }),
+        )
+        .then(
+          (response) => response,
+          (error: unknown) => error,
+        );
+      const nullOverrideResponse = await built.agent.sessionClient.fetch(
+        new Request(`${origin}/null`, { signal: alreadyAborted.signal }),
+        { signal: null },
+      );
+      const streamingInit: RequestInit & { duplex: 'half' } = {
+        method: 'POST',
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('streamed body'));
+            controller.close();
+          },
+        }),
+        duplex: 'half',
+      };
+      const streamingResponse = await built.agent.sessionClient.fetch(
+        `${origin}/stream`,
+        streamingInit,
+      );
+
+      const inFlight = new AbortController();
+      const pending = built.agent.sessionClient
+        .fetch(new Request(`${origin}/inflight`, { signal: inFlight.signal }))
+        .then(
+          (response) => response,
+          (error: unknown) => error,
+        );
+      await admitted.promise;
+      inFlight.abort();
+      const inFlightResult = await pending;
+      await disconnected.promise;
+
+      expect(alreadyResult).toBeInstanceOf(Error);
+      expect(nullOverrideResponse.status).toBe(200);
+      expect(await streamingResponse.text()).toBe('streamed body');
+      expect(requests).toBe(3);
+      expect(inFlightResult).toBeInstanceOf(Error);
+    } finally {
+      await built.cleanup();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+        server.closeAllConnections();
+      });
+    }
+  });
+
   it.skipIf(process.platform === 'win32')(
     'cancels physical shell work before a held factory settles and joins its late resource once',
     async () => {

@@ -621,6 +621,7 @@ interface HeldRefresh {
   readonly provider: OAuthProvider;
   readonly entered: Promise<void>;
   readonly hold: { release: () => void };
+  readonly signals: AbortSignal[];
 }
 
 /** refreshToken waits on a gate and ignores its signal while waiting. */
@@ -630,18 +631,20 @@ function heldRefreshProvider(
 ): HeldRefresh {
   const entered = gate();
   const hold = gate();
+  const signals: AbortSignal[] = [];
   const provider: OAuthProvider = {
     name,
     initiateAuth: async (): Promise<OAuthToken> => freshToken(`${name}-auth`),
     getToken: async () => null,
-    refreshToken: async (): Promise<OAuthToken> => {
+    refreshToken: async (_token, signal): Promise<OAuthToken> => {
+      if (signal !== undefined) signals.push(signal);
       entered.release();
       await hold.promise;
       if (outcome === 'fail') throw new Error('provider refresh failed');
       return freshToken(`${name}-refreshed`);
     },
   };
-  return { provider, entered: entered.promise, hold };
+  return { provider, entered: entered.promise, hold, signals };
 }
 
 function expiredToken(access: string): OAuthToken {
@@ -669,6 +672,7 @@ describe('OAuthManager dispose reports refresh-lock release failures', () => {
     try {
       await flush();
       expect(disposing.isSettled()).toBe(false);
+      expect(held.signals[0]?.aborted).toBe(true);
       held.hold.release();
       const disposal = await disposing.outcome;
       return { caller: await running.outcome, disposal, events: store.events };

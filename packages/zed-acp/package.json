@@ -39,6 +39,7 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.2.1",
     "@vybestack/llxprt-code-agents": "file:../agents",
+    "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-core": "file:../core",
     "@vybestack/llxprt-code-providers": "file:../providers",
     "@vybestack/llxprt-code-settings": "file:../settings",

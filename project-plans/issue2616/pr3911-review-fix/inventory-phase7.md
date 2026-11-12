@@ -647,7 +647,7 @@ No edge needs a preparation task: the largest consumer list is T7.1 and T7.3 wit
 Copy the first into `W/tmp/pr3911/T7.0/inv7.ts` and the second into `W/tmp/pr3911/T7.0/uses.ts` (never commit them), then run:
 
 ```
-exec < /dev/null; cd /Volumes/XS1000/acoliver/projects/llxprt/branch-2/llxprt-code/tmp/w2616k && bun tmp/pr3911/T7.0/inv7.ts /Volumes/XS1000/acoliver/projects/llxprt/branch-2/llxprt-code/tmp/w2616k > tmp/pr3911/T7.0/inv7.out && bun tmp/pr3911/T7.0/uses.ts /Volumes/XS1000/acoliver/projects/llxprt/branch-2/llxprt-code/tmp/w2616k tmp/pr3911/T7.0/inv7.out > tmp/pr3911/T7.0/uses.out
+exec < /dev/null; cd W && bun tmp/pr3911/T7.0/inv7.ts W > tmp/pr3911/T7.0/inv7.out && bun tmp/pr3911/T7.0/uses.ts W tmp/pr3911/T7.0/inv7.out > tmp/pr3911/T7.0/uses.out
 ```
 
 The root is an argument, not derived from the script location, so the copies work wherever they are saved. `inv7.ts` walks `packages/*/src` (skipping `node_modules`, `dist` and `.d.ts`), discovers every class that transitively extends `SessionProviderOwner` at any nesting depth, and counts `this.<member>` uses in every file that declares one of those classes; it then lists every file that names a chain class. `uses.ts` reads its output and lists the line numbers of each member's uses in the eight files named above. Both were run once against lane L1 at `edbcb0e8f` (exit 0). A task that moves a line shifts the numbers; rerun them to refresh.
