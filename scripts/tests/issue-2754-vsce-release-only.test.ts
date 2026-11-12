@@ -219,10 +219,14 @@ describe('issue #2754 — VSCE is release-only packaging tooling', () => {
 
   it('A5: release.yml Publish VS Code extension step uses the pinned runner and preserves publishing flags', () => {
     const releaseYml = readFile('.github/workflows/release.yml');
-    const publishStep = releaseYml.slice(
-      releaseYml.indexOf('Publish VS Code extension'),
-      releaseYml.indexOf('\n      - name: Publish @vybestack'),
+    const publishStepStart = releaseYml.indexOf(
+      '\n      - name: Publish VS Code extension',
     );
+    const publishStepEnd = releaseYml.indexOf(
+      '\n      - name: Update Homebrew formula',
+      publishStepStart,
+    );
+    const publishStep = releaseYml.slice(publishStepStart, publishStepEnd);
     expect(publishStep).toContain('scripts/run_vsce.ts publish');
     expect(publishStep).toContain('--packagePath');
     expect(publishStep).toContain('--azure-credential');
