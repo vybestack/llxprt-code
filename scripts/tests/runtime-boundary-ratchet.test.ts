@@ -333,7 +333,7 @@ describe('strict runtime boundary enforcement after ratchet retirement', () => {
       readFileSync(path, 'utf8'),
     );
     expect(baseline.purpose).toContain('#3980');
-    expect(baseline.purpose).toContain('follow-up issue');
+    expect(baseline.purpose).toContain('#4037');
     expect(baseline.findings.length).toBeGreaterThan(0);
   });
 });

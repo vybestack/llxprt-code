@@ -12,6 +12,19 @@ import {
 const filename = 'packages/providers/src/BaseProvider.ts';
 
 describe('runtime state structure scanner', () => {
+  it('gives environment writes stable member-specific identities', () => {
+    const findings = scanRuntimeStateStructure(
+      filename,
+      'export function run() { process.env.FIRST = "one"; process.env.SECOND = "two"; }',
+    );
+
+    expect(
+      findings
+        .filter((finding) => finding.kind === 'process-environment-mutation')
+        .map((finding) => finding.declaration),
+    ).toEqual(['run.process.env.FIRST', 'run.process.env.SECOND']);
+  });
+
   it.each([
     'export default { current: undefined };',
     'class Holder {} export default new Holder();',
@@ -696,5 +709,80 @@ const cache = new Map();`,
         { allowlist: [] },
       ),
     ).toEqual([]);
+  });
+
+  it('reports module instances mutated through their resolved methods', () => {
+    const source =
+      'class Owner { private count = 0; increment() { this.count++; } } export const owner = new Owner(); export function run() { owner.increment(); }';
+    expect(
+      scanRuntimeStateStructure(filename, source, [], undefined, {
+        allowlist: [],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        declaration: 'owner',
+        kind: 'module-mutation',
+      }),
+    );
+  });
+
+  it('reports static fields mutated through their static methods', () => {
+    const source =
+      'class Owner { private static count = 0; static increment() { this.count++; } } export function run() { Owner.increment(); }';
+    expect(
+      scanRuntimeStateStructure(filename, source, [], undefined, {
+        allowlist: [],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        declaration: 'Owner.count',
+        kind: 'module-mutation',
+      }),
+    );
+  });
+
+  it('keeps an unresolved imported instance declaration conservative', () => {
+    expect(
+      scanRuntimeStateStructure(
+        filename,
+        "import { ExternalOwner } from './external-owner'; export const owner = new ExternalOwner();",
+        [],
+        undefined,
+        { allowlist: [] },
+      ),
+    ).toContainEqual(
+      expect.objectContaining({
+        declaration: 'owner',
+        kind: 'mutable-state',
+      }),
+    );
+  });
+
+  it('keeps unresolved default-export and static-field declarations conservative', () => {
+    const defaultExport =
+      "import { ExternalOwner } from './external-owner'; export default new ExternalOwner();";
+    const staticField =
+      "import { ExternalOwner } from './external-owner'; class Owner { static external = new ExternalOwner(); }";
+
+    expect(
+      scanRuntimeStateStructure(filename, defaultExport, [], undefined, {
+        allowlist: [],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        declaration: 'default',
+        kind: 'mutable-state',
+      }),
+    );
+    expect(
+      scanRuntimeStateStructure(filename, staticField, [], undefined, {
+        allowlist: [],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        declaration: 'Owner.external',
+        kind: 'mutable-state',
+      }),
+    );
   });
 });

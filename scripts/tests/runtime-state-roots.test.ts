@@ -186,6 +186,47 @@ describe('discovered roots feed the audit', () => {
     expect(result.exitCode).toBe(1);
   });
 
+  it('follows resolved instance and static receiver writes in widened and runtime roots', () => {
+    const classBody =
+      'class Owner { private count = 0; increment() { this.count++; } private static total = 0; static incrementTotal() { this.total++; } }';
+    put(
+      'packages/demo/src/ownership/state.ts',
+      `${classBody} export const owner = new Owner(); export function run() { owner.increment(); Owner.incrementTotal(); }`,
+    );
+    put(
+      'packages/demo/src/runtime/state.ts',
+      `${classBody} export const owner = new Owner(); export function run() { owner.increment(); Owner.incrementTotal(); }`,
+    );
+    const result = scanState(workspace, discoveryPolicy, [
+      resolve(workspace, 'packages/demo/src/ownership/state.ts'),
+      resolve(workspace, 'packages/demo/src/runtime/state.ts'),
+    ]);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          file: resolve(workspace, 'packages/demo/src/ownership/state.ts'),
+          declaration: 'owner',
+          rule: 'module-mutation',
+        }),
+        expect.objectContaining({
+          file: resolve(workspace, 'packages/demo/src/runtime/state.ts'),
+          declaration: 'owner',
+          rule: 'module-mutation',
+        }),
+        expect.objectContaining({
+          file: resolve(workspace, 'packages/demo/src/ownership/state.ts'),
+          declaration: 'Owner.total',
+          rule: 'module-mutation',
+        }),
+        expect.objectContaining({
+          file: resolve(workspace, 'packages/demo/src/runtime/state.ts'),
+          declaration: 'Owner.total',
+          rule: 'module-mutation',
+        }),
+      ]),
+    );
+  });
+
   it('excludes test and fixture files from expanded state and ALS scans', () => {
     const fixtureFiles = [
       'packages/demo/src/state.test.ts',

@@ -12,6 +12,7 @@ export interface StateBaselineEntry {
   readonly file: string;
   readonly rule: string;
   readonly declaration: string;
+  readonly count: number;
 }
 
 export interface StateBaselineComparison {
@@ -22,6 +23,7 @@ export interface StateBaselineComparison {
 
 const ratchetedProductionRules = new Set([
   'module-mutation',
+  'mutable-state',
   'process-environment-mutation',
   'async-local-storage',
   'runtime-service-bag-parameter',
@@ -34,11 +36,34 @@ function entryFor(finding: AuditFinding): StateBaselineEntry {
     file: finding.file,
     rule: finding.rule,
     declaration: finding.declaration ?? '',
+    count: 1,
   };
 }
 
 function key(entry: StateBaselineEntry): string {
   return JSON.stringify([entry.file, entry.rule, entry.declaration]);
+}
+
+function remainsStrict(finding: AuditFinding): boolean {
+  return (
+    finding.rule === 'mutable-state' &&
+    /(?:^|\/)(?:runtime|api|settings)(?:\/|$)/.test(finding.file)
+  );
+}
+
+function aggregateCounts(
+  entries: readonly StateBaselineEntry[],
+): Map<string, StateBaselineEntry> {
+  const counts = new Map<string, StateBaselineEntry>();
+  for (const entry of entries) {
+    const entryKey = key(entry);
+    const previous = counts.get(entryKey);
+    counts.set(entryKey, {
+      ...entry,
+      count: (previous?.count ?? 0) + entry.count,
+    });
+  }
+  return counts;
 }
 
 export function unique<T>(items: readonly T[]): T[] {
@@ -51,29 +76,46 @@ export function compareStateBaseline(
   findings: readonly AuditFinding[],
   baseline: readonly StateBaselineEntry[],
 ): StateBaselineComparison {
-  const baselineByKey = new Map(baseline.map((entry) => [key(entry), entry]));
-  const current = new Map<string, StateBaselineEntry>();
+  const baselineByKey = aggregateCounts(baseline);
+  const currentCounts = new Map<string, StateBaselineEntry>();
   const unbaselined = new Map<string, StateBaselineEntry>();
   const strictFindings: AuditFinding[] = [];
 
   for (const finding of findings) {
-    if (!ratchetedProductionRules.has(finding.rule)) {
+    if (!ratchetedProductionRules.has(finding.rule) || remainsStrict(finding)) {
       strictFindings.push(finding);
       continue;
     }
     const entry = entryFor(finding);
     const entryKey = key(entry);
-    current.set(entryKey, entry);
-    if (!baselineByKey.has(entryKey)) unbaselined.set(entryKey, entry);
+    const current = currentCounts.get(entryKey);
+    currentCounts.set(entryKey, {
+      ...entry,
+      count: (current?.count ?? 0) + 1,
+    });
   }
+
+  for (const [entryKey, current] of currentCounts) {
+    const baselineEntry = baselineByKey.get(entryKey);
+    if (current.count > (baselineEntry?.count ?? 0))
+      unbaselined.set(entryKey, {
+        ...current,
+        count: current.count - (baselineEntry?.count ?? 0),
+      });
+  }
+
+  const stale = [...baselineByKey].flatMap(([entryKey, baselineEntry]) => {
+    const currentCount = currentCounts.get(entryKey)?.count ?? 0;
+    return currentCount < baselineEntry.count
+      ? [{ ...baselineEntry, count: baselineEntry.count - currentCount }]
+      : [];
+  });
 
   return {
     unbaselined: [...unbaselined.values()].sort((a, b) =>
       key(a).localeCompare(key(b)),
     ),
-    stale: baseline
-      .filter((entry) => !current.has(key(entry)))
-      .sort((a, b) => key(a).localeCompare(key(b))),
+    stale: stale.sort((a, b) => key(a).localeCompare(key(b))),
     strictFindings,
   };
 }

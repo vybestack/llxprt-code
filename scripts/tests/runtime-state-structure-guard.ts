@@ -6,6 +6,18 @@
 import ts from 'typescript';
 import { compilerSourcePath } from '../compiler-source-path.js';
 import {
+  accessedMember,
+  declarationName,
+  isOwnedModuleStorage,
+  moduleInstanceMutation,
+  mutationDeclaration,
+  mutationTarget,
+  processEnvironmentSite,
+  targetsGlobalThis,
+  targetsProcessEnvironment,
+  unresolvedConstruction,
+} from './runtime-state-mutation-analysis.js';
+import {
   isModuleOwned,
   isStatic,
   referencedSymbol,
@@ -63,9 +75,11 @@ function shouldReportStaticField(
   checker: ts.TypeChecker,
   containerPolicy: ContainerPolicy | undefined,
 ): node is ts.PropertyDeclaration {
-  if (containerPolicy || !ts.isPropertyDeclaration(node)) return false;
+  if (!ts.isPropertyDeclaration(node)) return false;
   if (!isStatic(node) || !isModuleOwned(node)) return false;
-  return mutableStaticField(node, checker);
+  return containerPolicy
+    ? !!node.initializer && unresolvedConstruction(node.initializer, checker)
+    : mutableStaticField(node, checker);
 }
 
 function isReadonly(node: ts.Node): boolean {
@@ -75,38 +89,6 @@ function isReadonly(node: ts.Node): boolean {
       .getModifiers(node)
       ?.some((modifier) => modifier.kind === ts.SyntaxKind.ReadonlyKeyword)
   );
-}
-
-/**
- * Storage declared in the scanned file itself. Declarations reached through a
- * resolved program (ambient `process`, imported bindings) belong to other
- * files or the platform and are not this module's state.
- */
-function isOwnedModuleStorage(
-  declaration: ts.Node,
-  sourceFile: ts.SourceFile,
-): boolean {
-  return (
-    declaration.getSourceFile() === sourceFile && isModuleOwned(declaration)
-  );
-}
-
-function declarationName(node: ts.Node): string {
-  const parts: string[] = [];
-  let current: ts.Node | undefined = node;
-  while (current && !ts.isSourceFile(current)) {
-    const candidate: ts.Node = current;
-    const named =
-      ts.isVariableDeclaration(candidate) ||
-      ts.isPropertyDeclaration(candidate) ||
-      ts.isClassDeclaration(candidate);
-    const callable =
-      ts.isFunctionDeclaration(candidate) || ts.isMethodDeclaration(candidate);
-    if ((named || callable) && candidate.name)
-      parts.unshift(candidate.name.getText());
-    current = current.parent;
-  }
-  return parts.length ? parts.join('.') : `<anonymous@${node.getStart()}>`;
 }
 
 function asyncHooksImport(node: ts.Node): boolean {
@@ -187,15 +169,6 @@ function directAlsConstructor(
     member === 'AsyncLocalStorage' &&
     valueMatches(target.expression, checker, 'async-hooks')
   );
-}
-
-function accessedMember(
-  access: ts.PropertyAccessExpression | ts.ElementAccessExpression,
-): string | undefined {
-  if (ts.isPropertyAccessExpression(access)) return access.name.text;
-  return ts.isStringLiteral(access.argumentExpression)
-    ? access.argumentExpression.text
-    : undefined;
 }
 
 function namespaceExport(
@@ -551,115 +524,6 @@ function mutatedArgumentStorage(
   );
 }
 
-function mutationDeclaration(
-  node: ts.Node,
-  checker: ts.TypeChecker,
-): ts.VariableDeclaration | ts.PropertyDeclaration | undefined {
-  const target = mutationTarget(node);
-  if (!target) return undefined;
-  const value = unwrap(target);
-  if (!ts.isCallExpression(node) && ts.isIdentifier(value)) {
-    const declaration = checker.getSymbolAtLocation(value)?.valueDeclaration;
-    return declaration && ts.isVariableDeclaration(declaration)
-      ? declaration
-      : undefined;
-  }
-  return storageOrigin(value, checker);
-}
-
-function mutationTarget(node: ts.Node): ts.Expression | undefined {
-  if (
-    ts.isBinaryExpression(node) &&
-    node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-    node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
-  )
-    return node.left;
-  if (ts.isDeleteExpression(node)) return node.expression;
-  if (
-    (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
-    (node.operator === ts.SyntaxKind.PlusPlusToken ||
-      node.operator === ts.SyntaxKind.MinusMinusToken)
-  )
-    return node.operand;
-  if (
-    !ts.isCallExpression(node) ||
-    !ts.isPropertyAccessExpression(node.expression)
-  )
-    return undefined;
-  const callee = node.expression;
-  if (
-    [
-      'Object.assign',
-      'Object.defineProperty',
-      'Object.defineProperties',
-      'Reflect.set',
-      'Reflect.deleteProperty',
-    ].includes(callee.getText())
-  )
-    return node.arguments[0];
-  if (
-    [
-      'set',
-      'add',
-      'delete',
-      'clear',
-      'push',
-      'pop',
-      'shift',
-      'unshift',
-      'splice',
-      'sort',
-      'reverse',
-      'fill',
-      'copyWithin',
-    ].includes(callee.name.text)
-  )
-    return callee.expression;
-  return undefined;
-}
-
-function targetsGlobalThis(node: ts.Node, checker: ts.TypeChecker): boolean {
-  const target = mutationTarget(node);
-  if (!target) return false;
-  let root = unwrap(target);
-  while (
-    ts.isPropertyAccessExpression(root) ||
-    ts.isElementAccessExpression(root)
-  )
-    root = unwrap(root.expression);
-  if (!ts.isIdentifier(root) || root.text !== 'globalThis') return false;
-  const declarations = checker.getSymbolAtLocation(root)?.declarations ?? [];
-  return declarations.every(
-    (declaration) => declaration.getSourceFile().isDeclarationFile,
-  );
-}
-
-function targetsProcessEnvironment(
-  node: ts.Node,
-  checker: ts.TypeChecker,
-): boolean {
-  const target = mutationTarget(node);
-  if (!target) return false;
-  let current = unwrap(target);
-  let addressesEnvironment = false;
-  while (
-    ts.isPropertyAccessExpression(current) ||
-    ts.isElementAccessExpression(current)
-  ) {
-    addressesEnvironment ||= accessedMember(current) === 'env';
-    current = unwrap(current.expression);
-  }
-  if (
-    !addressesEnvironment ||
-    !ts.isIdentifier(current) ||
-    current.text !== 'process'
-  )
-    return false;
-  return (checker.getSymbolAtLocation(current)?.declarations ?? []).every(
-    (declaration) => declaration.getSourceFile().isDeclarationFile,
-  );
-}
-
 function isolatedSource(
   filename: string,
   source: string,
@@ -777,6 +641,8 @@ export function scanRuntimeStateStructure(
   }
   function checkModuleVariable(node: ts.VariableDeclaration): void {
     if (containerPolicy) {
+      if (node.initializer && unresolvedConstruction(node.initializer, checker))
+        report(node, 'mutable-state');
       if (node.initializer && containerLiteralStorage(node.initializer)) {
         const declaration = declarationName(node);
         const allowance = containerPolicy.allowlist.find(
@@ -818,20 +684,29 @@ export function scanRuntimeStateStructure(
   function visit(node: ts.Node): void {
     checkAlsConstructor(node);
     if (
-      !containerPolicy &&
       ts.isExportAssignment(node) &&
       !node.isExportEquals &&
-      containsMutableConstruction(node.expression, checker)
+      (containerPolicy
+        ? unresolvedConstruction(node.expression, checker)
+        : containsMutableConstruction(node.expression, checker))
     )
       report(node, 'mutable-state', 'default');
     if (targetsGlobalThis(node, checker))
       report(node, 'module-mutation', 'globalThis');
     if (targetsProcessEnvironment(node, checker))
-      report(node, 'process-environment-mutation', 'process.env');
+      report(
+        node,
+        'process-environment-mutation',
+        processEnvironmentSite(node),
+      );
     if (ts.isVariableDeclaration(node) && isModuleOwned(node))
       checkModuleVariable(node);
     if (shouldReportStaticField(node, checker, containerPolicy))
       report(node, 'mutable-state');
+    if (ts.isCallExpression(node)) {
+      const instance = moduleInstanceMutation(node, checker, sourceFile);
+      if (instance) report(node, 'module-mutation', declarationName(instance));
+    }
     const declaration = mutationDeclaration(node, checker);
     if (
       declaration &&
