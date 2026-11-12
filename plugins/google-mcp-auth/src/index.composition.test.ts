@@ -93,6 +93,7 @@ describe('google-mcp-auth host composition', () => {
 
     const binding = createTestOAuthBinding();
     const transport = await createTransport(
+      globalThis.fetch,
       binding.tokenStorage,
       'google-server',
       config,
