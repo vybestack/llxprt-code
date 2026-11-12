@@ -155,4 +155,41 @@ describe('agent-core import boundary', () => {
     expect(violations).toEqual([]);
     expect(module.answer).toBe(42);
   });
+
+  it('rejects every unresolved import edge', () => {
+    for (const source of [
+      "export * from './missing.js';",
+      "import absent = require('missing-package');",
+    ]) {
+      const root = fixture(source);
+      expect(scanAgentCoreBoundary(root).some((entry) => entry.kind === 'unresolved-import')).toBe(true);
+    }
+  });
+
+  it('rejects import-equals syntax for Node builtins', () => {
+    const root = fixture("import fs = require('node:fs'); export { fs };");
+    expect(scanAgentCoreBoundary(root).some((entry) => entry.kind === 'runtime-import')).toBe(true);
+  });
+
+  it('rejects Node global aliases including computed process access', () => {
+    for (const source of [
+      "export const env = global['process'].env;",
+      'export const env = global.process.env;',
+    ]) {
+      const root = fixture(source);
+      expect(scanAgentCoreBoundary(root).some((entry) => entry.kind === 'ambient-io')).toBe(true);
+    }
+  });
+
+  it('does not flag inert capability property names or shadowed identifiers', () => {
+    const root = fixture('const process = { env: 1 }; const console = { log: 2 }; export const value = { process: 1, console: 2, local: process.env };');
+    expect(scanAgentCoreBoundary(root)).toEqual([]);
+  });
+
+  it('rejects helper barrels and unapproved external runtime exports', () => {
+    const root = fixture("export * from '../../../helpers/bridge.js';", {
+      'helpers/bridge.ts': "export * from 'node:fs';",
+    });
+    expect(scanAgentCoreBoundary(root).some((entry) => entry.kind === 'runtime-import')).toBe(true);
+  });
 });
