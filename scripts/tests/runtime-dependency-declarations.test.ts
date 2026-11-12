@@ -187,46 +187,51 @@ describe('undeclared runtime imports (#3305)', () => {
   });
 });
 
-describe('type-only imports are erased and never reported', () => {
-  it('ignores import type declarations', () => {
-    expect(
-      violationsFor({
-        files: {
-          'index.ts':
-            "import type { T } from 'undeclared';\nexport type U = T;\n",
-        },
-      }),
-    ).toEqual([]);
-  });
-
-  it('ignores export type re-exports', () => {
-    expect(
-      violationsFor({
-        files: { 'index.ts': "export type { T } from 'undeclared';\n" },
-      }),
-    ).toEqual([]);
-  });
-
-  it('ignores a declaration whose named bindings are all inline-type', () => {
-    expect(
-      violationsFor({
-        files: {
-          'index.ts':
-            "import { type A, type B } from 'undeclared';\nexport type C = A | B;\n",
-        },
-      }),
-    ).toEqual([]);
-  });
-
-  it('reports a declaration mixing an inline-type and a value binding', () => {
+describe('type imports require declared workspace dependencies', () => {
+  it('reports a type-only import from an undeclared workspace package', () => {
     const violations = violationsFor({
       files: {
         'index.ts':
-          "import { type A, b } from 'undeclared';\nexport const v: A = b;\n",
+          "import type { T } from '@vybestack/llxprt-code-core';\nexport type U = T;\n",
       },
     });
     expect(violations).toHaveLength(1);
-    expect(violations[0].importedPackage).toBe('undeclared');
+    expect(violations[0].importedPackage).toBe('@vybestack/llxprt-code-core');
+  });
+
+  it('reports a type-only re-export from an undeclared workspace package', () => {
+    const violations = violationsFor({
+      files: {
+        'index.ts': "export type { T } from '@vybestack/llxprt-code-core';\n",
+      },
+    });
+    expect(violations).toHaveLength(1);
+    expect(violations[0].importedPackage).toBe('@vybestack/llxprt-code-core');
+  });
+
+  it('reports workspace imports whose named bindings are all inline-type', () => {
+    const violations = violationsFor({
+      files: {
+        'index.ts':
+          "import { type A, type B } from '@vybestack/llxprt-code-core';\nexport type C = A | B;\n",
+      },
+    });
+    expect(violations).toHaveLength(1);
+    expect(violations[0].importedPackage).toBe('@vybestack/llxprt-code-core');
+  });
+
+  it('accepts a workspace type-only package declared in dependencies', () => {
+    expect(
+      violationsFor({
+        files: {
+          'index.ts':
+            "import type { T } from '@vybestack/llxprt-code-core';\nexport type U = T;\n",
+        },
+        manifest: {
+          dependencies: { '@vybestack/llxprt-code-core': '^1.0.0' },
+        },
+      }),
+    ).toEqual([]);
   });
 });
 

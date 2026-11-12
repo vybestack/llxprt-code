@@ -4,7 +4,7 @@ import type { McpAuthFactoryRegistry } from './mcp-auth-factory.js';
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-auth/network-fetch.js';
 
 import * as crypto from 'node:crypto';
 import { URL } from 'node:url';

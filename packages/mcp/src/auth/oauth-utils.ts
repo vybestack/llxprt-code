@@ -3,7 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-auth/network-fetch.js';
 
 import { type MCPOAuthConfig } from './oauth-provider.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-tools/utils/errors.js';

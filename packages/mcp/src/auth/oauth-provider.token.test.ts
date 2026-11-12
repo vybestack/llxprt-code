@@ -814,7 +814,7 @@ describe('MCPOAuthProvider', () => {
       // Access the static private method on the class itself
       const providerWithAccess = MCPOAuthProvider as unknown as {
         discoverAuthServerMetadataForRegistration: (
-          requestFetch: import('@vybestack/llxprt-code-core/utils/fetch.js').NetworkFetch,
+          requestFetch: import('@vybestack/llxprt-code-auth/network-fetch.js').NetworkFetch,
           authorizationUrl: string,
         ) => Promise<{
           issuerUrl: string;
