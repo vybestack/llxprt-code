@@ -31,6 +31,7 @@ export function createRecordingExecution(
     persistSemanticMediaPurge: (history, frontier) =>
       session.persistSemanticMediaPurge(history, frontier),
     recordRefusal: (refusal) => session.recordRefusal(refusal),
+    prepareRefusalRewrite: (rewrite) => session.prepareRefusalRewrite(rewrite),
   };
 }
 

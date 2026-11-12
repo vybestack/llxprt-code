@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 /**
@@ -30,8 +32,9 @@ export interface RefusalAttempt extends RefusalEvidence {
 
 /**
  * What to do with a refused attempt. `retry` resends the same prepared request
- * after `delayMs`; `stop` ends the logical request. A later phase adds
- * `review`. The optional `notice` is the user-facing text for the decision.
+ * after `delayMs` (a reviewer rewrite is a retry with no wait); `stop` ends the
+ * logical request. The optional `notice` is the user-facing text for the
+ * decision.
  */
 export type RefusalDecision =
   | {
@@ -41,11 +44,29 @@ export type RefusalDecision =
     }
   | { readonly action: 'stop'; readonly notice?: string };
 
+/** What a decision may need from the request that was refused. */
+export interface RefusalContext {
+  /** The session journal, when the host keeps one. */
+  readonly execution?: AgentChatRecordingExecution;
+  /** The admitted route of the refused request. */
+  readonly modelParameters?: AdmittedModelParameters;
+  /** Aborts a review in progress. */
+  readonly signal?: AbortSignal;
+}
+
 /** The hook a recovery coordinator implements to take over refusals. */
 export interface RefusalRecovery {
   /** Fixes the recovery policy for a logical request the first time it is seen. */
   admit(promptId: string): void;
-  decide(attempt: RefusalAttempt): RefusalDecision | Promise<RefusalDecision>;
+  decide(
+    attempt: RefusalAttempt,
+    context?: RefusalContext,
+  ): RefusalDecision | Promise<RefusalDecision>;
+  /**
+   * Called when an attempt succeeded. Returns the notice to show the first
+   * time a request succeeds after a reviewer rewrote its context.
+   */
+  recovered(promptId: string): string | undefined;
   /** Abortable wait before a retry; rejects as soon as `signal` aborts. */
   wait(ms: number, signal?: AbortSignal): Promise<void>;
 }

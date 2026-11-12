@@ -21,6 +21,7 @@ const PROMPT_TOKENS = 120;
 
 /** What the local OpenAI-compatible endpoint answers to one request. */
 export type EndpointReply =
+  | { readonly kind: 'http-error'; readonly status: number }
   | {
       readonly kind: 'finish';
       readonly finishReason: string;
@@ -33,6 +34,11 @@ export type EndpointReply =
       /** End the stream with the refusal finish reason after the tool call. */
       readonly refused?: boolean;
     };
+
+/** The endpoint rejects the request with this HTTP status. */
+export function httpErrorReply(status: number): EndpointReply {
+  return { kind: 'http-error', status };
+}
 
 /** An answer that ends normally with the given text. */
 export function stopReply(text: string): EndpointReply {
@@ -98,7 +104,9 @@ function usageChunk(outputTokens: number): string {
   })}\n\n`;
 }
 
-function renderReply(reply: EndpointReply): string {
+function renderReply(
+  reply: Exclude<EndpointReply, { kind: 'http-error' }>,
+): string {
   if (reply.kind === 'todo-write') {
     const todos = [{ id: '1', content: reply.content, status: 'pending' }];
     const call = {
@@ -133,13 +141,20 @@ export interface ScriptedEndpoint {
   stop(): Promise<void>;
 }
 
+/** Chooses the reply to one request from what the endpoint received. */
+export type ReplyResponder = (
+  request: WireRequest,
+  index: number,
+) => EndpointReply | Promise<EndpointReply>;
+
 /**
- * A local OpenAI-compatible chat endpoint answering request N with reply N.
- * A request beyond the script is answered with a marker text and recorded, so
- * an unwanted extra request shows up in `requests()` and in the output.
+ * A local OpenAI-compatible chat endpoint answering request N with reply N, or
+ * with whatever a responder decides from the request itself. A request beyond
+ * the script is answered with a marker text and recorded, so an unwanted extra
+ * request shows up in `requests()` and in the output.
  */
 export async function startScriptedEndpoint(
-  replies: readonly EndpointReply[],
+  replies: readonly EndpointReply[] | ReplyResponder,
 ): Promise<ScriptedEndpoint> {
   const requests: WireRequest[] = [];
   const server = createServer((request, response) => {
@@ -150,9 +165,23 @@ export async function startScriptedEndpoint(
         Buffer.concat(buffers).toString('utf8'),
       ) as WireRequest;
       requests.push(body);
+      const index = requests.length - 1;
+      const scripted =
+        typeof replies === 'function'
+          ? await replies(body, index)
+          : replies.find((_, position) => position === index);
       const reply =
-        replies[requests.length - 1] ??
+        scripted ??
         stopReply('UNSCRIPTED REQUEST: the agent asked for more than expected');
+      if (reply.kind === 'http-error') {
+        response.writeHead(reply.status, {
+          'Content-Type': 'application/json',
+        });
+        response.end(
+          JSON.stringify({ error: { message: 'scripted failure' } }),
+        );
+        return;
+      }
       response.writeHead(200, { 'Content-Type': 'text/event-stream' });
       response.end(renderReply(reply));
     })().catch((error: unknown) =>
@@ -209,9 +238,10 @@ export interface ScriptedRunOptions {
   /** Which wire protocol the local endpoint speaks. Default: openai. */
   readonly protocol?: 'openai' | 'anthropic';
   /**
-   * Ephemeral settings applied before the first prompt. Refusal retries are
-   * off unless a test turns them on (`undefined` restores the default), so
-   * the issue #4036 phase 1 tests keep their single-request shape.
+   * Ephemeral settings applied before the first prompt. Refusal retries and
+   * review are off unless a test turns them on (`undefined` restores the
+   * default), so the issue #4036 phase 1 tests keep their single-request
+   * shape.
    */
   readonly settings?: Readonly<Record<string, unknown>>;
   readonly modelParams?: Readonly<Record<string, unknown>>;
@@ -263,6 +293,7 @@ export async function runScriptedPrompt(
     });
     for (const [key, value] of Object.entries({
       'refusal.retries': 0,
+      'refusal.rewrite': false,
       ...options.settings,
     }))
       agent.setEphemeralSetting(key, value);

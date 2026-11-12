@@ -5,6 +5,7 @@
  */
 
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import { toRefusalAttempt } from './refusalDetection.js';
 import { recordRefusalInJournal } from './refusalJournal.js';
 import type { ModelRefusalSignal, RefusalRecovery } from './refusalTypes.js';
@@ -15,6 +16,8 @@ interface RefusalSettlementDeps {
   readonly provider: () => string;
   readonly model: () => string;
   readonly execution: AgentChatRecordingExecution | undefined;
+  readonly modelParameters: AdmittedModelParameters | undefined;
+  readonly signal: AbortSignal | undefined;
 }
 
 /** How the turn loop proceeds after a refused attempt. */
@@ -44,8 +47,20 @@ export async function settleRefusal(
     provider: deps.provider(),
     model: deps.model(),
   });
-  const decision = await deps.recovery.decide(refused);
-  await recordRefusalInJournal(deps.execution, refused, decision);
+  let decision;
+  try {
+    decision = await deps.recovery.decide(refused, {
+      execution: deps.execution,
+      modelParameters: deps.modelParameters,
+      signal: deps.signal,
+    });
+  } catch (error: unknown) {
+    // An abort during a review ends the request; no attempt will consume the
+    // prompt's pending token-usage state.
+    deps.usageLogger?.finalizePrompt(promptId);
+    throw error;
+  }
+  await recordRefusalInJournal(deps.execution, refused, decision.action);
   if (decision.action === 'retry') {
     return {
       action: 'retry-same-request',

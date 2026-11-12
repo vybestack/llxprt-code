@@ -93,6 +93,7 @@ import {
   ModelRefusalSignal,
   advanceAfterAttempt,
   announceRefusalSettlement,
+  refusalNotice,
   settleRefusal,
   type AttemptCounters,
   type RefusalRecovery,
@@ -421,6 +422,8 @@ export class TurnProcessor {
         attemptUsage = chunk.usage ?? attemptUsage;
         yield wrapChunk(chunk);
       }
+      const recovered = this.refusalRecovery.recovered(prompt_id);
+      if (recovered !== undefined) yield refusalNotice(recovered);
       return { error: null, action: 'stop' };
     } catch (error) {
       // A refusal is a typed outcome, decided before any generic retry
@@ -436,6 +439,8 @@ export class TurnProcessor {
               route?.provider.name ?? this.providerResolver('stream').name,
             model: () => route?.model ?? this.ports.state.model,
             execution: params.recordingExecution,
+            modelParameters: params.modelParameters,
+            signal: params.config?.abortSignal,
           },
           error,
           prompt_id,

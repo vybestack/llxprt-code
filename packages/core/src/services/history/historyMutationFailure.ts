@@ -67,6 +67,24 @@ export async function finalizeMutationEffects(
 }
 
 /**
+ * Rolls prepared effects back in reverse order and returns the failures, so
+ * one failing rollback cannot stop the others.
+ */
+export async function rollbackMutationEffects(
+  effects: readonly PreparedHistoryBatchEffect[],
+): Promise<unknown[]> {
+  const failures: unknown[] = [];
+  for (const effect of [...effects].reverse()) {
+    try {
+      await effect.rollback();
+    } catch (error: unknown) {
+      failures.push(error);
+    }
+  }
+  return failures;
+}
+
+/**
  * Announces a mutation outcome to observers. A failing observer must not
  * replace the outcome being announced (a committed replacement, or the failure
  * that caused a reversion), so its failure is logged instead.

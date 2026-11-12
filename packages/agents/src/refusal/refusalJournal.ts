@@ -7,13 +7,13 @@
 import type { RefusalPayload } from '@vybestack/llxprt-code-core';
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { RefusalAttempt, RefusalDecision } from './refusalTypes.js';
+import type { RefusalAttempt } from './refusalTypes.js';
 
 const logger = new DebugLogger('llxprt:refusal');
 
 export function toRefusalPayload(
   attempt: RefusalAttempt,
-  decision: RefusalDecision,
+  action: RefusalPayload['action'],
   now: Date = new Date(),
 ): RefusalPayload {
   const { usage } = attempt;
@@ -35,7 +35,7 @@ export function toRefusalPayload(
         totalTokens: usage.totalTokens,
       },
     }),
-    action: decision.action,
+    action,
   };
 }
 
@@ -46,11 +46,11 @@ export function toRefusalPayload(
 export async function recordRefusalInJournal(
   execution: AgentChatRecordingExecution | undefined,
   attempt: RefusalAttempt,
-  decision: RefusalDecision,
+  action: RefusalPayload['action'],
 ): Promise<void> {
   if (execution?.recordRefusal === undefined) return;
   try {
-    await execution.recordRefusal(toRefusalPayload(attempt, decision));
+    await execution.recordRefusal(toRefusalPayload(attempt, action));
   } catch (error: unknown) {
     logger.error(
       `Failed to record refusal for prompt ${attempt.promptId}`,

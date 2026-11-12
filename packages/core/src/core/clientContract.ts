@@ -47,10 +47,14 @@ import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProvide
 
 import type { AdmittedModelParameters } from '../runtime/admittedModelParameters.js';
 import type { ContentGeneratorConfig } from './contentGenerator.js';
-import type { HistoryService } from '../services/history/HistoryService.js';
+import type {
+  HistoryService,
+  PreparedHistoryBatchEffect,
+} from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
 import type { SemanticMediaPurgeFrontier } from '../services/history/semantic-media-purge.js';
 import type { RefusalPayload } from '../recording/refusalPayload.js';
+import type { RefusalRewritePayload } from '../recording/refusalRewritePayload.js';
 import type { CompletedToolCall } from '../scheduler/types.js';
 import type {
   PerformCompressionResult,
@@ -123,6 +127,15 @@ export interface AgentChatRecordingExecution {
    * changes history (issue #4036).
    */
   readonly recordRefusal?: (refusal: RefusalPayload) => Promise<void>;
+  /**
+   * Prepares the `refusal_rewrite` journal record as an effect of a history
+   * commit, so the live rewrite and its record succeed or fail together.
+   * Resolves to undefined while no journal is recording; absent when the host
+   * keeps none (issue #4036).
+   */
+  readonly prepareRefusalRewrite?: (
+    rewrite: RefusalRewritePayload,
+  ) => Promise<PreparedHistoryBatchEffect | undefined>;
 }
 
 export interface AgentHistoryAdmission {

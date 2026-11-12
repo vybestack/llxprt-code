@@ -198,12 +198,32 @@ describe('refusal that survives every retry (issue #4036)', () => {
     expect(run.historyAfter).toStrictEqual(run.historyBefore);
   });
 
-  it('stops the same way when rewrite is on, because review is not available yet', async () => {
-    const run = await exhausted({ ...TWO_RETRIES, 'refusal.rewrite': true });
+  it('hands the exhausted refusal to a reviewer when rewrite is on, and stops on its verdict', async () => {
+    const noChange = JSON.stringify({
+      verdict: 'no_change',
+      explanation: 'Nothing in the context needs rewording.',
+      rewrites: [],
+    });
+    const run = await runScriptedPrompt(
+      [
+        emptyRefusalReply(),
+        emptyRefusalReply(),
+        emptyRefusalReply(),
+        stopReply(noChange),
+        stopReply(UNREQUESTED),
+      ],
+      [PROMPT],
+      { settings: { ...TWO_RETRIES, 'refusal.rewrite': true } },
+    );
 
-    expect(run.requests).toHaveLength(3);
+    expect(run.requests).toHaveLength(4);
     expect(doneReasons(run)).toStrictEqual(['refusal']);
-    expect(journalActions(run)).toStrictEqual(['retry', 'retry', 'stop']);
+    expect(journalActions(run)).toStrictEqual([
+      'retry',
+      'retry',
+      'review',
+      'stop',
+    ]);
   });
 });
 

@@ -29,7 +29,11 @@ import type { SessionNativeHistory } from './session-history-observation.js';
  */
 
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core';
-import type { RefusalPayload } from '@vybestack/llxprt-code-core';
+import type {
+  RefusalPayload,
+  RefusalRewritePayload,
+} from '@vybestack/llxprt-code-core';
+import type { PreparedHistoryBatchEffect } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   CONTINUE_LATEST,
   CheckpointService,
@@ -484,15 +488,14 @@ export class SessionControl implements AgentSessionControl {
 
   recordRecordingEvent = this.flushRecording;
 
-  /**
-   * Audit-only refusal record (issue #4036). Internal to the engine: it is
-   * deliberately not part of the public session control, whose recording
-   * events are host-authored. A no-op while no recording is active.
-   */
-  async recordRefusal(refusal: RefusalPayload): Promise<void> {
-    this.recordingLifetime.integration?.recordRefusal(refusal);
-    await this.recordingLifetime.integration?.flushAtTurnBoundary();
-  }
+  /** Internal refusal journaling (issue #4036); not on the public surface. */
+  recordRefusal = (refusal: RefusalPayload): Promise<void> =>
+    this.recordingLifetime.recordRefusal(refusal);
+
+  prepareRefusalRewrite = (
+    rewrite: RefusalRewritePayload,
+  ): Promise<PreparedHistoryBatchEffect | undefined> =>
+    this.recordingLifetime.prepareRefusalRewrite(rewrite);
 
   async createCheckpoint(
     name: string,

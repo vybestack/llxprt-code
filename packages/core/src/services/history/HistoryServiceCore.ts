@@ -18,6 +18,7 @@ import { validateHistoryBatch } from './history-batch-validation.js';
 import {
   finalizeMutationEffects,
   notifyObservers,
+  rollbackMutationEffects,
 } from './historyMutationFailure.js';
 import { retainContentOrigins } from './historyOrigin.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
@@ -73,6 +74,19 @@ export interface PreparedHistoryBatchEffect {
   rollback(): void | Promise<void>;
   finalize?(): void | Promise<void>;
 }
+
+/**
+ * Builds a caller-owned effect for one history commit, given the history that
+ * is about to be committed. It joins the commit like a batch participant: it
+ * is published before the history, finalized after it, and rolled back if the
+ * commit fails anywhere. Returning undefined opts out of the effect.
+ */
+export type HistoryEffectFactory = (
+  nextHistory: readonly IContent[],
+) =>
+  | PreparedHistoryBatchEffect
+  | undefined
+  | Promise<PreparedHistoryBatchEffect | undefined>;
 
 export type HistoryBatchParticipant = (
   publication: HistoryBatchPublication,
@@ -899,6 +913,7 @@ export abstract class HistoryServiceCore
     previousHistory: readonly IContent[],
     nextHistory: readonly IContent[],
     adopted: readonly HistoryOwnedMediaReservation[],
+    prepareEffect: HistoryEffectFactory | undefined,
   ): Promise<void> {
     if (this.mediaOwner !== undefined) {
       effects.push(
@@ -914,27 +929,16 @@ export abstract class HistoryServiceCore
         effects.push(await participant(publication));
       }
     }
+    const requested = await prepareEffect?.(nextHistory);
+    if (requested !== undefined) effects.push(requested);
   }
 
-  private async rollbackMutationEffects(
-    effects: readonly PreparedHistoryBatchEffect[],
-  ): Promise<unknown[]> {
-    const failures: unknown[] = [];
-    for (const effect of [...effects].reverse()) {
-      try {
-        await effect.rollback();
-      } catch (error: unknown) {
-        failures.push(error);
-      }
-    }
-    return failures;
-  }
-
-  private async commitHistoryMutation(input: {
+  protected async commitHistoryMutation(input: {
     readonly nextHistory: readonly IContent[];
     readonly nextHistoryTokens: number;
     readonly publishedContents?: readonly IContent[];
     readonly options: HistoryBatchOptions;
+    readonly prepareEffect?: HistoryEffectFactory;
   }): Promise<void> {
     const previousHistory = this.history;
     const previousTokens = this.totalTokens;
@@ -961,6 +965,7 @@ export abstract class HistoryServiceCore
         previousHistory,
         nextHistory,
         input.options.adoptedOwners ?? [],
+        input.prepareEffect,
       );
       for (const effect of effects) {
         await effect.publish();
@@ -997,7 +1002,7 @@ export abstract class HistoryServiceCore
         }
       }
       this.restoreChronology(chronology);
-      const rollbackFailures = await this.rollbackMutationEffects(effects);
+      const rollbackFailures = await rollbackMutationEffects(effects);
       if (rollbackFailures.length === 0) throw error;
       throw new AggregateError(
         [error, ...rollbackFailures],

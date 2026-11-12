@@ -50,14 +50,20 @@ import {
   type RecordingCheckpointInfo,
   type SessionForkedPayload,
   type RefusalPayload,
+  type RefusalRewritePayload,
 } from './types.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { replaySession } from './ReplayEngine.js';
 import { RecordingBatchCompletions } from './recording-batch-completion.js';
 import {
+  type HeaderRebind,
+  type PreparedContentBatch,
   type PendingRecord,
+  type PendingSessionStart,
+  replacesHistory,
   toPendingRecord,
   toContentBatchRecords,
+  toEventRecord,
   totalRecordBytes,
   recordingVersion,
 } from './recording-pending-record.js';
@@ -77,6 +83,7 @@ const MATERIALIZING_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
   'session_named',
   'semantic_media_purge',
   'refusal',
+  'refusal_rewrite',
 ]);
 
 type RecordingLifecycle =
@@ -85,27 +92,7 @@ type RecordingLifecycle =
   | { readonly status: 'failure-reported' }
   | { readonly status: 'disposed' };
 
-/** The session_start line as built at construction, before any rebinding. */
-interface PendingSessionStart {
-  readonly line: SessionRecordLine;
-  readonly payload: SessionStartPayload;
-  readonly record: PendingRecord;
-}
-
-/** A session_start header rebuilt for the provider/model at materialization. */
-interface HeaderRebind {
-  readonly record: PendingRecord;
-  /** Byte growth of the rebuilt header over the buffered one. */
-  readonly growth: number;
-}
-
-export interface PreparedContentBatch<
-  Completion extends void | Promise<void> = void,
-> {
-  publish(): void;
-  rollback(): void;
-  finalize(): Completion;
-}
+export type { PreparedContentBatch };
 
 /**
  * Core service for recording session events to a JSONL file.
@@ -261,7 +248,7 @@ export class SessionRecordingService {
     payload: unknown,
   ): SessionRecordLine {
     return {
-      v: type === 'semantic_media_purge' ? 2 : recordingVersion(payload),
+      v: replacesHistory(type) ? 2 : recordingVersion(payload),
       seq: this.seq + 1,
       ts: new Date().toISOString(),
       type,
@@ -776,6 +763,32 @@ export class SessionRecordingService {
     contents: readonly IContent[],
     mode?: 'appended',
   ): PreparedContentBatch<void | Promise<void>> {
+    return this.prepareRecordBatch(
+      (expectedSeq) => toContentBatchRecords(contents, expectedSeq),
+      mode,
+    );
+  }
+
+  /**
+   * Prepares a `refusal_rewrite` record to commit together with the history
+   * it describes (issue #4036). Publishing queues the record, rolling back
+   * removes it again, and finalizing lets it drain to disk.
+   */
+  prepareRefusalRewrite(
+    payload: RefusalRewritePayload,
+  ): PreparedContentBatch<void | Promise<void>> {
+    return this.prepareRecordBatch(
+      (expectedSeq) => [
+        toEventRecord('refusal_rewrite', payload, expectedSeq, 2),
+      ],
+      'appended',
+    );
+  }
+
+  private prepareRecordBatch(
+    buildRecords: (expectedSeq: number) => PendingRecord[],
+    mode: 'appended' | undefined,
+  ): PreparedContentBatch<void | Promise<void>> {
     if (this.lifecycle.status !== 'active') {
       throw new Error('Cannot record content batch: recording is not active');
     }
@@ -786,7 +799,7 @@ export class SessionRecordingService {
     }
 
     const expectedSeq = this.seq;
-    const records = toContentBatchRecords(contents, expectedSeq);
+    const records = buildRecords(expectedSeq);
     const batchBytes = totalRecordBytes(records);
     this.reserveQueueBytes(
       batchBytes + (this.materialized ? 0 : this.planHeaderGrowth()),

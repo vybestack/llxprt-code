@@ -28,7 +28,7 @@ export type StreamAttemptOutcome =
   | { error: unknown; action: 'retry' | 'stop' }
   | { error: null; action: 'retry-same-request'; delayMs: number };
 
-function refusalNotice(message: string): StreamEvent {
+export function refusalNotice(message: string): StreamEvent {
   return {
     type: StreamEventType.NOTICE,
     message,

@@ -16,6 +16,9 @@ import {
   resolveProviderBaseUrl,
   completedToolResponses,
   logChatInitialization,
+  lookupProviderByName,
+  resolveExplicitAuxiliaryProvider,
+  type ProviderLookupDeps,
 } from './chatSessionProviderRuntime.js';
 /**
  * @license
@@ -37,10 +40,7 @@ import type {
   ToolDeclaration,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
-import type {
-  AgentRuntimeProviderAdapter,
-  ToolRegistryView,
-} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -116,7 +116,11 @@ import {
   semanticPurgeRuntime,
 } from './chatSessionMediaLifecycle.js';
 import { createCompressionHookTrigger } from './compressionHookWiring.js';
-import { resolveCompressionProvider } from './CompressionProfileResolver.js';
+import {
+  COMPRESSION_PROFILE_PURPOSE,
+  resolveCompressionProvider,
+  type AuxiliaryProfilePurpose,
+} from './CompressionProfileResolver.js';
 import { ConversationManager } from './ConversationManager.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import {
@@ -131,7 +135,12 @@ import type { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import { StreamProcessor } from './StreamProcessor.js';
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
 import { TurnProcessor } from './TurnProcessor.js';
-import { createRefusalRecovery } from '../refusal/index.js';
+import {
+  createRefusalRecovery,
+  HistoryRefusalReviewer,
+  refusalReviewPurpose,
+  type RefusalRecovery,
+} from '../refusal/index.js';
 
 // Re-exports — consumers import from './chatSession.js'
 export {
@@ -149,7 +158,6 @@ export {
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { StreamEvent } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import { CompressionProfileNotFoundError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { resolveSystemPromptForTurn } from './systemPromptModel.js';
 import type { PerformCompressionResult } from './turn.js';
 
@@ -352,9 +360,25 @@ export class ChatSession {
       this.historyService,
       this.streamProcessor,
       resolveBaseUrl,
-      createRefusalRecovery(this.ports.turn.ephemerals.refusal),
+      this.createRefusalRecovery(),
     );
     this.directProcessor = this.createDirectMessageProcessor();
+  }
+
+  /** Refusal recovery whose reviewer reads this session's live history. */
+  private createRefusalRecovery(): RefusalRecovery {
+    const reviewer = new HistoryRefusalReviewer({
+      history: () => this.historyService,
+      runtimeState: this.runtimeState,
+      config: () => this.getConfig(),
+      compressionProfile: () =>
+        this.ports.compression.ephemerals.compressionProfile(),
+      resolveProvider: (profile, setting) =>
+        this.resolveAuxiliaryProvider(profile, refusalReviewPurpose(setting)),
+      usageLogger: () =>
+        this.compressionHandler.tokenUsageLogger ?? this.tokenUsageLogger,
+    });
+    return createRefusalRecovery(this.ports.turn.ephemerals.refusal, reviewer);
   }
 
   private createTokenUsageLogger(): TokenUsageLogger {
@@ -456,33 +480,12 @@ export class ChatSession {
       this.ports.runtime.provider.getActiveProvider(),
     );
 
-  private lookupProviderByName(
-    adapter: AgentRuntimeProviderAdapter,
-    desiredProviderName: string,
-    compressionProfileName: string,
-  ): IProvider | undefined {
-    if (typeof adapter.getProviderByName !== 'function') {
-      return undefined;
-    }
-    try {
-      const candidate = adapter.getProviderByName(desiredProviderName);
-      if (candidate !== undefined) {
-        const active = this.getActiveProvider();
-        if (active !== undefined && active.name !== desiredProviderName) {
-          this.logger.debug(
-            () =>
-              `[ChatSession] selected provider '${desiredProviderName}' via getProviderByName (active remains '${active.name}') [${compressionProfileName}]`,
-          );
-        }
-        return candidate;
-      }
-    } catch (error) {
-      this.logger.debug(
-        () =>
-          `[ChatSession] provider lookup skipped (${compressionProfileName}): ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    return undefined;
+  private get providerLookup(): ProviderLookupDeps {
+    return {
+      adapter: this.ports.runtime.provider,
+      active: this.getActiveProvider,
+      logger: this.logger,
+    };
   }
 
   resolveProviderForRuntime(compressionProfileName: string): IProvider {
@@ -490,8 +493,8 @@ export class ChatSession {
     const adapter = this.ports.runtime.provider;
 
     if (desiredProviderName) {
-      const candidate = this.lookupProviderByName(
-        adapter,
+      const candidate = lookupProviderByName(
+        this.providerLookup,
         desiredProviderName,
         compressionProfileName,
       );
@@ -525,60 +528,48 @@ export class ChatSession {
     return provider;
   }
 
-  private resolveExplicitCompressionProvider(
-    profileName: string,
-    providerName: string,
-    lookupProviderName: string = providerName,
-  ): IProvider {
-    const adapter = this.ports.runtime.provider;
-    const lookupResult = this.lookupProviderByName(
-      adapter,
-      lookupProviderName,
-      `compression.profile:${profileName}`,
-    );
-    if (lookupResult) {
-      return lookupResult;
-    }
-
-    const activeProvider = this.getActiveProvider();
-    if (
-      activeProvider?.name === providerName ||
-      activeProvider?.name === lookupProviderName
-    ) {
-      return activeProvider;
-    }
-
-    throw new CompressionProfileNotFoundError(
-      profileName,
-      `provider '${lookupProviderName}' is not available for compression.profile: provider lookup by name is required when it is not already active`,
-    );
-  }
-
   providerSupportsIContent(provider: IProvider | undefined): boolean {
     return supportsChatCompletion(provider);
   }
 
-  // ── Compression profile resolution (delegated to CompressionProfileResolver) ──
+  // ── Auxiliary profile resolution (delegated to CompressionProfileResolver) ──
 
-  private async resolveCompressionProvider(
+  private resolveCompressionProvider(
     profileName: string | undefined,
+  ): Promise<CompressionProviderResult> {
+    return this.resolveAuxiliaryProvider(
+      profileName,
+      COMPRESSION_PROFILE_PURPOSE,
+    );
+  }
+
+  /**
+   * Resolves a saved profile into an isolated provider for compression or
+   * refusal review. The foreground session never loads the profile.
+   */
+  private async resolveAuxiliaryProvider(
+    profileName: string | undefined,
+    purpose: AuxiliaryProfilePurpose,
   ): Promise<CompressionProviderResult> {
     return resolveCompressionProvider(
       {
+        purpose,
         profileDefinitions: this.ports.runtime.profileDefinitions,
         providerRuntime: this.ports.runtime.providerRuntime,
         prepareProviderInvocation: this.ports.runtime.prepareProviderInvocation,
         runtimeState: this.runtimeState,
         readProviderKeys: () => this.ports.runtime.provider.getProviderKeys(),
-        resolveExplicitCompressionProvider:
-          this.resolveExplicitCompressionProvider.bind(this),
+        resolveExplicitCompressionProvider: (profile, provider) =>
+          resolveExplicitAuxiliaryProvider(
+            this.providerLookup,
+            purpose,
+            profile,
+            provider,
+          ),
         roundRobinIndexes: this.compressionLoadBalancerRoundRobinIndexes,
       },
       profileName,
-      () =>
-        this.resolveProviderForRuntime(
-          'ChatSession.resolveCompressionProvider.default',
-        ),
+      () => this.resolveProviderForRuntime(`${purpose.source}.default`),
       this.mediaResolver,
       this.requestMediaBudgetBytes,
       this.providerFileBindings,

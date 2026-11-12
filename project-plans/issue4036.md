@@ -611,3 +611,117 @@ Also for Phase 3: the review call must not run refusal recovery itself (it does
 not pass through `TurnProcessor.sendMessageStream`, so it cannot as long as it
 uses the isolated auxiliary path), and the docs for `refusal.rewrite` currently
 say review is not available yet.
+
+## Phase 3 implementation notes
+
+Phase 3 ("Review and rewrite") is implemented. When identical retries are
+exhausted and `refusal.rewrite` is on, `RefusalRecoveryCoordinator.decide()`
+hands the refused request to a reviewer. A rewrite starts a fresh retry round
+for the original model; every other outcome stops with an explanation.
+
+### Decision flow
+
+- `decide()` journals `refusal` action `review`, calls
+  `RefusalReviewer.review()` and maps the outcome:
+  - `rewritten`: `rewritesUsed += 1`, `retriesUsed = 0`, `{ action: 'retry',
+    delayMs: 0 }` with the notice `Refusal review by <reviewer model>: rewrote N
+    message(s) [kind: "old" → "new", ...] (operation <id>). Retrying.` After the
+    next successful attempt `TurnProcessor` asks `recovery.recovered(promptId)`
+    once and emits `Refusal recovered after rewrite by <reviewer model>.`
+  - `disallowed`: stop, notice with the reviewer's explanation, no rewrite and
+    no further call to the original model. The terminal `done` reason is
+    `refusal`.
+  - `stopped` (unknown profile, reviewer refused, reviewer failed or timed out,
+    invalid reply, `no_change`, history changed, commit failed): stop with a
+    specific notice. A reviewer that itself refused recommends a different
+    `refusal.review-profile`.
+- If the rewritten request is refused again and `max-rewrites` is reached, the
+  stop notice summarizes everything tried: `Model M refused 4 times (2 retries
+  with backoff 15 s, 15 s; reviewer R rewrote 1 message(s) and the model
+  refused again). Stopping.`
+- `RefusalDecision` is unchanged (`retry | stop`); a review is internal to the
+  coordinator. `RefusalRecovery.decide(attempt, context)` now receives the
+  recording execution, the admitted route and the abort signal. An abort during
+  a review rethrows (it is not a review result) and `settleRefusal` finalizes
+  the pending token-usage prompt before the error propagates.
+- `toRefusalPayload`/`recordRefusalInJournal` now take the journal action
+  instead of a decision, because `review` is not a decision.
+
+### Profile resolution (shared)
+
+`CompressionProfileResolver` gained an `AuxiliaryProfilePurpose` (setting name,
+runtime id segment, `metadata.source`, metadata keys, not-found error). The
+default purpose is compression and reproduces the previous runtime id,
+metadata and error byte for byte; review passes
+`refusalReviewPurpose(setting)` (`::refusal-review-profile:<name>`,
+`RefusalReviewProfileError` naming the setting that supplied the name).
+`ChatSession.resolveAuxiliaryProvider` replaces the compression-only method;
+the provider lookup moved to `chatSessionProviderRuntime.ts`
+(`lookupProviderByName`, `resolveExplicitAuxiliaryProvider`) to keep
+`chatSession.ts` under the line limit. The foreground session never loads the
+profile.
+
+Order: `refusal.review-profile` (captured at admission) → `compression.profile`
+→ the session's current model and route (the compression no-profile path). The
+rewrite notice and journal record name the resolved reviewer model.
+
+### Reviewer call
+
+`refusalReviewer.ts` builds the request with `buildCompressionChatOptions` (the
+core system prompt with no tools or memory; the Claude Code-required prompt
+stays in the provider path) and sends one tool-less provider call through
+`reviewCall.ts`. It is not `TurnProcessor.sendMessageStream`, so it never runs
+refusal recovery, never commits history and has no retry. The call ends at a
+120 s deadline or when the request aborts, even if the stream never yields.
+Reviewer usage is a new `refusal_review` lifecycle record in the token log
+(`purpose: "refusal-review"`, verdict, tokens). It is not a turn record, so it
+is never an attempt of the request it reviews. `/stats` counts the reviewer's
+own refusal under the reviewer's model (a reviewer refusal is a refusal); the
+foreground model's counts and records are unchanged.
+
+### Window, prompt and validation
+
+- `reviewWindow.ts`: entries after the last non-synthetic, non-summary AI
+  response, plus the newest summary if it is newer. Ids are `c<chronology
+  seq>.<block>` (`i<index>.<block>` without chronology). Editable: summary
+  text, assistant text, string/`{output}` tool results. Never editable: human
+  messages, tool calls, media, thinking, unreadable results, structure and
+  order.
+- `reviewPrompt.ts`: the reviewer task (disallowed categories vs. benign
+  engineering, plain-wording rewrite, fact preservation, untrusted session
+  data between `<session_data>` delimiters, JSON-only output,
+  `insufficient_context:`).
+- `reviewVerdict.ts`: strict zod contract, one fenced json block tolerated,
+  unique editable ids, no empty or no-op edits, and the fact guard in
+  `protectedLiterals.ts` (code spans and fences, URLs, paths, hashes, numbers
+  with units, SCREAMING_CASE, dotted identifiers). Any failure rejects the
+  whole reply.
+
+### Apply and journal
+
+- `HistoryService.replaceIfUnchanged` (core) is one queued mutation: it checks
+  that the history is entry-for-entry the reviewed snapshot, re-estimates
+  tokens, drops stored Responses parents from the first changed entry, resets
+  the cache anchor if it reaches the change, and runs a prepared effect that is
+  published before the commit and rolled back on any failure. `transformAll`
+  and `replaceAll` do not invoke batch participants, so they could not journal.
+- `refusal_rewrite` (version 2, materializing) holds operation id, parent
+  prompt/attempt, reviewer profile/provider/model, explanation, changed entries
+  with original and new text, and the resulting history. Replay installs the
+  snapshot; a malformed payload warns and keeps the history. The session media
+  package admits the snapshot like `semantic_media_purge`.
+  `SessionRecordingService.prepareRefusalRewrite` shares the prepared-batch
+  machinery with content batches. `AgentChatRecordingExecution.
+  prepareRefusalRewrite` is optional and absent when the host keeps no journal;
+  then the rewrite is live only.
+- Originals never re-enter model history: only the journal record holds them.
+
+### Decisions and limits
+
+- Same model as the refused one is allowed and is the default; the notice names
+  it.
+- A concurrent change between snapshot and commit (any append, removal or
+  replacement) discards the rewrite; the appended entry stays.
+- The reviewer prompt is untuned against live models; the tests script the
+  reviewer. Tune against real refusals before trusting it.
+- Non-streaming `TurnProcessor.sendMessage` still has no refusal recovery.

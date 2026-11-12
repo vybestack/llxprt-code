@@ -7,6 +7,7 @@
 export {
   ModelRefusalSignal,
   type RefusalAttempt,
+  type RefusalContext,
   type RefusalDecision,
   type RefusalEvidence,
   type RefusalRecovery,
@@ -25,25 +26,38 @@ export { waitBeforeRefusalRetry, type RefusalWait } from './refusalWait.js';
 export { type RefusalPolicySource } from './refusalPolicy.js';
 export { recordRefusalInJournal, toRefusalPayload } from './refusalJournal.js';
 export { settleRefusal, type RefusalSettlement } from './refusalSettlement.js';
+export {
+  HistoryRefusalReviewer,
+  type RefusalReviewerDeps,
+} from './refusalReviewer.js';
+export { refusalReviewPurpose } from './reviewProfile.js';
+export type { RefusalReviewer } from './reviewTypes.js';
 export { finishWithRefusal } from './refusalPostTurn.js';
 export {
   advanceAfterAttempt,
   announceRefusalSettlement,
+  refusalNotice,
   type AttemptCounters,
   type StreamAttemptOutcome,
 } from './refusalTurn.js';
 
 import { RefusalRecoveryCoordinator } from './refusalRecovery.js';
+import type { RefusalReviewer } from './reviewTypes.js';
 import type { RefusalPolicySource } from './refusalPolicy.js';
 import type { RefusalRecovery } from './refusalTypes.js';
 import { waitBeforeRefusalRetry } from './refusalWait.js';
 
-/** The recovery a chat session uses: live settings and the abortable timer. */
+/**
+ * The recovery a chat session uses: live settings, the abortable timer and,
+ * when the session can review, the reviewer.
+ */
 export function createRefusalRecovery(
   settings: RefusalPolicySource,
+  reviewer?: RefusalReviewer,
 ): RefusalRecovery {
   return new RefusalRecoveryCoordinator({
     settings,
     wait: waitBeforeRefusalRetry,
+    reviewer,
   });
 }

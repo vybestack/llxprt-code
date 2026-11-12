@@ -142,6 +142,13 @@ async function preparePortableContent(
   return admitted;
 }
 
+/** The payload field holding a full history snapshot, for events that carry one. */
+function historySnapshotKey(type: unknown): string | undefined {
+  if (type === 'semantic_media_purge') return 'history';
+  if (type === 'refusal_rewrite') return 'resultingHistory';
+  return undefined;
+}
+
 async function processPortableLine(
   line: Record<string, unknown>,
   lineNumber: number,
@@ -176,10 +183,13 @@ async function processPortableLine(
     context.histories.push([admitted]);
     return { kind: 'event', payload: { ...payload, [key]: admitted } };
   }
-  if (line['type'] === 'semantic_media_purge') {
-    const history = payload['history'];
+  const snapshotKey = historySnapshotKey(line['type']);
+  if (snapshotKey !== undefined) {
+    const history = payload[snapshotKey];
     if (!Array.isArray(history) || !history.every(isContent)) {
-      throw new Error(`Invalid semantic purge recording at line ${lineNumber}`);
+      throw new Error(
+        `Invalid ${String(line['type'])} recording at line ${lineNumber}`,
+      );
     }
     let admitted: IContent[];
     if (context.destinationProjectHash === undefined) {
@@ -205,7 +215,10 @@ async function processPortableLine(
       admitted = history.map(requirePortableMediaContent);
     }
     context.histories.push(admitted);
-    return { kind: 'event', payload: { ...payload, history: admitted } };
+    return {
+      kind: 'event',
+      payload: { ...payload, [snapshotKey]: admitted },
+    };
   }
   return { kind: 'event', payload };
 }

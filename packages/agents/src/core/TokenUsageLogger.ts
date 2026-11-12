@@ -14,6 +14,7 @@ import {
   type TokenUsageActualInput,
   type TokenUsageLifecycleEvent,
   type TokenUsageCompressionEvent,
+  type TokenUsageRefusalReviewEvent,
   type TokenUsageProviderSwitchEvent,
   type TokenUsageModelSwitchEvent,
   type TokenUsageSessionResumeEvent,
@@ -641,6 +642,8 @@ export class TokenUsageLogger {
     switch (event.type) {
       case 'compression':
         return this._toCompressionRecord(event);
+      case 'refusal_review':
+        return this._toRefusalReviewRecord(event);
       case 'provider_switch':
         return this._toProviderSwitchRecord(event);
       case 'model_switch':
@@ -675,6 +678,32 @@ export class TokenUsageLogger {
       }),
       ...(event.compressionOutputTokens !== undefined && {
         compression_output_tokens: event.compressionOutputTokens,
+      }),
+    };
+  }
+
+  private _toRefusalReviewRecord(
+    event: TokenUsageRefusalReviewEvent,
+  ): SerializedTokenUsageLifecycleRecord {
+    return {
+      record_type: 'refusal_review',
+      schema_version: TOKEN_USAGE_SCHEMA_VERSION,
+      ts: event.ts ?? new Date().toISOString(),
+      session_id: event.sessionId,
+      turn_id: event.turnId ?? null,
+      prompt_id: event.promptId,
+      purpose: 'refusal-review',
+      provider: event.provider,
+      model: event.model,
+      verdict: event.verdict,
+      ...(event.promptTokens !== undefined && {
+        prompt_tokens: event.promptTokens,
+      }),
+      ...(event.outputTokens !== undefined && {
+        output_tokens: event.outputTokens,
+      }),
+      ...(event.finishReason !== undefined && {
+        finish_reason: event.finishReason,
       }),
     };
   }
