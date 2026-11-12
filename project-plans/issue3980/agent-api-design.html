@@ -470,6 +470,7 @@ interface ToolDescriptor {
   readonly effects: readonly Effect[];    // assigned by the host adapter, never by the tool
   readonly concurrency: 'parallel' | 'exclusive'; // assigned by the host adapter
   readonly resources?: readonly string[]; // lock keys for cross-agent exclusion, e.g. 'fs:/repo'
+  readonly shell?: { readonly commandArg: string }; // host-assigned shell semantics, never from model/MCP text
 }
 type Effect = 'read' | 'write' | 'execute' | 'network' | 'spawn';
 interface PreparedCall {
@@ -477,6 +478,15 @@ interface PreparedCall {
   readonly args: unknown;                 // validated, final
   readonly preview?: ToolPreview;         // diff, command line, URL
   readonly preconditions?: readonly Precondition[]; // e.g. file hash at preparation
+  readonly shell?: PreparedShell;         // required for descriptors declaring shell semantics
+}
+type PreparedShell =
+  | { readonly parsed: false; readonly command: string; readonly error: string }
+  | { readonly parsed: true; readonly command: string; readonly segments: readonly ShellSegment[] };
+interface ShellSegment {
+  readonly command: string;
+  readonly argv: readonly string[];
+  readonly hasRedirection: boolean;
 }
 type ToolOutcome =
   | { status: 'ok'; result: ToolResult }
@@ -735,6 +745,8 @@ type JournalRecord =
   | { kind: 'grant'; grant: Grant } | { kind: 'grant-revoked'; grant: GrantId }
   | { kind: 'command-applied'; command: AgentCommand }
   | { kind: 'compacted'; replaces: { from: CheckpointId; to: CheckpointId }; summary: TranscriptEntry }
+  | { kind: 'attempt-budget'; attempt: string; phase: 'reserved' | 'settled'; reported: UsageReport; charged: Usage; estimated: boolean }
+  | { kind: 'model-recovery'; attempt: string; recovery: ModelRecovery }
   | { kind: 'turn-ended'; result: TurnResult };
 </script>
 <ul>
@@ -779,6 +791,7 @@ interface ModelClient {
   readonly info: {
     readonly contextWindow: number; readonly maxOutputTokens: number; readonly tools: boolean; readonly reasoning: boolean;
     readonly modalities: readonly ('text' | 'image' | 'audio' | 'file')[];
+    readonly replayScope: ReplayScope;
   };
   stream(request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelChunk>;
   countTokens?(request: ModelRequest, signal: AbortSignal): Promise<number>;
@@ -789,14 +802,65 @@ interface ModelRequest {
   readonly messages: readonly TranscriptEntry[];
   readonly tools: readonly { readonly id: ToolId; readonly description: string; readonly inputSchema: JsonSchema }[];
   readonly parameters: ModelParameters;
+  readonly recovery?: ModelRecovery;      // core-retained reconstruction for this logical request and compatible scope; not dispatch authorization
+}
+type JsonValue = null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
+interface ReplayScope {
+  readonly provider: string;
+  readonly model: string;
+  readonly endpoint: string;              // opaque endpoint identity, no URL credentials
+  readonly principal: string;             // opaque auth principal identity, never a credential
+  readonly connection?: string;           // only for connection-bound replay
+}
+interface ProviderReplayData {
+  readonly id: string;                    // stable within this model entry
+  readonly scope: ReplayScope;
+  readonly format: string;                // versioned adapter schema
+  readonly target: { readonly kind: 'entry' } | { readonly kind: 'part'; readonly id: string };
+  readonly data: JsonValue;               // validated by adapter; no credentials or executable values
+}
+type TranscriptPart =
+  | { readonly id: string; readonly content: ContentPart }
+  | { readonly id: string; readonly thinking: string }
+  | { readonly id: string; readonly call: { readonly id: CallId; readonly tool: ToolId; readonly args: JsonValue } }
+  | { readonly id: string; readonly result: { readonly call: CallId; readonly outcome: ToolOutcome } };
+interface TranscriptEntry {
+  readonly id: string;
+  readonly role: 'user' | 'model' | 'tool';
+  readonly parts: readonly TranscriptPart[];
+  readonly replay?: readonly ProviderReplayData[]; // model entries only; journaled with the entry
+}
+interface Usage {
+  readonly inputTokens: number;           // includes cache reads/writes
+  readonly outputTokens: number;          // excludes reasoningTokens
+  readonly reasoningTokens: number;
+  readonly cacheReadInputTokens: number;  // subsets of inputTokens, not added again
+  readonly cacheWriteInputTokens: number;
+}
+interface UsageReport {
+  readonly totals: Readonly<Partial<Usage>>; // cumulative per attempt; omitted means unreported
+  readonly complete: boolean;             // true requires all counters, including known zeroes
+}
+interface ModelRecovery {
+  readonly scope: ReplayScope;
+  readonly invalidates: readonly { readonly entry: string; readonly replay: string }[];
+  readonly format: string;                 // versioned adapter schema, validated on use
+  readonly data: JsonValue;                // reconstruction instructions, not a cached conversation
 }
 type ModelChunk =
-  | { kind: 'text' | 'thinking'; delta: string }
+  | { kind: 'text' | 'thinking'; part: string; delta: string }
   | { kind: 'tool-call'; id: CallId; tool: ToolId; argsDelta: string }
-  | { kind: 'finish'; reason: FinishReason; usage: Usage };
+  | { kind: 'replay'; value: ProviderReplayData }
+  | { kind: 'usage'; report: UsageReport }  // accounting only; never commits output
+  | { kind: 'finish'; reason: FinishReason; usage: UsageReport };
 
 type ModelErrorKind = 'auth' | 'quota' | 'rate-limit' | 'overloaded' | 'invalid-request' | 'context-length' | 'network' | 'aborted' | 'other';
-interface ModelError { readonly kind: ModelErrorKind; readonly retryable: boolean; readonly retryAfterMs?: number; readonly message: string }
+interface ModelError {
+  readonly kind: ModelErrorKind; readonly retryable: boolean; readonly retryAfterMs?: number; readonly message: string;
+  readonly usage?: UsageReport;
+  readonly dispatch: 'not-sent' | 'sent' | 'unknown';
+  readonly recovery?: ModelRecovery;
+}
 interface ToolError { readonly kind: 'invalid-args' | 'failed' | 'aborted' | 'revoked' | 'unavailable'; readonly message: string }
 interface StoreError { readonly kind: 'unavailable' | 'corrupt' | 'aborted'; readonly message: string }
 
@@ -820,7 +884,13 @@ interface Interceptors {
   beforeTool?(call: PreparedCallView, signal: AbortSignal): Promise<Continue | Block | { patchArgs: JsonPatch }>;
   afterTool?(call: PreparedCallView, result: ToolResult, signal: AbortSignal): Promise<Continue | { redact: readonly Redaction[]; note?: string }>;
   beforeCompact?(signal: AbortSignal): Promise<Continue | Block>;
-  afterTurn?(result: TurnResult, signal: AbortSignal): Promise<Continue | { continueWith: UserInput }>;
+  afterTurn?(view: AfterTurnView, signal: AbortSignal): Promise<Continue | { continueWith: UserInput }>;
+}
+interface AfterTurnView {
+  readonly result: TurnResult;            // candidate result, not yet turn.completed
+  readonly continuationPass: number;     // zero initially; increases within this same turn
+  readonly thinkingOnly: boolean;        // committed thinking, no visible content or tool calls in the last response
+  readonly tools: readonly { readonly call: CallId; readonly tool: ToolId; readonly outcome: ToolOutcome }[]; // settled calls in this turn
 }
 type Continue = { action: 'continue' };
 type Block = { action: 'block'; reason: string };
@@ -901,6 +971,11 @@ decisions: { presence: 'human', decide: (r, signal) => connection.requestPermiss
 <div class="decision"><b>D11. Output is one event stream with a cursor, a snapshot and a transcript reader.</b> Text is provisional until its attempt commits.</div>
 <div class="decision"><b>D12. Diagnostics are push-only.</b> Debug filtering happens once, in the host's sink.</div>
 <div class="decision"><b>D13. Configuration loading lives in a shared host-kit,</b> neither in the agent nor separately in each host.</div>
+<div class="decision"><b>D14. Port completion: provider replay belongs to core history.</b> Replay chunks replace an envelope by id within the provisional attempt; tool-call part ids equal their call ids. Finish commits envelopes with the model entry, and SessionStore preserves them on resume and fork. Discard drops them. The adapter validates versioned payloads for signed thinking, encrypted reasoning, provider ids and Gemini AFC metadata. Core matches provider, model, endpoint and principal exactly; an envelope with a connection identity also requires that same connection. Durable envelopes omit connection identity. A model, endpoint, principal or connection change excludes incompatible envelopes without erasing the journal. Compaction never attaches old signatures to new text. No adapter owns a conversation cache, and replay metadata cannot execute tools.</div>
+<div class="decision"><b>D15. Port completion: usage is independent of successful completion.</b> Usage reports are cumulative per attempt; later counters replace earlier counters, they are not added to them. Finish supplies its final accounting report, which may still be incomplete; a typed failure may also supply a final report without committing content. Incomplete final usage on a finished, sent or unknown request retains the larger of the reservation and reported usage, component by component, as an explicitly estimated budget charge. A proven not-sent request releases its unused reservation. Reported totals and budget charges stay distinct in attempt-budget records and accounting events; only reported totals enter Usage aggregates. A reservation is journaled before dispatch; recovery settles an unfinished reservation conservatively without resending. Complete reports release unused reservation, including on failure. Invalid or decreasing counters fail conformance, not silently reset.</div>
+<div class="decision"><b>D16. Port completion: recovery instructions do not issue requests.</b> An adapter returns a scoped ModelRecovery value with the error and stops. Core journals it and discards provisional output. Dispatch authorization covers one attempt only; core retains validated reconstruction instructions for every remaining attempt of the same logical request and compatible scope, including ordinary retries after a repaired successor fails. Each later request is rebuilt from ModelRequest messages plus those instructions, without an adapter conversation/request cache or another repair cycle, with SDK retries disabled. Core clears retained reconstruction state when the logical request ends or the scope becomes incompatible; it cannot transfer to a fallback model. Before every stream call, core separately checks cancellation, retry kind, maxAttempts and budgets, admits the attempt and charges its usage once. Retained instructions grant no extra retry, and repeated repair of the same condition is rejected; reapplying retained instructions is not a new repair cycle. Image repair, rejected Responses parents and transport changes cannot conceal a second generation request; every stream call issues at most one generation. The invalidates list references entry/envelope ids from the request, so core records and applies invalidation without interpreting provider payloads; no retry runs automatically after restart.</div>
+<div class="decision"><b>D17. Port completion: afterTurn receives a read-only candidate view.</b> The result, committed thinking-only status, settled tool outcomes and continuation ordinal let built-in continuation run without reading an Agent or reconstructing a host model loop. A continueWith response stays inside the current turn, shares its deadline and budgets, and precedes the single terminal turn.completed event. Failed, cancelled and limit outcomes cannot continue. User hooks may be disabled independently of the built-in continuation adapter.</div>
+<div class="decision"><b>D18. Port completion: shell preparation returns facts, never policy decisions.</b> A host-trusted shell descriptor requires parsed command segments, argv and redirection facts bound to the prepared token. Patches and edited approvals recompute them. Core alone evaluates the existing destructive-command deny before any grants, checks every compound-command segment with the same authority/preferences, and uses an ask floor for redirection or parse failure. Missing or inconsistent required preparation data fails the port contract. The adaptation plan's Q3 records unsupported persisted policy forms and the choice needed for legacy redirection exemptions; no executor calls a second policy engine.</div>
 
 <!-- ============================================================ -->
 <h2 id="llxprt">17. Adapting llxprt (later)</h2>
