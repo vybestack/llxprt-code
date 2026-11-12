@@ -31,8 +31,8 @@ const ROOT = resolve(import.meta.dirname, '../..');
 const RELEASE_TAG = 'v1.2.3';
 const RELEASE_VERSION = '1.2.3';
 const RELEASE_BRANCH = `release/${RELEASE_TAG}`;
-const CLI_TARBALL = './release-proof/vybestack-llxprt-code-1.2.3.tgz';
-const VSIX_PATH = 'packages/vscode/llxprt-code.vsix';
+const CLI_TARBALL = './release-artifacts/vybestack-llxprt-code-1.2.3.tgz';
+const VSIX_PATH = './release-artifacts/llxprt-code.vsix';
 const REPOSITORY = 'vybestack/llxprt-code';
 
 type TargetMode = 'branch' | 'head';
@@ -252,6 +252,7 @@ function runWorkflow(
         FAIL_API_LOOKUP: options.failLookup === true ? 'true' : 'false',
         RELEASE_TAG,
         RELEASE_VERSION,
+        RELEASE_COMMIT_SHA: targetSha,
         RUNNER_TEMP: '.',
         RELEASE_BRANCH: options.targetMode === 'branch' ? RELEASE_BRANCH : '',
         SHOULD_CREATE_BRANCH:
@@ -280,8 +281,9 @@ function runScenario(options: ScenarioOptions): ScenarioResult {
     git(repository, ['branch', RELEASE_BRANCH, releaseSha]);
     const headSha = createCommit(repository, 'nightly\n', 'nightly');
     const targetSha = options.targetMode === 'branch' ? releaseSha : headSha;
+    git(repository, ['checkout', '--detach', targetSha]);
 
-    mkdirSync(join(repository, 'release-proof'), { recursive: true });
+    mkdirSync(join(repository, 'release-artifacts'), { recursive: true });
     mkdirSync(join(repository, 'packages/cli/dist'), { recursive: true });
     writeFileSync(
       join(repository, 'packages/cli/dist/vybestack-llxprt-code-1.2.3.tgz'),
@@ -294,7 +296,10 @@ function runScenario(options: ScenarioOptions): ScenarioResult {
     if (options.includeVsix === true) {
       writeFileSync(join(repository, VSIX_PATH), 'vsix');
     }
-    writeFileSync(join(repository, 'release-notes.md'), 'Release notes\n');
+    writeFileSync(
+      join(repository, 'release-artifacts/release-notes.md'),
+      'Release notes\n',
+    );
     writeFileSync(
       statePath,
       JSON.stringify(initialState(options.existingTag, targetSha, baseSha)),
@@ -406,7 +411,7 @@ const NON_VSIX_RELEASE_ARGUMENTS = [
   '--title',
   `Release ${RELEASE_TAG}`,
   '--notes-file',
-  'release-notes.md',
+  './release-artifacts/release-notes.md',
 ];
 
 const VSIX_RELEASE_ARGUMENTS = [
@@ -418,7 +423,7 @@ const VSIX_RELEASE_ARGUMENTS = [
   '--title',
   `Release ${RELEASE_TAG}`,
   '--notes-file',
-  'release-notes.md',
+  './release-artifacts/release-notes.md',
 ];
 
 describe('Create GitHub Release and Tag workflow step', () => {

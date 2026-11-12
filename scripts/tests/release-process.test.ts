@@ -177,6 +177,9 @@ describe('.github/workflows/release.yml', () => {
   const releaseYml = readRootFile('.github/workflows/release.yml');
   const releaseParsed = parseWorkflowYaml(releaseYml);
   const releaseSteps = jobSteps(workflowJobOptional(releaseParsed, 'release'));
+  const prepareSteps = jobSteps(
+    workflowJobOptional(releaseParsed, 'prepare_artifact'),
+  );
   const integrationSteps = jobSteps(
     workflowJobOptional(releaseParsed, 'integration'),
   );
@@ -186,6 +189,9 @@ describe('.github/workflows/release.yml', () => {
   const integrationStepByName = (name: string): WorkflowStep =>
     integrationSteps.find((step) => step.name === name) ??
     raiseMissing(`missing integration step: ${name}`);
+  const prepareStepByName = (name: string): WorkflowStep =>
+    prepareSteps.find((step) => step.name === name) ??
+    raiseMissing(`missing preparation step: ${name}`);
   const stepById = (id: string): WorkflowStep =>
     releaseSteps.find((s) => s.id === id) ??
     raiseMissing(`missing step id: ${id}`);
@@ -194,24 +200,27 @@ describe('.github/workflows/release.yml', () => {
     raiseMissing(`missing step: ${name}`);
 
   it('gates every npm publish on scripts-disabled consumer proof and publishes the proven tarballs', () => {
-    const gate = stepByName('Prove scripts-disabled release consumers');
-    const gateIndex = releaseSteps.indexOf(gate);
+    const gate = prepareStepByName('Build and prove prepared release packages');
     const publishes = releaseSteps.filter((step) =>
       npmReleasePackages().some((name) => step.name === `Publish ${name}`),
     );
     expect(publishes.length).toBeGreaterThan(0);
     for (const step of publishes) {
-      expect(releaseSteps.indexOf(step)).toBeGreaterThan(gateIndex);
-      expect(asString(step.run)).toContain('--ignore-scripts');
-      expect(asString(step.run)).toContain('release-proof/');
+      expect(step.run).toContain('--ignore-scripts');
+      expect(asString(step.run)).toContain('release-artifacts/');
     }
+    expect(asString(gate.if)).toContain('inputs.publish_vscode_only != true');
     expect(asString(gate.if)).not.toContain('is_dry_run');
-    expect(asString(gate.if)).not.toContain('is_nightly');
     expect(asString(gate.run)).toContain('release-bound-artifact-helpers.ts');
+    expect(prepareSteps.indexOf(gate)).toBeLessThan(
+      prepareSteps.findIndex(
+        (step) => step.name === 'Upload prepared release artifacts',
+      ),
+    );
   });
 
   it('routes integration and release-note model requests through local Gemma', () => {
-    const releaseNotes = stepByName('Generate Release Notes');
+    const releaseNotes = prepareStepByName('Write release notes');
     const integrations = integrationStepByName('Run Integration Tests');
     const modelSetup = integrationSteps.find(
       (step) => step.name === 'Set up local Gemma model',
@@ -229,11 +238,9 @@ describe('.github/workflows/release.yml', () => {
       '${{ runner.temp }}/release-model-ledger.jsonl',
     );
 
-    const releaseNotesSetup = releaseSteps.find(
-      (step) => step.name === 'Set up local Gemma for release notes',
-    );
-    expect(releaseSteps.indexOf(releaseNotesSetup!)).toBeLessThan(
-      releaseSteps.indexOf(releaseNotes),
+    const releaseNotesSetup = prepareStepByName('Generate release notes');
+    expect(prepareSteps.indexOf(releaseNotesSetup)).toBeLessThan(
+      prepareSteps.indexOf(releaseNotes),
     );
     const releaseNotesEnv = asRecord(releaseNotes.env);
     expect(releaseNotesEnv.OPENAI_BASE_URL).toBe('http://127.0.0.1:12644/v1');
@@ -277,10 +284,7 @@ describe('.github/workflows/release.yml', () => {
     );
 
     for (const step of [
-      stepByName('Update package versions'),
-      stepByName('Bind release dependencies'),
-      stepByName('Build and Prepare Packages'),
-      stepByName('Generate Release Notes'),
+      stepByName('Push release branch after all release gates'),
       stepByName('Publish @vybestack/llxprt-code-tools'),
       stepByName('Publish @vybestack/llxprt-code'),
       stepByName('Publish tested sandbox candidates'),
@@ -291,6 +295,9 @@ describe('.github/workflows/release.yml', () => {
         `${step.name ?? '<unnamed>'} should respect the duplicate-nightly skip`,
       ).toContain("steps.duplicate_check.outputs.is_duplicate != 'true'");
     }
+    expect(
+      String(prepareStepByName('Version and bind release packages').if ?? ''),
+    ).not.toContain('dry_run');
 
     expect(asString(stepByName('Create Issue on Failure')['if'])).toBe(
       'failure()',
@@ -407,7 +414,7 @@ ${path.posix.join(realFixture, 'plugins/google-mcp-auth')}|install --omit=peer
   it('publishes every npm release package', () => {
     for (const packageName of npmReleasePackages()) {
       expect(releaseYml, `release.yml should publish ${packageName}`).toContain(
-        `release-proof/${packageName.replace('@', '').replace('/', '-')}-`,
+        `release-artifacts/${packageName.replace('@', '').replace('/', '-')}-`,
       );
     }
   });
@@ -485,49 +492,54 @@ ${path.posix.join(realFixture, 'plugins/google-mcp-auth')}|install --omit=peer
     expect(cliIndex).toBeGreaterThan(agentsIndex);
   });
 
-  it('binds release dependencies before committing or publishing', () => {
-    const versionStep = releaseYml.indexOf('Update package versions');
-    const bindStep = releaseYml.indexOf('Bind release dependencies');
-    const commitStep = releaseYml.indexOf('Commit and Conditionally Push');
-    const publishStep = releaseYml.indexOf(
-      'Publish @vybestack/llxprt-code-core',
+  it('binds and versions release dependencies before building and committing prepared artifacts', () => {
+    const versionStep = prepareSteps.findIndex(
+      (step) => step.name === 'Version and bind release packages',
     );
+    const buildStep = prepareSteps.findIndex(
+      (step) => step.name === 'Build versioned sandbox inputs',
+    );
+    const versionCommand = asString(prepareSteps[versionStep]?.run);
 
-    expect(bindStep).toBeGreaterThan(versionStep);
-    expect(commitStep).toBeGreaterThan(bindStep);
-    expect(publishStep).toBeGreaterThan(bindStep);
-    expect(releaseYml).toContain('bun scripts/bind-release-deps.ts');
+    expect(versionStep).toBeGreaterThanOrEqual(0);
+    expect(buildStep).toBeGreaterThan(versionStep);
+    expect(versionCommand).toContain('npm run release:version');
+    expect(versionCommand).toContain('bun scripts/bind-release-deps.ts');
+    expect(versionCommand).toContain('bun scripts/bind-plugin-peers.ts');
+    expect(versionCommand).toContain('npm version "$RELEASE_VERSION"');
+    expect(versionCommand).toContain('git commit -m');
+    expect(versionCommand).toContain('git rev-parse HEAD');
     expect(releaseYml).not.toContain(
       'bun scripts/bind-release-deps.ts --backup',
     );
   });
 
-  it('does not skip dependency binding during dry-run releases', () => {
-    const bindStep = releaseYml.slice(
-      releaseYml.indexOf('Bind release dependencies'),
-      releaseYml.indexOf('Commit and Conditionally Push'),
-    );
-
-    expect(bindStep).toContain(
-      "steps.vars.outputs.should_run_standard_release == 'true'",
-    );
-    expect(bindStep).not.toContain('is_dry_run');
+  it('does not skip release package preparation during dry-run releases', () => {
+    const preparation = prepareSteps.map((step) => step.run ?? '').join('\n');
+    expect(preparation).toContain('npm run release:version');
+    expect(preparation).toContain('release-bound-artifact-helpers.ts');
+    expect(
+      asString(
+        prepareStepByName('Build and prove prepared release packages').if,
+      ),
+    ).not.toContain('dry_run');
   });
 
-  it('prepares tools tarballs for sandbox images', () => {
-    expect(releaseYml).toContain('packages/tools/dist');
-    expect(releaseYml).toContain('npm pack -w @vybestack/llxprt-code-tools');
-  });
-
-  it('prepares settings, providers, and agents tarballs for sandbox images', () => {
-    expect(releaseYml).toContain('packages/settings/dist');
-    expect(releaseYml).toContain('packages/providers/dist');
-    expect(releaseYml).toContain('packages/agents/dist');
-    expect(releaseYml).toContain('npm pack -w @vybestack/llxprt-code-settings');
+  it('uses prepared tools tarballs as sandbox image inputs', () => {
+    expect(releaseYml).toContain('packages/*/dist/*.tgz');
     expect(releaseYml).toContain(
-      'npm pack -w @vybestack/llxprt-code-providers',
+      'scripts/tests/release-bound-artifact-helpers.ts',
     );
-    expect(releaseYml).toContain('npm pack -w @vybestack/llxprt-code-agents');
+    expect(releaseYml).toContain('release-package-tarballs.sha256');
+    expect(releaseYml).toContain('cp "$tarball" "$package_dir/dist/"');
+  });
+
+  it('uses prepared settings, providers, and agents tarballs as sandbox image inputs', () => {
+    expect(releaseYml).toContain('for package_dir in packages/*');
+    expect(releaseYml).toContain('packages/*/dist/*.tgz');
+    expect(releaseYml).toContain(
+      'npm pack --ignore-scripts --pack-destination',
+    );
   });
 
   it('does not claim create_nightly_release ignores the version input', () => {

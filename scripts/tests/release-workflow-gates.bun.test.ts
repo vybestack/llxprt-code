@@ -121,6 +121,23 @@ describe('issue #4033 release workflow gates', () => {
     }
   });
 
+  it('verifies prepared package tarballs before building image candidates', () => {
+    for (const jobName of ['candidate_amd64', 'candidate_arm64']) {
+      const steps = jobSteps(workflowJob(workflow, jobName));
+      const restoreIndex = steps.findIndex(
+        (step) => step.name === 'Restore and verify sandbox input tarballs',
+      );
+      const buildIndex = steps.findIndex((step) =>
+        (step.name ?? '').startsWith('Build '),
+      );
+      expect(restoreIndex).toBeGreaterThanOrEqual(0);
+      expect(asString(steps[restoreIndex]?.run)).toContain(
+        'sha256sum --check release-package-tarballs.sha256',
+      );
+      expect(restoreIndex).toBeLessThan(buildIndex);
+    }
+  });
+
   it('preserves the preflight checks, integration suite, and both image smokes', () => {
     const commandsByJob = Object.fromEntries(
       Object.keys(jobs).map((jobName) => [jobName, runCommands(jobName)]),
@@ -238,5 +255,112 @@ describe('issue #4033 release workflow gates', () => {
         'needs.prepare_artifact.outputs.artifact_digest',
       );
     }
+  });
+
+  it('completes artifact and candidate verification before publishing in the required order', () => {
+    const steps = jobSteps(workflowJob(workflow, 'release'));
+    const names = steps.map((step) => step.name ?? '');
+    const indexOf = (name: string): number => {
+      const index = names.indexOf(name);
+      expect(index, `missing promotion step: ${name}`).toBeGreaterThanOrEqual(
+        0,
+      );
+      return index;
+    };
+    const verificationIndex = indexOf(
+      'Verify prepared release artifact digests',
+    );
+    const candidateIndex = indexOf('Verify and load candidate images');
+    const pushIndex = indexOf('Push release branch after all release gates');
+    const npmIndex = indexOf('Publish @vybestack/llxprt-code-tools');
+    const vscodeIndex = indexOf('Publish VS Code extension');
+    const homebrewIndex = indexOf('Update Homebrew formula');
+    const imagesIndex = indexOf('Publish tested sandbox candidates');
+    const releaseIndex = indexOf('Create GitHub Release and Tag');
+
+    expect(verificationIndex).toBeLessThan(pushIndex);
+    expect(candidateIndex).toBeLessThan(pushIndex);
+    expect(pushIndex).toBeLessThan(npmIndex);
+    expect(npmIndex).toBeLessThan(vscodeIndex);
+    expect(vscodeIndex).toBeLessThan(homebrewIndex);
+    expect(homebrewIndex).toBeLessThan(imagesIndex);
+    expect(imagesIndex).toBeLessThan(releaseIndex);
+  });
+
+  it('promotes only digest-verified prepared artifacts without rebuilding or installing source', () => {
+    const prepare = workflowJob(workflow, 'prepare_artifact');
+    const preparationSteps = jobSteps(prepare);
+    const preparation = preparationSteps
+      .map((step) => step.run ?? '')
+      .join('\n');
+    const releaseSteps = jobSteps(workflowJob(workflow, 'release'));
+
+    expect(preparation).toContain('npm pack');
+    expect(preparation).toContain('sha256sum');
+    expect(preparation).toContain(
+      'scripts/tests/release-bound-artifact-helpers.ts',
+    );
+    expect(preparation).toContain('build:vscode');
+    expect(preparation).toContain('release-artifacts.sha256');
+
+    const releaseRuns = releaseSteps.flatMap((step) =>
+      (step.run ?? '').split('\n').map((line) => line.trimStart()),
+    );
+    expect(releaseRuns.join('\n')).toContain(
+      'sha256sum --check release-artifacts.sha256',
+    );
+    expect(releaseRuns.join('\n')).toContain('npm publish');
+    const forbiddenCommands = [
+      'npm ci',
+      'npm install',
+      'npm pack',
+      'npm version',
+      'npm run build',
+      'npm run build:packages',
+      'npm run prepare:package',
+      'npm run bundle:cli',
+      'npm run build:vscode',
+      'bun install',
+    ];
+    for (const line of releaseRuns) {
+      expect(
+        forbiddenCommands.some(
+          (command) => line === command || line.startsWith(`${command} `),
+        ),
+        `promotion must not prepare source artifacts: ${line}`,
+      ).toBe(false);
+    }
+
+    const publishSteps = releaseSteps.filter((step) =>
+      /^(Publish |Update Homebrew|Create GitHub Release and Tag)/.test(
+        step.name ?? '',
+      ),
+    );
+    expect(publishSteps.length).toBeGreaterThan(0);
+    for (const step of publishSteps) {
+      const description = `${step.run ?? ''}\n${JSON.stringify(step.env ?? {})}`;
+      expect(
+        description,
+        `${step.name} must consume a prepared artifact`,
+      ).toMatch(/release-artifacts|candidate-amd64/);
+    }
+
+    const prepareOutputs = asRecord(prepare['outputs']);
+    expect(asString(prepareOutputs.release_commit_sha)).toContain(
+      'steps.prepare_commit.outputs.release_commit_sha',
+    );
+    const checkout = releaseSteps.find(
+      (step) => step.name === 'Checkout prepared release commit',
+    );
+    expect(JSON.stringify(checkout?.with)).toContain(
+      'needs.prepare_artifact.outputs.release_commit_sha',
+    );
+    expect(
+      releaseRuns.some((line) =>
+        line.includes(
+          'needs.prepare_artifact.outputs.release_commit_sha }}:refs/heads/',
+        ),
+      ),
+    ).toBe(true);
   });
 });
