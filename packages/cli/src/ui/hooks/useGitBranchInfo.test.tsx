@@ -114,7 +114,7 @@ describe('useGitBranchInfo', () => {
     setupExec(
       gitResponses(
         {
-          'git status --porcelain': '',
+          'git --no-optional-locks status --porcelain': '',
           'git rev-parse --abbrev-ref HEAD': 'main\n',
         },
         'abc1234\n',
@@ -129,7 +129,7 @@ describe('useGitBranchInfo', () => {
     });
 
     expect(mockExec).toHaveBeenCalledWith(
-      'git status --porcelain',
+      'git --no-optional-locks status --porcelain',
       expect.anything(),
       expect.any(Function),
     );
@@ -141,7 +141,10 @@ describe('useGitBranchInfo', () => {
 
   it('reports a modified work tree as dirty', async () => {
     setupExec(
-      gitResponses({ 'git status --porcelain': ' M src/file.ts\n' }, 'main\n'),
+      gitResponses(
+        { 'git --no-optional-locks status --porcelain': ' M src/file.ts\n' },
+        'main\n',
+      ),
     );
 
     const { result, rerender } = renderHook(() => useGitBranchInfo(CWD));
@@ -155,7 +158,12 @@ describe('useGitBranchInfo', () => {
   });
 
   it('runs every git command with a bounded buffer and timeout', async () => {
-    setupExec(gitResponses({ 'git status --porcelain': '' }, 'main'));
+    setupExec(
+      gitResponses(
+        { 'git --no-optional-locks status --porcelain': '' },
+        'main',
+      ),
+    );
 
     const { result, rerender } = renderHook(() => useGitBranchInfo(CWD));
 
@@ -169,7 +177,8 @@ describe('useGitBranchInfo', () => {
       isDirty: false,
     });
     const statusCall = mockExec.mock.calls.find(
-      (call: unknown[]) => call[0] === 'git status --porcelain',
+      (call: unknown[]) =>
+        call[0] === 'git --no-optional-locks status --porcelain',
     );
     const statusOpts = statusCall?.[1] as {
       maxBuffer?: number;
@@ -201,7 +210,7 @@ describe('useGitBranchInfo', () => {
     setupExec(
       gitResponses(
         {
-          'git status --porcelain': '',
+          'git --no-optional-locks status --porcelain': '',
           'git rev-parse --abbrev-ref HEAD': 'HEAD\n',
         },
         'a1b2c3d\n',
@@ -226,7 +235,7 @@ describe('useGitBranchInfo', () => {
     setupExec(
       gitResponses(
         {
-          'git status --porcelain': '',
+          'git --no-optional-locks status --porcelain': '',
           'git rev-parse --abbrev-ref HEAD': 'main\n',
         },
         'abc1234\n',
@@ -290,7 +299,7 @@ describe('useGitBranchInfo', () => {
       gitResponses(
         {
           'git rev-parse --abbrev-ref HEAD': 'main\n',
-          'git status --porcelain': ' M f\n',
+          'git --no-optional-locks status --porcelain': ' M f\n',
         },
         'x\n',
       ),
@@ -325,7 +334,8 @@ describe('useGitBranchInfo', () => {
     const capture = watchCapture();
     setupExec((cmd, cb) => {
       if (cmd === 'git rev-parse --abbrev-ref HEAD') cb(null, 'main\n', '');
-      else if (cmd === 'git status --porcelain') cb(null, '', '');
+      else if (cmd === 'git --no-optional-locks status --porcelain')
+        cb(null, '', '');
       else cb(null, 'x\n', '');
     });
 
@@ -355,7 +365,7 @@ describe('useGitBranchInfo', () => {
     vi.useFakeTimers();
     let statusDirty = false;
     mockExec.mockImplementation((cmd: string, _opts: unknown, cb: ExecCb) => {
-      if (cmd === 'git status --porcelain')
+      if (cmd === 'git --no-optional-locks status --porcelain')
         cb(null, statusDirty ? ' M f' : '', '');
       else cb(null, 'main', '');
       return eventEmitter();
@@ -394,7 +404,7 @@ describe('useGitBranchInfo', () => {
     vi.useFakeTimers();
     let statusDirty = true;
     mockExec.mockImplementation((cmd: string, _opts: unknown, cb: ExecCb) => {
-      if (cmd === 'git status --porcelain')
+      if (cmd === 'git --no-optional-locks status --porcelain')
         cb(null, statusDirty ? '?? new.txt' : '', '');
       else cb(null, 'main', '');
       return eventEmitter();
@@ -433,7 +443,7 @@ describe('useGitBranchInfo', () => {
     vi.useFakeTimers();
     let statusDirty = false;
     mockExec.mockImplementation((cmd: string, _opts: unknown, cb: ExecCb) => {
-      if (cmd === 'git status --porcelain')
+      if (cmd === 'git --no-optional-locks status --porcelain')
         cb(null, statusDirty ? '?? new.txt' : '', '');
       else cb(null, 'main', '');
       return eventEmitter();
@@ -464,7 +474,8 @@ describe('useGitBranchInfo', () => {
     const statusCbs: ExecCb[] = [];
     const branchCbs: ExecCb[] = [];
     mockExec.mockImplementation((cmd: string, _opts: unknown, cb: ExecCb) => {
-      if (cmd === 'git status --porcelain') statusCbs.push(cb);
+      if (cmd === 'git --no-optional-locks status --porcelain')
+        statusCbs.push(cb);
       else branchCbs.push(cb);
       return eventEmitter();
     });
@@ -507,7 +518,7 @@ describe('useGitBranchInfo', () => {
 
   it('keeps the branch when only the status command fails', async () => {
     mockExec.mockImplementation((cmd: string, _opts: unknown, cb: ExecCb) => {
-      if (cmd === 'git status --porcelain')
+      if (cmd === 'git --no-optional-locks status --porcelain')
         cb(new Error('status error'), '', '');
       else cb(null, 'main', '');
       return eventEmitter();
@@ -528,7 +539,8 @@ describe('useGitBranchInfo', () => {
 
   it('shows no branch when only the branch command fails', async () => {
     mockExec.mockImplementation((cmd: string, _opts: unknown, cb: ExecCb) => {
-      if (cmd === 'git status --porcelain') cb(null, ' M f', '');
+      if (cmd === 'git --no-optional-locks status --porcelain')
+        cb(null, ' M f', '');
       else cb(new Error('branch error'), '', '');
       return eventEmitter();
     });
@@ -549,7 +561,8 @@ describe('useGitBranchInfo', () => {
     let execCount = 0;
     mockExec.mockImplementation((cmd: string, _opts: unknown, cb: ExecCb) => {
       execCount++;
-      if (cmd === 'git status --porcelain') cb(null, '', '');
+      if (cmd === 'git --no-optional-locks status --porcelain')
+        cb(null, '', '');
       else cb(null, 'main', '');
       return eventEmitter();
     });
@@ -615,7 +628,8 @@ describe('useGitBranchInfo', () => {
     const shortCbs: ExecCb[] = [];
     const statusCbs: ExecCb[] = [];
     mockExec.mockImplementation((cmd: string, _opts: unknown, cb: ExecCb) => {
-      if (cmd === 'git status --porcelain') statusCbs.push(cb);
+      if (cmd === 'git --no-optional-locks status --porcelain')
+        statusCbs.push(cb);
       else if (cmd === 'git rev-parse --abbrev-ref HEAD') branchCbs.push(cb);
       else shortCbs.push(cb);
       return eventEmitter();
@@ -656,7 +670,8 @@ describe('useGitBranchInfo', () => {
     const statusCbs: ExecCb[] = [];
     const branchCbs: ExecCb[] = [];
     mockExec.mockImplementation((cmd: string, _opts: unknown, cb: ExecCb) => {
-      if (cmd === 'git status --porcelain') statusCbs.push(cb);
+      if (cmd === 'git --no-optional-locks status --porcelain')
+        statusCbs.push(cb);
       else branchCbs.push(cb);
       return eventEmitter();
     });
