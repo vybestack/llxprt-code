@@ -123,6 +123,65 @@ async function shellTranscript(
 }
 
 describe('public Agent coordinated shutdown', () => {
+  it('preserves Request cancellation before and during public session fetch', async () => {
+    const admitted = gate();
+    const disconnected = gate();
+    let requests = 0;
+    const server = createServer((request, response) => {
+      requests += 1;
+      if (request.url?.endsWith('/already') === true) {
+        response.end('contacted');
+        return;
+      }
+      response.once('close', () => disconnected.release());
+      admitted.release();
+      setTimeout(() => response.end('completed'), 100);
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', resolve);
+    });
+    const address = server.address();
+    if (address === null || typeof address === 'string')
+      throw new Error('Missing request cancellation port');
+    const built = await buildAgent('plain-text.jsonl');
+    try {
+      const origin = `http://127.0.0.1:${address.port}`;
+      const alreadyAborted = new AbortController();
+      alreadyAborted.abort();
+      const alreadyResult = await built.agent.sessionClient
+        .fetch(
+          new Request(`${origin}/already`, { signal: alreadyAborted.signal }),
+        )
+        .then(
+          (response) => response,
+          (error: unknown) => error,
+        );
+
+      const inFlight = new AbortController();
+      const pending = built.agent.sessionClient
+        .fetch(new Request(`${origin}/inflight`, { signal: inFlight.signal }))
+        .then(
+          (response) => response,
+          (error: unknown) => error,
+        );
+      await admitted.promise;
+      inFlight.abort();
+      const inFlightResult = await pending;
+      await disconnected.promise;
+
+      expect(alreadyResult).toBeInstanceOf(Error);
+      expect(requests).toBe(1);
+      expect(inFlightResult).toBeInstanceOf(Error);
+    } finally {
+      await built.cleanup();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+        server.closeAllConnections();
+      });
+    }
+  });
+
   it.skipIf(process.platform === 'win32')(
     'cancels physical shell work before a held factory settles and joins its late resource once',
     async () => {
