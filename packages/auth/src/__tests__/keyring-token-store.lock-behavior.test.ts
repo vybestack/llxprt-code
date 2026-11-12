@@ -345,22 +345,46 @@ describe('KeyringTokenStore advisory lock behavior', () => {
     const callback = new Promise<boolean>((resolve) => {
       finishCallback = resolve;
     });
+    let deadlineClockStart = 0;
     const store = createStore(async () => {
       await new Promise((resolve) => setTimeout(resolve, 2_000));
       return buildOwnerMetadata(Date.now() - process.uptime() * 1000);
     });
+    let acquisitionSettled = false;
     const acquisition = store.acquireAuthLock('codex', {
       waitMs: 100,
       onWait: () => {
+        deadlineClockStart = Date.now() - 2;
+        vi.useFakeTimers({ now: deadlineClockStart });
         callbackEntered();
         return callback;
       },
     });
 
-    await entered;
-    await expect(acquisition).resolves.toBe(false);
-    expect(await fs.readFile(lockFile, 'utf8')).toBe(liveOwner);
-    finishCallback(true);
+    void acquisition.then(
+      () => {
+        acquisitionSettled = true;
+      },
+      () => {
+        acquisitionSettled = true;
+      },
+    );
+
+    try {
+      await entered;
+      vi.advanceTimersByTime(99);
+      expect(acquisitionSettled).toBe(false);
+      vi.advanceTimersByTime(1);
+      vi.runAllTimers();
+      await Promise.resolve();
+      vi.runAllTimers();
+      expect(Date.now() - deadlineClockStart).toBeLessThanOrEqual(110);
+      await expect(acquisition).resolves.toBe(false);
+      expect(await fs.readFile(lockFile, 'utf8')).toBe(liveOwner);
+    } finally {
+      finishCallback(true);
+      vi.useRealTimers();
+    }
   });
 
   it('keeps auth and refresh lock namespaces independent', async () => {
