@@ -1,0 +1,46 @@
+{
+  "name": "@vybestack/llxprt-code-agent-core",
+  "version": "0.12.0",
+  "description": "Pure agent API contracts and definition validation for LLxprt Code",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "bun": "./index.ts",
+      "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/src/testing/fake-ports.d.ts",
+      "bun": "./src/testing/fake-ports.ts",
+      "import": "./dist/src/testing/fake-ports.js"
+    }
+  },
+  "scripts": {
+    "build": "bun ../../scripts/build_package.ts",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write .",
+    "test": "bun ../../scripts/run_bun_tests.ts --workspace agent-core --junit junit.xml",
+    "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace agent-core --junit junit.xml",
+    "typecheck": "tsc --noEmit",
+    "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace agent-core"
+  },
+  "files": [
+    "index.ts",
+    "src",
+    "!**/*.test.ts",
+    "dist"
+  ],
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=24.22.1"
+  }
+}
