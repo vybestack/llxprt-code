@@ -147,11 +147,10 @@ export class SessionClientAcquisitionOwner {
     input: Parameters<NetworkFetch>[0],
     init?: Parameters<NetworkFetch>[1],
   ): ReturnType<NetworkFetch> {
-    const callerSignal =
-      init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    const effective = new Request(input, init);
     return this.auxiliary.run(
-      (signal) => this.fetch(input, { ...init, signal }),
-      callerSignal ?? undefined,
+      (signal) => this.fetch(effective, { signal }),
+      effective.signal,
     );
   }
   async initializeInitialClientBinding(): Promise<void> {

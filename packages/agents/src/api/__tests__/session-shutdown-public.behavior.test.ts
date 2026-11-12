@@ -129,7 +129,16 @@ describe('public Agent coordinated shutdown', () => {
     let requests = 0;
     const server = createServer((request, response) => {
       requests += 1;
-      if (request.url?.endsWith('/already') === true) {
+      if (request.url?.endsWith('/stream') === true) {
+        const chunks: Buffer[] = [];
+        request.on('data', (chunk: Buffer) => chunks.push(chunk));
+        request.on('end', () => response.end(Buffer.concat(chunks).toString()));
+        return;
+      }
+      if (
+        request.url?.endsWith('/already') === true ||
+        request.url?.endsWith('/null') === true
+      ) {
         response.end('contacted');
         return;
       }
@@ -157,6 +166,24 @@ describe('public Agent coordinated shutdown', () => {
           (response) => response,
           (error: unknown) => error,
         );
+      const nullOverrideResponse = await built.agent.sessionClient.fetch(
+        new Request(`${origin}/null`, { signal: alreadyAborted.signal }),
+        { signal: null },
+      );
+      const streamingInit: RequestInit & { duplex: 'half' } = {
+        method: 'POST',
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('streamed body'));
+            controller.close();
+          },
+        }),
+        duplex: 'half',
+      };
+      const streamingResponse = await built.agent.sessionClient.fetch(
+        `${origin}/stream`,
+        streamingInit,
+      );
 
       const inFlight = new AbortController();
       const pending = built.agent.sessionClient
@@ -171,7 +198,9 @@ describe('public Agent coordinated shutdown', () => {
       await disconnected.promise;
 
       expect(alreadyResult).toBeInstanceOf(Error);
-      expect(requests).toBe(1);
+      expect(nullOverrideResponse.status).toBe(200);
+      expect(await streamingResponse.text()).toBe('streamed body');
+      expect(requests).toBe(3);
       expect(inFlightResult).toBeInstanceOf(Error);
     } finally {
       await built.cleanup();
