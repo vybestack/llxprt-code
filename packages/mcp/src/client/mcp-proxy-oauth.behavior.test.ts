@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { createServer, get } from 'node:http';
-import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import { createTestOwnedFetch } from '@vybestack/llxprt-code-test-utils/network/test-utils/owned-fetch.js';
 import { startLocalForwardProxy } from '@vybestack/llxprt-code-test-utils/network/local-forward-proxy.js';
 import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 import { createTestOAuthBinding } from './test-support/oauth.js';
@@ -85,7 +85,7 @@ describe('MCP OAuth proxy ownership', () => {
           ...(request.body ? { body: request.body } : {}),
         }),
     });
-    const network = new OwnedFetch(proxy.url);
+    const network = createTestOwnedFetch(proxy.url);
     const binding = { ...createTestOAuthBinding(), openBrowser: authorize };
     try {
       expect(

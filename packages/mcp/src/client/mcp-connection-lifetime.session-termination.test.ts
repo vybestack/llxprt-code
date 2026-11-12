@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { createServer, type Server } from 'node:http';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import { createTestOwnedFetch } from '@vybestack/llxprt-code-test-utils/network/test-utils/owned-fetch.js';
 import {
   startLocalForwardProxy,
   type LocalForwardProxy,
@@ -145,7 +145,7 @@ describe('createJoiningTransport session termination', () => {
       },
     });
     proxies.push(proxy);
-    const network = new OwnedFetch(proxy.url);
+    const network = createTestOwnedFetch(proxy.url);
 
     const transport = createJoiningTransport(
       network.fetch,

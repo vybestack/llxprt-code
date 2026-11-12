@@ -7,7 +7,7 @@ import { describe, expect, it } from 'bun:test';
 import { createServer, type Server, type ServerResponse } from 'node:http';
 import { connect } from 'node:net';
 import type { Duplex } from 'node:stream';
-import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import { createTestOwnedFetch } from '@vybestack/llxprt-code-test-utils/network/test-utils/owned-fetch.js';
 import { connectToMcpServer } from './mcp-connection.js';
 import {
   bindMcpOAuthCapabilities,
@@ -137,7 +137,9 @@ describe('MCP SSE owner proxy', () => {
         socket.on('error', () => upstream.destroy());
         socket.on('close', () => upstream.destroy());
       });
-      const network = new OwnedFetch(`http://127.0.0.1:${await listen(proxy)}`);
+      const network = createTestOwnedFetch(
+        `http://127.0.0.1:${await listen(proxy)}`,
+      );
       const binding = createTestOAuthBinding();
       if (mode === 'authenticated-sse') {
         await binding.tokenStorage.saveToken(
