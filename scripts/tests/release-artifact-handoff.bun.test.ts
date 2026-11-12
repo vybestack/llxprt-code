@@ -24,9 +24,13 @@ const WORKFLOW = parseWorkflowYaml(
   readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf8'),
 );
 
-function runSnippet(script: string, env: NodeJS.ProcessEnv): number | null {
+function runSnippet(
+  script: string,
+  env: NodeJS.ProcessEnv,
+  cwd = ROOT,
+): number | null {
   return spawnSync('bash', ['--noprofile', '--norc', '-e', '-c', script], {
-    cwd: ROOT,
+    cwd,
     env: { ...process.env, ...env },
     encoding: 'utf8',
   }).status;
@@ -152,6 +156,183 @@ describe('release candidate archive handoff', () => {
         'tampered candidate image',
       );
       expect(runSnippet(consumer, consumerEnv)).not.toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('prepared release commit bundle handoff', () => {
+  it('restores an unpublished commit in a fresh job and rejects missing or changed bundles', () => {
+    const createCommit = stepNamed(
+      workflowJob(WORKFLOW, 'prepare_artifact'),
+      'Create prepared release commit',
+    ).run;
+    const prepare = stepNamed(
+      workflowJob(WORKFLOW, 'prepare_artifact'),
+      'Bundle prepared release commit',
+    ).run;
+    const consumer = stepNamed(
+      workflowJob(WORKFLOW, 'candidate_amd64'),
+      'Restore prepared release commit bundle',
+    ).run;
+    if (
+      createCommit === undefined ||
+      prepare === undefined ||
+      consumer === undefined
+    ) {
+      throw new Error(
+        'release commit bundle producer and consumer snippets are required',
+      );
+    }
+
+    const root = mkdtempSync(join(WORK, 'commit-bundle-handoff-'));
+    const origin = join(root, 'origin.git');
+    const producer = join(root, 'producer');
+    const runnerTemp = join(root, 'runner-temp');
+    const releaseBranch = 'release/v1.2.0';
+    const git = (cwd: string, ...args: string[]): string =>
+      execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+
+    try {
+      mkdirSync(producer);
+      mkdirSync(join(runnerTemp, 'release-artifacts'), { recursive: true });
+      git(producer, 'init', '-b', 'main');
+      git(producer, 'config', 'user.name', 'Release handoff test');
+      git(producer, 'config', 'user.email', 'release-handoff@example.invalid');
+      writeFileSync(join(producer, 'base.txt'), 'public base');
+      git(producer, 'add', 'base.txt');
+      git(producer, 'commit', '-m', 'public base');
+      const baseSha = git(producer, 'rev-parse', 'HEAD');
+      git(root, 'init', '--bare', origin);
+      git(producer, 'remote', 'add', 'origin', origin);
+      git(producer, 'push', 'origin', 'main');
+      git(origin, 'symbolic-ref', 'HEAD', 'refs/heads/main');
+
+      git(producer, 'switch', '-c', releaseBranch);
+      mkdirSync(join(producer, 'packages', 'sample'), { recursive: true });
+      mkdirSync(join(producer, 'plugins', 'google-gemini'), {
+        recursive: true,
+      });
+      mkdirSync(join(producer, 'plugins', 'google-mcp-auth'), {
+        recursive: true,
+      });
+      writeFileSync(join(producer, 'package.json'), '{"version":"1.2.0"}');
+      writeFileSync(join(producer, 'package-lock.json'), '{}');
+      writeFileSync(join(producer, 'packages', 'sample', 'package.json'), '{}');
+      writeFileSync(
+        join(producer, 'plugins', 'google-gemini', 'package.json'),
+        '{}',
+      );
+      writeFileSync(
+        join(producer, 'plugins', 'google-mcp-auth', 'package.json'),
+        '{}',
+      );
+      const commitOutput = join(root, 'create-commit-output');
+      expect(
+        runSnippet(
+          createCommit,
+          {
+            GITHUB_OUTPUT: commitOutput,
+            SHOULD_CREATE_BRANCH: 'true',
+            RELEASE_TAG: 'v1.2.0',
+          },
+          producer,
+        ),
+      ).toBe(0);
+      const releaseSha = readFileSync(commitOutput, 'utf8').match(
+        /^release_commit_sha=(.+)$/m,
+      )?.[1];
+      if (releaseSha === undefined) {
+        throw new Error('release commit step did not report its commit SHA');
+      }
+      expect(
+        runSnippet(
+          prepare,
+          {
+            RUNNER_TEMP: runnerTemp,
+            PUBLIC_BASE_SHA: baseSha,
+            RELEASE_COMMIT_SHA: releaseSha ?? '',
+            RELEASE_BRANCH: releaseBranch,
+          },
+          producer,
+        ),
+      ).toBe(0);
+
+      const bundle = join(
+        runnerTemp,
+        'release-artifacts',
+        'release-commit.bundle',
+      );
+      const consumerTemp = join(root, 'consumer-temp');
+      mkdirSync(join(consumerTemp, 'release-artifacts'), { recursive: true });
+      execFileSync('cp', [bundle, join(consumerTemp, 'release-artifacts')]);
+      const consumerEnv = {
+        RUNNER_TEMP: consumerTemp,
+        PUBLIC_BASE_SHA: baseSha,
+        RELEASE_COMMIT_SHA: releaseSha,
+        RELEASE_BRANCH: releaseBranch,
+        SHOULD_CREATE_BRANCH: 'true',
+      };
+
+      const freshConsumer = join(root, 'consumer');
+      git(root, 'clone', origin, freshConsumer);
+      expect(git(freshConsumer, 'rev-parse', 'HEAD')).toBe(baseSha);
+      expect(
+        spawnSync('git', ['cat-file', '-e', releaseSha], { cwd: freshConsumer })
+          .status,
+      ).not.toBe(0);
+      expect(runSnippet(consumer, consumerEnv, freshConsumer)).toBe(0);
+      expect(git(freshConsumer, 'rev-parse', 'HEAD')).toBe(releaseSha);
+
+      writeFileSync(
+        join(consumerTemp, 'release-artifacts', 'release-commit.bundle'),
+        'tampered',
+      );
+      const tamperedConsumer = join(root, 'tampered-consumer');
+      git(root, 'clone', origin, tamperedConsumer);
+      expect(runSnippet(consumer, consumerEnv, tamperedConsumer)).not.toBe(0);
+
+      rmSync(join(consumerTemp, 'release-artifacts', 'release-commit.bundle'));
+      const missingConsumer = join(root, 'missing-consumer');
+      git(root, 'clone', origin, missingConsumer);
+      expect(runSnippet(consumer, consumerEnv, missingConsumer)).not.toBe(0);
+
+      const nightlyConsumer = join(root, 'nightly-consumer');
+      git(root, 'clone', origin, nightlyConsumer);
+      const nightlyOutput = join(root, 'nightly-output');
+      expect(
+        runSnippet(
+          createCommit,
+          {
+            GITHUB_OUTPUT: nightlyOutput,
+            SHOULD_CREATE_BRANCH: 'false',
+            RELEASE_TAG: 'nightly',
+          },
+          nightlyConsumer,
+        ),
+      ).toBe(0);
+      const nightlySha = readFileSync(nightlyOutput, 'utf8').match(
+        /^release_commit_sha=(.+)$/m,
+      )?.[1];
+      if (nightlySha === undefined) {
+        throw new Error('no-commit step did not report the public base SHA');
+      }
+      expect(nightlySha).toBe(baseSha);
+      expect(
+        runSnippet(
+          consumer,
+          {
+            RUNNER_TEMP: join(root, 'no-bundle'),
+            PUBLIC_BASE_SHA: baseSha,
+            RELEASE_COMMIT_SHA: nightlySha,
+            RELEASE_BRANCH: '',
+            SHOULD_CREATE_BRANCH: 'false',
+          },
+          nightlyConsumer,
+        ),
+      ).toBe(0);
+      expect(git(nightlyConsumer, 'rev-parse', 'HEAD')).toBe(baseSha);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

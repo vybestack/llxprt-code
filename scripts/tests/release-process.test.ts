@@ -496,19 +496,24 @@ ${path.posix.join(realFixture, 'plugins/google-mcp-auth')}|install --omit=peer
     const versionStep = prepareSteps.findIndex(
       (step) => step.name === 'Version and bind release packages',
     );
+    const commitStep = prepareSteps.findIndex(
+      (step) => step.name === 'Create prepared release commit',
+    );
     const buildStep = prepareSteps.findIndex(
       (step) => step.name === 'Build versioned sandbox inputs',
     );
     const versionCommand = asString(prepareSteps[versionStep]?.run);
+    const commitCommand = asString(prepareSteps[commitStep]?.run);
 
     expect(versionStep).toBeGreaterThanOrEqual(0);
-    expect(buildStep).toBeGreaterThan(versionStep);
+    expect(commitStep).toBeGreaterThan(versionStep);
+    expect(buildStep).toBeGreaterThan(commitStep);
     expect(versionCommand).toContain('npm run release:version');
     expect(versionCommand).toContain('bun scripts/bind-release-deps.ts');
     expect(versionCommand).toContain('bun scripts/bind-plugin-peers.ts');
     expect(versionCommand).toContain('npm version "$RELEASE_VERSION"');
-    expect(versionCommand).toContain('git commit -m');
-    expect(versionCommand).toContain('git rev-parse HEAD');
+    expect(commitCommand).toContain('git commit -m');
+    expect(commitCommand).toContain('git rev-parse HEAD');
     expect(releaseYml).not.toContain(
       'bun scripts/bind-release-deps.ts --backup',
     );

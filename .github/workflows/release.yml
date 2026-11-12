@@ -247,11 +247,11 @@ jobs:
     timeout-minutes: 120
     if: github.repository == 'vybestack/llxprt-code'
     outputs:
-      source_sha: ${{ steps.prepare_commit.outputs.release_commit_sha }}
+      source_sha: ${{ steps.create_release_commit.outputs.release_commit_sha }}
       release_version: ${{ steps.metadata.outputs.release_version }}
       release_tag: ${{ steps.metadata.outputs.release_tag }}
       npm_tag: ${{ steps.metadata.outputs.npm_tag }}
-      release_commit_sha: ${{ steps.prepare_commit.outputs.release_commit_sha }}
+      release_commit_sha: ${{ steps.create_release_commit.outputs.release_commit_sha }}
       release_branch: ${{ steps.prepare_commit.outputs.release_branch }}
       should_create_branch: ${{ steps.prepare_commit.outputs.should_create_branch }}
       image_labels: ${{ steps.image_metadata.outputs.labels }}
@@ -321,22 +321,41 @@ jobs:
               npm version "$RELEASE_VERSION" --no-git-tag-version --allow-same-version --prefix "$plugin"
             done
             bun scripts/bind-plugin-peers.ts "$RELEASE_VERSION"
-            if [[ "$should_create_branch" == "true" ]]; then
-              git config user.name "github-actions[bot]"
-              git config user.email "github-actions[bot]@users.noreply.github.com"
-              git add package.json package-lock.json packages/*/package.json plugins/google-gemini/package.json plugins/google-mcp-auth/package.json
-              if git diff --cached --quiet; then
-                git commit --allow-empty -m "chore(release): $RELEASE_TAG (no version changes)"
-              else
-                git commit -m "chore(release): $RELEASE_TAG"
-              fi
-            fi
           fi
           echo "should_create_branch=$should_create_branch" >> "$GITHUB_OUTPUT"
           if [[ "$should_create_branch" == "true" ]]; then
             echo "release_branch=release/$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           fi
+      - name: Create prepared release commit
+        id: create_release_commit
+        env:
+          SHOULD_CREATE_BRANCH: ${{ steps.prepare_commit.outputs.should_create_branch }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [[ "$SHOULD_CREATE_BRANCH" == "true" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add package.json package-lock.json packages/*/package.json plugins/google-gemini/package.json plugins/google-mcp-auth/package.json
+            if git diff --cached --quiet; then
+              git commit --allow-empty -m "chore(release): $RELEASE_TAG (no version changes)"
+            else
+              git commit -m "chore(release): $RELEASE_TAG"
+            fi
+          fi
           echo "release_commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Bundle prepared release commit
+        if: steps.prepare_commit.outputs.should_create_branch == 'true'
+        env:
+          PUBLIC_BASE_SHA: ${{ github.sha }}
+          RELEASE_COMMIT_SHA: ${{ steps.create_release_commit.outputs.release_commit_sha }}
+          RELEASE_BRANCH: ${{ steps.prepare_commit.outputs.release_branch }}
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/release-artifacts/release-commit.bundle"
+          git bundle create "$bundle" "refs/heads/$RELEASE_BRANCH" "^$PUBLIC_BASE_SHA"
+          git bundle verify "$bundle"
+          git bundle list-heads "$bundle" | grep -F "$RELEASE_COMMIT_SHA"
       - name: Build versioned sandbox inputs
         run: |
           npm run build:packages
@@ -432,7 +451,31 @@ jobs:
       - name: Checkout source SHA
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
         with:
-          ref: ${{ needs.prepare_artifact.outputs.release_commit_sha }}
+          ref: ${{ github.sha }}
+      - name: Download prepared release artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: prepared-release-artifacts-${{ github.run_id }}
+          path: ${{ runner.temp }}/release-artifacts
+      - name: Restore prepared release commit bundle
+        env:
+          PUBLIC_BASE_SHA: ${{ github.sha }}
+          RELEASE_COMMIT_SHA: ${{ needs.prepare_artifact.outputs.release_commit_sha }}
+          RELEASE_BRANCH: ${{ needs.prepare_artifact.outputs.release_branch }}
+          SHOULD_CREATE_BRANCH: ${{ needs.prepare_artifact.outputs.should_create_branch }}
+        run: |
+          set -euo pipefail
+          if [[ "$SHOULD_CREATE_BRANCH" == "true" ]]; then
+            bundle="$RUNNER_TEMP/release-artifacts/release-commit.bundle"
+            test -f "$bundle"
+            git bundle verify "$bundle"
+            git fetch "$bundle" "refs/heads/$RELEASE_BRANCH"
+          else
+            test "$RELEASE_COMMIT_SHA" = "$PUBLIC_BASE_SHA"
+            test "$(git rev-parse HEAD)" = "$PUBLIC_BASE_SHA"
+          fi
+          git checkout --detach "$RELEASE_COMMIT_SHA"
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT_SHA"
       - name: Download shared versioned sandbox inputs
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
         with:
@@ -494,7 +537,31 @@ jobs:
       - name: Checkout source SHA
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
         with:
-          ref: ${{ needs.prepare_artifact.outputs.release_commit_sha }}
+          ref: ${{ github.sha }}
+      - name: Download prepared release artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: prepared-release-artifacts-${{ github.run_id }}
+          path: ${{ runner.temp }}/release-artifacts
+      - name: Restore prepared release commit bundle
+        env:
+          PUBLIC_BASE_SHA: ${{ github.sha }}
+          RELEASE_COMMIT_SHA: ${{ needs.prepare_artifact.outputs.release_commit_sha }}
+          RELEASE_BRANCH: ${{ needs.prepare_artifact.outputs.release_branch }}
+          SHOULD_CREATE_BRANCH: ${{ needs.prepare_artifact.outputs.should_create_branch }}
+        run: |
+          set -euo pipefail
+          if [[ "$SHOULD_CREATE_BRANCH" == "true" ]]; then
+            bundle="$RUNNER_TEMP/release-artifacts/release-commit.bundle"
+            test -f "$bundle"
+            git bundle verify "$bundle"
+            git fetch "$bundle" "refs/heads/$RELEASE_BRANCH"
+          else
+            test "$RELEASE_COMMIT_SHA" = "$PUBLIC_BASE_SHA"
+            test "$(git rev-parse HEAD)" = "$PUBLIC_BASE_SHA"
+          fi
+          git checkout --detach "$RELEASE_COMMIT_SHA"
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT_SHA"
       - name: Download shared versioned sandbox inputs
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
         with:
@@ -587,16 +654,35 @@ jobs:
       RELEASE_TAG: ${{ steps.version.outputs.RELEASE_TAG }}
 
     steps:
-      - name: Checkout prepared release commit
+      - name: Checkout prepared release commit base
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
-          ref: ${{ needs.prepare_artifact.outputs.release_commit_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Download prepared release artifacts
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
         with:
           name: prepared-release-artifacts-${{ github.run_id }}
           path: ${{ runner.temp }}/release-artifacts
+      - name: Restore prepared release commit bundle
+        env:
+          PUBLIC_BASE_SHA: ${{ github.sha }}
+          RELEASE_COMMIT_SHA: ${{ needs.prepare_artifact.outputs.release_commit_sha }}
+          RELEASE_BRANCH: ${{ needs.prepare_artifact.outputs.release_branch }}
+          SHOULD_CREATE_BRANCH: ${{ needs.prepare_artifact.outputs.should_create_branch }}
+        run: |
+          set -euo pipefail
+          if [[ "$SHOULD_CREATE_BRANCH" == "true" ]]; then
+            bundle="$RUNNER_TEMP/release-artifacts/release-commit.bundle"
+            test -f "$bundle"
+            git bundle verify "$bundle"
+            git fetch "$bundle" "refs/heads/$RELEASE_BRANCH"
+          else
+            test "$RELEASE_COMMIT_SHA" = "$PUBLIC_BASE_SHA"
+            test "$(git rev-parse HEAD)" = "$PUBLIC_BASE_SHA"
+          fi
+          git checkout --detach "$RELEASE_COMMIT_SHA"
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT_SHA"
       - name: Verify prepared release artifact digests
         run: |
           cd "$RUNNER_TEMP/release-artifacts"

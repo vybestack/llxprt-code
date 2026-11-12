@@ -62,6 +62,58 @@ function runCommands(jobName: string): string[] {
     .filter((run): run is string => typeof run === 'string');
 }
 
+describe('prepared release commit wiring', () => {
+  it('uploads the bundle with prepared artifacts and restores it before each release checkout', () => {
+    const prepareSteps = jobSteps(workflowJob(workflow, 'prepare_artifact'));
+    const bundleIndex = prepareSteps.findIndex(
+      (step) => step.name === 'Bundle prepared release commit',
+    );
+    const uploadIndex = prepareSteps.findIndex(
+      (step) => step.name === 'Upload prepared release artifacts',
+    );
+    expect(bundleIndex).toBeGreaterThanOrEqual(0);
+    expect(uploadIndex).toBeGreaterThan(bundleIndex);
+    expect(asString(prepareSteps[bundleIndex]?.run)).toContain(
+      'release-commit.bundle',
+    );
+
+    for (const jobName of ['candidate_amd64', 'candidate_arm64', 'release']) {
+      const steps = jobSteps(workflowJob(workflow, jobName));
+      const restoreIndex = steps.findIndex(
+        (step) => step.name === 'Restore prepared release commit bundle',
+      );
+      expect(
+        restoreIndex,
+        `${jobName} must restore its commit bundle`,
+      ).toBeGreaterThanOrEqual(0);
+      const artifactIndex = steps.findIndex(
+        (step) => step.name === 'Download prepared release artifacts',
+      );
+      expect(
+        artifactIndex,
+        `${jobName} must download the bundle artifact`,
+      ).toBeGreaterThanOrEqual(0);
+      expect(artifactIndex).toBeLessThan(restoreIndex);
+      const restore = steps[restoreIndex];
+      const restoreRun = asString(restore?.run);
+      expect(restoreRun).toContain('git bundle verify "$bundle"');
+      expect(restoreRun).toContain(
+        'git checkout --detach "$RELEASE_COMMIT_SHA"',
+      );
+      expect(restoreRun).toContain(
+        'test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT_SHA"',
+      );
+      expect(restoreRun.indexOf('git bundle verify')).toBeLessThan(
+        restoreRun.indexOf('git checkout --detach'),
+      );
+      expect(restoreRun).toContain('SHOULD_CREATE_BRANCH');
+      expect(restoreRun).toContain(
+        'test "$RELEASE_COMMIT_SHA" = "$PUBLIC_BASE_SHA"',
+      );
+    }
+  });
+});
+
 describe('issue #4033 release workflow gates', () => {
   it('makes promotion depend on every verification and architecture smoke job', () => {
     const needs = needsOf('release');
@@ -347,13 +399,20 @@ describe('issue #4033 release workflow gates', () => {
 
     const prepareOutputs = asRecord(prepare['outputs']);
     expect(asString(prepareOutputs.release_commit_sha)).toContain(
-      'steps.prepare_commit.outputs.release_commit_sha',
+      'steps.create_release_commit.outputs.release_commit_sha',
     );
     const checkout = releaseSteps.find(
-      (step) => step.name === 'Checkout prepared release commit',
+      (step) => step.name === 'Checkout prepared release commit base',
     );
-    expect(JSON.stringify(checkout?.with)).toContain(
-      'needs.prepare_artifact.outputs.release_commit_sha',
+    expect(JSON.stringify(checkout?.with)).toContain('github.sha');
+    expect(
+      releaseSteps.findIndex(
+        (step) => step.name === 'Restore prepared release commit bundle',
+      ),
+    ).toBeGreaterThan(
+      releaseSteps.findIndex(
+        (step) => step.name === 'Checkout prepared release commit base',
+      ),
     );
     expect(
       releaseRuns.some((line) =>
