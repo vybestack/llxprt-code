@@ -7,13 +7,13 @@
 // File for 'llxprt mcp list' command
 import {
   OwnedFetch,
+  type MCPServerConfig,
   type NetworkFetch,
-} from '@vybestack/llxprt-code-core/utils/fetch.js';
+} from '@vybestack/llxprt-code-core';
 import { resolveProxy } from '../../config/configBuilder.js';
 import type { CommandModule } from 'yargs';
 import { loadSettings } from '../../config/settings.js';
 import { exitCli } from '../utils.js';
-import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   MCPOAuthTokenStorage,
