@@ -71,9 +71,18 @@ function answer(text: string): IContent {
   };
 }
 
+/** One request's stream: chunks, with `'retry'` marking a discarded attempt. */
+type ScriptedRequest = IContent | ReadonlyArray<IContent | 'retry'>;
+
+function isStreamScript(
+  request: ScriptedRequest,
+): request is ReadonlyArray<IContent | 'retry'> {
+  return Array.isArray(request);
+}
+
 async function runSubagent(
   retainSubagentCleanup: (close: () => void | Promise<void>) => () => void,
-  responses: readonly IContent[],
+  responses: readonly ScriptedRequest[],
   todoReminder: string | null,
 ): Promise<{
   readonly output: OutputObject;
@@ -107,11 +116,13 @@ async function runSubagent(
     sendMessageStream: async () => {
       const response = responses[requestCount] ?? UNREQUESTED;
       requestCount += 1;
+      const steps = isStreamScript(response) ? response : [response];
       return (async function* () {
-        yield {
-          type: StreamEventType.CHUNK,
-          value: toModelStreamChunk(response),
-        };
+        for (const step of steps) {
+          yield step === 'retry'
+            ? { type: StreamEventType.RETRY }
+            : { type: StreamEventType.CHUNK, value: toModelStreamChunk(step) };
+        }
       })();
     },
   } as unknown as ChatSession;
@@ -208,6 +219,37 @@ describe('subagent non-interactive run whose model refuses (issue #4036)', () =>
     );
 
     expect({ toolCalls, requestCount }).toStrictEqual({
+      toolCalls: 0,
+      requestCount: 1,
+    });
+  });
+
+  it('forgets a refused attempt that the stream then retried', async () => {
+    const staleCall = {
+      type: 'tool_call' as const,
+      id: 'call-stale',
+      name: 'list_directory',
+      parameters: { dir_path: '.' },
+    };
+    const { output, toolCalls, requestCount } = await runSubagent(
+      retainSubagentCleanup,
+      [
+        [
+          refusal([{ type: 'text', text: 'I cannot help.' }, staleCall]),
+          'retry',
+          answer('all done'),
+        ],
+        UNREQUESTED,
+      ],
+      null,
+    );
+
+    expect({
+      reason: output.terminate_reason,
+      toolCalls,
+      requestCount,
+    }).toStrictEqual({
+      reason: SubagentTerminateMode.GOAL,
       toolCalls: 0,
       requestCount: 1,
     });

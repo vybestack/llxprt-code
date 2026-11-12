@@ -29,7 +29,6 @@ import type {
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
@@ -92,9 +91,12 @@ import { enforceTurnMediaRequestContents } from './turnMediaRequest.js';
 import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
 import {
   ModelRefusalSignal,
+  advanceAfterAttempt,
+  announceRefusalSettlement,
   settleRefusal,
-  terminalRefusalRecovery,
+  type AttemptCounters,
   type RefusalRecovery,
+  type StreamAttemptOutcome,
 } from '../refusal/index.js';
 
 type SemanticMediaPurgeFactory = () => Promise<
@@ -134,9 +136,6 @@ export class TurnProcessor {
   private eagerlyRecordedToolResponseCallIds = new Set<string>();
   private stampingBaseUrl: string | undefined = undefined;
   private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
-
-  /** Phase 1 has no recovery, so a refusal always stops the request. */
-  private readonly refusalRecovery: RefusalRecovery = terminalRefusalRecovery;
 
   /**
    * 0-based index of the send attempt that produced the response being
@@ -180,6 +179,7 @@ export class TurnProcessor {
     private readonly resolveProviderBaseUrl: (
       provider: IProvider,
     ) => string | undefined,
+    private readonly refusalRecovery: RefusalRecovery,
   ) {}
 
   /**
@@ -329,12 +329,25 @@ export class TurnProcessor {
     onDone: () => void,
   ): AsyncGenerator<StreamEvent> {
     const requestParams = withRetryRequestState(params);
+    // The refusal policy and retry budget belong to the logical request, which
+    // spans every send made under this prompt id.
+    this.refusalRecovery.admit(prompt_id);
     let primaryFailure: { readonly error: unknown } | undefined;
     try {
       let lastError: unknown = new Error('Request failed after all retries.');
-      let attempt = 0;
+      // `contentAttempt` drives the retry temperature and the content-retry
+      // budget. `requestAttempt` numbers every request sent for this turn,
+      // whatever caused the resend, so token-log attempt indexes stay unique.
+      const attempt: AttemptCounters = {
+        contentAttempt: 0,
+        requestAttempt: 0,
+        announceRetry: false,
+      };
       let retrying = true;
-      while (retrying && attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts) {
+      while (
+        retrying &&
+        attempt.contentAttempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts
+      ) {
         const outcome = yield* this._runStreamAttempt(
           requestParams,
           prompt_id,
@@ -343,15 +356,12 @@ export class TurnProcessor {
           semanticMediaPurge,
         );
         lastError = outcome.error;
-        if (outcome.action !== 'retry') {
-          retrying = false;
-        } else {
-          await delay(
-            INVALID_CONTENT_RETRY_OPTIONS.initialDelayMs * (attempt + 1),
-            requestParams.config?.abortSignal,
-          );
-          attempt++;
-        }
+        retrying = await advanceAfterAttempt(outcome, attempt, {
+          recovery: this.refusalRecovery,
+          usageLogger: this.compressionHandler.tokenUsageLogger,
+          promptId: prompt_id,
+          signal: requestParams.config?.abortSignal,
+        });
       }
       if (lastError != null) throw lastError;
     } catch (error: unknown) {
@@ -385,22 +395,25 @@ export class TurnProcessor {
     params: SendMessageParams,
     prompt_id: string,
     prepared: PreparedUserTurn,
-    attempt: number,
+    attempt: AttemptCounters,
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
-  ): AsyncGenerator<StreamEvent, { error: unknown; action: 'retry' | 'stop' }> {
-    if (attempt > 0) {
+  ): AsyncGenerator<StreamEvent, StreamAttemptOutcome> {
+    if (attempt.announceRetry) {
       yield { type: StreamEventType.RETRY };
     }
 
     let hasYieldedChunk = false;
     let attemptUsage: UsageStats | undefined;
     try {
-      const currentParams = applyRetryTemperature(params, attempt);
+      const currentParams = applyRetryTemperature(
+        params,
+        attempt.contentAttempt,
+      );
       const stream = await this.streamProcessor.makeApiCallAndProcessStream(
         currentParams,
         prompt_id,
         prepared,
-        attempt,
+        attempt.requestAttempt,
         semanticMediaPurge,
       );
       for await (const chunk of stream) {
@@ -414,35 +427,35 @@ export class TurnProcessor {
       // classification: it never reaches the temperature-changing content
       // retry below (issue #4036).
       if (error instanceof ModelRefusalSignal) {
-        return settleRefusal(
+        const route = params.modelParameters?.route;
+        const settlement = await settleRefusal(
           {
             recovery: this.refusalRecovery,
             usageLogger: this.compressionHandler.tokenUsageLogger,
             provider: () =>
-              params.modelParameters?.route?.provider.name ??
-              this.providerResolver('stream').name,
-            model: () =>
-              params.modelParameters?.route?.model ?? this.ports.state.model,
+              route?.provider.name ?? this.providerResolver('stream').name,
+            model: () => route?.model ?? this.ports.state.model,
             execution: params.recordingExecution,
           },
           error,
           prompt_id,
-          attempt,
+          attempt.requestAttempt,
         );
+        return yield* announceRefusalSettlement(settlement);
       }
       // Hook execution control errors are yielded then stop the loop.
       if (yield* hookControlStreamEvents(error)) {
         return { error: null, action: 'stop' };
       }
       if (
-        shouldRetryStreamAttempt(error, params, attempt, {
+        shouldRetryStreamAttempt(error, params, attempt.contentAttempt, {
           hasYieldedOutput: hasYieldedChunk,
         })
       ) {
         await recordAbandonedStreamAttempt(
           this.compressionHandler.tokenUsageLogger,
           prompt_id,
-          attempt,
+          attempt.requestAttempt,
           hasYieldedChunk,
           attemptUsage,
           this.compressionHandler.lastPromptTokenCount,

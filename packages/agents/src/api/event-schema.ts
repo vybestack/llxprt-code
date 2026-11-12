@@ -126,7 +126,11 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('tool-status'), update: ToolUpdateSchema }),
   z.object({ type: z.literal('usage'), usage: UsageMetadataValueSchema }),
   z.object({ type: z.literal('model-info'), info: ModelInfoSchema }),
-  z.object({ type: z.literal('notice'), message: z.string() }),
+  z.object({
+    type: z.literal('notice'),
+    message: z.string(),
+    source: z.literal('refusal-recovery').optional(),
+  }),
   z.object({
     type: z.literal('compression'),
     info: ChatCompressionInfoSchema.nullable(),

@@ -417,6 +417,13 @@ function createRuntimeContext(
       contextLimit: () => 60_000,
       preserveThreshold: () => 0.2,
       toolFormatOverride: () => undefined,
+      refusal: {
+        retries: () => 2,
+        backoffMs: () => 15_000,
+        rewrite: () => true,
+        reviewProfile: () => undefined,
+        maxRewrites: () => 1,
+      },
       reasoning: {
         enabled: () => false,
         includeInContext: () => false,

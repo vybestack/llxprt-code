@@ -13,6 +13,8 @@ import { join } from 'node:path';
 import { ApprovalMode, createAgent } from '@vybestack/llxprt-code-agents';
 import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
 import { Storage } from '@vybestack/llxprt-code-settings';
+import { installRefusalWaitForTesting } from '../../../refusal/refusalWait.js';
+import { startAnthropicEndpoint } from './anthropic-refusal-endpoint.js';
 import { drain } from './agentHarness.js';
 
 const PROMPT_TOKENS = 120;
@@ -28,6 +30,8 @@ export type EndpointReply =
   | {
       readonly kind: 'todo-write';
       readonly content: string;
+      /** End the stream with the refusal finish reason after the tool call. */
+      readonly refused?: boolean;
     };
 
 /** An answer that ends normally with the given text. */
@@ -50,6 +54,15 @@ export function emptyFinishReply(finishReason: string): EndpointReply {
   return { kind: 'finish', finishReason, outputTokens: 0 };
 }
 
+/** A task-list tool call whose attempt ends with the refusal finish reason. */
+export function refusedTodoReply(): EndpointReply {
+  return {
+    kind: 'todo-write',
+    content: 'write the quarterly report',
+    refused: true,
+  };
+}
+
 /** A task-list write that leaves one pending item, so a continuation is due. */
 export function pendingTodoReply(): EndpointReply {
   return { kind: 'todo-write', content: 'write the quarterly report' };
@@ -59,6 +72,7 @@ export interface WireRequest {
   readonly model: string;
   readonly temperature?: number;
   readonly messages: ReadonlyArray<{ role: string; content?: unknown }>;
+  readonly [key: string]: unknown;
 }
 
 function chunk(delta: object, finishReason: string | null): string {
@@ -94,7 +108,10 @@ function renderReply(reply: EndpointReply): string {
       function: { name: 'todo_write', arguments: JSON.stringify({ todos }) },
     };
     return (
-      chunk({ role: 'assistant', tool_calls: [call] }, 'tool_calls') +
+      chunk(
+        { role: 'assistant', tool_calls: [call] },
+        reply.refused === true ? 'refusal' : 'tool_calls',
+      ) +
       usageChunk(8) +
       'data: [DONE]\n\n'
     );
@@ -110,7 +127,7 @@ function renderReply(reply: EndpointReply): string {
   );
 }
 
-interface ScriptedEndpoint {
+export interface ScriptedEndpoint {
   readonly url: string;
   requests(): readonly WireRequest[];
   stop(): Promise<void>;
@@ -121,7 +138,7 @@ interface ScriptedEndpoint {
  * A request beyond the script is answered with a marker text and recorded, so
  * an unwanted extra request shows up in `requests()` and in the output.
  */
-async function startScriptedEndpoint(
+export async function startScriptedEndpoint(
   replies: readonly EndpointReply[],
 ): Promise<ScriptedEndpoint> {
   const requests: WireRequest[] = [];
@@ -159,6 +176,8 @@ async function startScriptedEndpoint(
 
 export interface ScriptedRun {
   readonly events: readonly AgentEvent[];
+  /** Backoff durations the agent asked the injected wait for, in order. */
+  readonly waits: readonly number[];
   readonly stats: ReturnType<Agent['getStats']>;
   readonly requests: readonly WireRequest[];
   readonly historyBefore: Awaited<ReturnType<Agent['getHistory']>>;
@@ -167,7 +186,7 @@ export interface ScriptedRun {
   readonly journalRecords: ReadonlyArray<Record<string, unknown>>;
 }
 
-function readJsonl(path: string): Array<Record<string, unknown>> {
+export function readJsonl(path: string): Array<Record<string, unknown>> {
   let raw: string;
   try {
     raw = readFileSync(path, 'utf8');
@@ -180,43 +199,97 @@ function readJsonl(path: string): Array<Record<string, unknown>> {
     .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
+export interface WaitCall {
+  readonly ms: number;
+  readonly signal: AbortSignal | undefined;
+  readonly agent: Agent;
+}
+
+export interface ScriptedRunOptions {
+  /** Which wire protocol the local endpoint speaks. Default: openai. */
+  readonly protocol?: 'openai' | 'anthropic';
+  /**
+   * Ephemeral settings applied before the first prompt. Refusal retries are
+   * off unless a test turns them on (`undefined` restores the default), so
+   * the issue #4036 phase 1 tests keep their single-request shape.
+   */
+  readonly settings?: Readonly<Record<string, unknown>>;
+  readonly modelParams?: Readonly<Record<string, unknown>>;
+  /**
+   * Behavior of the injected backoff wait. The default resolves at once, so
+   * tests observe requested delays without sleeping.
+   */
+  readonly wait?: (call: WaitCall) => Promise<void>;
+  /** Abort signal passed to every prompt. */
+  readonly signal?: AbortSignal;
+  /** Runs after the prompts while the agent is alive. */
+  readonly inspect?: (agent: Agent) => Promise<void>;
+}
+
 /**
  * Runs prompts in order through a real public Agent talking to a local
- * OpenAI-compatible endpoint that answers with `replies`, with the session
- * journal recording. Returns what a host can observe: the public events, the
- * requests the endpoint received, history before and after, the token-usage
- * log and the journal.
+ * endpoint that answers with `replies`, with the session journal recording.
+ * Returns what a host can observe: the public events, the requests the
+ * endpoint received, history before and after, the token-usage log and the
+ * journal.
  */
 export async function runScriptedPrompt(
   replies: readonly EndpointReply[],
   prompts: readonly string[] = ['please summarise the work'],
+  options: ScriptedRunOptions = {},
 ): Promise<ScriptedRun> {
   const workingDir = realpathSync(
     mkdtempSync(join(tmpdir(), 'llxprt-refusal-')),
   );
   const sessionId = `refusal-${randomUUID()}`;
-  const endpoint = await startScriptedEndpoint(replies);
+  const anthropic = options.protocol === 'anthropic';
+  const endpoint = anthropic
+    ? await startAnthropicEndpoint(replies)
+    : await startScriptedEndpoint(replies);
+  const waits: number[] = [];
   let agent: Agent | undefined;
+  const restoreWait = installRefusalWaitForTesting(async (ms, signal) => {
+    waits.push(ms);
+    if (agent !== undefined) await options.wait?.({ ms, signal, agent });
+  });
   try {
     agent = await createAgent({
-      provider: 'openai',
-      model: 'scripted-model',
+      provider: anthropic ? 'anthropic' : 'openai',
+      model: anthropic ? 'claude-opus-5-5' : 'scripted-model',
       workingDir,
       sessionId,
       approvalMode: ApprovalMode.YOLO,
       auth: { apiKey: 'local-test-key', baseUrl: endpoint.url },
     });
+    for (const [key, value] of Object.entries({
+      'refusal.retries': 0,
+      ...options.settings,
+    }))
+      agent.setEphemeralSetting(key, value);
+    for (const [key, value] of Object.entries(options.modelParams ?? {}))
+      agent.setModelParam(key, value);
     const historyBefore = await agent.getHistory();
     await agent.session.setRecording({ enabled: true });
     const events: AgentEvent[] = [];
     for (const prompt of prompts)
-      events.push(...(await drain(agent.stream(prompt))));
+      events.push(
+        ...(await drain(
+          agent.stream(
+            prompt,
+            options.signal === undefined
+              ? undefined
+              : { signal: options.signal },
+          ),
+        )),
+      );
+    await options.inspect?.(agent);
     const historyAfter = await agent.getHistory();
     const journalPath = agent.session.getRecording().path ?? '';
     await agent.session.setRecording({ enabled: false });
     const projectTempDir = new Storage(workingDir).getProjectTempDir();
     return {
       events,
+      waits,
       stats: agent.getStats(),
       requests: [...endpoint.requests()],
       historyBefore,
@@ -227,6 +300,7 @@ export async function runScriptedPrompt(
       journalRecords: readJsonl(journalPath),
     };
   } finally {
+    restoreWait();
     await agent?.dispose();
     await endpoint.stop();
     rmSync(workingDir, { recursive: true, force: true });

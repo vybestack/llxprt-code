@@ -131,6 +131,7 @@ import type { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import { StreamProcessor } from './StreamProcessor.js';
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
 import { TurnProcessor } from './TurnProcessor.js';
+import { createRefusalRecovery } from '../refusal/index.js';
 
 // Re-exports — consumers import from './chatSession.js'
 export {
@@ -351,6 +352,7 @@ export class ChatSession {
       this.historyService,
       this.streamProcessor,
       resolveBaseUrl,
+      createRefusalRecovery(this.ports.turn.ephemerals.refusal),
     );
     this.directProcessor = this.createDirectMessageProcessor();
   }

@@ -17,18 +17,27 @@ interface RefusalSettlementDeps {
   readonly execution: AgentChatRecordingExecution | undefined;
 }
 
+/** How the turn loop proceeds after a refused attempt. */
+export type RefusalSettlement =
+  | {
+      readonly action: 'retry-same-request';
+      readonly delayMs: number;
+      readonly notice: string;
+    }
+  | { readonly action: 'stop'; readonly notice?: string };
+
 /**
  * Applies the recovery policy to a refused attempt and journals the decision.
- * In Phase 1 every decision is a stop: the pending token-usage state is
- * finalized and the request ends without an error. The attempt's output was
- * already withheld from history by the stream finalizer.
+ * A retry keeps the prompt's pending token-usage state so the resend is logged
+ * as the next attempt; a stop finalizes it. Either way the attempt's output
+ * was already withheld from history by the stream finalizer.
  */
 export async function settleRefusal(
   deps: RefusalSettlementDeps,
   signal: ModelRefusalSignal,
   promptId: string,
   attemptIndex: number,
-): Promise<{ error: unknown; action: 'retry' | 'stop' }> {
+): Promise<RefusalSettlement> {
   const refused = toRefusalAttempt(signal.evidence, {
     promptId,
     attemptIndex,
@@ -37,6 +46,15 @@ export async function settleRefusal(
   });
   const decision = await deps.recovery.decide(refused);
   await recordRefusalInJournal(deps.execution, refused, decision);
+  if (decision.action === 'retry') {
+    return {
+      action: 'retry-same-request',
+      delayMs: decision.delayMs,
+      notice: decision.notice,
+    };
+  }
   deps.usageLogger?.finalizePrompt(promptId);
-  return { error: null, action: 'stop' };
+  return decision.notice === undefined
+    ? { action: 'stop' }
+    : { action: 'stop', notice: decision.notice };
 }

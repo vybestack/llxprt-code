@@ -85,6 +85,20 @@ Control how much context the model sees and when/how history is compressed. Thes
 | `compression.density.compressHeadroom`  | number  | `0.6`            | yes     | Multiplier for compression target (0–1). Lower = more aggressive compression.                                                                                   |
 | `compression.density.optimizeThreshold` | number  | strategy default | yes     | Context usage fraction that triggers density optimization.                                                                                                      |
 
+## Refusal Recovery
+
+Some models, notably Claude Opus through the Anthropic API, sometimes end a request with the stop reason `refusal` and no output, even when the request is ordinary work. Retrying the identical request often succeeds. These settings control how LLxprt Code retries. A refused attempt never enters the conversation history, and the same request is resent unchanged (same messages, model and parameters). The policy is read once when a request starts, so a `/set` during a retry wait applies to the next request.
+
+| Setting                  | Type    | Default | Profile | Description                                                                                                                                                                          |
+| ------------------------ | ------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `refusal.retries`        | number  | `2`     | yes     | Identical retries after a refusal, 0 to 10. `0` stops at the first refusal. Todo continuation and hook follow-ups of the same request share this budget.                             |
+| `refusal.backoff-ms`     | number  | `15000` | yes     | Base wait before the first retry, in milliseconds. Retry n waits `min(base * 4^(n-1), 180000)`, so the defaults wait 15 s, 60 s, then 180 s. `0` retries immediately.                |
+| `refusal.rewrite`        | boolean | `true`  | yes     | Let a review model check and rewrite the recent context once retries are exhausted. Review is not available yet, so a refusal that exhausts its retries currently stops the request. |
+| `refusal.review-profile` | string  | —       | yes     | Saved profile for the review model. Unset falls back to `compression.profile`, then to the current model. Cannot be empty when set.                                                  |
+| `refusal.max-rewrites`   | number  | `1`     | yes     | Review and rewrite rounds allowed per request, 0 to 3.                                                                                                                               |
+
+Each retry shows a notice with the wait and the attempt number. Press Escape or cancel the request during the wait to stop it at once. When the retries run out, a notice states how many times the model refused and what was tried, followed by the usual safety notice. In headless text mode these notices go to stderr, and `--quiet` suppresses them. With `--output-format stream-json` they appear as warning events, and plain `--output-format json` leaves them out of stdout.
+
 ## Tool Output Limits
 
 Prevent tools from flooding the context. Applied to all tools via the batch scheduler. See [Settings and Profiles](../settings-and-profiles.md#tool-output-limits) for how these interact.

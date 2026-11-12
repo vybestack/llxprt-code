@@ -286,7 +286,6 @@ export async function consumeNonInteractiveStream(
 function abortedRead(
   collected: {
     textResponse: string;
-    parseableTextResponse: string;
     hookRestrictedAllowedTools: string[] | undefined;
   },
   reportedOutputTokens: number | undefined,
@@ -302,6 +301,7 @@ function abortedRead(
 } {
   return {
     ...collected,
+    parseableTextResponse: collected.textResponse,
     reportedOutputTokens,
     outputCharacterCount,
     aborted: true,
@@ -334,25 +334,26 @@ async function readStreamToCompletion(
   refused: boolean;
 }> {
   let textResponse = '';
-  let parseableTextResponse = '';
   let hookRestrictedAllowedTools: string[] | undefined;
   let reportedOutputTokens: number | undefined;
   let refused = false;
   const outputCounter = new GeneratedOutputCounter();
 
-  let result = await readNextNonInteractiveEvent(
-    iterator,
-    abortController,
-    timeoutController,
-    timeoutSignal,
-    effectiveTimeoutMs,
-    output,
-  );
+  const readNext = () =>
+    readNextNonInteractiveEvent(
+      iterator,
+      abortController,
+      timeoutController,
+      timeoutSignal,
+      effectiveTimeoutMs,
+      output,
+    );
+  let result = await readNext();
   while (result.done !== true) {
     const resp = result.value;
     if (abortController.signal.aborted) {
       return abortedRead(
-        { textResponse, parseableTextResponse, hookRestrictedAllowedTools },
+        { textResponse, hookRestrictedAllowedTools },
         reportedOutputTokens,
         outputCounter.total,
       );
@@ -371,22 +372,21 @@ async function readStreamToCompletion(
       hookRestrictedAllowedTools =
         chunkResult.hookRestrictedAllowedTools ?? hookRestrictedAllowedTools;
       textResponse += chunkResult.text;
-      parseableTextResponse += chunkResult.text;
       refused ||= isRefusalFinishReason(resp.value.finishReason);
+    } else if (resp.type === StreamEventType.RETRY) {
+      // The stream discarded the attempt read so far (a refusal resent
+      // unchanged, or a content retry): nothing it produced may be acted on.
+      functionCalls.length = 0;
+      textResponse = '';
+      hookRestrictedAllowedTools = undefined;
+      refused = false;
     }
-    result = await readNextNonInteractiveEvent(
-      iterator,
-      abortController,
-      timeoutController,
-      timeoutSignal,
-      effectiveTimeoutMs,
-      output,
-    );
+    result = await readNext();
   }
 
   return {
     textResponse,
-    parseableTextResponse,
+    parseableTextResponse: textResponse,
     hookRestrictedAllowedTools,
     reportedOutputTokens,
     outputCharacterCount: outputCounter.total,

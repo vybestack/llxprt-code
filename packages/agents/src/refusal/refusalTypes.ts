@@ -29,14 +29,25 @@ export interface RefusalAttempt extends RefusalEvidence {
 }
 
 /**
- * What to do with a refused attempt. Phase 1 can only stop; later phases add
- * `retry` (resend the same prepared request) and `review`.
+ * What to do with a refused attempt. `retry` resends the same prepared request
+ * after `delayMs`; `stop` ends the logical request. A later phase adds
+ * `review`. The optional `notice` is the user-facing text for the decision.
  */
-export type RefusalDecision = { readonly action: 'stop' };
+export type RefusalDecision =
+  | {
+      readonly action: 'retry';
+      readonly delayMs: number;
+      readonly notice: string;
+    }
+  | { readonly action: 'stop'; readonly notice?: string };
 
 /** The hook a recovery coordinator implements to take over refusals. */
 export interface RefusalRecovery {
+  /** Fixes the recovery policy for a logical request the first time it is seen. */
+  admit(promptId: string): void;
   decide(attempt: RefusalAttempt): RefusalDecision | Promise<RefusalDecision>;
+  /** Abortable wait before a retry; rejects as soon as `signal` aborts. */
+  wait(ms: number, signal?: AbortSignal): Promise<void>;
 }
 
 /**

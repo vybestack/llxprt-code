@@ -364,7 +364,11 @@ function* mapValueEventInner(
       yield { type: 'model-info', info: value as ModelInfo };
       return;
     case AgentEventType.SystemNotice:
-      yield { type: 'notice', message: value as string };
+      yield {
+        type: 'notice',
+        message: value as string,
+        ...(e.source !== undefined && { source: e.source }),
+      };
       return;
     case AgentEventType.ChatCompressed:
       yield { type: 'compression', info: value as CompressionInfo };

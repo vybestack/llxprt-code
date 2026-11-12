@@ -30,11 +30,9 @@ import {
   getErrorMessage,
   toFriendlyError,
 } from '@vybestack/llxprt-code-core/utils/errors.js';
-import {
-  normalizeToolName,
-  canonicalizeToolName,
-} from '@vybestack/llxprt-code-tools';
+import { normalizeToolName } from '@vybestack/llxprt-code-tools';
 import type { ChatSession } from './chatSession.js';
+import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
@@ -97,33 +95,6 @@ interface IdleFlag {
   timedOut: boolean;
   fire: StreamWatchdogFire | undefined;
   livenessObserved: boolean;
-}
-
-/**
- * Filters ContentBlocks by hook-restricted allowed tool names.
- * Tool-call and tool-response blocks are kept only if their tool name is in
- * the allowed set; other block types (text, thinking, media, code) always pass.
- *
- * @issue #2348 — replaces the Part[]-based filterHookRestrictedParts for the
- * block-shaped pipeline.
- */
-function filterBlocksByAllowedTools(
-  blocks: ContentBlock[],
-  allowedToolNames: string[] | undefined,
-): ContentBlock[] {
-  if (allowedToolNames === undefined) {
-    return [...blocks];
-  }
-  const allowed = new Set(allowedToolNames.map(canonicalizeToolName));
-  return blocks.filter((block) => {
-    if (block.type === 'tool_call') {
-      return allowed.has(canonicalizeToolName(block.name));
-    }
-    if (block.type === 'tool_response') {
-      return allowed.has(canonicalizeToolName(block.toolName));
-    }
-    return true;
-  });
 }
 
 /**
@@ -272,7 +243,7 @@ export class Turn {
     traceId: string | undefined,
     cumulativeOutcome: ResponseOutcome,
   ): Generator<ServerAgentStreamEvent> {
-    const allowedBlocks = filterBlocksByAllowedTools(
+    const allowedBlocks = filterHookRestrictedBlocks(
       chunk.content.blocks,
       chunk.hookRestrictions?.allowedToolNames,
     );
@@ -482,6 +453,15 @@ export class Turn {
       return { action: 'continue', outcome, chunk: null };
     }
 
+    if (streamEvent.type === StreamEventType.NOTICE) {
+      yield {
+        type: AgentEventType.SystemNotice,
+        value: streamEvent.message,
+        source: streamEvent.source,
+      };
+      return { action: 'continue', outcome: cumulativeOutcome, chunk: null };
+    }
+
     // Handle AGENT_EXECUTION_STOPPED event
     if (streamEvent.type === StreamEventType.AGENT_EXECUTION_STOPPED) {
       yield {
@@ -514,7 +494,7 @@ export class Turn {
     chunk: ModelStreamChunk,
   ): ResponseOutcome {
     const allowedToolNames = chunk.hookRestrictions?.allowedToolNames;
-    const allowedBlocks = filterBlocksByAllowedTools(
+    const allowedBlocks = filterHookRestrictedBlocks(
       chunk.content.blocks,
       allowedToolNames,
     );

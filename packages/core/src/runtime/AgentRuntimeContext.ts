@@ -98,6 +98,12 @@ export interface ReadonlySettingsSnapshot {
    */
   compressionVerification?: boolean;
   'media.semantic-purge'?: 'off' | 'remove' | 'summary';
+  /** Refusal recovery policy (issue #4036). Unset values use the registry defaults. */
+  'refusal.retries'?: number;
+  'refusal.backoff-ms'?: number;
+  'refusal.rewrite'?: boolean;
+  'refusal.review-profile'?: string;
+  'refusal.max-rewrites'?: number;
 }
 
 /**
@@ -270,6 +276,17 @@ export interface AgentRuntimeContext {
      */
     compressionVerification(): boolean;
     semanticMediaPurge(): 'off' | 'remove' | 'summary';
+    /**
+     * Refusal recovery policy (issue #4036). Each accessor reads the live
+     * setting; the agent captures the whole policy once per request.
+     */
+    refusal: {
+      retries(): number;
+      backoffMs(): number;
+      rewrite(): boolean;
+      reviewProfile(): string | undefined;
+      maxRewrites(): number;
+    };
     /**
      * @plan PLAN-20251202-THINKING.P03b
      * @requirement REQ-THINK-006

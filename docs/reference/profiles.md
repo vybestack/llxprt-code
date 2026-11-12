@@ -106,7 +106,7 @@ Settings stored here include:
 
 - **Authentication** — `auth-key-name` (preferred), `auth-key` (deprecated), `auth-keyfile` (deprecated), `base-url`. Set by `/key`, `/keyfile`, `/baseurl` commands, not `/set` directly.
 - **Tool format** — `toolFormat`, `toolFormatOverride`. Set by `/toolformat`.
-- **Everything else** — reasoning, context limits, compression, timeouts, tool output limits, etc. Set by `/set`. See [Ephemeral Settings Reference](./ephemerals.md) for the complete list.
+- **Everything else** — reasoning, context limits, compression, refusal recovery (`refusal.retries`, `refusal.backoff-ms`, `refusal.rewrite`, `refusal.review-profile`, `refusal.max-rewrites`), timeouts, tool output limits, etc. Set by `/set`. See [Ephemeral Settings Reference](./ephemerals.md) for the complete list.
 
 When a profile loads, the ephemeral settings are applied to the session. They override provider alias defaults but are overridden by CLI flags (`--set`, `--key-name`, etc.).
 

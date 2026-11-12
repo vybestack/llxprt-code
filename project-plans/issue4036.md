@@ -416,3 +416,198 @@ Flow of one refused attempt:
   still need host wiring (`notice` is a no-op in `agentEventDispatcher.ts`).
 - Not covered in Phase 1: the non-streaming `TurnProcessor.sendMessage` path
   commits whatever the provider returned (it only records `finish_reason`).
+
+## Phase 2 implementation notes
+
+Phase 2 ("Settings, backoff and stop guards") is implemented. A refused
+request is resent unchanged after an abortable backoff, within a retry budget
+that belongs to the logical request. Review and rewrite are not implemented;
+they resolve to a stop at one clearly marked branch (see "What Phase 3 fills").
+
+### Settings
+
+- `refusal.retries`, `refusal.backoff-ms`, `refusal.rewrite`,
+  `refusal.review-profile` and `refusal.max-rewrites` are registered in
+  `packages/settings/src/settings/registry/registry-entries-4.ts`
+  (`cli-behavior`, owner `model`, propagation `next-turn`, like
+  `compression.profile`, `persistToProfile: true`). Custom validators reject
+  non-finite, non-integer and out-of-range numbers and an empty or blank
+  profile name, each with a message naming the key and the allowed range.
+  `/set` reaches them through `parseEphemeralSettingValue`.
+- Typed `EphemeralSettings` fields (`profiles/types.ts`), the session runtime
+  policy projection (`session-settings-owner.ts`, `runtimePolicySchema`), the
+  `ReadonlySettingsSnapshot` fields and the `AgentRuntimeContext.ephemerals.refusal`
+  accessors (`retries()`, `backoffMs()`, `rewrite()`, `reviewProfile()`,
+  `maxRewrites()`). The accessors read the live setting and fall back to the
+  registry default when the live value is absent or fails the registry
+  validator, so a corrupt profile cannot make recovery unbounded.
+- They stay out of provider `modelParams`: `separateSettings` files them under
+  `cliSettings`, a saved profile carries them in `ephemeralSettings`, and the
+  wire request never contains them (tests assert all three).
+- Docs: `docs/reference/ephemerals.md` (new "Refusal Recovery" section) and a
+  mention in `docs/reference/profiles.md`.
+
+### Coordinator and budget semantics
+
+`packages/agents/src/refusal/` now has:
+
+- `refusalPolicy.ts`: pure. `captureRefusalPolicy`, `refusalBackoffMs`
+  (`min(base * 4^(n-1), 180000)`) and `decideRefusal(policy, progress)`, which
+  returns `retry`, `review` or `stop`.
+- `refusalNotices.ts`: the notice texts.
+- `refusalRecovery.ts`: `RefusalRecoveryCoordinator`, which replaces
+  `terminalRefusalRecovery` (deleted). It owns the per-request budgets and the
+  injectable abortable `wait`.
+- `refusalWait.ts`: the production wait is `delay` from core. A process-wide
+  test seam, `installRefusalWaitForTesting`, lets end-to-end tests observe the
+  requested backoffs without sleeping.
+- `refusalSettlement.ts`: `settleRefusal` now returns `retry-same-request`
+  (with `delayMs` and a notice) or `stop` (with an optional notice), journals
+  the decision and finalizes the token-usage prompt only on a stop.
+
+Exact budget semantics:
+
+- The logical request is the **prompt id**. `TurnProcessor._createStreamGenerator`
+  calls `recovery.admit(promptId)`; the first time an id is seen the coordinator
+  captures the whole policy (all five settings read once) next to a zeroed
+  budget. A later `/set`, even during a backoff, changes only requests admitted
+  afterwards.
+- One budget per prompt id is shared by everything that reuses the id:
+  task-list continuation, thinking-only retries, AfterAgent decision
+  follow-ups, the 413 and boundary recovery sends (`MessageStreamTerminalHandler`
+  passes `ctx.prompt_id` to all of them). A recovered refusal does not refund
+  its retry: success never resets the budget.
+- A tool round trip in the agentic loop (`generateContinuationPromptId`) and
+  each subagent turn (`<session>#<subagent>#<turn>`) carry their own prompt ids,
+  so each is its own logical request with its own budget and policy. Their
+  content differs (new tool results), and a long autonomous run must not run
+  out of retries after the first few refusals. If a stricter per-user-prompt
+  scope is wanted later, key the budget by the initial prompt id instead.
+- Budgets are held in an insertion-ordered map capped at 64 prompt ids; the
+  oldest is dropped. ChatSession serializes sends, so only the most recent ids
+  are ever live.
+- The retry count is per round. Phase 3 resets `retriesUsed` after a rewrite
+  and increments `rewritesUsed`; Phase 2 never gets there.
+
+### Retry flow
+
+`TurnProcessor._createStreamGenerator` keeps two counters in `AttemptCounters`:
+`contentAttempt` (retry temperature and the content-retry budget, as before)
+and `requestAttempt` (every request sent for the turn). `requestAttempt` is the
+attempt index given to `makeApiCallAndProcessStream`, the token log and the
+journal, so refused and content-retried attempts never share an index.
+
+On a refusal that has retries left the loop yields `StreamEventType.RETRY`
+(so `Turn`, the orchestrator, `AgenticLoop`, the CLI and the headless consumers
+discard the refused attempt), then a `NOTICE`, waits through
+`recovery.wait(delayMs, abortSignal)`, and calls `_runStreamAttempt` again with
+the same `requestParams` and the same `PreparedUserTurn`. `applyRetryTemperature`
+still receives `contentAttempt`, which a refusal retry does not advance, so the
+temperature is untouched; there is no "Please continue", no recompression and
+no profile reselection. The request is rebuilt from `HistoryService` at send
+time, which is also why a Phase 3 rewrite needs no special resend path.
+
+An abort during the wait rejects the wait, finalizes the pending token-usage
+prompt and rethrows, which `Turn.handleRunError` turns into `UserCancelled`
+and the public `done` reason `aborted`. No further request is sent.
+
+Journal actions are `retry` for each retried attempt and `stop` for the last.
+With rewrite on, Phase 2 still journals `stop`: `review` is only recorded once
+a review is really started. The terminal-stop summary notice is emitted only if
+at least one retry ran, so `refusal.retries 0` is byte-for-byte the Phase 1
+behavior.
+
+### Notices
+
+`RefusalDecision.notice` → `refusalNotice()` in `TurnProcessor` →
+`StreamEventType.NOTICE` (new, `{ message, source: 'refusal-recovery' }`) →
+`Turn.dispatchStreamEvent` → internal `AgentEventType.SystemNotice` (new
+optional `source`) → `eventAdapter` → public `notice` event with the optional
+`source` field (`event-types.ts`, `event-schema.ts`).
+
+There were no earlier `SystemNotice` producers. The only other public `notice`
+is the MCP discovery failure in `foregroundRunLifecycle.ts`, which has no
+`source`. The hosts therefore render only notices that carry
+`source: 'refusal-recovery'`; the interactive CLI used to ignore every notice
+and rendering the MCP one on every prompt would have been noise.
+
+- Interactive CLI (`agentEventDispatcher.ts`): info item, after committing any
+  pending refused text.
+- Headless (`nonInteractiveCliSupport.ts`): text mode writes to stderr;
+  stream-json emits a `warning` error event (the shape the refusal warning
+  uses); plain JSON writes nothing (the JSON result has no warnings field);
+  `--quiet` suppresses all of it.
+- A2A (`executor.ts`): `\n\n[recovery notice] <message>` appended to the task,
+  like the `[safety notice]`.
+- ACP already forwards every `notice` as an agent message chunk, so it shows
+  these (and, as before, the MCP one).
+
+### Other consumers
+
+- Non-interactive subagent: `readStreamToCompletion` now resets the collected
+  function calls, text, hook restrictions and the `refused` flag on
+  `StreamEventType.RETRY` (Phase 1 risk 4). The interactive subagent consumer
+  already handled `AgentEventType.Retry`.
+- CLI hooks (Phase 1 risk 5): the interactive CLI no longer schedules model
+  tool calls or continues todos itself; `AgenticLoop` and the orchestrator do,
+  and both already drop a refused attempt (Phase 1). The CLI's own
+  `scheduleToolCalls` runs only for client-initiated slash-command tools. No
+  new guard was needed. A public-API test now proves that only the tool call of
+  the attempt that was not refused runs, and that none runs when retries are
+  exhausted.
+- Non-streaming `TurnProcessor.sendMessage` (Phase 1 risk 6): its only callers
+  are tests and the `clientContract.sendMessage` declaration. No user-facing
+  flow uses it, so refusal classification was not added there. It still commits
+  whatever the provider returned; add the classification if a caller appears.
+
+### Tests
+
+- `settings/src/__tests__/refusalSettings.test.ts`: registration, defaults,
+  validation messages, no model-param leakage.
+- `agents/src/refusal/refusalPolicy.test.ts`: pure policy and backoff cap.
+- `agents/src/api/__tests__/refusalRecovery.behavior.test.ts`: public
+  `agent.stream()` over the real OpenAI provider and a local HTTP endpoint:
+  recovery, exhaustion, retries 0, abort, shared budget, tool calls,
+  admission-time policy.
+- `refusalRecovery.anthropic.behavior.test.ts`: the real Anthropic provider
+  (API-key path) against local Anthropic SSE with a metadata-only
+  `stop_reason: "refusal"` stream.
+- `refusalSettings.behavior.test.ts`: profile capture and wire body.
+- `subagentNonInteractive.refusal.test.ts`, `agentEventDispatcher.notice.test.ts`,
+  `nonInteractiveCliSupport.refusalNotice.test.ts`, `setCommand.refusal.test.ts`
+  and the a2a `executor.refusalNotice.test.ts`.
+- The Phase 1 helper `refusal-endpoint.ts` now takes options. It sets
+  `refusal.retries 0` unless a test says otherwise, so the Phase 1 tests keep
+  their single-request shape.
+
+### What Phase 3 fills
+
+The decision branch is `RefusalRecoveryCoordinator.decide()` in
+`packages/agents/src/refusal/refusalRecovery.ts`. When `decideRefusal` returns
+`review` (retries used, `refusal.rewrite` on, `rewritesUsed < maxRewrites`) the
+coordinator today calls `this.stop(...)`. Phase 3 replaces that line.
+
+What it receives: the `RefusalAttempt` (prompt id, request attempt index,
+provider, model, finish reasons, usage, turn id), the captured `RefusalPolicy`
+(including `reviewProfile` and `maxRewrites`) and the request budget. `decide`
+may already be async (`RefusalRecovery.decide` returns a value or a promise).
+The history window is not in the coordinator yet. Add a `reviewer` dependency
+to `RefusalRecoveryDeps`, built where the coordinator is constructed in
+`ChatSession` (the constructor call added next to the `TurnProcessor`
+construction), which has `this.historyService` and the compression profile
+resolution.
+
+How to resend after a rewrite: return `{ action: 'retry', delayMs: 0, notice }`
+after applying the rewrite, with `budget.rewritesUsed += 1` and
+`budget.retriesUsed = 0` so the resend gets a fresh retry round. The turn loop
+then yields `RETRY` and the notice and resends the same prepared request. It
+needs no other change because the provider request is rebuilt from
+`HistoryService.getCuratedForProvider` at each send, so it sees the rewritten
+history. A review that ends in a stop returns `{ action: 'stop', notice }`; the
+journal action `review` should be recorded when the review is started (add it
+to `RefusalDecision`) and `stop` when it gives up.
+
+Also for Phase 3: the review call must not run refusal recovery itself (it does
+not pass through `TurnProcessor.sendMessageStream`, so it cannot as long as it
+uses the isolated auxiliary path), and the docs for `refusal.rewrite` currently
+say review is not available yet.
