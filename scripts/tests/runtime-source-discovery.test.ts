@@ -551,8 +551,8 @@ it('scans an existing JavaScript launcher with ordinary data', () => {
   expect(result.findings).toEqual([]);
   expect(result.programs[0].files).toContain('launcher.cjs');
 });
-it('retains all 57 census modules and their precise entry derivations', () => {
-  expect(productionEntryManifest.requiredClosure).toHaveLength(57);
+it('retains all 58 census modules and their precise entry derivations', () => {
+  expect(productionEntryManifest.requiredClosure).toHaveLength(58);
   expect(productionEntryManifest.requiredClosure).toContain(
     'plugins/google-gemini/src/gemini/GeminiProvider.ts',
   );

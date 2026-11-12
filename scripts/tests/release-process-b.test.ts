@@ -238,6 +238,7 @@ describe('scripts/bind-release-deps.ts', () => {
       '@vybestack/llxprt-code-settings',
       '@vybestack/llxprt-code-telemetry',
       '@vybestack/llxprt-code-ide-integration',
+      '@vybestack/llxprt-code-agent-core',
       '@vybestack/llxprt-code-policy',
       '@vybestack/llxprt-code-mcp',
       '@vybestack/llxprt-code-core',

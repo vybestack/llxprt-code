@@ -214,6 +214,7 @@ describe('test isolation contract (issue #3622)', () => {
   it('covers every declared root and every package workspace, including roots without preloads', () => {
     const knownRoots = [
       'a2a-server',
+      'agent-core',
       'agents',
       'eslint-rules',
       'providers',
