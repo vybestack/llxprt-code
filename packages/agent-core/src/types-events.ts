@@ -18,7 +18,6 @@ import type {
   FinishReason,
   Grant,
   GrantId,
-  JsonValue,
   ModelErrorKind,
   ModelRecovery,
   ModelRef,
@@ -26,7 +25,7 @@ import type {
   RequestId,
   Resolution,
   RuleId,
-  ToolId,
+  ToolCall,
   ToolOutcome,
   ToolProgress,
   ToolResult,
@@ -65,11 +64,7 @@ export type AgentEvent = AgentEventBase &
       }
     | {
         readonly type: 'tool.proposed';
-        readonly call: {
-          readonly id: CallId;
-          readonly tool: ToolId;
-          readonly args: JsonValue;
-        };
+        readonly call: ToolCall;
       }
     | {
         readonly type: 'policy.evaluated';

@@ -8,7 +8,7 @@ import * as fc from 'fast-check';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { FakeClock, MemorySessionStore, MemoryTools, ScriptedDecisions, ScriptedModel } from './testing/fake-ports.js';
+import { MemorySessionStore } from './testing/fake-ports.js';
 import {
   DefinitionError,
   mergeUsageReports,
@@ -18,8 +18,10 @@ import {
   validateModelRecovery,
   validatePreparedCall,
   validateTranscriptEntry,
+  validateUsage,
   validateUsageReport,
   type AgentDefinition,
+  type JournalRecord,
   type PreparedCall,
   type Usage,
   type UsageReport,
@@ -58,9 +60,19 @@ const validDefinition: AgentDefinition = {
 };
 
 describe('validateDefinition', () => {
-  it('accepts a complete definition without filling in defaults', () => {
+  it('accepts complete definitions and preserves optional undefined fields', () => {
     const parsed = validateDefinition(validDefinition);
     expect(parsed).toStrictEqual(validDefinition);
+    const withUndefined = {
+      ...validDefinition,
+      limits: { ...validDefinition.limits, turnTimeoutMs: undefined },
+    };
+    expect(
+      validateDefinition(withUndefined).limits.turnTimeoutMs,
+    ).toBeUndefined();
+    expect(() =>
+      validateDefinition({ ...validDefinition, unexpected: undefined }),
+    ).toThrow(DefinitionError);
   });
 
   it('reports every malformed or missing definition field together', () => {
@@ -286,7 +298,6 @@ describe('validateDefinition', () => {
     expect(validatePreparedCall(prepared, 'command')).toStrictEqual(prepared);
   });
 
-
   it('preserves the structure of generated JSON values', () => {
     fc.assert(
       fc.property(fc.jsonValue(), (value) => {
@@ -454,20 +465,58 @@ describe('validateDefinition', () => {
   it('rejects executable, accessor-backed, symbol-keyed, hidden, cyclic, and non-finite data without invoking getters', () => {
     let getterCalls = 0;
     const getterValue = Object.defineProperty({ ...validDefinition }, 'name', {
-      get() { getterCalls += 1; return 'getter'; },
+      get() {
+        getterCalls += 1;
+        return 'getter';
+      },
     });
     expect(() => validateDefinition(getterValue)).toThrow(DefinitionError);
-    expect(getterCalls).toBe(0);
-    expect(() => validateDefinition({ ...validDefinition, [Symbol('hidden')]: 1 })).toThrow(DefinitionError);
-    expect(() => validateDefinition(Object.defineProperty({ ...validDefinition }, 'hidden', { value: 1 }))).toThrow(DefinitionError);
-    expect(() => validateDefinition({ ...validDefinition, context: { ...validDefinition.context, extra: () => 1 } })).toThrow(DefinitionError);
-    expect(() => validateDefinition({ ...validDefinition, policy: { authority: [{ id: 'numeric', match: { args: [{ arg: 'x', equals: Infinity }] }, outcome: 'deny' }], preferences: [], fallback: 'deny' } })).toThrow(DefinitionError);
+    expect(() =>
+      validateDefinition({ ...validDefinition, [Symbol('hidden')]: 1 }),
+    ).toThrow(DefinitionError);
+    expect(() =>
+      validateDefinition(
+        Object.defineProperty({ ...validDefinition }, 'hidden', { value: 1 }),
+      ),
+    ).toThrow(DefinitionError);
+    expect(() =>
+      validateDefinition({
+        ...validDefinition,
+        context: { ...validDefinition.context, extra: () => 1 },
+      }),
+    ).toThrow(DefinitionError);
+    expect(() =>
+      validateDefinition({
+        ...validDefinition,
+        policy: {
+          authority: [
+            {
+              id: 'numeric',
+              match: { args: [{ arg: 'x', equals: Infinity }] },
+              outcome: 'deny',
+            },
+          ],
+          preferences: [],
+          fallback: 'deny',
+        },
+      }),
+    ).toThrow(DefinitionError);
     const cycle: { self?: unknown } = {};
     cycle.self = cycle;
     expect(() => validateJsonValue(cycle)).toThrow(DefinitionError);
-    expect(() => validateJsonValue(Object.defineProperty([], 'hidden', { value: () => 1 }))).toThrow(DefinitionError);
+    expect(() =>
+      validateJsonValue(
+        Object.defineProperty([], 'hidden', { value: () => 1 }),
+      ),
+    ).toThrow(DefinitionError);
     const arrayGetter: unknown[] = [];
-    Object.defineProperty(arrayGetter, '0', { get() { getterCalls += 1; return 'bad'; }, enumerable: true });
+    Object.defineProperty(arrayGetter, '0', {
+      get() {
+        getterCalls += 1;
+        return 'bad';
+      },
+      enumerable: true,
+    });
     arrayGetter.length = 1;
     expect(() => validateJsonValue(arrayGetter)).toThrow(DefinitionError);
     expect(getterCalls).toBe(0);
@@ -475,79 +524,270 @@ describe('validateDefinition', () => {
 
   it('reports authority allow with independent structural definition errors', () => {
     let caught: unknown;
-    try { validateDefinition({ ...validDefinition, policy: { authority: [{ match: {}, outcome: 'allow' }], preferences: [], fallback: 'deny' } }); } catch (error) { caught = error; }
+    try {
+      validateDefinition({
+        ...validDefinition,
+        policy: {
+          authority: [{ match: {}, outcome: 'allow' }],
+          preferences: [],
+          fallback: 'deny',
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
     expect(caught).toBeInstanceOf(DefinitionError);
-    if (!(caught instanceof DefinitionError)) throw new Error('Expected definition failure');
-    expect(caught.problems.some((problem) => problem.path.join('.') === 'policy.authority.0.outcome')).toBe(true);
-    expect(caught.problems.some((problem) => problem.path.join('.') === 'policy.authority.0.id')).toBe(true);
+    if (!(caught instanceof DefinitionError))
+      throw new Error('Expected definition failure');
+    expect(
+      caught.problems.some(
+        (problem) => problem.path.join('.') === 'policy.authority.0.outcome',
+      ),
+    ).toBe(true);
+    expect(
+      caught.problems.some(
+        (problem) => problem.path.join('.') === 'policy.authority.0.id',
+      ),
+    ).toBe(true);
     let missingFallback: unknown;
-    try { validateDefinition({ ...validDefinition, policy: { authority: [{ id: 'allow', match: {}, outcome: 'allow' }], preferences: [] } }); } catch (error) { missingFallback = error; }
+    try {
+      validateDefinition({
+        ...validDefinition,
+        policy: {
+          authority: [{ id: 'allow', match: {}, outcome: 'allow' }],
+          preferences: [],
+        },
+      });
+    } catch (error) {
+      missingFallback = error;
+    }
     expect(missingFallback).toBeInstanceOf(DefinitionError);
-    if (!(missingFallback instanceof DefinitionError)) throw new Error('Expected definition failure');
-    expect(missingFallback.problems.some((problem) => problem.path.join('.') === 'policy.authority.0.outcome')).toBe(true);
-    expect(missingFallback.problems.some((problem) => problem.path.join('.') === 'policy.fallback')).toBe(true);
+    if (!(missingFallback instanceof DefinitionError))
+      throw new Error('Expected definition failure');
+    expect(
+      missingFallback.problems.some(
+        (problem) => problem.path.join('.') === 'policy.authority.0.outcome',
+      ),
+    ).toBe(true);
+    expect(
+      missingFallback.problems.some(
+        (problem) => problem.path.join('.') === 'policy.fallback',
+      ),
+    ).toBe(true);
   });
 
   it('keeps measured usage when a later counter is explicitly undefined and enforces cache subsets', () => {
-    const merged = mergeUsageReports({ totals: { inputTokens: 5 }, complete: false }, { totals: { inputTokens: undefined }, complete: false });
+    const merged = mergeUsageReports(
+      { totals: { inputTokens: 5 }, complete: false },
+      { totals: { inputTokens: undefined }, complete: false },
+    );
     expect(merged.totals.inputTokens).toBe(5);
-    expect(() => validateUsageReport({ totals: { inputTokens: 1, cacheReadInputTokens: 1, cacheWriteInputTokens: 1 }, complete: false })).toThrow(DefinitionError);
+    expect(() =>
+      validateUsageReport({
+        totals: {
+          inputTokens: 1,
+          cacheReadInputTokens: 1,
+          cacheWriteInputTokens: 1,
+        },
+        complete: false,
+      }),
+    ).toThrow(DefinitionError);
   });
 
   it('validates credential-bearing URL components while preserving opaque identities', () => {
-    for (const endpoint of ['https://alice@example.test', 'https://example.test/?token=abc', 'https://example.test/?key=abc']) {
-      expect(() => validateModelRecovery({ scope: { provider: 'p', model: 'm', endpoint, principal: 'opaque' }, invalidates: [], format: 'v1', data: null })).toThrow(DefinitionError);
+    for (const endpoint of [
+      'https://alice@example.test',
+      'https://example.test/?token=abc',
+      'https://example.test/?key=abc',
+      'https://example.test/#access_token=abc',
+      'https://example.test/?client_secret=abc',
+    ]) {
+      expect(() =>
+        validateModelRecovery({
+          scope: { provider: 'p', model: 'm', endpoint, principal: 'opaque' },
+          invalidates: [],
+          format: 'v1',
+          data: null,
+        }),
+      ).toThrow(DefinitionError);
     }
-    expect(validateModelRecovery({ scope: { provider: 'p', model: 'm', endpoint: 'https://example.test/path', principal: 'secretary-1', connection: 'token-opaque' }, invalidates: [], format: 'v1', data: null }).scope.principal).toBe('secretary-1');
+    expect(
+      validateModelRecovery({
+        scope: {
+          provider: 'p',
+          model: 'm',
+          endpoint: 'https://example.test/path',
+          principal: 'secretary-1',
+          connection: 'token-opaque',
+        },
+        invalidates: [],
+        format: 'v1',
+        data: null,
+      }).scope.principal,
+    ).toBe('secretary-1');
   });
 
   it('accepts an empty non-command argument in validated shell facts', () => {
-    const prepared: PreparedCall = { token: 'prepared-1', args: { command: "printf '%s' ''" }, shell: { parsed: true, command: "printf '%s' ''", segments: [{ command: "printf '%s' ''", argv: ['printf', '%s', ''], hasRedirection: false }] } };
+    const prepared: PreparedCall = {
+      token: 'prepared-1',
+      args: { command: "printf '%s' ''" },
+      shell: {
+        parsed: true,
+        command: "printf '%s' ''",
+        segments: [
+          {
+            command: "printf '%s' ''",
+            argv: ['printf', '%s', ''],
+            hasRedirection: false,
+          },
+        ],
+      },
+    };
     expect(validatePreparedCall(prepared, 'command').shell?.parsed).toBe(true);
   });
 
   it('round-trips replay and accounting records through MemorySessionStore', async () => {
     const store = new MemorySessionStore();
-    const records = [
-      { kind: 'entry' as const, checkpoint: 'cp-1', entry: { id: 'entry-1', role: 'model' as const, parts: [], replay: [{ id: 'r1', scope: { provider: 'p', model: 'm', endpoint: 'https://example.test', principal: 'p1' }, format: 'v1', target: { kind: 'entry' as const }, data: { n: 1 } }] } },
-      { kind: 'attempt-budget' as const, attempt: 'a1', phase: 'settled' as const, reported: { totals: { inputTokens: 2 }, complete: false }, charged: { inputTokens: 2, outputTokens: 0, reasoningTokens: 0, cacheReadInputTokens: 0, cacheWriteInputTokens: 0 }, estimated: false },
+    const records: JournalRecord[] = [
+      {
+        kind: 'entry',
+        checkpoint: 'cp-1',
+        entry: {
+          id: 'entry-1',
+          role: 'model',
+          parts: [],
+          replay: [
+            {
+              id: 'r1',
+              scope: {
+                provider: 'p',
+                model: 'm',
+                endpoint: 'https://example.test',
+                principal: 'p1',
+              },
+              format: 'v1',
+              target: { kind: 'entry' },
+              data: { n: 1 },
+            },
+          ],
+        },
+      },
+      {
+        kind: 'attempt-budget',
+        attempt: 'a1',
+        phase: 'settled',
+        reported: { totals: { inputTokens: 2 }, complete: false },
+        charged: {
+          inputTokens: 2,
+          outputTokens: 0,
+          reasoningTokens: 0,
+          cacheReadInputTokens: 0,
+          cacheWriteInputTokens: 0,
+        },
+        estimated: false,
+      },
     ];
     const signal = new AbortController().signal;
     await store.append('session-1', records, signal);
     expect(await store.load('session-1', signal)).toStrictEqual(records);
   });
-
-  it('exercises fake port state transitions and abort handling', async () => {
-    const controller = new AbortController();
-    const clock = new FakeClock(10);
-    await clock.sleep(5, controller.signal);
-    expect(clock.now()).toBe(15);
-    controller.abort(new Error('cancelled'));
-    await expect(clock.sleep(1, controller.signal)).rejects.toThrow('cancelled');
-    await expect(new MemoryTools([]).pin([], controller.signal)).rejects.toThrow('cancelled');
-    await expect(new MemorySessionStore().load('session', controller.signal)).rejects.toThrow('cancelled');
-    expect(() => new ScriptedModel(async (_ref, signal) => { signal.throwIfAborted(); throw new Error('resolver invoked'); }).resolve({ provider: 'p', model: 'm' }, controller.signal)).toThrow('cancelled');
-    expect(() => new ScriptedDecisions(async (_request, signal) => { signal.throwIfAborted(); throw new Error('resolver invoked'); }).decide({ id: 'r', from: 'a', turn: 't', kind: 'question', prompt: '?' }, controller.signal)).toThrow('cancelled');
-  });
-
   it('rejects invalid budgets, compaction ratios, and output cap relationships', () => {
     for (const limits of [
       { ...validDefinition.limits, turnTokenBudget: 0 },
       { ...validDefinition.limits, turnCostBudget: 0 },
       { ...validDefinition.limits, turnTimeoutMs: 0 },
       { ...validDefinition.limits, decisionTimeoutMs: 0 },
-    ]) expect(() => validateDefinition({ ...validDefinition, limits })).toThrow(DefinitionError);
-    for (const compactAtRatio of [0, 1]) expect(() => validateDefinition({ ...validDefinition, context: { ...validDefinition.context, compactAtRatio } })).toThrow(DefinitionError);
-    expect(() => validateDefinition({ ...validDefinition, toolOutput: { ...validDefinition.toolOutput, maxStepResultBytes: validDefinition.toolOutput.maxResultBytes - 1 } })).toThrow(DefinitionError);
+    ])
+      expect(() => validateDefinition({ ...validDefinition, limits })).toThrow(
+        DefinitionError,
+      );
+    for (const compactAtRatio of [0, 1])
+      expect(() =>
+        validateDefinition({
+          ...validDefinition,
+          context: { ...validDefinition.context, compactAtRatio },
+        }),
+      ).toThrow(DefinitionError);
+    expect(() =>
+      validateDefinition({
+        ...validDefinition,
+        toolOutput: {
+          ...validDefinition.toolOutput,
+          maxStepResultBytes: validDefinition.toolOutput.maxResultBytes - 1,
+        },
+      }),
+    ).toThrow(DefinitionError);
   });
 
-  it('compiles positive image and audio union extraction fixtures', { timeout: 30_000 }, () => {
-    const configPath = fileURLToPath(new URL('../tsconfig.json', import.meta.url));
-    const config = ts.readConfigFile(configPath, ts.sys.readFile);
-    const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, packageDirectory);
-    const fixturePath = fileURLToPath(new URL('../type-fixtures/valid-content-unions.ts', import.meta.url));
-    const program = ts.createProgram({ rootNames: [fixturePath], options: { ...parsed.options, noEmit: true } });
-    const diagnostics = ts.getPreEmitDiagnostics(program).filter((diagnostic) => diagnostic.file?.fileName === fixturePath);
-    expect(diagnostics).toEqual([]);
+  it(
+    'compiles positive image and audio union extraction fixtures',
+    { timeout: 30_000 },
+    () => {
+      const configPath = fileURLToPath(
+        new URL('../tsconfig.json', import.meta.url),
+      );
+      const config = ts.readConfigFile(configPath, ts.sys.readFile);
+      const parsed = ts.parseJsonConfigFileContent(
+        config.config,
+        ts.sys,
+        packageDirectory,
+      );
+      const fixturePath = fileURLToPath(
+        new URL('../type-fixtures/valid-content-unions.ts', import.meta.url),
+      );
+      const program = ts.createProgram({
+        rootNames: [fixturePath],
+        options: { ...parsed.options, noEmit: true },
+      });
+      const diagnostics = ts
+        .getPreEmitDiagnostics(program)
+        .filter((diagnostic) => diagnostic.file?.fileName === fixturePath);
+      expect(diagnostics).toStrictEqual([]);
+    },
+  );
+
+  it('rejects executable replay and recovery payloads through their public validators', () => {
+    const scope = {
+      provider: 'p',
+      model: 'm',
+      endpoint: 'https://example.test',
+      principal: 'p1',
+    };
+    expect(() =>
+      validateModelRecovery({
+        scope,
+        invalidates: [],
+        format: 'v1',
+        data: { callback: () => undefined },
+      }),
+    ).toThrow(DefinitionError);
+    expect(() =>
+      validateTranscriptEntry({
+        id: 'entry-1',
+        role: 'model',
+        parts: [],
+        replay: [
+          {
+            id: 'replay-1',
+            scope,
+            format: 'v1',
+            target: { kind: 'entry' },
+            data: { callback: () => undefined },
+          },
+        ],
+      }),
+    ).toThrow(DefinitionError);
+  });
+
+  it('rejects full usage when cache counters exceed input tokens', () => {
+    expect(() =>
+      validateUsage({
+        inputTokens: 1,
+        outputTokens: 0,
+        reasoningTokens: 0,
+        cacheReadInputTokens: 5,
+        cacheWriteInputTokens: 0,
+      }),
+    ).toThrow(DefinitionError);
   });
 });

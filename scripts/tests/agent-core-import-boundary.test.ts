@@ -15,6 +15,7 @@ const roots: string[] = [];
 function fixture(
   core: string,
   files: Readonly<Record<string, string>> = {},
+  paths: Readonly<Record<string, readonly string[]>> = {},
 ): string {
   const root = mkdtempSync(join(tmpdir(), 'agent-core-boundary-'));
   roots.push(root);
@@ -31,7 +32,7 @@ function fixture(
     JSON.stringify({
       compilerOptions: {
         baseUrl: '.',
-        paths: { '@workspace/other/*': ['../other/src/*'] },
+        paths: { '@workspace/other/*': ['../other/src/*'], ...paths },
       },
     }),
   );
@@ -156,33 +157,124 @@ describe('agent-core import boundary', () => {
     expect(module.answer).toBe(42);
   });
 
-  it('rejects every unresolved import edge', () => {
-    for (const source of [
-      "export * from './missing.js';",
-      "import absent = require('missing-package');",
-    ]) {
-      const root = fixture(source);
-      expect(scanAgentCoreBoundary(root).some((entry) => entry.kind === 'unresolved-import')).toBe(true);
-    }
+  it('rejects unresolved relative import edges', () => {
+    const root = fixture("export * from './missing.js';");
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'unresolved-import',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects unresolved import-equals edges', () => {
+    const root = fixture("import absent = require('missing-package');");
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'unresolved-import',
+      ),
+    ).toBe(true);
   });
 
   it('rejects import-equals syntax for Node builtins', () => {
     const root = fixture("import fs = require('node:fs'); export { fs };");
-    expect(scanAgentCoreBoundary(root).some((entry) => entry.kind === 'runtime-import')).toBe(true);
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'runtime-import',
+      ),
+    ).toBe(true);
   });
 
-  it('rejects Node global aliases including computed process access', () => {
-    for (const source of [
-      "export const env = global['process'].env;",
-      'export const env = global.process.env;',
-    ]) {
-      const root = fixture(source);
-      expect(scanAgentCoreBoundary(root).some((entry) => entry.kind === 'ambient-io')).toBe(true);
-    }
+  it('rejects computed process access through the Node global alias', () => {
+    const root = fixture("export const env = global['process'].env;");
+    expect(
+      scanAgentCoreBoundary(root).some((entry) => entry.kind === 'ambient-io'),
+    ).toBe(true);
   });
 
-  it('does not flag inert capability property names or shadowed identifiers', () => {
-    const root = fixture('const process = { env: 1 }; const console = { log: 2 }; export const value = { process: 1, console: 2, local: process.env };');
+  it('rejects direct process access through the Node global alias', () => {
+    const root = fixture('export const env = global.process.env;');
+    expect(
+      scanAgentCoreBoundary(root).some((entry) => entry.kind === 'ambient-io'),
+    ).toBe(true);
+  });
+
+  it('rejects a CommonJS require call to a Node builtin', () => {
+    const root = fixture("export const fs = require('node:fs');");
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'runtime-import',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects a static template-string dynamic import of a Node builtin', () => {
+    const root = fixture('export const load = () => import(`node:fs`);');
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'runtime-import',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects an interpolated dynamic import specifier', () => {
+    const root = fixture(
+      'export const load = (suffix: string) => import(`node:${suffix}`);',
+    );
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'runtime-import',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects process access through globalThis', () => {
+    const root = fixture('export const env = globalThis.process.env;');
+    expect(
+      scanAgentCoreBoundary(root).some((entry) => entry.kind === 'ambient-io'),
+    ).toBe(true);
+  });
+
+  it('rejects a Node builtin reached through a path alias', () => {
+    const root = fixture(
+      "export * from '@io';",
+      {
+        'helpers/io.ts': "export * from 'node:fs';",
+      },
+      { '@io': ['../../helpers/io.ts'] },
+    );
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'runtime-import',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects an unapproved installed package even when it re-exports Node I/O', () => {
+    const root = fixture("export * from 'io-alias';", {
+      'node_modules/io-alias/package.json': JSON.stringify({
+        name: 'io-alias',
+        type: 'module',
+        main: './index.ts',
+        types: './index.ts',
+      }),
+      'node_modules/io-alias/index.ts': "export * from 'node:fs';",
+    });
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'runtime-import',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not flag inert process and console property names', () => {
+    const root = fixture('export const value = { process: 1, console: 2 };');
+    expect(scanAgentCoreBoundary(root)).toEqual([]);
+  });
+
+  it('does not flag locally declared process and console identifiers', () => {
+    const root = fixture(
+      'const process = { env: 1 }; const console = { log: 2 }; export const value = process.env + console.log;',
+    );
     expect(scanAgentCoreBoundary(root)).toEqual([]);
   });
 
@@ -190,6 +282,28 @@ describe('agent-core import boundary', () => {
     const root = fixture("export * from '../../../helpers/bridge.js';", {
       'helpers/bridge.ts': "export * from 'node:fs';",
     });
-    expect(scanAgentCoreBoundary(root).some((entry) => entry.kind === 'runtime-import')).toBe(true);
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'runtime-import',
+      ),
+    ).toBe(true);
+  });
+
+  it('checks the runtime export condition of the audited Zod entry point', () => {
+    const root = fixture("import { value } from 'zod'; export { value };", {
+      'node_modules/zod/package.json': JSON.stringify({
+        name: 'zod',
+        types: './pure.d.ts',
+        main: './pure.d.ts',
+        exports: { '.': { types: './pure.d.ts', import: './runtime.js' } },
+      }),
+      'node_modules/zod/pure.d.ts': 'export declare const value: number;',
+      'node_modules/zod/runtime.js': "export * from 'node:fs';",
+    });
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'runtime-import',
+      ),
+    ).toBe(true);
   });
 });

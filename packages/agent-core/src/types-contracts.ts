@@ -20,6 +20,11 @@ export type GrantId = string;
 export type PreparedToken = string;
 export type BlobRef = string;
 export type ToolId = string;
+export interface ToolCall {
+  readonly id: CallId;
+  readonly tool: ToolId;
+  readonly args: JsonValue;
+}
 export type ModelRef = { readonly provider: string; readonly model: string };
 export type Effect = 'read' | 'write' | 'execute' | 'network' | 'spawn';
 export type JsonValue =
@@ -39,7 +44,12 @@ export interface InstructionBlock {
 export type ContentPart =
   | { readonly kind: 'text'; readonly text: string }
   | {
-      readonly kind: 'image' | 'audio';
+      readonly kind: 'image';
+      readonly mediaType: string;
+      readonly data: Uint8Array | { readonly ref: BlobRef };
+    }
+  | {
+      readonly kind: 'audio';
       readonly mediaType: string;
       readonly data: Uint8Array | { readonly ref: BlobRef };
     }
@@ -110,8 +120,9 @@ export interface ToolOutputLimits {
   readonly maxStepResultBytes: number;
   readonly truncation: 'head' | 'tail' | 'head-and-tail';
 }
+export type ToolPattern = string;
 export interface PolicyMatch {
-  readonly tools?: readonly string[];
+  readonly tools?: readonly ToolPattern[];
   readonly effects?: readonly Effect[];
   readonly args?: readonly ArgMatcher[];
 }
@@ -704,7 +715,3 @@ export type DefinitionProblem = {
   readonly path: ReadonlyArray<string | number>;
   readonly message: string;
 };
-export interface UnsubscribeCatalog {
-  (): void;
-}
-export type ClockPort = Clock;
