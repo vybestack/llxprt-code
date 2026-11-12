@@ -26,6 +26,7 @@ import type {
   CompletedToolCall,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { AgenticLoopEvent } from '../core/agenticLoop/types.js';
+import { isRefusalFinishReason } from '../refusal/refusalDetection.js';
 import type {
   AgentEvent,
   AgentToolCall,
@@ -285,15 +286,19 @@ function internalUsageToPublic(value: unknown): UsageMetadataValue {
 /**
  * Maps a Finished value to the public DoneReason. A Finished event represents
  * normal completion; other terminal causes arrive via their own variants. When
- * the raw provider stop reason is `'refusal'` (the model's safety classifier
- * declined the request, e.g. Anthropic Claude Fable 5), the done carries
- * `reason: 'refusal'` so consumers can surface a refusal-specific notice;
- * otherwise the done is a normal `'stop'`.
+ * the canonical finish reason is `'refusal'`, or the raw provider stop reason
+ * is (the model's safety classifier declined the request, e.g. Anthropic
+ * Claude Fable 5), the done carries `reason: 'refusal'` so consumers can
+ * surface a refusal-specific notice; otherwise the done is a normal `'stop'`.
  * @pseudocode event-adapter.md step 244: mapFinishReason
  * @issue:2329
+ * @issue:4036
  */
-function mapFinishReason(stopReason: string | undefined): DoneReason {
-  return stopReason === 'refusal' ? 'refusal' : 'stop';
+function mapFinishReason(finished: FinishedValue | null): DoneReason {
+  return isRefusalFinishReason(finished?.reason) ||
+    finished?.stopReason === 'refusal'
+    ? 'refusal'
+    : 'stop';
 }
 
 /**
@@ -568,8 +573,7 @@ export async function* mapLoopStream(
     // value, so a preserved refusal stopReason is honored on the
     // synthesized-completion path (@issue:2329).
     const reason: DoneReason =
-      state.pendingDoneReason ??
-      mapFinishReason(state.lastFinished?.stopReason);
+      state.pendingDoneReason ?? mapFinishReason(state.lastFinished);
     yield makeDone(state, reason);
   }
 }

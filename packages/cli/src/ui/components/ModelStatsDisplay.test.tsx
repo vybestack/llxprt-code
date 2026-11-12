@@ -97,6 +97,36 @@ describe('<ModelStatsDisplay />', () => {
     expect(output).not.toContain('Cache Reads');
     expect(output).not.toContain('Thoughts');
     expect(output).not.toContain('Tool');
+    expect(output).not.toContain('Refusals');
+    expect(output).toMatchSnapshot();
+  });
+
+  it('should display a Refusals row counting refusals separately from errors', () => {
+    const { lastFrame } = renderWithMockedStats({
+      models: {
+        'claude-opus-5-5': {
+          api: {
+            totalRequests: 2,
+            totalErrors: 0,
+            totalRefusals: 1,
+            totalLatencyMs: 2000,
+          },
+          tokens: {
+            input: 240,
+            prompt: 240,
+            candidates: 40,
+            total: 280,
+            cached: 0,
+            thoughts: 0,
+            tool: 0,
+          },
+        },
+      },
+    });
+
+    const output = lastFrame();
+    expect(output).toMatch(/Refusals\s+1\b/);
+    expect(output).toMatch(/Errors\s+0 \(0\.0%\)/);
     expect(output).toMatchSnapshot();
   });
 

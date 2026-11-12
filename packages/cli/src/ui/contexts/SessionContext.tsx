@@ -34,6 +34,7 @@ function areModelMetricsEqual(a: ModelMetrics, b: ModelMetrics): boolean {
   if (
     a.api.totalRequests !== b.api.totalRequests ||
     a.api.totalErrors !== b.api.totalErrors ||
+    a.api.totalRefusals !== b.api.totalRefusals ||
     a.api.totalLatencyMs !== b.api.totalLatencyMs
   ) {
     return false;

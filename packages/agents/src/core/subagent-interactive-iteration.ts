@@ -11,6 +11,7 @@ import {
   checkTerminationConditions,
   processInteractiveTextResponse,
   recordTurnOutputTokens,
+  terminateOnRefusal,
   type ExecutionLoopContext,
 } from './subagentExecution.js';
 import type { ToolCallRequestInfo } from './turn.js';
@@ -21,6 +22,8 @@ interface InteractiveTurnResult {
   currentTurn: number;
   reportedOutputTokens: number | undefined;
   outputCharacterCount: number;
+  /** The turn ended with a refusal; its tools and the goal check are skipped. */
+  refused: boolean;
 }
 interface InteractiveIterationOperations {
   runTurn: () => Promise<InteractiveTurnResult>;
@@ -50,9 +53,14 @@ export async function runInteractiveIteration(
     currentTurn,
     reportedOutputTokens,
     outputCharacterCount,
+    refused,
   } = await operations.runTurn();
   if (signal.aborted) return { action: 'abort' };
   recordTurnOutputTokens(execCtx, reportedOutputTokens, outputCharacterCount);
+  if (refused) {
+    terminateOnRefusal(execCtx);
+    return { action: 'stop' };
+  }
   if (checkOutputBudget(execCtx).shouldStop) return { action: 'stop' };
   processInteractiveTextResponse(textResponse, execCtx);
   const toolMessages = await operations.processTools(responseParts);

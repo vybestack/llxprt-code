@@ -50,6 +50,7 @@ import type { ContentGeneratorConfig } from './contentGenerator.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
 import type { SemanticMediaPurgeFrontier } from '../services/history/semantic-media-purge.js';
+import type { RefusalPayload } from '../recording/refusalPayload.js';
 import type { CompletedToolCall } from '../scheduler/types.js';
 import type {
   PerformCompressionResult,
@@ -116,6 +117,12 @@ export interface AgentChatRecordingExecution {
     history: readonly IContent[],
     frontier: SemanticMediaPurgeFrontier,
   ) => Promise<void>;
+  /**
+   * Appends an audit-only `refusal` record to the session journal when the
+   * host is recording one. Absent when the host keeps no journal. Never
+   * changes history (issue #4036).
+   */
+  readonly recordRefusal?: (refusal: RefusalPayload) => Promise<void>;
 }
 
 export interface AgentHistoryAdmission {

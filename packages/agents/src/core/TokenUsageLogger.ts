@@ -65,13 +65,17 @@ export interface TokenUsageRecord extends PendingTokenEstimate {
 export const PENDING_CAP = 100;
 
 /**
- * True for the outcomes that are followed by another billed attempt for the
- * same prompt. Any other outcome ends the turn.
+ * True for the outcomes that may be followed by another billed attempt for the
+ * same prompt. Any other outcome ends the turn. A refusal keeps the pending
+ * state because recovery can resend the same request; a terminal stop ends it
+ * through {@link TokenUsageLogger.finalizePrompt}.
  */
 function isRetriedOutcome(
   outcome: TokenUsageAttemptOutcome | undefined,
 ): boolean {
-  return outcome === 'abandoned' || outcome === 'error';
+  return (
+    outcome === 'abandoned' || outcome === 'error' || outcome === 'refusal'
+  );
 }
 
 /**
@@ -394,9 +398,20 @@ export class TokenUsageLogger {
         retryReason: actual.retryReason,
         httpStatus: actual.httpStatus,
         backendProfile: actual.backendProfile,
+        finishReason: actual.finishReason,
+        rawStopReason: actual.rawStopReason,
       },
     };
     await this._writeTurnRecord(record);
+  }
+
+  /**
+   * Ends a prompt whose last attempt kept its pending state alive for a retry
+   * that will not come (a terminal refusal). Later completions for the prompt
+   * are dropped instead of being matched against stale state.
+   */
+  finalizePrompt(promptId: string): void {
+    this.pending.delete(promptId);
   }
 
   /**
@@ -610,6 +625,12 @@ export class TokenUsageLogger {
       }),
       ...(extras.backendProfile !== undefined && {
         backend_profile: extras.backendProfile,
+      }),
+      ...(extras.finishReason !== undefined && {
+        finish_reason: extras.finishReason,
+      }),
+      ...(extras.rawStopReason !== undefined && {
+        raw_stop_reason: extras.rawStopReason,
       }),
     };
   }

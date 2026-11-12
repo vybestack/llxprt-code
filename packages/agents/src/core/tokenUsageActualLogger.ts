@@ -38,6 +38,8 @@ export interface ActualTokenUsageInput {
   cache_creation_input_tokens?: number;
   attemptIndex?: number;
   attemptOutcome?: TokenUsageAttemptOutcome;
+  finishReason?: string;
+  rawStopReason?: string;
 }
 
 interface ActualTokenUsageRecorder {
@@ -57,6 +59,8 @@ export function usageStatsToActualInput(
   attempt?: {
     attemptIndex: number;
     attemptOutcome: TokenUsageAttemptOutcome;
+    finishReason?: string;
+    rawStopReason?: string;
   },
 ): ActualTokenUsageInput {
   const base: ActualTokenUsageInput = {
@@ -75,6 +79,12 @@ export function usageStatsToActualInput(
     ...base,
     attemptIndex: attempt.attemptIndex,
     attemptOutcome: attempt.attemptOutcome,
+    ...(attempt.finishReason !== undefined && {
+      finishReason: attempt.finishReason,
+    }),
+    ...(attempt.rawStopReason !== undefined && {
+      rawStopReason: attempt.rawStopReason,
+    }),
   };
 }
 
@@ -99,6 +109,8 @@ export async function syncAndRecordTurnUsage(input: {
   lastPromptTokenCount: number | null;
   attemptIndex: number;
   promptId?: string;
+  finishReason?: string;
+  rawStopReason?: string;
 }): Promise<void> {
   const { history, usage, lastPromptTokenCount } = input;
   await history.waitForTokenUpdates();
@@ -116,7 +128,10 @@ export async function syncAndRecordTurnUsage(input: {
   await recordActualTokenUsage(
     input.usageLogger,
     input.promptId,
-    buildSuccessfulTurnUsage(usage, fallback, input.attemptIndex),
+    buildSuccessfulTurnUsage(usage, fallback, input.attemptIndex, {
+      finishReason: input.finishReason,
+      rawStopReason: input.rawStopReason,
+    }),
   );
 }
 
@@ -132,8 +147,13 @@ export function buildSuccessfulTurnUsage(
   usage: UsageStats | undefined,
   lastPromptTokenCount: number | null,
   attemptIndex: number,
+  finish: { finishReason?: string; rawStopReason?: string } = {},
 ): ActualTokenUsageInput | undefined {
-  const attempt = { attemptIndex, attemptOutcome: 'success' as const };
+  const attempt = {
+    attemptIndex,
+    attemptOutcome: 'success' as const,
+    ...finish,
+  };
   if (usage !== undefined) {
     return usageStatsToActualInput(usage, attempt);
   }
@@ -197,6 +217,12 @@ export async function recordActualTokenUsage(
       }),
       ...(usage.attemptOutcome !== undefined && {
         attemptOutcome: usage.attemptOutcome,
+      }),
+      ...(usage.finishReason !== undefined && {
+        finishReason: usage.finishReason,
+      }),
+      ...(usage.rawStopReason !== undefined && {
+        rawStopReason: usage.rawStopReason,
       }),
     };
 

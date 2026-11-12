@@ -136,3 +136,23 @@ exports[`<ModelStatsDisplay /> should render "no API calls" message when there a
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
+
+exports[`<ModelStatsDisplay /> should display a Refusals row counting refusals separately from errors 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  Model Stats For Nerds                                                                           │
+│                                                                                                  │
+│  Metric                      claude-opus-5-5                                                     │
+│  ──────────────────────────────────────────────────────────────────────────────────────────────  │
+│  API                                                                                             │
+│  Requests                    2                                                                   │
+│  Errors                      0 (0.0%)                                                            │
+│  Refusals                    1                                                                   │
+│  Avg Latency                 1.0s                                                                │
+│  Tokens                                                                                          │
+│  Total                       280                                                                 │
+│    ↳ Input                   240                                                                 │
+│    ↳ Output                  40                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;

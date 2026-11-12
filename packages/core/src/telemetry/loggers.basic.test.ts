@@ -326,7 +326,12 @@ describe('loggers', () => {
       expect(
         telemetry.localMetrics.getMetrics().models['test-model'],
       ).toStrictEqual({
-        api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
+        api: {
+          totalRequests: 1,
+          totalErrors: 0,
+          totalRefusals: 0,
+          totalLatencyMs: 100,
+        },
         tokens: {
           input: 7,
           prompt: 17,
@@ -386,7 +391,12 @@ describe('loggers', () => {
       expect(
         telemetry.localMetrics.getMetrics().models['test-model'],
       ).toStrictEqual({
-        api: { totalRequests: 1, totalErrors: 1, totalLatencyMs: 100 },
+        api: {
+          totalRequests: 1,
+          totalErrors: 1,
+          totalRefusals: 0,
+          totalLatencyMs: 100,
+        },
         tokens: {
           input: 7,
           prompt: 17,

@@ -51,6 +51,8 @@ export interface ModelMetrics {
   api: {
     totalRequests: number;
     totalErrors: number;
+    /** Attempts that ended with the canonical finish reason `refusal` (#4036). */
+    totalRefusals: number;
     totalLatencyMs: number;
   };
   tokens: {
@@ -248,6 +250,19 @@ function norm(value: number | undefined | null): number {
   return value;
 }
 
+/**
+ * A provider-owned response whose finish reasons include the canonical
+ * `refusal` ended with the model declining the request (issue #4036).
+ */
+function isRefusalEvent(
+  event: Pick<ApiResponseEvent, 'finish_reasons'>,
+): boolean {
+  return (
+    Array.isArray(event.finish_reasons) &&
+    event.finish_reasons.includes('refusal')
+  );
+}
+
 export class UiTelemetryService
   extends EventEmitter
   implements SessionMetricOperations, SessionMetricEventSink
@@ -373,6 +388,7 @@ export class UiTelemetryService
         api: {
           totalRequests: breakdown.totalRequests,
           totalErrors: breakdown.totalErrors,
+          totalRefusals: breakdown.totalRefusals,
           totalLatencyMs: breakdown.totalLatencyMs,
         },
         tokens: {
@@ -407,14 +423,18 @@ export class UiTelemetryService
     if (event.provider_owned !== true) {
       return false;
     }
-    return this.recordApiEvent(event, event.error !== undefined);
+    return this.recordApiEvent(
+      event,
+      event.error !== undefined,
+      isRefusalEvent(event),
+    );
   }
 
   private processApiError(event: Omit<ApiErrorEvent, 'event.name'>): boolean {
     if (event.provider_owned !== true) {
       return false;
     }
-    return this.recordApiEvent(event, true);
+    return this.recordApiEvent(event, true, false);
   }
 
   /**
@@ -425,6 +445,7 @@ export class UiTelemetryService
   private recordApiEvent(
     event: Omit<ApiResponseEvent | ApiErrorEvent, 'event.name'>,
     isError: boolean,
+    isRefusal: boolean,
   ): boolean {
     const durationMs = norm(event.duration_ms);
     const inputTokens = norm(event.input_token_count);
@@ -440,6 +461,7 @@ export class UiTelemetryService
       model: event.model,
       provider: event.provider ?? 'unknown',
       isError,
+      isRefusal,
       hasUsage: event.usage_metadata_present === true,
       inputTokens,
       outputTokens,

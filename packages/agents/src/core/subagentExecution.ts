@@ -34,6 +34,7 @@ import type {
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { REFUSAL_NOTICE_MESSAGE } from '@vybestack/llxprt-code-core';
 import type { SessionSchedulerOwner } from '../session/sessionSchedulerOwner.js';
 import type {
   CompletedToolCall,
@@ -220,6 +221,21 @@ export function checkOutputBudget(
     return { shouldStop: true, reason: SubagentTerminateMode.MAX_OUTPUT };
   }
   return { shouldStop: false };
+}
+
+/**
+ * Ends a subagent run whose model refused (issue #4036). The caller skips the
+ * refused attempt's tool calls and the goal check, whose nudge would send
+ * another request to the model that just refused.
+ */
+export function terminateOnRefusal(
+  ctx: Pick<ExecutionLoopContext, 'output' | 'subagentId' | 'logger'>,
+): void {
+  ctx.output.terminate_reason = SubagentTerminateMode.REFUSAL;
+  ctx.output.final_message = REFUSAL_NOTICE_MESSAGE;
+  ctx.logger.warn(
+    () => `Subagent ${ctx.subagentId} stopping: the model refused the request`,
+  );
 }
 
 export function checkTerminationConditions(

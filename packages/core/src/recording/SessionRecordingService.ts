@@ -49,6 +49,7 @@ import {
   type SessionStartPayload,
   type RecordingCheckpointInfo,
   type SessionForkedPayload,
+  type RefusalPayload,
 } from './types.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { replaySession } from './ReplayEngine.js';
@@ -75,6 +76,7 @@ const MATERIALIZING_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
   'session_metadata',
   'session_named',
   'semantic_media_purge',
+  'refusal',
 ]);
 
 type RecordingLifecycle =
@@ -872,6 +874,15 @@ export class SessionRecordingService {
     frontier: { readonly contentIndex: number; readonly blockIndex: number },
   ): void {
     this.enqueue('semantic_media_purge', { history, frontier });
+  }
+
+  /**
+   * Record an audit-only refusal event (issue #4036). Like content, it
+   * materializes the file so a refusal on the first request still leaves a
+   * transcript; it never changes replayed history.
+   */
+  recordRefusal(payload: RefusalPayload): void {
+    this.enqueue('refusal', payload);
   }
 
   /**

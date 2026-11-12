@@ -11,6 +11,7 @@ import {
   type ExecutionLoopContext,
 } from './subagentExecution.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { isRefusalFinishReason } from '../refusal/refusalDetection.js';
 
 // Types, interfaces, enums, and ContextState are now in subagentTypes.ts
 // Runtime setup helpers are now in subagentRuntimeSetup.ts
@@ -128,9 +129,12 @@ export async function consumeInteractiveTurnOutput(
   textResponse: string;
   reportedOutputTokens: number | undefined;
   outputCharacterCount: number;
+  /** The turn ended with a refusal (issue #4036). */
+  refused: boolean;
 }> {
   let textResponse = '';
   let reportedOutputTokens: number | undefined;
+  let refused = false;
   let outputCounter = new InteractiveOutputCounter();
   try {
     for await (const event of stream) {
@@ -138,6 +142,7 @@ export async function consumeInteractiveTurnOutput(
       if (event.type === AgentEventType.Retry) {
         textResponse = '';
         reportedOutputTokens = undefined;
+        refused = false;
         outputCounter = new InteractiveOutputCounter();
         execCtx.onOutputReset?.();
       }
@@ -145,6 +150,9 @@ export async function consumeInteractiveTurnOutput(
       reportedOutputTokens =
         readInteractiveOutputTokens(event) ?? reportedOutputTokens;
       textResponse += processInteractiveStreamEvent(event, execCtx);
+      refused ||=
+        event.type === AgentEventType.Finished &&
+        isRefusalFinishReason(event.value.reason);
     }
   } catch (primary) {
     if (signal.aborted) throw createAbortError();
@@ -154,5 +162,6 @@ export async function consumeInteractiveTurnOutput(
     textResponse,
     reportedOutputTokens,
     outputCharacterCount: outputCounter.total,
+    refused,
   };
 }

@@ -67,6 +67,7 @@ import {
   logStreamTelemetry,
   RawTokenDeltaBridge,
   StreamTimingTracker,
+  type StreamFinishInfo,
 } from './streamTelemetryLogger.js';
 import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
@@ -90,6 +91,7 @@ import {
   reasoningInclusionPolicy,
 } from './runtimePorts.js';
 import { stampTurnIdentityOnInput } from './turnIdentity.js';
+import { throwIfRefused } from '../refusal/refusalDetection.js';
 
 function isPreparedUserTurn(
   value: IContent | IContent[] | PreparedUserTurn,
@@ -655,6 +657,7 @@ export class StreamProcessor {
     owner?: HookExecutionOwner,
   ): AsyncGenerator<ModelStreamChunk> {
     let lastIContent: IContent | undefined;
+    let finish: StreamFinishInfo = {};
     // Constructed at generator-body start (first pull — the provider call
     // boundary), so provider_request_ms covers the stream lifecycle alone
     // and excludes send-seam estimation (#3257).
@@ -690,6 +693,10 @@ export class StreamProcessor {
           yieldedChunk,
           lastIContent,
         );
+        finish = {
+          finishReason: chunk.finishReason ?? finish.finishReason,
+          rawStopReason: chunk.rawStopReason ?? finish.rawStopReason,
+        };
         yield yieldedChunk;
       }
     } catch (error) {
@@ -708,6 +715,7 @@ export class StreamProcessor {
       lastIContent,
       this.compressionHandler.tokenUsageLogger,
       timing.measure(),
+      finish,
     );
   }
 
@@ -876,8 +884,12 @@ export class StreamProcessor {
         accumulator.add(historyChunk);
         yield { ...chunk, content: filteredContent };
       }
+      const accumulated = accumulator.materialize();
+      // Classified before validation, history commit and success accounting:
+      // a refused attempt's output never reaches any of them (issue #4036).
+      throwIfRefused(accumulated, turnId);
       await this._finalizeStreamProcessing(
-        accumulator.materialize(),
+        accumulated,
         userInput,
         includeThoughts,
         semanticMediaPurge,

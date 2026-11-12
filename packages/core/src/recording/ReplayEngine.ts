@@ -35,6 +35,7 @@ import {
 } from './replayCheckpointMetadata.js';
 export { foldCheckpointMetadata } from './replayCheckpointMetadata.js';
 import { readBoundedFirstLine } from './boundedHeaderReader.js';
+import { RefusalPayloadSchema } from './refusalPayload.js';
 import { formatReplayDiagnostic } from './replayErrorFormatting.js';
 import {
   INVALID_SESSION_START_MESSAGE,
@@ -468,6 +469,21 @@ function handleSemanticMediaPurge(
   };
 }
 
+/**
+ * issue #4036: refusal is an audit-only record. It is validated so a corrupt
+ * line is reported, but it never touches history.
+ */
+function handleRefusal(
+  payload: Record<string, unknown>,
+  acc: ReplayAccumulators,
+  lineNumber: number,
+): void {
+  if (!RefusalPayloadSchema.safeParse(payload).success) {
+    acc.malformedCount++;
+    acc.warnings.push(`Line ${lineNumber}: malformed refusal event, skipping`);
+  }
+}
+
 function applyParsedEvent(
   parsed: Record<string, unknown> | null,
   acc: ReplayAccumulators,
@@ -621,6 +637,9 @@ function dispatchEvent(
       break;
     case 'semantic_media_purge':
       handleSemanticMediaPurge(payload, acc, lineNumber);
+      break;
+    case 'refusal':
+      handleRefusal(payload, acc, lineNumber);
       break;
     case 'directories_changed':
       handleDirectoriesChanged(payload, acc, lineNumber);

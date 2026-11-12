@@ -56,10 +56,7 @@ import {
   shouldRetryStreamAttempt,
 } from './turnAbortHelpers.js';
 
-import {
-  AgentExecutionBlockedError,
-  AgentExecutionStoppedError,
-} from './chatSession.js';
+import { hookControlStreamEvents } from './turnHookControl.js';
 import {
   createProviderSendTiming,
   logModelOutputResponse,
@@ -93,6 +90,12 @@ import {
 } from './turnMediaAdmissionLifecycle.js';
 import { enforceTurnMediaRequestContents } from './turnMediaRequest.js';
 import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
+import {
+  ModelRefusalSignal,
+  settleRefusal,
+  terminalRefusalRecovery,
+  type RefusalRecovery,
+} from '../refusal/index.js';
 
 type SemanticMediaPurgeFactory = () => Promise<
   SemanticMediaPurgeAttempt | undefined
@@ -131,6 +134,9 @@ export class TurnProcessor {
   private eagerlyRecordedToolResponseCallIds = new Set<string>();
   private stampingBaseUrl: string | undefined = undefined;
   private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
+
+  /** Phase 1 has no recovery, so a refusal always stops the request. */
+  private readonly refusalRecovery: RefusalRecovery = terminalRefusalRecovery;
 
   /**
    * 0-based index of the send attempt that produced the response being
@@ -404,30 +410,28 @@ export class TurnProcessor {
       }
       return { error: null, action: 'stop' };
     } catch (error) {
-      // Hook execution control errors are yielded then stop the loop.
-      if (error instanceof AgentExecutionStoppedError) {
-        yield {
-          type: StreamEventType.AGENT_EXECUTION_STOPPED,
-          reason: error.reason,
-          systemMessage: error.systemMessage,
-          contextCleared: error.contextCleared,
-        };
-        return { error: null, action: 'stop' };
+      // A refusal is a typed outcome, decided before any generic retry
+      // classification: it never reaches the temperature-changing content
+      // retry below (issue #4036).
+      if (error instanceof ModelRefusalSignal) {
+        return settleRefusal(
+          {
+            recovery: this.refusalRecovery,
+            usageLogger: this.compressionHandler.tokenUsageLogger,
+            provider: () =>
+              params.modelParameters?.route?.provider.name ??
+              this.providerResolver('stream').name,
+            model: () =>
+              params.modelParameters?.route?.model ?? this.ports.state.model,
+            execution: params.recordingExecution,
+          },
+          error,
+          prompt_id,
+          attempt,
+        );
       }
-      if (error instanceof AgentExecutionBlockedError) {
-        yield {
-          type: StreamEventType.AGENT_EXECUTION_BLOCKED,
-          reason: error.reason,
-          systemMessage: error.systemMessage,
-          contextCleared: error.contextCleared,
-        };
-        if (error.blockedOutput) {
-          // P13: blockedOutput is now a neutral ModelOutput (was syntheticResponse).
-          yield {
-            type: StreamEventType.CHUNK,
-            value: error.blockedOutput,
-          };
-        }
+      // Hook execution control errors are yielded then stop the loop.
+      if (yield* hookControlStreamEvents(error)) {
         return { error: null, action: 'stop' };
       }
       if (

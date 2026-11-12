@@ -21,7 +21,8 @@ export type TokenUsageAttemptOutcome =
   | 'success'
   | 'error'
   | 'aborted'
-  | 'abandoned';
+  | 'abandoned'
+  | 'refusal';
 
 // ---------------------------------------------------------------------------
 // Serialized turn record
@@ -38,6 +39,7 @@ const AttemptOutcomeSchema = z.enum([
   'error',
   'aborted',
   'abandoned',
+  'refusal',
 ]);
 
 const ToolCallEntrySchema = z.object({
@@ -102,6 +104,9 @@ export const SerializedTokenUsageTurnRecordSchema = z.object({
   retry_reason: z.string().optional(),
   http_status: z.number().optional(),
   backend_profile: z.string().optional(),
+  // --- #4036 terminal finish reasons of the attempt (canonical and raw) ---
+  finish_reason: z.string().optional(),
+  raw_stop_reason: z.string().optional(),
   // --- AC-5 tool attribution ---
   tool_calls: z.array(ToolCallEntrySchema).optional(),
   new_tool_result_tokens: z.number().optional(),
@@ -333,6 +338,9 @@ export interface TokenUsageActualInput {
   retryReason?: string;
   httpStatus?: number;
   backendProfile?: string;
+  // #4036 terminal finish reasons of the attempt
+  finishReason?: string;
+  rawStopReason?: string;
 }
 
 // ---------------------------------------------------------------------------

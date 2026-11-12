@@ -39,6 +39,12 @@ export enum SubagentTerminateMode {
    * Indicates that the subagent's execution terminated because it exceeded the aggregate output token budget.
    */
   MAX_OUTPUT = 'MAX_OUTPUT',
+  /**
+   * Indicates that the subagent's model ended its attempt with a refusal
+   * (canonical finish reason `refusal`). A refusal is not a crash and not a
+   * goal: the run stops without running tools or the goal check.
+   */
+  REFUSAL = 'REFUSAL',
 }
 
 /**
