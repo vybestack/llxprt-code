@@ -14,12 +14,12 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { stepNamed } from './ocr-review-workflow-helpers.ts';
 import { parseWorkflowYaml, workflowJob } from './typed-test-helpers.ts';
 
 const ROOT = resolve(import.meta.dirname, '../..');
-const WORK = join(ROOT, 'tmp/lane');
 const WORKFLOW = parseWorkflowYaml(
   readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf8'),
 );
@@ -67,7 +67,9 @@ describe('release candidate archive handoff', () => {
       cwd: ROOT,
       encoding: 'utf8',
     }).trim();
-    const root = mkdtempSync(join(WORK, 'handoff-'));
+    const root = mkdtempSync(
+      join(tmpdir(), 'llxprt-release-artifact-handoff-'),
+    );
     const source = join(root, 'producer');
     const destination = join(root, 'consumer');
     const bin = join(root, 'bin');
@@ -186,7 +188,9 @@ describe('prepared release commit bundle handoff', () => {
       );
     }
 
-    const root = mkdtempSync(join(WORK, 'commit-bundle-handoff-'));
+    const root = mkdtempSync(
+      join(tmpdir(), 'llxprt-prepared-release-commit-bundle-'),
+    );
     const origin = join(root, 'origin.git');
     const producer = join(root, 'producer');
     const runnerTemp = join(root, 'runner-temp');
