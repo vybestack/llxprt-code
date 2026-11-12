@@ -5,6 +5,12 @@
  */
 import { z } from 'zod';
 import { DefinitionError } from './errors.js';
+import {
+  cloneDataDescriptors,
+  hasSafeDescriptors,
+  isJsonValue,
+  isPlainData,
+} from './plain-data.js';
 import type {
   AgentDefinition,
   ContentPart,
@@ -17,12 +23,40 @@ import type {
   UsageReport,
 } from './types.js';
 
-function hasUrlUserInfo(endpoint: string): boolean {
-  const schemeEnd = endpoint.indexOf('://');
-  if (schemeEnd < 0) return false;
-  const authority = endpoint.slice(schemeEnd + 3).split(/[/?#]/, 1)[0] ?? '';
-  const at = authority.indexOf('@');
-  return at > 0 && authority.slice(0, at).includes(':');
+const CREDENTIAL_URL_PARAMETER_KEYS = new Set([
+  'access_token',
+  'api_key',
+  'api_secret',
+  'apikey',
+  'auth',
+  'authorization',
+  'bearer',
+  'client_secret',
+  'credential',
+  'credentials',
+  'key',
+  'password',
+  'private_key',
+  'refresh_token',
+  'secret',
+  'token',
+]);
+
+function hasCredentialUrlParts(endpoint: string): boolean {
+  if (!endpoint.includes('://')) return false;
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return true;
+  }
+  if (url.username !== '' || url.password !== '') return true;
+  const parameters = new URLSearchParams(url.search);
+  const fragment = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
+  for (const [key] of new URLSearchParams(fragment)) parameters.append(key, '');
+  return [...parameters.keys()].some((key) =>
+    CREDENTIAL_URL_PARAMETER_KEYS.has(key.toLowerCase().replaceAll('-', '_')),
+  );
 }
 
 const nonEmpty = z.string().min(1);
@@ -63,24 +97,16 @@ const policyRuleSchema = z
 const policyLayerSchema = z
   .object({ name: nonEmpty, rules: z.array(policyRuleSchema) })
   .strict();
+const authorityRuleSchema = policyRuleSchema.extend({
+  outcome: z.enum(['deny', 'ask']),
+});
 const policySchema = z
   .object({
-    authority: z.array(policyRuleSchema),
+    authority: z.array(authorityRuleSchema),
     preferences: z.array(policyLayerSchema),
     fallback: z.enum(['allow', 'deny', 'ask']),
   })
-  .strict()
-  .superRefine((policy, context) => {
-    policy.authority.forEach((rule, index) => {
-      if (rule.outcome === 'allow') {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['authority', index, 'outcome'],
-          message: 'Authority rules may deny or ask, but may not allow.',
-        });
-      }
-    });
-  });
+  .strict();
 const modelParametersSchema = z
   .object({
     temperature: z.number().finite().min(0).max(2).optional(),
@@ -192,28 +218,6 @@ export const AgentDefinitionSchema = z
   })
   .strict();
 
-function isJsonValue(value: unknown): value is JsonValue {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean')
-    return true;
-  if (typeof value === 'number') return Number.isFinite(value);
-  if (Array.isArray(value)) {
-    for (let index = 0; index < value.length; index += 1) {
-      if (!Object.hasOwn(value, index) || !isJsonValue(value[index]))
-        return false;
-    }
-    return true;
-  }
-  if (typeof value !== 'object') return false;
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) return false;
-  for (const key of Object.keys(value)) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    if (descriptor === undefined || !('value' in descriptor)) return false;
-    if (!isJsonValue(descriptor.value)) return false;
-  }
-  return true;
-}
-
 const jsonValueSchema: z.ZodType<JsonValue> = z.custom<JsonValue>(isJsonValue);
 const replayScopeSchema = z
   .object({
@@ -225,35 +229,13 @@ const replayScopeSchema = z
   })
   .strict()
   .superRefine((scope, context) => {
-    const credentialMarkers = [
-      'secret',
-      'password',
-      'credential',
-      'apikey',
-      'api-key',
-      'access-token',
-      'access_token',
-      'accesstoken',
-      'bearer',
-    ];
-    const scopeFields: ReadonlyArray<'endpoint' | 'principal' | 'connection'> =
-      ['endpoint', 'principal', 'connection'];
-    for (const field of scopeFields) {
-      const value = scope[field];
-      if (
-        value !== undefined &&
-        (credentialMarkers.some((marker) =>
-          value.toLowerCase().includes(marker),
-        ) ||
-          (field === 'endpoint' && hasUrlUserInfo(value)))
-      ) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: [field],
-          message:
-            'Replay scope values must identify a principal or endpoint without credential material.',
-        });
-      }
+    if (hasCredentialUrlParts(scope.endpoint)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endpoint'],
+        message:
+          'Replay endpoint URLs must not contain user information or credential parameters.',
+      });
     }
   });
 const usageFields: ReadonlyArray<keyof Usage> = [
@@ -271,7 +253,22 @@ const usageSchema = z
     cacheReadInputTokens: z.number().int().nonnegative(),
     cacheWriteInputTokens: z.number().int().nonnegative(),
   })
-  .strict();
+  .strict()
+  .superRefine((usage, context) => {
+    if (
+      usage.cacheReadInputTokens > usage.inputTokens ||
+      usage.cacheWriteInputTokens > usage.inputTokens ||
+      usage.cacheReadInputTokens + usage.cacheWriteInputTokens >
+        usage.inputTokens
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [],
+        message:
+          'Cache input counters are non-overlapping subsets of input tokens.',
+      });
+    }
+  });
 export const UsageReportSchema = z
   .object({
     totals: z
@@ -332,7 +329,17 @@ const contentSchema: z.ZodType<ContentPart> = z.lazy(() =>
     z.object({ kind: z.literal('text'), text: z.string() }).strict(),
     z
       .object({
-        kind: z.enum(['image', 'audio']),
+        kind: z.literal('image'),
+        mediaType: nonEmpty,
+        data: z.union([
+          z.instanceof(Uint8Array),
+          z.object({ ref: nonEmpty }).strict(),
+        ]),
+      })
+      .strict(),
+    z
+      .object({
+        kind: z.literal('audio'),
         mediaType: nonEmpty,
         data: z.union([
           z.instanceof(Uint8Array),
@@ -483,7 +490,18 @@ export const ModelRecoverySchema = z
 const shellSegmentSchema = z
   .object({
     command: nonEmpty,
-    argv: z.array(nonEmpty).min(1),
+    argv: z
+      .array(z.string())
+      .min(1)
+      .superRefine((argv, context) => {
+        if (argv[0] === '') {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [0],
+            message: 'The executable argument must not be empty.',
+          });
+        }
+      }),
     hasRedirection: z.boolean(),
   })
   .strict();
@@ -527,12 +545,33 @@ function problemsFrom(error: z.ZodError): DefinitionProblem[] {
 }
 
 export function validateDefinition(value: unknown): AgentDefinition {
-  const result = AgentDefinitionSchema.safeParse(value);
-  if (!result.success) throw new DefinitionError(problemsFrom(result.error));
+  const plainData = isPlainData(value, new Set(), true);
+  const result = AgentDefinitionSchema.safeParse(cloneDataDescriptors(value));
+  const problems = result.success ? [] : problemsFrom(result.error);
+  if (!plainData) {
+    problems.unshift({
+      code: 'invalid-plain-data',
+      path: [],
+      message:
+        'Agent definitions must contain only plain JSON-compatible data.',
+    });
+  }
+  if (problems.length > 0) throw new DefinitionError(problems);
+  if (!result.success)
+    throw new Error('Definition parsing failed without diagnostics.');
   return result.data;
 }
 
 function parse<T>(schema: z.ZodType<T>, value: unknown, label: string): T {
+  if (!hasSafeDescriptors(value)) {
+    throw new DefinitionError([
+      {
+        code: 'invalid-plain-data',
+        path: [],
+        message: `${label}: values must use plain data descriptors.`,
+      },
+    ]);
+  }
   const result = schema.safeParse(value);
   if (!result.success)
     throw new DefinitionError(
@@ -583,8 +622,15 @@ export function mergeUsageReports(
       ]);
     }
   }
+  const totals: { -readonly [Field in keyof Usage]?: Usage[Field] } = {
+    ...previous.totals,
+  };
+  for (const field of usageFields) {
+    const value = next.totals[field];
+    if (value !== undefined) totals[field] = value;
+  }
   return validateUsageReport({
-    totals: { ...previous.totals, ...next.totals },
+    totals,
     complete: previous.complete || next.complete,
   });
 }
