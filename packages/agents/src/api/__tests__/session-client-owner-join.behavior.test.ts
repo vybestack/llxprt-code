@@ -200,7 +200,7 @@ describe('Session owner cleanup joining', () => {
           entered.release();
           await released.promise;
           try {
-            received = await (await owner.operations.fetch(url)).text();
+            received = await (await manager.fetchNetwork(url)).text();
           } finally {
             await cleanup();
           }
@@ -223,13 +223,13 @@ describe('Session owner cleanup joining', () => {
       released.release();
       await closing;
       expect(received).toBe(new URL(url).pathname);
-      expect(await (await owner.operations.fetch(url)).text()).toBe(
+      expect(await (await manager.fetchNetwork(url)).text()).toBe(
         new URL(url).pathname,
       );
       engineClosed = true;
       await closeEngine();
       await expect(owner.operations.fetch(url)).rejects.toThrow(
-        'Root fetch is closed',
+        'Auxiliary generation is closed',
       );
     } finally {
       released.release();

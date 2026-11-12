@@ -23,14 +23,14 @@ Review complete: **3 High, 10 Medium, 0 Low**. Findings below include the affect
 ### 3. [High] B68b deletes a reachable rollback scenario using an incorrect production-reachability ruling
 
 - **Batch / commit:** T6.B68b, `e586bad74`.
-- **Location:** `packages/agents/src/api/__tests__/session-recording-identity.behavior.test.ts:216` (deleted test immediately before this point); `B2-batch-records/T6.B68b.md:13`; `tmp/lanes/BATCH-PROTOCOL.md`, standing ruling for `sessionIdentityOwnership: 'config'`.
+- **Location:** `packages/agents/src/api/__tests__/session-recording-identity.behavior.test.ts:216` (deleted test immediately before this point); `T6.B68b record line 13`; `tmp/lanes/BATCH-PROTOCOL.md`, standing ruling for `sessionIdentityOwnership: 'config'`.
 - **Problem:** `releases prepared recording and lock when reading prior history fails before adoption` was removed because `'config'` ownership allegedly has no production caller. That conclusion confuses removal of an adoption override with removal of the production behavior. At both `e7f9b4973` and HEAD, `agentRuntimeAssembly.ts` sets `sessionIdentityOwnership = 'config'` for `createAgent`, and `foreground-agent-assembly.ts:300` sets it for Route B. The deleted scenario used `buildAgent`, which calls `createAgent`; it did not supply the removed `AgentAdoptionIntent` option. Its assertions covered release of the prepared lock, recording remaining disabled, unchanged Config identity, and a successful retry when the prior-history read fails. The remaining rollback test fails later, after Config mutation, and does not exercise this earlier cleanup path. This orchestrator ruling contradicts both the production writers and the plan's prohibition on removing reachable rollback/failure scenarios.
 - **Concrete fix:** Restore the scenario as a domain-level `SessionControl` test built from a production `SessionClientOwner`, wrapping the real client's `getHistory` on the instance. Keep all lock, recording-state, identity and retry assertions, with a test-owned Config accessible to the test. Correct the standing ruling to distinguish the removed override from the production Route B/C ownership mode.
 
 ### 4. [Medium] B35's named bus-identity coverage does not occur in the scenarios that drop the assertions
 
 - **Batch / commit:** T6.B35, `85546369b`.
-- **Location:** `packages/agents/src/api/__tests__/post-config-preflight.test.ts:481-517,566-595`; `B2-batch-records/T6.B35.md`, resolution U2.
+- **Location:** `packages/agents/src/api/__tests__/post-config-preflight.test.ts:481-517,566-595`; `T6.B35 record`, resolution U2.
 - **Problem:** Both the activation-to-agent bus identity and the activation-to-OAuth bus identity were dropped with a reference to tool-confirmation coverage in T6.B09. Neither affected scenario executes a turn or delivers a confirmation. Their current reads succeed with an unrelated bus, and ordinary tool confirmations elsewhere do not prove the OAuth manager uses the activation bus. The observation rule requires a covering assertion in the same scenario that fails when the identity property breaks.
 - **Concrete fix:** Exercise the relevant bus path within each affected scenario, including an OAuth prompt/response path for the OAuth bus relationship. If that cannot be expressed through the public route, provide a named domain-level replacement for that relationship rather than citing unrelated B09 tests.
 
@@ -86,7 +86,7 @@ Review complete: **3 High, 10 Medium, 0 Low**. Findings below include the affect
 ### 12. [Medium] B29 removes the caller-settings survival assertion and substitutes `undefined === undefined`
 
 - **Batch / commit:** T6.B29, `afecc5557`.
-- **Location:** `packages/agents/src/api/__tests__/instruction-publication-drain.behavior.test.ts:155-157`; `B2-batch-records/T6.B29.md`, decision 4.
+- **Location:** `packages/agents/src/api/__tests__/instruction-publication-drain.behavior.test.ts:155-157`; `T6.B29 record`, decision 4.
 - **Problem:** In the `peerFirst` case, `survivor` is assigned `undefined`, and the former settings-usability check becomes `expect(survivor?.maxOutputTokens).toBe(undefined)`. No settings operation occurs. The removal is justified by claiming caller-shared settings cannot be supplied in production. That is false for `SettingsService`: `fromConfig` explicitly accepts it, and `AgentActivationBootstrap.adopt` writes `adoptSettingsService` at both the baseline and HEAD. The removed `adoptSettingsOwner` field does not make the service itself unreachable. Other migrated batches, including B12, retain caller-settings disposal coverage through Route A.
 - **Concrete fix:** Keep a test-owned SettingsService alive across both retirement orders and assert a real write/read after the held close, through Route A or a named domain-level replacement. Remove the tautological assertion and correct the production-reachability rationale. Preserve the separate instruction-publication join assertion.
 

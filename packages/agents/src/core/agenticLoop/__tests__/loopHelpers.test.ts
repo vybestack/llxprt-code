@@ -10,6 +10,7 @@ import type {
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import { convertToFunctionResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { filterEagerlyRecordedToolResponses } from '../../streamResponseHelpers.js';
 import { buildToolResponses } from '../loopHelpers.js';
 
@@ -287,5 +288,96 @@ describe('buildToolResponses image budget enforcement', () => {
 
     const images = blocks.filter((b) => b.type === 'media');
     expect(images).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildToolResponses model-visible batch admission (issue #3984)
+// ---------------------------------------------------------------------------
+
+/** Mirrors what the scheduler records: real convertToFunctionResponse output. */
+function completedReadFile(
+  callId: string,
+  mimeType: string,
+  encodedLength: number,
+): CompletedToolCall {
+  return {
+    status: 'error',
+    request: {
+      callId,
+      name: 'read_file',
+      args: {},
+      isClientInitiated: false,
+      prompt_id: 'issue3984',
+    },
+    response: {
+      callId,
+      responseParts: convertToFunctionResponse('read_file', callId, [
+        { inlineData: { mimeType, data: 'A'.repeat(encodedLength) } },
+      ]),
+      resultDisplay: undefined,
+      error: undefined,
+      errorType: undefined,
+    },
+  };
+}
+
+function feedbackText(blocks: readonly ContentBlock[]): string {
+  return blocks.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n');
+}
+
+describe('buildToolResponses next-message admission', () => {
+  it('answers every call and tells the model to read fewer images when a batch overflows', () => {
+    const tools = [
+      completedReadFile('call-a', 'image/png', 4000),
+      completedReadFile('call-b', 'image/png', 4000),
+      completedReadFile('call-c', 'image/png', 4000),
+    ];
+
+    const next = buildToolResponses(tools, 6000);
+
+    const answered = next.flatMap((b) =>
+      b.type === 'tool_response' ? [b.callId] : [],
+    );
+    expect(answered).toStrictEqual(['call-a', 'call-b', 'call-c']);
+    expect(next.filter((b) => b.type === 'media')).toHaveLength(1);
+    const feedback = feedbackText(next);
+    expect(feedback).toContain('6000');
+    expect(feedback).toContain('call-b');
+    expect(feedback).toContain('call-c');
+    expect(feedback).not.toContain('call-a');
+    expect(feedback.toLowerCase()).toContain('fewer');
+  });
+
+  it('tells the model an image larger than the whole budget cannot fit alone', () => {
+    const tools = [
+      completedReadFile('call-small', 'image/png', 1000),
+      completedReadFile('call-huge', 'image/png', 9000),
+    ];
+
+    const next = buildToolResponses(tools, 6000);
+
+    const answered = next.flatMap((b) =>
+      b.type === 'tool_response' ? [b.callId] : [],
+    );
+    expect(answered).toStrictEqual(['call-small', 'call-huge']);
+    const feedback = feedbackText(next).toLowerCase();
+    expect(feedback).toContain('call-huge');
+    expect(feedback).toContain('cannot fit alone');
+    expect(feedback).toContain('9000');
+    expect(feedback).not.toContain('fewer');
+    expect(feedback).not.toContain('re-read');
+  });
+
+  it('does not count or omit non-image media', () => {
+    const tools = [
+      completedReadFile('call-pdf', 'application/pdf', 40_000),
+      completedReadFile('call-img', 'image/png', 1000),
+    ];
+
+    const next = buildToolResponses(tools, 6000);
+
+    expect(next.filter((b) => b.type === 'media')).toHaveLength(2);
+    expect(feedbackText(next)).toBe('');
   });
 });

@@ -705,7 +705,10 @@ function applyImageBudget(
     budgetBytes,
   );
   if (omitted.length > 0) {
-    budgeted.push({ type: 'text', text: buildOmissionFeedback(omitted) });
+    budgeted.push({
+      type: 'text',
+      text: buildOmissionFeedback(omitted, budgetBytes),
+    });
     ctx.logger.warn(
       () =>
         `Subagent ${ctx.subagentId}: omitted ${omitted.length} image(s) due to cumulative image payload budget (${budgetBytes} bytes)`,

@@ -15,11 +15,11 @@
  * AgentRuntimeState module-level globals: the write-only runtime state
  * registry, the subscription registry behind subscribeToAgentRuntimeState,
  * and the subscribe entry point itself. Production sources under
- * packages/<pkg>/src are scanned; test and spec files are excluded
- * (they may reference the names in deletion proofs).
+ * packages/<pkg>/src and plugins/<plugin>/src are scanned. Ordinary `.test.ts`
+ * files are excluded; `.spec.ts` files remain in scope for the #2616 AC2 check.
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
 
@@ -91,8 +91,7 @@ export interface AmbientSymbolScanResult {
 function isProductionSource(fileName: string): boolean {
   return (
     (fileName.endsWith('.ts') || fileName.endsWith('.tsx')) &&
-    !/\.test\./.test(fileName) &&
-    !/\.spec\./.test(fileName)
+    !/\.test\./.test(fileName)
   );
 }
 
@@ -103,10 +102,7 @@ function collectSourceFiles(root: string): string[] {
       const fullPath = join(dir, entry);
       const stats = statSync(fullPath);
       if (stats.isDirectory()) {
-        if (entry === 'node_modules' || entry === 'dist') {
-          continue;
-        }
-        walk(fullPath);
+        if (entry !== 'node_modules' && entry !== 'dist') walk(fullPath);
       } else if (isProductionSource(entry)) {
         found.push(fullPath);
       }
@@ -116,6 +112,19 @@ function collectSourceFiles(root: string): string[] {
   return found;
 }
 
+function isRetiredRuntimeImport(statement: ts.Statement): boolean {
+  if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement))
+    return false;
+  const moduleSpecifier = statement.moduleSpecifier;
+  return (
+    !!moduleSpecifier &&
+    ts.isStringLiteral(moduleSpecifier) &&
+    /(?:^|\/)runtime(?:Accessors|Settings|\/providerManagerInstance)(?:\.js|\.ts)?$/.test(
+      moduleSpecifier.text,
+    )
+  );
+}
+
 function collectFileViolations(
   file: string,
   lines: string[],
@@ -123,6 +132,22 @@ function collectFileViolations(
 ): void {
   const migratedRetryConsumer =
     /(?:^|[/\\])(?:errors|RetryOrchestrator)\.ts$/.test(file);
+  const source = ts.createSourceFile(
+    file,
+    lines.join('\n'),
+    ts.ScriptTarget.Latest,
+  );
+  for (const statement of source.statements) {
+    if (!isRetiredRuntimeImport(statement)) continue;
+    const line = source.getLineAndCharacterOfPosition(
+      statement.getStart(source),
+    ).line;
+    violations.push({
+      file,
+      line: line + 1,
+      text: statement.getText(source),
+    });
+  }
   for (let index = 0; index < lines.length; index += 1) {
     if (
       BANNED_PATTERN.test(lines[index]) ||
@@ -221,4 +246,26 @@ export function scanForBannedAmbientSymbols(
   }
 
   return { violations, scannedFiles };
+}
+
+if (import.meta.main) {
+  const roots = ['packages', 'plugins'].flatMap((directory) =>
+    readdirSync(directory, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(directory, entry.name, 'src'))
+      .filter((root) => existsSync(root) && statSync(root).isDirectory()),
+  );
+  const result = scanForBannedAmbientSymbols(roots);
+  if (result.violations.length) {
+    process.stderr.write(
+      `${result.violations
+        .map(({ file, line, text }) => `${file}:${line}: ${text}`)
+        .join('\n')}\n`,
+    );
+    process.exitCode = 1;
+  } else {
+    process.stdout.write(
+      `Scanned ${result.scannedFiles} production sources.\n`,
+    );
+  }
 }

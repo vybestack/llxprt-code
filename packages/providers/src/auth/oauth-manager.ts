@@ -117,6 +117,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     buckets: string[],
     metadata?: OAuthTokenRequestMetadata,
   ): void {
+    this.foreground.assertOpen();
     this.bucketManager.ensureFailoverHandler(
       providerName,
       buckets,
@@ -129,6 +130,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     provider: string,
     metadata?: OAuthTokenRequestMetadata,
   ): string[] {
+    this.foreground.assertOpen();
     return (
       this.bucketManager
         .readFailoverHandler(provider, metadata)
@@ -137,6 +139,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   }
 
   resetBuckets(provider: string, continuation: boolean): void {
+    this.foreground.assertOpen();
     const handler = this.bucketManager.readFailoverHandler(provider);
     if (continuation) handler?.resetSession?.();
     else handler?.reset?.();
@@ -149,10 +152,12 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   }
 
   clearRetryHandlers(): void {
+    this.foreground.assertOpen();
     this.bucketManager.clearFailoverHandlers();
   }
 
   checkpointRetryHandlers(): () => void {
+    this.foreground.assertOpen();
     return this.bucketManager.checkpointFailoverHandlers();
   }
 
@@ -342,7 +347,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * @returns Array of authentication status for each provider
    */
   async getAuthStatus(): Promise<AuthStatus[]> {
-    return this.authStatusService.getAuthStatus();
+    return this.foreground.accept(() => this.authStatusService.getAuthStatus());
   }
 
   /**
@@ -358,7 +363,9 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     providerName: string,
     bucket?: string,
   ): Promise<boolean> {
-    return this.authStatusService.isAuthenticated(providerName, bucket);
+    return this.foreground.accept(() =>
+      this.authStatusService.isAuthenticated(providerName, bucket),
+    );
   }
 
   /**
@@ -370,7 +377,9 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * @param bucket - Optional bucket name for multi-account support
    */
   async logout(providerName: string, bucket?: string): Promise<void> {
-    return this.authStatusService.logout(providerName, bucket);
+    return this.foreground.accept(() =>
+      this.authStatusService.logout(providerName, bucket),
+    );
   }
 
   /**
@@ -380,7 +389,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * Logout from all providers by clearing all stored tokens
    */
   async logoutAll(): Promise<void> {
-    return this.authStatusService.logoutAll();
+    return this.foreground.accept(() => this.authStatusService.logoutAll());
   }
 
   /**
@@ -397,12 +406,36 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   }
 
   /**
+   * Resolve the full OAuth token with exactly the semantics of `getToken`
+   * (same admission, disk/peek/refresh/authentication paths), so a caller can
+   * take the bearer and its account identity from one result.
+   * Delegates to TokenAccessCoordinator.
+   */
+  async resolveToken(
+    providerName: string,
+    bucket?: string | unknown,
+  ): Promise<OAuthToken | null> {
+    return this.foreground.accept((signal) =>
+      this.tokenAccessCoordinator.resolveToken(providerName, bucket, signal),
+    );
+  }
+
+  /**
    * Retrieve the stored OAuth token without refreshing it.
    * Delegates to TokenAccessCoordinator.
    */
   async peekStoredToken(providerName: string): Promise<OAuthToken | null> {
     return this.foreground.accept(() =>
       this.tokenAccessCoordinator.peekStoredToken(providerName),
+    );
+  }
+
+  async readStoredToken(
+    providerName: string,
+    bucket?: string,
+  ): Promise<OAuthToken | null> {
+    return this.foreground.accept(() =>
+      this.tokenStore.getToken(providerName, bucket),
     );
   }
 
@@ -666,10 +699,12 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * @returns String describing higher priority auth method, null if none
    */
   async getHigherPriorityAuth(providerName: string): Promise<string | null> {
-    return getHigherPriorityAuth(
-      providerName,
-      this.settings,
-      this.readSessionAuthPolicy().authOnly,
+    return this.foreground.accept(() =>
+      getHigherPriorityAuth(
+        providerName,
+        this.settings,
+        this.readSessionAuthPolicy().authOnly,
+      ),
     );
   }
 
@@ -682,6 +717,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     bucket: string,
     metadata?: OAuthTokenRequestMetadata,
   ): void {
+    this.foreground.assertOpen();
     this.bucketManager.setSessionBucket(provider, bucket, metadata);
   }
 
@@ -689,19 +725,21 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     provider: string,
     bucket: string,
   ): Promise<void> {
-    const context = await resolveCurrentProfileOAuthContext(
-      provider,
-      this.readSessionAuthPolicy().profileName,
-      this.profileReads,
-    );
-    if (context === undefined) {
-      this.bucketManager.setSessionBucket(provider, bucket);
-    } else if (
-      context.providerMatches === true &&
-      !context.hasExplicitBucketPolicy
-    ) {
-      this.bucketManager.setSessionBucket(provider, bucket, context.metadata);
-    }
+    return this.foreground.accept(async () => {
+      const context = await resolveCurrentProfileOAuthContext(
+        provider,
+        this.readSessionAuthPolicy().profileName,
+        this.profileReads,
+      );
+      if (context === undefined) {
+        this.bucketManager.setSessionBucket(provider, bucket);
+      } else if (
+        context.providerMatches === true &&
+        !context.hasExplicitBucketPolicy
+      ) {
+        this.bucketManager.setSessionBucket(provider, bucket, context.metadata);
+      }
+    });
   }
 
   /**
@@ -712,6 +750,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     provider: string,
     metadata?: OAuthTokenRequestMetadata,
   ): string | undefined {
+    this.foreground.assertOpen();
     return this.bucketManager.getSessionBucket(provider, metadata);
   }
 
@@ -749,10 +788,12 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     provider: string,
     metadata?: OAuthTokenRequestMetadata,
   ): void {
+    this.foreground.assertOpen();
     this.bucketManager.clearSessionBucket(provider, metadata);
   }
 
   clearAllSessionBuckets(provider: string): void {
+    this.foreground.assertOpen();
     this.bucketManager.clearAllSessionBuckets(provider);
   }
 
@@ -760,11 +801,15 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * Logout from all buckets for a provider
    */
   async logoutAllBuckets(provider: string): Promise<void> {
-    return this.authStatusService.logoutAllBuckets(provider);
+    return this.foreground.accept(() =>
+      this.authStatusService.logoutAllBuckets(provider),
+    );
   }
 
   async listBuckets(provider: string): Promise<string[]> {
-    return this.authStatusService.listBuckets(provider);
+    return this.foreground.accept(() =>
+      this.authStatusService.listBuckets(provider),
+    );
   }
 
   /**
@@ -778,7 +823,9 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       isSessionBucket: boolean;
     }>
   > {
-    return this.authStatusService.getAuthStatusWithBuckets(provider);
+    return this.foreground.accept(() =>
+      this.authStatusService.getAuthStatusWithBuckets(provider),
+    );
   }
 
   /**
@@ -916,6 +963,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     bucket: string,
     association: BrowserProfileAssociation,
   ): void {
+    this.foreground.assertOpen();
     this.browserProfileStore.setAssociation(provider, bucket, association);
   }
 
@@ -927,6 +975,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     provider: string,
     bucket?: string,
   ): BrowserProfileAssociation | undefined {
+    this.foreground.assertOpen();
     return this.browserProfileStore.getAssociation(provider, bucket);
   }
 
@@ -934,6 +983,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * Clear the browser profile association for a provider+bucket.
    */
   clearBrowserProfileAssociation(provider: string, bucket?: string): void {
+    this.foreground.assertOpen();
     this.browserProfileStore.clearAssociation(provider, bucket);
   }
 
@@ -943,6 +993,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   listBrowserProfileAssociations(
     provider: string,
   ): Array<{ bucket: string } & BrowserProfileAssociation> {
+    this.foreground.assertOpen();
     return this.browserProfileStore.listAssociations(provider);
   }
 }

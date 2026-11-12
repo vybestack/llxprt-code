@@ -446,6 +446,7 @@ export class CompressionHandler {
           hookOwner,
         }),
       estimateFinalizedPromptTokens,
+      requestMediaBudgetBytes: this.requestMediaBudgetBytes,
       getPromptTokenBaseline: () => this.lastPromptTokenCount,
       resetPromptTokenBaseline: () => {
         this.lastPromptTokenCount = null;

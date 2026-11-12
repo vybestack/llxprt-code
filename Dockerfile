@@ -112,24 +112,21 @@ RUN export npm_config_fetch_retries=5 \
     rm -f /tmp/*.tgz
 
 
-# Install experimental UI package into the sandbox so --experimental-ui works.
-# If it's not available on the registry yet (e.g. nightlies), users can still
-# mount/install it manually. This install streams straight from the registry
-# and can hit the same transient network resets as the tarball install
-# (issue #3241), so it gets the same bounded retry.
-RUN export npm_config_fetch_retries=5 \
-      npm_config_fetch_retry_mintimeout=1000 \
-      npm_config_fetch_retry_maxtimeout=60000; \
-    attempts=0; \
-    until npm install -g @vybestack/llxprt-ui; do \
-      attempts=$((attempts + 1)); \
-      if [ "$attempts" -ge 3 ]; then \
-        echo "npm install of @vybestack/llxprt-ui failed after $attempts attempts" >&2; \
-        exit 1; \
-      fi; \
-      echo "npm install of @vybestack/llxprt-ui attempt $attempts failed; retrying in 15s" >&2; \
-      sleep 15; \
-    done && \
+# @lvce-editor/ripgrep@1.6.0 uses this cache archive before it tries the
+# GitHub release download. Seed it from the system ripgrep package for the
+# target architecture so image builds do not depend on GitHub availability.
+ENV XDG_CACHE_HOME=/home/node/.cache
+RUN mkdir -p "$XDG_CACHE_HOME/vscode-ripgrep" && \
+    case "$TARGETARCH" in \
+      amd64) ripgrep_target='x86_64-unknown-linux-musl.tar.gz' ;; \
+      arm64) ripgrep_target='aarch64-unknown-linux-gnu.tar.gz' ;; \
+      *) echo "Unsupported sandbox target architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac && \
+    tar -czf "$XDG_CACHE_HOME/vscode-ripgrep/ripgrep-v13.0.0-10-$ripgrep_target" -C /usr/bin rg
+
+# Install pinned UI and ripgrep packages after seeding the cache archive, so
+# ripgrep's postinstall extracts system rg instead of downloading from GitHub.
+RUN npm install -g @vybestack/llxprt-ui@0.9.3 @lvce-editor/ripgrep@1.6.0 && \
     npm cache clean --force
 
 # Verify the final filesystem after every global install transaction. The

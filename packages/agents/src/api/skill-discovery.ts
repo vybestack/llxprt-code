@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import {
   Config,
   discoverSkillsForConfig,
@@ -71,12 +72,14 @@ export async function discoverAgentSkills(
     enableHooks: false,
     coreTools: [],
   });
+  const network = new OwnedFetch(config.getProxy());
   let runtime: McpRuntimeOwner;
   try {
     runtime = await McpRuntimeOwner.create(
       {
         oauth: host.oauth,
         config,
+        requestFetch: network.fetch,
         managerFactory: McpClientManager,
         extensionLoader: { kind: 'none' },
         policy: { kind: 'none' },
@@ -95,10 +98,16 @@ export async function discoverAgentSkills(
       },
     );
   } catch (error) {
-    return cleanupAfterFailure(error, () => config.dispose());
+    return cleanupAfterFailure(error, () =>
+      runCleanupSteps([() => network.dispose(), () => config.dispose()]),
+    );
   }
   const close = (): Promise<void> =>
-    runCleanupSteps([() => runtime.dispose(), () => config.dispose()]);
+    runCleanupSteps([
+      () => runtime.dispose(),
+      () => network.dispose(),
+      () => config.dispose(),
+    ]);
   let skills: SkillDefinition[];
   try {
     skills = await discoverSkillsForConfig(

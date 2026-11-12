@@ -430,7 +430,7 @@ describe('RenderInline file path links', () => {
   });
 
   it('renders an absolute path that exists as a link', () => {
-    const abs = createTempFile('config.json');
+    const abs = createTempFile('dir_a_b/config.json');
     const node = renderInlineNode({
       text: `See ${abs} for settings.`,
       workspaceDirectories: [tempDir],
@@ -453,7 +453,7 @@ describe('RenderInline file path links', () => {
   });
 
   it('renders an absolute path that exists as a link even without workspaceDirectories', () => {
-    const abs = createTempFile('config.json');
+    const abs = createTempFile('dir_a_b/config.json');
     const node = renderInlineNode({
       text: `See ${abs} for settings.`,
     });
@@ -461,6 +461,58 @@ describe('RenderInline file path links', () => {
     const flat = flattenText(node);
     expect(flat).toContain(OSC8_PREFIX);
     expect(flat).toContain(abs);
+  });
+
+  it('links a relative file path whose directory contains paired underscores', () => {
+    createTempFile('dir_a_b/file.ts');
+    const node = renderInlineNode({
+      text: 'Edit dir_a_b/file.ts to fix the bug.',
+      workspaceDirectories: [tempDir],
+    });
+
+    const flat = flattenText(node);
+    expect(flat).toContain(OSC8_PREFIX);
+    expect(flat).toContain('dir_a_b/file.ts');
+  });
+
+  it('keeps real emphasis next to a path with paired underscores', () => {
+    const abs = createTempFile('dir_a_b/file.ts');
+    const node = renderInlineNode({
+      text: `_emphasis_ points to ${abs}.`,
+      workspaceDirectories: [tempDir],
+    });
+
+    const flat = flattenText(node);
+    expect(flat).toContain(OSC8_PREFIX);
+    expect(flat).toContain(abs);
+    expect(
+      collectElementProps(node).some((props) => props.italic === true),
+    ).toBe(true);
+  });
+
+  it('keeps a path with paired underscores inside an inline code span unlinked', () => {
+    const abs = createTempFile('dir_a_b/file.ts');
+    const node = renderInlineNode({
+      text: `Edit \`${abs}\` to fix the bug.`,
+      workspaceDirectories: [tempDir],
+    });
+
+    const flat = flattenText(node);
+    expect(flat).not.toContain(OSC8_PREFIX);
+    expect(flat).toContain(abs);
+  });
+
+  it('excludes punctuation after a path with paired underscores from its link target', () => {
+    const abs = createTempFile('dir_a_b/file.ts');
+    const node = renderInlineNode({
+      text: `Edit ${abs}.`,
+      workspaceDirectories: [tempDir],
+    });
+
+    const flat = flattenText(node);
+    expect(flat).toContain(OSC8_PREFIX);
+    expect(flat).toContain(abs);
+    expect(extractFirstOsc8Label(flat)).toBe(abs);
   });
 
   it('links a relative path with trailing punctuation when the file exists', () => {

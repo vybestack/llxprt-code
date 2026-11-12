@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { acquireRootNetwork } from './root-network.js';
 import { createProviderPopulationTarget } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import type { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
@@ -77,15 +78,19 @@ export function acquirePreflightManager(
   resources: PreflightResources,
   inputs: PreflightProviderInputs,
 ): ProviderManager {
-  return acquireRuntimeProviderManager(resources.release, {
-    files: resources.files,
-    proxy: inputs.host.proxy,
-    settings: inputs.settings,
-    config: undefined,
-    settingsOwner: undefined,
-    context: capturePreflightRuntimeContext(inputs.host, 'pre-config'),
-    authority: inputs.authority,
-  });
+  return acquireRuntimeProviderManager(
+    resources.release,
+    {
+      files: resources.files,
+      proxy: inputs.host.proxy,
+      settings: inputs.settings,
+      config: undefined,
+      settingsOwner: undefined,
+      context: capturePreflightRuntimeContext(inputs.host, 'pre-config'),
+      authority: inputs.authority,
+    },
+    acquireRootNetwork(resources.release, inputs.host.proxy).fetch,
+  );
 }
 
 export function acquirePreflightOAuth(

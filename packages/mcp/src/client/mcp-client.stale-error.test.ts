@@ -84,6 +84,7 @@ describe('McpClient stale error handling', () => {
       >
     ).mockReturnValue({} as SdkClientStdioLib.StdioClientTransport);
     const client = new McpClient(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       'test-server',
@@ -118,6 +119,7 @@ describe('McpClient stale error handling', () => {
       >
     ).mockReturnValue({} as SdkClientStdioLib.StdioClientTransport);
     const client = new McpClient(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       'test-server',

@@ -7,7 +7,6 @@
 import {
   type RuntimeProviderManager,
   type Config,
-  setGitStatsService,
 } from '@vybestack/llxprt-code-core';
 
 import dns from 'node:dns';
@@ -228,10 +227,11 @@ export async function configureProvidersAndServices(
 ): Promise<void> {
   await reapplyBootstrapProfile(argv, readCurrentProfileName, loadProfile);
 
-  if (config.getConversationLoggingEnabled()) {
-    const gitStatsService = new GitStatsServiceImpl(config);
-    setGitStatsService(gitStatsService);
-  }
+  config.setGitStatsService(
+    config.getConversationLoggingEnabled()
+      ? new GitStatsServiceImpl(config)
+      : null,
+  );
 
   dns.setDefaultResultOrder(
     validateDnsResolutionOrder(settings.merged.dnsResolutionOrder),

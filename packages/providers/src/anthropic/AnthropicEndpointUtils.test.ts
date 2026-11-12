@@ -11,9 +11,11 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 import {
+  ANTHROPIC_NATIVE_REQUEST_ENVELOPE_BYTES,
   createMediaSupportPredicate,
   isAnthropicOAuthBaseURL,
   isZaiAnthropicEndpoint,
+  resolveAnthropicRequestMediaBudgetBytes,
 } from './AnthropicEndpointUtils.js';
 
 describe('isZaiAnthropicEndpoint (#3693)', () => {
@@ -179,4 +181,58 @@ describe('createMediaSupportPredicate projection (#3693)', () => {
       ).toHaveLength(1);
     },
   );
+});
+
+describe('native Anthropic request envelope (issue #3984)', () => {
+  it('resolves the native default endpoint to the strict 15 MiB media budget', () => {
+    expect(resolveAnthropicRequestMediaBudgetBytes(undefined, undefined)).toBe(
+      15 * 1024 * 1024,
+    );
+  });
+
+  it('keeps the 15 MiB image budget for the api.anthropic.com host', () => {
+    expect(
+      resolveAnthropicRequestMediaBudgetBytes(
+        undefined,
+        'https://api.anthropic.com/',
+      ),
+    ).toBe(15 * 1024 * 1024);
+  });
+
+  it('keeps the full request body ceiling at the 32,000,000 byte envelope', () => {
+    expect(ANTHROPIC_NATIVE_REQUEST_ENVELOPE_BYTES).toBe(32_000_000);
+  });
+
+  it('leaves Anthropic-compatible third-party hosts on the provider default', () => {
+    expect(
+      resolveAnthropicRequestMediaBudgetBytes(
+        undefined,
+        'https://api.z.ai/api/anthropic',
+      ),
+    ).toBeUndefined();
+  });
+
+  it('does not treat a spoofed or subdomain host as the native API', () => {
+    expect([
+      resolveAnthropicRequestMediaBudgetBytes(
+        undefined,
+        'https://api.anthropic.com.evil.example/',
+      ),
+      resolveAnthropicRequestMediaBudgetBytes(
+        undefined,
+        'https://proxy.anthropic.com/',
+      ),
+    ]).toStrictEqual([undefined, undefined]);
+  });
+
+  it('keeps an explicit configured budget, including zero and 15 MiB, on every endpoint', () => {
+    expect([
+      resolveAnthropicRequestMediaBudgetBytes(0, undefined),
+      resolveAnthropicRequestMediaBudgetBytes(
+        15 * 1024 * 1024,
+        'https://api.anthropic.com',
+      ),
+      resolveAnthropicRequestMediaBudgetBytes(7, 'https://api.z.ai'),
+    ]).toStrictEqual([0, 15 * 1024 * 1024, 7]);
+  });
 });

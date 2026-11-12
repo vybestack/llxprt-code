@@ -27,7 +27,7 @@ import type {
 import {
   refreshTokenUnderLock,
   RefreshLockReleases,
-  performDiskCheckUnderLock,
+  performDiskCheck,
   type RefreshErrorPolicy,
 } from './token-refresh-helper.js';
 import {
@@ -38,6 +38,7 @@ import {
 import {
   resolveProfileBuckets,
   resolveCurrentProfileSessionMetadata,
+  resolveCurrentProfileSessionBucket,
 } from './token-profile-resolver.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';
@@ -432,11 +433,12 @@ export class TokenAccessCoordinator {
     providerName: string,
     explicitBucket: boolean,
     requestMetadata: OAuthTokenRequestMetadata | undefined,
-  ): Promise<string | null> {
+    signal?: AbortSignal,
+  ): Promise<OAuthToken | null> {
     if (explicitBucket) {
       return null;
     }
-    return this.peekOtherProfileBuckets(providerName, requestMetadata);
+    return this.peekOtherProfileBuckets(providerName, requestMetadata, signal);
   }
 
   // --------------------------------------------------------------------------
@@ -446,14 +448,33 @@ export class TokenAccessCoordinator {
   /**
    * Get access token string for a specific provider.
    * Triggers OAuth flows when necessary (via injected authenticator).
+   * Delegates to {@link resolveToken}, so both share one set of semantics.
    */
   async getToken(
     providerName: string,
     bucket?: string | unknown,
     signal?: AbortSignal,
   ): Promise<string | null> {
+    const token = await this.resolveToken(providerName, bucket, signal);
+    return token === null ? null : token.access_token;
+  }
+
+  /**
+   * Resolve the full token for a provider with exactly the semantics of
+   * {@link getToken}: unknown provider and disabled OAuth yield null, then the
+   * stored token (refreshing under lock when expiring), the other profile
+   * buckets, the locked disk check, and finally authentication. The returned
+   * token is the credential the access token belongs to, so callers that need
+   * an identity (e.g. the Codex account id) take it from this same result
+   * instead of reading the store a second time.
+   */
+  async resolveToken(
+    providerName: string,
+    bucket?: string | unknown,
+    signal?: AbortSignal,
+  ): Promise<OAuthToken | null> {
     logger.debug(
-      () => `[FLOW] getToken() called for provider: ${providerName}`,
+      () => `[FLOW] resolveToken() called for provider: ${providerName}`,
     );
 
     if (!this.providerRegistry.getProvider(providerName)) {
@@ -499,7 +520,7 @@ export class TokenAccessCoordinator {
         () =>
           `[FLOW] Returning existing token for ${providerName} (expiry=${token.expiry})`,
       );
-      return token.access_token;
+      return token;
     }
 
     // @fix issue1616: Peek other profile buckets before triggering full re-auth.
@@ -509,6 +530,7 @@ export class TokenAccessCoordinator {
       providerName,
       explicitBucket,
       effectiveMetadata,
+      signal,
     );
     if (peekResult !== null) {
       return peekResult;
@@ -580,7 +602,7 @@ export class TokenAccessCoordinator {
     explicitBucket: boolean,
     requestMetadata: OAuthTokenRequestMetadata | undefined,
     signal?: AbortSignal,
-  ): Promise<string | null> {
+  ): Promise<OAuthToken | null> {
     logger.debug(
       () =>
         `[FLOW] No existing token for ${providerName}, triggering OAuth flow...`,
@@ -607,9 +629,14 @@ export class TokenAccessCoordinator {
     );
 
     // @fix issue1262 & issue1195: Before triggering OAuth, check disk with lock
-    const diskCheckResult = await this.performDiskCheck(
+    const diskCheckResult = await performDiskCheck(
       providerName,
       bucketToCheck,
+      this.tokenStore,
+      this.providerRegistry,
+      this.proactiveRenewalManager,
+      this.refreshLockReleases,
+      signal,
     );
     if (diskCheckResult !== undefined) {
       return diskCheckResult;
@@ -633,12 +660,13 @@ export class TokenAccessCoordinator {
 
   /**
    * Peek other profile buckets for a valid token (issue1616 path).
-   * Returns access_token string if found, null if none found.
+   * Returns the token if found, null if none found.
    */
   private async peekOtherProfileBuckets(
     providerName: string,
     requestMetadata: OAuthTokenRequestMetadata | undefined,
-  ): Promise<string | null> {
+    signal?: AbortSignal,
+  ): Promise<OAuthToken | null> {
     const profileBuckets = await this.getProfileBuckets(
       providerName,
       requestMetadata,
@@ -655,12 +683,14 @@ export class TokenAccessCoordinator {
     );
 
     for (const peekBucket of profileBuckets) {
+      signal?.throwIfAborted();
       if (peekBucket === alreadyTriedBucket) continue;
       try {
         const peekToken = await this.tokenStore.getToken(
           providerName,
           peekBucket,
         );
+        signal?.throwIfAborted();
         if (peekToken && peekToken.expiry > thirtySecondsFromNow) {
           logger.debug(
             () =>
@@ -676,9 +706,10 @@ export class TokenAccessCoordinator {
             peekBucket,
             peekToken,
           );
-          return peekToken.access_token;
+          return peekToken;
         }
       } catch (peekError) {
+        if (signal?.aborted === true) throw peekError;
         // Unusable for every bucket, not just this one: continuing the loop
         // would swallow it once per bucket and end in a false "no token".
         rethrowIfStoreOutage(peekError);
@@ -695,64 +726,6 @@ export class TokenAccessCoordinator {
     return null;
   }
 
-  /**
-   * Disk-check with refresh lock before triggering OAuth (issue1262/1195/1317).
-   * Returns:
-   *  - string  → valid token found, return it
-   *  - null    → no valid token and refresh attempted/failed, caller should NOT trigger auth
-   *  - undefined → lock missed or no useful disk token; caller continues to auth
-   */
-  private async performDiskCheck(
-    providerName: string,
-    bucketToCheck: string | undefined,
-  ): Promise<string | null | undefined> {
-    const lockAcquired = await this.tokenStore.acquireRefreshLock(
-      providerName,
-      { waitMs: 5000, bucket: bucketToCheck },
-    );
-
-    if (lockAcquired) {
-      try {
-        return await performDiskCheckUnderLock(
-          providerName,
-          bucketToCheck,
-          this.tokenStore,
-          this.providerRegistry,
-        );
-      } finally {
-        await this.refreshLockReleases.release(providerName, bucketToCheck);
-      }
-    }
-
-    // Couldn't acquire lock — check disk anyway (best-effort, treat failures as cache miss)
-    let diskToken: OAuthToken | null = null;
-    try {
-      diskToken = await this.tokenStore.getToken(providerName, bucketToCheck);
-    } catch (error) {
-      rethrowIfStoreOutage(error);
-      logger.debug(
-        `[issue1262/1195] Disk fallback read failed for ${providerName}:`,
-        error,
-      );
-      return undefined;
-    }
-    const thirtySecondsFromNow = Math.floor(Date.now() / 1000) + 30;
-    if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
-      logger.debug(
-        () =>
-          `[issue1262/1195] Found valid token on disk after lock timeout for ${providerName}`,
-      );
-      this.proactiveRenewalManager.scheduleProactiveRenewal(
-        providerName,
-        bucketToCheck,
-        diskToken,
-      );
-      return diskToken.access_token;
-    }
-
-    return undefined; // continue to auth
-  }
-
   private async triggerAuthFlow(
     providerName: string,
     bucketToCheck: string | undefined,
@@ -760,7 +733,7 @@ export class TokenAccessCoordinator {
     explicitBucket: boolean,
     reason: 'authentication-required' | 'reauthentication-required',
     signal?: AbortSignal,
-  ): Promise<string | null> {
+  ): Promise<OAuthToken | null> {
     signal?.throwIfAborted();
     // @plan PLAN-20260827-ISSUE2562.P04
     // @requirement REQ-2562-3
@@ -828,7 +801,7 @@ export class TokenAccessCoordinator {
       explicitBucket ? bucketToCheck : requestMetadata,
       signal,
     );
-    return newToken ? newToken.access_token : null;
+    return newToken ?? null;
   }
 
   // --------------------------------------------------------------------------
@@ -851,29 +824,12 @@ export class TokenAccessCoordinator {
     provider: string,
     metadata?: OAuthTokenRequestMetadata,
   ): Promise<string | undefined> {
-    const scopedSessionBucket = this.facadeRef.getSessionBucket(
+    return resolveCurrentProfileSessionBucket(
       provider,
       metadata,
+      (name, scope) => this.facadeRef.getSessionBucket(name, scope),
+      (name, scope) => this.getProfileBuckets(name, scope),
     );
-    if (scopedSessionBucket) {
-      return scopedSessionBucket;
-    }
-
-    const profileBuckets = await this.getProfileBuckets(provider, metadata);
-    if (profileBuckets.length === 1) {
-      return profileBuckets[0];
-    }
-
-    const unscopedSessionBucket = this.facadeRef.getSessionBucket(provider);
-    if (
-      unscopedSessionBucket &&
-      (profileBuckets.length === 0 ||
-        profileBuckets.includes(unscopedSessionBucket))
-    ) {
-      return unscopedSessionBucket;
-    }
-
-    return undefined;
   }
 
   async getProfileBuckets(

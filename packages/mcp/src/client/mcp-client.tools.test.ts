@@ -32,6 +32,7 @@ import {
   ToolListChangedNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { McpClient } from './mcp-client.js';
+const TestClient = McpClient.bind(null, globalThis.fetch);
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
 // Exercises the real host seam instead of mocking a module (#3305).
@@ -133,7 +134,7 @@ describe('mcp-client', () => {
         sortTools: vi.fn(),
         getMessageBus: vi.fn(),
       } as unknown as ToolRegistry;
-      const client = new McpClient(
+      const client = new TestClient(
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -194,7 +195,7 @@ describe('mcp-client', () => {
         {} as SdkClientStdioLib.StdioClientTransport,
       );
 
-      const client = new McpClient(
+      const client = new TestClient(
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -235,7 +236,7 @@ describe('mcp-client', () => {
         {} as SdkClientStdioLib.StdioClientTransport,
       );
 
-      const client = new McpClient(
+      const client = new TestClient(
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -276,7 +277,7 @@ describe('mcp-client', () => {
         {} as SdkClientStdioLib.StdioClientTransport,
       );
 
-      const client = new McpClient(
+      const client = new TestClient(
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -339,7 +340,7 @@ describe('mcp-client', () => {
       const onToolsUpdatedSpy = vi.fn().mockResolvedValue(undefined);
 
       // Initialize client with onToolsUpdated callback
-      const client = new McpClient(
+      const client = new TestClient(
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -413,7 +414,7 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
 
-      const client = new McpClient(
+      const client = new TestClient(
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -488,7 +489,7 @@ describe('mcp-client', () => {
 
       const onToolsUpdatedSpy = vi.fn().mockResolvedValue(undefined);
 
-      const clientA = new McpClient(
+      const clientA = new TestClient(
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'server-A',
@@ -504,7 +505,7 @@ describe('mcp-client', () => {
         mockEmitFeedback,
       );
 
-      const clientB = new McpClient(
+      const clientB = new TestClient(
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'server-B',
@@ -578,7 +579,7 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
 
-      const client = new McpClient(
+      const client = new TestClient(
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -647,7 +648,7 @@ describe('mcp-client', () => {
 
       const onToolsUpdatedSpy = vi.fn().mockResolvedValue(undefined);
 
-      const client = new McpClient(
+      const client = new TestClient(
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -704,7 +705,7 @@ describe('mcp-client', () => {
           sortTools: vi.fn(),
           getMessageBus: vi.fn().mockReturnValue(undefined),
         } as unknown as ToolRegistry;
-        const client = new McpClient(
+        const client = new TestClient(
           createTestOAuthBinding(),
           unsupportedApprovalPolicy(),
           'test-server',
@@ -776,7 +777,7 @@ describe('mcp-client', () => {
         sortTools: vi.fn(),
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
-      const client = new McpClient(
+      const client = new TestClient(
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -845,7 +846,7 @@ describe('mcp-client', () => {
         sortTools: vi.fn(),
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
-      const client = new McpClient(
+      const client = new TestClient(
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -899,7 +900,7 @@ describe('mcp-client', () => {
         sortTools: vi.fn(),
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
-      const client = new McpClient(
+      const client = new TestClient(
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',

@@ -87,6 +87,35 @@ async function typeText(
   }
 }
 
+const BACKSPACE_KEY = '\u007F';
+
+/**
+ * Types an existing profile name and waits until the duplicate error renders.
+ * The step loads existing profile names asynchronously on mount and only
+ * validates on keystrokes, so under load the typed name can be validated
+ * against a still-empty list. Re-typing the last character re-runs validation
+ * once the scan has completed.
+ */
+async function typeExistingNameAndAwaitFlag(
+  step: SaveStepRenderResult,
+  name: string,
+): Promise<void> {
+  await typeText(step.stdin, name);
+  const lastChar = name.slice(-1);
+  await waitFor(
+    async () => {
+      if (!(step.lastFrame() ?? '').includes('✗ Profile name already exists')) {
+        await act(async () => {
+          step.stdin.write(BACKSPACE_KEY);
+        });
+        await typeText(step.stdin, lastChar);
+      }
+      expect(step.lastFrame() ?? '').toContain('✗ Profile name already exists');
+    },
+    { timeout: 5000, interval: 50 },
+  );
+}
+
 // Root ignores directory permission bits, so chmod(profilesDir, 0o555)
 // cannot force the EACCES this test needs. process.getuid?.() is undefined
 // on Windows, so the guard also skips there, where the POSIX premise does
@@ -178,7 +207,7 @@ describe('ProfileSaveStep', () => {
     await seedExistingProfile(EXISTING_PROFILE);
     const step = renderSaveStep();
 
-    await typeText(step.stdin, EXISTING_PROFILE);
+    await typeExistingNameAndAwaitFlag(step, EXISTING_PROFILE);
 
     const frame = step.lastFrame() ?? '';
     expect(frame).toContain('✗ Profile name already exists');

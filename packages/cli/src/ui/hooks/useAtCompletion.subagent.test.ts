@@ -9,7 +9,6 @@ import { installDefinitionRuntimeFixture } from '../../__tests__/definition-runt
 
 import {
   advanceTimersByTimeAsync,
-  runOnlyPendingTimersAsync,
   createTmpDir,
   cleanupTmpDir,
 } from '@vybestack/llxprt-code-test-utils';
@@ -378,10 +377,27 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
 
   describe('Debounce Behavior', () => {
     it('should not search for rapid pattern changes within the debounce window', async () => {
+      vi.useFakeTimers();
       testRootDir = await createTmpDir({});
+      let resolveInitialization = (): void => {
+        throw new Error('Expected file search initialization to be pending');
+      };
+      const initialization = new Promise<void>((resolve) => {
+        resolveInitialization = resolve;
+      });
+      let resolveSubagents = (_names: string[]): void => {
+        throw new Error('Expected subagent enrichment to be pending');
+      };
+      const subagents = new Promise<string[]>((resolve) => {
+        resolveSubagents = resolve;
+      });
+      vi.spyOn(
+        definitions.subagentDefinitions,
+        'listSubagents',
+      ).mockReturnValue(subagents);
       const searchSpy = vi.fn().mockResolvedValue(['abc.txt']);
       const mockFileSearch: FileSearch = {
-        initialize: vi.fn().mockResolvedValue(undefined),
+        initialize: vi.fn(() => initialization),
         search: searchSpy,
       };
       vi.spyOn(FileSearchFactory, 'create').mockReturnValue(mockFileSearch);
@@ -397,25 +413,31 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
         { initialProps: { pattern: '' } },
       );
 
-      await waitFor(() => {
-        expect(searchSpy).toHaveBeenCalledWith('', expect.any(Object));
+      await act(async () => {
+        resolveSubagents(['deepthinker']);
+        for (let turn = 0; turn < 20; turn++) await Promise.resolve();
       });
+      expect(searchSpy).not.toHaveBeenCalled();
+      await act(async () => {
+        resolveInitialization();
+        for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+      });
+      expect(searchSpy).toHaveBeenCalledWith('', expect.any(Object));
       searchSpy.mockClear();
-
-      vi.useFakeTimers();
 
       act(() => {
         rerender({ pattern: 'a' });
         rerender({ pattern: 'ab' });
         vi.advanceTimersByTime(40);
         rerender({ pattern: 'abc' });
-        vi.advanceTimersByTime(150);
+        vi.advanceTimersByTime(149);
       });
+      expect(searchSpy).not.toHaveBeenCalled();
 
       await act(async () => {
-        await runOnlyPendingTimersAsync();
+        await advanceTimersByTimeAsync(1);
+        for (let turn = 0; turn < 20; turn++) await Promise.resolve();
       });
-      vi.useRealTimers();
 
       // Only the final pattern survives the debounce window.
       expect(searchSpy).toHaveBeenCalledTimes(1);
@@ -537,15 +559,22 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
     it('should not publish results after search timeout aborts during enrichment', async () => {
       vi.useFakeTimers();
       testRootDir = await createTmpDir({});
+      let resolveInitialization = (): void => {
+        throw new Error('Expected file search initialization to be pending');
+      };
+      const initialization = new Promise<void>((resolve) => {
+        resolveInitialization = resolve;
+      });
       let resolveSubagents = (_names: string[]): void => {
         throw new Error('Expected the subagent promise to be initialized');
       };
       const subagentPromise = new Promise<string[]>((resolve) => {
         resolveSubagents = resolve;
       });
+      const search = vi.fn().mockResolvedValue(['file.txt']);
       const mockFileSearch: FileSearch = {
-        initialize: vi.fn().mockResolvedValue(undefined),
-        search: vi.fn().mockResolvedValue(['file.txt']),
+        initialize: vi.fn(() => initialization),
+        search,
       };
       vi.spyOn(FileSearchFactory, 'create').mockReturnValue(mockFileSearch);
 
@@ -556,10 +585,15 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
           respectLlxprtIgnore: true,
           searchTimeout: 1,
         })),
-        getSubagentManager: () => ({
-          listSubagents: () => subagentPromise,
-        }),
       } as unknown as Config;
+      // The completion runtime reads subagents from the workspace definition
+      // reads, not from the supplied Config, so the controlled enrichment
+      // promise must be installed at that boundary. Otherwise enrichment
+      // settles on its own and can finish before the search timeout elapses.
+      vi.spyOn(
+        definitions.subagentDefinitions,
+        'listSubagents',
+      ).mockReturnValue(subagentPromise);
 
       const { result } = renderHook(() =>
         useTestHarnessForAtCompletion(
@@ -571,13 +605,14 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       );
 
       await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
+        resolveInitialization();
+        for (let turn = 0; turn < 20; turn++) await Promise.resolve();
       });
       expect(mockFileSearch.search).toHaveBeenCalledWith(
         '',
         expect.any(Object),
       );
+      expect(definitions.subagentDefinitions.listSubagents).toHaveBeenCalled();
 
       await act(async () => {
         await advanceTimersByTimeAsync(2);

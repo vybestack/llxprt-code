@@ -1,0 +1,1511 @@
+{
+  "purpose": "Ratchet for #3980 agent API work. The #4037 follow-up issue tracks the burn-down. Entries cover the widened production scan and use stable per-site identities with counts so source-line edits do not churn the baseline.",
+  "findings": [
+    {
+      "file": "packages/agents/src/api/activationPreflightState.ts",
+      "rule": "runtime-service-bag-parameter",
+      "declaration": "providers",
+      "count": 2
+    },
+    {
+      "file": "packages/agents/src/api/activationPreflightState.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "#providers",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/api/activationPreflightState.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "<anonymous>",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/api/activationPreflightState.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "PreflightProviderInput",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/api/activationPreflightState.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "providers",
+      "count": 4
+    },
+    {
+      "file": "packages/agents/src/api/adopted-agent-assembly.ts",
+      "rule": "runtime-service-bag-parameter",
+      "declaration": "providers",
+      "count": 2
+    },
+    {
+      "file": "packages/agents/src/api/adopted-agent-assembly.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "<anonymous>",
+      "count": 2
+    },
+    {
+      "file": "packages/agents/src/api/adopted-agent-assembly.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "providers",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/api/agentRuntimeAssembly.ts",
+      "rule": "runtime-service-bag-parameter",
+      "declaration": "provider",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/api/agentRuntimeAssembly.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "<anonymous>",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/api/agentRuntimeAssembly.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "PreferredProvider",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/api/agentRuntimeAssembly.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "provider",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/api/child-agent-assembly.ts",
+      "rule": "runtime-service-bag-parameter",
+      "declaration": "loaded",
+      "count": 3
+    },
+    {
+      "file": "packages/agents/src/api/child-agent-assembly.ts",
+      "rule": "runtime-service-bag-parameter",
+      "declaration": "provider",
+      "count": 5
+    },
+    {
+      "file": "packages/agents/src/api/child-agent-assembly.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "<anonymous>",
+      "count": 2
+    },
+    {
+      "file": "packages/agents/src/api/child-agent-assembly.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "ChildProvider",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/api/child-agent-assembly.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "loaded",
+      "count": 6
+    },
+    {
+      "file": "packages/agents/src/api/child-agent-assembly.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "provider",
+      "count": 4
+    },
+    {
+      "file": "packages/agents/src/api/foreground-agent-assembly.ts",
+      "rule": "runtime-service-bag-parameter",
+      "declaration": "providers",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/api/foreground-agent-assembly.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "<anonymous>",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/api/foreground-agent-assembly.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "providers",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/api/fromConfig-session.ts",
+      "rule": "runtime-service-bag-parameter",
+      "declaration": "providers",
+      "count": 5
+    },
+    {
+      "file": "packages/agents/src/api/fromConfig-session.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "<anonymous>",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/api/fromConfig-session.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "providers",
+      "count": 3
+    },
+    {
+      "file": "packages/agents/src/api/policyComposition.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "<anonymous>",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/api/profile-preflight.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "<anonymous>",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/core/chat-system-prompt.ts",
+      "rule": "runtime-service-bag-parameter",
+      "declaration": "deps",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/core/ChatSessionFactory.ts",
+      "rule": "runtime-service-bag-parameter",
+      "declaration": "deps",
+      "count": 3
+    },
+    {
+      "file": "packages/agents/src/core/ChatSessionFactory.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "CreateChatSessionDeps",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/core/ChatSessionFactory.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "deps",
+      "count": 3
+    },
+    {
+      "file": "packages/agents/src/core/ChatSessionFactory.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "runtimeBundle",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/core/client.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "<anonymous>",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/session/session-client-acquisition-owner.ts",
+      "rule": "runtime-service-bag-parameter",
+      "declaration": "factories",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/session/session-client-acquisition-owner.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "factories",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/session/session-client-acquisition-owner.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "SessionClientFactories",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/session/session-client-binding.ts",
+      "rule": "runtime-service-bag-parameter",
+      "declaration": "construction",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/session/session-client-binding.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "<anonymous>",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/session/session-client-binding.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "SessionClientConstruction",
+      "count": 1
+    },
+    {
+      "file": "packages/agents/src/session/session-client-owner.ts",
+      "rule": "runtime-service-bag-parameter",
+      "declaration": "factories",
+      "count": 2
+    },
+    {
+      "file": "packages/agents/src/session/session-client-owner.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "factories",
+      "count": 2
+    },
+    {
+      "file": "packages/auth/src/lock-owner.ts",
+      "rule": "module-mutation",
+      "declaration": "cachedCurrentProcessStartTime",
+      "count": 2
+    },
+    {
+      "file": "packages/auth/src/lock-owner.ts",
+      "rule": "module-mutation",
+      "declaration": "cachedProcessStartTimeMs",
+      "count": 2
+    },
+    {
+      "file": "packages/auth/src/lock-owner.ts",
+      "rule": "module-mutation",
+      "declaration": "currentProcessStartTimeLookup",
+      "count": 3
+    },
+    {
+      "file": "packages/auth/src/proxy/proxy-socket-client.ts",
+      "rule": "module-mutation",
+      "declaration": "PROTOCOL_VERSION",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/cli.tsx",
+      "rule": "process-environment-mutation",
+      "declaration": "<module>.process.env.NODE_NO_WARNINGS",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/cli.tsx",
+      "rule": "process-environment-mutation",
+      "declaration": "setupProcessLifecycle.process.env.LLXPRT_CONFIG_HOME",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/cliBootstrap.tsx",
+      "rule": "module-mutation",
+      "declaration": "globalThis",
+      "count": 3
+    },
+    {
+      "file": "packages/cli/src/commands/extensions/examples/mcp-server/example.js",
+      "rule": "mutable-state",
+      "declaration": "server",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/commands/extensions/examples/mcp-server/example.js",
+      "rule": "mutable-state",
+      "declaration": "transport",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/config/cliArgParser.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "version",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/config/extension.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "setValue",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/config/extensionLoaderSettingsRef.ts",
+      "rule": "module-mutation",
+      "declaration": "loadSettingsRef",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/config/sandboxConfig.ts",
+      "rule": "process-environment-mutation",
+      "declaration": "applySandboxProfileEnv.process.env.SANDBOX_CPUS",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/config/sandboxConfig.ts",
+      "rule": "process-environment-mutation",
+      "declaration": "applySandboxProfileEnv.process.env.SANDBOX_MEMORY",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/config/sandboxConfig.ts",
+      "rule": "process-environment-mutation",
+      "declaration": "applySandboxProfileEnv.process.env.SANDBOX_NETWORK",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/config/sandboxConfig.ts",
+      "rule": "process-environment-mutation",
+      "declaration": "applySandboxProfileEnv.process.env.SANDBOX_PIDS",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/config/sandboxConfig.ts",
+      "rule": "process-environment-mutation",
+      "declaration": "applySandboxProfileEnv.process.env.SANDBOX_SSH_AGENT",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/config/sandboxConfig.ts",
+      "rule": "process-environment-mutation",
+      "declaration": "process.env",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/config/sandboxEnvGuard.ts",
+      "rule": "process-environment-mutation",
+      "declaration": "process.env",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/config/settings-validation.ts",
+      "rule": "module-mutation",
+      "declaration": "REF_SCHEMAS",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/config/trustedFolders.ts",
+      "rule": "module-mutation",
+      "declaration": "loadedTrustedFolders",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/config/trustedFolders.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "formatConfigFileErrors",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/config/trustedFolders.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "resolveWorkspaceTrust",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/config/welcomeConfig.ts",
+      "rule": "module-mutation",
+      "declaration": "cachedConfig",
+      "count": 4
+    },
+    {
+      "file": "packages/cli/src/config/welcomeConfig.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "isWelcomeCompleted",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/launcher/bun-launcher.ts",
+      "rule": "process-environment-mutation",
+      "declaration": "process.env",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/launcher/bun-path-resolver.ts",
+      "rule": "module-mutation",
+      "declaration": "ovenVariantsCache",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/observation/jspProducer.ts",
+      "rule": "module-mutation",
+      "declaration": "DEFAULT_AGENT_SCOPE",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/session/errorReporting.ts",
+      "rule": "module-mutation",
+      "declaration": "stderrWriter",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/session/interactiveUI.tsx",
+      "rule": "module-mutation",
+      "declaration": "render",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/session/interactiveUI.tsx",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "buildAndStartPerfOwner",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/session/interactiveUI.tsx",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "commitInteractiveStartup",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/session/interactiveUI.tsx",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "initializeInteractivePresentation",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/session/interactiveUI.tsx",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "prepareInteractiveStartup",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/session/machineErrorReporting.ts",
+      "rule": "module-mutation",
+      "declaration": "machineReportedErrors",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/session/signalHandlers.ts",
+      "rule": "module-mutation",
+      "declaration": "debugConsoleOpened",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/ui/app-providers.tsx",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "isMouseEventsEnabled",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/commands/aboutCommand.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "addItem",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/commands/directoryCommand.tsx",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "isPathTrusted",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/commands/permissionsCommandHost.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "resolveLocalWorkspaceTrust",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/commands/permissionsCommandHost.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "restoreSnapshot",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/commands/permissionsCommandHost.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "setValue",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/commands/permissionsCommandHost.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "snapshotValue",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/DebugProfiler.tsx",
+      "rule": "module-mutation",
+      "declaration": "profiler",
+      "count": 4
+    },
+    {
+      "file": "packages/cli/src/ui/components/Footer.tsx",
+      "rule": "module-mutation",
+      "declaration": "BranchDisplay",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/Footer.tsx",
+      "rule": "module-mutation",
+      "declaration": "DebouncedTPMDisplay",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/Footer.tsx",
+      "rule": "module-mutation",
+      "declaration": "DebouncedWaitDisplay",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/Footer.tsx",
+      "rule": "module-mutation",
+      "declaration": "Footer",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/Footer.tsx",
+      "rule": "module-mutation",
+      "declaration": "FooterFirstLine",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/Footer.tsx",
+      "rule": "module-mutation",
+      "declaration": "FooterMetricsRow",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/Footer.tsx",
+      "rule": "module-mutation",
+      "declaration": "FooterSecondLine",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/Footer.tsx",
+      "rule": "module-mutation",
+      "declaration": "ModelNameDisplay",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/Footer.tsx",
+      "rule": "module-mutation",
+      "declaration": "PaidModeDisplay",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/Footer.tsx",
+      "rule": "module-mutation",
+      "declaration": "ResponsiveContextDisplay",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/Footer.tsx",
+      "rule": "module-mutation",
+      "declaration": "ResponsiveMemoryDisplay",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/Footer.tsx",
+      "rule": "module-mutation",
+      "declaration": "ResponsiveTimestamp",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/Footer.tsx",
+      "rule": "module-mutation",
+      "declaration": "SandboxStatusDisplay",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/shared/MaxSizedBox.tsx",
+      "rule": "module-mutation",
+      "declaration": "enableDebugLog",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/shared/transformations.ts",
+      "rule": "module-mutation",
+      "declaration": "imagePathRegex",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/shared/transformations.ts",
+      "rule": "module-mutation",
+      "declaration": "transformationsCache",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/shared/VirtualizedList.tsx",
+      "rule": "module-mutation",
+      "declaration": "VirtualizedListWithForwardRef",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/components/shared/visual-layout.ts",
+      "rule": "module-mutation",
+      "declaration": "lineLayoutCache",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/containers/AppContainer/hooks/useClearScreenAction.ts",
+      "rule": "module-mutation",
+      "declaration": "globalThis",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/contexts/ScrollProvider.tsx",
+      "rule": "module-mutation",
+      "declaration": "nextId",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/hooks/agentStream/useAgentEventStream.ts",
+      "rule": "module-mutation",
+      "declaration": "monotonicClock",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/hooks/atCommandProcessor.ts",
+      "rule": "module-mutation",
+      "declaration": "powershellTipShown",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/hooks/slashCommandProcessorSupport.ts",
+      "rule": "module-mutation",
+      "declaration": "globalThis",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/hooks/useFolderTrust.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "resolveLocalWorkspaceTrust",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/hooks/useFolderTrust.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "restoreSnapshot",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/hooks/useFolderTrust.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "setValue",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/hooks/useFolderTrust.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "snapshotValue",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/hooks/useMemoryMonitor.ts",
+      "rule": "module-mutation",
+      "declaration": "__portsForTesting",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/hooks/usePermissionsModifyTrust.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "loadTrustedFolders",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/hooks/usePresentationCommands.ts",
+      "rule": "module-mutation",
+      "declaration": "globalThis",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/hooks/useWelcomeOnboarding.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "useState",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/inkRenderOptions.ts",
+      "rule": "module-mutation",
+      "declaration": "interactiveRenderObserver",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/inkRenderOptions.ts",
+      "rule": "module-mutation",
+      "declaration": "interactiveStdio",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/ui/inkRenderOptions.ts",
+      "rule": "module-mutation",
+      "declaration": "interactiveStdoutObserver",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/inkRenderOptions.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "inkRenderOptions",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/stores/turn/historyLedger.ts",
+      "rule": "module-mutation",
+      "declaration": "globalMessageIdCounter",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/utils/ConsolePatcher.ts",
+      "rule": "module-mutation",
+      "declaration": "globalThis",
+      "count": 10
+    },
+    {
+      "file": "packages/cli/src/ui/utils/highlight.ts",
+      "rule": "module-mutation",
+      "declaration": "HIGHLIGHT_REGEX",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/ui/utils/highlight.ts",
+      "rule": "module-mutation",
+      "declaration": "highlightCache",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/utils/mouse.ts",
+      "rule": "module-mutation",
+      "declaration": "mouseEventsActive",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/ui/utils/mouse.ts",
+      "rule": "module-mutation",
+      "declaration": "mouseEventsGeneration",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/ui/utils/renderLoopDetector.ts",
+      "rule": "module-mutation",
+      "declaration": "globalObj",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/ui/utils/renderLoopDetector.ts",
+      "rule": "module-mutation",
+      "declaration": "renderCounts",
+      "count": 3
+    },
+    {
+      "file": "packages/cli/src/ui/utils/TableRenderer.tsx",
+      "rule": "module-mutation",
+      "declaration": "wrapCache",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/ui/utils/TableRenderer.tsx",
+      "rule": "module-mutation",
+      "declaration": "wrapCacheOrder",
+      "count": 3
+    },
+    {
+      "file": "packages/cli/src/ui/utils/terminalCapabilityManager.ts",
+      "rule": "module-mutation",
+      "declaration": "TerminalCapabilityManager.instance",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/ui/utils/terminalLinks.ts",
+      "rule": "module-mutation",
+      "declaration": "linkCache",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/ui/utils/textUtils.ts",
+      "rule": "module-mutation",
+      "declaration": "codePointsCache",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/utils/textUtils.ts",
+      "rule": "module-mutation",
+      "declaration": "regex",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/ui/utils/textUtils.ts",
+      "rule": "module-mutation",
+      "declaration": "stringWidthCache",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/ui/utils/unicodeSupport.ts",
+      "rule": "module-mutation",
+      "declaration": "unicodeSupported",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/utils/cleanup-state.ts",
+      "rule": "module-mutation",
+      "declaration": "state",
+      "count": 6
+    },
+    {
+      "file": "packages/cli/src/utils/events.ts",
+      "rule": "mutable-state",
+      "declaration": "appEvents",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/utils/gitCommitInfo.ts",
+      "rule": "module-mutation",
+      "declaration": "infoCache",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/utils/sandbox-bashrc.ts",
+      "rule": "process-environment-mutation",
+      "declaration": "process.env",
+      "count": 3
+    },
+    {
+      "file": "packages/cli/src/utils/sandbox-seatbelt-profile.ts",
+      "rule": "process-environment-mutation",
+      "declaration": "resolveSeatbeltProfile.process.env.SEATBELT_PROFILE",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/utils/shellJobShutdownNotice.ts",
+      "rule": "module-mutation",
+      "declaration": "armedTargets",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/utils/stdinSafety.ts",
+      "rule": "module-mutation",
+      "declaration": "globalStdinErrorHandler",
+      "count": 2
+    },
+    {
+      "file": "packages/cli/src/utils/updateEventEmitter.ts",
+      "rule": "mutable-state",
+      "declaration": "updateEventEmitter",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/utils/version.ts",
+      "rule": "module-mutation",
+      "declaration": "startupEnvVersion",
+      "count": 1
+    },
+    {
+      "file": "packages/cli/src/utils/version.ts",
+      "rule": "module-mutation",
+      "declaration": "versionPromise",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/core/logger.ts",
+      "rule": "module-mutation",
+      "declaration": "lockMutationCounter",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/core/prompts.ts",
+      "rule": "module-mutation",
+      "declaration": "promptServiceManager",
+      "count": 3
+    },
+    {
+      "file": "packages/core/src/prompt-config/defaults/manifest-loader.ts",
+      "rule": "module-mutation",
+      "declaration": "manifestCache",
+      "count": 3
+    },
+    {
+      "file": "packages/core/src/prompt-config/defaults/manifest-loader.ts",
+      "rule": "module-mutation",
+      "declaration": "manifestLoaded",
+      "count": 3
+    },
+    {
+      "file": "packages/core/src/prompt-config/defaults/manifest-loader.ts",
+      "rule": "module-mutation",
+      "declaration": "manifestOrigin",
+      "count": 3
+    },
+    {
+      "file": "packages/core/src/prompt-config/defaults/prompt-warnings.ts",
+      "rule": "module-mutation",
+      "declaration": "reported",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/prompt-config/installer/conflict-resolution.ts",
+      "rule": "module-mutation",
+      "declaration": "defaultSourceDirsCache",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/recording/janitor/janitorLease.ts",
+      "rule": "module-mutation",
+      "declaration": "JanitorLease.heartbeatTimer",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/recording/janitor/janitorLease.ts",
+      "rule": "module-mutation",
+      "declaration": "JanitorLease.inFlightHeartbeat",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/recording/janitor/janitorLease.ts",
+      "rule": "module-mutation",
+      "declaration": "JanitorLease.preClaimHook",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/recording/janitor/reclamationEngine.ts",
+      "rule": "module-mutation",
+      "declaration": "unlinkFaultFn",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/recording/janitor/sessionJanitor.ts",
+      "rule": "module-mutation",
+      "declaration": "rmdirFaultFn",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/recording/janitor/sessionJanitor.ts",
+      "rule": "module-mutation",
+      "declaration": "scanToMutationHook",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/recording/SessionLockManager.internals.ts",
+      "rule": "module-mutation",
+      "declaration": "ownedLockPaths",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/recording/SessionLockManager.ts",
+      "rule": "module-mutation",
+      "declaration": "SessionLockManager.internalsPromise",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/runtime/AgentRuntimeLoader.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "<anonymous>",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/runtime/AgentRuntimeLoader.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "AgentRuntimeLoaderResult",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/runtime/AgentRuntimeLoader.ts",
+      "rule": "runtime-service-bundle",
+      "declaration": "ToolSelectedRuntimeLoaderResult",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/services/image/ImageGenerationService.ts",
+      "rule": "module-mutation",
+      "declaration": "BASE64_VALID_BYTES.i",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/services/image/ImageGenerationService.ts",
+      "rule": "module-mutation",
+      "declaration": "BASE64_VALID_BYTES.set",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/services/image/ImageGenerationService.ts",
+      "rule": "module-mutation",
+      "declaration": "PNG_CRC_TABLE.c",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/services/image/ImageGenerationService.ts",
+      "rule": "module-mutation",
+      "declaration": "PNG_CRC_TABLE.k",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/services/image/ImageGenerationService.ts",
+      "rule": "module-mutation",
+      "declaration": "PNG_CRC_TABLE.n",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/services/image/ImageGenerationService.ts",
+      "rule": "module-mutation",
+      "declaration": "PNG_CRC_TABLE.table",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/services/shellExecutionService.ts",
+      "rule": "module-mutation",
+      "declaration": "ShellExecutionService.activePtys",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/services/shellExecutionService.ts",
+      "rule": "module-mutation",
+      "declaration": "ShellExecutionService.lastActivePtyIdRef",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/services/shellJobTail.ts",
+      "rule": "module-mutation",
+      "declaration": "TAG_FIRST_CHARS.c",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/services/shellJobTail.ts",
+      "rule": "module-mutation",
+      "declaration": "TAG_FIRST_CHARS.s",
+      "count": 3
+    },
+    {
+      "file": "packages/core/src/services/shellJobTail.ts",
+      "rule": "module-mutation",
+      "declaration": "TAG_NAME_CHARS.c",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/services/shellJobTail.ts",
+      "rule": "module-mutation",
+      "declaration": "TAG_NAME_CHARS.s",
+      "count": 4
+    },
+    {
+      "file": "packages/core/src/services/shellProcessKill.ts",
+      "rule": "module-mutation",
+      "declaration": "ownedGroupTerminations",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/services/shellPtyLifecycle.ts",
+      "rule": "module-mutation",
+      "declaration": "abortGroupReapChains",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/storage/local-media-store-persistence.ts",
+      "rule": "module-mutation",
+      "declaration": "storeQueueRegistration",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/storage/local-media-store-persistence.ts",
+      "rule": "module-mutation",
+      "declaration": "storeQueueTails",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/storage/local-media-store-persistence.ts",
+      "rule": "mutable-state",
+      "declaration": "storeQueueContext",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/utils/channel.ts",
+      "rule": "module-mutation",
+      "declaration": "cache",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/utils/errorReporting.ts",
+      "rule": "module-mutation",
+      "declaration": "recentReports",
+      "count": 4
+    },
+    {
+      "file": "packages/core/src/utils/errorReporting.ts",
+      "rule": "module-mutation",
+      "declaration": "rotationCohorts",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/utils/filesearch/crawlCache.ts",
+      "rule": "module-mutation",
+      "declaration": "cacheTimers",
+      "count": 3
+    },
+    {
+      "file": "packages/core/src/utils/filesearch/crawlCache.ts",
+      "rule": "module-mutation",
+      "declaration": "crawlCache",
+      "count": 3
+    },
+    {
+      "file": "packages/core/src/utils/schemaValidator.ts",
+      "rule": "module-mutation",
+      "declaration": "ajvSchemaCache",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/utils/shell-parser.ts",
+      "rule": "module-mutation",
+      "declaration": "bashLanguage",
+      "count": 3
+    },
+    {
+      "file": "packages/core/src/utils/shell-parser.ts",
+      "rule": "module-mutation",
+      "declaration": "generation",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/utils/shell-parser.ts",
+      "rule": "module-mutation",
+      "declaration": "initializationError",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/utils/shell-parser.ts",
+      "rule": "module-mutation",
+      "declaration": "initializationPromise",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/utils/shell-parser.ts",
+      "rule": "module-mutation",
+      "declaration": "parser",
+      "count": 4
+    },
+    {
+      "file": "packages/core/src/utils/shell-parser.ts",
+      "rule": "module-mutation",
+      "declaration": "pwshLanguage",
+      "count": 3
+    },
+    {
+      "file": "packages/core/src/utils/shell-parser.ts",
+      "rule": "module-mutation",
+      "declaration": "pwshParser",
+      "count": 4
+    },
+    {
+      "file": "packages/core/src/utils/shell-parser.ts",
+      "rule": "module-mutation",
+      "declaration": "QueryCtor",
+      "count": 3
+    },
+    {
+      "file": "packages/core/src/utils/systemEncoding.ts",
+      "rule": "module-mutation",
+      "declaration": "cachedSystemEncoding",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/utils/testUtils.ts",
+      "rule": "module-mutation",
+      "declaration": "fallbackOccurred",
+      "count": 3
+    },
+    {
+      "file": "packages/core/src/utils/testUtils.ts",
+      "rule": "module-mutation",
+      "declaration": "requestCounter",
+      "count": 2
+    },
+    {
+      "file": "packages/core/src/utils/testUtils.ts",
+      "rule": "module-mutation",
+      "declaration": "simulate429AfterRequests",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/utils/testUtils.ts",
+      "rule": "module-mutation",
+      "declaration": "simulate429Enabled",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/utils/toolOutputLimiter.ts",
+      "rule": "module-mutation",
+      "declaration": "cachedEncoder",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/utils/toolOutputLimiter.ts",
+      "rule": "module-mutation",
+      "declaration": "encoderInitFailed",
+      "count": 1
+    },
+    {
+      "file": "packages/core/src/utils/toolOutputLimiter.ts",
+      "rule": "mutable-state",
+      "declaration": "utf8Decoder",
+      "count": 1
+    },
+    {
+      "file": "packages/ide-integration/src/ide/ide-client.ts",
+      "rule": "module-mutation",
+      "declaration": "IdeClient.instance",
+      "count": 2
+    },
+    {
+      "file": "packages/ide-integration/src/ide/process-info.ts",
+      "rule": "module-mutation",
+      "declaration": "resolved",
+      "count": 2
+    },
+    {
+      "file": "packages/lsp/src/service/language-map.ts",
+      "rule": "module-mutation",
+      "declaration": "languageIdToExtensions.extensions",
+      "count": 1
+    },
+    {
+      "file": "packages/lsp/src/service/language-map.ts",
+      "rule": "module-mutation",
+      "declaration": "languageIdToExtensions.grouped",
+      "count": 1
+    },
+    {
+      "file": "packages/providers/src/anthropic/AnthropicStreamProcessor.ts",
+      "rule": "module-mutation",
+      "declaration": "toolCallSequence",
+      "count": 1
+    },
+    {
+      "file": "packages/providers/src/auth/proxy/audit-log.ts",
+      "rule": "module-mutation",
+      "declaration": "deferredDuringOwnership",
+      "count": 4
+    },
+    {
+      "file": "packages/providers/src/auth/proxy/audit-log.ts",
+      "rule": "module-mutation",
+      "declaration": "droppedFromDeferred",
+      "count": 3
+    },
+    {
+      "file": "packages/providers/src/auth/proxy/audit-log.ts",
+      "rule": "module-mutation",
+      "declaration": "tuiOwned",
+      "count": 2
+    },
+    {
+      "file": "packages/providers/src/openai/ConversationCache.ts",
+      "rule": "module-mutation",
+      "declaration": "ConversationCache.scopes",
+      "count": 6
+    },
+    {
+      "file": "packages/providers/src/retryErrorClassification.ts",
+      "rule": "module-mutation",
+      "declaration": "errorsAfterStreamOutput",
+      "count": 2
+    },
+    {
+      "file": "packages/providers/src/tokenizers/official/officialPromptEstimators.ts",
+      "rule": "module-mutation",
+      "declaration": "counterCache",
+      "count": 2
+    },
+    {
+      "file": "packages/storage/src/secure-store/credential-write-lock.ts",
+      "rule": "module-mutation",
+      "declaration": "cachedCurrentProcessStartTime",
+      "count": 1
+    },
+    {
+      "file": "packages/storage/src/secure-store/default-keyring-adapter.ts",
+      "rule": "module-mutation",
+      "declaration": "_keyringLogger",
+      "count": 1
+    },
+    {
+      "file": "packages/storage/src/secure-store/keychain-grant-persistence.ts",
+      "rule": "module-mutation",
+      "declaration": "broken",
+      "count": 2
+    },
+    {
+      "file": "packages/storage/src/secure-store/keychain-grant-persistence.ts",
+      "rule": "module-mutation",
+      "declaration": "effectivePlatform",
+      "count": 1
+    },
+    {
+      "file": "packages/storage/src/secure-store/keychain-grant-persistence.ts",
+      "rule": "module-mutation",
+      "declaration": "lastInteractiveReadEndedAt",
+      "count": 4
+    },
+    {
+      "file": "packages/storage/src/secure-store/keyring-session-state.ts",
+      "rule": "module-mutation",
+      "declaration": "disabledBySetting",
+      "count": 2
+    },
+    {
+      "file": "packages/storage/src/secure-store/keyring-session-state.ts",
+      "rule": "module-mutation",
+      "declaration": "keyringDisabled",
+      "count": 2
+    },
+    {
+      "file": "packages/storage/src/secure-store/keyring-session-state.ts",
+      "rule": "module-mutation",
+      "declaration": "warned",
+      "count": 2
+    },
+    {
+      "file": "packages/storage/src/secure-store/machine-secret.ts",
+      "rule": "module-mutation",
+      "declaration": "cache",
+      "count": 4
+    },
+    {
+      "file": "packages/storage/src/secure-store/machine-secret.ts",
+      "rule": "module-mutation",
+      "declaration": "keyringLoaderIds",
+      "count": 1
+    },
+    {
+      "file": "packages/storage/src/secure-store/machine-secret.ts",
+      "rule": "module-mutation",
+      "declaration": "lockCache",
+      "count": 1
+    },
+    {
+      "file": "packages/storage/src/secure-store/machine-secret.ts",
+      "rule": "module-mutation",
+      "declaration": "nextKeyringLoaderId",
+      "count": 1
+    },
+    {
+      "file": "packages/storage/src/secure-store/runtime-identity.ts",
+      "rule": "module-mutation",
+      "declaration": "currentDetector",
+      "count": 1
+    },
+    {
+      "file": "packages/storage/src/secure-store/runtime-replaced-errors.ts",
+      "rule": "module-mutation",
+      "declaration": "runtimeReplacedWarned",
+      "count": 2
+    },
+    {
+      "file": "packages/storage/src/testing/isolateStorageRoots.ts",
+      "rule": "process-environment-mutation",
+      "declaration": "process.env",
+      "count": 4
+    },
+    {
+      "file": "packages/telemetry/src/debug/ConfigurationManager.ts",
+      "rule": "module-mutation",
+      "declaration": "ConfigurationManager.instance",
+      "count": 2
+    },
+    {
+      "file": "packages/telemetry/src/debug/DebugLogger.ts",
+      "rule": "module-mutation",
+      "declaration": "DebugLogger.instances",
+      "count": 3
+    },
+    {
+      "file": "packages/telemetry/src/debug/FileOutput.ts",
+      "rule": "module-mutation",
+      "declaration": "FileOutput.instance",
+      "count": 3
+    },
+    {
+      "file": "packages/telemetry/src/debug/MockConfigurationManager.ts",
+      "rule": "module-mutation",
+      "declaration": "MockConfigurationManager.instance",
+      "count": 1
+    },
+    {
+      "file": "packages/telemetry/src/debug/MockFileOutput.ts",
+      "rule": "module-mutation",
+      "declaration": "MockFileOutput.instance",
+      "count": 1
+    },
+    {
+      "file": "packages/telemetry/src/perf/perfPhaseObserver.ts",
+      "rule": "module-mutation",
+      "declaration": "activeObserver",
+      "count": 1
+    },
+    {
+      "file": "packages/tools/src/formatters/ToolFormatter.ts",
+      "rule": "module-mutation",
+      "declaration": "streamingArgumentBuffers",
+      "count": 1
+    },
+    {
+      "file": "packages/tools/src/tools/memoryTool.ts",
+      "rule": "module-mutation",
+      "declaration": "currentLlxprtMdFilename",
+      "count": 2
+    },
+    {
+      "file": "packages/tools/src/tools/memoryTool.ts",
+      "rule": "module-mutation",
+      "declaration": "MemoryToolInvocation.allowlist",
+      "count": 1
+    },
+    {
+      "file": "packages/tools/src/tools/todo-store.ts",
+      "rule": "module-mutation",
+      "declaration": "todoPathQueues",
+      "count": 2
+    },
+    {
+      "file": "packages/tools/src/utils/ast-grep-utils.ts",
+      "rule": "module-mutation",
+      "declaration": "dynamicLanguagesAvailable",
+      "count": 2
+    },
+    {
+      "file": "packages/tools/src/utils/ast-grep-utils.ts",
+      "rule": "module-mutation",
+      "declaration": "dynamicLanguagesRegistered",
+      "count": 1
+    },
+    {
+      "file": "packages/tools/src/utils/processTermination.ts",
+      "rule": "module-mutation",
+      "declaration": "activeTerminations",
+      "count": 2
+    },
+    {
+      "file": "packages/tools/src/utils/ripgrepPathResolver.ts",
+      "rule": "module-mutation",
+      "declaration": "ripgrepAvailabilityCache",
+      "count": 3
+    },
+    {
+      "file": "packages/tools/src/utils/schemaValidator.ts",
+      "rule": "module-mutation",
+      "declaration": "ajvSchemaCache",
+      "count": 1
+    },
+    {
+      "file": "packages/tools/src/utils/todoContextTracker.ts",
+      "rule": "module-mutation",
+      "declaration": "trackers",
+      "count": 1
+    },
+    {
+      "file": "packages/vscode-ide-companion/src/extension.ts",
+      "rule": "module-mutation",
+      "declaration": "ideServer",
+      "count": 3
+    },
+    {
+      "file": "packages/vscode-ide-companion/src/extension.ts",
+      "rule": "module-mutation",
+      "declaration": "log",
+      "count": 1
+    },
+    {
+      "file": "packages/vscode-ide-companion/src/extension.ts",
+      "rule": "module-mutation",
+      "declaration": "logger",
+      "count": 1
+    },
+    {
+      "file": "packages/zed-acp/src/utils/version.ts",
+      "rule": "module-mutation",
+      "declaration": "startupEnvVersion",
+      "count": 1
+    },
+    {
+      "file": "packages/zed-acp/src/utils/version.ts",
+      "rule": "module-mutation",
+      "declaration": "versionPromise",
+      "count": 2
+    },
+    {
+      "file": "packages/zed-acp/src/zed-initialize.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "initializeZedAgent",
+      "count": 1
+    },
+    {
+      "file": "packages/zed-acp/src/zedIntegration.ts",
+      "rule": "runtime-ambient-delegation",
+      "declaration": "admitWork",
+      "count": 1
+    }
+  ]
+}

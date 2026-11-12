@@ -313,7 +313,7 @@ export class GeminiProvider extends BaseProvider {
   override isPaidMode(): boolean {
     const settingsService = this.captureGoogleAuthPolicy();
     return (
-      !!process.env.GEMINI_API_KEY ||
+      !!getNonEmptySetting(settingsService, 'GEMINI_API_KEY') ||
       !!getNonEmptySetting(settingsService, 'GOOGLE_API_KEY') ||
       hasVertexAICredentials(settingsService)
     );
@@ -386,6 +386,19 @@ export class GeminiProvider extends BaseProvider {
               getNonEmptySetting(
                 settingsService,
                 'GOOGLE_APPLICATION_CREDENTIALS',
+              ),
+              Object.fromEntries(
+                [
+                  'HOME',
+                  'APPDATA',
+                  'GCE_METADATA_IP',
+                  'GCE_METADATA_HOST',
+                  'METADATA_SERVER_DETECTION',
+                  'GOOGLE_CLOUD_QUOTA_PROJECT',
+                ].flatMap((key) => {
+                  const value = settingsService[key];
+                  return typeof value === 'string' ? [[key, value]] : [];
+                }),
               ),
             ),
           }

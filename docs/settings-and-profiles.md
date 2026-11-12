@@ -237,6 +237,21 @@ These prevent a single tool call from flooding the context. This matters more th
 
 `tool-output-truncate-mode` controls what happens when a tool exceeds its limits. `warn` drops the output entirely and tells the model the results were too large — the model gets nothing back, just a message suggesting it narrow its query. `truncate` cuts the output to fit and silently includes what fits. `sample` picks evenly-spaced lines from the output to give a representative cross-section. `warn` is the default because it forces the model to be more surgical, which usually produces better results than shoveling truncated output into context.
 
+### Image Payload Budget
+
+| Setting                      | Meaning                                                                             | Default           |
+| ---------------------------- | ----------------------------------------------------------------------------------- | ----------------- |
+| `image-payload-budget-bytes` | Maximum normalized image bytes in one tool-result batch and in one provider request | unset (see below) |
+
+When unset, tool-result batches admit up to `15728640` normalized base64 bytes (15 MiB). Native Anthropic requests (the default endpoint or exact `api.anthropic.com` host) also use 15 MiB as the media budget. Other providers and compatible endpoints use the same 15 MiB shared default. Separately, a complete native Anthropic JSON request, including text, tools, and images, has an exact `32000000`-byte application ceiling.
+
+The `32000000`-byte ceiling is conservative compatibility policy based on [Claude Code's 32 MB guidance](https://code.claude.com/docs/en/errors#request-too-large). The [Messages API documents 128 MB](https://platform.claude.com/docs/en/api/errors#request-size-limits); these documents do not establish an OAuth-specific maximum. LLxprt therefore retains a 32,000,000-byte native body guard despite the larger direct API limit. Token context capacity and encoded request bytes are separate limits.
+
+On a request view, if encoded images exceed the effective positive media budget, LLxprt replaces the oldest eligible historical images with honest text notes, aiming to bring the request-view image total to at most 75% of that budget. The budget counts every encoded media block (images, PDFs and audio), but only images are retired. Pending content is protected; if its media alone exceeds the budget, LLxprt skips futile history compression and reports that the attachments on this request are over the budget. This request-time safety retirement preserves canonical history and stored source pixels, and is recomputed after recomposition. It is distinct from `media.semantic-purge`, the opt-in lossy policy for changing conversation history described below. A direct provider request without the agent's retirement step still rejects media above its budget.
+
+An explicit value overrides the media budget, including `15728640` and `0`, while the native full-body ceiling remains in force. An explicit larger value admits more media only when the complete request fits; even `134217728` cannot override the 32,000,000-byte native body cap. Zero disables the tool-batch filter, but request-side retirement is disabled at zero and the resolver rejects encoded media. Media accounting uses normalized encoded base64 lengths, while the body guard measures the complete serialized JSON bytes. Profiles save this setting only when you set it.
+Tool-result admission counts both inline images and stored image references. If a batch exceeds the budget, all tool calls still receive their results, with feedback identifying omitted images (up to 20 per category, plus a count of the rest) and advising smaller batches. An image larger than the entire budget gets different guidance: resize or crop it because an unchanged single-image read cannot fit. Request-view retirement is pressure-driven, without an age timer; source pixels remain in canonical history, and rereading an original file depends on that file still being available.
+
 ### Shell output acquisition
 
 | Setting                            | Description                                                                                                         | Default   |
@@ -291,18 +306,20 @@ stores uploaded data. Set `provider-files-zdr=require` to reject an enabled mode
 when the adapter declares that conflict. `allow-retention` acknowledges the
 provider storage implication. Memory pressure never changes these settings.
 
-`media.semantic-purge` controls an explicit, lossy change to conversation
-history. `off` preserves every image. `remove` deletes the oldest eligible image
-after a successful provider request. `summary` replaces an eligible image only
-when the image already has a non-empty caption or configured summary. A purge
-changes the model-visible prompt and can invalidate the cached suffix beginning
-at that image. LLxprt advances the purge frontier only after the provider request
-succeeds and, for explicit-cache providers, after the intended pre-image prefix
-is written.
+`media.semantic-purge` controls an explicit, lossy change to canonical conversation
+history. `off` preserves every image in that history. `remove` deletes the oldest
+eligible image after a successful provider request. `summary` replaces an eligible
+image only when the image already has a non-empty caption or configured summary.
+A purge changes future model-visible prompts and can invalidate the cached suffix
+beginning at that image. LLxprt advances the purge frontier only after the provider
+request succeeds and, for explicit-cache providers, after the intended pre-image
+prefix is written.
 
-Local media eviction is lossless and independent of this setting. Missing or
-corrupt media, storage quotas, and memory pressure never trigger a semantic
-purge.
+Request-view safety retirement is separate: it substitutes notes only in the
+current provider request, leaves canonical history and stored pixels unchanged,
+and repeats its selection when another request is composed. It does not enable or
+advance semantic purge. Local media eviction is lossless and independent of this
+setting. Missing or corrupt media and storage quotas never trigger semantic purge.
 
 ### Other Settings
 

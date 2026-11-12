@@ -85,7 +85,7 @@ import { parseArguments } from './config/cliArgParser.js';
 import { loadSettings, type LoadedSettings } from './config/settings.js';
 import {
   debugLogger,
-  ConfigurationManager,
+  type ConfigurationManager,
 } from '@vybestack/llxprt-code-telemetry';
 import { applySandboxBashrc } from './utils/sandbox-bashrc.js';
 import {
@@ -106,7 +106,7 @@ import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
 import { existsSync, mkdirSync } from 'fs';
 import { firstNonEmptyString } from './utils/coalesce.js';
 import {
-  configureEarlyDebugLogging,
+  configureCliDebugLogging,
   createMemoizedStdinReader,
   ensureStdinOrPromptProvided,
   handleVersionAndHelpFlags,
@@ -755,8 +755,7 @@ async function prepareConfiguredTerminalSession(
 export async function main() {
   const capturedEnvPath = captureBootstrapEnvPath();
   const terminalHost = createTerminalHost();
-  const debugConfiguration = ConfigurationManager.create();
-  configureEarlyDebugLogging(debugConfiguration);
+  const debugConfiguration = configureCliDebugLogging();
   await handleVersionAndHelpFlags(process.argv.slice(2));
 
   const { cleanupStdio, workspaceRoot, settings, argv, credentialOwner } =

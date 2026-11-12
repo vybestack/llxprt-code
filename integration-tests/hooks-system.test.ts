@@ -77,32 +77,13 @@ describe('Hooks System Integration', () => {
     });
 
     it('should block tool execution and use stderr as reason when hook exits with code 2', async () => {
-      rig.setup(
-        'should block tool execution and use stderr as reason when hook exits with code 2',
-        {
-          fakeResponsesPath: join(
-            import.meta.dirname,
-            'hooks-system.block-tool.responses',
-          ),
-          settings: {
-            hooks: {
-              enabled: true,
-              BeforeTool: [
-                {
-                  matcher: 'write_file',
-                  hooks: [
-                    {
-                      type: 'command',
-                      command: 'bun stderr_block_hook.ts',
-                      timeout: 5000,
-                    },
-                  ],
-                },
-              ],
-            },
-          },
-        },
+      const testName =
+        'should block tool execution and use stderr as reason when hook exits with code 2';
+      const fakeResponsesPath = join(
+        import.meta.dirname,
+        'hooks-system.block-tool.responses',
       );
+      rig.setup(testName, { fakeResponsesPath });
       const stderrHookPath = join(rig.testDir!, 'stderr_block_hook.ts');
       writeFileSync(
         stderrHookPath,
@@ -112,6 +93,26 @@ process.stderr.write('File writing blocked by security policy');
 process.exit(2);
 `,
       );
+      rig.setup(testName, {
+        fakeResponsesPath,
+        settings: {
+          hooks: {
+            enabled: true,
+            BeforeTool: [
+              {
+                matcher: 'write_file',
+                hooks: [
+                  {
+                    type: 'command',
+                    command: scriptHookCommand(stderrHookPath),
+                    timeout: 5000,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
 
       const result = await rig.run({
         args: 'Create a file called test.txt with content "Hello World"',
@@ -124,20 +125,34 @@ process.exit(2);
           t.toolRequest.name === 'write_file' && t.toolRequest.success === true,
       );
 
+      const hookLogs = rig.readHookLogs();
+      const hookDiagnostics = hookLogs.map(({ hookCall }) => ({
+        exitCode: hookCall.exit_code,
+        durationMs: hookCall.duration_ms,
+        timedOut: hookCall.error.includes('timed out'),
+        stderr: hookCall.stderr,
+        error: hookCall.error,
+      }));
+      const failureDetails = JSON.stringify({
+        hookDiagnostics,
+        targetExists: existsSync(join(rig.testDir!, 'test.txt')),
+      });
+      const blockHook = hookLogs.find((log) => log.hookCall.exit_code === 2);
+
       // Tool should not be called due to blocking hook
-      expect(writeFileCalls).toHaveLength(0);
+      expect(writeFileCalls, failureDetails).toHaveLength(0);
 
       // Result should mention the blocking reason from stderr
-      expect(result).toContain('File writing blocked by security policy');
-
-      // Verify hook telemetry shows exit code 2, stderr and the deny decision
-      const hookLogs = rig.readHookLogs();
-      const blockHook = hookLogs.find((log) => log.hookCall.exit_code === 2);
-      expect(blockHook).toBeDefined();
-      expect(blockHook?.hookCall.stderr).toContain(
+      expect(result, failureDetails).toContain(
         'File writing blocked by security policy',
       );
-      expect(blockHook?.hookCall.success).toBe(false);
+
+      // Verify hook telemetry shows exit code 2, stderr and the deny decision
+      expect(blockHook, failureDetails).toBeDefined();
+      expect(blockHook?.hookCall.stderr, failureDetails).toContain(
+        'File writing blocked by security policy',
+      );
+      expect(blockHook?.hookCall.success, failureDetails).toBe(false);
       // Telemetry serializes hook_output as a JSON string.
       const stderrHookOutput = JSON.parse(
         String(blockHook?.hookCall.hook_output),

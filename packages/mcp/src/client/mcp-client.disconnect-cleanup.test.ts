@@ -157,6 +157,7 @@ describe('McpClient disconnect cleanup', () => {
       transport as unknown as SdkClientStdioLib.StdioClientTransport,
     );
     const client = new McpClient(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       'test-server',
@@ -198,6 +199,7 @@ describe('McpClient disconnect cleanup', () => {
       | ((name: string, status: MCPServerStatus) => void)
       | undefined;
     const client = new McpClient(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       'test-server',
@@ -260,6 +262,7 @@ describe('McpClient disconnect cleanup', () => {
         {} as SdkClientStdioLib.StdioClientTransport,
       );
       const client = new McpClient(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         'test-server',
@@ -321,6 +324,7 @@ describe('McpClient disconnect cleanup', () => {
       {} as SdkClientStdioLib.StdioClientTransport,
     );
     const client = new McpClient(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       'test-server',
@@ -364,6 +368,7 @@ describe('McpClient disconnect cleanup', () => {
       }),
     } as unknown as ToolRegistry;
     const client = new McpClient(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       'test-server',
@@ -413,6 +418,7 @@ describe('McpClient disconnect cleanup', () => {
       }),
     } as unknown as PromptRegistry;
     const client = new McpClient(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       'test-server',
@@ -486,6 +492,7 @@ describe('McpClient disconnect cleanup', () => {
       | ((name: string, status: MCPServerStatus) => void)
       | undefined;
     const client = new McpClient(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       'test-server',
@@ -556,6 +563,7 @@ describe('McpClient disconnect cleanup', () => {
     const toolCleanup = createRetryingToolRegistry();
     const toolRegistry = toolCleanup.registry;
     const client = new McpClient(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       'test-server',

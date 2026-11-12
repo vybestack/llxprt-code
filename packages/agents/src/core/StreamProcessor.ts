@@ -389,7 +389,7 @@ export class StreamProcessor {
     provider = this._bindProviderMediaAndFiles(provider);
 
     try {
-      const { contents: finalContents, pendingContents } =
+      const { contents: finalContents, ...pendingRegion } =
         await fireBeforeModelHook({
           owner: params.hookOwner ?? params.recordingExecution?.hookOwner,
           requestContents: requestPayload.contents,
@@ -403,7 +403,7 @@ export class StreamProcessor {
       const streamPreparation = await prepareStreamEnvelope(
         provider,
         finalContents,
-        pendingContents,
+        pendingRegion,
         (contents) =>
           buildStreamChatOptions(
             this.ports.prepareProviderInvocation,

@@ -7,9 +7,11 @@ Starting head: `3984a8773` (equal to `origin/issue2616-final` when this plan was
 Review: `tmp/feedback.txt` in the worktree (gitignored, binding)
 Issues: #2616, #3841. Follow-ups already open: #3910, #3897, #3913.
 
+The generated B2 batch records, slices, and index have been removed after the migration; references below to the B2 archive describe completed work, not files retained in this directory.
+
 ## Summary
 
-The review is mostly correct. Of its 31 items (A1-A7, B1-B6, C1-C4, D1-D2, E1-E8, E9 split into E9a-E9c, F), 27 are confirmed, 3 are partly correct (C1, E1, E4) and 1 is wrong as written (A6: the trust lifecycle already joins and reports its transitions). For two confirmed items the test or fix differs from the review's suggestion (E5, E9c); the findings table explains each. Several items predate the PR on `origin/main` (B5, C1's exemption, C3, E4, most of A5's `workspaceControl` join, the `AgentRuntimeContext` part of B4); they are still in scope because the review binds them and #3841 claims them. This version also folds in the 21 findings of the first plan review (`review.md`), the 14 findings of the second (`review-2.md`), the 9 findings of the third (`review-3.md`; they changed task contents, not the task count), the 3 findings of the fourth (`review-4.md`; A7 became T2.7a-T2.7c) and the 3 findings of the fifth (`review-5.md`; task contents only), plus the decisions on the phase 2 transport inventory (`inventory-phase2.md` findings F1-F7 and its table D of ambient defaults; T2.2b and T2.2c were added and T2.6 became T2.6a and T2.6b), and the decisions on the phase 6 inventory slices (`B2-slices/S01.md`-`S26.md`; slice T6.0-S27 was added, T6.D1 became T6.D1a and T6.D1b, and T6.D2 became T6.D2a and T6.D2b); `revision-notes.md` lists what was done with each, and "Decisions on the plan review" below records the parts not adopted.
+The review is mostly correct. Of its 31 items (A1-A7, B1-B6, C1-C4, D1-D2, E1-E8, E9 split into E9a-E9c, F), 27 are confirmed, 3 are partly correct (C1, E1, E4) and 1 is wrong as written (A6: the trust lifecycle already joins and reports its transitions). For two confirmed items the test or fix differs from the review's suggestion (E5, E9c); the findings table explains each. Several items predate the PR on `origin/main` (B5, C1's exemption, C3, E4, most of A5's `workspaceControl` join, the `AgentRuntimeContext` part of B4); they are still in scope because the review binds them and #3841 claims them. This version also folds in the 21 findings of the first plan review (`review.md`), the 14 findings of the second (`review-2.md`), the 9 findings of the third (`review-3.md`; they changed task contents, not the task count), the 3 findings of the fourth (`review-4.md`; A7 became T2.7a-T2.7c) and the 3 findings of the fifth (`review-5.md`; task contents only), plus the decisions on the phase 2 transport inventory (`inventory-phase2.md` findings F1-F7 and its table D of ambient defaults; T2.2b and T2.2c were added and T2.6 became T2.6a and T2.6b), and the decisions on the phase 6 inventory slices (T6.0-S01-S26 slice records; slice T6.0-S27 was added, T6.D1 became T6.D1a and T6.D1b, and T6.D2 became T6.D2a and T6.D2b); `revision-notes.md` lists what was done with each, and "Decisions on the plan review" below records the parts not adopted.
 
 The work is 11 phases (0 through 10) and 92 fixed tasks (phase 0: 1, phase 1: 17, phase 2: 15, phase 3: 6, phase 4: 2, phase 5: 11, phase 6: 6, phase 7: 13, phase 8: 14, phase 9: 3, phase 10: 4), plus 10 generated sets whose ids come from committed inventory files or a task's stop rule: E6 fake-seam test batches (T1.9d-Bk, from T1.9d-inv, possibly none), transport test batches (T2.5a-n, from T2.0), unbound-provider test batches (T2.6b-Bk, from T2.6b's stop rule, possibly none), MCP caller batches (T5.5a-n, from T5.5-inv), B2 inventory slices (T6.0-Sxx, from T6.0-list), B2 migration batches (T6.Bxx, from T6.0-agg), production fixes those batches uncover (T6.Pk, possibly none), B4 inventory slices (T8.0-Sxx, from T8.0-list), B4 producer projections (T8.7a-n, from T8.0-agg), and scanner production fixes (T9.Fxx, from T9.1-T9.3, possibly none). Every task is sized for one coder session, writes a failing test through a real entry point first (or, for refactors, deletions and characterization tasks, names the behavior tests that must stay green and records them passing before the change), runs a fixed list of commands, and ends in one normal commit that compiles and passes. A separate reviewer checks each phase before the next starts.
 
@@ -19,9 +21,9 @@ Nothing in this plan merges the PR. Merge happens only on Andrew's explicit inst
 
 ## Where to work (read first, every time)
 
-- Worktree: `W = /Volumes/XS1000/acoliver/projects/llxprt/branch-2/llxprt-code/tmp/w2616k`. In this document `cd W` means `cd /Volumes/XS1000/acoliver/projects/llxprt/branch-2/llxprt-code/tmp/w2616k`. Always type the literal absolute path. Shell variables do not persist between tool calls, and a bare `cd $W` in a fresh shell goes to your home directory.
-- Do not touch the parent checkout `/Volumes/XS1000/acoliver/projects/llxprt/branch-2/llxprt-code` (an unrelated branch with 829 uncommitted files) or the sibling worktrees `tmp/w2616b` through `tmp/w2616e`. They contain look-alike files. Every file path you edit must start with the `W` path above.
-- Logs go to `W/tmp/pr3911/<task-id>/` (gitignored). Never write logs to `/tmp`; parallel sessions on this machine share it.
+- Worktree: `W = <worktree root>`. In this document, `W` means the root of the worktree where the plan is being carried out. Resolve it to that worktree's absolute path in each shell command; shell variables do not persist between tool calls, and a bare `cd $W` in a fresh shell goes to your home directory.
+- Do not touch the parent checkout (an unrelated branch with uncommitted files) or the sibling worktrees `tmp/w2616b` through `tmp/w2616e`. They contain look-alike files. Every file path you edit must start with the `W` path above.
+- Logs go to `W/tmp/pr3911/<task-id>/` (gitignored). Never write logs to `system temporary directory`; parallel sessions on this machine share it.
 - Commands with `$()` or backticks are rejected by the shell tool. The templates below avoid them.
 
 ## Binding ground rules (from the review)
@@ -38,7 +40,7 @@ Nothing in this plan merges the PR. Merge happens only on Andrew's explicit inst
 Run exactly:
 
 ```
-exec < /dev/null; cd /Volumes/XS1000/acoliver/projects/llxprt/branch-2/llxprt-code/tmp/w2616k && git rev-parse --show-toplevel && git rev-parse --abbrev-ref HEAD && git rev-parse HEAD && git status --porcelain=v1 --untracked-files=all && if test -e project-plans/issue2616/pr3911-review-fix/handoff; then ls -la project-plans/issue2616/pr3911-review-fix/handoff; else echo NO-HANDOFF-DIR; fi
+exec < /dev/null; cd W && git rev-parse --show-toplevel && git rev-parse --abbrev-ref HEAD && git rev-parse HEAD && git status --porcelain=v1 --untracked-files=all && if test -e project-plans/issue2616/pr3911-review-fix/handoff; then ls -la project-plans/issue2616/pr3911-review-fix/handoff; else echo NO-HANDOFF-DIR; fi
 ```
 
 `NO-HANDOFF-DIR` is the normal case. If `ls` itself fails on an existing path, that is a filesystem error: stop and report it.
@@ -86,13 +88,13 @@ A red run saves its output with the same pattern as a suite log, named `red-<n>.
 Pick the log name first: list `W/tmp/pr3911/<task-id>/` and use the next unused attempt number `<n>` for `<name>-<n>.log` (for example `agents-suite-1.log`, then `agents-suite-2.log` on a rerun). A name is never reused; `set -C` below makes the shell refuse to overwrite an existing log, so a stale log can never be read as the new run's result.
 
 ```
-exec < /dev/null; cd /Volumes/XS1000/acoliver/projects/llxprt/branch-2/llxprt-code/tmp/w2616k && mkdir -p tmp/pr3911/<task-id> && set -C && nohup sh -c 'cd packages/<pkg> && npm run test; echo EXIT=$?' < /dev/null > tmp/pr3911/<task-id>/<pkg>-suite-<n>.log 2>&1 &
+exec < /dev/null; cd W && mkdir -p tmp/pr3911/<task-id> && set -C && nohup sh -c 'cd packages/<pkg> && npm run test; echo EXIT=$?' < /dev/null > tmp/pr3911/<task-id>/<pkg>-suite-<n>.log 2>&1 &
 ```
 
 Poll in bounded calls (each under two minutes; repeat the call until it reports a result):
 
 ```
-exec < /dev/null; cd /Volumes/XS1000/acoliver/projects/llxprt/branch-2/llxprt-code/tmp/w2616k && L=tmp/pr3911/<task-id>/<pkg>-suite-<n>.log && for i in 1 2 3 4 5 6 7 8 9 10; do grep -q '^EXIT=' $L && break; sleep 10; done; tail -n 5 $L; grep -qx 'EXIT=0' $L
+exec < /dev/null; cd W && L=tmp/pr3911/<task-id>/<pkg>-suite-<n>.log && for i in 1 2 3 4 5 6 7 8 9 10; do grep -q '^EXIT=' $L && break; sleep 10; done; tail -n 5 $L; grep -qx 'EXIT=0' $L
 ```
 
 The poll exits 0 only when the run finished with `EXIT=0`. A nonzero exit means either still running (no `EXIT=` line in the tail) or failed (`EXIT=` other than 0); the tail shows which. A run whose tail has not changed across ten consecutive polls and has no `EXIT=` line is a dead run: record it as failed and start a new attempt with the next log number.
@@ -104,7 +106,7 @@ A suite failure that also appears in the phase 0 baseline log is not yours, but 
 ### Commit
 
 ```
-cd /Volumes/XS1000/acoliver/projects/llxprt/branch-2/llxprt-code/tmp/w2616k && git add <each changed or deleted path, listed explicitly> && NODE_OPTIONS=--max-old-space-size=8192 git commit -m "<type>(<scope>): <what changed and why>" -m "<which test proves it; each verification command run and its log file name>" -m "Refs #2616, #3841" -m "Plan-Task: PLAN-20261023-PR3911FIX.<task-id>"
+cd W && git add <each changed or deleted path, listed explicitly> && NODE_OPTIONS=--max-old-space-size=8192 git commit -m "<type>(<scope>): <what changed and why>" -m "<which test proves it; each verification command run and its log file name>" -m "Refs #2616, #3841" -m "Plan-Task: PLAN-20261023-PR3911FIX.<task-id>"
 ```
 
 Then `git status --porcelain` must print nothing. The `Plan-Task` trailer replaces in-code `@plan` markers for this plan, because `dev-docs/RULES.md` forbids explanatory comments and the reviewer finds a phase's commits with `git log --grep`.
@@ -233,7 +235,7 @@ These settle the "how" so coders do not have to choose.
   3. Calling `commitInteractiveStartup(args)` transfers it. From its first line, commit owns it: its existing transactional rollback (`rollbackInteractiveFailure`) closes it together with the staged instance and owner, and its close failure aggregates behind the primary error like the other rollback steps. On success, commit registers `providerKeys.close()` with the published instance's teardown, the same teardown `InteractiveInstanceCapability` runs on exit and when a later `startInteractiveUI` replaces it (`replacePreviousInstanceAndOwner`).
   So each window has exactly one closer, and no closer depends on an idempotent `close` to be correct. Nobody else closes it. The negative control adds `ProviderKeyStorageLike`, `CredentialAuthority` and `TokenStore` to the boundary policy's `runtimeObjects` (which only feeds the Config-locator rule), plus a fixture test.
 - B2: delete the unreachable fields and the `'caller'` adoption options. Tests move to `fromConfig(config, settings, intent, authority)` and `createAgent(config)` with only inputs production already accepts (including the provider contribution registry hosts pass today). No new test-only public inputs. Decided from the T6.0 slices (reasons in `revision-notes.md`, "Phase 6 inventory decisions"):
-  1. Fields deleted. All `adopt*` input fields production never sets (the 33 marked "no" in the `B2-batches.md` table, plus `adoptTokenStore`, whose only writer is the fixture), the adoption-with-preflight route (`adoptActivationPreflight`), the four `activation*` fields production never sets (`activationSuppliedClient`, `activationMcp`, `activationTokenizer`, `activationContent`, plus `activationMemoryOwnership`, which production always sets to `'transferred'`), and the `borrowedClient` parameter of `acquireSessionClient`/`SessionClientOwner.create`, whose only production sources were two of those fields. The `customExecute` override of `executeActivation` goes with `activation-acquisition-capture.ts`. Tasks T6.D1a, T6.D1b, T6.D2a.
+  1. Fields deleted. All `adopt*` input fields production never sets (the 33 marked "no" in the `B2 batch archive` table, plus `adoptTokenStore`, whose only writer is the fixture), the adoption-with-preflight route (`adoptActivationPreflight`), the four `activation*` fields production never sets (`activationSuppliedClient`, `activationMcp`, `activationTokenizer`, `activationContent`, plus `activationMemoryOwnership`, which production always sets to `'transferred'`), and the `borrowedClient` parameter of `acquireSessionClient`/`SessionClientOwner.create`, whose only production sources were two of those fields. The `customExecute` override of `executeActivation` goes with `activation-acquisition-capture.ts`. Tasks T6.D1a, T6.D1b, T6.D2a.
   2. `AgentAdoptionIntent` keeps only `sessionId` and `activation`. `fromConfig` takes no owner, runtime or client input, so with the adopt fields gone each `*Ownership: 'caller'` value (`definitionOwnership`, `filesystemOwnership`, `lspOwnership`, `mcpOwnership`) can only reject (`assertAdoptedWorkspaceRoots`, `assertAdoptedWorkspaceHandoff`, `assertMcpHandoff`) and each `'agent'` value equals the default. `sessionIdentityOwnership: 'config'` makes a facade that borrows the caller's `Config` rewrite that `Config`'s session id, which contradicts the documented `fromConfig` contract (the caller's `Config` stays the caller's, `docs/agent-api.md` "Ownership and `dispose()`"); it has no production caller and no documentation, and the CLI gets `'config'` from the foreground assembly (`foreground-agent-assembly.ts:300`). Tests that passed it move to Route B. Task T6.D1a.
   3. `AgentConfig`'s owner options stay: `definitionOwner`/`definitionOwnership`, `filesystemOwner`/`filesystemOwnership`, `lspOwner`/`lspOwnership`, `memoryOwner`. On `createAgent` the caller can supply the owner, so `'caller'` is usable, and `'caller'` without an owner is input validation that rejects at construction (`mcpOAuthAssembly.ts`, "Caller-owned LSP requires an explicit workspace root"), which `workspace-lsp-lifetime.behavior.test.ts` scenario 2 keeps testing. B2's "make them usable" branch already holds for these. That the half-supplied form (`'caller'` without an owner) is representable at all is recorded under "Observations outside the review".
   4. `AgentConfig.runtimeFactoryBindings` is deleted (T6.D2b) with `createAgentRuntimeFactoryBindings` and the core `AgentRuntimeFactoryBindings` type. No production host sets it (cli, zed-acp and a2a-server build agents without it), neither agent-API document lists it (the `dev-docs/agent-api.md` callback and factory list names only `onApproval`, `onOAuthPrompt`, `editorCallbacks`, `toolSchedulerFactory`), and its own module says hosts never receive the assembly descriptor (`runtimeFactories.ts`, "install defaults without exposing the assembly descriptor (#3222)"). #2616's target design says adapters "do not construct runtimes or register factories"; `agentClientFactory` constructs the session's client and `taskToolRegistration` registers the task tool. Its only users are tests, mostly through the capture that E9a asks to remove. For the same reason it is not an observation seam (phase 6, "Observation rule").
@@ -590,7 +592,7 @@ A7 is three tasks because the installed libraries have three different routes (s
 
 Shared test fixture (created in T2.7a, reused by T2.7b and T2.7c): `plugins/google-gemini/src/test/vertexOwnerTransport.ts`. `createOwnerTransport(name)` starts one loopback HTTP server on `127.0.0.1:0` and returns `{ fetch, requests, hold(kind), release(kind), close() }`. `fetch` is the owner fetch handed to `createGeminiApiClient`. It maps the fixed hosts to that server by kind: `www.googleapis.com` and `oauth2.googleapis.com` to `token`, `169.254.169.254` and `metadata.google.internal.` to `metadata`, `sts.googleapis.com` to `sts`, `iamcredentials.googleapis.com` to `iam`, `*-aiplatform.googleapis.com` to `model`, test hosts `metadata-<root>.invalid` to `metadata`, and `subject-<root>.invalid` to `subject`. It records each request's original URL, method, headers and body, and throws for any other host, so nothing can leave the machine through it. `hold(kind)` keeps the next request of that kind open until `release(kind)`. `close()` mirrors `OwnedFetch.closeAdmissionAndAbort` (`packages/agents`, the production owner fetch): it aborts every in-flight request and rejects later calls with `Error('Owner transport is closed')`, then closes the server. Responders return canned bodies per root (`tok-a`, `meta-a`, `sts-a`, ...), and the metadata responder sends `Metadata-Flavor: Google`. Control, written and run first in T2.7a: calling each kind's URL directly through `fetch` returns its canned response and is recorded under the right root, and an unrouted host throws.
 
-Red runs for all three tasks confine the environment to the test command, so the code before the change cannot use the developer's own credentials or reach Google: `exec < /dev/null; cd W/plugins/google-gemini && mkdir -p ../../tmp/pr3911/<task-id>/empty-home && env -u GOOGLE_APPLICATION_CREDENTIALS -u GOOGLE_CLOUD_QUOTA_PROJECT HOME=W/tmp/pr3911/<task-id>/empty-home GCE_METADATA_HOST=127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 https_proxy=http://127.0.0.1:9 bun test <file>` (literal absolute path for `W`). Green runs use the plain focused command; the tests pass their `GoogleCredentialEnvironment` explicitly and never set `process.env`.
+Red runs for all three tasks confine the environment to the test command, so the code before the change cannot use the developer's own credentials or reach Google: `exec < /dev/null; cd W/plugins/google-gemini && mkdir -p ../../../tmp/pr3911/<task-id>/empty-home && env -u GOOGLE_APPLICATION_CREDENTIALS -u GOOGLE_CLOUD_QUOTA_PROJECT HOME=W/tmp/pr3911/<task-id>/empty-home GCE_METADATA_HOST=127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 https_proxy=http://127.0.0.1:9 bun test <file>` (literal absolute path for `W`). Green runs use the plain focused command; the tests pass their `GoogleCredentialEnvironment` explicitly and never set `process.env`.
 
 #### T2.7a A7: file and explicit credentials built with the owner transporter
 
@@ -798,15 +800,15 @@ One helper for the repository owns the positional order and the test defaults: `
 
 A fixture that writes an unreachable field proves only that its construction route is invalid. It does not prove the scenarios in the file are obsolete. So deletion is decided per scenario (`it`/`test` block), never per file:
 
-- Each scenario is recorded with its name and its assertions (the `expect` lines, summarized) in the batch's section of `B2-batches.md` before any edit.
+- Each scenario is recorded with its name and its assertions (the `expect` lines, summarized) in the batch's section of `B2 batch archive` before any edit.
 - Each scenario then gets exactly one outcome: Kept (migrated to a production entry point with the same expected behavior; assertions unchanged except how the agent is built), Replaced (the behavior is asserted by a named existing or new public/domain test; give its file and test name), or Removed (the behavior itself cannot happen in production; name the deleted field or option whose absence makes it impossible, and the production line that proves it, for example "production never sets `adoptLspOwner`: only `AgentActivationBootstrap.adopt` writes adopt fields, and it sets three, listed").
 - Rollback, isolation between roots, disposal order and failure-reporting scenarios are never Removed just because their fixture is invalid; they are Kept or Replaced.
-- Kept has two forms. Agent-level: the agent is built through `fromConfig`, `createAgent` or the foreground preflight route, and the scenario asserts through the `Agent` API and real effects. Domain-level: the scenario's subject is one production owner (for example `McpRuntimeOwner`, `SessionClientOwner`, `WorkspaceExtensionOwner`, `HistoryService`), built through its own production constructor or static `create` with collaborators built the same way and only parameters production also fills. A domain-level test never writes protected fields, never subclasses a production class, never patches a prototype, and never passes a parameter production never fills (after T6.D1b that includes `borrowedClient`). The batch section in `B2-batches.md` says which form each Kept scenario takes.
+- Kept has two forms. Agent-level: the agent is built through `fromConfig`, `createAgent` or the foreground preflight route, and the scenario asserts through the `Agent` API and real effects. Domain-level: the scenario's subject is one production owner (for example `McpRuntimeOwner`, `SessionClientOwner`, `WorkspaceExtensionOwner`, `HistoryService`), built through its own production constructor or static `create` with collaborators built the same way and only parameters production also fills. A domain-level test never writes protected fields, never subclasses a production class, never patches a prototype, and never passes a parameter production never fills (after T6.D1b that includes `borrowedClient`). The batch section in `B2 batch archive` says which form each Kept scenario takes.
 - Internal identity assertions (`toBe`/`not.toBe` on a session client, provider manager, message bus, model registry, settings owner or `HistoryService` that the test could read only through a capture) are the one assertion group a Kept scenario may drop without a deleted-field citation, and only under the observation rule below (row "Internal identity"): the same scenario must keep an assertion that fails when the identity property is broken, and the commit body names each dropped line next to the assertion that covers it.
 - Timers, timeouts and thresholds move unchanged.
 - The commit body lists each scenario's outcome. The reviewer checks every Removed and Replaced entry, not a sample.
 
-When a Kept scenario fails on the production path, it has found a real bug. The coder stops, saves the failing output to `W/tmp/pr3911/<task-id>/production-failure-<n>.log`, adds the scenario unchanged to `B2-batches.md` under "Production failures" with the log path, and writes a handoff. The orchestrator then creates a bounded fix task `T6.Pk` (scope: the production files the failure points at, red test: that scenario exactly as written), runs it under the normal protocol, and resumes the batch. The scenario's assertions are never adjusted to make it pass.
+When a Kept scenario fails on the production path, it has found a real bug. The coder stops, saves the failing output to `W/tmp/pr3911/<task-id>/production-failure-<n>.log`, records the scenario unchanged in the handoff with the log path. The orchestrator then creates a bounded fix task `T6.Pk` (scope: the production files the failure points at, red test: that scenario exactly as written), runs it under the normal protocol, and resumes the batch. The scenario's assertions are never adjusted to make it pass.
 
 #### Observation rule (applies to every T6.Bxx, T6.Pk and T6.D task)
 
@@ -845,7 +847,7 @@ Many Kept scenarios read objects the agent builds internally (session client, pr
 | A second agent over the first agent's client, bus, MCP runtime, task manager or history (R7, `adoptSibling`, `borrow()`) | A second independent agent through the same route with the same hooks, working directory and `Config` where production allows it. Assertions that the peer does not see the first agent's content stay. Assertions that need the shared object are Removed, citing the deleted field (`adoptAgentClient`, `adoptMessageBus`, `adoptMcpRuntime`, `adoptAsyncTaskManager`, `adoptProviderManager`). |
 | Extension `load`/`unload` | Domain-level Kept (decision under T6.Bxx, "Settled routes"); `restart` on Route B through the host's `onExtensionRestart`. |
 
-Stop rule. When no row applies, or the row's approach does not give the value, the coder leaves the scenario unchanged, adds it to `B2-batches.md` under "Unobservable reads" (create the heading if absent) with the read it needs and the rows it tried, and writes a handoff. The coder never keeps a capture, never adds a public input or a test-only parameter, and never edits an assertion to get past it. The orchestrator decides one of: (c) with a covering assertion it names; Replaced by a domain-level test it names; or, only if a production host needs the same read and lacks it, a `T6.Pk` task that adds a public read that host then uses.
+Stop rule. When no row applies, or the row's approach does not give the value, the coder leaves the scenario unchanged, adds it to `B2 batch archive` under "Unobservable reads" (create the heading if absent) with the read it needs and the rows it tried, and writes a handoff. The coder never keeps a capture, never adds a public input or a test-only parameter, and never edits an assertion to get past it. The orchestrator decides one of: (c) with a covering assertion it names; Replaced by a domain-level test it names; or, only if a production host needs the same read and lacks it, a `T6.Pk` task that adds a public read that host then uses.
 
 #### Bounded inventory rule (applies to every inventory task in this plan)
 
@@ -855,10 +857,10 @@ An inventory task that must read files one by one (scenario summaries, consumer 
 
 At the starting head the search below returns 346 files: 229 in `packages/agents/src/api/__tests__`, 13 in its `helpers/`, and 104 spread over 28 other directories in agents, cli, core, providers and zed-acp. Some are definitions rather than importers; the list task keeps them and marks them.
 
-- T6.0-list. Scope: new `project-plans/issue2616/pr3911-review-fix/B2-batches.md` (committed). Steps: run `git grep -l -E 'adoption-fixture|agent-resource-capture|activation-acquisition-capture|caller-fixture|skills-fixture-caller|createAgentRuntimeFactoryBindings' -- packages` (after phase 5, so the count may differ), sort it, mark each file `importer` or `definition` (a definition declares one of the six names), and cut the sorted list into slices of at most 20 files, never mixing directories except that directories with fewer than 5 files are grouped by package. Write the slice table (`T6.0-S01` ... with the exact file list of each) and the slice ids into the task index under T6.0. Also write, once, the `adopt*` field table: each field, set in production (yes/no, with the production line), production readers (file and symbol), from `git grep -n "adopt[A-Z]" -- packages/agents/src/api ':!*__tests__*' ':!*.test.ts'`. Verify: the orchestrator checks that the slice lists concatenate to the full search output.
-- T6.0-Sxx (one per slice). Scope: `B2-batches.md`, only the slice's section. Steps: for each file in the slice, record each scenario (`it`/`test` name and assertion summary) and its proposed outcome under the conservation rule, plus its size (S: one or two scenarios, single acquisition, no rollback harness; M: several scenarios or one rollback/isolation harness; L: shared acquisition/rollback harness used by many scenarios, or more than 8 scenarios). Definition files get a line saying which importers use them. Verify: the section lists every file of the slice; the orchestrator checks every Removed proposal in the slice against its cited production line.
+- T6.0-list. Scope: new `B2 batch archive` (committed). Steps: run `git grep -l -E 'adoption-fixture|agent-resource-capture|activation-acquisition-capture|caller-fixture|skills-fixture-caller|createAgentRuntimeFactoryBindings' -- packages` (after phase 5, so the count may differ), sort it, mark each file `importer` or `definition` (a definition declares one of the six names), and cut the sorted list into slices of at most 20 files, never mixing directories except that directories with fewer than 5 files are grouped by package. Write the slice table (`T6.0-S01` ... with the exact file list of each) and the slice ids into the task index under T6.0. Also write, once, the `adopt*` field table: each field, set in production (yes/no, with the production line), production readers (file and symbol), from `git grep -n "adopt[A-Z]" -- packages/agents/src/api ':!*__tests__*' ':!*.test.ts'`. Verify: the orchestrator checks that the slice lists concatenate to the full search output.
+- T6.0-Sxx (one per slice). Scope: `B2 batch archive`, only the slice's section. Steps: for each file in the slice, record each scenario (`it`/`test` name and assertion summary) and its proposed outcome under the conservation rule, plus its size (S: one or two scenarios, single acquisition, no rollback harness; M: several scenarios or one rollback/isolation harness; L: shared acquisition/rollback harness used by many scenarios, or more than 8 scenarios). Definition files get a line saying which importers use them. Verify: the section lists every file of the slice; the orchestrator checks every Removed proposal in the slice against its cited production line.
 - T6.0-S27 (added after the slices, same format). The T6.0-list search names missed one fixture: `packages/agents/src/api/__tests__/helpers/adopted-provider-fixture.ts` declares `AdoptedProviderFixture extends AdoptedSessionAssembly` and writes `adopt*` fields T6.D1a deletes (`adoptProviderManager`, `adoptTokenStore`, `adoptSuppliedOAuth`, and others). Slice: the helper (definition) and its 8 importers from `git grep -l "adopted-provider-fixture" -- packages` (1 in `packages/agents/src/api/__tests__`, 7 in `packages/providers/src`). Found by `git grep -n -E "extends (AgentActivationBootstrap|AdoptedAgentAssembly|AdoptedSessionAssembly|ForegroundAgentAssembly|PreferredAgentAssembly|SessionProviderOwner|AgentRuntimeAssembly)( |<|$)" -- packages` over test files; the other hit outside the three known fixtures, `helpers/provider-read-fixture.ts` (`extends SessionProviderOwner`), writes only `facade*` fields production also sets, so it belongs to phase 7's inventory (T7.0), not B2. T6.0-agg does not start until S27 is committed.
-- T6.0-agg. Scope: `B2-batches.md`. Steps: check that every file in the list (S01-S27) has a complete slice section and every scenario has an outcome; record the 29 incidental files once as "no B2 fixture use; nothing to migrate" and leave them out of batches; group the files into migration batches T6.B01, T6.B02, ... from one directory with a budget of at most 10 points (S=1, M=3, L=6; an L file over 10 points is its own batch, and an L file whose scenarios cannot be migrated in one session is split by scenario groups into T6.BxxA/B); add the batch ids to the task index. Ordering and sizing rules found by the slices (each batch section names the rules it depends on):
+- T6.0-agg. Scope: `B2 batch archive`. Steps: check that every file in the list (S01-S27) has a complete slice section and every scenario has an outcome; record the 29 incidental files once as "no B2 fixture use; nothing to migrate" and leave them out of batches; group the files into migration batches T6.B01, T6.B02, ... from one directory with a budget of at most 10 points (S=1, M=3, L=6; an L file over 10 points is its own batch, and an L file whose scenarios cannot be migrated in one session is split by scenario groups into T6.BxxA/B); add the batch ids to the task index. Ordering and sizing rules found by the slices (each batch section names the rules it depends on):
   1. Shared helpers are created in the earliest batch that uses them, and their points count there (a new helper M=3; H-d S=1). The batch runs the focused command for every file that imports the new helper. The helpers: H-a, a Route A builder (`Config` from `toConfigParameters`, `SettingsService` seeded from `config.getInitialSettings()`, temp directory, `CredentialAuthority`, fake-response environment restore) plus `fake-responses-replay.ts`, which takes `useFakeResponsesReplay` out of `caller-fixture.ts` (the five importers' import lines change in the same commit; that one-line edit outside the batch is allowed); H-b, a recording provider registered through `providerContributions` that records the request options and invocation it receives and can hold a request on a gate; H-c, the gated recording stdio MCP server (T6.Bxx settled route 3); H-d, `ownerClients` in `session-client-capture.ts` (settled route 1); H-e, one Route B helper in `packages/agents/src/api/__tests__/helpers/` (`prepareAgentPreflight`, `preparePostConfiguration`, `preflight`, `createForegroundAgent`, with disposal), which cli `integration-tests/__tests__/prepare-preflight.ts` and `session-client-owner-fixture.ts` then use (S21's single-route note). New helpers have no prototype spy, no capture and no `runtimeFactoryBindings`.
   2. A helper whose exports keep their signature is rewritten in place, in the batch of its last importer that still needs the old internals, or after it: `turn-revision-capture.fixture.ts` with or after its five `fixtureAgentResources` importers (`provider-factory-authority`, `same-agent-admission.driver`, `turn-lb-final-dispatch`, `two-agent-identity.driver`, cli `ui/utils/autoPromptGenerator.test.ts`); `child-parameter-tool.ts` with its one importer; `skills-fixture-declarations.ts` with or after the last of its skills importers (it then reads H-b's recorded request); `generation-owner-fixture.ts`, `async-child-disposal-join-fixture.ts` and `disposalProbe.ts` by the same rule. `agentHarness.ts`'s capture removal is in T6.D2a, after every batch.
   3. A helper whose exported signature must change gets a new helper beside it under a new name; importers move batch by batch, and the old helper is deleted in the batch of its last importer or in T6.D2a: `recording-owner-lifetime-fixture.ts` (40 importers), cli `integration-tests/test-utils.ts` (`initializeTestAgent`, `initializeTestConfig`), the S18 cli helpers, `integration-tests/__tests__/session-client-owner-fixture.ts`.
@@ -870,10 +872,10 @@ At the starting head the search below returns 346 files: 229 in `packages/agents
   9. Batches stay within one directory as before; the only cross-directory edits are the helper rules above and the one-line import edits of rule 1.
   Verify: the orchestrator checks five Kept proposals against their files and that every file appears in exactly one batch (or is a definition handled by T6.D2a or T6.D2b), and that no batch comes before a batch it depends on under rules 1-8.
 
-#### T6.Bxx Migration batches (one task per batch from B2-batches.md)
+#### T6.Bxx Migration batches (one task per batch from B2 batch archive)
 
 - Scope: only the files in the batch, plus shared non-fixture test helpers they need (new helpers under `__tests__/helpers/` that call `fromConfig` or `createAgent`; no prototype spies). Helper batches (H-a to H-e, see T6.0-agg) create the shared helpers before the first batch that uses them.
-- Steps: before editing a file that no slice inventoried (a transitive importer of a changed helper), record its scenarios in the batch's section of `B2-batches.md` in the slice format. Apply each scenario's recorded outcome, choosing every observation by the phase 6 observation rule and the settled routes below; where a slice proposal conflicts with them (for example a slice proposed the `agentClientFactory` observation helper, or kept `sessionIdentityOwnership`), the observation rule and design decision B2 win, and the batch section records the changed proposal. Kept scenarios build agents only through the public entry points and assert through the `Agent` API, real files, local servers and provider contributions, or take the domain-level form. Files left with no scenarios are deleted.
+- Steps: before editing a file that no slice inventoried (a transitive importer of a changed helper), record its scenarios in the batch's section of `B2 batch archive` in the slice format. Apply each scenario's recorded outcome, choosing every observation by the phase 6 observation rule and the settled routes below; where a slice proposal conflicts with them (for example a slice proposed the `agentClientFactory` observation helper, or kept `sessionIdentityOwnership`), the observation rule and design decision B2 win, and the batch section records the changed proposal. Kept scenarios build agents only through the public entry points and assert through the `Agent` API, real files, local servers and provider contributions, or take the domain-level form. Files left with no scenarios are deleted.
 - Verify: the focused command for each batch file (one file per process, see "Focused tests"); package typecheck; eslint and prettier; package suite (background).
 - Must not: mock production classes, add a prototype spy, or index positional arguments; change a Kept scenario's assertions; pass `runtimeFactoryBindings` to `createAgent`; (Test-local prototype spies that are none of the capture hooks above and were in the file before the batch, for example `Config.prototype.dispose` and `MessageBus.prototype.cancelPendingConfirmations` in `createAgent.selfAssembly.behavior.test.ts`, stay as written; E9a names only the capture helper, and they are listed under "Observations outside the review".) add a call to `fixtureAgentResources`, `captureAgentCreation`, `capturedSessionClient`, `capturedActivation` or any other export T6.D2a deletes.
 
@@ -890,8 +892,8 @@ The four deletion tasks run in this order, each after the previous one's commit:
 
 #### T6.D2a Conservation check, then delete the fixtures and capture helpers (B2, E9a)
 
-- Scope: `B2-batches.md` (read for the check), and these test helpers under `packages/agents/src/api/__tests__/helpers/`: delete `adoption-fixture.ts`, `adopted-provider-fixture.ts`, `activation-acquisition-capture.ts` (with `ActivationFixture`'s `customExecute` override of `executeActivation`), `agent-resource-capture.ts`, `caller-fixture.ts` (its `useFakeResponsesReplay` moved to `fake-responses-replay.ts` in helper batch H-a), `skills-fixture-caller.ts`; change `session-client-capture.ts` (delete `captureSessionOwnerCreation`, `capturedSessionClient` and the `AgentResourceCapture` import; `createCapturedSessionOwner`, `acquireCapturedSessionClient` and `ownerClients` stay as the domain-level helper, see "Settled routes" under T6.Bxx) and `agentHarness.ts` (`buildAgent`/`buildAgentFromContent` pass the caller's overrides to `createAgent` unchanged; delete `internalConfig`, `registerFakeProviders`, `captureHistoryServiceIdentity`, the `fixtureAgentResources` re-export and the `AgentResourceCapture` import); and any other helper the batch sections mark "delete in T6.D2a". No production file.
-- First step, before deleting anything: in `B2-batches.md`, confirm every scenario recorded in the T6.0 slices (S01-S27) and in the batch sections has an outcome, every Replaced entry's target test exists (`git grep -n "<test name>"`), the "Production failures" list is empty or every entry has a committed `T6.Pk` fix, and the "Unobservable reads" list is empty or every entry carries the orchestrator's decision and the batch applied it. Then confirm nothing outside the files this task deletes or changes imports them: `git grep -l -E "adoption-fixture|adopted-provider-fixture|activation-acquisition-capture|agent-resource-capture|caller-fixture|skills-fixture-caller" -- packages` lists only files in this task's scope. If any check fails, stop and report.
+- Scope: `B2 batch archive` (read for the check), and these test helpers under `packages/agents/src/api/__tests__/helpers/`: delete `adoption-fixture.ts`, `adopted-provider-fixture.ts`, `activation-acquisition-capture.ts` (with `ActivationFixture`'s `customExecute` override of `executeActivation`), `agent-resource-capture.ts`, `caller-fixture.ts` (its `useFakeResponsesReplay` moved to `fake-responses-replay.ts` in helper batch H-a), `skills-fixture-caller.ts`; change `session-client-capture.ts` (delete `captureSessionOwnerCreation`, `capturedSessionClient` and the `AgentResourceCapture` import; `createCapturedSessionOwner`, `acquireCapturedSessionClient` and `ownerClients` stay as the domain-level helper, see "Settled routes" under T6.Bxx) and `agentHarness.ts` (`buildAgent`/`buildAgentFromContent` pass the caller's overrides to `createAgent` unchanged; delete `internalConfig`, `registerFakeProviders`, `captureHistoryServiceIdentity`, the `fixtureAgentResources` re-export and the `AgentResourceCapture` import); and any other helper the batch sections mark "delete in T6.D2a". No production file.
+- First step, before deleting anything: in `B2 batch archive`, confirm every scenario recorded in the T6.0 slices (S01-S27) and in the batch sections has an outcome, every Replaced entry's target test exists (`git grep -n "<test name>"`), the "Production failures" list is empty or every entry has a committed `T6.Pk` fix, and the "Unobservable reads" list is empty or every entry carries the orchestrator's decision and the batch applied it. Then confirm nothing outside the files this task deletes or changes imports them: `git grep -l -E "adoption-fixture|adopted-provider-fixture|activation-acquisition-capture|agent-resource-capture|caller-fixture|skills-fixture-caller" -- packages` lists only files in this task's scope. If any check fails, stop and report.
 - Test: behavior-preserving. Characterization: the agents, cli, zed-acp and providers suites green before the deletions (background, logs `before-<pkg>-<n>.log`) and after.
 - Verify: (1) `git grep -n -w -E "adoptFixture|captureAgentAdoption|captureAgentCreation|fixtureAgentResources|AgentResourceCapture|AdoptedProviderFixture|captureActivationAcquisition|prepareActivationFixture|createFixtureForeground|observeActivationPreparation|captureActivationConstruction|capturedActivation|capturedSessionClient|captureSessionOwnerCreation|openSkillsCaller|internalConfig|registerFakeProviders|captureHistoryServiceIdentity" -- packages` prints nothing (`openCaller` is not in the list: five providers runtime tests outside phase 6 declare a local function of that name). (2) `git grep -n -E "prototype, '(setRuntimeContext|bindChildExecution|subscribe|bindTelemetry|initializePreparedActivation)'|spyOn\((SessionClientOwner|agentBootstrap), '(create|recordOwnership)'\)" -- packages` prints nothing. (3) The six deleted files do not exist (`ls` each; `No such file` for all six). (4) agents, cli, zed-acp and providers typecheck; eslint and prettier on the changed helpers; the four suites (background); `npm run check:runtime-boundary`.
 
@@ -899,7 +901,7 @@ The four deletion tasks run in this order, each after the previous one's commit:
 
 - Scope: `packages/agents/src/api/adopted-agent-assembly.ts`, `fromConfig-session.ts`, `activationPreflightState.ts` (`adopt`, `selectAdoptionOwner`, `validateAdoptionIdentity`, `acceptAdoption`), `mcpOAuthAssembly.ts` (`assertMcpHandoff`, `assertAdoptedWorkspaceHandoff`, `assertAdoptedWorkspaceRoots`), `config-types.ts` (`AgentAdoptionIntent`), `docs/agent-api.md` and `dev-docs/agent-api.md` if they name a deleted option.
 - Steps:
-  1. Delete every `adopt*` input field marked "set in production: no" in the `B2-batches.md` field table (33 fields: `adoptSettingsOwner` through `adoptRegisterSkillTools`), plus `adoptTokenStore`, which the table lists under derived state but whose only writer is the fixture (S04): its reader `this.adoptTokenStore ?? this.adoptAuthority.createTokenStore()` (`fromConfig-session.ts`) becomes the authority's store. Delete their abstract redeclarations in `fromConfig-session.ts`. `adoptSettingsService`, `adoptIntent`, `adoptCredentialAuthority`, `adoptionConfig` and the derived state listed after the table stay.
+  1. Delete every `adopt*` input field marked "set in production: no" in the `B2 batch archive` field table (33 fields: `adoptSettingsOwner` through `adoptRegisterSkillTools`), plus `adoptTokenStore`, which the table lists under derived state but whose only writer is the fixture (S04): its reader `this.adoptTokenStore ?? this.adoptAuthority.createTokenStore()` (`fromConfig-session.ts`) becomes the authority's store. Delete their abstract redeclarations in `fromConfig-session.ts`. `adoptSettingsService`, `adoptIntent`, `adoptCredentialAuthority`, `adoptionConfig` and the derived state listed after the table stay.
   2. Delete every branch that reads a deleted field, keeping the branch production takes (field `undefined`): for example `adoptProviderManager === undefined` keeps the manager build in `acquireAdoptedProviderManager`, `adoptMcpRuntime !== undefined` paths go, `adoptActivationPreflight === undefined` keeps `acquireAdoptedSession`. A derived field that becomes constant is deleted with its branches too: `adoptSuppliedOAuth` is `this.adoptOauthManager ?? preflight?.oauthManager` (`adopted-agent-assembly.ts` `#adoptAcquireOAuth`), so it is always `undefined` and the supplied-OAuth branch of `acquireAdoptedOAuth` goes. `selectAdoptionOwner(config, preflight)` loses its preflight parameter (production passes `undefined`), and the receipt validation reached only through it goes with it; `#validate` stays for `createForeground`.
   3. `AgentAdoptionIntent` becomes `{ readonly sessionId?: string; readonly activation?: ProviderActivationIntent }`. Deleted: `definitionOwnership`, `filesystemOwnership`, `lspOwnership`, `mcpOwnership` and `sessionIdentityOwnership` (reasons in design decision B2). The adopted facade's `sessionIdentityOwnership` is `'facade'`. `assertMcpHandoff`, `assertAdoptedWorkspaceHandoff` and `assertAdoptedWorkspaceRoots` and their calls are deleted: with no adopted owner and no option, each can only pass. `selectedOwnership` calls in `#adoptConstructMcp` become the values production computes today with the owners absent.
   4. `AgentConfig`'s `definitionOwner`/`definitionOwnership`, `filesystemOwner`/`filesystemOwnership`, `lspOwner`/`lspOwnership` and `memoryOwner` stay unchanged (design decision B2).
@@ -1227,194 +1229,194 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T5.7 E7 typed ProviderFileLifecycle
 - [x] T6.0-list B2 inventory file list and slices
 - [x] T6.0-Sxx B2 inventory slices (ids added by T6.0-list; S27 added by the phase 6 inventory decisions)
-  - [x] T6.0-S01 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
-  - [x] T6.0-S02 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
-  - [x] T6.0-S03 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
-  - [x] T6.0-S04 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
-  - [x] T6.0-S05 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
-  - [x] T6.0-S06 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
-  - [x] T6.0-S07 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
-  - [x] T6.0-S08 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
-  - [x] T6.0-S09 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
-  - [x] T6.0-S10 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
-  - [x] T6.0-S11 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
-  - [x] T6.0-S12 B2 inventory slice: packages/agents/src/api/__tests__, 14 files (file list in B2-batches.md)
-  - [x] T6.0-S13 B2 inventory slice: packages/agents/src/api/__tests__/helpers, 15 files (file list in B2-batches.md)
-  - [x] T6.0-S14 B2 inventory slice: packages/agents/src/core, 7 files (file list in B2-batches.md)
-  - [x] T6.0-S15 B2 inventory slice: packages/agents/src/core/agenticLoop/__tests__, 6 files (file list in B2-batches.md)
-  - [x] T6.0-S16 B2 inventory slice: agents small directories (4 dirs, each under 5 files), 9 files (file list in B2-batches.md)
-  - [x] T6.0-S17 B2 inventory slice: packages/cli/src, 11 files (file list in B2-batches.md)
-  - [x] T6.0-S18 B2 inventory slice: packages/cli/src/__tests__, 7 files (file list in B2-batches.md)
-  - [x] T6.0-S19 B2 inventory slice: packages/cli/src/ui/contexts, 6 files (file list in B2-batches.md)
-  - [x] T6.0-S20 B2 inventory slice: packages/cli/src/ui/hooks, 16 files (file list in B2-batches.md)
-  - [x] T6.0-S21 B2 inventory slice: cli small directories (12 dirs, each under 5 files), 11 files (file list in B2-batches.md)
-  - [x] T6.0-S22 B2 inventory slice: cli small directories (12 dirs, each under 5 files), 10 files (file list in B2-batches.md)
-  - [x] T6.0-S23 B2 inventory slice: core small directories (4 dirs, each under 5 files), 8 files (file list in B2-batches.md)
-  - [x] T6.0-S24 B2 inventory slice: packages/providers/src/runtime, 7 files (file list in B2-batches.md)
-  - [x] T6.0-S25 B2 inventory slice: providers small directories (1 dirs, each under 5 files), 1 files (file list in B2-batches.md)
-  - [x] T6.0-S26 B2 inventory slice: packages/zed-acp/src, 6 files (file list in B2-batches.md)
+  - [x] T6.0-S01 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (slice details omitted from retained plan)
+  - [x] T6.0-S02 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (slice details omitted from retained plan)
+  - [x] T6.0-S03 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (slice details omitted from retained plan)
+  - [x] T6.0-S04 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (slice details omitted from retained plan)
+  - [x] T6.0-S05 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (slice details omitted from retained plan)
+  - [x] T6.0-S06 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (slice details omitted from retained plan)
+  - [x] T6.0-S07 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (slice details omitted from retained plan)
+  - [x] T6.0-S08 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (slice details omitted from retained plan)
+  - [x] T6.0-S09 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (slice details omitted from retained plan)
+  - [x] T6.0-S10 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (slice details omitted from retained plan)
+  - [x] T6.0-S11 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (slice details omitted from retained plan)
+  - [x] T6.0-S12 B2 inventory slice: packages/agents/src/api/__tests__, 14 files (slice details omitted from retained plan)
+  - [x] T6.0-S13 B2 inventory slice: packages/agents/src/api/__tests__/helpers, 15 files (slice details omitted from retained plan)
+  - [x] T6.0-S14 B2 inventory slice: packages/agents/src/core, 7 files (slice details omitted from retained plan)
+  - [x] T6.0-S15 B2 inventory slice: packages/agents/src/core/agenticLoop/__tests__, 6 files (slice details omitted from retained plan)
+  - [x] T6.0-S16 B2 inventory slice: agents small directories (4 dirs, each under 5 files), 9 files (slice details omitted from retained plan)
+  - [x] T6.0-S17 B2 inventory slice: packages/cli/src, 11 files (slice details omitted from retained plan)
+  - [x] T6.0-S18 B2 inventory slice: packages/cli/src/__tests__, 7 files (slice details omitted from retained plan)
+  - [x] T6.0-S19 B2 inventory slice: packages/cli/src/ui/contexts, 6 files (slice details omitted from retained plan)
+  - [x] T6.0-S20 B2 inventory slice: packages/cli/src/ui/hooks, 16 files (slice details omitted from retained plan)
+  - [x] T6.0-S21 B2 inventory slice: cli small directories (12 dirs, each under 5 files), 11 files (slice details omitted from retained plan)
+  - [x] T6.0-S22 B2 inventory slice: cli small directories (12 dirs, each under 5 files), 10 files (slice details omitted from retained plan)
+  - [x] T6.0-S23 B2 inventory slice: core small directories (4 dirs, each under 5 files), 8 files (slice details omitted from retained plan)
+  - [x] T6.0-S24 B2 inventory slice: packages/providers/src/runtime, 7 files (slice details omitted from retained plan)
+  - [x] T6.0-S25 B2 inventory slice: providers small directories (1 dirs, each under 5 files), 1 files (slice details omitted from retained plan)
+  - [x] T6.0-S26 B2 inventory slice: packages/zed-acp/src, 6 files (slice details omitted from retained plan)
   - [x] T6.0-S27 B2 inventory slice: helpers/adopted-provider-fixture.ts and its 8 importers (added by the phase 6 inventory decisions; file list from `git grep -l "adopted-provider-fixture" -- packages`)
 - [x] T6.0-agg B2 inventory aggregation and batches
 - [x] T6.Bxx B2 migration batches (ids added by T6.0-agg: 159 batches, 1213 points)
-  - [x] T6.B01 B2 migration batch, 7 points, agents/src/api/__tests__: AgentRuntimeState.configDispose.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B02 B2 migration batch, 10 points, agents/src/api/__tests__: activation-bootstrap-rollback.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B03 B2 migration batch, 10 points, agents/src/api/__tests__: activation-preflight-cleanup-failure.behavior.test.ts and 3 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B04 B2 migration batch, 10 points, agents/src/api/__tests__: activationPreflightState-owner-12.behavior.test.ts and 7 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B05 B2 migration batch, 9 points, agents/src/api/__tests__: activationPreflightState-owner-3.behavior.test.ts and 6 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B06 B2 migration batch, 6 points, agents/src/api/__tests__: activationPreflightState.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B07 B2 migration batch, 9 points, agents/src/api/__tests__: adoption-publication-barrier.behavior.test.ts and 3 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B08 B2 migration batch, 9 points, agents/src/api/__tests__: agent.sequenceModel.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B09 B2 migration batch, 9 points, agents/src/api/__tests__: agentAdmission.owner.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B10 B2 migration batch, 9 points, agents/src/api/__tests__: agentUnconfigured.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B11 B2 migration batch, 6 points, agents/src/api/__tests__: async-child-background-isolation.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B12 B2 migration batch, 10 points, agents/src/api/__tests__: auxiliary-generation-lifetime.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B13 B2 migration batch, 10 points, agents/src/api/__tests__: cli-turn-parity-owner-1.spec.ts and 3 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B14 B2 migration batch, 10 points, agents/src/api/__tests__: cli-turn-parity.spec.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B15 B2 migration batch, 6 points, agents/src/api/__tests__: config-provider-ownership-owner-1.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B16 B2 migration batch, 6 points, agents/src/api/__tests__: config-provider-ownership-owner-2.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B17 B2 migration batch, 6 points, agents/src/api/__tests__: config-provider-ownership-owner-3.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B18 B2 migration batch, 6 points, agents/src/api/__tests__: config-provider-ownership.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B19 B2 migration batch, 9 points, agents/src/api/__tests__: config.folderTrustLive.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B20 B2 migration batch, 7 points, agents/src/api/__tests__: createAgent.selfAssembly.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B21 B2 migration batch, 9 points, agents/src/api/__tests__: foreground-task-streaming-preservation.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B22 B2 migration batch, 10 points, agents/src/api/__tests__: fromConfig-acquisition.behavior.test.ts and 4 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B23 B2 migration batch, 8 points, agents/src/api/__tests__: fromConfig-admission-owner-5.behavior.test.ts and 5 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B24 B2 migration batch, 6 points, agents/src/api/__tests__: fromConfig-bootstrap-failure.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B25 B2 migration batch, 9 points, agents/src/api/__tests__: fromConfig-identity.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B26 B2 migration batch, 10 points, agents/src/api/__tests__: fromConfig-properties.behavior.test.ts and 3 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B27 B2 migration batch, 8 points, agents/src/api/__tests__: fromConfigSkills.behavior.test.ts and 5 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B28 B2 migration batch, 6 points, agents/src/api/__tests__: host-github-broker-owner.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B29 B2 migration batch, 9 points, agents/src/api/__tests__: ide-client-independent.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B30 B2 migration batch, 9 points, agents/src/api/__tests__: loop-transaction-retirement.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B31 B2 migration batch, 9 points, agents/src/api/__tests__: mcp-agent-operations.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B32 B2 migration batch, 9 points, agents/src/api/__tests__: mcp-approval-scheduler-isolation.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B33 B2 migration batch, 9 points, agents/src/api/__tests__: mcp-construction-owner.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B34 B2 migration batch, 7 points, agents/src/api/__tests__: model-notification-root-isolation.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B35 B2 migration batch, 6 points, agents/src/api/__tests__: post-config-preflight.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B36 B2 migration batch, 9 points, agents/src/api/__tests__: preflight-release.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B37 B2 migration batch, 9 points, agents/src/api/__tests__: preflightAgentActivation.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B38 B2 migration batch, 9 points, agents/src/api/__tests__: profile-authclear-owner.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B39 B2 migration batch, 6 points, agents/src/api/__tests__: profile-chat-preparation.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B40 B2 migration batch, 9 points, agents/src/api/__tests__: profile-commit-publication.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B41 B2 migration batch, 6 points, agents/src/api/__tests__: profile-lb-authkey-owner.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B42 B2 migration batch, 7 points, agents/src/api/__tests__: profile-lb-detection-owner.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B43 B2 migration batch, 9 points, agents/src/api/__tests__: profile-postcommit-lifetime.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B44 B2 migration batch, 6 points, agents/src/api/__tests__: profile-preparation-cancellation.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B45 B2 migration batch, 10 points, agents/src/api/__tests__: profile-workflow-owner.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B46 B2 migration batch, 9 points, agents/src/api/__tests__: profileApplication.owner-owner-3.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B47 B2 migration batch, 9 points, agents/src/api/__tests__: profileApplication.owner-owner-6.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B48 B2 migration batch, 9 points, agents/src/api/__tests__: provider-activation-adoption.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B49 B2 migration batch, 8 points, agents/src/api/__tests__: provider-owner-generation.behavior.test.ts and 3 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B50 B2 migration batch, 10 points, agents/src/api/__tests__: provider-switch-transaction.test.ts and 7 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B51 B2 migration batch, 10 points, agents/src/api/__tests__: providerActivation-owner-7.behavior.test.ts and 3 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B52 B2 migration batch, 6 points, agents/src/api/__tests__: rebuild-loop-ownership.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B53 B2 migration batch, 6 points, agents/src/api/__tests__: recording-compression-origin.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B54 B2 migration batch, 9 points, agents/src/api/__tests__: recording-facade-chat-channel.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B55 B2 migration batch, 6 points, agents/src/api/__tests__: recording-nonstream-413-hooks.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B56 B2 migration batch, 6 points, agents/src/api/__tests__: recording-owner-lifetime.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B57 B2 migration batch, 9 points, agents/src/api/__tests__: recording-shared-history-origin.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B58 B2 migration batch, 6 points, agents/src/api/__tests__: replaceableClient.smoke.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B59 B2 migration batch, 10 points, agents/src/api/__tests__: runtime-owner-kimi-http.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B60 B2 migration batch, 6 points, agents/src/api/__tests__: sameLabel.toolIsolation.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B61 B2 migration batch, 9 points, agents/src/api/__tests__: session-background-clear.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B62 B2 migration batch, 6 points, agents/src/api/__tests__: session-client-borrowed-preflight-engine.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B63 B2 migration batch, 9 points, agents/src/api/__tests__: session-client-owner-engine.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B64 B2 migration batch, 6 points, agents/src/api/__tests__: session-client-peer-engine.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B65 B2 migration batch, 9 points, agents/src/api/__tests__: session-client-replacement-join.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B66 B2 migration batch, 9 points, agents/src/api/__tests__: session-execution-resolution.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B67 B2 migration batch, 7 points, agents/src/api/__tests__: session-media-owner-closure.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B68 B2 migration batch, 9 points, agents/src/api/__tests__: session-owner-restore-checkpoint.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B69 B2 migration batch, 9 points, agents/src/api/__tests__: session-settings-owner.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B70 B2 migration batch, 9 points, agents/src/api/__tests__: session-tool-catalog-owner.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B71 B2 migration batch, 9 points, agents/src/api/__tests__: session-tool-owner-risk.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B72 B2 migration batch, 9 points, agents/src/api/__tests__: session.clearConversation.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B73 B2 migration batch, 10 points, agents/src/api/__tests__: shell-owner-isolation.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B74 B2 migration batch, 9 points, agents/src/api/__tests__: skillReloadDeclaration-owner-2.behavior.test.ts and 4 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B75 B2 migration batch, 10 points, agents/src/api/__tests__: skillReloadDeclaration-owner-7.behavior.test.ts and 3 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B76 B2 migration batch, 9 points, agents/src/api/__tests__: staleClient.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B77 B2 migration batch, 9 points, agents/src/api/__tests__: task-child-whitelist-preservation.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B78 B2 migration batch, 9 points, agents/src/api/__tests__: tasksControl.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B79 B2 migration batch, 10 points, agents/src/api/__tests__: two-agent-identity.driver.ts and 5 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B80 B2 migration batch, 10 points, agents/src/api/__tests__: workspace-catalog-owner-owner-6.behavior.test.ts and 3 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B81 B2 migration batch, 10 points, agents/src/api/__tests__: workspace-definition-lifetime.behavior.test.ts and 3 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B82 B2 migration batch, 9 points, agents/src/api/__tests__: workspace-filesystem-lifetime.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B83 B2 migration batch, 10 points, agents/src/api/__tests__: workspace-filesystem-skill-publication.behavior.test.ts and 5 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B84 B2 migration batch, 8 points, agents/src/api/__tests__: workspace-memory-lifetime-owner-5.behavior.test.ts and 5 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B85 B2 migration batch, 9 points, agents/src/api/__tests__: workspace-registrar-reload-owner-owner-1.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B86 B2 migration batch, 7 points, agents/src/api/__tests__/helpers: async-child-disposal-join-fixture.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B87 B2 migration batch, 6 points, agents/src/api/__tests__/helpers: disposalProbe.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B88 B2 migration batch, 6 points, agents/src/api/__tests__/helpers: generation-owner-fixture.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B89 B2 migration batch, 10 points, agents/src/api/__tests__/helpers: recording-owner-lifetime-fixture.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B90 B2 migration batch, 1 points, agents/src/api/__tests__/helpers: skills-fixture-declarations.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B91 B2 migration batch, 3 points, agents/src/api: profile-candidate-operations.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B92 B2 migration batch, 3 points, agents/src/core/__tests__: child-task-tool-lifetime.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B93 B2 migration batch, 9 points, cli/src/__tests__: command-owner-fixture.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B94 B2 migration batch, 10 points, cli/src/__tests__: scripted-headless-owner.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B95 B2 migration batch, 9 points, cli/src/__tests__: stream-media-fixture.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B96 B2 migration batch, 9 points, cli/src: activation-bootstrap-handoff.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B97 B2 migration batch, 9 points, cli/src: cli.provider-init.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B98 B2 migration batch, 6 points, cli/src: cliBootstrap.providerActivation.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B99 B2 migration batch, 6 points, cli/src: nonInteractiveUnconfiguredProvider.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B100 B2 migration batch, 9 points, cli/src: session-client-bootstrap.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B101 B2 migration batch, 6 points, cli/src: workspace-extension-lifetime-owner-2.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B102 B2 migration batch, 9 points, cli/src/ui/hooks/agentStream/__tests__: useSubmitQuery.background-clear.test.tsx and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B103 B2 migration batch, 9 points, cli/src/ui/hooks: child-tool-owner-owner-1.test.tsx and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B104 B2 migration batch, 9 points, cli/src/ui/hooks: child-tool-owner-owner-4.test.tsx and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B105 B2 migration batch, 9 points, cli/src/ui/hooks: client-tool-owner-owner-1.test.tsx and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B106 B2 migration batch, 9 points, cli/src/ui/hooks: client-tool-owner-owner-4.test.tsx and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B107 B2 migration batch, 9 points, cli/src/ui/hooks: client-tool-owner-owner-7.test.tsx and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B108 B2 migration batch, 3 points, cli/src/ui/hooks: client-tool-owner.test.tsx (file list and dependencies in B2-batches.md)
-  - [x] T6.B109 B2 migration batch, 9 points, cli/src/ui/contexts: runtime-owner-bridge-owner-1.test.tsx and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B110 B2 migration batch, 9 points, cli/src/ui/contexts: runtime-owner-bridge.test.tsx and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B111 B2 migration batch, 9 points, cli/src/config: config.kimiModelBootstrap.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B112 B2 migration batch, 3 points, cli/src/config: runtimePlugins.wiring.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B113 B2 migration batch, 9 points, cli/src/config/__tests__: cliRuntimeImportCut.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B114 B2 migration batch, 6 points, cli/src/config/__tests__: profileOverridePrecedenceParity.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B115 B2 migration batch, 6 points, cli/src/integration-tests: provider-switching.integration.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B116 B2 migration batch, 6 points, cli/src/integration-tests: test-utils.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B117 B2 migration batch, 6 points, cli/src/integration-tests/__tests__: prepare-preflight.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B118 B2 migration batch, 3 points, cli/src/runtime/__tests__: runtime-model-ownership.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B119 B2 migration batch, 6 points, cli/src/services: workspace-mcp-consumers.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B120 B2 migration batch, 6 points, cli/src/session: interactive-owner-startup.test.tsx and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B121 B2 migration batch, 6 points, cli/src/session/__tests__: telemetry-cleanup.fixture.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B122 B2 migration batch, 6 points, cli/src/ui: cliUiRuntime.agentClientSource.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B123 B2 migration batch, 6 points, cli/src/ui/commands: clearCommand.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B124 B2 migration batch, 6 points, cli/src/ui/utils: autoPromptGenerator.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B125 B2 migration batch, 3 points, providers/src/auth: auth-owner-identity.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B126 B2 migration batch, 6 points, providers/src/composition: oauth-browser-owner.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B127 B2 migration batch, 3 points, providers/src/openai-responses: compression-session-headers.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B128 B2 migration batch, 10 points, providers/src/runtime: assembleCliProviderRuntime.identity.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B129 B2 migration batch, 10 points, providers/src/runtime: isolated-runtime-owner-scope.test.ts and 3 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B130 B2 migration batch, 7 points, providers/src/runtime: runtimeContextFactory.requiredConfig.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B131 B2 migration batch, 6 points, providers/src/runtime: runtimeRegistry.spec.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B132 B2 migration batch, 6 points, providers/src/runtime/__tests__: providerManagerAdoption.behavior.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B133 B2 migration batch, 8 points, zed-acp/src: zed-model-port.behavior.test.ts and 3 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B134 B2 migration batch, 9 points, zed-acp/src: zed-provider-owner.connection.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B135 B2 migration batch, 9 points, agents/src/api/__tests__: generate-detached-lifetime.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B136 B2 migration batch, 10 points, agents/src/api/__tests__: generate-options.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B137 B2 migration batch, 6 points, agents/src/api/__tests__: recording-remaining-hooks.behavior.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B138 B2 migration batch, 9 points, cli/src: configured-provider-predicate.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B139 B2 migration batch, 9 points, cli/src: nonInteractiveCli.slashCommandsAndThinking-owner-3.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B140 B2 migration batch, 7 points, cli/src/ui/hooks/agentStream/__tests__: streamRuntimeTestHelper.isolation.test.ts and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B141 B2 migration batch, 10 points, cli/src/ui/hooks: app-input-producer.behavior.test.tsx and 7 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B142 B2 migration batch, 10 points, cli/src/ui/hooks: provider-registration-owner.behavior.test.tsx and 4 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B143 B2 migration batch, 6 points, cli/src/ui/hooks: useCoreEventHandlers.owner.test.ts and 3 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B144 B2 migration batch, 9 points, cli/src/integration-tests: base-url-behavior.integration.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B145 B2 migration batch, 7 points, cli/src/integration-tests: model-params-isolation.integration.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B146 B2 migration batch, 3 points, cli/src/runtime/__tests__: runtimeIsolation.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B147 B2 migration batch, 2 points, cli/src/ui: recording-owner-app-mount.test.tsx and 1 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B148 B2 migration batch, 10 points, cli/src/ui/commands: chatOwnerCommand.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B149 B2 migration batch, 9 points, cli/src/ui/commands: compress-command-owner.behavior.test.ts and 4 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B150 B2 migration batch, 5 points, cli/src/ui/commands: session-utility-owner.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B151 B2 migration batch, 6 points, cli/src/ui/commands/__tests__: continueCommand.spec.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B152 B2 migration batch, 6 points, cli/src/ui/commands/test: subagentCommand.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B153 B2 migration batch, 8 points, cli/src/ui/components: DialogManager.test.tsx and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B154 B2 migration batch, 1 points, cli/src/ui/containers/AppContainer/hooks: session-initialization-owner.behavior.test.tsx (file list and dependencies in B2-batches.md)
-  - [x] T6.B155 B2 migration batch, 7 points, cli/src/ui/utils: auto-prompt-lifetime.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
-  - [x] T6.B156 B2 migration batch, 6 points, cli/src/utils: terminalTheme.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B157 B2 migration batch, 3 points, zed-acp/src: zedIntegration.sessionInfo.test.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B158 B2 migration batch, 1 points, agents/src/api/__tests__: turn-revision-capture.fixture.ts (file list and dependencies in B2-batches.md)
-  - [x] T6.B159 B2 migration batch, 9 points, rule 6 (cross-directory by rule): session-client-child-owner.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
+  - [x] T6.B01 B2 migration batch, 7 points, agents/src/api/__tests__: AgentRuntimeState.configDispose.test.ts (batch details omitted from retained plan)
+  - [x] T6.B02 B2 migration batch, 10 points, agents/src/api/__tests__: activation-bootstrap-rollback.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B03 B2 migration batch, 10 points, agents/src/api/__tests__: activation-preflight-cleanup-failure.behavior.test.ts and 3 more (batch details omitted from retained plan)
+  - [x] T6.B04 B2 migration batch, 10 points, agents/src/api/__tests__: activationPreflightState-owner-12.behavior.test.ts and 7 more (batch details omitted from retained plan)
+  - [x] T6.B05 B2 migration batch, 9 points, agents/src/api/__tests__: activationPreflightState-owner-3.behavior.test.ts and 6 more (batch details omitted from retained plan)
+  - [x] T6.B06 B2 migration batch, 6 points, agents/src/api/__tests__: activationPreflightState.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B07 B2 migration batch, 9 points, agents/src/api/__tests__: adoption-publication-barrier.behavior.test.ts and 3 more (batch details omitted from retained plan)
+  - [x] T6.B08 B2 migration batch, 9 points, agents/src/api/__tests__: agent.sequenceModel.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B09 B2 migration batch, 9 points, agents/src/api/__tests__: agentAdmission.owner.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B10 B2 migration batch, 9 points, agents/src/api/__tests__: agentUnconfigured.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B11 B2 migration batch, 6 points, agents/src/api/__tests__: async-child-background-isolation.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B12 B2 migration batch, 10 points, agents/src/api/__tests__: auxiliary-generation-lifetime.behavior.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B13 B2 migration batch, 10 points, agents/src/api/__tests__: cli-turn-parity-owner-1.spec.ts and 3 more (batch details omitted from retained plan)
+  - [x] T6.B14 B2 migration batch, 10 points, agents/src/api/__tests__: cli-turn-parity.spec.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B15 B2 migration batch, 6 points, agents/src/api/__tests__: config-provider-ownership-owner-1.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B16 B2 migration batch, 6 points, agents/src/api/__tests__: config-provider-ownership-owner-2.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B17 B2 migration batch, 6 points, agents/src/api/__tests__: config-provider-ownership-owner-3.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B18 B2 migration batch, 6 points, agents/src/api/__tests__: config-provider-ownership.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B19 B2 migration batch, 9 points, agents/src/api/__tests__: config.folderTrustLive.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B20 B2 migration batch, 7 points, agents/src/api/__tests__: createAgent.selfAssembly.behavior.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B21 B2 migration batch, 9 points, agents/src/api/__tests__: foreground-task-streaming-preservation.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B22 B2 migration batch, 10 points, agents/src/api/__tests__: fromConfig-acquisition.behavior.test.ts and 4 more (batch details omitted from retained plan)
+  - [x] T6.B23 B2 migration batch, 8 points, agents/src/api/__tests__: fromConfig-admission-owner-5.behavior.test.ts and 5 more (batch details omitted from retained plan)
+  - [x] T6.B24 B2 migration batch, 6 points, agents/src/api/__tests__: fromConfig-bootstrap-failure.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B25 B2 migration batch, 9 points, agents/src/api/__tests__: fromConfig-identity.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B26 B2 migration batch, 10 points, agents/src/api/__tests__: fromConfig-properties.behavior.test.ts and 3 more (batch details omitted from retained plan)
+  - [x] T6.B27 B2 migration batch, 8 points, agents/src/api/__tests__: fromConfigSkills.behavior.test.ts and 5 more (batch details omitted from retained plan)
+  - [x] T6.B28 B2 migration batch, 6 points, agents/src/api/__tests__: host-github-broker-owner.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B29 B2 migration batch, 9 points, agents/src/api/__tests__: ide-client-independent.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B30 B2 migration batch, 9 points, agents/src/api/__tests__: loop-transaction-retirement.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B31 B2 migration batch, 9 points, agents/src/api/__tests__: mcp-agent-operations.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B32 B2 migration batch, 9 points, agents/src/api/__tests__: mcp-approval-scheduler-isolation.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B33 B2 migration batch, 9 points, agents/src/api/__tests__: mcp-construction-owner.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B34 B2 migration batch, 7 points, agents/src/api/__tests__: model-notification-root-isolation.behavior.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B35 B2 migration batch, 6 points, agents/src/api/__tests__: post-config-preflight.test.ts (batch details omitted from retained plan)
+  - [x] T6.B36 B2 migration batch, 9 points, agents/src/api/__tests__: preflight-release.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B37 B2 migration batch, 9 points, agents/src/api/__tests__: preflightAgentActivation.behavior.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B38 B2 migration batch, 9 points, agents/src/api/__tests__: profile-authclear-owner.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B39 B2 migration batch, 6 points, agents/src/api/__tests__: profile-chat-preparation.test.ts (batch details omitted from retained plan)
+  - [x] T6.B40 B2 migration batch, 9 points, agents/src/api/__tests__: profile-commit-publication.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B41 B2 migration batch, 6 points, agents/src/api/__tests__: profile-lb-authkey-owner.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B42 B2 migration batch, 7 points, agents/src/api/__tests__: profile-lb-detection-owner.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B43 B2 migration batch, 9 points, agents/src/api/__tests__: profile-postcommit-lifetime.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B44 B2 migration batch, 6 points, agents/src/api/__tests__: profile-preparation-cancellation.test.ts (batch details omitted from retained plan)
+  - [x] T6.B45 B2 migration batch, 10 points, agents/src/api/__tests__: profile-workflow-owner.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B46 B2 migration batch, 9 points, agents/src/api/__tests__: profileApplication.owner-owner-3.behavior.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B47 B2 migration batch, 9 points, agents/src/api/__tests__: profileApplication.owner-owner-6.behavior.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B48 B2 migration batch, 9 points, agents/src/api/__tests__: provider-activation-adoption.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B49 B2 migration batch, 8 points, agents/src/api/__tests__: provider-owner-generation.behavior.test.ts and 3 more (batch details omitted from retained plan)
+  - [x] T6.B50 B2 migration batch, 10 points, agents/src/api/__tests__: provider-switch-transaction.test.ts and 7 more (batch details omitted from retained plan)
+  - [x] T6.B51 B2 migration batch, 10 points, agents/src/api/__tests__: providerActivation-owner-7.behavior.test.ts and 3 more (batch details omitted from retained plan)
+  - [x] T6.B52 B2 migration batch, 6 points, agents/src/api/__tests__: rebuild-loop-ownership.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B53 B2 migration batch, 6 points, agents/src/api/__tests__: recording-compression-origin.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B54 B2 migration batch, 9 points, agents/src/api/__tests__: recording-facade-chat-channel.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B55 B2 migration batch, 6 points, agents/src/api/__tests__: recording-nonstream-413-hooks.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B56 B2 migration batch, 6 points, agents/src/api/__tests__: recording-owner-lifetime.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B57 B2 migration batch, 9 points, agents/src/api/__tests__: recording-shared-history-origin.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B58 B2 migration batch, 6 points, agents/src/api/__tests__: replaceableClient.smoke.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B59 B2 migration batch, 10 points, agents/src/api/__tests__: runtime-owner-kimi-http.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B60 B2 migration batch, 6 points, agents/src/api/__tests__: sameLabel.toolIsolation.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B61 B2 migration batch, 9 points, agents/src/api/__tests__: session-background-clear.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B62 B2 migration batch, 6 points, agents/src/api/__tests__: session-client-borrowed-preflight-engine.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B63 B2 migration batch, 9 points, agents/src/api/__tests__: session-client-owner-engine.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B64 B2 migration batch, 6 points, agents/src/api/__tests__: session-client-peer-engine.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B65 B2 migration batch, 9 points, agents/src/api/__tests__: session-client-replacement-join.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B66 B2 migration batch, 9 points, agents/src/api/__tests__: session-execution-resolution.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B67 B2 migration batch, 7 points, agents/src/api/__tests__: session-media-owner-closure.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B68 B2 migration batch, 9 points, agents/src/api/__tests__: session-owner-restore-checkpoint.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B69 B2 migration batch, 9 points, agents/src/api/__tests__: session-settings-owner.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B70 B2 migration batch, 9 points, agents/src/api/__tests__: session-tool-catalog-owner.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B71 B2 migration batch, 9 points, agents/src/api/__tests__: session-tool-owner-risk.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B72 B2 migration batch, 9 points, agents/src/api/__tests__: session.clearConversation.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B73 B2 migration batch, 10 points, agents/src/api/__tests__: shell-owner-isolation.behavior.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B74 B2 migration batch, 9 points, agents/src/api/__tests__: skillReloadDeclaration-owner-2.behavior.test.ts and 4 more (batch details omitted from retained plan)
+  - [x] T6.B75 B2 migration batch, 10 points, agents/src/api/__tests__: skillReloadDeclaration-owner-7.behavior.test.ts and 3 more (batch details omitted from retained plan)
+  - [x] T6.B76 B2 migration batch, 9 points, agents/src/api/__tests__: staleClient.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B77 B2 migration batch, 9 points, agents/src/api/__tests__: task-child-whitelist-preservation.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B78 B2 migration batch, 9 points, agents/src/api/__tests__: tasksControl.behavior.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B79 B2 migration batch, 10 points, agents/src/api/__tests__: two-agent-identity.driver.ts and 5 more (batch details omitted from retained plan)
+  - [x] T6.B80 B2 migration batch, 10 points, agents/src/api/__tests__: workspace-catalog-owner-owner-6.behavior.test.ts and 3 more (batch details omitted from retained plan)
+  - [x] T6.B81 B2 migration batch, 10 points, agents/src/api/__tests__: workspace-definition-lifetime.behavior.test.ts and 3 more (batch details omitted from retained plan)
+  - [x] T6.B82 B2 migration batch, 9 points, agents/src/api/__tests__: workspace-filesystem-lifetime.behavior.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B83 B2 migration batch, 10 points, agents/src/api/__tests__: workspace-filesystem-skill-publication.behavior.test.ts and 5 more (batch details omitted from retained plan)
+  - [x] T6.B84 B2 migration batch, 8 points, agents/src/api/__tests__: workspace-memory-lifetime-owner-5.behavior.test.ts and 5 more (batch details omitted from retained plan)
+  - [x] T6.B85 B2 migration batch, 9 points, agents/src/api/__tests__: workspace-registrar-reload-owner-owner-1.behavior.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B86 B2 migration batch, 7 points, agents/src/api/__tests__/helpers: async-child-disposal-join-fixture.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B87 B2 migration batch, 6 points, agents/src/api/__tests__/helpers: disposalProbe.ts (batch details omitted from retained plan)
+  - [x] T6.B88 B2 migration batch, 6 points, agents/src/api/__tests__/helpers: generation-owner-fixture.ts (batch details omitted from retained plan)
+  - [x] T6.B89 B2 migration batch, 10 points, agents/src/api/__tests__/helpers: recording-owner-lifetime-fixture.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B90 B2 migration batch, 1 points, agents/src/api/__tests__/helpers: skills-fixture-declarations.ts (batch details omitted from retained plan)
+  - [x] T6.B91 B2 migration batch, 3 points, agents/src/api: profile-candidate-operations.test.ts (batch details omitted from retained plan)
+  - [x] T6.B92 B2 migration batch, 3 points, agents/src/core/__tests__: child-task-tool-lifetime.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B93 B2 migration batch, 9 points, cli/src/__tests__: command-owner-fixture.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B94 B2 migration batch, 10 points, cli/src/__tests__: scripted-headless-owner.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B95 B2 migration batch, 9 points, cli/src/__tests__: stream-media-fixture.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B96 B2 migration batch, 9 points, cli/src: activation-bootstrap-handoff.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B97 B2 migration batch, 9 points, cli/src: cli.provider-init.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B98 B2 migration batch, 6 points, cli/src: cliBootstrap.providerActivation.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B99 B2 migration batch, 6 points, cli/src: nonInteractiveUnconfiguredProvider.test.ts (batch details omitted from retained plan)
+  - [x] T6.B100 B2 migration batch, 9 points, cli/src: session-client-bootstrap.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B101 B2 migration batch, 6 points, cli/src: workspace-extension-lifetime-owner-2.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B102 B2 migration batch, 9 points, cli/src/ui/hooks/agentStream/__tests__: useSubmitQuery.background-clear.test.tsx and 1 more (batch details omitted from retained plan)
+  - [x] T6.B103 B2 migration batch, 9 points, cli/src/ui/hooks: child-tool-owner-owner-1.test.tsx and 2 more (batch details omitted from retained plan)
+  - [x] T6.B104 B2 migration batch, 9 points, cli/src/ui/hooks: child-tool-owner-owner-4.test.tsx and 2 more (batch details omitted from retained plan)
+  - [x] T6.B105 B2 migration batch, 9 points, cli/src/ui/hooks: client-tool-owner-owner-1.test.tsx and 2 more (batch details omitted from retained plan)
+  - [x] T6.B106 B2 migration batch, 9 points, cli/src/ui/hooks: client-tool-owner-owner-4.test.tsx and 2 more (batch details omitted from retained plan)
+  - [x] T6.B107 B2 migration batch, 9 points, cli/src/ui/hooks: client-tool-owner-owner-7.test.tsx and 2 more (batch details omitted from retained plan)
+  - [x] T6.B108 B2 migration batch, 3 points, cli/src/ui/hooks: client-tool-owner.test.tsx (batch details omitted from retained plan)
+  - [x] T6.B109 B2 migration batch, 9 points, cli/src/ui/contexts: runtime-owner-bridge-owner-1.test.tsx and 2 more (batch details omitted from retained plan)
+  - [x] T6.B110 B2 migration batch, 9 points, cli/src/ui/contexts: runtime-owner-bridge.test.tsx and 2 more (batch details omitted from retained plan)
+  - [x] T6.B111 B2 migration batch, 9 points, cli/src/config: config.kimiModelBootstrap.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B112 B2 migration batch, 3 points, cli/src/config: runtimePlugins.wiring.test.ts (batch details omitted from retained plan)
+  - [x] T6.B113 B2 migration batch, 9 points, cli/src/config/__tests__: cliRuntimeImportCut.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B114 B2 migration batch, 6 points, cli/src/config/__tests__: profileOverridePrecedenceParity.test.ts (batch details omitted from retained plan)
+  - [x] T6.B115 B2 migration batch, 6 points, cli/src/integration-tests: provider-switching.integration.test.ts (batch details omitted from retained plan)
+  - [x] T6.B116 B2 migration batch, 6 points, cli/src/integration-tests: test-utils.ts (batch details omitted from retained plan)
+  - [x] T6.B117 B2 migration batch, 6 points, cli/src/integration-tests/__tests__: prepare-preflight.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B118 B2 migration batch, 3 points, cli/src/runtime/__tests__: runtime-model-ownership.test.ts (batch details omitted from retained plan)
+  - [x] T6.B119 B2 migration batch, 6 points, cli/src/services: workspace-mcp-consumers.test.ts (batch details omitted from retained plan)
+  - [x] T6.B120 B2 migration batch, 6 points, cli/src/session: interactive-owner-startup.test.tsx and 1 more (batch details omitted from retained plan)
+  - [x] T6.B121 B2 migration batch, 6 points, cli/src/session/__tests__: telemetry-cleanup.fixture.ts (batch details omitted from retained plan)
+  - [x] T6.B122 B2 migration batch, 6 points, cli/src/ui: cliUiRuntime.agentClientSource.test.ts (batch details omitted from retained plan)
+  - [x] T6.B123 B2 migration batch, 6 points, cli/src/ui/commands: clearCommand.test.ts (batch details omitted from retained plan)
+  - [x] T6.B124 B2 migration batch, 6 points, cli/src/ui/utils: autoPromptGenerator.test.ts (batch details omitted from retained plan)
+  - [x] T6.B125 B2 migration batch, 3 points, providers/src/auth: auth-owner-identity.test.ts (batch details omitted from retained plan)
+  - [x] T6.B126 B2 migration batch, 6 points, providers/src/composition: oauth-browser-owner.test.ts (batch details omitted from retained plan)
+  - [x] T6.B127 B2 migration batch, 3 points, providers/src/openai-responses: compression-session-headers.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B128 B2 migration batch, 10 points, providers/src/runtime: assembleCliProviderRuntime.identity.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B129 B2 migration batch, 10 points, providers/src/runtime: isolated-runtime-owner-scope.test.ts and 3 more (batch details omitted from retained plan)
+  - [x] T6.B130 B2 migration batch, 7 points, providers/src/runtime: runtimeContextFactory.requiredConfig.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B131 B2 migration batch, 6 points, providers/src/runtime: runtimeRegistry.spec.ts (batch details omitted from retained plan)
+  - [x] T6.B132 B2 migration batch, 6 points, providers/src/runtime/__tests__: providerManagerAdoption.behavior.test.ts (batch details omitted from retained plan)
+  - [x] T6.B133 B2 migration batch, 8 points, zed-acp/src: zed-model-port.behavior.test.ts and 3 more (batch details omitted from retained plan)
+  - [x] T6.B134 B2 migration batch, 9 points, zed-acp/src: zed-provider-owner.connection.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B135 B2 migration batch, 9 points, agents/src/api/__tests__: generate-detached-lifetime.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B136 B2 migration batch, 10 points, agents/src/api/__tests__: generate-options.behavior.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B137 B2 migration batch, 6 points, agents/src/api/__tests__: recording-remaining-hooks.behavior.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B138 B2 migration batch, 9 points, cli/src: configured-provider-predicate.behavior.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B139 B2 migration batch, 9 points, cli/src: nonInteractiveCli.slashCommandsAndThinking-owner-3.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B140 B2 migration batch, 7 points, cli/src/ui/hooks/agentStream/__tests__: streamRuntimeTestHelper.isolation.test.ts and 1 more (batch details omitted from retained plan)
+  - [x] T6.B141 B2 migration batch, 10 points, cli/src/ui/hooks: app-input-producer.behavior.test.tsx and 7 more (batch details omitted from retained plan)
+  - [x] T6.B142 B2 migration batch, 10 points, cli/src/ui/hooks: provider-registration-owner.behavior.test.tsx and 4 more (batch details omitted from retained plan)
+  - [x] T6.B143 B2 migration batch, 6 points, cli/src/ui/hooks: useCoreEventHandlers.owner.test.ts and 3 more (batch details omitted from retained plan)
+  - [x] T6.B144 B2 migration batch, 9 points, cli/src/integration-tests: base-url-behavior.integration.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B145 B2 migration batch, 7 points, cli/src/integration-tests: model-params-isolation.integration.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B146 B2 migration batch, 3 points, cli/src/runtime/__tests__: runtimeIsolation.test.ts (batch details omitted from retained plan)
+  - [x] T6.B147 B2 migration batch, 2 points, cli/src/ui: recording-owner-app-mount.test.tsx and 1 more (batch details omitted from retained plan)
+  - [x] T6.B148 B2 migration batch, 10 points, cli/src/ui/commands: chatOwnerCommand.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B149 B2 migration batch, 9 points, cli/src/ui/commands: compress-command-owner.behavior.test.ts and 4 more (batch details omitted from retained plan)
+  - [x] T6.B150 B2 migration batch, 5 points, cli/src/ui/commands: session-utility-owner.behavior.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B151 B2 migration batch, 6 points, cli/src/ui/commands/__tests__: continueCommand.spec.ts (batch details omitted from retained plan)
+  - [x] T6.B152 B2 migration batch, 6 points, cli/src/ui/commands/test: subagentCommand.test.ts (batch details omitted from retained plan)
+  - [x] T6.B153 B2 migration batch, 8 points, cli/src/ui/components: DialogManager.test.tsx and 2 more (batch details omitted from retained plan)
+  - [x] T6.B154 B2 migration batch, 1 points, cli/src/ui/containers/AppContainer/hooks: session-initialization-owner.behavior.test.tsx (batch details omitted from retained plan)
+  - [x] T6.B155 B2 migration batch, 7 points, cli/src/ui/utils: auto-prompt-lifetime.behavior.test.ts and 2 more (batch details omitted from retained plan)
+  - [x] T6.B156 B2 migration batch, 6 points, cli/src/utils: terminalTheme.test.ts (batch details omitted from retained plan)
+  - [x] T6.B157 B2 migration batch, 3 points, zed-acp/src: zedIntegration.sessionInfo.test.ts (batch details omitted from retained plan)
+  - [x] T6.B158 B2 migration batch, 1 points, agents/src/api/__tests__: turn-revision-capture.fixture.ts (batch details omitted from retained plan)
+  - [x] T6.B159 B2 migration batch, 9 points, rule 6 (cross-directory by rule): session-client-child-owner.behavior.test.ts and 2 more (batch details omitted from retained plan)
   - [x] T6.B05b B2 migration batch, follow-up of T6.B05 (owner files deferred by T6.B05) (orchestrator-added)
   - [x] T6.B19b B2 migration batch, follow-up of T6.B19 (unconfigured-provider readiness) (orchestrator-added)
   - [x] T6.B50b B2 migration batch, follow-up of T6.B50 (provider-switch-transaction, providerActivation-owner-4) (orchestrator-added)

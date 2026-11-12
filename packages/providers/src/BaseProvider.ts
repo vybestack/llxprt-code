@@ -30,13 +30,22 @@ import {
 import { type IModel } from './IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { firstTruthyString } from './utils/falsyFallback.js';
+import {
+  captureProviderDefaults,
+  extractModelParams,
+  isFalsyLikeValue,
+  type ProviderSettings,
+} from './utils/provider-settings.js';
+export type { ProviderSettings } from './utils/provider-settings.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
   CredentialResolutionError,
+  type CredentialResolutionErrorKind,
   type OAuthManager,
   type IProviderKeyStorage,
 } from '@vybestack/llxprt-code-auth';
+import { createCredentialResolutionError } from './utils/credentialResolutionError.js';
 import type { AuthPrecedenceResolver } from '@vybestack/llxprt-code-auth/precedence.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IProviderConfig } from './types/IProviderConfig.js';
@@ -54,10 +63,15 @@ import {
 import { getProviderCustomHeaders } from './customHeaders.js';
 import type {
   ProviderTelemetryContext,
+  RequestCredential,
   ResolvedAuthToken,
   UserMemoryInput,
 } from './types/providerRuntime.js';
-import { resolveRuntimeAuthToken } from './utils/authToken.js';
+import {
+  resolveRuntimeAuthCredential,
+  resolveRuntimeAuthToken,
+  toRequestCredential,
+} from './utils/authToken.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 
 export interface BaseProviderConfig {
@@ -399,13 +413,23 @@ export abstract class BaseProvider implements IProvider {
   }
 
   protected async getAuthTokenForPrompt(): Promise<string> {
+    return (await this.getRequestCredentialForPrompt()).token;
+  }
+
+  /**
+   * Resolve the credential for one prompt send as a single authorization
+   * result: the bearer and, when the credential source knows it, the account
+   * identity of that same credential. Providers that need an identity beside
+   * the bearer (Codex) use this rather than reading the store again.
+   */
+  protected async getRequestCredentialForPrompt(): Promise<RequestCredential> {
     const activeOptions = this.activeCallContext.getStore();
     if (activeOptions) {
-      const runtimeToken = await resolveRuntimeAuthToken(
+      const runtimeCredential = await resolveRuntimeAuthCredential(
         activeOptions.resolved.authToken,
       );
-      if (runtimeToken) {
-        return runtimeToken;
+      if (runtimeCredential?.token) {
+        return runtimeCredential;
       }
     }
 
@@ -416,14 +440,49 @@ export abstract class BaseProvider implements IProvider {
     const effectiveBaseURL =
       activeOptions?.resolved.baseURL ??
       this.computeBaseURL(this.owner.capturePolicy());
-    const token =
-      (await this.owner
-        .readAuthentication({
-          includeOAuth: this.isOAuthEligible(effectiveBaseURL),
-        })
-        .then((result) => result.token)) ?? '';
+    const result = await this.owner.readAuthentication({
+      includeOAuth: this.isOAuthEligible(effectiveBaseURL),
+    });
+    return result.token === null ? { token: '' } : toRequestCredential(result);
+  }
 
-    return token;
+  /**
+   * Builds a credential failure for the active call (falling back to minimal
+   * diagnostics outside one), for providers that validate a resolved
+   * credential after resolution.
+   */
+  protected createRequestCredentialFailure(
+    kind: CredentialResolutionErrorKind,
+    remediation: string,
+  ): CredentialResolutionError {
+    const active = this.activeCallContext.getStore();
+    if (active !== undefined) {
+      return createCredentialResolutionError(active, this.name, {
+        kind,
+        remediation,
+      });
+    }
+    return new CredentialResolutionError(
+      kind,
+      {
+        provider: this.name,
+        profile: 'no-profile',
+        runtimeId: 'no-runtime',
+        attemptedMechanisms: 'unknown',
+        proxyMode: Boolean(process.env.LLXPRT_CREDENTIAL_SOCKET),
+        proxyContacted: 'unknown',
+      },
+      { remediation },
+    );
+  }
+
+  /** Profile of the active call, for reads that must match its credential. */
+  protected readActiveProfileId(): string | undefined {
+    const active = this.activeCallContext.getStore();
+    const explicit = active?.metadata['profileId'];
+    if (typeof explicit === 'string' && explicit !== '') return explicit;
+    const current = active?.invocation.getEphemeral('currentProfile');
+    return typeof current === 'string' && current !== '' ? current : undefined;
   }
 
   /**
@@ -872,6 +931,11 @@ export abstract class BaseProvider implements IProvider {
           if (live.token === null) throw live.failure;
           return live.token;
         },
+        provideCredential: async () => {
+          const live = await readAuthentication(authInput);
+          if (live.token === null) throw live.failure;
+          return toRequestCredential(live);
+        },
       },
     };
   }
@@ -889,23 +953,11 @@ export abstract class BaseProvider implements IProvider {
   }
 
   private captureProviderDefaults(): Record<string, unknown> {
-    const config = this.providerConfig;
-    return {
-      defaultModel: config?.defaultModel ?? this.getDefaultModel(),
-      baseUrl: config?.baseUrl ?? this.baseProviderConfig.baseURL,
-      temperature: config?.temperature,
-      maxTokens: config?.maxTokens,
-      streaming: config?.streaming,
-      timeout: config?.timeout,
-      openaiResponsesEnabled: config?.openaiResponsesEnabled,
-      providerSpecific: config?.providerSpecific,
-      ephemerals: config?.readConnectionPolicy?.(),
-      enableTextToolCallParsing: config?.enableTextToolCallParsing,
-      textToolCallModels: config?.textToolCallModels,
-      providerToolFormatOverrides: config?.providerToolFormatOverrides,
-      organizationId: config?.organizationId,
-      projectId: config?.projectId,
-    };
+    return captureProviderDefaults(
+      this.providerConfig,
+      this.baseProviderConfig.baseURL,
+      () => this.getDefaultModel(),
+    );
   }
 
   /**
@@ -1048,34 +1100,7 @@ export abstract class BaseProvider implements IProvider {
     try {
       const settings = await this.owner.readProviderData();
 
-      // Extract model parameters from settings, excluding standard fields
-      const {
-        enabled: _enabled,
-        'auth-key': _authKey,
-        'auth-keyfile': _authKeyfile,
-        'base-url': _baseUrl,
-        model: _model,
-        max_tokens,
-        temperature,
-        // Defensive: strip legacy sensitive aliases that should never reach
-        // the model params pass-through, even if present in imported/malformed
-        // provider settings data.
-        apiKey: _legacyApiKey,
-        apiKeyfile: _legacyApiKeyfile,
-        'api-key': _legacyApiKeyDash,
-        'api-keyfile': _legacyApiKeyfileDash,
-        ...additionalSettings
-      } = settings;
-
-      // Include registered model parameters when present
-      const params: Record<string, unknown> = {};
-      if (temperature !== undefined) params.temperature = temperature;
-      if (max_tokens !== undefined) params.max_tokens = max_tokens;
-
-      return Object.keys(params).length > 0 ||
-        Object.keys(additionalSettings).length > 0
-        ? { ...params, ...additionalSettings }
-        : undefined;
+      return extractModelParams(settings);
     } catch (error) {
       if (process.env.DEBUG) {
         debugLogger.error(
@@ -1122,29 +1147,4 @@ export abstract class BaseProvider implements IProvider {
     }
     return getProviderCustomHeaders(this.providerConfig);
   }
-}
-
-// Import ProviderSettings type to avoid circular dependency
-/**
- * Helper function to check if a value is falsy-like.
- * Used for determining when to use fallback values for provider settings.
- */
-function isFalsyLikeValue(value: unknown): boolean {
-  // Check undefined/null first
-  if (value === undefined || value === null) return true;
-  // Check false, empty string, or 0
-  if (value === false || value === '' || value === 0) return true;
-  // Check NaN for numbers
-  return typeof value === 'number' && Number.isNaN(value);
-}
-
-export interface ProviderSettings {
-  enabled: boolean;
-  'auth-key'?: string;
-  'auth-keyfile'?: string;
-  baseUrl?: string;
-  model?: string;
-  maxTokens?: number;
-  temperature?: number;
-  [key: string]: unknown;
 }

@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { acquireRootNetwork } from '../../root-network.js';
 import type {
   IOAuthSettingsProvider,
   TokenStore,
@@ -44,19 +45,23 @@ export function acquirePreferredProviderManager(
   authority: CredentialAuthority,
   release: AcquisitionRelease,
 ): ProviderManager {
-  return acquireRuntimeProviderManager(release, {
-    config,
-    settings,
-    settingsOwner,
-    files,
-    proxy: config.getProxy(),
-    authority,
-    context: createProviderRuntimeContext({
-      runtimeId,
-      runtimeKind: 'agent',
-      metadata: { source: 'cli-isolated-runtime-factory' },
-    }),
-  });
+  return acquireRuntimeProviderManager(
+    release,
+    {
+      config,
+      settings,
+      settingsOwner,
+      files,
+      proxy: config.getProxy(),
+      authority,
+      context: createProviderRuntimeContext({
+        runtimeId,
+        runtimeKind: 'agent',
+        metadata: { source: 'cli-isolated-runtime-factory' },
+      }),
+    },
+    acquireRootNetwork(release, config.getProxy()).fetch,
+  );
 }
 
 /** Completes a staged test acquisition with the selected token-store ownership. */

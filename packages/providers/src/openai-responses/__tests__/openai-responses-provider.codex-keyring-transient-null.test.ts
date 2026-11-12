@@ -35,8 +35,6 @@ import {
   type KeyringAdapter,
 } from '@vybestack/llxprt-code-storage';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
@@ -197,7 +195,11 @@ async function buildCodexHarness(
   });
   const tokenStore = new KeyringTokenStore({ secureStore: store, lockDir });
   const oauthManager = new OAuthManager(tokenStore);
-  registerStandardOAuthProviders(oauthManager, tokenStore);
+  registerStandardOAuthProviders(
+    oauthManager,
+    (input, init) => globalThis.fetch(input, init),
+    tokenStore,
+  );
   const browserFlow = oauthManager.getProvider('codex');
   if (browserFlow === undefined) {
     throw new Error('codex OAuth provider was not registered');
@@ -210,23 +212,12 @@ async function buildCodexHarness(
   const settings = new SettingsService();
 
   const send = async (): Promise<SentRequest> => {
-    const runtime = createProviderRuntimeContext({
-      settingsService: settings,
-      runtimeId: 'codex-keyring-3965',
-      config: createRuntimeConfigStub(settings),
-    });
-    const ephemerals = { retries: 1, retrywait: 1 };
     const options = createProviderCallOptions({
       providerName: provider.name,
       settings,
       config: createRuntimeConfigStub(settings),
-      runtime,
-      invocation: createRuntimeInvocationContext({
-        runtimeId: runtime.runtimeId,
-        runtimeMetadata: runtime.metadata,
-        providerName: provider.name,
-        ephemeralsSnapshot: ephemerals,
-      }),
+      runtimeId: 'codex-keyring-3965',
+      ephemerals: { retries: 1, retrywait: 1 },
       contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] }],
     });
     const callsBefore = fetchSpy.mock.calls.length;

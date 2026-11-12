@@ -254,7 +254,7 @@ export class SessionClientOwner {
   readonly closeImageAdmission = this.images.close.bind(this.images);
 
   readonly operations: Agent['sessionClient'] = {
-    fetch: (input, init) => this.clients.fetch(input, init),
+    fetch: (input, init) => this.clients.fetchWithLifetime(input, init),
     refreshAuth: (method) => this.clients.refreshAuth(method),
     publishTools: () => this.clients.publishTools(),
     runImageOperation: (input) => this.runImageOperation(input),

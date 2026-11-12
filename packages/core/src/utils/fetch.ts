@@ -9,22 +9,17 @@ import { URL } from 'node:url';
 import { createRequire } from 'node:module';
 import type * as Undici from 'undici';
 import { dispatchOwnedFetch } from './owned-fetch-request.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-auth/network-fetch.js';
+
+export type {
+  NetworkFetch,
+  NetworkFetchOptions,
+} from '@vybestack/llxprt-code-auth/network-fetch.js';
 
 const packageRequire = createRequire(
   createRequire(import.meta.url).resolve('undici/package.json'),
 );
 const { Agent, ProxyAgent }: typeof Undici = packageRequire('./');
-
-export interface NetworkFetchOptions {
-  /** Deadline for response headers on this request, replacing the dispatcher default. */
-  readonly headersTimeoutMs?: number;
-}
-
-export type NetworkFetch = (
-  input: RequestInfo | URL,
-  init?: RequestInit,
-  options?: NetworkFetchOptions,
-) => Promise<Response>;
 
 const PRIVATE_IP_RANGES = [
   /^10\./,

@@ -19,6 +19,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import type { OAuthToken, TokenStore } from './types.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';
+import { rethrowIfStoreOutage } from './token-store-outage.js';
 
 const logger = new DebugLogger('llxprt:oauth:token');
 
@@ -227,8 +228,8 @@ export async function executeTokenRefresh(
 // --------------------------------------------------------------------------
 
 /**
- * Try to refresh an expired disk token. Returns access_token on success,
- * or undefined when refresh is not possible or fails.
+ * Try to refresh an expired disk token. Returns the refreshed (merged) token on
+ * success, or undefined when refresh is not possible or fails.
  */
 export async function tryRefreshDiskToken(
   providerName: string,
@@ -236,11 +237,14 @@ export async function tryRefreshDiskToken(
   diskToken: OAuthToken,
   tokenStore: TokenStore,
   providerRegistry: ProviderRegistry,
-): Promise<string | undefined> {
+  signal?: AbortSignal,
+): Promise<OAuthToken | undefined> {
   const provider = providerRegistry.getProvider(providerName);
   if (!provider) return undefined;
   try {
-    const refreshedToken = await provider.refreshToken(diskToken);
+    signal?.throwIfAborted();
+    const refreshedToken = await provider.refreshToken(diskToken, signal);
+    signal?.throwIfAborted();
     if (refreshedToken) {
       const mergedToken = mergeRefreshedToken(
         diskToken as OAuthTokenWithExtras,
@@ -251,9 +255,10 @@ export async function tryRefreshDiskToken(
         () =>
           `[issue1317] Refreshed expired disk token for ${providerName}, skipping OAuth`,
       );
-      return mergedToken.access_token;
+      return mergedToken;
     }
   } catch (refreshError) {
+    if (signal?.aborted === true) throw refreshError;
     logger.debug(
       () =>
         `[issue1317] Disk token refresh failed for ${providerName}: ${refreshError instanceof Error ? refreshError.message : refreshError}`,
@@ -264,7 +269,7 @@ export async function tryRefreshDiskToken(
 
 /**
  * Perform disk check while holding the refresh lock.
- * Returns access_token if a usable token exists (valid or refreshable),
+ * Returns the token if a usable one exists (valid or refreshable),
  * or undefined to continue to full auth.
  */
 export async function performDiskCheckUnderLock(
@@ -272,8 +277,11 @@ export async function performDiskCheckUnderLock(
   bucketToCheck: string | undefined,
   tokenStore: TokenStore,
   providerRegistry: ProviderRegistry,
-): Promise<string | undefined> {
+  signal?: AbortSignal,
+): Promise<OAuthToken | undefined> {
+  signal?.throwIfAborted();
   const diskToken = await tokenStore.getToken(providerName, bucketToCheck);
+  signal?.throwIfAborted();
   const thirtySecondsFromNow = Math.floor(Date.now() / 1000) + 30;
 
   if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
@@ -281,7 +289,7 @@ export async function performDiskCheckUnderLock(
       () =>
         `[issue1262/1195] Found valid token on disk for ${providerName}, skipping OAuth`,
     );
-    return diskToken.access_token;
+    return diskToken;
   }
 
   // @fix issue1317: expired disk token with refresh_token — try refresh
@@ -296,12 +304,67 @@ export async function performDiskCheckUnderLock(
       diskToken,
       tokenStore,
       providerRegistry,
+      signal,
     );
     if (result !== undefined) {
       return result;
     }
   }
 
+  return undefined;
+}
+export async function performDiskCheck(
+  providerName: string,
+  bucketToCheck: string | undefined,
+  tokenStore: TokenStore,
+  providerRegistry: ProviderRegistry,
+  renewals: ProactiveRenewalManager,
+  releases: RefreshLockReleases,
+  signal?: AbortSignal,
+): Promise<OAuthToken | null | undefined> {
+  signal?.throwIfAborted();
+  const lockAcquired = await tokenStore.acquireRefreshLock(providerName, {
+    waitMs: 5000,
+    bucket: bucketToCheck,
+  });
+
+  if (lockAcquired) {
+    try {
+      return await performDiskCheckUnderLock(
+        providerName,
+        bucketToCheck,
+        tokenStore,
+        providerRegistry,
+        signal,
+      );
+    } finally {
+      await releases.release(providerName, bucketToCheck);
+    }
+  }
+
+  let diskToken: OAuthToken | null = null;
+  try {
+    signal?.throwIfAborted();
+    diskToken = await tokenStore.getToken(providerName, bucketToCheck);
+    signal?.throwIfAborted();
+  } catch (error) {
+    if (signal?.aborted === true) throw error;
+    rethrowIfStoreOutage(error);
+    logger.debug(
+      `[issue1262/1195] Disk fallback read failed for ${providerName}:`,
+      error,
+    );
+    return undefined;
+  }
+  const thirtySecondsFromNow = Math.floor(Date.now() / 1000) + 30;
+  if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
+    logger.debug(
+      () =>
+        `[issue1262/1195] Found valid token on disk after lock timeout for ${providerName}`,
+    );
+    renewals.scheduleProactiveRenewal(providerName, bucketToCheck, diskToken);
+    return diskToken;
+  }
   return undefined;
 }
 

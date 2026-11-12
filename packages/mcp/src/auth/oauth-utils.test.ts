@@ -91,6 +91,7 @@ describe('OAuthUtils', () => {
       });
 
       const result = await OAuthUtils.fetchProtectedResourceMetadata(
+        (input, init) => globalThis.fetch(input, init),
         'https://example.com/.well-known/oauth-protected-resource',
       );
 
@@ -103,6 +104,7 @@ describe('OAuthUtils', () => {
       });
 
       const result = await OAuthUtils.fetchProtectedResourceMetadata(
+        (input, init) => globalThis.fetch(input, init),
         'https://example.com/.well-known/oauth-protected-resource',
       );
 
@@ -125,6 +127,7 @@ describe('OAuthUtils', () => {
       });
 
       const result = await OAuthUtils.fetchAuthorizationServerMetadata(
+        (input, init) => globalThis.fetch(input, init),
         'https://auth.example.com/.well-known/oauth-authorization-server',
       );
 
@@ -137,6 +140,7 @@ describe('OAuthUtils', () => {
       });
 
       const result = await OAuthUtils.fetchAuthorizationServerMetadata(
+        (input, init) => globalThis.fetch(input, init),
         'https://auth.example.com/.well-known/oauth-authorization-server',
       );
 
@@ -163,6 +167,7 @@ describe('OAuthUtils', () => {
       });
 
       const result = await OAuthUtils.discoverAuthorizationServerMetadata(
+        (input, init) => globalThis.fetch(input, init),
         'https://auth.example.com/',
       );
 
@@ -184,6 +189,7 @@ describe('OAuthUtils', () => {
       });
 
       const result = await OAuthUtils.discoverAuthorizationServerMetadata(
+        (input, init) => globalThis.fetch(input, init),
         'https://auth.example.com/mcp',
       );
 
@@ -224,6 +230,7 @@ describe('OAuthUtils', () => {
         });
 
       const config = await OAuthUtils.discoverOAuthConfig(
+        (input, init) => globalThis.fetch(input, init),
         'https://example.com/mcp',
       );
 
@@ -246,7 +253,10 @@ describe('OAuthUtils', () => {
       });
 
       await expect(
-        OAuthUtils.discoverOAuthConfig('https://example.com/mcp'),
+        OAuthUtils.discoverOAuthConfig(
+          (input, init) => globalThis.fetch(input, init),
+          'https://example.com/mcp',
+        ),
       ).rejects.toThrow(/does not match expected/);
     });
   });

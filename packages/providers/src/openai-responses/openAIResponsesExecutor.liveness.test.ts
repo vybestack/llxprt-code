@@ -26,7 +26,11 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
-import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
+import {
+  buildResponsesRequestContextForProjection,
+  executeOpenAIResponsesRequest,
+} from './openAIResponsesExecutor.js';
+import { dumpFinalizedRequest } from './openAIResponsesRequestDump.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -99,8 +103,10 @@ function buildDeps(
     requestBaseURL: 'https://api.openai.com/v1',
     requestHeaders: undefined,
     isCodexMode: () => false,
-    getCodexAccountId: async () => 'codex-account',
-    resolveAuthTokenForPrompt: async () => '',
+    resolveRequestCredential: async () => ({
+      bearer: 'test-token',
+      accountId: 'codex-account',
+    }),
     shouldRetryOnError: () => false,
     defaultModel: 'gpt-5',
 
@@ -708,14 +714,74 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     expect(responseFiles[0].startsWith(`${httpBaseId}-`)).toBe(true);
   });
 
-  it('A3/3159: keeps the WebSocket transport in the dump when header observation fails', async () => {
+  it('A3/3159: a Codex credential without an account identity fails before any transport or dump, then the next request recovers', async () => {
+    const fetchMock = vi.fn();
+    setGlobal('fetch', fetchMock);
     const wsTransport: WebSocketTransport = {
       streamResponse: vi.fn().mockReturnValue(textChunkStream('OK')),
       close: vi.fn(),
     };
-    const fetchMock = vi.fn();
-    setGlobal('fetch', fetchMock);
+    // The stored credential resolves a bearer first with no identity, then
+    // (after a re-login) with one. Dump and handshake both read the single
+    // resolved credential, so there is no second lookup left to fail.
+    const stored: { accountId?: string } = {};
+    const deps = buildDeps({
+      isCodexMode: () => true,
+      getWebSocketTransport: () => wsTransport,
+      isWebSocketTransportActive: () => true,
+      resolveRequestCredential: async () => ({
+        bearer: 'codex-token',
+        ...(stored.accountId === undefined
+          ? {}
+          : { accountId: stored.accountId }),
+      }),
+    });
+    const send = async (): Promise<IContent[]> => {
+      const options = buildNormalizedOptions({
+        ephemerals: { dumpcontext: 'on' },
+        resolved: {
+          model: 'gpt-5.6-sol',
+          baseURL: 'https://chatgpt.com/backend-api/codex',
+          authToken: 'codex-token',
+        },
+      });
+      const consumed: IContent[] = [];
+      for await (const chunk of executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, deps),
+        deps,
+      )) {
+        consumed.push(chunk);
+      }
+      return consumed;
+    };
 
+    await expect(send()).rejects.toThrow(
+      /missing the account identity.*\/auth codex login/,
+    );
+    expect(wsTransport.streamResponse).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    const dumpDir = path.join(tempDumpDir, 'dumps');
+    expect(
+      fs.existsSync(dumpDir) ? await fsp.readdir(dumpDir) : [],
+    ).toStrictEqual([]);
+
+    stored.accountId = 'codex-account';
+    const recovered = await send();
+    expect(recovered).toStrictEqual([
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'OK' }] },
+    ]);
+    expect(wsTransport.streamResponse).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const dumped = await readDumpedEnvelope();
+    expect(dumped.transport).toStrictEqual({
+      type: 'websocket',
+      frameType: 'response.create',
+    });
+    expect(dumped.headers?.['ChatGPT-Account-ID']).toBe('[REDACTED]');
+    expect(JSON.stringify(dumped)).not.toContain('codex-account');
+  });
+
+  it('A3/3159 dump guard: records the WebSocket transport and claims no headers when a context lacks the credential identity', async () => {
     const options = buildNormalizedOptions({
       ephemerals: { dumpcontext: 'on' },
       resolved: {
@@ -724,48 +790,32 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
         authToken: 'codex-token',
       },
     });
-
-    // First getCodexAccountId call (dump metadata) fails; the second (real
-    // handshake) succeeds so the request still goes over the WebSocket.
-    let codexAccountIdCalls = 0;
-    const iterator = executeOpenAIResponsesRequest(
-      captureResponsesTestRequest(
-        options,
-        buildDeps({
-          isCodexMode: () => true,
-          getWebSocketTransport: () => wsTransport,
-          isWebSocketTransportActive: () => true,
-          getCodexAccountId: async () => {
-            codexAccountIdCalls += 1;
-            if (codexAccountIdCalls === 1) {
-              throw new Error('account id unavailable');
-            }
-            return 'codex-account';
-          },
-        }),
-      ),
-      buildDeps({
-        isCodexMode: () => true,
-        getWebSocketTransport: () => wsTransport,
-        isWebSocketTransportActive: () => true,
-        getCodexAccountId: async () => {
-          codexAccountIdCalls += 1;
-          if (codexAccountIdCalls === 1) {
-            throw new Error('account id unavailable');
-          }
-          return 'codex-account';
-        },
-      }),
+    const deps = buildDeps({
+      isCodexMode: () => true,
+      isWebSocketTransportActive: () => true,
+    });
+    const request = captureResponsesTestRequest(options, deps);
+    const prepared = await buildResponsesRequestContextForProjection(
+      request,
+      deps,
     );
-    const consumed: IContent[] = [];
-    for await (const chunk of iterator) {
-      consumed.push(chunk);
-    }
-    expect(consumed).toHaveLength(1);
-    expect(fetchMock).not.toHaveBeenCalled();
 
-    // The transport was known (WebSocket) even though header observation
-    // failed; the dump must not relabel the request as HTTP.
+    // Defensive guard of the dump module in isolation: the executor rejects an
+    // identity-less Codex credential before it reaches the dump (see the
+    // end-to-end test above), so this feeds the dump a context it never
+    // receives from the executor. The dump is best-effort: it must still be
+    // written and must not relabel the WebSocket request as HTTP.
+    await dumpFinalizedRequest(
+      {
+        ...prepared,
+        apiKey: 'codex-token',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+      },
+      { dumpcontext: 'on' },
+      deps,
+      request,
+    );
+
     const dumpedRequest = await readDumpedEnvelope();
     expect(dumpedRequest.method).toBe('SEND');
     expect(dumpedRequest.url).toBe(
@@ -775,8 +825,8 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       type: 'websocket',
       frameType: 'response.create',
     });
-    // Observation failed, so no headers may be claimed — not even the
-    // legacy synthesized defaults.
+    // Observation failed, so no headers may be claimed, not even the legacy
+    // synthesized defaults, and no credential material may appear.
     expect(dumpedRequest.headers).toStrictEqual({});
   });
 });

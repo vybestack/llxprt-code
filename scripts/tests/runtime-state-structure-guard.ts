@@ -6,6 +6,18 @@
 import ts from 'typescript';
 import { compilerSourcePath } from '../compiler-source-path.js';
 import {
+  accessedMember,
+  declarationName,
+  isOwnedModuleStorage,
+  moduleInstanceMutation,
+  mutationDeclaration,
+  mutationTarget,
+  processEnvironmentSite,
+  targetsGlobalThis,
+  targetsProcessEnvironment,
+  unresolvedConstruction,
+} from './runtime-state-mutation-analysis.js';
+import {
   isModuleOwned,
   isStatic,
   referencedSymbol,
@@ -38,6 +50,7 @@ export interface RuntimeStateFinding {
   readonly kind:
     | 'mutable-state'
     | 'module-mutation'
+    | 'process-environment-mutation'
     | 'async-local-storage'
     | 'stale-immutable-allowance';
   readonly line: number;
@@ -57,6 +70,18 @@ function mutableStaticField(
   );
 }
 
+function shouldReportStaticField(
+  node: ts.Node,
+  checker: ts.TypeChecker,
+  containerPolicy: ContainerPolicy | undefined,
+): node is ts.PropertyDeclaration {
+  if (!ts.isPropertyDeclaration(node)) return false;
+  if (!isStatic(node) || !isModuleOwned(node)) return false;
+  return containerPolicy
+    ? !!node.initializer && unresolvedConstruction(node.initializer, checker)
+    : mutableStaticField(node, checker);
+}
+
 function isReadonly(node: ts.Node): boolean {
   return (
     ts.canHaveModifiers(node) &&
@@ -64,38 +89,6 @@ function isReadonly(node: ts.Node): boolean {
       .getModifiers(node)
       ?.some((modifier) => modifier.kind === ts.SyntaxKind.ReadonlyKeyword)
   );
-}
-
-/**
- * Storage declared in the scanned file itself. Declarations reached through a
- * resolved program (ambient `process`, imported bindings) belong to other
- * files or the platform and are not this module's state.
- */
-function isOwnedModuleStorage(
-  declaration: ts.Node,
-  sourceFile: ts.SourceFile,
-): boolean {
-  return (
-    declaration.getSourceFile() === sourceFile && isModuleOwned(declaration)
-  );
-}
-
-function declarationName(node: ts.Node): string {
-  const parts: string[] = [];
-  let current: ts.Node | undefined = node;
-  while (current && !ts.isSourceFile(current)) {
-    const candidate: ts.Node = current;
-    const named =
-      ts.isVariableDeclaration(candidate) ||
-      ts.isPropertyDeclaration(candidate) ||
-      ts.isClassDeclaration(candidate);
-    const callable =
-      ts.isFunctionDeclaration(candidate) || ts.isMethodDeclaration(candidate);
-    if ((named || callable) && candidate.name)
-      parts.unshift(candidate.name.getText());
-    current = current.parent;
-  }
-  return parts.length ? parts.join('.') : `<anonymous@${node.getStart()}>`;
 }
 
 function asyncHooksImport(node: ts.Node): boolean {
@@ -176,15 +169,6 @@ function directAlsConstructor(
     member === 'AsyncLocalStorage' &&
     valueMatches(target.expression, checker, 'async-hooks')
   );
-}
-
-function accessedMember(
-  access: ts.PropertyAccessExpression | ts.ElementAccessExpression,
-): string | undefined {
-  if (ts.isPropertyAccessExpression(access)) return access.name.text;
-  return ts.isStringLiteral(access.argumentExpression)
-    ? access.argumentExpression.text
-    : undefined;
 }
 
 function namespaceExport(
@@ -540,89 +524,6 @@ function mutatedArgumentStorage(
   );
 }
 
-function mutationDeclaration(
-  node: ts.Node,
-  checker: ts.TypeChecker,
-): ts.VariableDeclaration | ts.PropertyDeclaration | undefined {
-  const target = mutationTarget(node);
-  if (!target) return undefined;
-  const value = unwrap(target);
-  if (!ts.isCallExpression(node) && ts.isIdentifier(value)) {
-    const declaration = checker.getSymbolAtLocation(value)?.valueDeclaration;
-    return declaration && ts.isVariableDeclaration(declaration)
-      ? declaration
-      : undefined;
-  }
-  return storageOrigin(value, checker);
-}
-
-function mutationTarget(node: ts.Node): ts.Expression | undefined {
-  if (
-    ts.isBinaryExpression(node) &&
-    node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-    node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
-  )
-    return node.left;
-  if (ts.isDeleteExpression(node)) return node.expression;
-  if (
-    (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
-    (node.operator === ts.SyntaxKind.PlusPlusToken ||
-      node.operator === ts.SyntaxKind.MinusMinusToken)
-  )
-    return node.operand;
-  if (
-    !ts.isCallExpression(node) ||
-    !ts.isPropertyAccessExpression(node.expression)
-  )
-    return undefined;
-  const callee = node.expression;
-  if (
-    [
-      'Object.assign',
-      'Object.defineProperty',
-      'Object.defineProperties',
-      'Reflect.set',
-      'Reflect.deleteProperty',
-    ].includes(callee.getText())
-  )
-    return node.arguments[0];
-  if (
-    [
-      'set',
-      'add',
-      'delete',
-      'clear',
-      'push',
-      'pop',
-      'shift',
-      'unshift',
-      'splice',
-      'sort',
-      'reverse',
-      'fill',
-      'copyWithin',
-    ].includes(callee.name.text)
-  )
-    return callee.expression;
-  return undefined;
-}
-
-function targetsGlobalThis(node: ts.Node, checker: ts.TypeChecker): boolean {
-  const target = mutationTarget(node);
-  if (!target) return false;
-  let root = unwrap(target);
-  while (
-    ts.isPropertyAccessExpression(root) ||
-    ts.isElementAccessExpression(root)
-  )
-    root = unwrap(root.expression);
-  if (!ts.isIdentifier(root) || root.text !== 'globalThis') return false;
-  const declarations = checker.getSymbolAtLocation(root)?.declarations ?? [];
-  return declarations.every(
-    (declaration) => declaration.getSourceFile().isDeclarationFile,
-  );
-}
-
 function isolatedSource(
   filename: string,
   source: string,
@@ -702,16 +603,14 @@ function resolvedSource(
  * separate analysis. Without a resolved program the scan is single-source;
  * passing a program whose module resolution covers the scanned files lets ALS
  * constructors be followed through imports and re-exports. Branches are unioned, not evaluated for reachability.
- * With a `containerPolicy`, module-level object/array literal storage (also
- * inside Object.freeze unless it is a primitive-only table) is reported as
- * mutable-state unless an exact file + declaration allowlist entry with a
- * nonblank reason names it; allowlist entries that match no such declaration
- * are reported as stale-immutable-allowance.
- * All non-ALS `new` initializers are conservatively treated as mutable; imported
- * class implementations are not inspected. Object.freeze does not exempt
- * constructed instances. Frozen primitive tables are permitted. Input should
- * already pass TypeScript parsing/typechecking; this scanner is not a compiler
- * diagnostic replacement. No repository discovery or default allowance exists.
+ * In production state-root scans, a `containerPolicy` marks scope where
+ * module values are reported only when writes or known mutators reach them;
+ * never-mutated values are not state findings. The associated table allowlist
+ * is still checked for stale entries. Without that production policy, the
+ * single-source helper retains conservative declaration-level checks for
+ * callers that explicitly request them. Input should already pass TypeScript
+ * parsing/typechecking; this scanner is not a compiler diagnostic replacement.
+ * No repository discovery or default allowance exists.
  */
 export function scanRuntimeStateStructure(
   filename: string,
@@ -741,64 +640,73 @@ export function scanRuntimeStateStructure(
     });
   }
   function checkModuleVariable(node: ts.VariableDeclaration): void {
-    const writable =
-      ts.isVariableDeclarationList(node.parent) &&
-      !(node.parent.flags & ts.NodeFlags.Const);
+    if (containerPolicy) {
+      if (node.initializer && unresolvedConstruction(node.initializer, checker))
+        report(node, 'mutable-state');
+      if (node.initializer && containerLiteralStorage(node.initializer)) {
+        const declaration = declarationName(node);
+        const allowance = containerPolicy.allowlist.find(
+          (entry) =>
+            entry.file === filename &&
+            entry.declaration === declaration &&
+            entry.reason.trim().length > 0,
+        );
+        if (allowance) usedAllowances.add(allowance);
+      }
+      return;
+    }
     if (
-      writable ||
-      (node.initializer &&
-        containsMutableConstruction(node.initializer, checker))
+      ts.isVariableDeclarationList(node.parent) &&
+      !(node.parent.flags & ts.NodeFlags.Const)
     )
       return report(node, 'mutable-state');
     if (
-      !containerPolicy ||
-      !node.initializer ||
-      !containerLiteralStorage(node.initializer)
+      node.initializer &&
+      containsMutableConstruction(node.initializer, checker)
+    )
+      report(node, 'mutable-state');
+  }
+  function checkAlsConstructor(node: ts.Node): void {
+    if (
+      !ts.isNewExpression(node) ||
+      !isAlsConstructor(node.expression, checker)
     )
       return;
     const declaration = declarationName(node);
-    const allowance = containerPolicy.allowlist.find(
+    const allowed = allowlist.some(
       (entry) =>
         entry.file === filename &&
         entry.declaration === declaration &&
         entry.reason.trim().length > 0,
     );
-    if (allowance) usedAllowances.add(allowance);
-    else report(node, 'mutable-state', declaration);
+    if (!allowed) report(node, 'async-local-storage', declaration);
   }
   function visit(node: ts.Node): void {
+    checkAlsConstructor(node);
     if (
-      ts.isNewExpression(node) &&
-      isAlsConstructor(node.expression, checker)
-    ) {
-      const declaration = declarationName(node);
-      if (
-        !allowlist.some(
-          (entry) =>
-            entry.file === filename &&
-            entry.declaration === declaration &&
-            entry.reason.trim().length > 0,
-        )
-      )
-        report(node, 'async-local-storage', declaration);
-    }
-    if (ts.isExportAssignment(node) && !node.isExportEquals) {
-      const mutable =
-        containsMutableConstruction(node.expression, checker) ||
-        (containerPolicy && containerLiteralStorage(node.expression));
-      if (mutable) report(node, 'mutable-state', 'default');
-    }
+      ts.isExportAssignment(node) &&
+      !node.isExportEquals &&
+      (containerPolicy
+        ? unresolvedConstruction(node.expression, checker)
+        : containsMutableConstruction(node.expression, checker))
+    )
+      report(node, 'mutable-state', 'default');
     if (targetsGlobalThis(node, checker))
       report(node, 'module-mutation', 'globalThis');
+    if (targetsProcessEnvironment(node, checker))
+      report(
+        node,
+        'process-environment-mutation',
+        processEnvironmentSite(node),
+      );
     if (ts.isVariableDeclaration(node) && isModuleOwned(node))
       checkModuleVariable(node);
-    if (
-      ts.isPropertyDeclaration(node) &&
-      isStatic(node) &&
-      isModuleOwned(node) &&
-      mutableStaticField(node, checker)
-    )
+    if (shouldReportStaticField(node, checker, containerPolicy))
       report(node, 'mutable-state');
+    if (ts.isCallExpression(node)) {
+      const instance = moduleInstanceMutation(node, checker, sourceFile);
+      if (instance) report(node, 'module-mutation', declarationName(instance));
+    }
     const declaration = mutationDeclaration(node, checker);
     if (
       declaration &&

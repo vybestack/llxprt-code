@@ -82,9 +82,9 @@ outcome kind so callers can recover without string matching.
 
 ## Routing rules
 
-`TokenAccessCoordinator.triggerAuthFlow` decides the route from
-`getActiveRuntimeKind()` (from the `AsyncLocalStorage`-scoped runtime
-registry):
+`TokenAccessCoordinator.triggerAuthFlow` decides the route from the optional
+`readAuthIdentity()` callback, which supplies the current request identity and
+its runtime kind:
 
 - Runtime kind `agent` or `subagent`: **always** escalate via
   `interactiveAuthCoordinator.requestAuth`. If no host handler is bound,
@@ -186,8 +186,7 @@ a detached waiter reports `cancelled` even if a coalesced waiter later reports
   `packages/providers/src/auth/auth-flow-orchestrator.ts`,
   `packages/providers/src/auth/oauth-manager.ts`,
   `packages/providers/src/auth/codex-oauth-provider.ts`
-- Runtime kind detection: `packages/providers/src/runtime/active-runtime-identity.ts`,
-  `packages/providers/src/runtime/runtimeAccessors.ts`
+- Runtime kind resolution: `packages/providers/src/runtime/runtimeKind.ts`; request identity is read by `TokenAccessCoordinator` from its injected `readAuthIdentity` callback.
 - Host binding and UI mapping:
   `packages/cli/src/ui/containers/AppContainer/hooks/useUpdateAndOAuthBridges.ts`,
   `packages/cli/src/ui/commands/providerCommand.ts`

@@ -708,4 +708,141 @@ describe('Credential resolution diagnostics', () => {
     expect(hasNonOAuth).toBe(false);
     expect(oauthOnly).toBe(true);
   });
+  describe('OAuth credential projection and store outages', () => {
+    function oauthResolver(oauthManager: OAuthManager): AuthPrecedenceResolver {
+      return new AuthPrecedenceResolver(
+        {
+          providerId: 'test-provider',
+          oauthProvider: 'test-oauth',
+          isOAuthEnabled: true,
+          supportsOAuth: true,
+        },
+        { settingsService: createSettingsService(), oauthManager },
+      );
+    }
+
+    it('projects only the bearer and account id from one full-token resolution', async () => {
+      let accessCalls = 0;
+      const resolver = oauthResolver({
+        getToken: async () => {
+          accessCalls += 1;
+          return 'must-not-be-read';
+        },
+        resolveToken: async () => ({
+          access_token: 'bearer-1',
+          refresh_token: 'refresh-secret',
+          id_token: 'id-secret',
+          token_type: 'Bearer',
+          expiry: 4_000_000_000,
+          account_id: 'acct-1',
+        }),
+        isAuthenticated: async () => true,
+      });
+
+      const result = await resolver.resolveAuthenticationResult({
+        includeOAuth: true,
+      });
+
+      expect(accessCalls).toBe(0);
+      expect(result).toStrictEqual({ token: 'bearer-1', accountId: 'acct-1' });
+    });
+
+    it('keeps the bearer-only result for managers without full-token resolution', async () => {
+      const resolver = oauthResolver({
+        getToken: async () => 'bearer-2',
+        isAuthenticated: async () => true,
+      });
+
+      const result = await resolver.resolveAuthenticationResult({
+        includeOAuth: true,
+      });
+
+      expect(result).toStrictEqual({ token: 'bearer-2' });
+    });
+
+    it('marks a full token without an account id as having no identity', async () => {
+      const resolver = oauthResolver({
+        getToken: async () => null,
+        resolveToken: async () => ({
+          access_token: 'bearer-3',
+          token_type: 'Bearer',
+          expiry: 4_000_000_000,
+        }),
+        isAuthenticated: async () => true,
+      });
+
+      const result = await resolver.resolveAuthenticationResult({
+        includeOAuth: true,
+      });
+
+      // The full credential was read and carries no identity: say so, so that
+      // consumers never go looking for an identity in a second read.
+      expect(result).toStrictEqual({ token: 'bearer-3', identity: 'absent' });
+    });
+
+    it('treats a blank stored account id as no identity', async () => {
+      const resolver = oauthResolver({
+        getToken: async () => null,
+        resolveToken: async () => ({
+          access_token: 'bearer-4',
+          token_type: 'Bearer',
+          expiry: 4_000_000_000,
+          account_id: '   ',
+        }),
+        isAuthenticated: async () => true,
+      });
+
+      const result = await resolver.resolveAuthenticationResult({
+        includeOAuth: true,
+      });
+
+      expect(result).toStrictEqual({ token: 'bearer-4', identity: 'absent' });
+    });
+
+    it.each(['LOCKED', 'DENIED', 'TIMEOUT', 'UNAVAILABLE', 'RUNTIME_REPLACED'])(
+      'does not ask for login when the credential store fails with %s',
+      async (code) => {
+        const outage = Object.assign(new Error('store failed'), {
+          code,
+          remediation: 'Unlock your keyring',
+        });
+        const resolver = oauthResolver({
+          getToken: async () => {
+            throw outage;
+          },
+          isAuthenticated: async () => false,
+        });
+
+        const result = await resolver.resolveAuthenticationResult({
+          includeOAuth: true,
+        });
+
+        const failure = expectSafeFailure(
+          result,
+          'credential-source-failed',
+          [],
+        );
+        expect(failure.cause).toBe(outage);
+        expect(failure.remediation).not.toContain('/auth test-oauth login');
+        expect(failure.remediation).toContain('credential store');
+        expect(failure.remediation).toContain('Unlock your keyring');
+      },
+    );
+
+    it('still asks for login when an ordinary source error is not a store outage', async () => {
+      const resolver = oauthResolver({
+        getToken: async () => {
+          throw Object.assign(new Error('bad'), { code: 'CORRUPT' });
+        },
+        isAuthenticated: async () => false,
+      });
+
+      const result = await resolver.resolveAuthenticationResult({
+        includeOAuth: true,
+      });
+
+      const failure = expectSafeFailure(result, 'credential-source-failed', []);
+      expect(failure.remediation).toContain('/auth test-oauth login');
+    });
+  });
 });

@@ -88,6 +88,10 @@ async function awaitFixtureAbort(
     );
   }
 }
+// The request deadline starts when connect() begins, before the held fetch is
+// entered. It must leave room for client setup on a loaded machine so entry is
+// observed first; the abort-then-join assertions still run once it elapses.
+const TIMEOUT_MODE_DEADLINE_MS = 1000;
 class MemoryStore implements TokenStorage {
   credentials: OAuthCredentials = {
     serverName: 'same',
@@ -151,6 +155,7 @@ function createClient(
   return {
     tools,
     client: new McpClient(
+      (input, init) => globalThis.fetch(input, init),
       {
         ...createTestOAuthBinding(),
         tokenStorage: new MCPOAuthTokenStorage(store),
@@ -360,7 +365,11 @@ describe('actual MCP client auth cancellation', () => {
         }
         return nativeFetch(input, init);
       });
-      const a = createClient(store, serverUrl, mode === 'timeout' ? 30 : 10000);
+      const a = createClient(
+        store,
+        serverUrl,
+        mode === 'timeout' ? TIMEOUT_MODE_DEADLINE_MS : 10000,
+      );
       const b = createClient(store, serverUrl);
       const connecting = observe(a.client.connect());
       const label = `${mode} ${phase}`;

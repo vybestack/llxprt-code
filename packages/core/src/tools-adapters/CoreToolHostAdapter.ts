@@ -17,7 +17,6 @@ import type {
   IToolHostFileService,
   IToolHostGitStatsService,
 } from '@vybestack/llxprt-code-tools';
-import { getGitStatsService } from '../services/git-stats-service.js';
 import type {
   WorkspacePathOperations,
   WorkspaceTextOperations,
@@ -37,6 +36,7 @@ export interface CoreToolHostConfig {
   getFileFilteringOptions(): IToolHostFileFilteringOptions;
   getFileFilteringRespectLlxprtIgnore(): boolean;
   getConversationLoggingEnabled(): boolean;
+  getGitStatsService?(): IToolHostGitStatsService | null;
   getDebugMode(): boolean;
 }
 
@@ -178,7 +178,7 @@ export class CoreToolHostAdapter implements IToolHost {
   }
 
   getGitStatsService(): IToolHostGitStatsService | undefined {
-    return getGitStatsService() ?? undefined;
+    return this.config.getGitStatsService?.() ?? undefined;
   }
 
   getDebugMode(): boolean {

@@ -15,7 +15,14 @@ import { hasHeaderName } from './AnthropicProviderInternals.js';
 import type Anthropic from '@anthropic-ai/sdk';
 import { enforcesPreservedThinkingPrefixCheck } from './AnthropicModelData.js';
 import type { DumpMode } from '../utils/dumpContext.js';
-import { withBoundedJsonHttpBody } from '../utils/boundedJsonBody.js';
+import {
+  BoundedJsonBody,
+  BoundedJsonEnvelopeOverflowError,
+  DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
+  DEFAULT_STREAMING_JSON_CHUNK_BYTES,
+  withBoundedJsonHttpBody,
+} from '../utils/boundedJsonBody.js';
+import { RequestBodyByteOverflowError } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContext,
@@ -133,6 +140,39 @@ export function buildAnthropicCustomHeaders(params: {
   return customHeaders;
 }
 
+function toRequestBodyOverflow(error: unknown): unknown {
+  return error instanceof BoundedJsonEnvelopeOverflowError
+    ? new RequestBodyByteOverflowError(
+        error.byteLength,
+        error.maxEnvelopeBytes,
+        { cause: error },
+      )
+    : error;
+}
+
+/**
+ * Exact-body guard for a finalized Messages request: measures the serialized
+ * JSON through the bounded serialization plan (no whole-body string) and
+ * throws the shared typed overflow error when it exceeds `limitBytes`.
+ * Used both at token projection time, so byte pressure reaches compression
+ * before any send, and again at send time.
+ */
+export async function assertAnthropicRequestBodyWithinLimit(
+  requestBody: Record<string, unknown>,
+  limitBytes: number,
+): Promise<void> {
+  let body: BoundedJsonBody;
+  try {
+    body = new BoundedJsonBody(requestBody, {
+      maxChunkBytes: DEFAULT_STREAMING_JSON_CHUNK_BYTES,
+      maxEnvelopeBytes: Math.min(limitBytes, DEFAULT_HTTP_JSON_ENVELOPE_BYTES),
+    });
+  } catch (error) {
+    throw toRequestBodyOverflow(error);
+  }
+  await body.dispose();
+}
+
 /**
  * Create API call closure with response headers
  */
@@ -141,29 +181,45 @@ export function createAnthropicApiCall(
   requestBody: Record<string, unknown>,
   customHeaders: Record<string, string>,
   signal?: AbortSignal,
+  maxRequestBodyBytes: number = DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
 ): () => Promise<{
   data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
   response: Response | undefined;
 }> {
-  return async () =>
-    withBoundedJsonHttpBody(requestBody, async (body) => {
-      const headers = {
-        ...customHeaders,
-        'content-type': 'application/json',
-        'content-length': String(body.byteLength),
-      };
-      return client
-        .post<Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>>(
-          '/v1/messages',
-          {
-            body: body.stream,
-            headers,
-            stream: requestBody['stream'] === true,
-            ...(signal === undefined ? {} : { signal }),
-          },
-        )
-        .withResponse();
-    });
+  const limits = {
+    maxChunkBytes: DEFAULT_STREAMING_JSON_CHUNK_BYTES,
+    maxEnvelopeBytes: Math.min(
+      maxRequestBodyBytes,
+      DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
+    ),
+  };
+  return async () => {
+    try {
+      return await withBoundedJsonHttpBody(
+        requestBody,
+        async (body) => {
+          const headers = {
+            ...customHeaders,
+            'content-type': 'application/json',
+            'content-length': String(body.byteLength),
+          };
+          return client
+            .post<
+              Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>
+            >('/v1/messages', {
+              body: body.stream,
+              headers,
+              stream: requestBody['stream'] === true,
+              ...(signal === undefined ? {} : { signal }),
+            })
+            .withResponse();
+        },
+        limits,
+      );
+    } catch (error) {
+      throw toRequestBodyOverflow(error);
+    }
+  };
 }
 
 /**

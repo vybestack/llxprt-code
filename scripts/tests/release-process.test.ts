@@ -177,6 +177,21 @@ describe('.github/workflows/release.yml', () => {
   const releaseYml = readRootFile('.github/workflows/release.yml');
   const releaseParsed = parseWorkflowYaml(releaseYml);
   const releaseSteps = jobSteps(workflowJobOptional(releaseParsed, 'release'));
+  const prepareSteps = jobSteps(
+    workflowJobOptional(releaseParsed, 'prepare_artifact'),
+  );
+  const integrationSteps = jobSteps(
+    workflowJobOptional(releaseParsed, 'integration'),
+  );
+  const verifyShardSteps = jobSteps(
+    workflowJobOptional(releaseParsed, 'verify_shards'),
+  );
+  const integrationStepByName = (name: string): WorkflowStep =>
+    integrationSteps.find((step) => step.name === name) ??
+    raiseMissing(`missing integration step: ${name}`);
+  const prepareStepByName = (name: string): WorkflowStep =>
+    prepareSteps.find((step) => step.name === name) ??
+    raiseMissing(`missing preparation step: ${name}`);
   const stepById = (id: string): WorkflowStep =>
     releaseSteps.find((s) => s.id === id) ??
     raiseMissing(`missing step id: ${id}`);
@@ -185,73 +200,62 @@ describe('.github/workflows/release.yml', () => {
     raiseMissing(`missing step: ${name}`);
 
   it('gates every npm publish on scripts-disabled consumer proof and publishes the proven tarballs', () => {
-    const gate = stepByName('Prove scripts-disabled release consumers');
-    const gateIndex = releaseSteps.indexOf(gate);
+    const gate = prepareStepByName('Build and prove prepared release packages');
     const publishes = releaseSteps.filter((step) =>
       npmReleasePackages().some((name) => step.name === `Publish ${name}`),
     );
     expect(publishes.length).toBeGreaterThan(0);
     for (const step of publishes) {
-      expect(releaseSteps.indexOf(step)).toBeGreaterThan(gateIndex);
-      expect(asString(step.run)).toContain('--ignore-scripts');
-      expect(asString(step.run)).toContain('release-proof/');
+      expect(step.run).toContain('--ignore-scripts');
+      expect(asString(step.run)).toContain('release-artifacts/');
     }
+    expect(asString(gate.if)).toContain('inputs.publish_vscode_only != true');
     expect(asString(gate.if)).not.toContain('is_dry_run');
-    expect(asString(gate.if)).not.toContain('is_nightly');
     expect(asString(gate.run)).toContain('release-bound-artifact-helpers.ts');
+    expect(prepareSteps.indexOf(gate)).toBeLessThan(
+      prepareSteps.findIndex(
+        (step) => step.name === 'Upload prepared release artifacts',
+      ),
+    );
   });
 
-  it('runs release tests and release-note generation against the pinned local model without paid-provider credentials', () => {
-    const releaseNotes = stepByName('Generate Release Notes');
-    const preflight = stepByName('Run Preflight Checks');
-    const integrations = stepByName('Run Integration Tests');
-    expect(
-      releaseSteps.some(
-        (step) => step.name === 'Check local-model request budget',
-      ),
-    ).toBe(false);
-    expect(asString(integrations.env?.LLXPRT_E2E_MODEL_LEDGER)).toBe(
-      '${{ runner.temp }}/release-model-ledger.jsonl',
+  it('routes integration and release-note model requests through local Gemma', () => {
+    const releaseNotes = prepareStepByName('Write release notes');
+    const integrations = integrationStepByName('Run Integration Tests');
+    const modelSetup = integrationSteps.find(
+      (step) => step.name === 'Set up local Gemma model',
     );
-    const cpuProof = stepByName('Verify live Ollama CPU backend');
-    expect(asString(cpuProof.run)).toContain('/proc/$pid/maps');
-    expect(asString(cpuProof.run)).toContain('libggml-cpu-haswell.so');
-    const ollama = stepByName('Start pinned local Gemma model');
-    expect(asString(ollama.run)).toContain('server_pid=$!');
-    expect(asString(ollama.run)).toContain('kill -0 "$server_pid"');
-    expect(asString(ollama.run)).toContain(
-      'cat "$RUNNER_TEMP/ollama-server.log" >&2',
-    );
-    expect(releaseSteps.some((step) => step.id === 'quota')).toBe(false);
-    expect(releaseSteps.indexOf(ollama)).toBeLessThan(
-      releaseSteps.indexOf(preflight),
-    );
-    expect(releaseSteps.indexOf(preflight)).toBeLessThan(
-      releaseSteps.indexOf(integrations),
-    );
-    expect(releaseSteps.indexOf(integrations)).toBeLessThan(
-      releaseSteps.indexOf(releaseNotes),
-    );
-    for (const step of [preflight, integrations, releaseNotes]) {
-      const env = asRecord(step.env);
-      expect(env.OPENAI_BASE_URL).toBe('http://127.0.0.1:12644/v1');
-      expect(env.OPENAI_API_KEY).toBe('ollama-local-only');
-      expect(env.LLXPRT_DEFAULT_PROVIDER).toBe('openai');
-      expect(env.LLXPRT_DEFAULT_MODEL).toBe('gemma4:e2b-it-qat');
-    }
-    expect(JSON.stringify(releaseSteps)).not.toContain('ci-quota-check.ts');
-    expect(JSON.stringify(releaseSteps)).not.toContain(
-      'secrets[vars.KEY_VAR_NAME',
+
+    expect(modelSetup).toBeDefined();
+    expect(asString(modelSetup?.uses)).toBe(
+      './.github/actions/setup-local-gemma',
     );
     expect(asString(integrations.run)).toContain(
       'npm run test:integration:sandbox:none',
     );
     expect(asString(integrations.run)).not.toContain('--exclude');
+    expect(asString(asRecord(integrations.env).LLXPRT_E2E_MODEL_LEDGER)).toBe(
+      '${{ runner.temp }}/release-model-ledger.jsonl',
+    );
+
+    const releaseNotesSetup = prepareStepByName('Generate release notes');
+    expect(prepareSteps.indexOf(releaseNotesSetup)).toBeLessThan(
+      prepareSteps.indexOf(releaseNotes),
+    );
+    const releaseNotesEnv = asRecord(releaseNotes.env);
+    expect(releaseNotesEnv.OPENAI_BASE_URL).toBe('http://127.0.0.1:12644/v1');
+    expect(releaseNotesEnv.OPENAI_API_KEY).toBe('ollama-local-only');
+    expect(releaseNotesEnv.LLXPRT_DEFAULT_PROVIDER).toBe('openai');
+    expect(releaseNotesEnv.LLXPRT_DEFAULT_MODEL).toBe('gemma4:e2b-it-qat');
+    expect(JSON.stringify([releaseSteps, integrationSteps])).not.toContain(
+      'secrets[vars.KEY_VAR_NAME',
+    );
   });
 
   it('captures and uploads local-model diagnostics after integration failures', () => {
-    const capture = stepByName('Capture release model diagnostics');
-    const upload = stepByName('Upload release model diagnostics');
+    const capture = integrationStepByName('Capture release model diagnostics');
+    const upload = integrationStepByName('Upload release model diagnostics');
+    const integrations = integrationStepByName('Run Integration Tests');
     expect(asString(capture['if'])).toContain('always()');
     expect(asString(upload['if'])).toContain('always()');
     expect(asString(capture.run)).toContain('release-model-ledger.jsonl');
@@ -262,18 +266,15 @@ describe('.github/workflows/release.yml', () => {
       '${{ runner.temp }}/release-diagnostics/',
     );
     expect(asString(upload.with?.['if-no-files-found'])).toBe('error');
-    expect(releaseSteps.indexOf(capture)).toBeGreaterThan(
-      releaseSteps.indexOf(stepByName('Run Integration Tests')),
+    expect(integrationSteps.indexOf(capture)).toBeGreaterThan(
+      integrationSteps.indexOf(integrations),
     );
-    expect(releaseSteps.indexOf(upload)).toBeGreaterThan(
-      releaseSteps.indexOf(capture),
-    );
-    expect(releaseSteps.indexOf(upload)).toBeLessThan(
-      releaseSteps.indexOf(stepByName('Configure Git User')),
+    expect(integrationSteps.indexOf(upload)).toBeGreaterThan(
+      integrationSteps.indexOf(capture),
     );
   });
 
-  it('skips the release pipeline for scheduled nightlies when the version is already published', () => {
+  it('skips release publication for scheduled nightlies when the version is already published', () => {
     const duplicateCheck = stepById('duplicate_check');
     expect(asString(duplicateCheck['if'])).toBe(
       "github.event_name == 'schedule'",
@@ -282,77 +283,63 @@ describe('.github/workflows/release.yml', () => {
       'bun scripts/check-nightly-release.ts',
     );
 
-    const guardedSteps = [
-      stepByName(
-        'Install pinned local Ollama runtime for release model checks',
-      ),
-      stepByName('Select local Ollama CPU backend'),
-      stepByName('Start pinned local Gemma model'),
-      stepByName('Run Preflight Checks'),
-      stepByName('Run Integration Tests'),
-      stepByName('Update package versions'),
-      stepByName('Bind release dependencies'),
-      stepByName('Build and Prepare Packages'),
-      stepByName('Generate Release Notes'),
+    for (const step of [
+      stepByName('Push release branch after all release gates'),
       stepByName('Publish @vybestack/llxprt-code-tools'),
       stepByName('Publish @vybestack/llxprt-code'),
-      stepByName('Prepare sandbox package tarballs'),
-      stepByName('Build and push sandbox image'),
+      stepByName('Publish tested sandbox candidates'),
       stepByName('Create GitHub Release and Tag'),
-    ];
-    for (const step of guardedSteps) {
+    ]) {
       expect(
         asString(step['if']),
         `${step.name ?? '<unnamed>'} should respect the duplicate-nightly skip`,
       ).toContain("steps.duplicate_check.outputs.is_duplicate != 'true'");
     }
+    expect(
+      String(prepareStepByName('Version and bind release packages').if ?? ''),
+    ).not.toContain('dry_run');
 
     expect(asString(stepByName('Create Issue on Failure')['if'])).toBe(
       'failure()',
     );
+    const gateFailure = workflowJobOptional(
+      releaseParsed,
+      'report_gate_failure',
+    );
+    expect(gateFailure).toBeDefined();
+    expect(asString(gateFailure?.['if'])).toContain(
+      "needs.verify_shards.result == 'failure'",
+    );
   });
 
-  it('installs first-party runtime plugin dependencies before preflight and restores the repository Bun version', () => {
-    const pluginBunSetup = stepByName(
-      'Setup Bun for runtime plugin dependencies',
+  it('installs runtime plugins in shard and integration runners', () => {
+    const shardPluginInstall = verifyShardSteps.find(
+      (step) => step.name === 'Install runtime plugin dependencies',
     );
-    const pluginInstall = stepByName(
-      'Install runtime plugin dependencies for preflight',
+    const integrationPluginInstall = integrationStepByName(
+      'Install runtime plugin dependencies',
     );
-    const bunRestore = stepByName('Restore repository Bun version');
-    const preflight = stepByName('Run Preflight Checks');
 
-    expect(asString(pluginBunSetup.uses)).toContain('oven-sh/setup-bun@');
-    expect(asString(pluginBunSetup['if'])).toContain(
-      "steps.duplicate_check.outputs.is_duplicate != 'true'",
-    );
-    expect(asString(pluginInstall['if'])).toContain(
-      "steps.duplicate_check.outputs.is_duplicate != 'true'",
-    );
-    expect(asString(asRecord(pluginBunSetup.with)['bun-version-file'])).toBe(
-      '.bun-version',
-    );
-    expect(asString(pluginInstall.run)).toContain(
+    expect(shardPluginInstall).toBeDefined();
+    expect(asString(shardPluginInstall?.run)).toContain(
       'plugins/google-gemini plugins/google-mcp-auth',
     );
-    expect(asString(pluginInstall.run)).toContain('bun install --omit=peer');
-    expect(asString(asRecord(bunRestore.with)['bun-version-file'])).toBe(
-      '.bun-version',
+    expect(asString(shardPluginInstall?.run)).toContain(
+      'bun install --omit=peer',
     );
-    expect(releaseSteps.indexOf(pluginBunSetup)).toBeLessThan(
-      releaseSteps.indexOf(pluginInstall),
+    expect(asString(integrationPluginInstall.run)).toContain(
+      'plugins/google-gemini plugins/google-mcp-auth',
     );
-    expect(releaseSteps.indexOf(pluginInstall)).toBeLessThan(
-      releaseSteps.indexOf(bunRestore),
-    );
-    expect(releaseSteps.indexOf(bunRestore)).toBeLessThan(
-      releaseSteps.indexOf(preflight),
+    expect(asString(integrationPluginInstall.run)).toContain(
+      'bun install --omit=peer',
     );
   });
 
   it('executes plugin installation in each plugin directory with peer omission and stops on either install failure', () => {
     const shell = asString(
-      stepByName('Install runtime plugin dependencies for preflight').run,
+      verifyShardSteps.find(
+        (step) => step.name === 'Install runtime plugin dependencies',
+      )?.run,
     );
     const fixture = fs.mkdtempSync(
       path.join(os.tmpdir(), 'release-plugin-install-'),
@@ -427,7 +414,7 @@ ${path.posix.join(realFixture, 'plugins/google-mcp-auth')}|install --omit=peer
   it('publishes every npm release package', () => {
     for (const packageName of npmReleasePackages()) {
       expect(releaseYml, `release.yml should publish ${packageName}`).toContain(
-        `release-proof/${packageName.replace('@', '').replace('/', '-')}-`,
+        `release-artifacts/${packageName.replace('@', '').replace('/', '-')}-`,
       );
     }
   });
@@ -505,49 +492,59 @@ ${path.posix.join(realFixture, 'plugins/google-mcp-auth')}|install --omit=peer
     expect(cliIndex).toBeGreaterThan(agentsIndex);
   });
 
-  it('binds release dependencies before committing or publishing', () => {
-    const versionStep = releaseYml.indexOf('Update package versions');
-    const bindStep = releaseYml.indexOf('Bind release dependencies');
-    const commitStep = releaseYml.indexOf('Commit and Conditionally Push');
-    const publishStep = releaseYml.indexOf(
-      'Publish @vybestack/llxprt-code-core',
+  it('binds and versions release dependencies before building and committing prepared artifacts', () => {
+    const versionStep = prepareSteps.findIndex(
+      (step) => step.name === 'Version and bind release packages',
     );
+    const commitStep = prepareSteps.findIndex(
+      (step) => step.name === 'Create prepared release commit',
+    );
+    const buildStep = prepareSteps.findIndex(
+      (step) => step.name === 'Build versioned sandbox inputs',
+    );
+    const versionCommand = asString(prepareSteps[versionStep]?.run);
+    const commitCommand = asString(prepareSteps[commitStep]?.run);
 
-    expect(bindStep).toBeGreaterThan(versionStep);
-    expect(commitStep).toBeGreaterThan(bindStep);
-    expect(publishStep).toBeGreaterThan(bindStep);
-    expect(releaseYml).toContain('bun scripts/bind-release-deps.ts');
+    expect(versionStep).toBeGreaterThanOrEqual(0);
+    expect(commitStep).toBeGreaterThan(versionStep);
+    expect(buildStep).toBeGreaterThan(commitStep);
+    expect(versionCommand).toContain('npm run release:version');
+    expect(versionCommand).toContain('bun scripts/bind-release-deps.ts');
+    expect(versionCommand).toContain('bun scripts/bind-plugin-peers.ts');
+    expect(versionCommand).toContain('npm version "$RELEASE_VERSION"');
+    expect(commitCommand).toContain('git commit -m');
+    expect(commitCommand).toContain('git rev-parse HEAD');
     expect(releaseYml).not.toContain(
       'bun scripts/bind-release-deps.ts --backup',
     );
   });
 
-  it('does not skip dependency binding during dry-run releases', () => {
-    const bindStep = releaseYml.slice(
-      releaseYml.indexOf('Bind release dependencies'),
-      releaseYml.indexOf('Commit and Conditionally Push'),
-    );
-
-    expect(bindStep).toContain(
-      "steps.vars.outputs.should_run_standard_release == 'true'",
-    );
-    expect(bindStep).not.toContain('is_dry_run');
+  it('does not skip release package preparation during dry-run releases', () => {
+    const preparation = prepareSteps.map((step) => step.run ?? '').join('\n');
+    expect(preparation).toContain('npm run release:version');
+    expect(preparation).toContain('release-bound-artifact-helpers.ts');
+    expect(
+      asString(
+        prepareStepByName('Build and prove prepared release packages').if,
+      ),
+    ).not.toContain('dry_run');
   });
 
-  it('prepares tools tarballs for sandbox images', () => {
-    expect(releaseYml).toContain('packages/tools/dist');
-    expect(releaseYml).toContain('npm pack -w @vybestack/llxprt-code-tools');
-  });
-
-  it('prepares settings, providers, and agents tarballs for sandbox images', () => {
-    expect(releaseYml).toContain('packages/settings/dist');
-    expect(releaseYml).toContain('packages/providers/dist');
-    expect(releaseYml).toContain('packages/agents/dist');
-    expect(releaseYml).toContain('npm pack -w @vybestack/llxprt-code-settings');
+  it('uses prepared tools tarballs as sandbox image inputs', () => {
+    expect(releaseYml).toContain('packages/*/dist/*.tgz');
     expect(releaseYml).toContain(
-      'npm pack -w @vybestack/llxprt-code-providers',
+      'scripts/tests/release-bound-artifact-helpers.ts',
     );
-    expect(releaseYml).toContain('npm pack -w @vybestack/llxprt-code-agents');
+    expect(releaseYml).toContain('release-package-tarballs.sha256');
+    expect(releaseYml).toContain('cp "$tarball" "$package_dir/dist/"');
+  });
+
+  it('uses prepared settings, providers, and agents tarballs as sandbox image inputs', () => {
+    expect(releaseYml).toContain('for package_dir in packages/*');
+    expect(releaseYml).toContain('packages/*/dist/*.tgz');
+    expect(releaseYml).toContain(
+      'npm pack --ignore-scripts --pack-destination',
+    );
   });
 
   it('does not claim create_nightly_release ignores the version input', () => {

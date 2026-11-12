@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { installMcpNetwork } from './helpers/mcp-network.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { AggregateDisposeError } from '../disposeErrors.js';
 import { buildAgent } from './helpers/agentHarness.js';
@@ -28,19 +29,17 @@ describe('manual MCP cancellation failure ownership', () => {
     const signals: AbortSignal[] = [];
     const repeated = new Error('physical MCP abort failed after cancellation');
     const reasons: unknown[] = [undefined, repeated, repeated];
-    const network = spyOn(globalThis, 'fetch').mockImplementation(
-      async (_input, init) => {
-        const signal = init?.signal;
-        if (signal === undefined || signal === null)
-          throw new Error(
-            'MCP metadata requires its actual authentication signal',
-          );
-        signals.push(signal);
-        if (signals.length === reasons.length) entered.release();
-        await released.promise;
-        return new Response(null, { status: 401 });
-      },
-    );
+    const restoreNetwork = installMcpNetwork(async (_input, init) => {
+      const signal = init?.signal;
+      if (signal === undefined || signal === null)
+        throw new Error(
+          'MCP metadata requires its actual authentication signal',
+        );
+      signals.push(signal);
+      if (signals.length === reasons.length) entered.release();
+      await released.promise;
+      return new Response(null, { status: 401 });
+    });
     const built = await buildAgent('multi-turn-text.jsonl', {
       folderTrust: false,
       mcpServers: {
@@ -123,7 +122,7 @@ describe('manual MCP cancellation failure ownership', () => {
       restoreAbort();
       released.release();
       await Promise.allSettled([...authentication, disposal, built.cleanup()]);
-      network.mockRestore();
+      restoreNetwork();
     }
   }, 30000);
 });

@@ -24,7 +24,7 @@ export function attachCompressionCallback(
   }
 
   const callback = async (
-    _contents: IContent[],
+    contents: IContent[],
     guard?: CompressionGuardInfo,
   ): Promise<IContent[]> => {
     if (pendingContents === undefined) {
@@ -42,6 +42,7 @@ export function attachCompressionCallback(
         promptId,
         guard,
         provider,
+        contents,
       );
     } catch (error) {
       logger.warn(

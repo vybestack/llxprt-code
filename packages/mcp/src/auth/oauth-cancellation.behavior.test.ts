@@ -198,6 +198,7 @@ describe('MCP request-local authentication cancellation', () => {
     const display = authorization();
     const work = observe(
       MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: new MCPOAuthTokenStorage(store),
           openBrowser,
@@ -273,6 +274,7 @@ describe('MCP request-local authentication cancellation', () => {
       const display = authorization();
       const work = observe(
         MCPOAuthProvider.authenticate(
+          (input, init) => globalThis.fetch(input, init),
           {
             tokenStorage: new MCPOAuthTokenStorage(store),
             openBrowser,
@@ -338,6 +340,7 @@ describe('MCP request-local authentication cancellation', () => {
     const reason = new Error('native cancelled');
     const work = observe(
       MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: new MCPOAuthTokenStorage(store),
           openBrowser,
@@ -362,6 +365,7 @@ describe('MCP request-local authentication cancellation', () => {
     const display = authorization();
     const work = observe(
       MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: new MCPOAuthTokenStorage(store),
           openBrowser,
@@ -391,6 +395,7 @@ describe('MCP request-local authentication cancellation', () => {
     );
     const work = observe(
       MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: new MCPOAuthTokenStorage(store),
           openBrowser,
@@ -419,6 +424,7 @@ describe('MCP request-local authentication cancellation', () => {
     };
     const work = observe(
       MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: new MCPOAuthTokenStorage(store),
           openBrowser,
@@ -466,6 +472,7 @@ describe('MCP request-local authentication cancellation', () => {
       const display = authorization();
       const work = observe(
         MCPOAuthProvider.authenticate(
+          (input, init) => globalThis.fetch(input, init),
           {
             tokenStorage: new MCPOAuthTokenStorage(store),
             openBrowser,
@@ -498,6 +505,7 @@ describe('MCP request-local authentication cancellation', () => {
     const display = authorization();
     const work = observe(
       MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: new MCPOAuthTokenStorage(store),
           openBrowser,
@@ -559,6 +567,7 @@ describe('MCP request-local authentication cancellation', () => {
       const display = authorization();
       const work = observe(
         MCPOAuthProvider.authenticate(
+          (input, init) => globalThis.fetch(input, init),
           {
             tokenStorage: new MCPOAuthTokenStorage(store),
             openBrowser,
@@ -598,6 +607,7 @@ describe('MCP request-local authentication cancellation', () => {
     const display = authorization();
     const work = observe(
       MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: new MCPOAuthTokenStorage(store),
           openBrowser,
@@ -651,6 +661,7 @@ describe('MCP request-local authentication cancellation', () => {
     const displayB = authorization();
     const resultA = observe(
       MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: new MCPOAuthTokenStorage(store),
           openBrowser,
@@ -664,6 +675,7 @@ describe('MCP request-local authentication cancellation', () => {
     );
     const resultB = observe(
       MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: new MCPOAuthTokenStorage(store),
           openBrowser,
@@ -707,6 +719,7 @@ describe('MCP request-local authentication cancellation', () => {
     const shared = { ...config };
     const resultA = observe(
       MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: new MCPOAuthTokenStorage(store),
           openBrowser,
@@ -720,6 +733,7 @@ describe('MCP request-local authentication cancellation', () => {
     );
     const resultB = observe(
       MCPOAuthProvider.authenticate(
+        (input, init) => globalThis.fetch(input, init),
         {
           tokenStorage: new MCPOAuthTokenStorage(store),
           openBrowser,

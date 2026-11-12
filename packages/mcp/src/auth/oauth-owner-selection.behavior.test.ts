@@ -85,8 +85,18 @@ describe('explicit MCP credential selection', () => {
         );
       }
       const tokens = await Promise.all([
-        MCPOAuthProvider.getValidToken(a, 'same', { clientId: 'client' }),
-        MCPOAuthProvider.getValidToken(b, 'same', { clientId: 'client' }),
+        MCPOAuthProvider.getValidToken(
+          (input, init) => globalThis.fetch(input, init),
+          a,
+          'same',
+          { clientId: 'client' },
+        ),
+        MCPOAuthProvider.getValidToken(
+          (input, init) => globalThis.fetch(input, init),
+          b,
+          'same',
+          { clientId: 'client' },
+        ),
       ]);
       expect(tokens).toStrictEqual(['A-rotated', 'B-rotated']);
       expect([...requests].sort()).toStrictEqual(['A', 'B']);

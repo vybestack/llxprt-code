@@ -49,12 +49,11 @@ class SocketBoundaryProvider extends OpenAIResponsesProvider {
     });
   }
 
-  protected override async getCodexAccountId(): Promise<string> {
-    return 'test-account';
-  }
-
-  protected override async getAuthTokenForPrompt(): Promise<string> {
-    return 'test-token';
+  protected override async getRequestCredentialForPrompt(): Promise<{
+    token: string;
+    accountId: string;
+  }> {
+    return { token: 'test-token', accountId: 'test-account' };
   }
 }
 

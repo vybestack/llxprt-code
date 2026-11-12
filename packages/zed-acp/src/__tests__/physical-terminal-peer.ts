@@ -33,6 +33,7 @@ export class PhysicalTerminalPeer {
   private acquisitionGate: ReturnType<typeof deferred<void>> | undefined;
   private acquired = deferred<void>();
   private updateGate: ReturnType<typeof deferred<void>> | undefined;
+  private updateDeliveryHeld = false;
   private updated = deferred<void>();
   private closeClient!: () => void;
   private closeAgent!: () => void;
@@ -162,12 +163,17 @@ export class PhysicalTerminalPeer {
 
   holdUpdates(): void {
     this.updateGate = deferred<void>();
+    this.updateDeliveryHeld = true;
     this.updated = deferred<void>();
   }
   whenUpdated(): Promise<void> {
     return this.updated.promise;
   }
+  isHoldingUpdates(): boolean {
+    return this.updateDeliveryHeld;
+  }
   releaseUpdates(): void {
+    this.updateDeliveryHeld = false;
     this.updateGate?.resolve();
   }
 

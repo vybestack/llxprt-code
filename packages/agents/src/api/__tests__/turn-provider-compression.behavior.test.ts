@@ -384,4 +384,14 @@ describe('Foreground compression on an admitted provider route', () => {
       false,
     );
   }, 30_000);
+
+  it('rejects manual compression while a turn owns the conversation', async () => {
+    await withOwners(async (agent, _other, original, _replacement, start) => {
+      const admitted = start(agent, 'Hold the active turn');
+      await original.entered;
+      await expect(agent.compress()).rejects.toBeInstanceOf(AgentBusyError);
+      original.release();
+      successful(await admitted);
+    });
+  }, 30_000);
 });

@@ -6,6 +6,7 @@ import type { SessionSettingsOwner } from '../session/session-settings-owner.js'
  */
 
 import type { Config, RedactionConfig } from '../config/config.js';
+import type { ConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import type {
   ApiErrorEvent,
   ApiRequestEvent,
@@ -27,6 +28,7 @@ import { deepFreeze } from '../profiles/contracts/routingContexts.js';
 export interface ProviderRequestDiagnostics {
   readonly conversationLoggingEnabled: boolean;
   readonly conversationLogPath: string;
+  readonly conversationFileWriter: ConversationFileWriter;
   readonly redaction: RedactionConfig;
   recordApiError(event: ApiErrorEvent): void;
   recordApiRequest(event: ApiRequestEvent): void;
@@ -59,6 +61,7 @@ export function captureProviderRequestDiagnostics(
       return settings.readConversationLoggingEnabled();
     },
     conversationLogPath: owner.getConversationLogPath(),
+    conversationFileWriter: owner.getConversationFileWriter(),
     redaction: deepFreeze(structuredClone(redaction)),
     recordApiError: (event) => logApiError(owner, event, settings.telemetry),
     recordApiRequest: (event) =>

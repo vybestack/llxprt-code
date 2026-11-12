@@ -63,6 +63,15 @@ export interface OAuthManager {
     metadata?: OAuthTokenRequestMetadata,
   ): Promise<OAuthToken | null>;
   /**
+   * Full-token form of `getToken`: the same disk/peek/refresh/authentication
+   * semantics, returning the credential the access token came from so the
+   * caller can take an identity from the exact same result.
+   */
+  resolveToken?(
+    provider: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): Promise<OAuthToken | null>;
+  /**
    * Force refresh a token when it is known to be revoked.
    * @fix issue1861 - Token revocation handling
    */

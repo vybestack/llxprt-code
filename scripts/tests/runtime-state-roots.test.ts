@@ -11,6 +11,7 @@ import {
   auditRuntimeStateBoundary,
   type AuditPolicy,
 } from '../check-runtime-state-boundary.js';
+import { scanState } from '../runtime-state-scan.js';
 
 const evidence = resolve(
   import.meta.dir,
@@ -24,13 +25,15 @@ function put(file: string, text: string): void {
   writeFileSync(path, text);
 }
 
-const mutableTable = "export const table = new Set(['a']);";
+const mutableTable =
+  "export const table = new Set(); export function mutate() { table.add('a'); }";
 
 const discoveryPolicy: AuditPolicy = {
   compilerConfig: 'tsconfig.json',
   sourceRoots: ['packages/demo/src'],
   stateRootDiscovery: {
     directoryNames: ['runtime', 'api', 'settings'],
+    allProductionSources: true,
   },
   services: [],
   configs: [],
@@ -134,7 +137,7 @@ describe('discovered roots feed the audit', () => {
       expect(result.findings).toContainEqual(
         expect.objectContaining({
           file: `packages/demo/src/${directory}/state.ts`,
-          rule: 'mutable-state',
+          rule: 'module-mutation',
           declaration: 'table',
         }),
       );
@@ -142,12 +145,106 @@ describe('discovered roots feed the audit', () => {
     },
   );
 
-  it('leaves module state outside the state directories unreported', () => {
+  it('reports module state outside runtime-named directories', () => {
+    put('packages/demo/src/ownership/state.ts', mutableTable);
+    const result = auditRuntimeStateBoundary(workspace, discoveryPolicy);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        file: 'packages/demo/src/ownership/state.ts',
+        rule: 'module-mutation',
+      }),
+    );
+    expect(result.exitCode).toBe(1);
+  });
+
+  it('reports AsyncLocalStorage outside runtime-named directories', () => {
+    put(
+      'packages/demo/src/ownership/scope.ts',
+      "import { AsyncLocalStorage } from 'node:async_hooks'; export const scope = new AsyncLocalStorage<string>();",
+    );
+    const result = auditRuntimeStateBoundary(workspace, discoveryPolicy);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        file: 'packages/demo/src/ownership/scope.ts',
+        rule: 'async-local-storage',
+      }),
+    );
+    expect(result.exitCode).toBe(1);
+  });
+
+  it('scans module state at the production source root', () => {
     put('packages/demo/src/runtime/state.ts', 'export const value = 1;');
     put('packages/demo/src/notes.ts', mutableTable);
     const result = auditRuntimeStateBoundary(workspace, discoveryPolicy);
     expect(result.compilerDiagnostics).toEqual([]);
-    expect(result.findings).toEqual([]);
-    expect(result.exitCode).toBe(0);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        file: 'packages/demo/src/notes.ts',
+        rule: 'module-mutation',
+      }),
+    );
+    expect(result.exitCode).toBe(1);
+  });
+
+  it('follows resolved instance and static receiver writes in widened and runtime roots', () => {
+    const classBody =
+      'class Owner { private count = 0; increment() { this.count++; } private static total = 0; static incrementTotal() { this.total++; } }';
+    put(
+      'packages/demo/src/ownership/state.ts',
+      `${classBody} export const owner = new Owner(); export function run() { owner.increment(); Owner.incrementTotal(); }`,
+    );
+    put(
+      'packages/demo/src/runtime/state.ts',
+      `${classBody} export const owner = new Owner(); export function run() { owner.increment(); Owner.incrementTotal(); }`,
+    );
+    const result = scanState(workspace, discoveryPolicy, [
+      resolve(workspace, 'packages/demo/src/ownership/state.ts'),
+      resolve(workspace, 'packages/demo/src/runtime/state.ts'),
+    ]);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          file: resolve(workspace, 'packages/demo/src/ownership/state.ts'),
+          declaration: 'owner',
+          rule: 'module-mutation',
+        }),
+        expect.objectContaining({
+          file: resolve(workspace, 'packages/demo/src/runtime/state.ts'),
+          declaration: 'owner',
+          rule: 'module-mutation',
+        }),
+        expect.objectContaining({
+          file: resolve(workspace, 'packages/demo/src/ownership/state.ts'),
+          declaration: 'Owner.total',
+          rule: 'module-mutation',
+        }),
+        expect.objectContaining({
+          file: resolve(workspace, 'packages/demo/src/runtime/state.ts'),
+          declaration: 'Owner.total',
+          rule: 'module-mutation',
+        }),
+      ]),
+    );
+  });
+
+  it('excludes test and fixture files from expanded state and ALS scans', () => {
+    const fixtureFiles = [
+      'packages/demo/src/state.test.ts',
+      'packages/demo/src/state.spec.ts',
+      'packages/demo/src/__tests__/state.ts',
+      'packages/demo/src/fixtures/state.ts',
+    ];
+    for (const file of fixtureFiles)
+      put(
+        file,
+        `${mutableTable}\nimport { AsyncLocalStorage } from 'node:async_hooks';\nnew AsyncLocalStorage();`,
+      );
+    expect(
+      scanState(
+        workspace,
+        discoveryPolicy,
+        fixtureFiles.map((file) => resolve(workspace, file)),
+      ),
+    ).toEqual([]);
   });
 });

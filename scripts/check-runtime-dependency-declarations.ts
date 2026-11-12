@@ -21,7 +21,8 @@
  * imports. Workspace hoisting and the tsconfig path wildcards hid this in-repo.
  *
  * A package declared only in `devDependencies` is therefore a FAILURE here:
- * that is precisely the defect shape.
+ * that is precisely the defect shape. Type-only workspace imports are included
+ * because emitted declarations preserve those references for consumers.
  *
  * "Production source" is defined by reachability, not by filename convention:
  * a file counts if it is reachable by transitive relative import from one of
@@ -137,20 +138,11 @@ function lineOf(sourceFile: ts.SourceFile, node: ts.Node): number {
   );
 }
 
-/**
- * Whether an import declaration contributes to the runtime graph.
- *
- * `import type ...` is erased. So is a declaration whose named bindings are all
- * inline-type (`import { type A, type B } from 'x'`). A default binding, a
- * namespace binding, a bare side-effect import, or any value-named binding
- * makes it a runtime import.
- */
 function isRuntimeImportDeclaration(node: ts.ImportDeclaration): boolean {
+  const specifier = literalSpecifierOf(node.moduleSpecifier);
+  if (specifier?.startsWith('@vybestack/llxprt-code-')) return true;
   const clause = node.importClause;
-  if (clause === undefined) {
-    // `import 'x'` is a side-effect import evaluated at runtime.
-    return true;
-  }
+  if (clause === undefined) return true;
   if (clause.isTypeOnly) return false;
   if (clause.name !== undefined) return true;
   const bindings = clause.namedBindings;
@@ -159,15 +151,12 @@ function isRuntimeImportDeclaration(node: ts.ImportDeclaration): boolean {
   return bindings.elements.some((element) => !element.isTypeOnly);
 }
 
-/** Whether an `export ... from` declaration contributes to the runtime graph. */
 function isRuntimeExportDeclaration(node: ts.ExportDeclaration): boolean {
+  const specifier = literalSpecifierOf(node.moduleSpecifier);
+  if (specifier?.startsWith('@vybestack/llxprt-code-')) return true;
   if (node.isTypeOnly) return false;
   const clause = node.exportClause;
-  if (clause === undefined) {
-    // `export * from 'x'` re-exports values at runtime.
-    return true;
-  }
-  if (ts.isNamespaceExport(clause)) return true;
+  if (clause === undefined || ts.isNamespaceExport(clause)) return true;
   return clause.elements.some((element) => !element.isTypeOnly);
 }
 

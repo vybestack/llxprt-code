@@ -275,11 +275,13 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     return this.#settings.exportForStateSnapshot();
   }
   load(name: string): ReturnType<AgentProfileApplication['load']> {
+    this.#assertOpen();
     return (this.#profiles ?? notPrepared()).load(name);
   }
   applySnapshot(
     ...args: Parameters<AgentProfileApplication['applySnapshot']>
   ): ReturnType<AgentProfileApplication['applySnapshot']> {
+    this.#assertOpen();
     return (this.#profiles ?? notPrepared()).applySnapshot(...args);
   }
   isApplying(): boolean {
@@ -719,15 +721,18 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     this.#phase = 'closed';
     this.#closing = Promise.resolve().then(async () => {
       await Promise.allSettled([this.#preparation]);
-      const actions: Array<() => void | Promise<void>> = [];
+      const actions: Array<() => void | Promise<void>> = [
+        () => this.#profiles?.cancelAndJoin(),
+      ];
       if (
         this.#foregroundPending !== undefined &&
         !this.#foregroundTransferred
       ) {
-        await this.#foregroundPending.catch(() => undefined);
-        const foreground = this.#activation;
-        if (foreground !== undefined)
-          actions.push(() => foreground.disposeForeground());
+        actions.push(async () => {
+          await this.#foregroundPending?.catch(() => undefined);
+          const foreground = this.#activation;
+          if (foreground !== undefined) await foreground.disposeForeground();
+        });
       } else if (!transferred) {
         const activation = this.#activation ?? this.#provisionalActivation;
         if (activation !== undefined) actions.push(() => activation.dispose());

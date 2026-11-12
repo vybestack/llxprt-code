@@ -50,6 +50,7 @@ export * from './skills/skillDiscovery.js';
 
 // Export environment sanitization
 export * from './services/environmentSanitization.js';
+export { OwnedFetch } from './utils/fetch.js';
 export type { NetworkFetch } from './utils/fetch.js';
 
 // Export debugLogger

@@ -435,3 +435,34 @@ export async function startNoAuthMcpFixture(): Promise<NoAuthMcpFixture> {
     },
   };
 }
+
+const HELD_ABORT_SETTLE_WAIT_MS = 2000;
+
+/**
+ * Releases the held `method` only if the transition has not settled by itself.
+ * Retirement aborts the accepted request, and the abort can still be in flight
+ * when a fixed delay elapses on a loaded machine. Releasing then makes the
+ * server create a session in a reply the aborting client never reads, so no
+ * DELETE can follow. A transition that settles without the release proves the
+ * abort; one that does not is released after the deadline so a joining
+ * implementation completes instead of hanging.
+ */
+export async function releaseHeldUnlessSettled(
+  fixture: NoAuthMcpFixture,
+  method: string,
+  settled: Promise<unknown>,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<'deadline'>((resolve) => {
+    timer = setTimeout(() => resolve('deadline'), HELD_ABORT_SETTLE_WAIT_MS);
+  });
+  const outcome = await Promise.race([
+    settled.then<'settled', 'settled'>(
+      () => 'settled',
+      () => 'settled',
+    ),
+    deadline,
+  ]);
+  clearTimeout(timer);
+  if (outcome === 'deadline') fixture.release(method);
+}

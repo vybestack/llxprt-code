@@ -30,6 +30,7 @@ import {
 import {
   AuthPrecedenceResolver,
   type OAuthManager as CoreOAuthManager,
+  type OAuthToken,
 } from '@vybestack/llxprt-code-core';
 import {
   SecureStore,
@@ -89,6 +90,10 @@ function createMockOAuthManager(tokenStore: KeyringTokenStore) {
   const spies = {
     authenticate: vi.spyOn(manager, 'authenticate'),
     getToken: vi.spyOn(manager, 'getToken'),
+    // The resolver reads the full credential through resolveToken so the
+    // bearer and its identity come from one result; both entry points are
+    // observed so a "must not trigger OAuth" assertion cannot pass vacuously.
+    resolveToken: vi.spyOn(manager, 'resolveToken'),
     isAuthenticated: vi.spyOn(manager, 'isAuthenticated'),
     // AuthPrecedenceResolver asks the manager whether OAuth is enabled for the
     // provider and returns null before touching getToken when it is not. These
@@ -102,6 +107,15 @@ function createMockOAuthManager(tokenStore: KeyringTokenStore) {
   };
 
   return { manager, spies };
+}
+
+/** A complete stored credential whose bearer is `accessToken`. */
+function oauthTokenFor(accessToken: string): OAuthToken {
+  return {
+    access_token: accessToken,
+    token_type: 'Bearer',
+    expiry: Math.floor(Date.now() / 1000) + 3600,
+  };
 }
 
 describe('OAuth Timing Integration Tests', () => {
@@ -211,6 +225,7 @@ describe('OAuth Timing Integration Tests', () => {
       // Verify OAuth was NOT triggered during profile load
       expect(oauthSpies.authenticate).not.toHaveBeenCalled();
       expect(oauthSpies.getToken).not.toHaveBeenCalled();
+      expect(oauthSpies.resolveToken).not.toHaveBeenCalled();
 
       // Verify keyfile was set in settings
       expect(settingsService.get('auth-keyfile')).toBe(keyfilePath);
@@ -244,6 +259,7 @@ describe('OAuth Timing Integration Tests', () => {
       // Verify OAuth was NOT triggered during profile load
       expect(oauthSpies.authenticate).not.toHaveBeenCalled();
       expect(oauthSpies.getToken).not.toHaveBeenCalled();
+      expect(oauthSpies.resolveToken).not.toHaveBeenCalled();
 
       // Verify auth key was set
       expect(settingsService.get('auth-key')).toBe('sk-ant-test-key-123');
@@ -275,6 +291,7 @@ describe('OAuth Timing Integration Tests', () => {
       // (OAuth should only trigger on prompt send, not during configuration)
       expect(oauthSpies.authenticate).not.toHaveBeenCalled();
       expect(oauthSpies.getToken).not.toHaveBeenCalled();
+      expect(oauthSpies.resolveToken).not.toHaveBeenCalled();
 
       // Verify no auth is set
       expect(settingsService.get('auth-key')).toBeUndefined();
@@ -314,6 +331,7 @@ describe('OAuth Timing Integration Tests', () => {
       // Should NOT trigger OAuth because includeOAuth defaults to false
       expect(token).toBeNull();
       expect(oauthSpies.getToken).not.toHaveBeenCalled();
+      expect(oauthSpies.resolveToken).not.toHaveBeenCalled();
       expect(oauthSpies.authenticate).not.toHaveBeenCalled();
     });
 
@@ -340,7 +358,9 @@ describe('OAuth Timing Integration Tests', () => {
       delete process.env.GEMINI_API_KEY;
 
       // Mock OAuth manager to return a token
-      oauthSpies.getToken.mockResolvedValue('oauth-token-123');
+      oauthSpies.resolveToken.mockResolvedValue(
+        oauthTokenFor('oauth-token-123'),
+      );
 
       // Resolve auth WITH includeOAuth=true (simulates prompt send)
       const token = await resolver.resolveAuthentication({
@@ -350,8 +370,8 @@ describe('OAuth Timing Integration Tests', () => {
 
       // NOW OAuth should have been triggered
       expect(token).toBe('oauth-token-123');
-      expect(oauthSpies.getToken).toHaveBeenCalledTimes(1);
-      expect(oauthSpies.getToken).toHaveBeenCalledWith(
+      expect(oauthSpies.resolveToken).toHaveBeenCalledTimes(1);
+      expect(oauthSpies.resolveToken).toHaveBeenCalledWith(
         'anthropic',
         expect.objectContaining({
           providerId: 'anthropic',
@@ -367,6 +387,9 @@ describe('OAuth Timing Integration Tests', () => {
 
       // Mock OAuth to return token if called
       oauthSpies.getToken.mockResolvedValue('should-not-be-used');
+      oauthSpies.resolveToken.mockResolvedValue(
+        oauthTokenFor('should-not-be-used'),
+      );
 
       const resolver = new AuthPrecedenceResolver(
         {
@@ -391,6 +414,7 @@ describe('OAuth Timing Integration Tests', () => {
       // Should get the API key, NOT trigger OAuth
       expect(token).toBe('explicit-api-key');
       expect(oauthSpies.getToken).not.toHaveBeenCalled();
+      expect(oauthSpies.resolveToken).not.toHaveBeenCalled();
       expect(oauthSpies.authenticate).not.toHaveBeenCalled();
     });
 
@@ -401,6 +425,9 @@ describe('OAuth Timing Integration Tests', () => {
 
       // Mock OAuth to return token if called
       oauthSpies.getToken.mockResolvedValue('should-not-be-used');
+      oauthSpies.resolveToken.mockResolvedValue(
+        oauthTokenFor('should-not-be-used'),
+      );
 
       const resolver = new AuthPrecedenceResolver(
         {
@@ -425,6 +452,7 @@ describe('OAuth Timing Integration Tests', () => {
       // Should read from keyfile, NOT trigger OAuth
       expect(token).toBe('keyfile-token');
       expect(oauthSpies.getToken).not.toHaveBeenCalled();
+      expect(oauthSpies.resolveToken).not.toHaveBeenCalled();
       expect(oauthSpies.authenticate).not.toHaveBeenCalled();
     });
 
@@ -439,6 +467,9 @@ describe('OAuth Timing Integration Tests', () => {
 
         // Mock OAuth to return token if called
         oauthSpies.getToken.mockResolvedValue('should-not-be-used');
+        oauthSpies.resolveToken.mockResolvedValue(
+          oauthTokenFor('should-not-be-used'),
+        );
 
         // @plan:PLAN-20260608-ISSUE1586.P15 — options-object constructor
         const resolver = new AuthPrecedenceResolver(
@@ -464,6 +495,7 @@ describe('OAuth Timing Integration Tests', () => {
         // Should use env var, NOT trigger OAuth
         expect(token).toBe('env-var-token');
         expect(oauthSpies.getToken).not.toHaveBeenCalled();
+        expect(oauthSpies.resolveToken).not.toHaveBeenCalled();
         expect(oauthSpies.authenticate).not.toHaveBeenCalled();
       } finally {
         delete process.env.ANTHROPIC_API_KEY;
@@ -502,6 +534,7 @@ describe('OAuth Timing Integration Tests', () => {
       // Should NOT trigger OAuth because it's disabled
       expect(token).toBeNull();
       expect(oauthSpies.getToken).not.toHaveBeenCalled();
+      expect(oauthSpies.resolveToken).not.toHaveBeenCalled();
       expect(oauthSpies.authenticate).not.toHaveBeenCalled();
     });
   });
@@ -513,7 +546,9 @@ describe('OAuth Timing Integration Tests', () => {
       settingsService.set('auth-key', 'should-be-ignored');
 
       // Mock OAuth to return token
-      oauthSpies.getToken.mockResolvedValue('oauth-only-token');
+      oauthSpies.resolveToken.mockResolvedValue(
+        oauthTokenFor('oauth-only-token'),
+      );
 
       const resolver = new AuthPrecedenceResolver(
         {
@@ -537,7 +572,7 @@ describe('OAuth Timing Integration Tests', () => {
 
       // Should use OAuth, ignoring the API key
       expect(token).toBe('oauth-only-token');
-      expect(oauthSpies.getToken).toHaveBeenCalledTimes(1);
+      expect(oauthSpies.resolveToken).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -549,6 +584,7 @@ describe('OAuth Timing Integration Tests', () => {
       // Verify OAuth was NOT triggered
       expect(oauthSpies.authenticate).not.toHaveBeenCalled();
       expect(oauthSpies.getToken).not.toHaveBeenCalled();
+      expect(oauthSpies.resolveToken).not.toHaveBeenCalled();
     });
 
     it('should NOT trigger OAuth when setting provider OAuth disabled flag', () => {
@@ -563,6 +599,7 @@ describe('OAuth Timing Integration Tests', () => {
       // Verify OAuth was NOT triggered
       expect(oauthSpies.authenticate).not.toHaveBeenCalled();
       expect(oauthSpies.getToken).not.toHaveBeenCalled();
+      expect(oauthSpies.resolveToken).not.toHaveBeenCalled();
     });
 
     it('should NOT trigger OAuth when setting keyfile path', async () => {
@@ -575,6 +612,7 @@ describe('OAuth Timing Integration Tests', () => {
       // Verify OAuth was NOT triggered
       expect(oauthSpies.authenticate).not.toHaveBeenCalled();
       expect(oauthSpies.getToken).not.toHaveBeenCalled();
+      expect(oauthSpies.resolveToken).not.toHaveBeenCalled();
     });
 
     it('should NOT trigger OAuth when clearing auth token', async () => {
@@ -589,9 +627,11 @@ describe('OAuth Timing Integration Tests', () => {
   describe('Multiple Provider Scenarios', () => {
     async function observeCodexTokenForSeparateProviderOAuthState() {
       // Mock different tokens for different providers
-      oauthSpies.getToken.mockImplementation(async (provider: string) => {
-        if (provider === 'codex') return 'codex-oauth-token';
-        if (provider === 'anthropic') return 'anthropic-oauth-token';
+      oauthSpies.resolveToken.mockImplementation(async (provider: string) => {
+        if (provider === 'codex') return oauthTokenFor('codex-oauth-token');
+        if (provider === 'anthropic') {
+          return oauthTokenFor('anthropic-oauth-token');
+        }
         return null;
       });
 
@@ -676,6 +716,7 @@ describe('OAuth Timing Integration Tests', () => {
 
       // OAuth should NEVER be triggered during config operations
       expect(oauthSpies.getToken).not.toHaveBeenCalled();
+      expect(oauthSpies.resolveToken).not.toHaveBeenCalled();
       expect(oauthSpies.authenticate).not.toHaveBeenCalled();
     });
 
@@ -696,7 +737,9 @@ describe('OAuth Timing Integration Tests', () => {
       );
 
       // Mock OAuth
-      oauthSpies.getToken.mockResolvedValue('prompt-time-token');
+      oauthSpies.resolveToken.mockResolvedValue(
+        oauthTokenFor('prompt-time-token'),
+      );
 
       // Simulate prompt send (includeOAuth=true)
       const token = await resolver.resolveAuthentication({
@@ -706,7 +749,7 @@ describe('OAuth Timing Integration Tests', () => {
 
       // OAuth should trigger ONLY on prompt send
       expect(token).toBe('prompt-time-token');
-      expect(oauthSpies.getToken).toHaveBeenCalledTimes(1);
+      expect(oauthSpies.resolveToken).toHaveBeenCalledTimes(1);
     });
   });
 });

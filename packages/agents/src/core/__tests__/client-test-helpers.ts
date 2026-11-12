@@ -200,6 +200,9 @@ function setupConfigMock(mockFns: ClientMockFns): ContentGeneratorConfig {
       getImagePayloadBudgetBytes: vi
         .fn()
         .mockReturnValue(DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES),
+      getRequestImagePayloadBudgetOverrideBytes: vi
+        .fn()
+        .mockReturnValue(undefined),
       getChatCompression: vi.fn().mockReturnValue(undefined),
       isTrustedFolder: () => true,
       isInteractive: vi.fn().mockReturnValue(true),

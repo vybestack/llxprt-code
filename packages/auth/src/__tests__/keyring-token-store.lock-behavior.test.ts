@@ -325,30 +325,66 @@ describe('KeyringTokenStore advisory lock behavior', () => {
     expect(Date.now() - start).toBeGreaterThanOrEqual(100);
   });
 
-  it('bounds a stalled auth-lock waiter callback by the acquisition deadline', async () => {
+  it('settles a stalled waiter at its deadline after owner metadata setup', async () => {
     const lockFile = path.join(lockDir, 'codex-auth.lock');
     await fs.mkdir(lockDir, { recursive: true });
-    await fs.writeFile(
-      lockFile,
-      JSON.stringify({
-        version: 1,
-        ownerToken: 'live-owner',
-        pid: process.pid,
-        hostname: os.hostname(),
-        startTimeMs: Date.now() - process.uptime() * 1000,
-      }),
-      { mode: 0o600 },
-    );
-    const store = createStore();
-    const start = Date.now();
+    const liveOwner = JSON.stringify({
+      version: 1,
+      ownerToken: 'live-owner',
+      pid: process.pid,
+      hostname: os.hostname(),
+      startTimeMs: Date.now() - process.uptime() * 1000,
+    });
+    await fs.writeFile(lockFile, liveOwner, { mode: 0o600 });
 
-    const acquired = await store.acquireAuthLock('codex', {
+    let callbackEntered!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      callbackEntered = resolve;
+    });
+    let finishCallback!: (value: boolean) => void;
+    const callback = new Promise<boolean>((resolve) => {
+      finishCallback = resolve;
+    });
+    let deadlineClockStart = 0;
+    const store = createStore(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      return buildOwnerMetadata(Date.now() - process.uptime() * 1000);
+    });
+    let acquisitionSettled = false;
+    const acquisition = store.acquireAuthLock('codex', {
       waitMs: 100,
-      onWait: () => new Promise<boolean>(() => undefined),
+      onWait: () => {
+        deadlineClockStart = Date.now() - 2;
+        vi.useFakeTimers({ now: deadlineClockStart });
+        callbackEntered();
+        return callback;
+      },
     });
 
-    expect(acquired).toBe(false);
-    expect(Date.now() - start).toBeLessThan(500);
+    void acquisition.then(
+      () => {
+        acquisitionSettled = true;
+      },
+      () => {
+        acquisitionSettled = true;
+      },
+    );
+
+    try {
+      await entered;
+      vi.advanceTimersByTime(99);
+      expect(acquisitionSettled).toBe(false);
+      vi.advanceTimersByTime(1);
+      vi.runAllTimers();
+      await Promise.resolve();
+      vi.runAllTimers();
+      expect(Date.now() - deadlineClockStart).toBeLessThanOrEqual(110);
+      await expect(acquisition).resolves.toBe(false);
+      expect(await fs.readFile(lockFile, 'utf8')).toBe(liveOwner);
+    } finally {
+      finishCallback(true);
+      vi.useRealTimers();
+    }
   });
 
   it('keeps auth and refresh lock namespaces independent', async () => {

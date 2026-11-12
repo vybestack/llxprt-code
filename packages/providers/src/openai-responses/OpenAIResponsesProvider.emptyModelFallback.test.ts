@@ -88,8 +88,10 @@ function buildDeps(
     requestBaseURL: 'https://api.openai.com/v1',
     requestHeaders: undefined,
     isCodexMode: () => false,
-    getCodexAccountId: async () => 'codex-account',
-    resolveAuthTokenForPrompt: async () => '',
+    resolveRequestCredential: async () => ({
+      bearer: 'test-token',
+      accountId: 'codex-account',
+    }),
     shouldRetryOnError: () => false,
     defaultModel: 'o3-mini',
 
@@ -174,7 +176,10 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
   it('uses deps.getDefaultModel() as the request model when resolved model is empty', async () => {
     const deps = buildDeps({
       defaultModel: 'o3-mini',
-      resolveAuthTokenForPrompt: async () => 'test-token',
+      resolveRequestCredential: async () => ({
+        bearer: 'test-token',
+        accountId: 'codex-account',
+      }),
     });
     const options = buildNormalizedOptions({
       resolved: {
@@ -200,7 +205,10 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
     const deps = buildDeps({
       defaultModel: 'o3-mini',
       requestBaseURL: baseURL,
-      resolveAuthTokenForPrompt: async () => 'test-token',
+      resolveRequestCredential: async () => ({
+        bearer: 'test-token',
+        accountId: 'codex-account',
+      }),
     });
     const options = buildNormalizedOptions({
       resolved: {
@@ -224,7 +232,10 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
   it('passes the resolved model when it is non-empty', async () => {
     const deps = buildDeps({
       defaultModel: 'o3-mini',
-      resolveAuthTokenForPrompt: async () => 'test-token',
+      resolveRequestCredential: async () => ({
+        bearer: 'test-token',
+        accountId: 'codex-account',
+      }),
     });
     const options = buildNormalizedOptions({
       resolved: {

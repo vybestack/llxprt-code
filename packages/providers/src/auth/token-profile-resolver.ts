@@ -175,3 +175,37 @@ function hasNonEmptyOAuthBuckets(profile: object): boolean {
   }
   return Array.isArray(authRecord.buckets) && authRecord.buckets.length > 0;
 }
+
+export async function resolveCurrentProfileSessionBucket(
+  provider: string,
+  metadata: OAuthTokenRequestMetadata | undefined,
+  readSessionBucket: (
+    provider: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ) => string | undefined,
+  readProfileBuckets: (
+    provider: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ) => Promise<string[]>,
+): Promise<string | undefined> {
+  const scopedSessionBucket = readSessionBucket(provider, metadata);
+  if (scopedSessionBucket) {
+    return scopedSessionBucket;
+  }
+
+  const profileBuckets = await readProfileBuckets(provider, metadata);
+  if (profileBuckets.length === 1) {
+    return profileBuckets[0];
+  }
+
+  const unscopedSessionBucket = readSessionBucket(provider);
+  if (
+    unscopedSessionBucket &&
+    (profileBuckets.length === 0 ||
+      profileBuckets.includes(unscopedSessionBucket))
+  ) {
+    return unscopedSessionBucket;
+  }
+
+  return undefined;
+}

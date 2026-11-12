@@ -25,9 +25,6 @@ import * as providerKeyStoragePkg from '@vybestack/llxprt-code-storage/storage/p
 import * as sessionTypesPkg from '@vybestack/llxprt-code-storage/storage/sessionTypes.js';
 import * as conversationFileWriterPkg from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 
-// Test-only helper from storage testing module
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
-
 describe('Core compatibility shims', () => {
   describe('root core exports expose moved symbols', () => {
     it('exposes SecureStore from core root', () => {
@@ -145,26 +142,11 @@ describe('Core compatibility shims', () => {
     });
   });
 
-  describe('singleton identity', () => {
+  describe('function re-export identity', () => {
     it('getConversationFileWriter deep-path shim identity', () => {
-      // Reset to ensure clean state using storage testing module
-      resetConversationFileWriterForTesting();
-
-      // Get from core deep path shim
-      const fromCoreDeep = conversationFileWriterShim.getConversationFileWriter(
-        '/tmp/compat-test-core',
+      expect(conversationFileWriterShim.getConversationFileWriter).toBe(
+        conversationFileWriterPkg.getConversationFileWriter,
       );
-      // Get from storage deep path
-      const fromStorageDeep =
-        conversationFileWriterPkg.getConversationFileWriter(
-          '/tmp/compat-test-storage',
-        );
-
-      // Same singleton regardless of path used to access
-      expect(fromCoreDeep).toBe(fromStorageDeep);
-
-      // Clean up
-      resetConversationFileWriterForTesting();
     });
   });
 });

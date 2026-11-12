@@ -33,6 +33,20 @@ function scan(source: string) {
   );
 }
 describe('runtime service shape guard flattened aggregates', () => {
+  it('fails when an assembly exemption names a missing function', () => {
+    expect(() =>
+      scanRuntimeServiceShapes(
+        { ...roots, 'consumer.ts': 'export function present(): void {}' },
+        {
+          ...options,
+          assembly: [
+            { file: 'consumer.ts', functionName: 'missing', issueNumber: 3979 },
+          ],
+        },
+      ),
+    ).toThrow('Unresolved assembly exemption');
+  });
+
   /**
    * The CliUiRuntime shape: several capability read-models, each exposing
    * operations that reach a distinct runtime object, flattened into one type.
@@ -94,6 +108,30 @@ describe('runtime service shape guard flattened aggregates', () => {
       interface StreamRuntime extends VaultReads { getModel(): string }`,
       ),
     ).toEqual([]);
+  });
+
+  it('rejects a bag containing multiple runtime objects', () => {
+    expect(
+      scan(
+        `
+      interface WorkspaceToolPorts { fileSystem: Vault; ide: Journal; }`,
+      ),
+    ).toContainEqual(
+      expect.objectContaining({ rule: 'runtime-service-bundle' }),
+    );
+  });
+
+  it('rejects interface heritage that combines two configured services', () => {
+    expect(
+      scan(
+        `
+      interface SchedulerPort { scheduler(): Scheduler }
+      interface ContextPort { context(): Context }
+      interface CombinedPorts extends SchedulerPort, ContextPort {}`,
+      ),
+    ).toContainEqual(
+      expect.objectContaining({ rule: 'runtime-service-bundle' }),
+    );
   });
 
   /** Allowed: merged parts that reach no configured capability are data. */
