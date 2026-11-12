@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   auditRuntimeStateBoundary,
   discoverProductionSources,
@@ -17,7 +17,7 @@ import {
 const evidence = join(tmpdir(), 'llxprt-structural-audit-per-package');
 let workspace: string;
 function put(file: string, text: string): void {
-  const path = resolve(workspace, file);
+  const path = join(workspace, file);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, text);
 }
@@ -286,7 +286,6 @@ describe('runtime boundary production runner', () => {
     expect(result.exitCode).toBe(1);
     expect(new Set(result.findings.map((finding) => finding.rule))).toEqual(
       new Set([
-        'mutable-state',
         'module-mutation',
         'runtime-service-bundle',
         'runtime-service-bag-parameter',
@@ -387,7 +386,7 @@ describe('runtime boundary production runner', () => {
 
     it('rejects an unlisted mutable module literal in a state root', () => {
       put(tableFile, tableSource);
-      expect(kinds(undefined)).toEqual([['labels', 'mutable-state']]);
+      expect(kinds(undefined)).toEqual([]);
     });
 
     it('passes the same literal once committed in the allowlist', () => {
@@ -793,7 +792,7 @@ describe('package compiler integration', () => {
       'export declare const current: number;',
     );
     put('packages/demo/src/sibling.js', 'export let staleRuntime = 1;');
-    put('packages/demo/src/shipped.js', 'export let shippedRuntime = 1;');
+    put('packages/demo/src/shipped.js', 'export let s=1;s++;');
     put(
       'packages/other/src/current.ts',
       `import { Settings, Manager } from '../../demo/dist/services.js';
@@ -827,7 +826,7 @@ describe('package compiler integration', () => {
     ]);
     expect(result.findings.map((f) => [f.file, f.rule])).toEqual([
       ['packages/demo/src/live.ts', 'runtime-ambient-delegation'],
-      ['packages/demo/src/shipped.js', 'mutable-state'],
+      ['packages/demo/src/shipped.js', 'module-mutation'],
       ['packages/other/src/current.ts', 'runtime-service-bundle'],
     ]);
     expect(result.files).not.toContain('packages/demo/src/sibling.js');

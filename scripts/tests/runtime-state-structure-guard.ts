@@ -58,6 +58,16 @@ function mutableStaticField(
   );
 }
 
+function shouldReportStaticField(
+  node: ts.Node,
+  checker: ts.TypeChecker,
+  containerPolicy: ContainerPolicy | undefined,
+): node is ts.PropertyDeclaration {
+  if (containerPolicy || !ts.isPropertyDeclaration(node)) return false;
+  if (!isStatic(node) || !isModuleOwned(node)) return false;
+  return mutableStaticField(node, checker);
+}
+
 function isReadonly(node: ts.Node): boolean {
   return (
     ts.canHaveModifiers(node) &&
@@ -729,16 +739,14 @@ function resolvedSource(
  * separate analysis. Without a resolved program the scan is single-source;
  * passing a program whose module resolution covers the scanned files lets ALS
  * constructors be followed through imports and re-exports. Branches are unioned, not evaluated for reachability.
- * With a `containerPolicy`, module-level object/array literal storage (also
- * inside Object.freeze unless it is a primitive-only table) is reported as
- * mutable-state unless an exact file + declaration allowlist entry with a
- * nonblank reason names it; allowlist entries that match no such declaration
- * are reported as stale-immutable-allowance.
- * All non-ALS `new` initializers are conservatively treated as mutable; imported
- * class implementations are not inspected. Object.freeze does not exempt
- * constructed instances. Frozen primitive tables are permitted. Input should
- * already pass TypeScript parsing/typechecking; this scanner is not a compiler
- * diagnostic replacement. No repository discovery or default allowance exists.
+ * In production state-root scans, a `containerPolicy` marks scope where
+ * module values are reported only when writes or known mutators reach them;
+ * never-mutated values are not state findings. The associated table allowlist
+ * is still checked for stale entries. Without that production policy, the
+ * single-source helper retains conservative declaration-level checks for
+ * callers that explicitly request them. Input should already pass TypeScript
+ * parsing/typechecking; this scanner is not a compiler diagnostic replacement.
+ * No repository discovery or default allowance exists.
  */
 export function scanRuntimeStateStructure(
   filename: string,
@@ -768,30 +776,29 @@ export function scanRuntimeStateStructure(
     });
   }
   function checkModuleVariable(node: ts.VariableDeclaration): void {
-    const writable =
-      ts.isVariableDeclarationList(node.parent) &&
-      !(node.parent.flags & ts.NodeFlags.Const);
+    if (containerPolicy) {
+      if (node.initializer && containerLiteralStorage(node.initializer)) {
+        const declaration = declarationName(node);
+        const allowance = containerPolicy.allowlist.find(
+          (entry) =>
+            entry.file === filename &&
+            entry.declaration === declaration &&
+            entry.reason.trim().length > 0,
+        );
+        if (allowance) usedAllowances.add(allowance);
+      }
+      return;
+    }
     if (
-      writable ||
-      (node.initializer &&
-        containsMutableConstruction(node.initializer, checker))
+      ts.isVariableDeclarationList(node.parent) &&
+      !(node.parent.flags & ts.NodeFlags.Const)
     )
       return report(node, 'mutable-state');
     if (
-      !containerPolicy ||
-      !node.initializer ||
-      !containerLiteralStorage(node.initializer)
+      node.initializer &&
+      containsMutableConstruction(node.initializer, checker)
     )
-      return;
-    const declaration = declarationName(node);
-    const allowance = containerPolicy.allowlist.find(
-      (entry) =>
-        entry.file === filename &&
-        entry.declaration === declaration &&
-        entry.reason.trim().length > 0,
-    );
-    if (allowance) usedAllowances.add(allowance);
-    else report(node, 'mutable-state', declaration);
+      report(node, 'mutable-state');
   }
   function checkAlsConstructor(node: ts.Node): void {
     if (
@@ -810,24 +817,20 @@ export function scanRuntimeStateStructure(
   }
   function visit(node: ts.Node): void {
     checkAlsConstructor(node);
-    if (ts.isExportAssignment(node) && !node.isExportEquals) {
-      const mutable =
-        containsMutableConstruction(node.expression, checker) ||
-        (containerPolicy && containerLiteralStorage(node.expression));
-      if (mutable) report(node, 'mutable-state', 'default');
-    }
+    if (
+      !containerPolicy &&
+      ts.isExportAssignment(node) &&
+      !node.isExportEquals &&
+      containsMutableConstruction(node.expression, checker)
+    )
+      report(node, 'mutable-state', 'default');
     if (targetsGlobalThis(node, checker))
       report(node, 'module-mutation', 'globalThis');
     if (targetsProcessEnvironment(node, checker))
       report(node, 'process-environment-mutation', 'process.env');
     if (ts.isVariableDeclaration(node) && isModuleOwned(node))
       checkModuleVariable(node);
-    if (
-      ts.isPropertyDeclaration(node) &&
-      isStatic(node) &&
-      isModuleOwned(node) &&
-      mutableStaticField(node, checker)
-    )
+    if (shouldReportStaticField(node, checker, containerPolicy))
       report(node, 'mutable-state');
     const declaration = mutationDeclaration(node, checker);
     if (

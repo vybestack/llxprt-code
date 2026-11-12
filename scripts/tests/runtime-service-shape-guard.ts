@@ -45,6 +45,19 @@ export interface RuntimeServiceShapeFinding {
   readonly file: string;
   readonly line: number;
   readonly column: number;
+  readonly declaration: string;
+}
+
+function isNamedDeclaration(node: ts.Node): node is ts.NamedDeclaration {
+  return 'name' in node && node.name !== undefined;
+}
+
+function findingDeclaration(node: ts.Node): string {
+  if (ts.isIdentifier(node)) return node.text;
+  if (ts.isPropertyAccessExpression(node)) return node.name.text;
+  if (isNamedDeclaration(node) && node.name && ts.isIdentifier(node.name))
+    return node.name.text;
+  return '<anonymous>';
 }
 
 function resolveRoots(
@@ -420,6 +433,7 @@ export function scanRuntimeServiceProgram(
         file,
         line: position.line + 1,
         column: position.character + 1,
+        declaration: findingDeclaration(node),
       });
     }
     function reportTypes(node: ts.Node, types: readonly ts.Type[]): void {

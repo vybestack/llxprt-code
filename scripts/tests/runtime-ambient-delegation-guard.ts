@@ -16,6 +16,7 @@ export interface AmbientDelegationFinding {
   readonly file: string;
   readonly line: number;
   readonly column: number;
+  readonly declaration: string;
   readonly kind: 'argument' | 'receiver' | 'return' | 'call';
 }
 
@@ -256,6 +257,34 @@ interface ReturnedValue {
  * Configure only service-bearing sources, not primitive observability accessors.
  * There are no assembly exemptions or automatic repository-wide assertions.
  */
+function namedCallableDeclaration(
+  node: ts.Node,
+): ts.NamedDeclaration | undefined {
+  if (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node))
+    return node;
+  if (ts.isFunctionExpression(node) || ts.isGetAccessorDeclaration(node))
+    return node;
+  return undefined;
+}
+
+function enclosingDeclaration(node: ts.Node): string {
+  let current: ts.Node | undefined = node;
+  while (current && !ts.isSourceFile(current)) {
+    const callable = namedCallableDeclaration(current);
+    if (callable?.name) return callable.name.getText();
+    if (ts.isConstructorDeclaration(current)) return 'constructor';
+    if (ts.isVariableDeclaration(current) && ts.isIdentifier(current.name))
+      return current.name.text;
+    if (ts.isCallExpression(current)) {
+      if (ts.isIdentifier(current.expression)) return current.expression.text;
+      if (ts.isPropertyAccessExpression(current.expression))
+        return current.expression.name.text;
+    }
+    current = current.parent;
+  }
+  return '<module>';
+}
+
 export function scanAmbientDelegation(
   program: ts.Program,
   sources: readonly ts.SourceFile[],
@@ -513,6 +542,7 @@ export function scanAmbientDelegation(
       file: file.fileName,
       line: location.line + 1,
       column: location.character + 1,
+      declaration: enclosingDeclaration(node),
       kind,
     });
   };

@@ -79,6 +79,7 @@ console.log(JSON.stringify({exitCode: result.exitCode, findings: result.findings
         file: 'packages/demo/src/bag.ts',
         line: 1,
         column: 49,
+        declaration: 'Bag',
       },
     ],
     diagnostics: [],
@@ -143,6 +144,7 @@ it.each(['C:\\fixture\\services.ts', 'C:/fixture/services.ts'])(
         file: 'C:\\fixture\\nested\\consumer.ts',
         line: 1,
         column: 50,
+        declaration: 'Bag',
       },
     ]);
   },

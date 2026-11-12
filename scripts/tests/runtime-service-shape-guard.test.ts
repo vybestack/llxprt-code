@@ -31,6 +31,7 @@ describe('runtime service shape guard', () => {
       expect(scan(imports + source)).toContainEqual(
         expect.objectContaining({
           rule: 'runtime-service-bundle',
+          declaration: 'Services',
           line: 2,
           column: 1,
         }),

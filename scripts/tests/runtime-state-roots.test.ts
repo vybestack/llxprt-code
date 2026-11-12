@@ -25,7 +25,8 @@ function put(file: string, text: string): void {
   writeFileSync(path, text);
 }
 
-const mutableTable = "export const table = new Set(['a']);";
+const mutableTable =
+  "export const table = new Set(); export function mutate() { table.add('a'); }";
 
 const discoveryPolicy: AuditPolicy = {
   compilerConfig: 'tsconfig.json',
@@ -136,7 +137,7 @@ describe('discovered roots feed the audit', () => {
       expect(result.findings).toContainEqual(
         expect.objectContaining({
           file: `packages/demo/src/${directory}/state.ts`,
-          rule: 'mutable-state',
+          rule: 'module-mutation',
           declaration: 'table',
         }),
       );
@@ -150,7 +151,7 @@ describe('discovered roots feed the audit', () => {
     expect(result.findings).toContainEqual(
       expect.objectContaining({
         file: 'packages/demo/src/ownership/state.ts',
-        rule: 'mutable-state',
+        rule: 'module-mutation',
       }),
     );
     expect(result.exitCode).toBe(1);
@@ -179,7 +180,7 @@ describe('discovered roots feed the audit', () => {
     expect(result.findings).toContainEqual(
       expect.objectContaining({
         file: 'packages/demo/src/notes.ts',
-        rule: 'mutable-state',
+        rule: 'module-mutation',
       }),
     );
     expect(result.exitCode).toBe(1);

@@ -171,6 +171,7 @@ describe('ambient delegation provenance guard', () => {
       file: '/consumer.ts',
       line: 2,
       column: 22,
+      declaration: 'operate',
       kind: 'argument',
     });
   });
@@ -203,6 +204,7 @@ describe('ambient delegation provenance guard', () => {
         file: '/consumer.ts',
         line: 2,
         column: 64,
+        declaration: 'operate',
         kind: 'argument',
       },
     ]);
@@ -251,6 +253,7 @@ describe('ambient delegation provenance guard', () => {
         file: '/consumer.ts',
         line: 4,
         column: 19,
+        declaration: 'service',
         kind: 'return',
       },
       {
@@ -258,6 +261,7 @@ describe('ambient delegation provenance guard', () => {
         file: '/consumer.ts',
         line: 5,
         column: 19,
+        declaration: 'run',
         kind: 'receiver',
       },
     ]);
@@ -277,6 +281,7 @@ describe('ambient delegation provenance guard', () => {
         file: '/consumer.ts',
         line: 3,
         column: 1,
+        declaration: 'operate',
         kind: 'argument',
       });
     },

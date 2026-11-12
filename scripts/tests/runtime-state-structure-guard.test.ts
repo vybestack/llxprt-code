@@ -18,12 +18,12 @@ describe('runtime state structure scanner', () => {
     'function* values() { yield 1; } const cursor = values();',
     'async function* values() { yield 1; } const cursor = values();',
     'const values = function* () { yield 1; }; const cursor = values();',
-  ])('rejects anonymous exports and module generator state in %s', (source) => {
+  ])('permits untouched module values in %s', (source) => {
     expect(
       scanRuntimeStateStructure(filename, source, [], undefined, {
         allowlist: [],
       }),
-    ).toContainEqual(expect.objectContaining({ kind: 'mutable-state' }));
+    ).toEqual([]);
   });
 
   it.each([
@@ -492,7 +492,7 @@ class BaseProvider { static readonly activeCallContext = new ALS(); }`;
       ).toEqual([]);
     });
 
-    it('rejects an unlisted module object literal even without a recognized mutation', () => {
+    it('permits an unmutated module object literal without an allowance', () => {
       expect(
         scanRuntimeStateStructure(
           filename,
@@ -501,18 +501,10 @@ class BaseProvider { static readonly activeCallContext = new ALS(); }`;
           undefined,
           noAllowances,
         ),
-      ).toEqual([
-        {
-          file: filename,
-          declaration: 'sessions',
-          kind: 'mutable-state',
-          line: 1,
-          column: 7,
-        },
-      ]);
+      ).toEqual([]);
     });
 
-    it('rejects unlisted array literals, as-const tables and non-primitive frozen tables', () => {
+    it('permits unmutated arrays, as-const tables and frozen objects', () => {
       const source = [
         'const list = [];',
         "const table = { a: 'x' } as const;",
@@ -526,7 +518,7 @@ class BaseProvider { static readonly activeCallContext = new ALS(); }`;
           undefined,
           noAllowances,
         ).map((finding) => finding.declaration),
-      ).toEqual(['list', 'table', 'nested']);
+      ).toEqual([]);
     });
 
     it('accepts a frozen primitive table without an allowlist entry', () => {
@@ -541,7 +533,7 @@ class BaseProvider { static readonly activeCallContext = new ALS(); }`;
       ).toEqual([]);
     });
 
-    it('accepts deeply frozen tables and rejects a frozen table holding an unfrozen member', () => {
+    it('permits untouched deeply and shallowly frozen tables', () => {
       const source = [
         "const deep = Object.freeze({ a: Object.freeze(['x']), b: 1 });",
         "const shallow = Object.freeze({ a: ['x'] });",
@@ -554,7 +546,7 @@ class BaseProvider { static readonly activeCallContext = new ALS(); }`;
           undefined,
           noAllowances,
         ).map((finding) => finding.declaration),
-      ).toEqual(['shallow']);
+      ).toEqual([]);
     });
 
     it('accepts an allowlisted table only by exact file and declaration with a reason', () => {
@@ -576,15 +568,12 @@ class BaseProvider { static readonly activeCallContext = new ALS(); }`;
           undefined,
           allowed('other'),
         ).map((finding) => [finding.declaration, finding.kind]),
-      ).toEqual([
-        ['table', 'mutable-state'],
-        ['other', 'stale-immutable-allowance'],
-      ]);
+      ).toEqual([['other', 'stale-immutable-allowance']]);
       expect(
         scanRuntimeStateStructure(filename, source, [], undefined, {
           allowlist: [{ file: filename, declaration: 'table', reason: ' ' }],
         }).map((finding) => finding.kind),
-      ).toEqual(['mutable-state', 'stale-immutable-allowance']);
+      ).toEqual(['stale-immutable-allowance']);
     });
 
     it('reports an allowlist entry whose declaration no longer exists as stale', () => {
@@ -635,7 +624,11 @@ class BaseProvider { static readonly activeCallContext = new ALS(); }`;
 
   it('returns source locations without reading a file', () => {
     expect(
-      scanRuntimeStateStructure(filename, '\nconst cache = new Map();'),
+      scanRuntimeStateStructure(
+        filename,
+        `
+const cache = new Map();`,
+      ),
     ).toEqual([
       {
         file: filename,
@@ -645,5 +638,63 @@ class BaseProvider { static readonly activeCallContext = new ALS(); }`;
         column: 7,
       },
     ]);
+  });
+
+  it('does not report a never-mutated module const Set', () => {
+    expect(
+      scanRuntimeStateStructure(
+        filename,
+        'const labels = new Set(["a"]);',
+        [],
+        undefined,
+        { allowlist: [] },
+      ),
+    ).toEqual([]);
+  });
+
+  it('reports a const Map mutated by a function as shared state', () => {
+    expect(
+      scanRuntimeStateStructure(
+        filename,
+        'const cache = new Map(); function store() { cache.set("key", 1); }',
+        [],
+        undefined,
+        { allowlist: [] },
+      ),
+    ).toContainEqual(
+      expect.objectContaining({
+        declaration: 'cache',
+        kind: 'module-mutation',
+      }),
+    );
+  });
+
+  it('reports a module let binding that is reassigned', () => {
+    expect(
+      scanRuntimeStateStructure(
+        filename,
+        'let active = 0; function update() { active = 1; }',
+        [],
+        undefined,
+        { allowlist: [] },
+      ),
+    ).toContainEqual(
+      expect.objectContaining({
+        declaration: 'active',
+        kind: 'module-mutation',
+      }),
+    );
+  });
+
+  it('does not report a module DebugLogger instance', () => {
+    expect(
+      scanRuntimeStateStructure(
+        filename,
+        'class DebugLogger {} const logger = new DebugLogger();',
+        [],
+        undefined,
+        { allowlist: [] },
+      ),
+    ).toEqual([]);
   });
 });
