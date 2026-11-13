@@ -49,16 +49,26 @@ const CREDENTIAL_URL_PARAMETER_KEYS = new Set(
 );
 
 function hasCredentialUrlParts(endpoint: string): boolean {
-  if (!/^[a-z][a-z\d+.-]*:/i.test(endpoint)) return false;
+  let candidate = endpoint
+    .replaceAll('\t', '')
+    .replaceAll('\n', '')
+    .replaceAll('\r', '');
+  let start = 0;
+  let end = candidate.length;
+  while (start < end && candidate.charCodeAt(start) <= 0x20) start++;
+  while (end > start && candidate.charCodeAt(end - 1) <= 0x20) end--;
+  candidate = candidate.slice(start, end);
+  if (!/^[a-z][a-z\d+.-]*:/i.test(candidate)) return false;
   let url: URL;
   try {
-    url = new URL(endpoint);
+    url = new URL(candidate);
   } catch {
     return true;
   }
   if (url.username !== '' || url.password !== '') return true;
   const parameters = new URLSearchParams(url.search);
   const fragment = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
+  for (const [key] of new URLSearchParams(fragment)) parameters.append(key, '');
   const routeQuery = fragment.includes('?')
     ? fragment.slice(fragment.indexOf('?') + 1)
     : fragment;
@@ -556,16 +566,18 @@ function problemsFrom(error: z.ZodError): DefinitionProblem[] {
 
 export function validateDefinition(value: unknown): AgentDefinition {
   const plainData = isPlainData(value, new Set(), true);
+  if (!plainData) {
+    throw new DefinitionError([
+      {
+        code: 'invalid-plain-data',
+        path: [],
+        message:
+          'Agent definitions must contain only plain JSON-compatible data.',
+      },
+    ]);
+  }
   const result = AgentDefinitionSchema.safeParse(cloneDataDescriptors(value));
   const problems = result.success ? [] : problemsFrom(result.error);
-  if (!plainData) {
-    problems.unshift({
-      code: 'invalid-plain-data',
-      path: [],
-      message:
-        'Agent definitions must contain only plain JSON-compatible data.',
-    });
-  }
   if (problems.length > 0) throw new DefinitionError(problems);
   if (!result.success)
     throw new Error('Definition parsing failed without diagnostics.');

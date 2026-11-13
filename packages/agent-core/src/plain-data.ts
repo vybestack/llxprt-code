@@ -149,6 +149,10 @@ export function cloneDataDescriptors(
     const copy: unknown[] = [];
     for (const key of ownKeys) {
       if (key === 'length') continue;
+      if (typeof key !== 'string' || !isArrayIndex(key, value.length)) {
+        active.delete(value);
+        return [];
+      }
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (
         descriptor !== undefined &&
