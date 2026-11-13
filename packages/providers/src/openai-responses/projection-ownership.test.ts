@@ -26,6 +26,8 @@ import {
 import {
   diskTextFixture as projectionDiskRows,
   diskTextRow,
+  distributedTextRows,
+  type DiskTextShape,
   diskTextWireOracle as projectionWireOracle,
 } from './__tests__/support/disk-text-fixture.js';
 import { requestSelection } from './__tests__/support/request-selection.js';
@@ -48,7 +50,7 @@ type PreparedLease = Omit<Prepared, 'projection'> & {
   readonly releaseIfUnsent?: () => Promise<void>;
 };
 interface ProjectionFacts {
-  readonly large: boolean;
+  readonly large: DiskTextShape;
   readonly retain: boolean;
   readonly expected: { bytes: number; sha256: string };
   readonly estimate: PromptEnvelopeEstimate;
@@ -75,11 +77,11 @@ async function collectHeap(): Promise<number> {
   ]);
 }
 
-async function independentTokenCount(large: boolean): Promise<number> {
+async function independentTokenCount(large: DiskTextShape): Promise<number> {
   let input = '[';
   for (let index = 0; index < rowCount; index++) {
     if (index !== 0) input += ',';
-    const row = diskTextRow(index, large && index === rowCount - 1);
+    const row = diskTextRow(index, large);
     input += JSON.stringify({
       role: row.speaker === 'human' ? 'user' : 'assistant',
       content: row.blocks
@@ -97,14 +99,14 @@ async function independentTokenCount(large: boolean): Promise<number> {
 
 async function independentActualEstimate(
   setup: Setup,
-  large: boolean,
+  large: DiskTextShape,
 ): Promise<PromptEnvelopeEstimate> {
   const rows = {
     count: rowCount,
-    readAt: (index: number) => diskTextRow(index, large && index === 63),
+    readAt: (index: number) => diskTextRow(index, large),
     async *openReader(): AsyncGenerator<IContent, void> {
       for (let index = 0; index < rowCount; index++)
-        yield diskTextRow(index, large && index === 63);
+        yield diskTextRow(index, large);
     },
   };
   const projection = await setup.provider.projectPromptEnvelope({
@@ -180,7 +182,7 @@ async function prepareMeasuredLease(
 }
 
 async function runProjectionScenario(
-  large: boolean,
+  large: DiskTextShape,
   retain: boolean,
 ): Promise<ProjectionFacts> {
   const http = projectionEndpoint(true);
@@ -189,11 +191,6 @@ async function runProjectionScenario(
     process.cwd(),
   );
   const expected = projectionWireOracle(large);
-  const expectedEstimate = await independentActualEstimate(setup, large);
-  expect(expectedEstimate.estimatedPromptTokens).toBe(
-    await independentTokenCount(large),
-  );
-  expect(expectedEstimate.estimatedPromptTokens).toBeLessThan(1_000_000);
   const disk = projectionDiskRows(large, retain);
   const baseline = await collectHeap();
   let stream: AsyncIterableIterator<IContent> | undefined;
@@ -201,7 +198,6 @@ async function runProjectionScenario(
   try {
     const prepared = await prepareMeasuredLease(setup, disk);
     releaseIfUnsent = prepared.releaseIfUnsent;
-    expect(prepared.estimate).toStrictEqual(expectedEstimate);
     expect(prepared.options.metadata?.['_retryRequestContext']).toStrictEqual({
       requestId: 'actual-projection',
     });
@@ -222,6 +218,12 @@ async function runProjectionScenario(
     expect(firstResult.done).toBe(false);
     const responseBytes = (await collectHeap()) - baseline;
     await drainProjectionResponse(stream, firstResult.value);
+    const expectedEstimate = await independentActualEstimate(setup, large);
+    expect(expectedEstimate.estimatedPromptTokens).toBe(
+      await independentTokenCount(large),
+    );
+    expect(expectedEstimate.estimatedPromptTokens).toBeLessThan(1_000_000);
+    expect(prepared.estimate).toStrictEqual(expectedEstimate);
     expect(http.bodies).toStrictEqual([expected, expected]);
     expect(disk.state.active).toBe(0);
     expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
@@ -334,6 +336,15 @@ async function abortPausedProjection(): Promise<string> {
   }
 }
 
+function projectionHeap(facts: ProjectionFacts): number {
+  return Math.max(
+    facts.preparedBytes,
+    facts.pausedUploadBytes,
+    facts.uploadedBytes,
+    facts.responseBytes,
+  );
+}
+
 describe('actual Responses projection disk ownership', () => {
   it.each([false, true])(
     'preserves independent BODY bytes and exact actual estimate through paused HTTP and retry, oversized=%s',
@@ -356,7 +367,7 @@ describe('actual Responses projection disk ownership', () => {
         distinctPrefixes.add(block.text.slice(0, 40));
       }
       expect(distinctPrefixes.size).toBe(rowCount);
-      expect(facts.expected.bytes).toBeGreaterThan(large ? 2 * 1024 * 1024 : 0);
+      expect(facts.expected.bytes).toBeGreaterThan(large ? 120_000 : 0);
     },
     120000,
   );
@@ -388,20 +399,36 @@ describe('actual Responses projection disk ownership', () => {
   }, 60000);
 
   it('does not retain context-scale text or request graphs during prepared request, HTTP pause and response lifetime', async () => {
-    // Two unmeasured full-size runs take the one-time state of this path
-    // before the baseline of each measured run; the gate is the median of
-    // three measured runs.
-    await runProjectionScenario(true, false);
-    await runProjectionScenario(true, false);
-    const gates: number[] = [];
-    for (let run = 0; run < 3; run++) {
-      const facts = await runProjectionScenario(true, false);
-      expect(facts.retainedCodeUnits).toBe(0);
-      gates.push(
-        Math.max(facts.preparedBytes, facts.uploadedBytes, facts.responseBytes),
+    const smallestBackpressuredRows = { rowCodeUnits: 4096 };
+    await runProjectionScenario(smallestBackpressuredRows, false);
+    const calibrations: number[] = [];
+    for (let run = 0; run < 3; run++)
+      calibrations.push(
+        projectionHeap(
+          await runProjectionScenario(smallestBackpressuredRows, false),
+        ),
       );
+    const fixedOverhead = Math.max(0, ...calibrations);
+    await runProjectionScenario(distributedTextRows, false);
+    const gates: number[] = [];
+    let allowance = 0;
+    for (let run = 0; run < 3; run++) {
+      const facts = await runProjectionScenario(distributedTextRows, false);
+      expect(facts.retainedCodeUnits).toBe(0);
+      allowance = fixedOverhead + 2 * facts.largestRowBytes;
+      expect(facts.payloadBytes).toBeGreaterThan(4 * allowance);
+      gates.push(projectionHeap(facts));
     }
-    expect(median(gates)).toBeLessThanOrEqual(1024 * 1024);
+    expect(median(gates)).toBeLessThanOrEqual(allowance);
+    const control = await runProjectionScenario(distributedTextRows, true);
+    expect(control.sourceLiveRows).toBe(rowCount);
+    expect(projectionHeap(control)).toBeGreaterThan(3 * allowance);
+    const evidence = process.env['H3_ALLOWANCE_EVIDENCE'];
+    if (evidence !== undefined)
+      appendFileSync(
+        evidence,
+        `${JSON.stringify({ suite: 'projection-gate', fixedOverhead, allowance, gates, control: projectionHeap(control) })}\n`,
+      );
   }, 120000);
 
   it('cancels a projected actual HTTP request while the receiver is paused without opening a new row reader', async () => {

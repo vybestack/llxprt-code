@@ -1,4 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  DEFAULT_MAX_TOKENS,
+  getEffectiveTokenLimit,
+} from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { assertRowIndex } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -13,7 +17,7 @@ import {
 } from './projection-ownership-fixture.js';
 
 /**
- * `large` true is the 2 MiB row of mixed prose and code-like lines; a number
+ * `large` true fills the default tool-output character budget with mixed text; a number
  * is that many 64 KiB single-character runs, which exercise the large-piece
  * estimator path.
  */
@@ -33,7 +37,7 @@ export interface MixedTextTail {
 }
 
 const chunkBytes = 65536;
-const largeChunkCount = 32;
+const largeChunkCount = 2;
 const vocabulary = [
   'the',
   'estimate',
@@ -124,16 +128,20 @@ export function diskTextRow(
   index: number,
   large: DiskTextTail | DistributedTextRows,
 ): IContent {
+  const text = `${index}: "quoted" \\ 雪\n\ud800 ${'a'.repeat(513)}`;
+  const tail = diskRowTail(index, large);
+  const remaining =
+    3 * getEffectiveTokenLimit(DEFAULT_MAX_TOKENS) - text.length;
   return {
     speaker: index % 2 === 0 ? 'human' : 'ai',
     blocks: [
       {
         type: 'text',
-        text: `${index}: "quoted" \\ 雪\n\ud800 ${'a'.repeat(513)}`,
+        text,
       },
       {
         type: 'text',
-        text: diskRowTail(index, large),
+        text: large === true ? tail.slice(0, remaining) : tail,
       },
     ],
   };

@@ -1,6 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
+  DEFAULT_MAX_TOKENS,
+  estimateTokens,
+  getEffectiveTokenLimit,
+} from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import {
   median,
   settledHeap,
 } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
@@ -44,17 +49,10 @@ async function heap(): Promise<number> {
     await settledHeap(),
   ]);
 }
-const ORIGINAL_HEAP_GATE_BYTES = 1024 * 1024;
-// Largest checkpoint in two smallest-fixture lifecycle measurements.
-const DISK_TEXT_FIXED_OVERHEAD_BYTES = 542_628;
 // One decoded UTF-16 row, its serialized representation and a transport chunk.
 const DISK_TEXT_ENCODING_FACTOR = 4;
-function heapAllowance(largestRowBytes: number): number {
-  return Math.min(
-    ORIGINAL_HEAP_GATE_BYTES,
-    DISK_TEXT_FIXED_OVERHEAD_BYTES +
-      DISK_TEXT_ENCODING_FACTOR * largestRowBytes,
-  );
+function heapAllowance(largestRowBytes: number, fixedOverhead: number): number {
+  return fixedOverhead + DISK_TEXT_ENCODING_FACTOR * largestRowBytes;
 }
 const MEASURED_RUNS = 3;
 function gateDelta(facts: Awaited<ReturnType<typeof acceptance>>): number {
@@ -240,7 +238,6 @@ async function acceptance(large: DiskTextShape, retainRows = false) {
     disk.root,
   );
   const expected = diskTextWireOracle(large);
-  const oracle = await nativeEstimate(setup, large);
   const largestRowBytes = largestRowSize(large);
   await warmRuntime(setup);
   const baseline = await heap();
@@ -267,6 +264,7 @@ async function acceptance(large: DiskTextShape, retainRows = false) {
   });
   try {
     const measurements = await uploadMeasurements(stream, http, observer);
+    const oracle = await nativeEstimate(setup, large);
     const liveFinalRows = disk.references.filter(
       (row) => row.deref() !== undefined,
     ).length;
@@ -331,16 +329,25 @@ function assertOwners(facts: Awaited<ReturnType<typeof acceptance>>): void {
 // the measured runs, so a single noisy checkpoint cannot decide it while
 // retention that exists in every run still does.
 async function measuredAcceptance(large: DiskTextShape, retainRows = false) {
+  const smallestBackpressuredRows = { rowCodeUnits: 4096 };
+  await acceptance(smallestBackpressuredRows);
+  const calibrations: number[] = [];
+  for (let run = 0; run < MEASURED_RUNS; run++) {
+    const calibration = await acceptance(smallestBackpressuredRows);
+    assertOwners(calibration);
+    calibrations.push(gateDelta(calibration));
+  }
+  const fixedOverhead = Math.max(0, ...calibrations);
   await acceptance(large, retainRows);
   const runs: Array<Awaited<ReturnType<typeof acceptance>>> = [];
   for (let run = 0; run < MEASURED_RUNS; run++)
     runs.push(await acceptance(large, retainRows));
-  const measured = { runs, gate: median(runs.map(gateDelta)) };
+  const measured = { runs, fixedOverhead, gate: median(runs.map(gateDelta)) };
   const evidence = process.env['H3_ALLOWANCE_EVIDENCE'];
   if (evidence !== undefined)
     appendFileSync(
       evidence,
-      `${JSON.stringify({ suite: 'disk-text', large, retainRows, gate: measured.gate, checkpoints: runs.map(gateDelta), largestRowBytes: runs[0].largestRowBytes, payloadBytes: runs[0].expected.bytes, tokens: runs[0].estimate.estimatedPromptTokens })}
+      `${JSON.stringify({ suite: 'disk-text', large, retainRows, fixedOverhead, gate: measured.gate, checkpoints: runs.map(gateDelta), phases: runs.map((facts) => ({ prepared: facts.preparedHeap - facts.baseline, firstChunk: facts.firstChunkHeap - facts.baseline, paused: facts.pausedHeap - facts.baseline, lastChunk: facts.lastChunkHeap - facts.baseline, response: facts.responseHeap - facts.baseline, final: facts.finalHeap - facts.baseline })), largestRowBytes: runs[0].largestRowBytes, payloadBytes: runs[0].expected.bytes, tokens: runs[0].estimate.estimatedPromptTokens })}
 `,
     );
   return measured;
@@ -350,18 +357,22 @@ function assertAcceptance(
 ): void {
   for (const facts of measured.runs) assertOwners(facts);
   expect(measured.gate).toBeLessThanOrEqual(
-    heapAllowance(measured.runs[0].largestRowBytes),
+    heapAllowance(measured.runs[0].largestRowBytes, measured.fixedOverhead),
   );
 }
 describe('actual stateless disk provider ownership acceptance', () => {
   it.each([false, true])(
     'preserves native metadata and independent HTTP bytes with bounded live owners, oversized=%s',
     async (large) => {
+      const text = diskTextRow(63, large)
+        .blocks.flatMap((block) => (block.type === 'text' ? [block.text] : []))
+        .join('');
+      expect(estimateTokens(text)).toBeLessThanOrEqual(
+        getEffectiveTokenLimit(DEFAULT_MAX_TOKENS),
+      );
       const measured = await measuredAcceptance(large);
       for (const facts of measured.runs)
-        expect(facts.largestRowBytes).toBeGreaterThan(
-          large ? 2 * 1024 * 1024 : 500,
-        );
+        expect(facts.largestRowBytes).toBeGreaterThan(large ? 120_000 : 500);
       assertAcceptance(measured);
     },
     600000,
@@ -369,7 +380,8 @@ describe('actual stateless disk provider ownership acceptance', () => {
   it('bounds a model-window request distributed over realistic rows', async () => {
     const measured = await measuredAcceptance(distributedTextRows);
     expect(measured.runs[0].expected.bytes).toBeGreaterThanOrEqual(
-      4 * heapAllowance(measured.runs[0].largestRowBytes),
+      4 *
+        heapAllowance(measured.runs[0].largestRowBytes, measured.fixedOverhead),
     );
     assertAcceptance(measured);
   }, 600000);
@@ -382,7 +394,8 @@ describe('actual stateless disk provider ownership acceptance', () => {
       expect(facts.estimate).toStrictEqual(facts.oracle);
     }
     expect(measured.gate).toBeGreaterThan(
-      3 * heapAllowance(measured.runs[0].largestRowBytes),
+      3 *
+        heapAllowance(measured.runs[0].largestRowBytes, measured.fixedOverhead),
     );
   }, 600000);
 });

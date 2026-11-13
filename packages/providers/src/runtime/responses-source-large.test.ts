@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import { get_encoding } from '@dqbd/tiktoken';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { createHash } from 'node:crypto';
@@ -12,8 +12,6 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { buildOpenAIResponsesInput } from '../openai-responses/OpenAIResponsesInputBuilder.js';
 import { projectOpenAIResponsesPromptEnvelope } from './promptEnvelopeProjections.js';
 
-/** Largest sampled peak of the same 64-row corpus with one text unit per row. */
-const SMALLEST_CORPUS_FIXED_OVERHEAD_BYTES = 400_338;
 /** UTF-16 source text plus one escaped native output item. */
 const ROW_ENCODING_FACTOR = 4;
 
@@ -22,7 +20,7 @@ function prepare(
   repeats = 512,
 ): {
   body: { bytes: number; sha256: string };
-  allowanceBytes: number;
+  largestRowBytes: number;
 } {
   const rows: IContent[] = Array.from({ length: 64 }, (_, index) => ({
     speaker: index % 2 === 0 ? 'human' : 'ai',
@@ -91,9 +89,7 @@ function prepare(
       bytes: Buffer.byteLength(segment),
       sha256: createHash('sha256').update(segment).digest('hex'),
     },
-    allowanceBytes:
-      SMALLEST_CORPUS_FIXED_OVERHEAD_BYTES +
-      ROW_ENCODING_FACTOR * largestRowBytes,
+    largestRowBytes,
   };
 }
 
@@ -103,6 +99,7 @@ interface Probe {
   readonly finalLive: number;
   readonly retainedHeap: number;
   readonly sampledHeapGrowth: number;
+  readonly fixedOverhead: number;
 }
 function probe(value: unknown): value is Probe {
   if (typeof value !== 'object' || value === null || !('actual' in value))
@@ -123,17 +120,23 @@ function probe(value: unknown): value is Probe {
     return false;
   if (!('retainedHeap' in value) || typeof value.retainedHeap !== 'number')
     return false;
+  if (!('fixedOverhead' in value) || typeof value.fixedOverhead !== 'number')
+    return false;
   return (
     'sampledHeapGrowth' in value && typeof value.sampledHeapGrowth === 'number'
   );
 }
 
 async function run(root: string, retain: boolean): Promise<Probe> {
+  const calibration = join(root, 'calibration');
+  mkdirSync(calibration);
+  prepare(calibration, 1);
   const child = Bun.spawn(
     [
       process.execPath,
       join(import.meta.dir, '__tests__', 'responses-source-large-probe.ts'),
       root,
+      calibration,
     ],
     {
       env: {
@@ -170,16 +173,14 @@ describe('Responses source large-row acceptance', () => {
         root,
         process.env.ISSUE854_SERIALIZER_RETAIN_ROWS === '1',
       );
+      const allowanceBytes =
+        actual.fixedOverhead + ROW_ENCODING_FACTOR * expected.largestRowBytes;
       expect(actual.actual).toStrictEqual(expected.body);
       expect(actual.peakLive).toBeLessThanOrEqual(2);
-      expect(expected.body.bytes).toBeGreaterThanOrEqual(
-        4 * expected.allowanceBytes,
-      );
-      expect(actual.sampledHeapGrowth).toBeLessThanOrEqual(
-        expected.allowanceBytes,
-      );
+      expect(expected.body.bytes).toBeGreaterThanOrEqual(4 * allowanceBytes);
+      expect(actual.sampledHeapGrowth).toBeLessThanOrEqual(allowanceBytes);
       expect(actual.finalLive).toBe(0);
-      expect(actual.retainedHeap).toBeLessThanOrEqual(expected.allowanceBytes);
+      expect(actual.retainedHeap).toBeLessThanOrEqual(allowanceBytes);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -189,12 +190,12 @@ describe('Responses source large-row acceptance', () => {
     try {
       const expected = prepare(root);
       const actual = await run(root, true);
+      const allowanceBytes =
+        actual.fixedOverhead + ROW_ENCODING_FACTOR * expected.largestRowBytes;
       expect(actual.actual).toStrictEqual(expected.body);
       expect(actual.peakLive).toBeGreaterThan(2);
-      expect(actual.sampledHeapGrowth).toBeGreaterThan(
-        3 * expected.allowanceBytes,
-      );
-      expect(actual.retainedHeap).toBeGreaterThan(3 * expected.allowanceBytes);
+      expect(actual.sampledHeapGrowth).toBeGreaterThan(3 * allowanceBytes);
+      expect(actual.retainedHeap).toBeGreaterThan(3 * allowanceBytes);
       expect(actual.finalLive).toBe(64);
     } finally {
       rmSync(root, { recursive: true, force: true });

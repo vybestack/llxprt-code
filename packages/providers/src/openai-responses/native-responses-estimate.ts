@@ -17,6 +17,8 @@ import { isSanctionedOpenAIO200kModel } from '../openai/openaiModelPolicy.js';
 import { countO200kBaseTokensFromChunks } from '../tokenizers/o200k-chunked-source.js';
 import { getO200kBaseEncoder } from '../tokenizers/o200kBaseCounter.js';
 
+import { jsonValueChunks } from '../utils/boundedJsonBody.js';
+
 type PromptKey = 'instructions' | 'input' | 'tools';
 interface EstimateScan {
   length: number;
@@ -45,7 +47,7 @@ export class NativeResponsesEstimateProjection {
     request: RuntimePromptEstimateRequest,
     scan: EstimateScan,
   ): AsyncGenerator<string> {
-    const canonical = (value: unknown): string => {
+    const canonical = function* (value: unknown): Generator<string> {
       const images: ProjectionImageEntry[] = [];
       const normalized = canonicalizePromptValue(value, key, images);
       for (const image of images)
@@ -54,23 +56,31 @@ export class NativeResponsesEstimateProjection {
           model: request.canonicalModel,
           dimensions: image.dimensions,
         });
-      return typeof normalized === 'string' && key !== 'input'
-        ? normalized
-        : JSON.stringify(normalized);
+      if (typeof normalized === 'string' && key !== 'input') {
+        yield normalized;
+        return;
+      }
+      const chunks = jsonValueChunks(normalized);
+      if (chunks === undefined)
+        throw new Error('Missing serialized prompt value');
+      const decoder = new TextDecoder();
+      for (const chunk of chunks) yield decoder.decode(chunk, { stream: true });
+      const tail = decoder.decode();
+      if (tail.length > 0) yield tail;
     };
     if (key !== 'input') {
-      yield canonical(this.prompt.envelope()[key]);
+      yield* canonical(this.prompt.envelope()[key]);
       return;
     }
     if (this.prompt.selection.inputOverride !== undefined) {
-      yield canonical(this.prompt.selection.inputOverride.value);
+      yield* canonical(this.prompt.selection.inputOverride.value);
       return;
     }
     yield '[';
     let separator = '';
     for await (const item of this.prompt.items(this.view.skipRows, true)) {
       yield separator;
-      yield canonical(item);
+      yield* canonical(item);
       separator = ',';
     }
     yield ']';

@@ -47,15 +47,18 @@ async function sample(): Promise<number> {
   );
 }
 
+function readRow(index: number): IContent {
+  const row: IContent = deserialize(readFileSync(join(root, `${index}.row`)));
+  refs.push(new WeakRef(row));
+  if (retaining) retained[index] = row;
+  return row;
+}
 const rows: ProviderRequestRows = {
   callerOwned: true,
   count: 64,
   async readAt(index: number): Promise<IContent> {
     if (index % 16 === 0) peakLive = Math.max(peakLive, await sample());
-    const row: IContent = deserialize(readFileSync(join(root, `${index}.row`)));
-    refs.push(new WeakRef(row));
-    if (retaining) retained[index] = row;
-    return row;
+    return readRow(index);
   },
   async *openReader(): AsyncGenerator<IContent> {
     for (let index = 0; index < 64; index++) yield await rows.readAt(index);
@@ -111,7 +114,45 @@ async function warmup(): Promise<void> {
   await settledHeap();
 }
 
+async function calibrate(directory: string): Promise<number> {
+  const start = await settledHeap();
+  let peak = 0;
+  const calibrationRows: ProviderRequestRows = {
+    callerOwned: true,
+    count: 64,
+    async readAt(index: number): Promise<IContent> {
+      if (index % 16 === 0) {
+        let growth = Number.POSITIVE_INFINITY;
+        for (let round = 0; round < SETTLE_ROUNDS; round++)
+          growth = Math.min(growth, (await settledHeap()) - start);
+        peak = Math.max(peak, growth);
+      }
+      return deserialize(readFileSync(join(directory, `${index}.row`)));
+    },
+    async *openReader(): AsyncGenerator<IContent> {
+      for (let index = 0; index < 64; index++)
+        yield await calibrationRows.readAt(index);
+    },
+  };
+  const owner = await nativePrompt(calibrationRows, {
+    model: 'gpt-5.6',
+    context: {
+      includeReasoningInContext: false,
+      mediaPdfEnabled: true,
+      outputLimits: parseOutputLimits({}),
+      debug: () => {},
+    },
+  });
+  await hashInput(owner);
+  await owner.dispose();
+  let final = Number.POSITIVE_INFINITY;
+  for (let round = 0; round < SETTLE_ROUNDS; round++)
+    final = Math.min(final, (await settledHeap()) - start);
+  return Math.max(0, peak, final);
+}
+
 await warmup();
+const fixedOverhead = await calibrate(process.argv[3]);
 baseline = await settledHeap();
 const prompt = await nativePrompt(rows, {
   model: 'gpt-5.6',
@@ -130,6 +171,7 @@ writeFileSync(
   join(root, 'measured.json'),
   JSON.stringify({
     actual,
+    fixedOverhead,
     peakLive,
     finalLive,
     sampledHeapGrowth,
