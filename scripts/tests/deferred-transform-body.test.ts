@@ -116,7 +116,7 @@ describe('deferred transform complete provider BODY', () => {
       expect(await verifyBody(size, 2048)).toBe(8);
     }, 180_000);
   }
-  it('keeps the complete oversized valid input in every provider BODY', async () => {
-    expect(await verifyBody(1, 9 * 1024 * 1024 + 1)).toBe(8);
+  it('keeps the complete context-scale valid input in every provider BODY', async () => {
+    expect(await verifyBody(1, 2 * 1024 * 1024 + 1)).toBe(8);
   }, 180_000);
 });

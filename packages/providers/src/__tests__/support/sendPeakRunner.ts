@@ -20,7 +20,8 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { WIRE_ROUTES, recordOf, sendThroughRoute } from './wireBodyCapture.js';
+import { recordOf, sendThroughRoute } from './wireBodyCapture.js';
+import { sendPeakRoute } from './send-peak-route.js';
 import type { HistoryCase } from './wireBodyHistories.js';
 import {
   SEND_PEAK_SHAPES,
@@ -55,11 +56,7 @@ export interface SendPeakRun {
   readonly verdict: SendPeakVerdict;
 }
 
-function routeById(routeId: string): (typeof WIRE_ROUTES)[number] {
-  const route = WIRE_ROUTES.find((candidate) => candidate.id === routeId);
-  if (route === undefined) throw new Error(`unknown wire route ${routeId}`);
-  return route;
-}
+const routeById = sendPeakRoute;
 
 /** The bytes today's code sends for a history, outside any measurement. */
 async function oracleBody(

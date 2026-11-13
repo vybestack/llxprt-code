@@ -44,7 +44,7 @@ describe('peak memory while sending, the anthropic provider, tool-heavy', () => 
   );
 
   it(
-    'tool-heavy: grows no more than 1 MiB from a 1 MiB to an 8 MiB body and retains no more than 1 MiB over repeated sends',
+    'tool-heavy: grows no more than 1 MiB from 256 to 1536 rows and retains no more than 1 MiB over repeated sends',
     async () => {
       const { verdict } = shapeRun(await measured(), 'tool-heavy');
       expect(verdict.heapGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);

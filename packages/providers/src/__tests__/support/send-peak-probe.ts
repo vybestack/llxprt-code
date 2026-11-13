@@ -50,12 +50,9 @@ import {
   median,
   settledHeap,
 } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
-import {
-  WIRE_ROUTES,
-  buildRouteCallOptions,
-  type WireRoute,
-} from './wireBodyCapture.js';
+import { buildRouteCallOptions, type WireRoute } from './wireBodyCapture.js';
 import { SEND_PEAK_REQUEST_SHAPE } from './sendPeakShapes.js';
+import { sendPeakRoute } from './send-peak-route.js';
 import { nativeProbeCost } from './native-probe-cost.js';
 import type { NativeRouteCounts } from './native-route-observer.js';
 import { observeNativeRoute } from './native-route-observer.js';
@@ -119,8 +116,7 @@ if (args.length !== 2) {
   throw new Error('usage: send-peak-probe <routeId> <rootDirectory>');
 }
 const [routeId, root] = args;
-const route = WIRE_ROUTES.find((candidate) => candidate.id === routeId);
-if (route === undefined) throw new Error(`unknown wire route ${routeId}`);
+const route = sendPeakRoute(routeId);
 const parsedPlan: unknown = JSON.parse(
   readFileSync(join(root, 'plan.json'), 'utf8'),
 );
@@ -339,7 +335,13 @@ async function estimateWhileSampling(
   try {
     sampler?.resetProgress();
     await sampler?.sample('estimate-start');
-    await estimatePromptEnvelope(provider.name, projection, tokenizerFactory);
+    const estimate = await estimatePromptEnvelope(
+      provider.name,
+      projection,
+      tokenizerFactory,
+    );
+    if (estimate.estimatedPromptTokens + 1024 > 1_000_000)
+      throw new Error('Send peak fixture exceeds its context window');
     await sampler?.sample('estimate-end');
   } finally {
     hold?.release();

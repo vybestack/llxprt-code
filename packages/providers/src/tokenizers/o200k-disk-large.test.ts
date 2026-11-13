@@ -38,13 +38,13 @@ async function diskLarge(size: number): Promise<number> {
 }
 
 describe('unbounded regex pieces', () => {
-  it('executes the disk-only >10 MiB piece with the established repeated-a merge recurrence', async () => {
-    expect(await diskLarge(10 * 1024 * 1024 + 1)).toBe(1310721);
+  it('executes the disk-only 4 MiB piece with the established repeated-a merge recurrence', async () => {
+    expect(await diskLarge(4 * 1024 * 1024 + 1)).toBe(524289);
   }, 600000);
   // The pinned tiktoken WASM encoder is quadratic on one long run of a single
   // character (about 5 s at 128 KiB, and it traps with RuntimeError at 1 MiB),
-  // so a whole-string oracle for a >10 MiB piece cannot be computed. The first
-  // test pins the >10 MiB count; this one proves the same disk path agrees
+  // so a whole-string oracle for a 4 MiB piece cannot be computed. The first
+  // test pins the 4 MiB count; this one proves the same disk path agrees
   // with the whole-string encoder at the largest sizes it can encode.
   it.each([64 * 1024 + 1, 128 * 1024 + 1])(
     'has whole-string pinned ordinary parity for a single %s byte piece',

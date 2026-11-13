@@ -20,7 +20,7 @@ import {
 } from './support/wireBodyCapture.js';
 
 const ROW_COUNT = 40;
-const ROW_TEXT_BYTES = 1024 * 1024;
+const ROW_TEXT_BYTES = 8 * 1024;
 const LIVE_BOUND = 9;
 const retainedTrapRows: IContent[] = [];
 
@@ -218,7 +218,7 @@ describe('native production sends release decoded rows, text blocks and stored i
   for (const route of WIRE_ROUTES.filter((candidate) =>
     ids.includes(candidate.id),
   )) {
-    it(`${route.id}: holds no more than nine row, text or media objects across forty 1 MiB rows`, async () => {
+    it(`${route.id}: holds no more than nine row, text or media objects across forty 8 KiB rows`, async () => {
       const peak = await sendWithCensus(route);
       expect(peak.rows).toBeGreaterThan(0);
       expect(peak.text).toBeGreaterThan(0);

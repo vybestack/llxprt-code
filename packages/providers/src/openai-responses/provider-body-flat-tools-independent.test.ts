@@ -203,7 +203,7 @@ async function runBody(rows: number, padding: number): Promise<number> {
     });
     expect(requestScratchEntries()).toStrictEqual(scratchBefore);
     if (padding > 0)
-      expect(Buffer.byteLength(wire)).toBeGreaterThan(9 * 1024 * 1024);
+      expect(Buffer.byteLength(wire)).toBeGreaterThan(2 * 1024 * 1024);
     return history.state().pulled;
   } finally {
     globalThis.fetch = originalFetch;
@@ -215,7 +215,7 @@ describe('independent real provider staged BODY and flat declaration sentinels',
   it.each([
     [512, 0],
     [8192, 0],
-    [8192, 1200],
+    [2048, 1200],
   ])(
     'preserves exact JSON bytes for %s rows with %s padding',
     async (rows, padding) => {

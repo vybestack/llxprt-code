@@ -186,18 +186,11 @@ async function runProjectionScenario(
     process.cwd(),
   );
   const expected = projectionWireOracle(large);
-  // The in-memory oracles tokenize every piece with the whole-string encoder,
-  // which is quadratic on the >10 MiB single-character runs, so only the
-  // small scenario is compared against them. The large scenario checks the
-  // source estimate against a lower bound and the shipped bytes against the
-  // wire oracle.
-  const expectedEstimate = large
-    ? undefined
-    : await independentActualEstimate(setup, large);
-  if (expectedEstimate !== undefined)
-    expect(expectedEstimate.estimatedPromptTokens).toBe(
-      await independentTokenCount(large),
-    );
+  const expectedEstimate = await independentActualEstimate(setup, large);
+  expect(expectedEstimate.estimatedPromptTokens).toBe(
+    await independentTokenCount(large),
+  );
+  expect(expectedEstimate.estimatedPromptTokens).toBeLessThan(1_000_000);
   const disk = projectionDiskRows(large, retain);
   const baseline = await collectHeap();
   let stream: AsyncIterableIterator<IContent> | undefined;
@@ -205,11 +198,7 @@ async function runProjectionScenario(
   try {
     const prepared = await prepareMeasuredLease(setup, disk);
     releaseIfUnsent = prepared.releaseIfUnsent;
-    if (expectedEstimate === undefined)
-      expect(prepared.estimate.estimatedPromptTokens).toBeGreaterThan(
-        1_000_000,
-      );
-    else expect(prepared.estimate).toStrictEqual(expectedEstimate);
+    expect(prepared.estimate).toStrictEqual(expectedEstimate);
     expect(prepared.options.metadata?.['_retryRequestContext']).toStrictEqual({
       requestId: 'actual-projection',
     });
@@ -336,9 +325,7 @@ describe('actual Responses projection disk ownership', () => {
         distinctPrefixes.add(block.text.slice(0, 40));
       }
       expect(distinctPrefixes.size).toBe(rowCount);
-      expect(facts.expected.bytes).toBeGreaterThan(
-        large ? 10 * 1024 * 1024 : 0,
-      );
+      expect(facts.expected.bytes).toBeGreaterThan(large ? 2 * 1024 * 1024 : 0);
     },
     120000,
   );

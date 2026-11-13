@@ -9,9 +9,9 @@
  *
  * Two shapes at two sizes. `text-only` alternates human and assistant text.
  * `tool-heavy` repeats a four-row group (human text, assistant tool call, tool
- * result, assistant text) and carries one inline image. The small size is
- * about 1 MiB of request body and the large size is at least 8 MiB, so a
- * structure proportional to the history shows as growth between the two.
+ * result, assistant text) and carries one inline image. The 256/1536-row
+ * corpora stay below a one-million-token window while keeping a sixfold
+ * size difference to expose history-proportional allocations.
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -31,8 +31,8 @@ export const SEND_PEAK_SHAPES: readonly SendPeakShape[] = [
 export const SEND_PEAK_SIZES: readonly SendPeakSize[] = ['small', 'large'];
 
 const ROW_COUNT: Record<SendPeakSize, number> = {
-  small: 1024,
-  large: 8192,
+  small: 256,
+  large: 1536,
 };
 
 /** The request fields every probe history shares. */

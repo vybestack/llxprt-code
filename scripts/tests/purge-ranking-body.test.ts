@@ -136,8 +136,8 @@ describe('real purge and ranked response complete provider BODY', () => {
         expect(await verifyBody(route, size, 2048)).toBe(8);
       }, 180_000);
     }
-    it(`${route} accepts complete valid input larger than nine MiB`, async () => {
-      expect(await verifyBody(route, 1, 9 * 1024 * 1024 + 1)).toBe(8);
+    it(`${route} accepts complete valid input larger than two MiB`, async () => {
+      expect(await verifyBody(route, 1, 2 * 1024 * 1024 + 1)).toBe(8);
     }, 180_000);
   }
 });

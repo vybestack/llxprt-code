@@ -1,6 +1,7 @@
 import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import { DEFAULT_REQUEST_MEDIA_BUDGET_BYTES } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -163,14 +164,29 @@ describe('Responses serializer to opt-in GPT56 image estimator', () => {
       ),
     ).toBeGreaterThan(0);
   }, 180000);
-  it('preserves independent bytes and string-oracle tokens for 4096 images', async () => {
-    expect(
-      await parity(
-        Array.from({ length: 4096 }, (_, i) =>
-          row(i, [image(i % 2 === 0 ? png(31, 33) : 'YQ==')]),
+  it('preserves independent bytes and string-oracle tokens for 128 budget-admissible images', async () => {
+    const rows = Array.from({ length: 128 }, (_, i) =>
+      row(i, [image(i % 2 === 0 ? png(31, 33) : 'YQ==')]),
+    );
+    const encodedBytes = rows.reduce(
+      (total, content) =>
+        total +
+        content.blocks.reduce(
+          (bytes, block) =>
+            bytes +
+            (block.type === 'media' && block.encoding === 'base64'
+              ? block.data.length
+              : 0),
+          0,
         ),
-      ),
-    ).toBeGreaterThan(0);
+      0,
+    );
+    expect(encodedBytes).toBeLessThanOrEqual(
+      DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
+    );
+    const count = await parity(rows);
+    expect(count).toBeGreaterThan(0);
+    expect(count + 1024).toBeLessThan(1_000_000);
   }, 600000);
   it.each(['codex-alias', 'custom-provider', 'anthropic-alias'])(
     'uses unchanged image estimation semantics for %s rather than stale persisted costs',
@@ -183,8 +199,8 @@ describe('Responses serializer to opt-in GPT56 image estimator', () => {
 });
 
 describe('Responses large-row source admission', () => {
-  it('accepts a valid greater-than-10MiB text row into the estimator without native long-input claims', async () => {
-    const size = 10 * 1024 * 1024 + 1;
+  it('accepts a 4 MiB text row within the one-million-token window', async () => {
+    const size = 4 * 1024 * 1024 + 1;
     const prompt = await nativePrompt(
       nativeRows([
         {
@@ -197,7 +213,7 @@ describe('Responses large-row source admission', () => {
     try {
       expect(
         Buffer.byteLength((await nativePromptKeys(prompt))[0]),
-      ).toBeGreaterThan(10 * 1024 * 1024);
+      ).toBeGreaterThan(4 * 1024 * 1024);
       expect(await nativePromptKeys(prompt)).toHaveLength(1);
       expect(await nativeImages(prompt)).toHaveLength(0);
     } finally {

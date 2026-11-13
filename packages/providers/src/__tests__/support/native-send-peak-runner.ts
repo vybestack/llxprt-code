@@ -2,7 +2,8 @@
 import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { serialize } from 'node:v8';
-import { recordOf, sendThroughRoute, WIRE_ROUTES } from './wireBodyCapture.js';
+import { recordOf, sendThroughRoute } from './wireBodyCapture.js';
+import { sendPeakRoute } from './send-peak-route.js';
 import {
   sendPeakHistory,
   streamSendPeakRows,
@@ -21,10 +22,7 @@ async function oracle(
   shape: SendPeakShape,
   size: SendPeakSize,
 ): Promise<SendPeakBody> {
-  const route = WIRE_ROUTES.find(
-    (candidate) => candidate.id === 'openai-chat-plain',
-  );
-  if (route === undefined) throw new Error('Missing plain Chat route');
+  const route = sendPeakRoute('openai-chat-plain');
   const body = recordOf(
     await sendThroughRoute(route, sendPeakHistory(shape, size), 'rows'),
   );

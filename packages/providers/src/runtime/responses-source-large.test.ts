@@ -17,7 +17,7 @@ function prepare(root: string): { bytes: number; sha256: string } {
       {
         type: 'text',
         text: `${index}: 雪 😀 " \\ \n \ud800 data:application/pdf;base64,YQ== `.repeat(
-          index === 24 ? 250000 : 2048,
+          index === 24 ? 24_000 : 128,
         ),
       },
     ],
@@ -115,7 +115,7 @@ describe('Responses source large-row acceptance', () => {
     const root = mkdtempSync(join(tmpdir(), 'responses-large-oracle-'));
     try {
       const expected = prepare(root);
-      expect(expected.bytes).toBeGreaterThan(10 * 1024 * 1024);
+      expect(expected.bytes).toBeGreaterThan(1024 * 1024);
       const actual = await run(
         root,
         process.env.ISSUE854_SERIALIZER_RETAIN_ROWS === '1',

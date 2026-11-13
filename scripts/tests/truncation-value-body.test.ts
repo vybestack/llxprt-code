@@ -149,7 +149,7 @@ describe('truncation complete provider BODY and independent value order', () => 
     },
     180_000,
   );
-  it('keeps valid rows larger than nine MiB without a row-size ban', async () => {
-    expect(await bodies(3, 9 * 1024 * 1024 + 1)).toBe(8);
+  it('keeps valid rows larger than two MiB without a row-size ban', async () => {
+    expect(await bodies(3, 2 * 1024 * 1024 + 1)).toBe(8);
   }, 180_000);
 });

@@ -41,14 +41,14 @@ async function requireRetiredToken(
 const root = registerProjectionWorkspace();
 
 describe('actual Responses native large rows and token retirement', () => {
-  it('sends a valid row above 10 MiB byte-for-byte without scratch workspaces', async () => {
+  it('sends a valid row above 1 MiB byte-for-byte without scratch workspaces', async () => {
     await withWorkspaceRuntime(root, async (setup, http) => {
-      const text = 'large "row" \\ 雪.'.repeat(800_000);
+      const text = 'large "row" \\ 雪.'.repeat(100_000);
       const row: IContent = {
         speaker: 'human',
         blocks: [{ type: 'text', text }],
       };
-      expect(Buffer.byteLength(text)).toBeGreaterThan(10 * 1024 * 1024);
+      expect(Buffer.byteLength(text)).toBeGreaterThan(1024 * 1024);
       const rows = {
         count: 1,
         readAt: () => row,

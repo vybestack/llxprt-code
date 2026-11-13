@@ -8,8 +8,8 @@ describe('native plain Chat original three-pair tool-heavy protocol', () => {
     const run = await runNativeSendPeak('tool-heavy', 'original-three-pair');
     expect(run.series.accumulation).toHaveLength(6);
     assertNativeFullProtocol(run, [
-      'a31fc26d960da4e93be21a938a47a53fb1bfbaa3791cca5ce4e4e2d7f813f906',
-      'fd7489eb6e0dfc6c4012b03fe0d43ab83afd86a658427ec3b33776b29b7bf836',
+      '9d8062463836acf4bbce98a47e5513eedf4f178928efaa0f652a0124ba0f93b5',
+      '7a7dc35d672c2f03c11a7ba6fdaf41f1f0189d5fa4993278126cae948a6591fd',
     ]);
   }, 170000);
 });

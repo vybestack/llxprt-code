@@ -292,6 +292,7 @@ async function acceptance(large: boolean, retainRows = false) {
 
 function assertOwners(facts: Awaited<ReturnType<typeof acceptance>>): void {
   expect(facts.estimate).toStrictEqual(facts.oracle);
+  expect(facts.estimate.estimatedPromptTokens).toBeLessThan(1_000_000);
   expect(facts.bodies).toStrictEqual([facts.expected, facts.expected]);
   expect(facts.preparedScan).toBe(64);
   expect(facts.finalScan).toBe(64);
@@ -330,7 +331,7 @@ describe('actual stateless disk provider ownership acceptance', () => {
       const measured = await measuredAcceptance(large);
       for (const facts of measured.runs)
         expect(facts.largestRowBytes).toBeGreaterThan(
-          large ? 10 * 1024 * 1024 : 500,
+          large ? 2 * 1024 * 1024 : 500,
         );
       assertAcceptance(measured);
     },

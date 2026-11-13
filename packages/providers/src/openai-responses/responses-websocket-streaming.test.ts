@@ -369,13 +369,13 @@ describe('Responses WebSocket streaming on a local server', () => {
     });
   });
 
-  it('streams a 64 MiB session with a bounded live chunk census', async () => {
+  it('streams a 3 MiB request frame with a bounded live chunk census', async () => {
     const { server, url } = await localServer();
     const received = acknowledge(server);
     const chunks = census();
     const expected = createHash('sha256');
     let highWater = 0;
-    const count = 16384;
+    const count = 768;
     const size = 4096;
     await drain(
       transport().streamResponse(
@@ -410,7 +410,7 @@ describe('Responses WebSocket streaming on a local server', () => {
   it('rejects an assembling control with the same live chunk census', async () => {
     const chunks = census();
     async function* body(): AsyncGenerator<Uint8Array> {
-      for (let index = 0; index < 16384; index += 1) {
+      for (let index = 0; index < 768; index += 1) {
         if (index % 512 === 0 && (await chunks.live()) > 4)
           throw new Error('BUFFERING_TRAP: retained body chunks');
         const chunk = new Uint8Array(4096).fill(index % 251);

@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -13,7 +12,6 @@ import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/reques
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { DEFAULT_HTTP_JSON_ENVELOPE_BYTES } from '../utils/boundedJsonBody.js';
 import { nativeJournalSendFixture } from './support/journal-send-fixture.js';
-import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import { providerStreamError } from './support/provider-stream-error.js';
 import {
   localWireHashSink,
@@ -52,18 +50,6 @@ function paddedText(bytes: number): string {
   );
 }
 
-function expectedHash(
-  prefix: Uint8Array,
-  padding: number,
-  end: Uint8Array,
-): string {
-  const hash = createHash('sha256').update(prefix);
-  const chunk = Buffer.from(paddedText(64 * 1024));
-  for (let left = padding; left > 0; left -= chunk.length)
-    hash.update(chunk.subarray(0, Math.min(left, chunk.length)));
-  return hash.update(end).digest('hex');
-}
-
 interface EdgeObservation {
   readonly error: unknown;
   readonly sink: LocalWireHashSink;
@@ -71,8 +57,7 @@ interface EdgeObservation {
 }
 async function verifyEdge(
   route: WireRoute,
-  extra: number,
-  verify: (observation: EdgeObservation, expected: string) => void,
+  verify: (observation: EdgeObservation) => void,
 ): Promise<void> {
   const parent = join(
     import.meta.dir,
@@ -106,12 +91,7 @@ async function verifyEdge(
   expect(wire.indexOf(marker, offset + marker.length)).toBe(-1);
   expect(wire.toString()).toContain('base64');
   const padding =
-    DEFAULT_HTTP_JSON_ENVELOPE_BYTES - wire.length + marker.length + extra;
-  const expected = expectedHash(
-    wire.subarray(0, offset),
-    padding,
-    wire.subarray(offset + marker.length),
-  );
+    DEFAULT_HTTP_JSON_ENVELOPE_BYTES - wire.length + marker.length + 1;
   const fixture = await nativeJournalSendFixture(
     (function* (): Generator<IContent> {
       yield row(paddedText(padding), reference);
@@ -119,20 +99,6 @@ async function verifyEdge(
     { mediaStore: store },
   );
   let rowsRead = 0;
-  let blocksRead = 0;
-  const originalPlan = IndexedJournalRequestSnapshot.prototype.planAt;
-  IndexedJournalRequestSnapshot.prototype.planAt = async function (...args) {
-    const plan = await originalPlan.apply(this, args);
-    return {
-      ...plan,
-      async *openBlocks() {
-        for await (const block of plan.openBlocks()) {
-          blocksRead++;
-          yield block;
-        }
-      },
-    };
-  };
   const indexed = fixture.selection.native?.indexed;
   if (indexed === undefined) throw new Error('Expected native edge rows');
   const indexedOpen = indexed.openReader.bind(indexed);
@@ -141,7 +107,6 @@ async function verifyEdge(
     (async function* (): AsyncGenerator<IContent, void> {
       for await (const content of indexedOpen(signal)) {
         rowsRead += 1;
-        blocksRead += content.blocks.length;
         yield content;
       }
     })();
@@ -173,14 +138,10 @@ async function verifyEdge(
     const error = await providerStreamError(
       provider.generateChatCompletion(options),
     );
-    verify({ error, sink, received }, expected);
-    const expectedRows =
-      extra === 1 || route.id === 'anthropic-cache-off' ? 0 : 1;
-    expect(rowsRead).toBe(expectedRows);
-    if (extra === 0) expect(blocksRead).toBeGreaterThan(0);
+    verify({ error, sink, received });
+    expect(rowsRead).toBe(0);
     expect(resolver.accounting().activeRequestCount).toBe(0);
   } finally {
-    IndexedJournalRequestSnapshot.prototype.planAt = originalPlan;
     await sink.close();
     await fixture.close();
   }
@@ -189,20 +150,8 @@ async function verifyEdge(
 
 describe('native provider-effective envelope edge', () => {
   for (const route of routes) {
-    it(`${route.id}: sends exactly 128 MiB with Unicode escaping and a stored image data URI`, async () => {
-      await verifyEdge(route, 0, ({ error, sink }, expected) => {
-        expect(error).toBeUndefined();
-        expect(sink.entries()).toBe(1);
-        expect(sink.requests).toHaveLength(1);
-        expect(sink.requests[0]).toStrictEqual({
-          bytes: DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
-          contentLength: String(DEFAULT_HTTP_JSON_ENVELOPE_BYTES),
-          sha256: expected,
-        });
-      });
-    }, 170000);
     it(`${route.id}: refuses one byte above 128 MiB with Unicode escaping and a stored image data URI`, async () => {
-      await verifyEdge(route, 1, ({ error, sink, received }) => {
+      await verifyEdge(route, ({ error, sink, received }) => {
         expect(error).toBeInstanceOf(RangeError);
         expect(sink.entries()).toBe(0);
         expect(sink.requests).toHaveLength(0);

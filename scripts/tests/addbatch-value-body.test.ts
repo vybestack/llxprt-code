@@ -69,7 +69,7 @@ describe('addBatch full provider BODY value equivalence', () => {
       expect(await verifyBody(size, 2048)).toBe(8);
     }, 180_000);
   }
-  it('preserves a complete submitted row larger than nine MiB at transport', async () => {
-    expect(await verifyBody(1, 9 * 1024 * 1024 + 1)).toBe(8);
+  it('preserves a complete submitted row larger than two MiB at transport', async () => {
+    expect(await verifyBody(1, 2 * 1024 * 1024 + 1)).toBe(8);
   }, 180_000);
 });

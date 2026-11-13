@@ -93,15 +93,15 @@ for (const route of ['middle-out', 'one-shot']) {
 }
 
 describe('invoked compression value large row', () => {
-  it('publishes a complete valid nine-MiB preserved row through the real value caller without truncating it or changing saved attribution', async () => {
-    const bytes = 9 * 1024 * 1024;
+  it('publishes a complete valid two-MiB preserved row through the real value caller without truncating it or changing saved attribution', async () => {
+    const bytes = 2 * 1024 * 1024;
     const makeRow = (index: number): IContent =>
       bodyRow(index, index === 0 ? bytes : 2048);
     await withSuffixFixture(
       512,
       async (history) => {
         const { handler } = middleoutSetup(history);
-        expect(await handler.performCompression('nine-MiB')).toBe(
+        expect(await handler.performCompression('two-MiB')).toBe(
           PerformCompressionResult.COMPRESSED,
         );
         let first: IContent | undefined;

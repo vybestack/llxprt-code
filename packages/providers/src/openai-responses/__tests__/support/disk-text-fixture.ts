@@ -13,7 +13,7 @@ import {
 } from './projection-ownership-fixture.js';
 
 /**
- * `large` true is the >10 MiB row of mixed prose and code-like lines; a number
+ * `large` true is the 2 MiB row of mixed prose and code-like lines; a number
  * is that many 64 KiB single-character runs, which exercise the large-piece
  * estimator path.
  */
@@ -25,7 +25,7 @@ export interface MixedTextTail {
 }
 
 const chunkBytes = 65536;
-const largeChunkCount = 161;
+const largeChunkCount = 32;
 const vocabulary = [
   'the',
   'estimate',

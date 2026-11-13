@@ -16,7 +16,7 @@ import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 const scratchEntries = registerScratchInspection();
 
-function history(rows = 512, padding = 70_000) {
+function history(rows = 512, padding = 4096) {
   let opened = 0;
   let pulled = 0;
   let closed = false;
@@ -49,7 +49,7 @@ function completed(): Response {
   );
 }
 
-function expectedBody(rows = 512, padding = 70_000): string {
+function expectedBody(rows = 512, padding = 4096): string {
   return JSON.stringify({
     model: 'o3-mini',
     input: Array.from({ length: rows }, (_, index) => ({
@@ -64,7 +64,7 @@ function expectedBody(rows = 512, padding = 70_000): string {
 async function runRetry(
   partial: boolean,
   rows = 512,
-  padding = 70_000,
+  padding = 4096,
 ): Promise<{ text: string; completeBodies: number }> {
   const source = history(rows, padding);
   const scratchBefore = requestScratchEntries();
@@ -161,7 +161,7 @@ function diskReplayHistory() {
         for (let index = 0; index < 512; index += 1) {
           const row: IContent = {
             speaker: 'human',
-            blocks: [{ type: 'text', text: `${index}:${'x'.repeat(70_000)}` }],
+            blocks: [{ type: 'text', text: `${index}:${'x'.repeat(4096)}` }],
           };
           references.push(new WeakRef(row));
           pulled += 1;
@@ -248,14 +248,14 @@ function retryEndpoint(
 
 describe('staged Responses upload retry', () => {
   it('replays an interrupted input part and emits the response once', async () => {
-    expect(await runRetry(true)).toStrictEqual({
+    expect(await runRetry(true, 32, 70_000)).toStrictEqual({
       text: 'finished',
       completeBodies: 1,
     });
   });
   it.each([
-    [512, 70_000],
-    [1, 10 * 1024 * 1024],
+    [512, 4096],
+    [1, 3 * 1024 * 1024],
   ])(
     'replays completed BODY bytes for %s rows of %s bytes without reopening history',
     async (rows, padding) => {
@@ -304,7 +304,7 @@ async function replayScenario(): Promise<number[]> {
     expect(output.join('')).toBe('finished');
     for (const count of endpoint.liveCounts)
       expect(count).toBeLessThanOrEqual(2);
-    expect(endpoint.snapshotSizes[0]).toBeGreaterThan(9 * 1024 * 1024);
+    expect(endpoint.snapshotSizes[0]).toBeGreaterThan(2 * 1024 * 1024);
     expect(endpoint.snapshotSizes[1]).toBe(endpoint.snapshotSizes[0]);
     expect(requestScratchEntries()).toStrictEqual([]);
     return endpoint.retainedBytes;

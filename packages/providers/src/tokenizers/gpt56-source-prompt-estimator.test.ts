@@ -319,7 +319,7 @@ function testFailures(): void {
     it.each([5, 1500])(
       'closes disk readers and releases the owner when cancelled after %i ms',
       async (delay) => {
-        const owner = largeProjection(32 * 1024 * 1024);
+        const owner = largeProjection(4 * 1024 * 1024);
         const controller = new AbortController();
         const timer = setTimeout(
           () => controller.abort(new Error('cancel-disk-count')),
@@ -400,11 +400,11 @@ function testLarge(): void {
         );
       }
     });
-    it('counts a real >10 MiB single-piece segment and its disk-only append metamorphism', async () => {
-      const size = 10 * 1024 * 1024 + 1;
+    it('counts a 4 MiB single-piece segment and its disk-only append metamorphism', async () => {
+      const size = 4 * 1024 * 1024 + 1;
       const owner = largeProjection(size);
       const path = owner.promptSegments[0].source.path;
-      expect(statSync(path).size).toBeGreaterThan(10 * 1024 * 1024);
+      expect(statSync(path).size).toBeGreaterThan(4 * 1024 * 1024);
       const first = await estimate(owner);
       const independent = await estimate(owner);
       expect(size % 8).toBe(1);

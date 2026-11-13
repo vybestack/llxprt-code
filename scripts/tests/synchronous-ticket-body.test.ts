@@ -22,7 +22,7 @@ function acceptedRow(index: number, oversized: boolean): IContent {
       ...row,
       speaker: 'human',
       blocks: [
-        { type: 'text', text: `oversized:${'x'.repeat(9 * 1024 * 1024 + 17)}` },
+        { type: 'text', text: `oversized:${'x'.repeat(2 * 1024 * 1024 + 17)}` },
       ],
     };
   return row.blocks.length === 0
@@ -91,7 +91,7 @@ describe('synchronous value tickets preserve provider BODYs and retries', () => 
     },
     180_000,
   );
-  it('preserves a complete greater-than-nine-MiB value in every BODY', async () => {
+  it('preserves a complete greater-than-two-MiB value in every BODY', async () => {
     await expect(compare(1, true)).resolves.toBeUndefined();
   }, 180_000);
 });

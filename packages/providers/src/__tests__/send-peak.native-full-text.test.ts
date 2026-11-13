@@ -8,8 +8,8 @@ describe('native plain Chat original three-pair text protocol', () => {
     const run = await runNativeSendPeak('text-only', 'original-three-pair');
     expect(run.series.accumulation).toHaveLength(6);
     assertNativeFullProtocol(run, [
-      '3da50735dd9871e72f2a1a02ee960c00ea2cbc36c0a91d8889a40220f7759de2',
-      '7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e',
+      'fd1da2829bf565ba22514d4285ab453c288b96c592bd3d68f007b800c210c4ee',
+      '4d698ae799b5f64601724064d43a0f2ab4da8757130b13731ffce3eb15f5b948',
     ]);
   }, 170000);
 });

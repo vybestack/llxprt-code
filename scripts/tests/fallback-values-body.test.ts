@@ -96,7 +96,7 @@ describe('fallback candidate complete provider BODY', () => {
       expect(await verifyBody(size, 2048)).toBe(8);
     }, 180_000);
   }
-  it('keeps every byte of a valid input larger than nine MiB', async () => {
-    expect(await verifyBody(1, 9 * 1024 * 1024 + 1)).toBe(8);
+  it('keeps every byte of a valid input larger than two MiB', async () => {
+    expect(await verifyBody(1, 2 * 1024 * 1024 + 1)).toBe(8);
   }, 180_000);
 });

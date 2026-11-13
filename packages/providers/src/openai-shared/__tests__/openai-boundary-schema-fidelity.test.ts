@@ -136,7 +136,7 @@ describe('OpenAI provider HTTP schema and complete body fidelity', () => {
     for (const [rows, padding] of [
       [512, 0],
       [8192, 0],
-      [8192, 1200],
+      [2048, 1200],
     ]) {
       for (const mode of [
         'nonempty',
@@ -153,7 +153,7 @@ describe('OpenAI provider HTTP schema and complete body fidelity', () => {
           expect(actual).toBe(expected);
           expect(Buffer.byteLength(actual)).toBe(Buffer.byteLength(expected));
           expect(digest(actual)).toBe(digest(expected));
-          const minimumBytes = padding > 0 ? 9 * 1024 * 1024 : 0;
+          const minimumBytes = padding > 0 ? 2 * 1024 * 1024 : 0;
           expect(Buffer.byteLength(actual)).toBeGreaterThan(minimumBytes);
         }, 180000);
       }
