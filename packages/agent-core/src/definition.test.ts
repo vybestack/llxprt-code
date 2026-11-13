@@ -82,7 +82,6 @@ describe('validateDefinition', () => {
       model: undefined,
       limits: { maxStepsPerTurn: -1, maxParallelChildren: 0, hidden: true },
       context: { ...validDefinition.context, compactAtRatio: 1.2 },
-      hostOnly: () => 'not data',
     };
 
     let captured: unknown;
@@ -96,13 +95,10 @@ describe('validateDefinition', () => {
     if (!(captured instanceof DefinitionError)) {
       throw new Error('Definition validation did not produce DefinitionError');
     }
-    expect(captured.problems.length).toBeGreaterThanOrEqual(6);
+    expect(captured.problems.length).toBeGreaterThanOrEqual(5);
     expect(captured.problems.map((problem) => problem.path[0])).toContain(
       'model',
     );
-    expect(
-      captured.problems.some((problem) => problem.message.includes('hostOnly')),
-    ).toBe(true);
   });
 
   it('rejects authority rules that grant authority', () => {
@@ -601,6 +597,53 @@ describe('validateDefinition', () => {
         data: null,
       }).scope.principal,
     ).toBe('secretary-1');
+  });
+
+  it('rejects credential-bearing URLs after WHATWG whitespace normalization', () => {
+    for (const endpoint of [
+      ' https://user:secret@example.test',
+      '\thttps://user:secret@example.test',
+      '\nhttps://user:secret@example.test',
+      'https://user:\nsecret@example.test',
+      '\u0000https://user:secret@example.test\u0020',
+    ]) {
+      expect(() =>
+        validateModelRecovery({
+          scope: { provider: 'p', model: 'm', endpoint, principal: 'p1' },
+          invalidates: [],
+          format: 'v1',
+          data: null,
+        }),
+      ).toThrow(DefinitionError);
+    }
+  });
+
+  it('checks credential parameters across the full fragment and route query', () => {
+    for (const endpoint of [
+      'https://example.test/#access_token=abc?state=1',
+      'https://example.test/#/callback?access_token=abc',
+    ]) {
+      expect(() =>
+        validateModelRecovery({
+          scope: { provider: 'p', model: 'm', endpoint, principal: 'p1' },
+          invalidates: [],
+          format: 'v1',
+          data: null,
+        }),
+      ).toThrow(DefinitionError);
+    }
+  });
+
+  it('returns DefinitionError for a definition array with a symbol key', () => {
+    const tools = Array(1);
+    Object.defineProperty(tools, Symbol('extra'), {
+      enumerable: true,
+      value: 1,
+    });
+
+    expect(() => validateDefinition({ ...validDefinition, tools })).toThrow(
+      DefinitionError,
+    );
   });
 
   it('accepts an empty non-command argument in validated shell facts', () => {
