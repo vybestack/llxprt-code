@@ -364,11 +364,32 @@ jobs:
         if: ${{ inputs.publish_vscode_only != true }}
         env:
           RELEASE_VERSION: ${{ steps.metadata.outputs.release_version }}
-          LLXPRT_RELEASE_PROOF_DIR: ${{ runner.temp }}/release-artifacts
+          LLXPRT_RELEASE_PROOF_DIR: ${{ runner.temp }}/release-proof
         run: |
+          set -euo pipefail
           npm run bundle:cli
           mkdir -p "$LLXPRT_RELEASE_PROOF_DIR"
           bun scripts/tests/release-bound-artifact-helpers.ts
+          node -e '
+            const fs = require("node:fs");
+            const path = require("node:path");
+            const [manifestPath, proofDirectory, artifactDirectory] = process.argv.slice(1);
+            const artifacts = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+            if (!Array.isArray(artifacts) || artifacts.length === 0) {
+              throw new Error("Consumer proof produced no package tarballs");
+            }
+            for (const artifact of artifacts) {
+              const filename = path.basename(artifact.tarball);
+              if (!filename.endsWith(".tgz")) {
+                throw new Error("Unexpected consumer-proof artifact: " + filename);
+              }
+              const source = path.join(proofDirectory, filename);
+              if (!fs.statSync(source).isFile()) {
+                throw new Error("Missing consumer-proof tarball: " + source);
+              }
+              fs.copyFileSync(source, path.join(artifactDirectory, filename));
+            }
+          ' "$LLXPRT_RELEASE_PROOF_DIR/artifacts.json" "$LLXPRT_RELEASE_PROOF_DIR" "$RUNNER_TEMP/release-artifacts"
           for package_dir in packages/*; do
             package_name="$(node -p "require('./$package_dir/package.json').name")"
             package_name="${package_name#@}"
@@ -381,6 +402,17 @@ jobs:
           done
           sha256sum packages/*/dist/*.tgz > "$RUNNER_TEMP/release-package-tarballs.sha256"
           tar -czf "$RUNNER_TEMP/sandbox-release-inputs.tgz" packages/*/dist/*.tgz -C "$RUNNER_TEMP" release-package-tarballs.sha256
+      - name: Upload release consumer proof
+        if: always()
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        with:
+          name: release-consumer-proof-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/release-proof/*.json
+            ${{ runner.temp }}/release-proof/*.log
+            ${{ runner.temp }}/release-proof/local/*.log
+            ${{ runner.temp }}/release-proof/global/*.log
+          if-no-files-found: warn
       - name: Version, build and pack runtime plugins
         if: ${{ inputs.publish_vscode_only != true }}
         env:

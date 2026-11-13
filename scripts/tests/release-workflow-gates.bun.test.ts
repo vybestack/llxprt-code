@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { relative, resolve } from 'node:path';
 import {
   asRecord,
   asString,
@@ -111,6 +112,72 @@ describe('prepared release commit wiring', () => {
         'test "$RELEASE_COMMIT_SHA" = "$PUBLIC_BASE_SHA"',
       );
     }
+  });
+});
+
+describe('prepared release artifact inventory', () => {
+  it('keeps consumer-proof scratch outside the uploaded handoff and uploads only its diagnostics separately', () => {
+    const prepareSteps = jobSteps(workflowJob(workflow, 'prepare_artifact'));
+    const proofStep = prepareSteps.find(
+      (step) => step.name === 'Build and prove prepared release packages',
+    );
+    const uploadStep = prepareSteps.find(
+      (step) => step.name === 'Upload prepared release artifacts',
+    );
+    const diagnosticsStep = prepareSteps.find(
+      (step) => step.name === 'Upload release consumer proof',
+    );
+    if (proofStep === undefined || uploadStep === undefined) {
+      throw new Error(
+        'release proof and prepared artifact upload are required',
+      );
+    }
+
+    const proofEnv = asRecord(proofStep.env);
+    const proofDirectory = asString(proofEnv.LLXPRT_RELEASE_PROOF_DIR).replace(
+      '${{ runner.temp }}',
+      '/runner-temp',
+    );
+    const uploadConfig = asRecord(uploadStep.with);
+    const uploadDirectory = asString(uploadConfig.path).replace(
+      '${{ runner.temp }}',
+      '/runner-temp',
+    );
+    const relativeProofPath = relative(
+      resolve(uploadDirectory),
+      resolve(proofDirectory),
+    );
+
+    expect(
+      relativeProofPath === '' ||
+        (!relativeProofPath.startsWith('../') && relativeProofPath !== '..'),
+      'proof scratch must not be the uploaded directory or a child of it',
+    ).toBe(false);
+    const proofRun = asString(proofStep.run);
+    expect(proofRun).toContain('path.basename(artifact.tarball)');
+    expect(proofRun).toContain('fs.statSync(source).isFile()');
+    expect(proofRun).toContain(
+      'fs.copyFileSync(source, path.join(artifactDirectory, filename))',
+    );
+    expect(proofRun).not.toContain('cp -R "$LLXPRT_RELEASE_PROOF_DIR"');
+
+    expect(diagnosticsStep).toBeDefined();
+    expect(asString(diagnosticsStep?.['if'])).toContain('always()');
+    expect(asString(diagnosticsStep?.uses)).toBe(uploadStep.uses);
+    const diagnostics = asRecord(diagnosticsStep?.with);
+    expect(asString(diagnostics['if-no-files-found'])).toBe('warn');
+    expect(asString(diagnostics.path)).toContain(
+      '${{ runner.temp }}/release-proof/*.json',
+    );
+    expect(asString(diagnostics.path)).toContain(
+      '${{ runner.temp }}/release-proof/*.log',
+    );
+    expect(asString(diagnostics.path)).toContain(
+      '${{ runner.temp }}/release-proof/local/*.log',
+    );
+    expect(asString(diagnostics.path)).toContain(
+      '${{ runner.temp }}/release-proof/global/*.log',
+    );
   });
 });
 
