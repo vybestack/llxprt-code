@@ -39,7 +39,7 @@ function standardArtifactAction(actionName: string): string {
       .filter((line) => line.includes(ratchetMarker))
       .map((line) => {
         const match = line.match(
-          /uses:\s*['\"]?(actions\/[a-z-]+@[a-f0-9]+)['\"]?\s+# ratchet:actions\/[a-z-]+@v(\d+)/,
+          /uses:\s*['"]?(actions\/[a-z-]+@[a-f0-9]+)['"]?\s+# ratchet:actions\/[a-z-]+@v(\d+)/,
         );
         if (match === null) {
           throw new Error(`Malformed ratcheted action line: ${line}`);
