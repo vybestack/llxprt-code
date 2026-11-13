@@ -68,8 +68,30 @@ function isArrayIndex(key: string, length: number): boolean {
 
 function isDenseArray(value: object): boolean {
   if (!Array.isArray(value)) return false;
-  for (let index = 0; index < value.length; index += 1) {
-    if (!Object.hasOwn(value, index)) return false;
+  return Reflect.ownKeys(value).length - 1 === value.length;
+}
+
+function isUint8ArrayIndex(value: Uint8Array, key: PropertyKey): key is string {
+  if (typeof key !== 'string') return false;
+  const index = Number(key);
+  return (
+    Number.isInteger(index) &&
+    index >= 0 &&
+    index < value.length &&
+    String(index) === key
+  );
+}
+
+function hasSafeUint8ArrayDescriptors(value: Uint8Array): boolean {
+  for (const key of Reflect.ownKeys(value)) {
+    if (!isUint8ArrayIndex(value, key)) return false;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (
+      descriptor === undefined ||
+      descriptor.enumerable !== true ||
+      !Object.hasOwn(descriptor, 'value')
+    )
+      return false;
   }
   return true;
 }
@@ -84,7 +106,7 @@ export function hasSafeDescriptors(
 ): boolean {
   if (value === null || typeof value !== 'object')
     return typeof value !== 'function';
-  if (value instanceof Uint8Array) return true;
+  if (value instanceof Uint8Array) return hasSafeUint8ArrayDescriptors(value);
   if (active.has(value)) return false;
   const array = Array.isArray(value);
   const prototype = Object.getPrototypeOf(value);
@@ -119,15 +141,21 @@ export function cloneDataDescriptors(
   if (active.has(value)) return undefined;
   active.add(value);
   if (Array.isArray(value)) {
+    const ownKeys = Reflect.ownKeys(value);
+    if (ownKeys.length - 1 !== value.length) {
+      active.delete(value);
+      return [];
+    }
     const copy: unknown[] = [];
-    for (let index = 0; index < value.length; index += 1) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    for (const key of ownKeys) {
+      if (key === 'length') continue;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (
         descriptor !== undefined &&
         Object.hasOwn(descriptor, 'value') &&
         descriptor.enumerable === true
       ) {
-        copy[index] = cloneDataDescriptors(descriptor.value, active);
+        copy[Number(key)] = cloneDataDescriptors(descriptor.value, active);
       }
     }
     active.delete(value);

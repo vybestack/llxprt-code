@@ -49,7 +49,7 @@ const CREDENTIAL_URL_PARAMETER_KEYS = new Set(
 );
 
 function hasCredentialUrlParts(endpoint: string): boolean {
-  if (!endpoint.includes('://')) return false;
+  if (!/^[a-z][a-z\d+.-]*:/i.test(endpoint)) return false;
   let url: URL;
   try {
     url = new URL(endpoint);
@@ -59,7 +59,11 @@ function hasCredentialUrlParts(endpoint: string): boolean {
   if (url.username !== '' || url.password !== '') return true;
   const parameters = new URLSearchParams(url.search);
   const fragment = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
-  for (const [key] of new URLSearchParams(fragment)) parameters.append(key, '');
+  const routeQuery = fragment.includes('?')
+    ? fragment.slice(fragment.indexOf('?') + 1)
+    : fragment;
+  for (const [key] of new URLSearchParams(routeQuery))
+    parameters.append(key, '');
   return [...parameters.keys()].some((key) =>
     CREDENTIAL_URL_PARAMETER_KEYS.has(normalizeCredentialParameterKey(key)),
   );

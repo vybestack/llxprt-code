@@ -8,7 +8,7 @@ import type { DefinitionProblem } from './types.js';
 export class DefinitionError extends Error {
   readonly kind = 'definition';
   constructor(readonly problems: readonly DefinitionProblem[]) {
-    super(`Agent definition has ${problems.length} problem(s).`);
+    super(`Validation failed with ${problems.length} problem(s).`);
     this.name = 'DefinitionError';
   }
 }
