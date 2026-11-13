@@ -21,11 +21,12 @@ import {
   type GrowthProbe,
 } from './__tests__/support/streamedBody.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
+import { freshFrameHeap } from './__tests__/support/fresh-frame-heap.js';
 
 const CHUNK_BYTES = 64 * 1024;
 const SAMPLE_EVERY_CHUNKS = 8;
-/** Maximum writer/reader peak of the one-chunk fixture on 2026-11-13. */
-const ONE_CHUNK_FIXED_OVERHEAD_BYTES = 368_928;
+/** Maximum one-chunk peak on 2026-11-13, less its source chunk. */
+const ONE_CHUNK_FIXED_OVERHEAD_BYTES = 368_928 - CHUNK_BYTES;
 /** Source chunk, frame output chunk, and one journal I/O chunk. */
 const IN_FLIGHT_CHUNKS = 3;
 const STREAMING_GROWTH_BOUND =
@@ -67,7 +68,7 @@ async function writeAndReadBack(
 ): Promise<Outcome> {
   const file = path.join(directory, `row-${totalBytes}.llxj`);
   const { dependencies } = testJournalSeams();
-  const writeProbe = await startGrowthProbe();
+  const writeProbe = await startGrowthProbe(freshFrameHeap);
   const produced = producedBody(
     totalBytes,
     CHUNK_BYTES,
@@ -80,7 +81,7 @@ async function writeAndReadBack(
   await writeProbe.sample();
   await writer.close();
 
-  const readProbe = await startGrowthProbe();
+  const readProbe = await startGrowthProbe(freshFrameHeap);
   const reader = await openJournalReadOnly(file, dependencies);
   const head = await reader.readRecordHead(JOURNAL_HEADER_BYTES);
   const readBack = await consume(
@@ -118,7 +119,8 @@ async function consume(
 }
 
 const CASES: ReadonlyArray<readonly [number, number]> = [
-  [MIB, Math.min(8 * CHUNK_BYTES, STREAMING_GROWTH_BOUND)],
+  [CHUNK_BYTES, STREAMING_GROWTH_BOUND],
+  [MIB, STREAMING_GROWTH_BOUND],
   [15 * MIB, STREAMING_GROWTH_BOUND],
 ];
 
@@ -142,7 +144,7 @@ describe('rows larger than any buffer the codec would allocate', () => {
   }
 
   it('control: a writer that gathers the body before writing exceeds the heap bound', async () => {
-    const [size, bound] = CASES[1];
+    const [size, bound] = CASES[2];
 
     const outcome = await writeAndReadBack(tempDir(), size, gathered, false);
 
@@ -152,10 +154,13 @@ describe('rows larger than any buffer the codec would allocate', () => {
       peak: outcome.writeGrowth,
     });
     expect(outcome.writeGrowth).toBeGreaterThan(4 * bound);
+    expect(outcome.writeGrowth).toBeGreaterThan(
+      4 * (368_928 + 3 * CHUNK_BYTES),
+    );
   });
 
   it('control: a reader that keeps every chunk exceeds the heap bound', async () => {
-    const [size, bound] = CASES[1];
+    const [size, bound] = CASES[2];
 
     const outcome = await writeAndReadBack(tempDir(), size, streamed, true);
 
@@ -164,5 +169,6 @@ describe('rows larger than any buffer the codec would allocate', () => {
       peak: outcome.readGrowth,
     });
     expect(outcome.readGrowth).toBeGreaterThan(4 * bound);
+    expect(outcome.readGrowth).toBeGreaterThan(4 * (368_928 + 3 * CHUNK_BYTES));
   });
 });

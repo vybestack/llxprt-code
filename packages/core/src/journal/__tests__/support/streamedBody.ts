@@ -11,12 +11,14 @@ export interface GrowthProbe {
   peakGrowth: () => number;
 }
 
-export async function startGrowthProbe(): Promise<GrowthProbe> {
-  const baseline = await settledHeap();
+export async function startGrowthProbe(
+  measure: () => Promise<number> = settledHeap,
+): Promise<GrowthProbe> {
+  const baseline = await measure();
   let peak = 0;
   return {
     sample: async () => {
-      peak = Math.max(peak, (await settledHeap()) - baseline);
+      peak = Math.max(peak, (await measure()) - baseline);
     },
     peakGrowth: () => peak,
   };

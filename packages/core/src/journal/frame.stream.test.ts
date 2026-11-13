@@ -26,18 +26,18 @@ import {
   type GrowthProbe,
 } from './__tests__/support/streamedBody.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
+import { freshFrameHeap } from './__tests__/support/fresh-frame-heap.js';
 
 const BODY_BYTES = 15 * MIB;
 const CHUNK_BYTES = 64 * 1024;
 const SAMPLE_EVERY_CHUNKS = 8;
 /** Largest encoder/decoder peak for the one-chunk fixture on 2026-11-13. */
 const ONE_CHUNK_FIXED_OVERHEAD_BYTES = 81_651;
-/** A source chunk, its frame output, and the reader's current chunk. */
+/** frameParts forwards the source array; three slots cover chunk handoffs and I/O. */
 const IN_FLIGHT_CHUNKS = 3;
 const ONE_CHUNK_GROWTH_ALLOWANCE =
   ONE_CHUNK_FIXED_OVERHEAD_BYTES + IN_FLIGHT_CHUNKS * CHUNK_BYTES;
-/** Unchanged gate: 283,820 bytes exceeded the 278,259-byte one-chunk allowance. */
-const STREAMING_GROWTH_BOUND = 2 * MIB;
+const STREAMING_GROWTH_BOUND = ONE_CHUNK_GROWTH_ALLOWANCE;
 const RETAINED_GROWTH_FLOOR = BODY_BYTES / 2;
 const KIND_HEADER = new Uint8Array(24).fill(0x5a);
 
@@ -119,10 +119,10 @@ async function decodeFromFile(
 }
 
 async function warmUp(file: string): Promise<void> {
-  const probe = await startGrowthProbe();
+  const probe = await startGrowthProbe(freshFrameHeap);
   const handle = await fs.open(file, 'w+');
   try {
-    const body = producedBody(4 * MIB, CHUNK_BYTES, probe, 1000);
+    const body = producedBody(4 * MIB, CHUNK_BYTES, probe, SAMPLE_EVERY_CHUNKS);
     await writeFrame(createFileHandleSink(handle, 0), 0x01, KIND_HEADER, {
       length: 4 * MIB,
       chunks: body.chunks,
@@ -130,8 +130,7 @@ async function warmUp(file: string): Promise<void> {
     const { size } = await handle.stat();
     const reader = createFileHandleReader(handle);
     const head = await readFrameHead(reader, 0, size);
-    for await (const chunk of readFrameBody(reader, head, CHUNK_BYTES))
-      crc32(chunk);
+    await streamingConsumer(reader, head, probe);
   } finally {
     await handle.close();
   }
@@ -146,14 +145,14 @@ describe('a 15 MiB media-budget body', () => {
       const file = path.join(tempDir(), 'streamed.llxj');
       await warmUp(path.join(tempDir(), 'warm.llxj'));
 
-      const encodeProbe = await startGrowthProbe();
+      const encodeProbe = await startGrowthProbe(freshFrameHeap);
       const written = await encodeToFile(
         file,
         streamingWriter,
         encodeProbe,
         bodyBytes,
       );
-      const decodeProbe = await startGrowthProbe();
+      const decodeProbe = await startGrowthProbe(freshFrameHeap);
       const read = await decodeFromFile(file, streamingConsumer, decodeProbe);
 
       expect((await fs.stat(file)).size).toBe(
@@ -174,7 +173,7 @@ describe('a 15 MiB media-budget body', () => {
   it('is caught when an encoder buffers the whole body', async () => {
     const file = path.join(tempDir(), 'trap-encode.llxj');
 
-    const probe = await startGrowthProbe();
+    const probe = await startGrowthProbe(freshFrameHeap);
     await encodeToFile(file, bufferingWriter, probe);
 
     expect(probe.peakGrowth()).toBeGreaterThan(RETAINED_GROWTH_FLOOR);
@@ -187,9 +186,13 @@ describe('a 15 MiB media-budget body', () => {
 
   it('is caught when a decoder reads the whole body', async () => {
     const file = path.join(tempDir(), 'trap-decode.llxj');
-    await encodeToFile(file, streamingWriter, await startGrowthProbe());
+    await encodeToFile(
+      file,
+      streamingWriter,
+      await startGrowthProbe(freshFrameHeap),
+    );
 
-    const probe = await startGrowthProbe();
+    const probe = await startGrowthProbe(freshFrameHeap);
     await decodeFromFile(file, wholeBodyConsumer, probe);
     recordMemoryGate('frame-decode-control', {
       bytes: BODY_BYTES,
@@ -206,8 +209,7 @@ const BIG_ROW_ITEMS = 128;
 /** The encoded header and its decoded copy accompany the same chunk window. */
 const BIG_ROW_ONE_CHUNK_ALLOWANCE =
   ONE_CHUNK_GROWTH_ALLOWANCE + 2 * bigRowHeader().byteLength;
-/** Unchanged: the measured 297,185-byte peak exceeded the 289,395-byte formula. */
-const BIG_ROW_GROWTH_BOUND = 512 * 1024;
+const BIG_ROW_GROWTH_BOUND = BIG_ROW_ONE_CHUNK_ALLOWANCE;
 
 /** A multi-block ROW header larger than the frame reader prefetch. */
 function bigRowHeader(): Uint8Array {
@@ -274,10 +276,10 @@ describe('a 2 MiB body behind a 128-block, 128-id ROW header', () => {
   it('streams the body with heap growth far below the body size', async () => {
     const header = bigRowHeader();
     const file = path.join(tempDir(), 'bigrow.llxj');
-    const encodeProbe = await startGrowthProbe();
+    const encodeProbe = await startGrowthProbe(freshFrameHeap);
     const written = await writeRow(file, header, encodeProbe, false);
 
-    const decodeProbe = await startGrowthProbe();
+    const decodeProbe = await startGrowthProbe(freshFrameHeap);
     const handle = await fs.open(file, 'r');
     let read: { crc: number; bytes: number };
     try {
@@ -306,7 +308,7 @@ describe('a 2 MiB body behind a 128-block, 128-id ROW header', () => {
 
   it('is caught when the encoder buffers the whole body', async () => {
     const header = bigRowHeader();
-    const probe = await startGrowthProbe();
+    const probe = await startGrowthProbe(freshFrameHeap);
 
     await writeRow(path.join(tempDir(), 'trap.llxj'), header, probe, true);
 
@@ -316,5 +318,6 @@ describe('a 2 MiB body behind a 128-block, 128-id ROW header', () => {
       peak: probe.peakGrowth(),
     });
     expect(probe.peakGrowth()).toBeGreaterThan(3 * BIG_ROW_GROWTH_BOUND);
+    expect(probe.peakGrowth()).toBeGreaterThan(3 * 512 * 1024);
   }, 180_000);
 });

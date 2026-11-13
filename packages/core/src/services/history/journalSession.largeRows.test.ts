@@ -5,14 +5,17 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { tmpdir } from 'node:os';
 import { beforeAll, describe, expect, it } from 'bun:test';
-import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
+import { freshFrameHeap } from '../../journal/__tests__/support/fresh-frame-heap.js';
+import { recordMemoryGate } from '../../journal/__tests__/support/memory-gate-evidence.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { MIB } from '../../journal/__tests__/support/streamedBody.js';
 import { JournalSession } from './journalSession.js';
 import type { IContent } from './IContent.js';
 
-/** Settled heap may rise this far above its start once the row has been written or read and dropped. */
-const RETAINED_BOUND = 2 * MIB;
+/** Largest settled lifecycle overhead in the 256-byte / 1 MiB calibration, 2026-11-13. */
+const FIXED_OVERHEAD_BYTES = 292_798;
+/** After conversion only the 64-character SHA-256 digest may survive. */
+const RETAINED_BOUND = FIXED_OVERHEAD_BYTES + 2 * 64;
 /** A row this big read into the control must show in the same measurement. */
 const CONTROL_FLOOR_FRACTION = 0.5;
 
@@ -66,7 +69,7 @@ async function readDigest(session: JournalSession): Promise<{
   return found;
 }
 
-const SIZES = [1, 2.5];
+const SIZES = [256 / MIB, 1, 2.5];
 
 describe('rows of 1 and 2.5 MiB through the journal session (defect 5)', () => {
   const directory = useTempDir('journal-large-session-');
@@ -92,19 +95,24 @@ describe('rows of 1 and 2.5 MiB through the journal session (defect 5)', () => {
     it(`writes, reopens and reads a ${mebibytes} MiB row, and holds none of it afterwards`, async () => {
       const file = path.join(directory(), `row-${mebibytes}.llxj`);
       const bytes = mebibytes * MIB;
-      const baseline = await settledHeap();
+      const baseline = await freshFrameHeap();
       const session = await JournalSession.create(file, testJournalOptions());
 
       const written = await appendRow(session, bytes);
-      const afterWrite = await settledHeap();
+      const afterWrite = await freshFrameHeap();
       await session.close();
       const fileBytes = (await fsp.stat(file)).size;
 
       const reopened = await JournalSession.open(file, testJournalOptions());
       const read = await readDigest(reopened);
-      const afterRead = await settledHeap();
+      const afterRead = await freshFrameHeap();
       await reopened.close();
 
+      recordMemoryGate('session', {
+        bytes,
+        write: afterWrite - baseline,
+        read: afterRead - baseline,
+      });
       expect(fileBytes).toBeGreaterThan(bytes);
       expect(read.length).toBe(bytes);
       expect(read.digest).toBe(written);
@@ -119,18 +127,23 @@ describe('rows of 1 and 2.5 MiB through the journal session (defect 5)', () => {
       testJournalOptions(),
     );
     const bytes = 2.5 * MIB;
-    const baseline = await settledHeap();
+    const baseline = await freshFrameHeap();
 
     const kept: IContent[] = [];
     const text = rowText(bytes);
     kept.push({ speaker: 'human', blocks: [{ type: 'text', text }] });
     await session.append(kept);
-    const withRow = await settledHeap();
+    const withRow = await freshFrameHeap();
     await session.close();
 
     expect(kept).toHaveLength(1);
     expect(withRow - baseline).toBeGreaterThan(bytes * CONTROL_FLOOR_FRACTION);
-    expect(withRow - baseline).toBeGreaterThan(RETAINED_BOUND);
+    recordMemoryGate('session-control', {
+      bytes,
+      retained: withRow - baseline,
+    });
+    expect(withRow - baseline).toBeGreaterThan(3 * RETAINED_BOUND);
+    expect(withRow - baseline).toBeGreaterThan(2 * MIB);
   });
 
   it('control: a reader that keeps the row it read shows the row in the same measurement', async () => {
@@ -139,16 +152,21 @@ describe('rows of 1 and 2.5 MiB through the journal session (defect 5)', () => {
     const session = await JournalSession.create(file, testJournalOptions());
     await appendRow(session, bytes);
     await session.close();
-    const baseline = await settledHeap();
+    const baseline = await freshFrameHeap();
 
     const reopened = await JournalSession.open(file, testJournalOptions());
     const kept: IContent[] = [];
     for await (const { content } of reopened.rows()) kept.push(content);
-    const withRow = await settledHeap();
+    const withRow = await freshFrameHeap();
     await reopened.close();
 
     expect(kept).toHaveLength(1);
     expect(withRow - baseline).toBeGreaterThan(bytes * CONTROL_FLOOR_FRACTION);
-    expect(withRow - baseline).toBeGreaterThan(RETAINED_BOUND);
+    recordMemoryGate('session-control', {
+      bytes,
+      retained: withRow - baseline,
+    });
+    expect(withRow - baseline).toBeGreaterThan(3 * RETAINED_BOUND);
+    expect(withRow - baseline).toBeGreaterThan(2 * MIB);
   });
 });
