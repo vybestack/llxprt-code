@@ -19,7 +19,27 @@ import { isHistorySource } from '../../../core/deferredHistorySource.js';
 import { buildAgentClientFactory } from '../../agentBootstrap.js';
 import { buildAgent, type Agent } from './agentHarness.js';
 
-export const carryBounds = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
+export function carryFixtureBytes(
+  size: number,
+  bytes = 2048,
+): { total: number; largest: number } {
+  let total = 0;
+  let largest = 0;
+  for (let index = 0; index < size; index++) {
+    const serialized = Buffer.byteLength(
+      JSON.stringify(accountingRow(index, bytes)),
+    );
+    total += serialized;
+    largest = Math.max(largest, serialized);
+  }
+  return { total, largest };
+}
+export const carryRowBytes = carryFixtureBytes(65);
+// Source and admitted row shells can coexist. The owner charges JSON, not heap.
+export const carryBounds = {
+  rows: 2,
+  serializedBytes: 2 * carryRowBytes.largest,
+};
 
 export function latch(): { promise: Promise<void>; open: () => void } {
   let open: () => void = () => {};

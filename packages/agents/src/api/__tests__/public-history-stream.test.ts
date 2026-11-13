@@ -6,9 +6,22 @@ import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__te
 import { withPublicHistory } from './helpers/public-history-fixture.js';
 import { buildAgent } from './helpers/agentHarness.js';
 
-const bounds = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
+const PUBLIC_HISTORY_ROW_COUNT = 65;
+function fixtureBytes(size: number): { total: number; largest: number } {
+  let total = 0;
+  let largest = 0;
+  for (let index = 0; index < size; index++) {
+    const bytes = Buffer.byteLength(JSON.stringify(accountingRow(index)));
+    total += bytes;
+    largest = Math.max(largest, bytes);
+  }
+  return { total, largest };
+}
+const PUBLIC_HISTORY_BYTES = fixtureBytes(PUBLIC_HISTORY_ROW_COUNT);
+// Ownership charges UTF-8 JSON only: one row, no encoder copies or heap overhead.
+const bounds = { rows: 1, serializedBytes: PUBLIC_HISTORY_BYTES.largest };
 
-for (const size of [65]) {
+for (const size of [PUBLIC_HISTORY_ROW_COUNT]) {
   for (const active of [false, true]) {
     describe(`public agent ${active ? 'active' : 'stored'} history with ${size} rows`, () => {
       it('streams the raw mixed transcript bytes with bounded reader ownership', async () => {
@@ -30,6 +43,12 @@ for (const size of [65]) {
             expect(reader.snapshot().peakRows).toBeLessThanOrEqual(1);
             expect(reader.snapshot().liveRows).toBe(0);
             expect(reader.within(bounds)).toBe(true);
+            expect(PUBLIC_HISTORY_BYTES.total).toBeGreaterThan(
+              4 * bounds.serializedBytes,
+            );
+            process.stdout.write(
+              `PUBLIC_HISTORY_BYTES ${JSON.stringify({ active, ...PUBLIC_HISTORY_BYTES, bounds, ...reader.snapshot() })}\n`,
+            );
           },
         );
       }, 120_000);
@@ -88,6 +107,37 @@ for (const size of [65]) {
 }
 
 describe('public history stream lifecycle', () => {
+  it.each([false, true])(
+    'control: retaining streamed rows exceeds the same byte allowance, active=%s',
+    async (active) => {
+      await withPublicHistory(
+        PUBLIC_HISTORY_ROW_COUNT,
+        active,
+        async (agent, _history, reader) => {
+          const held = [];
+          try {
+            for await (const row of agent.streamHistory()) {
+              reader.retain(row);
+              held.push(row);
+            }
+            expect(reader.within(bounds)).toBe(false);
+            expect(reader.snapshot().peakSerializedBytes).toBeGreaterThan(
+              3 * bounds.serializedBytes,
+            );
+            expect(reader.snapshot().liveRows).toBe(PUBLIC_HISTORY_ROW_COUNT);
+            process.stdout.write(
+              `PUBLIC_HISTORY_CONTROL ${JSON.stringify({ active, ...PUBLIC_HISTORY_BYTES, bounds, ...reader.snapshot() })}\n`,
+            );
+          } finally {
+            for (const row of held) reader.release(row);
+          }
+          expect(reader.snapshot().liveRows).toBe(0);
+        },
+      );
+    },
+    120_000,
+  );
+
   it('does not acquire an unused or pre-aborted reader', async () => {
     await withPublicHistory(2, false, async (agent, _history, reader) => {
       await agent.streamHistory().return();

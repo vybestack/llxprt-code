@@ -4,6 +4,7 @@ import { describe, expect, it } from 'bun:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import {
   carryBounds,
+  carryRowBytes,
   expectedDigest,
   historyDigest,
   recordCarry,
@@ -30,8 +31,13 @@ for (const size of [65]) {
           expect(input.snapshot().liveRows).toBe(0);
           expect(next.owners.within(carryBounds)).toBe(true);
           expect(input.within(carryBounds)).toBe(true);
+          expect(carryRowBytes.total).toBeGreaterThan(
+            4 * carryBounds.serializedBytes,
+          );
           recordCarry({
             size,
+            fixture: carryRowBytes,
+            allowance: carryBounds,
             input: input.snapshot(),
             admittedAndOutput: next.owners.snapshot(),
           });

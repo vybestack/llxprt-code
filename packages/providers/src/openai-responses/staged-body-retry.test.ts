@@ -3,6 +3,10 @@ import { registerScratchInspection } from '../__tests__/support/scratch-inspecti
 import { describe, expect, it } from 'bun:test';
 import { diskAdmittedSource } from '../__tests__/support/disk-admitted-source.js';
 import { createHash } from 'node:crypto';
+import {
+  countO200kBaseTokens,
+  getO200kBaseEncoder,
+} from '../tokenizers/o200kBaseCounter.js';
 import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -49,9 +53,9 @@ function completed(): Response {
   );
 }
 
-function expectedBody(rows = 512, padding = 4096): string {
+function expectedBody(rows = 512, padding = 4096, model = 'o3-mini'): string {
   return JSON.stringify({
-    model: 'o3-mini',
+    model,
     input: Array.from({ length: rows }, (_, index) => ({
       role: 'user',
       content: `${index}:${'x'.repeat(padding)}`,
@@ -151,17 +155,43 @@ async function runRetry(
   }
 }
 
-function diskReplayHistory() {
+const REPLAY_ROW_COUNT = 1024;
+const REPLAY_ROW_PADDING = 4096;
+// Largest checkpoint in two one-row lifecycle calibrations, before fixture growth.
+const REPLAY_FIXED_OVERHEAD_BYTES = 163_082;
+const REPLAY_ENCODING_FACTOR = 4;
+// The one-row formula fails the real replay path; retain the original cap.
+const UNRESOLVED_REPLAY_HEAP_BOUND = 1024 * 1024;
+const REPLAY_LIVE_ROW_FACTOR = 2;
+const REPLAY_LARGEST_ROW_BYTES = Buffer.byteLength(
+  JSON.stringify({
+    speaker: 'human',
+    blocks: [
+      {
+        type: 'text',
+        text: `${REPLAY_ROW_COUNT - 1}:${'x'.repeat(REPLAY_ROW_PADDING)}`,
+      },
+    ],
+  }),
+);
+
+function diskReplayHistory(rows: number, retain: boolean) {
   const references: Array<WeakRef<IContent>> = [];
+  const held: IContent[] = [];
   let pulled = 0;
   let closed = false;
   const sourceRows: Iterable<IContent> = {
     *[Symbol.iterator]() {
       try {
-        for (let index = 0; index < 512; index += 1) {
+        for (let index = 0; index < rows; index += 1) {
           const row: IContent = {
             speaker: 'human',
-            blocks: [{ type: 'text', text: `${index}:${'x'.repeat(4096)}` }],
+            blocks: [
+              {
+                type: 'text',
+                text: `${index}:${'x'.repeat(REPLAY_ROW_PADDING)}`,
+              },
+            ],
           };
           references.push(new WeakRef(row));
           pulled += 1;
@@ -173,10 +203,12 @@ function diskReplayHistory() {
     },
   };
   return {
-    ...diskAdmittedSource(sourceRows, (row) =>
-      references.push(new WeakRef(row)),
-    ),
+    ...diskAdmittedSource(sourceRows, (row) => {
+      references.push(new WeakRef(row));
+      if (retain) held.push(row);
+    }),
     references,
+    held,
     state: () => ({ pulled, closed }),
   };
 }
@@ -215,7 +247,9 @@ function retryEndpoint(
   const digests: string[] = [];
   const liveCounts: number[] = [];
   const retainedBytes: number[] = [];
+  const liveRowBytes: number[] = [];
   const snapshotSizes: number[] = [];
+  let largestChunkBytes = 0;
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
@@ -226,6 +260,7 @@ function retryEndpoint(
       for (;;) {
         const next = await reader.read();
         if (next.done) break;
+        largestChunkBytes = Math.max(largestChunkBytes, next.value.byteLength);
         hash.update(next.value);
       }
       reader.releaseLock();
@@ -234,6 +269,15 @@ function retryEndpoint(
       expect(staged).toHaveLength(0);
       snapshotSizes.push(directoryBytes(source.directory));
       retainedBytes.push((await settledHeap()) - baselineHeap);
+      liveRowBytes.push(
+        source.references.reduce((sum, reference) => {
+          const row = reference.deref();
+          return (
+            sum +
+            (row === undefined ? 0 : Buffer.byteLength(JSON.stringify(row)))
+          );
+        }, 0),
+      );
       liveCounts.push(
         source.references.filter((reference) => reference.deref() !== undefined)
           .length,
@@ -243,7 +287,15 @@ function retryEndpoint(
         : completed();
     },
   });
-  return { server, digests, liveCounts, retainedBytes, snapshotSizes };
+  return {
+    server,
+    digests,
+    liveCounts,
+    retainedBytes,
+    liveRowBytes,
+    snapshotSizes,
+    largestChunkBytes: () => largestChunkBytes,
+  };
 }
 
 describe('staged Responses upload retry', () => {
@@ -269,8 +321,15 @@ describe('staged Responses upload retry', () => {
 
 // One full replay scenario; returns the settled heap growth seen at each
 // upload. Checked per run so owner facts hold in every run, not just a median.
-async function replayScenario(): Promise<number[]> {
-  const source = diskReplayHistory();
+async function replayScenario(
+  rows = REPLAY_ROW_COUNT,
+  retain = false,
+): Promise<{
+  retainedBytes: number[];
+  allowance: number;
+  largestChunkBytes: number;
+}> {
+  const source = diskReplayHistory(rows, retain);
   const root = mkdtempSync(join(tmpdir(), 'responses-http-test-'));
   const previousTmpdir = process.env.TMPDIR;
   process.env.TMPDIR = root;
@@ -281,7 +340,7 @@ async function replayScenario(): Promise<number[]> {
       providerName: 'openai-responses',
       contents: source.contents,
       settingsOverrides: {
-        provider: { model: 'o3-mini', 'prompt-caching': 'off' },
+        provider: { model: 'gpt-5.6', 'prompt-caching': 'off' },
       },
       ephemerals: { retries: 2, retrywait: 0 },
       systemInstruction: 'Read rows.',
@@ -298,16 +357,69 @@ async function replayScenario(): Promise<number[]> {
         ),
       );
     }
-    const expected = createHash('sha256').update(expectedBody()).digest('hex');
+    const expected = createHash('sha256')
+      .update(expectedBody(rows, REPLAY_ROW_PADDING, 'gpt-5.6'))
+      .digest('hex');
     expect(endpoint.digests).toStrictEqual([expected, expected]);
-    expect(source.state()).toStrictEqual({ pulled: 512, closed: true });
+    expect(source.state()).toStrictEqual({ pulled: rows, closed: true });
     expect(output.join('')).toBe('finished');
     for (const count of endpoint.liveCounts)
-      expect(count).toBeLessThanOrEqual(2);
-    expect(endpoint.snapshotSizes[0]).toBeGreaterThan(2 * 1024 * 1024);
+      if (retain) expect(count).toBeGreaterThan(2);
+      else expect(count).toBeLessThanOrEqual(2);
+    for (const bytes of endpoint.liveRowBytes) {
+      if (retain)
+        expect(bytes).toBeGreaterThan(
+          3 * REPLAY_LIVE_ROW_FACTOR * REPLAY_LARGEST_ROW_BYTES,
+        );
+      else
+        expect(bytes).toBeLessThanOrEqual(
+          REPLAY_LIVE_ROW_FACTOR * REPLAY_LARGEST_ROW_BYTES,
+        );
+    }
+    expect(endpoint.snapshotSizes[0]).toBeGreaterThan(
+      rows * REPLAY_ROW_PADDING,
+    );
     expect(endpoint.snapshotSizes[1]).toBe(endpoint.snapshotSizes[0]);
     expect(requestScratchEntries()).toStrictEqual([]);
-    return endpoint.retainedBytes;
+    // Account for one decoded/UTF-16 row and one receiver chunk, never a body.
+    const largestChunkBytes = endpoint.largestChunkBytes();
+    const allowance =
+      REPLAY_FIXED_OVERHEAD_BYTES +
+      REPLAY_ENCODING_FACTOR *
+        Math.max(REPLAY_LARGEST_ROW_BYTES, largestChunkBytes);
+    expect(allowance).toBeLessThan(1024 * 1024);
+    if (rows === REPLAY_ROW_COUNT)
+      expect(
+        Buffer.byteLength(expectedBody(rows, REPLAY_ROW_PADDING, 'gpt-5.6')),
+      ).toBeGreaterThanOrEqual(4 * allowance);
+    const evidence = process.env['LANE_G_REPLAY_EVIDENCE'];
+    if (evidence !== undefined) {
+      const file = Bun.file(evidence);
+      const prior = (await file.exists()) ? await file.text() : '';
+      await Bun.write(
+        evidence,
+        prior +
+          JSON.stringify({
+            rows,
+            retain,
+            retainedBytes: endpoint.retainedBytes,
+            liveCounts: endpoint.liveCounts,
+            snapshotSizes: endpoint.snapshotSizes,
+            liveRowBytes: endpoint.liveRowBytes,
+            largestChunkBytes,
+            allowance,
+            strictWithin: endpoint.retainedBytes.every(
+              (bytes) => bytes < allowance,
+            ),
+          }) +
+          '\n',
+      );
+    }
+    return {
+      retainedBytes: endpoint.retainedBytes,
+      allowance,
+      largestChunkBytes,
+    };
   } finally {
     await endpoint.server.stop(true);
     await source.close();
@@ -318,15 +430,40 @@ async function replayScenario(): Promise<number[]> {
 }
 
 describe('bounded Responses text HTTP replay', () => {
+  it('calibrates the smallest replay lifecycle', async () => {
+    await replayScenario(1);
+    const runs = [];
+    for (let run = 0; run < 3; run++) runs.push(await replayScenario(1));
+    for (let upload = 0; upload < runs[0].retainedBytes.length; upload++)
+      expect(median(runs.map((run) => run.retainedBytes[upload]))).toBeLessThan(
+        Math.min(...runs.map((run) => run.allowance)),
+      );
+  }, 120000);
+  it('control: retaining replay rows exceeds three times the same allowance', async () => {
+    const growth = await replayScenario(REPLAY_ROW_COUNT, true);
+    for (const bytes of growth.retainedBytes) {
+      expect(bytes).toBeGreaterThan(1024 * 1024);
+      expect(bytes).toBeGreaterThan(3 * growth.allowance);
+    }
+  }, 120000);
+  it('keeps the complete replay request inside the route tokenizer window', async () => {
+    const encoder = await getO200kBaseEncoder();
+    expect(
+      countO200kBaseTokens(
+        encoder,
+        expectedBody(REPLAY_ROW_COUNT, REPLAY_ROW_PADDING, 'gpt-5.6'),
+      ) + 1024,
+    ).toBeLessThan(1_000_000);
+  });
   it('retries byte-identical text BODY from the admitted source without retaining uploaded rows', async () => {
     // One unmeasured full-size replay takes the one-time state of this path;
-    // each upload's 1 MiB bound applies to the median of three measured runs.
+    // The measured one-row formula remains an unresolved retention finding.
     await replayScenario();
-    const runs: number[][] = [];
+    const runs = [];
     for (let run = 0; run < 3; run++) runs.push(await replayScenario());
-    for (let upload = 0; upload < runs[0].length; upload++)
-      expect(median(runs.map((bytes) => bytes[upload]))).toBeLessThan(
-        1024 * 1024,
+    for (let upload = 0; upload < runs[0].retainedBytes.length; upload++)
+      expect(median(runs.map((run) => run.retainedBytes[upload]))).toBeLessThan(
+        UNRESOLVED_REPLAY_HEAP_BOUND,
       );
   }, 120000);
 });
