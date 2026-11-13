@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { recordMemoryGate } from './__tests__/support/memory-gate-evidence.js';
 import * as path from 'node:path';
 import { crc32 } from 'node:zlib';
 import type { FrameBody } from './frame.js';
@@ -23,6 +24,12 @@ import { useTempDir } from './__tests__/support/useTempDir.js';
 
 const CHUNK_BYTES = 64 * 1024;
 const SAMPLE_EVERY_CHUNKS = 8;
+/** Maximum writer/reader peak of the one-chunk fixture on 2026-11-13. */
+const ONE_CHUNK_FIXED_OVERHEAD_BYTES = 368_928;
+/** Source chunk, frame output chunk, and one journal I/O chunk. */
+const IN_FLIGHT_CHUNKS = 3;
+const STREAMING_GROWTH_BOUND =
+  ONE_CHUNK_FIXED_OVERHEAD_BYTES + IN_FLIGHT_CHUNKS * CHUNK_BYTES;
 
 type BodyMaker = (body: FrameBody) => Promise<FrameBody>;
 
@@ -111,8 +118,8 @@ async function consume(
 }
 
 const CASES: ReadonlyArray<readonly [number, number]> = [
-  [MIB, 512 * 1024],
-  [15 * MIB, 2 * MIB],
+  [MIB, Math.min(8 * CHUNK_BYTES, STREAMING_GROWTH_BOUND)],
+  [15 * MIB, STREAMING_GROWTH_BOUND],
 ];
 
 describe('rows larger than any buffer the codec would allocate', () => {
@@ -124,6 +131,11 @@ describe('rows larger than any buffer the codec would allocate', () => {
 
       expect(outcome.written.bytes).toBe(size);
       expect(outcome.readBack).toStrictEqual(outcome.written);
+      recordMemoryGate('journalLargeRows', {
+        bytes: size,
+        write: outcome.writeGrowth,
+        read: outcome.readGrowth,
+      });
       expect(outcome.writeGrowth).toBeLessThan(bound);
       expect(outcome.readGrowth).toBeLessThan(bound);
     });
@@ -135,7 +147,11 @@ describe('rows larger than any buffer the codec would allocate', () => {
     const outcome = await writeAndReadBack(tempDir(), size, gathered, false);
 
     expect(outcome.readBack).toStrictEqual(outcome.written);
-    expect(outcome.writeGrowth).toBeGreaterThan(bound);
+    recordMemoryGate('journalLargeRows-write-control', {
+      bytes: size,
+      peak: outcome.writeGrowth,
+    });
+    expect(outcome.writeGrowth).toBeGreaterThan(4 * bound);
   });
 
   it('control: a reader that keeps every chunk exceeds the heap bound', async () => {
@@ -143,6 +159,10 @@ describe('rows larger than any buffer the codec would allocate', () => {
 
     const outcome = await writeAndReadBack(tempDir(), size, streamed, true);
 
-    expect(outcome.readGrowth).toBeGreaterThan(bound);
+    recordMemoryGate('journalLargeRows-read-control', {
+      bytes: size,
+      peak: outcome.readGrowth,
+    });
+    expect(outcome.readGrowth).toBeGreaterThan(4 * bound);
   });
 });

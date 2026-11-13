@@ -6,9 +6,17 @@ import {
   SEND_PEAK_SIZES,
   streamSendPeakRows,
 } from './sendPeakShapes.js';
+import { SEND_PEAK_BOUND_BYTES } from './sendPeakMeasurement.js';
 
 describe('streamed native memory corpus', () => {
   for (const shape of SEND_PEAK_SHAPES) {
+    it(`${shape} has at least four allowances of history bytes`, () => {
+      let historyBytes = 0;
+      for (const row of streamSendPeakRows(shape, 'large')) {
+        historyBytes += Buffer.byteLength(JSON.stringify(row));
+      }
+      expect(historyBytes).toBeGreaterThanOrEqual(4 * SEND_PEAK_BOUND_BYTES);
+    });
     for (const size of SEND_PEAK_SIZES) {
       it(`preserves every original ${shape} ${size} row`, () => {
         const original = buildSendPeakRows(shape, size);

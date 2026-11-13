@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { appendFileSync } from 'node:fs';
+import { get_encoding } from '@dqbd/tiktoken';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
@@ -10,14 +12,25 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { buildOpenAIResponsesInput } from '../openai-responses/OpenAIResponsesInputBuilder.js';
 import { projectOpenAIResponsesPromptEnvelope } from './promptEnvelopeProjections.js';
 
-function prepare(root: string): { bytes: number; sha256: string } {
+/** Largest sampled peak of the same 64-row corpus with one text unit per row. */
+const SMALLEST_CORPUS_FIXED_OVERHEAD_BYTES = 400_338;
+/** UTF-16 source text plus one escaped native output item. */
+const ROW_ENCODING_FACTOR = 4;
+
+function prepare(
+  root: string,
+  repeats = 512,
+): {
+  body: { bytes: number; sha256: string };
+  allowanceBytes: number;
+} {
   const rows: IContent[] = Array.from({ length: 64 }, (_, index) => ({
     speaker: index % 2 === 0 ? 'human' : 'ai',
     blocks: [
       {
         type: 'text',
         text: `${index}: 雪 😀 " \\ \n \ud800 data:application/pdf;base64,YQ== `.repeat(
-          index === 24 ? 24_000 : 128,
+          repeats,
         ),
       },
     ],
@@ -47,9 +60,40 @@ function prepare(root: string): { bytes: number; sha256: string } {
   )
     throw new Error('Missing old oracle segment');
   const segment = oracle.promptSegments[0];
+  const tokenizer = get_encoding('o200k_base');
+  let promptTokens = 0;
+  try {
+    promptTokens = tokenizer.encode(segment).length;
+    expect(promptTokens + 1024).toBeLessThanOrEqual(1_000_000);
+  } finally {
+    tokenizer.free();
+  }
+  const evidence = process.env.MEMORY_GATE_LOG;
+  if (evidence !== undefined) {
+    appendFileSync(
+      evidence,
+      JSON.stringify({
+        gate: 'source-fixture',
+        repeats,
+        promptTokens,
+        bytes: Buffer.byteLength(segment),
+        largestRowBytes: Math.max(
+          ...rows.map((row) => Buffer.byteLength(JSON.stringify(row))),
+        ),
+      }) + '\n',
+    );
+  }
+  const largestRowBytes = Math.max(
+    ...rows.map((row) => Buffer.byteLength(JSON.stringify(row))),
+  );
   return {
-    bytes: Buffer.byteLength(segment),
-    sha256: createHash('sha256').update(segment).digest('hex'),
+    body: {
+      bytes: Buffer.byteLength(segment),
+      sha256: createHash('sha256').update(segment).digest('hex'),
+    },
+    allowanceBytes:
+      SMALLEST_CORPUS_FIXED_OVERHEAD_BYTES +
+      ROW_ENCODING_FACTOR * largestRowBytes,
   };
 }
 
@@ -107,6 +151,12 @@ async function run(root: string, retain: boolean): Promise<Probe> {
     readFileSync(join(root, 'measured.json'), 'utf8'),
   );
   if (!probe(result)) throw new Error('Invalid residency evidence');
+  const evidence = process.env.MEMORY_GATE_LOG;
+  if (evidence !== undefined)
+    appendFileSync(
+      evidence,
+      JSON.stringify({ gate: 'source-measured', retain, ...result }) + '\n',
+    );
   return result;
 }
 
@@ -115,16 +165,21 @@ describe('Responses source large-row acceptance', () => {
     const root = mkdtempSync(join(tmpdir(), 'responses-large-oracle-'));
     try {
       const expected = prepare(root);
-      expect(expected.bytes).toBeGreaterThan(1024 * 1024);
+      expect(expected.body.bytes).toBeGreaterThan(1024 * 1024);
       const actual = await run(
         root,
         process.env.ISSUE854_SERIALIZER_RETAIN_ROWS === '1',
       );
-      expect(actual.actual).toStrictEqual(expected);
+      expect(actual.actual).toStrictEqual(expected.body);
       expect(actual.peakLive).toBeLessThanOrEqual(2);
-      expect(actual.sampledHeapGrowth).toBeLessThanOrEqual(2 * 1024 * 1024);
+      expect(expected.body.bytes).toBeGreaterThanOrEqual(
+        4 * expected.allowanceBytes,
+      );
+      expect(actual.sampledHeapGrowth).toBeLessThanOrEqual(
+        expected.allowanceBytes,
+      );
       expect(actual.finalLive).toBe(0);
-      expect(actual.retainedHeap).toBeLessThanOrEqual(1024 * 1024);
+      expect(actual.retainedHeap).toBeLessThanOrEqual(expected.allowanceBytes);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -134,9 +189,12 @@ describe('Responses source large-row acceptance', () => {
     try {
       const expected = prepare(root);
       const actual = await run(root, true);
-      expect(actual.actual).toStrictEqual(expected);
+      expect(actual.actual).toStrictEqual(expected.body);
       expect(actual.peakLive).toBeGreaterThan(2);
-      expect(actual.sampledHeapGrowth).toBeGreaterThan(2 * 1024 * 1024);
+      expect(actual.sampledHeapGrowth).toBeGreaterThan(
+        3 * expected.allowanceBytes,
+      );
+      expect(actual.retainedHeap).toBeGreaterThan(3 * expected.allowanceBytes);
       expect(actual.finalLive).toBe(64);
     } finally {
       rmSync(root, { recursive: true, force: true });

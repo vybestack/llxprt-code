@@ -13,9 +13,27 @@
 import type { NativeRouteCounts } from './native-route-observer.js';
 import type { nativeProbeCost } from './native-probe-cost.js';
 import { median } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
+import { SEND_PEAK_SHAPES, streamSendPeakRows } from './sendPeakShapes.js';
 
-/** The growth and retention allowance, the same 1 MiB the other gates use. */
-export const SEND_PEAK_BOUND_BYTES = 1024 * 1024;
+/** Maximum small-corpus peak across routes, measured with 256 rows on 2026-11-13. */
+const SEND_PEAK_FIXED_OVERHEAD_BYTES = 333_571;
+/** One UTF-16 input plus an escaped output row, without a history-sized copy. */
+const SEND_PEAK_ROW_ENCODING_FACTOR = 4;
+const SEND_PEAK_LARGEST_ROW_BYTES = Math.max(
+  ...SEND_PEAK_SHAPES.map((shape) => {
+    let largestRowBytes = 0;
+    for (const row of streamSendPeakRows(shape, 'large')) {
+      largestRowBytes = Math.max(
+        largestRowBytes,
+        Buffer.byteLength(JSON.stringify(row)),
+      );
+    }
+    return largestRowBytes;
+  }),
+);
+export const SEND_PEAK_BOUND_BYTES =
+  SEND_PEAK_FIXED_OVERHEAD_BYTES +
+  SEND_PEAK_ROW_ENCODING_FACTOR * SEND_PEAK_LARGEST_ROW_BYTES;
 
 /** How many times the probe sends the same large history to measure retention. */
 export const SEND_PEAK_ACCUMULATION_SENDS = 6;

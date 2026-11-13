@@ -32,7 +32,7 @@ describe('peak memory while sending, trap retain', () => {
     async () => {
       const { verdict } = shapeRun(await measured(), 'text-only');
       expect(verdict.bytesMatchOracle).toBe(true);
-      expect(verdict.retainedGrowth).toBeGreaterThan(SEND_PEAK_BOUND_BYTES);
+      expect(verdict.retainedGrowth).toBeGreaterThan(4 * SEND_PEAK_BOUND_BYTES);
     },
     TEST_TIMEOUT_MS,
   );

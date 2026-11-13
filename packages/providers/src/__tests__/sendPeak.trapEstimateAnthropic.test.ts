@@ -33,7 +33,7 @@ describe('peak memory while estimating, trap estimate, anthropic', () => {
     async () => {
       const { verdict } = shapeRun(await measured(), 'text-only');
       expect(verdict.bytesMatchOracle).toBe(true);
-      expect(verdict.heapGrowth).toBeGreaterThan(SEND_PEAK_BOUND_BYTES);
+      expect(verdict.heapGrowth).toBeGreaterThan(4 * SEND_PEAK_BOUND_BYTES);
     },
     TEST_TIMEOUT_MS,
   );

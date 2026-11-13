@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { recordMemoryGate } from './__tests__/support/memory-gate-evidence.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { crc32 } from 'node:zlib';
@@ -29,7 +30,13 @@ import { useTempDir } from './__tests__/support/useTempDir.js';
 const BODY_BYTES = 15 * MIB;
 const CHUNK_BYTES = 64 * 1024;
 const SAMPLE_EVERY_CHUNKS = 8;
-/** Streaming holds a few 64 KiB chunks; retaining the media body exceeds this. */
+/** Largest encoder/decoder peak for the one-chunk fixture on 2026-11-13. */
+const ONE_CHUNK_FIXED_OVERHEAD_BYTES = 81_651;
+/** A source chunk, its frame output, and the reader's current chunk. */
+const IN_FLIGHT_CHUNKS = 3;
+const ONE_CHUNK_GROWTH_ALLOWANCE =
+  ONE_CHUNK_FIXED_OVERHEAD_BYTES + IN_FLIGHT_CHUNKS * CHUNK_BYTES;
+/** Unchanged gate: 283,820 bytes exceeded the 278,259-byte one-chunk allowance. */
 const STREAMING_GROWTH_BOUND = 2 * MIB;
 const RETAINED_GROWTH_FLOOR = BODY_BYTES / 2;
 const KIND_HEADER = new Uint8Array(24).fill(0x5a);
@@ -53,17 +60,13 @@ async function encodeToFile(
   file: string,
   write: FrameWriter,
   probe: GrowthProbe,
+  bodyBytes = BODY_BYTES,
 ): Promise<{ crc: number; bytes: number }> {
-  const body = producedBody(
-    BODY_BYTES,
-    CHUNK_BYTES,
-    probe,
-    SAMPLE_EVERY_CHUNKS,
-  );
+  const body = producedBody(bodyBytes, CHUNK_BYTES, probe, SAMPLE_EVERY_CHUNKS);
   const handle = await fs.open(file, 'w+');
   try {
     await write(createFileHandleSink(handle, 0), {
-      length: BODY_BYTES,
+      length: bodyBytes,
       chunks: body.chunks,
     });
     await probe.sample();
@@ -137,22 +140,36 @@ async function warmUp(file: string): Promise<void> {
 describe('a 15 MiB media-budget body', () => {
   const tempDir = useTempDir('journal-stream-');
 
-  it('encodes and decodes through the frame codec with heap growth far below the body size', async () => {
-    const file = path.join(tempDir(), 'streamed.llxj');
-    await warmUp(path.join(tempDir(), 'warm.llxj'));
+  it.each([CHUNK_BYTES, BODY_BYTES])(
+    'encodes and decodes %i bytes with heap growth far below the body size',
+    async (bodyBytes) => {
+      const file = path.join(tempDir(), 'streamed.llxj');
+      await warmUp(path.join(tempDir(), 'warm.llxj'));
 
-    const encodeProbe = await startGrowthProbe();
-    const written = await encodeToFile(file, streamingWriter, encodeProbe);
-    const decodeProbe = await startGrowthProbe();
-    const read = await decodeFromFile(file, streamingConsumer, decodeProbe);
+      const encodeProbe = await startGrowthProbe();
+      const written = await encodeToFile(
+        file,
+        streamingWriter,
+        encodeProbe,
+        bodyBytes,
+      );
+      const decodeProbe = await startGrowthProbe();
+      const read = await decodeFromFile(file, streamingConsumer, decodeProbe);
 
-    expect((await fs.stat(file)).size).toBe(
-      FRAME_HEAD_BYTES + KIND_HEADER.length + BODY_BYTES + 4,
-    );
-    expect(read).toStrictEqual(written);
-    expect(encodeProbe.peakGrowth()).toBeLessThan(STREAMING_GROWTH_BOUND);
-    expect(decodeProbe.peakGrowth()).toBeLessThan(STREAMING_GROWTH_BOUND);
-  }, 180_000);
+      expect((await fs.stat(file)).size).toBe(
+        FRAME_HEAD_BYTES + KIND_HEADER.length + bodyBytes + 4,
+      );
+      expect(read).toStrictEqual(written);
+      recordMemoryGate('frame', {
+        bytes: bodyBytes,
+        write: encodeProbe.peakGrowth(),
+        read: decodeProbe.peakGrowth(),
+      });
+      expect(encodeProbe.peakGrowth()).toBeLessThan(STREAMING_GROWTH_BOUND);
+      expect(decodeProbe.peakGrowth()).toBeLessThan(STREAMING_GROWTH_BOUND);
+    },
+    180_000,
+  );
 
   it('is caught when an encoder buffers the whole body', async () => {
     const file = path.join(tempDir(), 'trap-encode.llxj');
@@ -161,7 +178,11 @@ describe('a 15 MiB media-budget body', () => {
     await encodeToFile(file, bufferingWriter, probe);
 
     expect(probe.peakGrowth()).toBeGreaterThan(RETAINED_GROWTH_FLOOR);
-    expect(probe.peakGrowth()).not.toBeLessThan(STREAMING_GROWTH_BOUND);
+    recordMemoryGate('frame-encode-control', {
+      bytes: BODY_BYTES,
+      peak: probe.peakGrowth(),
+    });
+    expect(probe.peakGrowth()).toBeGreaterThan(3 * STREAMING_GROWTH_BOUND);
   }, 180_000);
 
   it('is caught when a decoder reads the whole body', async () => {
@@ -170,6 +191,11 @@ describe('a 15 MiB media-budget body', () => {
 
     const probe = await startGrowthProbe();
     await decodeFromFile(file, wholeBodyConsumer, probe);
+    recordMemoryGate('frame-decode-control', {
+      bytes: BODY_BYTES,
+      peak: probe.peakGrowth(),
+    });
+    expect(probe.peakGrowth()).toBeGreaterThan(3 * STREAMING_GROWTH_BOUND);
 
     expect(probe.peakGrowth()).toBeGreaterThan(RETAINED_GROWTH_FLOOR);
   }, 180_000);
@@ -177,6 +203,11 @@ describe('a 15 MiB media-budget body', () => {
 
 const BIG_ROW_BODY_BYTES = 2 * MIB;
 const BIG_ROW_ITEMS = 128;
+/** The encoded header and its decoded copy accompany the same chunk window. */
+const BIG_ROW_ONE_CHUNK_ALLOWANCE =
+  ONE_CHUNK_GROWTH_ALLOWANCE + 2 * bigRowHeader().byteLength;
+/** Unchanged: the measured 297,185-byte peak exceeded the 289,395-byte formula. */
+const BIG_ROW_GROWTH_BOUND = 512 * 1024;
 
 /** A multi-block ROW header larger than the frame reader prefetch. */
 function bigRowHeader(): Uint8Array {
@@ -263,8 +294,14 @@ describe('a 2 MiB body behind a 128-block, 128-id ROW header', () => {
     }
 
     expect(read).toStrictEqual(written);
-    expect(encodeProbe.peakGrowth()).toBeLessThan(512 * 1024);
-    expect(decodeProbe.peakGrowth()).toBeLessThan(512 * 1024);
+    recordMemoryGate('frame-big-header', {
+      bytes: BIG_ROW_BODY_BYTES,
+      proposedAllowance: BIG_ROW_ONE_CHUNK_ALLOWANCE,
+      write: encodeProbe.peakGrowth(),
+      read: decodeProbe.peakGrowth(),
+    });
+    expect(encodeProbe.peakGrowth()).toBeLessThan(BIG_ROW_GROWTH_BOUND);
+    expect(decodeProbe.peakGrowth()).toBeLessThan(BIG_ROW_GROWTH_BOUND);
   }, 180_000);
 
   it('is caught when the encoder buffers the whole body', async () => {
@@ -274,6 +311,10 @@ describe('a 2 MiB body behind a 128-block, 128-id ROW header', () => {
     await writeRow(path.join(tempDir(), 'trap.llxj'), header, probe, true);
 
     expect(probe.peakGrowth()).toBeGreaterThan(BIG_ROW_BODY_BYTES / 2);
-    expect(probe.peakGrowth()).not.toBeLessThan(512 * 1024);
+    recordMemoryGate('frame-big-header-control', {
+      bytes: BIG_ROW_BODY_BYTES,
+      peak: probe.peakGrowth(),
+    });
+    expect(probe.peakGrowth()).toBeGreaterThan(3 * BIG_ROW_GROWTH_BOUND);
   }, 180_000);
 });

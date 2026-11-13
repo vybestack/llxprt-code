@@ -35,7 +35,7 @@ describe('peak memory while sending, the openai-responses provider, one-shot row
   );
 
   it(
-    'tool-heavy: grows no more than 1 MiB from 256 to 1536 rows and retains no more than 1 MiB over repeated sends',
+    'tool-heavy: bounds growth from 256 to 1536 rows and repeated-send retention by one row plus measured overhead',
     async () => {
       const { verdict } = shapeRun(await measured(), 'tool-heavy');
       expect(verdict.heapGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);

@@ -4,7 +4,7 @@ import { runNativeSendPeak } from './support/native-send-peak-runner.js';
 import { SEND_PEAK_BOUND_BYTES } from './support/sendPeakMeasurement.js';
 
 describe('native plain Chat journal-backed tool-heavy memory', () => {
-  it('streams and estimates the original journal-backed tool-heavy 256/1536-row corpus within the original bounds', async () => {
+  it('streams and estimates the original journal-backed tool-heavy 256/1536-row corpus within the one-row bounds', async () => {
     const { verdict } = await runNativeSendPeak('tool-heavy');
     expect(verdict.bytesMatchOracle).toBe(true);
     expect(verdict.contentLengthMatchesBytes).toBe(true);

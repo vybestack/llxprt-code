@@ -32,7 +32,7 @@ describe('native plain Chat journal-backed 256/1536-row send and estimate', () =
       expect(round.chunks).toBeGreaterThan(0);
     }
   }, 180000);
-  it('bounds peak growth and repeated-send retention by the original 1 MiB allowance', async () => {
+  it('bounds peak growth and repeated-send retention by one row plus measured overhead', async () => {
     const { verdict } = await measured();
     expect(verdict.heapGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
     expect(verdict.arrayBufferGrowth).toBeLessThanOrEqual(
