@@ -62,3 +62,4 @@ export {
   JournalWatermarks,
   type JournalCommitWatermark,
 } from './src/journal/journal-watermarks.js';
+export { publishReviewedRewrite } from './src/services/history/publish-reviewed-rewrite.js';

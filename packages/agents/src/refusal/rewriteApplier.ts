@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { publishReviewedRewrite } from '@vybestack/llxprt-code-core/services/history/publish-reviewed-rewrite.js';
+import { publishReviewedRewrite } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
