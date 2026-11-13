@@ -204,12 +204,9 @@ function packageRoot(
   return undefined;
 }
 
-function zodRuntimeExport(
-  specifier: string,
-  resolvedFile: string,
-): string | undefined {
+function zodRuntimeExports(specifier: string, resolvedFile: string): string[] {
   const root = packageRoot(resolvedFile, 'zod');
-  if (!root) return undefined;
+  if (!root) return [];
   const metadata: unknown = JSON.parse(
     readFileSync(join(root, 'package.json'), 'utf8'),
   );
@@ -218,21 +215,26 @@ function zodRuntimeExport(
     metadata === null ||
     !('exports' in metadata)
   )
-    return undefined;
+    return [];
   const subpath =
     specifier === 'zod' ? '.' : `.${specifier.slice('zod'.length)}`;
   const exports = metadata.exports;
   if (typeof exports !== 'object' || exports === null || !(subpath in exports))
-    return undefined;
-  const conditions = exports[subpath];
-  if (
-    typeof conditions !== 'object' ||
-    conditions === null ||
-    !('import' in conditions)
-  )
-    return undefined;
-  const target = conditions.import;
-  return typeof target === 'string' ? resolve(root, target) : undefined;
+    return [];
+
+  const targets: string[] = [];
+  const collectTargets = (value: unknown): void => {
+    if (typeof value === 'string') {
+      targets.push(resolve(root, value));
+      return;
+    }
+    if (typeof value !== 'object' || value === null) return;
+    for (const [condition, target] of Object.entries(value)) {
+      if (!condition.startsWith('types')) collectTargets(target);
+    }
+  };
+  collectTargets(exports[subpath]);
+  return targets;
 }
 
 function resolveImport(
@@ -265,13 +267,14 @@ function resolveImport(
   }
   const target = resolve(resolved);
   if (isInside(target, context.packageDir)) return [target];
+  if (ALLOWED_EXTERNALS.has(specifier)) {
+    const runtimeTargets = zodRuntimeExports(specifier, target).filter(
+      (runtimeTarget) => ts.sys.fileExists(runtimeTarget),
+    );
+    if (runtimeTargets.length > 0) return runtimeTargets;
+  }
   const sourcePackage = packageRoot(source.fileName, 'zod');
   if (sourcePackage && isInside(target, sourcePackage)) return [target];
-  if (ALLOWED_EXTERNALS.has(specifier)) {
-    const runtimeTarget = zodRuntimeExport(specifier, target);
-    if (runtimeTarget && ts.sys.fileExists(runtimeTarget))
-      return [runtimeTarget];
-  }
   const kind: AgentCoreBoundaryViolation['kind'] = isWorkspaceImport(specifier)
     ? 'workspace-import'
     : 'runtime-import';
@@ -377,14 +380,52 @@ function isInertIdentifier(node: ts.Identifier): boolean {
   return isImportOrExportSpecifierName(parent, node);
 }
 
-function isLocalCapabilityName(node: ts.Node): node is ts.Identifier {
-  if (!ts.isIdentifier(node) || !FORBIDDEN_GLOBALS.has(node.text)) return false;
-  const parent = node.parent;
-  if (ts.isVariableDeclaration(parent) || ts.isParameter(parent))
-    return parent.name === node;
-  if (ts.isFunctionDeclaration(parent) || ts.isClassDeclaration(parent))
-    return parent.name === node;
+function isRuntimeLocalDeclaration(
+  declaration: ts.Node,
+  name: string,
+): boolean {
+  if (ts.isVariableDeclaration(declaration))
+    return (
+      ts.isIdentifier(declaration.name) &&
+      declaration.name.text === name &&
+      declaration.initializer !== undefined
+    );
+  if (ts.isParameter(declaration)) {
+    const owner = declaration.parent;
+    return (
+      ts.isIdentifier(declaration.name) &&
+      declaration.name.text === name &&
+      ts.isFunctionLike(owner) &&
+      owner.body !== undefined
+    );
+  }
+  if (ts.isFunctionDeclaration(declaration))
+    return declaration.name?.text === name && declaration.body !== undefined;
+  if (ts.isClassDeclaration(declaration))
+    return (
+      declaration.name?.text === name &&
+      !declaration.getSourceFile().isDeclarationFile &&
+      (ts.getCombinedModifierFlags(declaration) & ts.ModifierFlags.Ambient) ===
+        0
+    );
+  if (ts.isImportSpecifier(declaration)) {
+    const importDeclaration = declaration.parent.parent.parent;
+    return (
+      declaration.name.text === name &&
+      ts.isImportDeclaration(importDeclaration) &&
+      ts.isStringLiteral(importDeclaration.moduleSpecifier) &&
+      ALLOWED_EXTERNALS.has(importDeclaration.moduleSpecifier.text)
+    );
+  }
   return false;
+}
+
+function isLocalCapabilityName(node: ts.Node): node is ts.Identifier {
+  return (
+    ts.isIdentifier(node) &&
+    FORBIDDEN_GLOBALS.has(node.text) &&
+    isRuntimeLocalDeclaration(node.parent, node.text)
+  );
 }
 
 function isForbiddenCapabilityUse(node: ts.Node): node is ts.Identifier {
@@ -411,7 +452,9 @@ function scanAmbientCapabilities(
       const symbol = checker?.getSymbolAtLocation(node);
       const isLocal = checker
         ? symbol?.declarations?.some(
-            (declaration) => declaration.getSourceFile() === source,
+            (declaration) =>
+              declaration.getSourceFile() === source &&
+              isRuntimeLocalDeclaration(declaration, node.text),
           )
         : localNames.has(node.text);
       if (!isLocal)

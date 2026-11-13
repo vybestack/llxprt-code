@@ -450,15 +450,47 @@ describe('validateDefinition', () => {
         options: { ...parsed.options, noEmit: true },
         projectReferences: parsed.projectReferences,
       });
-      const codes = ts
+      const fixtureSource = ts.sys.readFile(invalidTypeFixturePath);
+      if (!fixtureSource) throw new Error('Negative type fixture is missing.');
+      const lineForMarker = (marker: string): number => {
+        const line = fixtureSource
+          .split('\n')
+          .findIndex((entry) => entry.includes(marker));
+        if (line < 0) throw new Error(`Missing diagnostic marker: ${marker}`);
+        return line + 1;
+      };
+      const diagnostics = ts
         .getPreEmitDiagnostics(program)
         .filter(
           (diagnostic) => diagnostic.file?.fileName === invalidTypeFixturePath,
         )
-        .map((diagnostic) => diagnostic.code);
+        .map((diagnostic) => {
+          const file = diagnostic.file;
+          if (!file) throw new Error('Fixture diagnostic is missing its file.');
+          return {
+            code: diagnostic.code,
+            line:
+              file.getLineAndCharacterOfPosition(diagnostic.start ?? 0).line +
+              1,
+          };
+        });
 
-      expect(codes).toContain(2353);
-      expect(codes).toContain(2322);
+      expect(diagnostics).toContainEqual({
+        code: 2353,
+        line: lineForMarker('@expect-agent-property'),
+      });
+      expect(diagnostics).toContainEqual({
+        code: 2322,
+        line: lineForMarker('@expect-replay-data'),
+      });
+      expect(diagnostics).toContainEqual({
+        code: 2353,
+        line: lineForMarker('@expect-callback-property'),
+      });
+      expect(diagnostics).toContainEqual({
+        code: 2322,
+        line: lineForMarker('@expect-recovery-data'),
+      });
     },
   );
 
@@ -599,6 +631,10 @@ describe('validateDefinition', () => {
       'https://alice@example.test',
       'https://example.test/?token=abc',
       'https://example.test/?key=abc',
+      'https://example.test/?accessToken=abc',
+      'https://example.test/#accessToken=abc',
+      'https://example.test/?access-token=abc',
+      'https://example.test/#ACCESS_TOKEN=abc',
       'https://example.test/#access_token=abc',
       'https://example.test/?client_secret=abc',
     ]) {
