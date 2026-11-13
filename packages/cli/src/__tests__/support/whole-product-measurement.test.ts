@@ -6,6 +6,7 @@ import { z } from 'zod';
 import {
   measurementMode,
   historyDataCensus,
+  ownedHistoryDataCensus,
 } from './whole-product-measurement.js';
 
 const resultSchema = z.object({
@@ -96,6 +97,35 @@ function assertDefaultCensus(
 }
 
 describe('whole-product retention measurement contract', () => {
+  it('isolates owner-reachable payloads from unrelated runtime strings and structures', () => {
+    const snapshot = {
+      nodes: [
+        0, 0, 0, 0, 1, 64, 1, 0, 2, 32, 2, 0, 3, 65536, 3, 0, 4, 2097152, 3, 0,
+        5, 4096, 4, 0,
+      ],
+      nodeClassNames: [
+        'root',
+        'WholeProductMeterOwner',
+        'Array',
+        'string',
+        'Structure',
+      ],
+      edges: [1, 2, 1, 0, 2, 3, 2, 0, 1, 5, 0, 0, 5, 4, 1, 1],
+      edgeTypes: ['Internal', 'Property', 'Index'],
+      edgeNames: ['held', 'source'],
+    };
+    expect(ownedHistoryDataCensus(snapshot, 'WholeProductMeterOwner')).toBe(
+      64 + 32 + 65536,
+    );
+    expect(historyDataCensus(snapshot).dataBytes).toBeGreaterThan(2097152);
+    expect(
+      ownedHistoryDataCensus(
+        { ...snapshot, edges: [1, 2, 1, 0, 1, 5, 0, 0, 5, 4, 1, 1] },
+        'WholeProductMeterOwner',
+      ),
+    ).toBe(96);
+  });
+
   for (const kind of [
     'decoded-row',
     'cloned-text',

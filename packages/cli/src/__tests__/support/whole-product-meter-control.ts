@@ -9,13 +9,17 @@ import {
 } from '../../../../agents/src/core/__tests__/support/journal-retained-growth-predicate.js';
 import {
   historyDataCensus,
+  ownedHistoryDataCensus,
   measurementMode,
 } from './whole-product-measurement.js';
 
 const kind = process.argv[2];
 const retaining = process.argv[3] === 'retain';
-const held: unknown[] = [];
-const ids = new Map<string, number>();
+class WholeProductMeterOwner {
+  readonly held: unknown[] = [];
+  readonly ids = new Map<string, number>();
+}
+const owner = new WholeProductMeterOwner();
 const digest = createHash('sha256');
 function allocate(turn: number, keep: boolean): void {
   const text = mixedText(turn, 65536);
@@ -23,7 +27,7 @@ function allocate(turn: number, keep: boolean): void {
   if (kind === 'id-map') {
     for (let index = 0; index < 4096; index++) {
       const id = `history-${turn}-${index}-${createHash('sha256').update(`${turn}:${index}`).digest('hex')}`;
-      if (keep) ids.set(id, index);
+      if (keep) owner.ids.set(id, index);
     }
     return;
   }
@@ -47,7 +51,7 @@ function allocate(turn: number, keep: boolean): void {
     default:
       throw new Error('Unknown meter control');
   }
-  if (keep) held.push(value);
+  if (keep) owner.held.push(value);
 }
 async function point(
   turn: number,
@@ -56,8 +60,14 @@ async function point(
   for (let index = 0; index < 9; index++) readings.push(await settledHeap());
   return { turn, heapBytes: median(readings) };
 }
-function census(): ReturnType<typeof historyDataCensus> {
-  return historyDataCensus(generateHeapSnapshot());
+function census(): ReturnType<typeof historyDataCensus> & {
+  ownedBytes: number;
+} {
+  const snapshot = generateHeapSnapshot();
+  return {
+    ...historyDataCensus(snapshot),
+    ownedBytes: ownedHistoryDataCensus(snapshot, 'WholeProductMeterOwner'),
+  };
 }
 const mode = measurementMode();
 const measureCensus = process.argv[4] === 'census';
@@ -71,7 +81,7 @@ for (let turn = 1; turn <= 50; turn++) {
   if (turn % 10 === 0) {
     checkpoints.push(await point(turn));
     if (censusBefore !== undefined)
-      dataCheckpoints.push({ turn, heapBytes: census().dataBytes });
+      dataCheckpoints.push({ turn, heapBytes: census().ownedBytes });
   }
 }
 const censusAfter = censusBefore === undefined ? undefined : census();
@@ -80,8 +90,8 @@ const result = {
   retaining,
   mode,
   inputHash: digest.digest('hex'),
-  held: held.length,
-  ids: ids.size,
+  held: owner.held.length,
+  ids: owner.ids.size,
   baseline,
   checkpoints,
   verdict: evaluateRetainedGrowth(baseline, checkpoints),
@@ -89,7 +99,7 @@ const result = {
     censusBefore === undefined
       ? undefined
       : evaluateRetainedGrowth(
-          { turn: 0, heapBytes: censusBefore.dataBytes },
+          { turn: 0, heapBytes: censusBefore.ownedBytes },
           dataCheckpoints,
         ),
   censusBefore,

@@ -85,3 +85,55 @@ export function historyDataCensus(snapshot: unknown): HistoryDataCensus {
   }
   return { dataBytes, totalBytes, types };
 }
+
+const ownedSnapshotSchema = snapshotSchema.extend({
+  edges: z.array(z.number()),
+  edgeTypes: z.array(z.string()),
+  edgeNames: z.array(z.string()),
+});
+
+/** Count the strong data graph of a named application owner, not JSC's globals. */
+export function ownedHistoryDataCensus(
+  snapshot: unknown,
+  ownerClass: string,
+): number {
+  const parsed = ownedSnapshotSchema.parse(snapshot);
+  if (parsed.nodes.length % 4 !== 0 || parsed.edges.length % 4 !== 0)
+    throw new Error('Incomplete Inspector graph');
+  const nodes = new Map<number, { bytes: number; name: string }>();
+  const pending: number[] = [];
+  for (let at = 0; at < parsed.nodes.length; at += 4) {
+    const name = parsed.nodeClassNames[parsed.nodes[at + 2]];
+    nodes.set(parsed.nodes[at], { bytes: parsed.nodes[at + 1], name });
+    if (name === ownerClass) pending.push(parsed.nodes[at]);
+  }
+  if (pending.length !== 1) throw new Error(`Expected one ${ownerClass} owner`);
+  const children = new Map<number, number[]>();
+  for (let at = 0; at < parsed.edges.length; at += 4) {
+    const type = parsed.edgeTypes[parsed.edges[at + 2]];
+    const name = parsed.edgeNames[parsed.edges[at + 3]];
+    const prototype =
+      type === 'Property' && ['__proto__', 'constructor'].includes(name);
+    const strongDataEdge = ['Property', 'Index', 'Internal'].includes(type);
+    if (prototype || !strongDataEdge) continue;
+
+    const from = parsed.edges[at];
+    const list = children.get(from) ?? [];
+    list.push(parsed.edges[at + 1]);
+    children.set(from, list);
+  }
+  const visited = new Set<number>();
+  let bytes = 0;
+  for (let cursor = 0; cursor < pending.length; cursor++) {
+    const id = pending[cursor];
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const node = nodes.get(id);
+    if (node === undefined) throw new Error('Missing Inspector node');
+    if (node.name === ownerClass || historyDataTypes.has(node.name)) {
+      bytes += node.bytes;
+      for (const child of children.get(id) ?? []) pending.push(child);
+    }
+  }
+  return bytes;
+}
