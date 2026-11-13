@@ -1,5 +1,3 @@
-import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
-import type { JournalSessionOptions } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -36,6 +34,8 @@ import {
   RecordingIntegration,
   withRecordingFailureReport,
   type ResumeResult,
+  type ScratchRootOwner,
+  type JournalSessionOptions,
   type JournalReadCounters,
   type ContinueTarget,
   type UnreadableRecording,

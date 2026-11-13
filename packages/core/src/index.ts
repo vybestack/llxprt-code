@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+export type { JournalSessionOptions } from './services/history/journalSession.js';
 export {
   WorkspaceDefinitionOwner,
   type ProfileDefinitionListing,

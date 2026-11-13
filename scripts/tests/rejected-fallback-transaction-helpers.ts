@@ -4,6 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { JournalRecordingService } from '../../packages/core/src/recording/journalRecordingService.js';
+import { NamedWriterOwnership } from '../../packages/core/src/journal/named-writer-ownership.js';
 import { suffixSeeder } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import {
@@ -112,6 +113,7 @@ async function createFixture(): Promise<TransactionFixture> {
     sessionId: 'rejected',
     projectHash: 'rejected',
     chatsDir: root,
+    journal: { namedWriters: new NamedWriterOwnership() },
     workspaceDirs: [root],
     provider: 'test',
     model: 'test',

@@ -28,13 +28,15 @@ const imports = `
 import assert from 'node:assert/strict';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 `;
 
 describe('public density rows under default Node exports', () => {
   it('round-trips disk rows and detached sanitized rows without retaining owners', () => {
     const result = nodeProbe(`${imports}
 const ownership = new RowOwnership();
-const rows = new HistoryDensityRows(ownership);
+const scratchRoots = new ScratchRootOwner();
+const rows = new HistoryDensityRows(scratchRoots, ownership);
 const input = JSON.parse(process.env.PROBE_ROW);
 try {
   rows.append(input);
@@ -47,19 +49,21 @@ try {
   console.log(JSON.stringify(rows.readRow(0)));
 } finally {
   rows.close();
+  scratchRoots.removeRoot();
 }
 assert.equal(ownership.snapshot().liveRows, 0);
 assert.equal(ownership.snapshot().liveSerializedBytes, 0);
 assert.throws(() => rows.readRow(0), /closed/);
 `);
-    expect(result.status).toBe(0);
+    expect(result.status, String(result.stderr)).toBe(0);
     expect(JSON.parse(String(result.stdout))).toStrictEqual(fixture);
   });
 
   it('releases iterator ownership when a consumer stops early', () => {
     const result = nodeProbe(`${imports}
 const ownership = new RowOwnership();
-const rows = new HistoryDensityRows(ownership);
+const scratchRoots = new ScratchRootOwner();
+const rows = new HistoryDensityRows(scratchRoots, ownership);
 try {
   rows.append(JSON.parse(process.env.PROBE_ROW));
   const iterator = rows[Symbol.iterator]();
@@ -70,8 +74,9 @@ try {
   assert.equal(ownership.snapshot().liveSerializedBytes, 0);
 } finally {
   rows.close();
+  scratchRoots.removeRoot();
 }
 `);
-    expect(result.status).toBe(0);
+    expect(result.status, String(result.stderr)).toBe(0);
   });
 });

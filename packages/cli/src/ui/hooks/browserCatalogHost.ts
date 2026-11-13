@@ -1,4 +1,3 @@
-import type { JournalSessionOptions } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -10,6 +9,7 @@ import {
   SessionLockManager,
   deleteSession,
   type ContinueTarget,
+  type JournalSessionOptions,
   type UnreadableRecording,
   type LocalMediaStore,
   type SessionRecordingPort,

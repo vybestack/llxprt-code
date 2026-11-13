@@ -8,6 +8,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
+import { NamedWriterOwnership } from '@vybestack/llxprt-code-core';
 import {
   realisticSessionRows,
   realisticSessionSummary,
@@ -118,6 +119,7 @@ async function seedJournal(): Promise<JournalFixture> {
     projectHash: 'realistic',
     workspaceDirs: [directory],
     chatsDir: directory,
+    journal: { namedWriters: new NamedWriterOwnership() },
     provider: 'gemini',
     model,
   });
