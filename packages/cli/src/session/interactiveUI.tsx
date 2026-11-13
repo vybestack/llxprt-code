@@ -1,3 +1,4 @@
+import { StartupStdinContext } from '../ui/contexts/startup-stdin-context.js';
 import type { InteractiveApplicationInputs } from './interactiveApplicationInputs.js';
 import { ObservationContext } from '../observation/ObservationContext.js';
 import type { ObservationCallbacks } from '../observation/jspWiring.js';
@@ -693,23 +694,25 @@ export async function commitInteractiveStartup(
 
     state.instance = ports.render(
       renderInteractiveShell(
-        <ObservationContext.Provider value={args.observation}>
-          {buildRenderElement(
-            commandPorts,
-            args.agent,
-            args.runtimeSettings,
-            args.settings,
-            args.startupWarnings,
-            args.version,
-            args.recordingIntegration,
-            args.resumedBoot,
-            args.initialRecordingService,
-            args.initialLockHandle,
-            args.suppressStartupWelcome,
-            args.perfOwner,
-            args.recordingOwner,
-          )}
-        </ObservationContext.Provider>,
+        <StartupStdinContext.Provider value={args.terminalHost.startupStdin}>
+          <ObservationContext.Provider value={args.observation}>
+            {buildRenderElement(
+              commandPorts,
+              args.agent,
+              args.runtimeSettings,
+              args.settings,
+              args.startupWarnings,
+              args.version,
+              args.recordingIntegration,
+              args.resumedBoot,
+              args.initialRecordingService,
+              args.initialLockHandle,
+              args.suppressStartupWelcome,
+              args.perfOwner,
+              args.recordingOwner,
+            )}
+          </ObservationContext.Provider>
+        </StartupStdinContext.Provider>,
         args.settings,
         new DebugLogger('llxprt:interactive', args.debugConfiguration),
       ),

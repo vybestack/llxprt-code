@@ -23,7 +23,6 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { setupTerminalAndTheme } from './utils/terminalTheme.js';
-import { drainStdinBuffer } from './ui/utils/terminalContract.js';
 import { StdinRawModeManager } from './utils/stdinSafety.js';
 import { registerCleanup, runExitCleanup } from './utils/cleanup.js';
 import { registerShellJobShutdownNotice } from './utils/shellJobShutdownNotice.js';
@@ -245,8 +244,6 @@ export async function enableInteractiveRawModeIfNeeded(
   if (!(config.isInteractive() && !wasRaw && process.stdin.isTTY)) {
     return;
   }
-  await drainStdinBuffer(process.stdin, 50);
-
   stdinManager.enable();
 
   process.on('SIGTERM', () => {

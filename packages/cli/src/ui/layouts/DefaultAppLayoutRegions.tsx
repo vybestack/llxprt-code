@@ -19,6 +19,7 @@ import { QueuedMessagesPanel } from '../components/QueuedMessagesPanel.js';
 import { BucketAuthConfirmation } from '../components/BucketAuthConfirmation.js';
 import { DialogManager } from '../components/DialogManager.js';
 import { InlineContent } from './InlineContent.js';
+import { StartupStdinContext } from '../contexts/startup-stdin-context.js';
 import {
   FooterSection,
   useHasActiveDialog,
@@ -103,6 +104,11 @@ function ComposerContent(props: DefaultAppLayoutProps) {
 /** The dialog layer reads visibility; DialogManager selects the active request. */
 export function DialogRegion(props: DefaultAppLayoutProps): React.ReactNode {
   const dialogsVisible = useHasActiveDialog();
+  const startupStdin = React.useContext(StartupStdinContext);
+  React.useEffect(
+    () => (dialogsVisible ? startupStdin?.acceptDialogInput() : undefined),
+    [dialogsVisible, startupStdin],
+  );
   return (
     <>
       <BucketAuthConfirmation

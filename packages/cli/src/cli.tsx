@@ -1,3 +1,4 @@
+import type { StartupStdinBuffer } from './utils/startup-stdin.js';
 import {
   createTerminalHost,
   type TerminalHost,
@@ -742,7 +743,12 @@ async function prepareConfiguredTerminalSession(
   argv: ParsedCliArgs,
   readProfile: () => string | null,
   loadProfile: AgentProfileApplication['load'],
+  startupStdin?: StartupStdinBuffer,
 ): Promise<void> {
+  if (!config.isInteractive() && startupStdin) {
+    startupStdin.dispose();
+    process.stdin.pause();
+  }
   await exitAfterSessionListOrDelete(argv, config, () => config.dispose());
   await rejectPromptInteractiveWithPipedStdin(argv);
   await prepareTerminalSession(config, settings, argv);
@@ -755,9 +761,9 @@ async function prepareConfiguredTerminalSession(
   );
 }
 
-export async function main() {
+export async function main(startupStdin?: StartupStdinBuffer) {
   const capturedEnvPath = captureBootstrapEnvPath();
-  const terminalHost = createTerminalHost();
+  const terminalHost = createTerminalHost(startupStdin);
   const debugConfiguration = configureCliDebugLogging();
   await handleVersionAndHelpFlags(process.argv.slice(2));
 
@@ -785,6 +791,7 @@ export async function main() {
       argv,
       () => preflight.getCurrentProfileName(),
       (name) => preflight.load(name),
+      startupStdin,
     );
 
     await exitAfterExtensionList(config.getListExtensions(), preflight);

@@ -246,27 +246,34 @@ describe('Interactive UI (tmux harness)', () => {
       );
     }
   }
-  runTmuxE2E(
-    'first startup paste followed immediately by Enter is submitted and journaled',
-    async () => {
-      const testName = 'startup-input-admission';
-      assertHarnessSuccess(
-        runHarness('tmux-script.startup-input.fake.json', testName),
-      );
-      const directory = getArtifactDir(testName);
-      const journals = readdirSync(directory, {
-        recursive: true,
-        encoding: 'utf8',
-      }).filter((file) => file.endsWith('.llxj'));
-      expect(journals).toHaveLength(1);
-      expect(
-        await SessionDiscovery.readFirstUserMessage(
-          path.join(directory, journals[0]),
-        ),
-      ).toBe('STARTUP_PASTE_ADMISSION');
-    },
-    300_000,
-  );
+  for (const delay of ['ready', 'zero']) {
+    runTmuxE2E(
+      `first startup paste followed immediately by Enter is submitted and journaled (${delay})`,
+      async () => {
+        const testName = `startup-input-admission-${delay}`;
+        assertHarnessSuccess(
+          runHarness(
+            delay === 'zero'
+              ? 'tmux-script.startup-zero-input.fake.json'
+              : 'tmux-script.startup-input.fake.json',
+            testName,
+          ),
+        );
+        const directory = getArtifactDir(testName);
+        const journals = readdirSync(directory, {
+          recursive: true,
+          encoding: 'utf8',
+        }).filter((file) => file.endsWith('.llxj'));
+        expect(journals).toHaveLength(1);
+        expect(
+          await SessionDiscovery.readFirstUserMessage(
+            path.join(directory, journals[0]),
+          ),
+        ).toBe('STARTUP_PASTE_ADMISSION');
+      },
+      300_000,
+    );
+  }
 
   runTmuxE2E(
     'clean startup renders a non-blank first frame with the composer',
