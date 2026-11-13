@@ -552,6 +552,19 @@ describe('Interactive UI (tmux harness)', () => {
   );
 
   runTmuxE2E(
+    'populated session browser keeps search and controls visible while scrolling',
+    () => {
+      assertHarnessSuccess(
+        runHarness(
+          'tmux-script.session-browser-populated.json',
+          'session-browser-populated',
+        ),
+      );
+    },
+    300_000,
+  );
+
+  runTmuxE2E(
     'session browser reflows across real terminal resizes',
     () => {
       const result = runHarness(

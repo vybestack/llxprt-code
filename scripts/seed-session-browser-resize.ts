@@ -23,6 +23,7 @@ export interface SessionBrowserResizeSeedOptions {
   readonly namedWriters: NamedWriterOwnership;
   readonly chatsDir: string;
   readonly projectRoot: string;
+  readonly sessionId?: string;
 }
 
 function content(speaker: IContent['speaker'], text: string): IContent {
@@ -43,7 +44,7 @@ export async function seedSessionBrowserResize(
 ): Promise<void> {
   const recording = await JournalRecordingService.createLocked({
     journal: { namedWriters: options.namedWriters },
-    sessionId: SESSION_BROWSER_RESIZE_SESSION_ID,
+    sessionId: options.sessionId ?? SESSION_BROWSER_RESIZE_SESSION_ID,
     projectHash: getProjectHash(options.projectRoot),
     chatsDir: options.chatsDir,
     workspaceDirs: [options.projectRoot],

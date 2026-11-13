@@ -19,6 +19,7 @@ import type {
   BrowserTargetDeleter,
 } from '../hooks/browserCatalogHost.js';
 import { useResponsive } from '../hooks/useResponsive.js';
+import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useSessionBrowser } from '../hooks/useSessionBrowser.js';
 import type { EnrichedSessionSummary } from '../hooks/useSessionBrowser.js';
@@ -540,6 +541,29 @@ const SessionList: React.FC<{
   state: ReturnType<typeof useSessionBrowser>;
   isNarrow: boolean;
 }> = ({ state, isNarrow }) => {
+  const { rows } = useTerminalSize();
+  const noticeRows =
+    3 *
+    [
+      state.skippedCount > 0,
+      state.error !== null,
+      state.isResuming,
+      state.deleteConfirmIndex !== null,
+      state.conversationConfirmActive,
+    ].filter(Boolean).length;
+  // Reserve the dialog chrome and the application's footer, then scroll only
+  // the two-line entries so search and keyboard controls remain on screen.
+  const visibleCount = Math.max(
+    1,
+    Math.floor((rows - (isNarrow ? 12 : 24) - noticeRows) / 2),
+  );
+  const firstVisible = Math.max(
+    0,
+    Math.min(
+      state.selectedIndex - visibleCount + 1,
+      state.pageItems.length - visibleCount,
+    ),
+  );
   if (state.pageItems.length === 0) {
     return (
       <EmptySearchResults pageItemsLength={0} searchTerm={state.searchTerm} />
@@ -548,39 +572,42 @@ const SessionList: React.FC<{
 
   return (
     <Box flexDirection="column">
-      {state.pageItems.map((session, index) => {
-        const isSelected = index === state.selectedIndex;
-        const relTime = formatRelativeTime(session.lastModified, {
-          mode: isNarrow ? 'short' : 'long',
-        });
-        const display = getSessionDisplay(session);
+      {state.pageItems
+        .slice(firstVisible, firstVisible + visibleCount)
+        .map((session, offset) => {
+          const index = firstVisible + offset;
+          const isSelected = index === state.selectedIndex;
+          const relTime = formatRelativeTime(session.lastModified, {
+            mode: isNarrow ? 'short' : 'long',
+          });
+          const display = getSessionDisplay(session);
 
-        if (isNarrow) {
+          if (isNarrow) {
+            return (
+              <NarrowSessionRow
+                key={session.targetKey}
+                session={session}
+                isSelected={isSelected}
+                display={display}
+                relTime={relTime}
+                isNarrow={isNarrow}
+              />
+            );
+          }
+
+          const oneBasedIndex = state.page * 20 + index + 1;
           return (
-            <NarrowSessionRow
+            <WideSessionRow
               key={session.targetKey}
               session={session}
               isSelected={isSelected}
               display={display}
               relTime={relTime}
+              oneBasedIndex={oneBasedIndex}
               isNarrow={isNarrow}
             />
           );
-        }
-
-        const oneBasedIndex = state.page * 20 + index + 1;
-        return (
-          <WideSessionRow
-            key={session.targetKey}
-            session={session}
-            isSelected={isSelected}
-            display={display}
-            relTime={relTime}
-            oneBasedIndex={oneBasedIndex}
-            isNarrow={isNarrow}
-          />
-        );
-      })}
+        })}
     </Box>
   );
 };
