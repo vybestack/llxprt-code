@@ -927,3 +927,33 @@ noted per finding.
   race. The agent-level `refusalReviewCancel.behavior.test.ts` still proves an
   aborted request is not resent; the reviewer-level test proves the commit
   abort reaches the caller as an abort rather than a stopped review.
+
+## CI fix: runtime-boundary
+
+- Failure: `npm run check:runtime-boundary` reported an unbaselined
+  module-mutation, `installedWaits` in `refusalWait.ts`, the module map behind
+  the test seam `installRefusalWaitForTesting`. The #2616 migration removes
+  ambient module state from production code, and the fix adds no baseline
+  entry and leaves the guard on.
+- Production: `createRefusalRecovery` passes the abortable core `delay` to
+  `RefusalRecoveryCoordinator` as its injected `wait`. `refusalWaitFor`,
+  `installRefusalWaitForTesting` and the session-id accessor that only served
+  them are gone. `refusalWait.ts` keeps the `RefusalWait` type, and the
+  coordinator still takes `wait` as a dependency, so a coordinator test passes
+  a fake wait directly (`refusalRecovery.test.ts` covers the 15 s, 60 s, 180 s
+  schedule and the abort signal reaching the wait).
+- Observability: a `retry` record in the session journal now carries the
+  requested `delayMs` (optional field of `RefusalPayload`, so older journals
+  still replay; a negative value is reported as a malformed record).
+- End-to-end tests: they no longer inject a wait. The helpers read the
+  requested waits from the journal and use a 1 ms base (waits 1 ms, then
+  4 ms). A test that acts during a backoff acts from the `onEvent` callback on
+  the backoff notice. The stream is a chain of pull-based async generators
+  (`TurnProcessor` yields RETRY and the notice, `AgenticLoop.streamAndCollect`
+  and `mapLoopStream` forward them one by one, and the buffered
+  `AgenticEventQueue` only carries tool-scheduler events), so the consumer's
+  awaited callback finishes before `advanceAfterAttempt` starts the wait. The
+  cancel-during-backoff test keeps a real 120 s backoff and aborts on the
+  notice. The two default-settings tests (retries 2, 15 s base) abort on the
+  first notice instead of sitting out 15 s; the later 60 s and 180 s waits
+  are covered by `refusalPolicy.test.ts` and `refusalRecovery.test.ts`.

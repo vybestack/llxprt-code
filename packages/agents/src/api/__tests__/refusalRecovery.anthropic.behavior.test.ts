@@ -16,6 +16,7 @@ import { isDoneEvent, isNoticeEvent } from './helpers/agentHarness.js';
 import {
   aiTexts,
   emptyRefusalReply,
+  isBackoffNotice,
   runScriptedPrompt,
   stopReply,
   turnRecords,
@@ -34,7 +35,11 @@ describe('Anthropic metadata-only refusal (issue #4036)', () => {
       [PROMPT],
       {
         protocol: 'anthropic',
-        settings: { 'refusal.retries': 1, 'refusal.rewrite': false },
+        settings: {
+          'refusal.retries': 1,
+          'refusal.backoff-ms': 1,
+          'refusal.rewrite': false,
+        },
       },
     );
 
@@ -69,10 +74,21 @@ describe('Anthropic metadata-only refusal (issue #4036)', () => {
   });
 
   it('waits the default 15 s before the retry and announces it', async () => {
+    // The default backoff is a real 15 s, so the request is cancelled when
+    // its notice arrives.
+    const controller = new AbortController();
     const run = await runScriptedPrompt(
       [emptyRefusalReply(), stopReply('ok')],
       [PROMPT],
-      { protocol: 'anthropic', settings: { 'refusal.retries': 1 } },
+      {
+        protocol: 'anthropic',
+        settings: { 'refusal.retries': 1, 'refusal.backoff-ms': undefined },
+        signal: controller.signal,
+        onEvent: (event) => {
+          if (isBackoffNotice(event)) controller.abort();
+          return Promise.resolve();
+        },
+      },
     );
 
     expect(run.waits).toStrictEqual([15000]);

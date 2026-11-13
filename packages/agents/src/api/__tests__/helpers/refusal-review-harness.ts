@@ -24,7 +24,6 @@ import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
 import { replaySession } from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { ProfileManager, Storage } from '@vybestack/llxprt-code-settings';
-import { installRefusalWaitForTesting } from '../../../refusal/refusalWait.js';
 import {
   REVIEW_DATA_CLOSE,
   REVIEW_DATA_OPEN,
@@ -33,6 +32,7 @@ import { startAnthropicEndpoint } from './anthropic-refusal-endpoint.js';
 import {
   emptyRefusalReply,
   readJsonl,
+  requestedWaits,
   startScriptedEndpoint,
   stopReply,
   type EndpointReply,
@@ -200,6 +200,7 @@ export interface ReviewScenario {
 
 export interface ReviewRun {
   readonly events: readonly AgentEvent[];
+  /** Backoff of every resend, as the journal recorded it; a rewrite records 0. */
   readonly waits: readonly number[];
   readonly stats: ReturnType<Agent['getStats']>;
   /** Requests the foreground endpoint received, review calls excluded. */
@@ -281,7 +282,7 @@ async function prepareAgent(
 ): Promise<void> {
   const settings: Record<string, unknown> = {
     'refusal.retries': 1,
-    'refusal.backoff-ms': 15000,
+    'refusal.backoff-ms': 1,
     'refusal.rewrite': true,
     'refusal.max-rewrites': 1,
     ...scenario.settings,
@@ -310,7 +311,6 @@ interface Endpoints {
 async function collectRun(input: {
   readonly agent: Agent;
   readonly events: readonly AgentEvent[];
-  readonly waits: readonly number[];
   readonly endpoints: Endpoints;
   readonly workingDir: string;
   readonly sessionId: string;
@@ -332,7 +332,7 @@ async function collectRun(input: {
   ];
   return {
     events: input.events,
-    waits: input.waits,
+    waits: requestedWaits(journalRecords),
     stats,
     foreground: endpoints.foreground
       .requests()
@@ -380,11 +380,6 @@ export async function runReviewScenario(
     foreground: await startEndpoint(foregroundProtocol, respond),
     profile: await startEndpoint(scenario.profile?.protocol, respond),
   };
-  const waits: number[] = [];
-  const restoreWait = installRefusalWaitForTesting(sessionId, (ms) => {
-    waits.push(ms);
-    return Promise.resolve();
-  });
   try {
     writeFiles(workingDir, scenario.files);
     if (scenario.profile !== undefined) {
@@ -407,13 +402,11 @@ export async function runReviewScenario(
     return await collectRun({
       agent,
       events,
-      waits,
       endpoints,
       workingDir,
       sessionId,
     });
   } finally {
-    restoreWait();
     await agent?.dispose();
     await endpoints.foreground.stop();
     await endpoints.profile.stop();

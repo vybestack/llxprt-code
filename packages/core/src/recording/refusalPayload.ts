@@ -28,6 +28,8 @@ export const RefusalPayloadSchema = z.object({
     })
     .optional(),
   action: z.enum(['stop', 'retry', 'review']),
+  /** Backoff requested before the resend; present only when `action` is `retry`. */
+  delayMs: z.number().int().nonnegative().optional(),
 });
 
 export type RefusalPayload = z.infer<typeof RefusalPayloadSchema>;

@@ -14,6 +14,7 @@ const logger = new DebugLogger('llxprt:refusal');
 export function toRefusalPayload(
   attempt: RefusalAttempt,
   action: RefusalPayload['action'],
+  delayMs?: number,
   now: Date = new Date(),
 ): RefusalPayload {
   const { usage } = attempt;
@@ -36,6 +37,7 @@ export function toRefusalPayload(
       },
     }),
     action,
+    ...(delayMs !== undefined && { delayMs }),
   };
 }
 
@@ -47,10 +49,11 @@ export async function recordRefusalInJournal(
   execution: AgentChatRecordingExecution | undefined,
   attempt: RefusalAttempt,
   action: RefusalPayload['action'],
+  delayMs?: number,
 ): Promise<void> {
   if (execution?.recordRefusal === undefined) return;
   try {
-    await execution.recordRefusal(toRefusalPayload(attempt, action));
+    await execution.recordRefusal(toRefusalPayload(attempt, action, delayMs));
   } catch (error: unknown) {
     logger.error(
       `Failed to record refusal for prompt ${attempt.promptId}`,

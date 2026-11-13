@@ -22,7 +22,7 @@ export {
   RefusalRecoveryCoordinator,
   type RefusalRecoveryDeps,
 } from './refusalRecovery.js';
-export { refusalWaitFor, type RefusalWait } from './refusalWait.js';
+export type { RefusalWait } from './refusalWait.js';
 export { type RefusalPolicySource } from './refusalPolicy.js';
 export { recordRefusalInJournal, toRefusalPayload } from './refusalJournal.js';
 export { settleRefusal, type RefusalSettlement } from './refusalSettlement.js';
@@ -47,7 +47,7 @@ import { RefusalRecoveryCoordinator } from './refusalRecovery.js';
 import type { RefusalReviewer } from './reviewTypes.js';
 import type { RefusalPolicySource } from './refusalPolicy.js';
 import type { RefusalRecovery } from './refusalTypes.js';
-import { refusalWaitFor } from './refusalWait.js';
+import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 
 /**
  * The recovery a chat session uses: live settings, the abortable timer and,
@@ -55,12 +55,11 @@ import { refusalWaitFor } from './refusalWait.js';
  */
 export function createRefusalRecovery(
   settings: RefusalPolicySource,
-  sessionId: () => string,
   reviewer?: RefusalReviewer,
 ): RefusalRecovery {
   return new RefusalRecoveryCoordinator({
     settings,
-    wait: refusalWaitFor(sessionId),
+    wait: delay,
     reviewer,
   });
 }

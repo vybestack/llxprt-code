@@ -11,16 +11,19 @@
  *
  * Every test drives the PUBLIC `agent.stream()` over the real OpenAI provider
  * and a local OpenAI-compatible HTTP endpoint that records the wire requests.
- * The only injected piece is the backoff wait, so the tests see the requested
- * delays without sleeping.
+ * The backoff is real: a 1 ms base waits 1 ms and then 4 ms, and the delay each
+ * resend asked for is read from the session journal. The full 15 s, 60 s,
+ * 180 s schedule is covered by refusalPolicy.test.ts and
+ * refusalRecovery.test.ts. A test that has to act during a backoff acts when
+ * it receives the backoff notice, which the stream yields before the wait.
  */
 
 import { describe, expect, it, setDefaultTimeout } from 'bun:test';
-import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { isDoneEvent, isNoticeEvent } from './helpers/agentHarness.js';
 import {
   aiTexts,
   emptyRefusalReply,
+  isBackoffNotice,
   pendingTodoReply,
   refusedTodoReply,
   runScriptedPrompt,
@@ -68,7 +71,7 @@ function humanTexts(history: ScriptedRun['historyAfter']): string[] {
 
 const TWO_RETRIES = {
   'refusal.retries': 2,
-  'refusal.backoff-ms': 15000,
+  'refusal.backoff-ms': 1,
   'refusal.rewrite': false,
 } as const;
 
@@ -80,10 +83,10 @@ describe('refused request that recovers on a retry (issue #4036)', () => {
       { settings: TWO_RETRIES, modelParams: { temperature: 0.3 } },
     );
 
-  it('waits 15 s and then 60 s before resending', async () => {
+  it('waits the base and then four times the base before resending', async () => {
     const run = await recovered();
 
-    expect(run.waits).toStrictEqual([15000, 60000]);
+    expect(run.waits).toStrictEqual([1, 4]);
   });
 
   it('resends the identical wire request each time', async () => {
@@ -112,8 +115,8 @@ describe('refused request that recovers on a retry (issue #4036)', () => {
 
     expect(doneReasons(run)).toStrictEqual(['stop']);
     expect(notices(run)).toStrictEqual([
-      'Model scripted-model refused the request; retrying in 15 s (retry 1 of 2).',
-      'Model scripted-model refused the request; retrying in 60 s (retry 2 of 2).',
+      'Model scripted-model refused the request; retrying in 1 ms (retry 1 of 2).',
+      'Model scripted-model refused the request; retrying in 4 ms (retry 2 of 2).',
     ]);
   });
 
@@ -148,14 +151,31 @@ describe('refused request that recovers on a retry (issue #4036)', () => {
   });
 
   it('uses two retries and the 15 s base when no setting is given', async () => {
+    // The default first backoff is a real 15 s, so the request is cancelled
+    // when its notice arrives; the later retries are covered by the policy.
+    const controller = new AbortController();
     const run = await runScriptedPrompt(
-      [emptyRefusalReply(), emptyRefusalReply(), stopReply('recovered')],
+      [emptyRefusalReply(), stopReply(UNREQUESTED)],
       [PROMPT],
-      { settings: { 'refusal.retries': undefined } },
+      {
+        settings: {
+          'refusal.retries': undefined,
+          'refusal.backoff-ms': undefined,
+        },
+        signal: controller.signal,
+        onEvent: (event) => {
+          if (isBackoffNotice(event)) controller.abort();
+          return Promise.resolve();
+        },
+      },
     );
 
-    expect(run.waits).toStrictEqual([15000, 60000]);
-    expect(doneReasons(run)).toStrictEqual(['stop']);
+    expect({ waits: run.waits, notices: notices(run) }).toStrictEqual({
+      waits: [15000],
+      notices: [
+        'Model scripted-model refused the request; retrying in 15 s (retry 1 of 2).',
+      ],
+    });
   });
 });
 
@@ -186,7 +206,7 @@ describe('refusal that survives every retry (issue #4036)', () => {
     const run = await exhausted();
 
     expect(lastOf(notices(run))).toBe(
-      'Model scripted-model refused 3 times (2 retries with backoff 15 s, 60 s). Stopping.',
+      'Model scripted-model refused 3 times (2 retries with backoff 1 ms, 4 ms). Stopping.',
     );
   });
 
@@ -317,10 +337,10 @@ describe('cancelling during the backoff (issue #4036)', () => {
           'refusal.rewrite': false,
         },
         signal: controller.signal,
-        // The real abortable timer, cancelled 50 ms into a two minute wait.
-        wait: ({ ms, signal }) => {
-          setTimeout(() => controller.abort(), 50);
-          return delay(ms, signal);
+        // The real abortable timer, cancelled as its two minute wait begins.
+        onEvent: (event) => {
+          if (isBackoffNotice(event)) controller.abort();
+          return Promise.resolve();
         },
       },
     );
@@ -351,7 +371,7 @@ describe('retry budget belongs to the logical request (issue #4036)', () => {
     );
 
     expect(run.requests).toHaveLength(5);
-    expect(run.waits).toStrictEqual([15000, 60000]);
+    expect(run.waits).toStrictEqual([1, 4]);
     expect(lastOf(doneReasons(run))).toBe('refusal');
   });
 
@@ -425,8 +445,10 @@ describe('policy is captured when the request is admitted (issue #4036)', () => 
       [PROMPT],
       {
         settings: { ...TWO_RETRIES, 'refusal.retries': 1 },
-        wait: ({ agent }) => {
-          agent.setEphemeralSetting('refusal.retries', 5);
+        onEvent: (event, agent) => {
+          if (isBackoffNotice(event)) {
+            agent.setEphemeralSetting('refusal.retries', 5);
+          }
           return Promise.resolve();
         },
       },
@@ -442,8 +464,10 @@ describe('policy is captured when the request is admitted (issue #4036)', () => 
       [PROMPT],
       {
         settings: TWO_RETRIES,
-        wait: ({ agent }) => {
-          agent.setEphemeralSetting('refusal.retries', 0);
+        onEvent: (event, agent) => {
+          if (isBackoffNotice(event)) {
+            agent.setEphemeralSetting('refusal.retries', 0);
+          }
           return Promise.resolve();
         },
       },
@@ -464,8 +488,10 @@ describe('policy is captured when the request is admitted (issue #4036)', () => 
       ['first prompt', 'second prompt'],
       {
         settings: { ...TWO_RETRIES, 'refusal.retries': 1 },
-        wait: ({ agent }) => {
-          agent.setEphemeralSetting('refusal.retries', 0);
+        onEvent: (event, agent) => {
+          if (isBackoffNotice(event)) {
+            agent.setEphemeralSetting('refusal.retries', 0);
+          }
           return Promise.resolve();
         },
       },

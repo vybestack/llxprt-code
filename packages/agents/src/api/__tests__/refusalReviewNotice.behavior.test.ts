@@ -43,7 +43,7 @@ describe('the notice before a refusal review (issue #4036)', () => {
     });
 
     expect(shownBeforeReview).toStrictEqual([
-      'Model scripted-model refused the request; retrying in 15 s (retry 1 of 1).',
+      'Model scripted-model refused the request; retrying in 1 ms (retry 1 of 1).',
       ASKING,
     ]);
   });

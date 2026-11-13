@@ -163,16 +163,13 @@ describe('agent processor retry boundaries', () => {
         releasePromptTurnIdentity: () => undefined,
       },
       compressionHandler: { tokenUsageLogger: null },
-      refusalRecovery: createRefusalRecovery(
-        {
-          retries: () => 2,
-          backoffMs: () => 15_000,
-          rewrite: () => true,
-          reviewProfile: () => undefined,
-          maxRewrites: () => 1,
-        },
-        () => 'processor-retry-boundary',
-      ),
+      refusalRecovery: createRefusalRecovery({
+        retries: () => 2,
+        backoffMs: () => 15_000,
+        rewrite: () => true,
+        reviewProfile: () => undefined,
+        maxRewrites: () => 1,
+      }),
       async *_runStreamAttempt() {
         attempts++;
         releaseAttempt();

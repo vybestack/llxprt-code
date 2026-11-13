@@ -13,9 +13,7 @@ import { join } from 'node:path';
 import { ApprovalMode, createAgent } from '@vybestack/llxprt-code-agents';
 import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { installRefusalWaitForTesting } from '../../../refusal/refusalWait.js';
 import { startAnthropicEndpoint } from './anthropic-refusal-endpoint.js';
-import { drain } from './agentHarness.js';
 
 const PROMPT_TOKENS = 120;
 
@@ -260,7 +258,10 @@ export async function startScriptedEndpoint(
 
 export interface ScriptedRun {
   readonly events: readonly AgentEvent[];
-  /** Backoff durations the agent asked the injected wait for, in order. */
+  /**
+   * Backoff durations the agent requested before each resend, in order, as the
+   * session journal recorded them.
+   */
   readonly waits: readonly number[];
   readonly stats: ReturnType<Agent['getStats']>;
   readonly requests: readonly WireRequest[];
@@ -283,10 +284,30 @@ export function readJsonl(path: string): Array<Record<string, unknown>> {
     .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
-export interface WaitCall {
-  readonly ms: number;
-  readonly signal: AbortSignal | undefined;
-  readonly agent: Agent;
+/**
+ * The backoff of every resend the journal recorded, in order. A reviewer
+ * rewrite resends at once and so records 0.
+ */
+export function requestedWaits(
+  journalRecords: ReadonlyArray<Record<string, unknown>>,
+): number[] {
+  return journalRecords
+    .filter((record) => record['type'] === 'refusal')
+    .map((record) => record['payload'] as { action: string; delayMs?: number })
+    .filter((payload) => payload.action === 'retry')
+    .map((payload) => payload.delayMs ?? Number.NaN);
+}
+
+/**
+ * Whether `event` announces an identical resend after a backoff. The stream is
+ * pull-based and the notice is yielded before the backoff starts, so a
+ * consumer that acts when it sees this event acts before the wait begins.
+ */
+export function isBackoffNotice(event: AgentEvent): boolean {
+  return (
+    event.type === 'notice' &&
+    event.message.includes('refused the request; retrying')
+  );
 }
 
 export interface ScriptedRunOptions {
@@ -301,10 +322,11 @@ export interface ScriptedRunOptions {
   readonly settings?: Readonly<Record<string, unknown>>;
   readonly modelParams?: Readonly<Record<string, unknown>>;
   /**
-   * Behavior of the injected backoff wait. The default resolves at once, so
-   * tests observe requested delays without sleeping.
+   * Runs for every public event, and is awaited before the stream is pulled
+   * again. A scenario that has to act during a refusal backoff does so when it
+   * sees the backoff notice (`isBackoffNotice`).
    */
-  readonly wait?: (call: WaitCall) => Promise<void>;
+  readonly onEvent?: (event: AgentEvent, agent: Agent) => Promise<void>;
   /** Abort signal passed to every prompt. */
   readonly signal?: AbortSignal;
   /** Runs after the prompts while the agent is alive. */
@@ -331,15 +353,7 @@ export async function runScriptedPrompt(
   const endpoint = anthropic
     ? await startAnthropicEndpoint(replies)
     : await startScriptedEndpoint(replies);
-  const waits: number[] = [];
   let agent: Agent | undefined;
-  const restoreWait = installRefusalWaitForTesting(
-    sessionId,
-    async (ms, signal) => {
-      waits.push(ms);
-      if (agent !== undefined) await options.wait?.({ ms, signal, agent });
-    },
-  );
   try {
     agent = await createAgent({
       provider: anthropic ? 'anthropic' : 'openai',
@@ -360,25 +374,24 @@ export async function runScriptedPrompt(
     const historyBefore = await agent.getHistory();
     await agent.session.setRecording({ enabled: true });
     const events: AgentEvent[] = [];
-    for (const prompt of prompts)
-      events.push(
-        ...(await drain(
-          agent.stream(
-            prompt,
-            options.signal === undefined
-              ? undefined
-              : { signal: options.signal },
-          ),
-        )),
-      );
+    for (const prompt of prompts) {
+      for await (const event of agent.stream(
+        prompt,
+        options.signal === undefined ? undefined : { signal: options.signal },
+      )) {
+        events.push(event);
+        await options.onEvent?.(event, agent);
+      }
+    }
     await options.inspect?.(agent);
     const historyAfter = await agent.getHistory();
     const journalPath = agent.session.getRecording().path ?? '';
     await agent.session.setRecording({ enabled: false });
+    const journalRecords = readJsonl(journalPath);
     const projectTempDir = new Storage(workingDir).getProjectTempDir();
     return {
       events,
-      waits,
+      waits: requestedWaits(journalRecords),
       stats: agent.getStats(),
       requests: [...endpoint.requests()],
       historyBefore,
@@ -386,10 +399,9 @@ export async function runScriptedPrompt(
       tokenRecords: readJsonl(
         join(projectTempDir, 'token-usage', `${sessionId}.jsonl`),
       ),
-      journalRecords: readJsonl(journalPath),
+      journalRecords,
     };
   } finally {
-    restoreWait();
     await agent?.dispose();
     await endpoint.stop();
     rmSync(workingDir, { recursive: true, force: true });

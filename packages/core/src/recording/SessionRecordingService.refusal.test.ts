@@ -129,6 +129,52 @@ describe('refusal journal record (issue #4036)', () => {
     expect(result.warnings).toStrictEqual([]);
   });
 
+  it('keeps the requested backoff of a retry record through replay', async () => {
+    const service = createService();
+    const retry: RefusalPayload = {
+      ...REFUSAL,
+      action: 'retry',
+      delayMs: 15000,
+    };
+    service.recordRefusal(retry);
+    await service.flush();
+
+    const lines = (await fs.readFile(service.getFilePath()!, 'utf-8'))
+      .trim()
+      .split('\n');
+    const result = await replaySession(service.getFilePath()!, PROJECT_HASH);
+
+    assertReplayOk(result);
+    expect({
+      payload: JSON.parse(lines[1]).payload,
+      warnings: result.warnings,
+    }).toStrictEqual({ payload: retry, warnings: [] });
+  });
+
+  it('reports a retry record with a negative backoff as malformed', async () => {
+    const service = createService();
+    service.recordContent(makeContent('first question', 'human'));
+    await service.flush();
+    const filePath = service.getFilePath()!;
+    await fs.appendFile(
+      filePath,
+      `${JSON.stringify({
+        v: 1,
+        seq: 3,
+        ts: '2026-11-11T21:12:00.000Z',
+        type: 'refusal',
+        payload: { ...REFUSAL, action: 'retry', delayMs: -1 },
+      })}\n`,
+    );
+
+    const result = await replaySession(filePath, PROJECT_HASH);
+
+    assertReplayOk(result);
+    expect(result.warnings.some((w) => w.includes('malformed refusal'))).toBe(
+      true,
+    );
+  });
+
   it('reports a refusal record with an invalid payload as malformed', async () => {
     const service = createService();
     service.recordContent(makeContent('first question', 'human'));

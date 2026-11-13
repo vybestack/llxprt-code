@@ -27,6 +27,7 @@ import { nativeHookCommand } from './helpers/native-hook-command.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
   emptyRefusalReply,
+  isBackoffNotice,
   runScriptedPrompt,
   startScriptedEndpoint,
   stopReply,
@@ -44,8 +45,13 @@ describe('an identical retry of a refused request (issue #4036)', () => {
       [emptyRefusalReply(), stopReply('recovered')],
       [PROMPT],
       {
-        settings: { 'refusal.retries': 1, 'refusal.rewrite': false },
-        wait: async ({ agent }) => {
+        settings: {
+          'refusal.retries': 1,
+          'refusal.backoff-ms': 1,
+          'refusal.rewrite': false,
+        },
+        onEvent: async (event, agent) => {
+          if (!isBackoffNotice(event)) return;
           await agent.addHistory({
             speaker: 'human',
             blocks: [{ type: 'text', text: APPENDED }],

@@ -107,7 +107,12 @@ async function settleResolved(
   promptId: string,
   decision: ResolvedRefusalDecision,
 ): Promise<RefusalSettlement> {
-  await recordRefusalInJournal(deps.execution, refused, decision.action);
+  await recordRefusalInJournal(
+    deps.execution,
+    refused,
+    decision.action,
+    decision.action === 'retry' ? decision.delayMs : undefined,
+  );
   if (decision.action === 'retry') {
     return {
       action: 'retry-same-request',

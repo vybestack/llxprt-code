@@ -102,7 +102,7 @@ describe('a refusal that a reviewer rewrite recovers (issue #4036)', () => {
       foregroundRequests: 3,
       reviewerRequests: 1,
       reviewedOn: [REVIEWER_MODEL],
-      waits: [15000, 0],
+      waits: [1, 0],
     });
   });
 
@@ -155,7 +155,7 @@ describe('a refusal that a reviewer rewrite recovers (issue #4036)', () => {
     ).operationId;
 
     expect(notices(run)).toStrictEqual([
-      'Model scripted-model refused the request; retrying in 15 s (retry 1 of 1).',
+      'Model scripted-model refused the request; retrying in 1 ms (retry 1 of 1).',
       `Model scripted-model refused 2 time(s); asking ${REVIEWER_MODEL} to review the recent context.`,
       `Refusal review by ${REVIEWER_MODEL}: rewrote 1 message(s) [summary: "${preview(SUMMARY_ORIGINAL)}" → "${preview(SUMMARY_REWRITTEN)}"] (operation ${operationId}). Retrying.`,
       `Refusal recovered after rewrite by ${REVIEWER_MODEL}.`,
@@ -378,7 +378,7 @@ describe('a rewrite that is refused again (issue #4036)', () => {
 
     const stop = notices(run).filter((n) => n.endsWith('Stopping.'));
     expect(stop).toStrictEqual([
-      `Model scripted-model refused 4 times (2 retries with backoff 15 s, 15 s; reviewer ${REVIEWER_MODEL} rewrote 1 message(s) and the model refused again). Stopping.`,
+      `Model scripted-model refused 4 times (2 retries with backoff 1 ms, 1 ms; reviewer ${REVIEWER_MODEL} rewrote 1 message(s) and the model refused again). Stopping.`,
     ]);
   });
 });
