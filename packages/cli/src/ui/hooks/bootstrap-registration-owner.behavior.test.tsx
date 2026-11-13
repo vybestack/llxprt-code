@@ -95,6 +95,8 @@ describe('bootstrap captured operation ownership', () => {
       });
     }
     const readRecordingPath = () => owner.session.getRecording().path;
+    const readRecordingWatermarks = () =>
+      owner.session.getRecordingWatermarks();
     const hook = renderHook(
       () => {
         const stores = useAppStores(containerRuntime);
@@ -107,8 +109,7 @@ describe('bootstrap captured operation ownership', () => {
               length: () => owner.session.getJournalLength(),
             }),
             readRecordingPath,
-            readRecordingWatermarks: () =>
-              owner.session.getRecordingWatermarks(),
+            readRecordingWatermarks,
             readIdeMode: owner.ide.getIdeMode.bind(owner.ide),
             subscribeHistoryTokens: owner.session.subscribeHistoryTokens.bind(
               owner.session,

@@ -180,6 +180,9 @@ describe('interactive Agent owner AppWrapper', () => {
                         readAgentRecordingPath={() =>
                           agent.session.getRecording().path
                         }
+                        readAgentRecordingWatermarks={() =>
+                          agent.session.getRecordingWatermarks()
+                        }
                         generateSubagentPrompt={async () => ''}
                         settings={settings}
                         version="test-capabilities"

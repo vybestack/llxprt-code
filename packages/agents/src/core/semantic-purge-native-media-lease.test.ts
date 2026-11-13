@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
+import { gcAndSweep, releaseWeakRefs } from 'bun:jsc';
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -69,13 +70,20 @@ async function assertLeaseOwners(
   }
 }
 
-async function collectGarbage(): Promise<void> {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  Bun.gc(true);
+function collectGarbage(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    setTimeout(() => {
+      // Collect off the reader's continuation stack and release the census's
+      // engine-owned WeakRef keepalives, without releasing production owners.
+      releaseWeakRefs();
+      gcAndSweep();
+      resolve();
+    }, 0);
+  });
 }
 
 async function consumePinned(
-  query: IndexedJournalRequestSnapshot,
+  query: Pick<IndexedJournalRequestSnapshot, 'openReader'>,
   resolver: RequestMediaResolver,
   signal: AbortSignal,
   payloadRead: () => void,
@@ -325,6 +333,51 @@ describe('native pending media consumer below provider preparation', () => {
       );
     },
   );
+  it('rejects a consumer that retains prior request rows', async () => {
+    await withNativePurgeFixture(async ({ history, store, session }) => {
+      await history.detachedValues.replace(
+        (async function* () {
+          for (let index = 0; index < 3; index++)
+            yield {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: `retained row ${index}` }],
+            } satisfies IContent;
+        })(),
+      );
+      const pin = await session.store.snapshot();
+      const query = await IndexedJournalRequestSnapshot.create(pin);
+      const resolver = new RequestMediaResolver(store);
+      const retained: IContent[] = [];
+      const bufferingReader = {
+        async *openReader(signal?: AbortSignal): AsyncGenerator<IContent> {
+          for await (const row of query.openReader(signal)) {
+            retained.push(row);
+            yield row;
+          }
+        },
+      };
+      try {
+        await expect(
+          consumePinned(
+            bufferingReader,
+            resolver,
+            new AbortController().signal,
+            () => {
+              throw new Error('Text-only rows must not materialize media');
+            },
+            Promise.resolve(),
+            [],
+          ),
+        ).rejects.toThrow('toBeLessThanOrEqual');
+        expect(retained.length).toBe(2);
+        expect(resolver.accounting().activeRequestCount).toBe(0);
+      } finally {
+        retained.length = 0;
+        await query.close();
+        await pin.close();
+      }
+    });
+  });
   it('resolves 65 distinct media units without retaining prior rows or reservation IDs', async () => {
     await withNativePurgeFixture(async ({ history, store, session }) => {
       await history.detachedValues.replace(

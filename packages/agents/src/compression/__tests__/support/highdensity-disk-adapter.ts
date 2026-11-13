@@ -42,6 +42,10 @@ export async function compressHighDensityViaDisk(
     const result = await new HighDensityStrategy().compressDisk(
       {
         ...context,
+        runtimeContext: {
+          ...context.runtimeContext,
+          scratchRoots: historyScratchRoots,
+        },
         history: source,
         estimateTokens: async (contents) =>
           context.estimateTokens(await collect(contents)),

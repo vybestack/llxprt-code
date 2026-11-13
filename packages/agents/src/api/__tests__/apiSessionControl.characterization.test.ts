@@ -1,5 +1,4 @@
 import { afterAll as afterRecordingTests } from 'bun:test';
-import { ScratchRootOwner } from '../../../../core/src/storage/scratch-root.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -13,7 +12,7 @@ const fixturePaths = installTestWorkspacePaths({
 });
 
 import { describe, it, expect, vi } from 'bun:test';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core';
+import { LocalMediaStore, ScratchRootOwner } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
 import { SessionControl } from '../control/sessionControl.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
