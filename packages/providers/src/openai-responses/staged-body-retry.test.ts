@@ -160,8 +160,8 @@ const REPLAY_ROW_PADDING = 4096;
 // Largest checkpoint in two one-row lifecycle calibrations, before fixture growth.
 const REPLAY_FIXED_OVERHEAD_BYTES = 163_082;
 const REPLAY_ENCODING_FACTOR = 4;
-// The one-row formula fails the real replay path; retain the original cap.
-const UNRESOLVED_REPLAY_HEAP_BOUND = 1024 * 1024;
+// The original ceiling remains an independent upper limit on the row formula.
+const ORIGINAL_REPLAY_HEAP_BOUND = 1024 * 1024;
 const REPLAY_LIVE_ROW_FACTOR = 2;
 const REPLAY_LARGEST_ROW_BYTES = Buffer.byteLength(
   JSON.stringify({
@@ -176,7 +176,7 @@ const REPLAY_LARGEST_ROW_BYTES = Buffer.byteLength(
 );
 
 function diskReplayHistory(rows: number, retain: boolean) {
-  const references: Array<WeakRef<IContent>> = [];
+  let references: Array<WeakRef<IContent>> = [];
   const held: IContent[] = [];
   let pulled = 0;
   let closed = false;
@@ -207,7 +207,14 @@ function diskReplayHistory(rows: number, retain: boolean) {
       references.push(new WeakRef(row));
       if (retain) held.push(row);
     }),
-    references,
+    get references(): ReadonlyArray<WeakRef<IContent>> {
+      return references;
+    },
+    pruneCollected(): void {
+      references = references.filter(
+        (reference) => reference.deref() !== undefined,
+      );
+    },
     held,
     state: () => ({ pulled, closed }),
   };
@@ -268,6 +275,10 @@ function retryEndpoint(
       const staged = stagedRowWorkspaces();
       expect(staged).toHaveLength(0);
       snapshotSizes.push(directoryBytes(source.directory));
+      await settledHeap();
+      // Dead WeakRef handles belong to the census, not to the request. Keep
+      // every live handle so pruning cannot conceal a buffered source row.
+      source.pruneCollected();
       retainedBytes.push((await settledHeap()) - baselineHeap);
       liveRowBytes.push(
         source.references.reduce((sum, reference) => {
@@ -466,7 +477,12 @@ describe('bounded Responses text HTTP replay', () => {
       for (let upload = 0; upload < runs[0].retainedBytes.length; upload++)
         expect(
           median(runs.map((run) => run.retainedBytes[upload])),
-        ).toBeLessThan(UNRESOLVED_REPLAY_HEAP_BOUND);
+        ).toBeLessThan(
+          Math.min(
+            ORIGINAL_REPLAY_HEAP_BOUND,
+            ...runs.map((run) => run.allowance),
+          ),
+        );
     },
     120000,
   );
