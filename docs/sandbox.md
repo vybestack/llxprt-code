@@ -854,26 +854,56 @@ echo "$LLXPRT_CREDENTIAL_SOCKET"
 container, which gives you a separate process namespace, enforceable resource
 limits, and a credential proxy that keeps your stored secrets on the host.
 
-**Use Seatbelt only when containers are unavailable.** Seatbelt is a macOS-only
-fallback with a substantially weaker boundary: it provides no process isolation
-(the sandboxed process runs directly on your host), no resource limits (CPU,
-memory, and process count cannot be capped), and no credential isolation (the
-process runs against your full keyring and token store). Its only effective
-control is a write-path allow-list, backed by Apple's `sandbox-exec`, which is
-undocumented and informally deprecated since macOS 10.15.
+**Use Seatbelt only when containers are unavailable on macOS.** Seatbelt is a
+macOS-only fallback with a substantially weaker boundary: it provides no
+process isolation, resource limits, or credential isolation.
+
+Linux also supports the experimental `bwrap` engine. It runs host tools inside
+private user and PID namespaces, masks host home and runtime paths, and brokers
+credentials through the host credential proxy. The capability token travels
+through an inherited pipe file descriptor. It is absent from bwrap's options,
+argv, and environment, and from sandbox process environments. The CLI consumes
+the token from its descriptor at startup and marks itself non-dumpable. The
+token and any resolved credential then reside in the CLI process memory while
+used. The kernel blocks same-UID reads of that memory; code running inside the
+CLI process can still read it. Bwrap does not enforce CPU, memory, or
+process-count limits. It rejects profiles that request these limits, proxied
+networking, or nonempty
+`SANDBOX_FLAGS`. The host system root remains readable except for masked paths,
+so this engine does not promise confidentiality for secrets stored elsewhere
+on the host.
+
+The engine supports launches from a source checkout as well as the built CLI
+bundle. It grants the checkout's `packages` tree and root `node_modules`
+read-only so workspace package links resolve, while keeping the home directory
+masked.
+
+Signals reach a bwrap session the way [Stopping a sandboxed
+session](#stopping-a-sandboxed-session) describes, with one difference: the
+host also escalates. When the CLI is still running 10 seconds after SIGTERM or
+SIGHUP, the host kills the whole sandbox with SIGKILL and exits with status 137.
+SIGINT starts no timer, because the CLI handles it as a request to cancel the
+current work. SIGKILL sent to the host ends every process in the sandbox,
+because the sandbox's PID namespace ends with the host. Nothing from the sandbox
+outlives the host.
+
+Each bwrap launch keeps its credential proxy socket in a private directory
+named `llxprt-bwrap-<random>` under the temp directory. A host that dies from
+SIGKILL, an out-of-memory kill or a crash cannot remove it, so the next bwrap
+launch removes the directories whose owning process no longer exists and leaves
+those of running sessions alone.
 
 | Engine       | Platform     | Resource limits | Credential proxy | Network control              |
 | ------------ | ------------ | --------------- | ---------------- | ---------------------------- |
 | **Docker**   | macOS, Linux | Yes             | Yes              | Yes (network namespace)      |
 | **Podman**   | macOS, Linux | Yes             | Yes              | Yes (network namespace)      |
+| **bwrap**    | Linux        | No              | Yes              | On/off (network namespace)   |
 | **Seatbelt** | macOS only   | No              | No               | Yes (via macOS profile file) |
 
 When `--sandbox` is used without an explicit engine, LLxprt Code auto-detects an
-available runtime. When `LLXPRT_SANDBOX=true` is set in the environment and no
-engine is specified, the detection order on macOS is Seatbelt, then Docker, then
-Podman; on Linux it is Docker, then Podman. If you are on macOS and want the
-stronger container boundary, set `--sandbox-engine docker` (or `podman`)
-explicitly rather than relying on auto-detection, which prefers Seatbelt.
+available runtime. Docker and Podman retain priority; Linux selects bwrap only
+when neither container engine is available. macOS keeps its existing Seatbelt,
+Docker, then Podman order.
 
 ## Configuring sandboxing
 
@@ -884,11 +914,12 @@ llxprt --sandbox                              # Enable with auto-detected engine
 llxprt --sandbox-engine docker                # Force Docker
 llxprt --sandbox-engine podman                # Force Podman
 llxprt --sandbox-engine sandbox-exec          # Force Seatbelt (macOS only)
+llxprt --sandbox-engine bwrap                  # Force bwrap (Linux only)
 llxprt --sandbox-engine none                  # Explicitly disable
 llxprt --sandbox-profile-load <name>          # Load a profile
 ```
 
-`--sandbox-engine` accepts: `auto`, `docker`, `podman`, `sandbox-exec`, `none`.
+`--sandbox-engine` accepts: `auto`, `docker`, `podman`, `sandbox-exec`, `bwrap`, `none`.
 
 ### Environment variable
 
@@ -899,7 +930,7 @@ export LLXPRT_SANDBOX=false                   # Disable
 ```
 
 `LLXPRT_SANDBOX` accepts a boolean (`true`/`false`/`1`/`0`) or an engine name
-(`docker`, `podman`, `sandbox-exec`). When set to `true`, LLxprt Code
+(`docker`, `podman`, `sandbox-exec`, `bwrap`). When set to `true`, LLxprt Code
 auto-detects an available engine.
 
 `--sandbox-engine none` always wins, even when `LLXPRT_SANDBOX` is set.
@@ -928,9 +959,10 @@ flag, variable, or settings.
 
 Profiles are JSON files in your config directory under `sandboxes/` (see
 [Application Directories](./reference/application-directories.md)). They control
-engine, image, resources, networking, SSH agent, and extra mounts. Default
-profiles are created automatically the first time you use
-`--sandbox-profile-load`.
+engine, image, resources, networking, SSH agent, environment, and extra mounts.
+Default profiles are created automatically the first time you use
+`--sandbox-profile-load`. Built-in profiles request resource limits, so they
+cannot be used with bwrap. Create a bwrap-specific profile without `resources`.
 
 #### Built-in profiles
 
@@ -959,17 +991,17 @@ profiles are created automatically the first time you use
 }
 ```
 
-| Field              | Valid values                                       | Description                                                |
-| ------------------ | -------------------------------------------------- | ---------------------------------------------------------- |
-| `engine`           | `auto`, `docker`, `podman`, `sandbox-exec`, `none` | Container runtime                                          |
-| `image`            | string                                             | Container image (defaults to the release image)            |
-| `resources.cpus`   | number                                             | CPU core limit                                             |
-| `resources.memory` | string                                             | Memory limit (e.g., `4g`, `512m`)                          |
-| `resources.pids`   | number                                             | Max process count                                          |
-| `network`          | `on`, `off`, `proxied`                             | Sandbox network policy (see [Network](#network))           |
-| `sshAgent`         | `auto`, `on`, `off`                                | SSH agent forwarding into container                        |
-| `mounts`           | array                                              | Extra mounts (`{from, to?, mode?}`); mode defaults to `ro` |
-| `env`              | object                                             | Additional environment variables                           |
+| Field              | Valid values                                                | Description                                                |
+| ------------------ | ----------------------------------------------------------- | ---------------------------------------------------------- |
+| `engine`           | `auto`, `docker`, `podman`, `sandbox-exec`, `bwrap`, `none` | Container or host-tool sandbox engine                      |
+| `image`            | string                                                      | Container image (defaults to the release image)            |
+| `resources.cpus`   | number                                                      | CPU core limit                                             |
+| `resources.memory` | string                                                      | Memory limit (e.g., `4g`, `512m`)                          |
+| `resources.pids`   | number                                                      | Max process count                                          |
+| `network`          | `on`, `off`, `proxied`                                      | Sandbox network policy (see [Network](#network))           |
+| `sshAgent`         | `auto`, `on`, `off`                                         | SSH agent forwarding into container                        |
+| `mounts`           | array                                                       | Extra mounts (`{from, to?, mode?}`); mode defaults to `ro` |
+| `env`              | object                                                      | Additional environment variables                           |
 
 > **Note:** `network: proxied` requires `LLXPRT_SANDBOX_PROXY_COMMAND`. Without
 > it, startup fails rather than silently using open networking.
