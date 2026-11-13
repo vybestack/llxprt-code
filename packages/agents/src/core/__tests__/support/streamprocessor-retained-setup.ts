@@ -5,10 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import {
   diskTextRow,
   type DiskTextTail,
+  type DistributedTextRows,
 } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import {
   projectionEndpoint,
@@ -18,7 +20,6 @@ import {
   processorFixture,
   sourcePending,
   sourceWireOracle,
-  largestSourceRowBytes,
 } from './streamprocessor-source-fixture.js';
 import { warmSourceProcessor } from './streamprocessor-source-measurements.js';
 import {
@@ -40,14 +41,18 @@ function observePreparation(
     census.observe('provider.release-closure', result.releaseIfUnsent);
     return result;
   };
-  const enforceSource = setup.compression.enforceProviderSource;
-  setup.compression.enforceProviderSource = ((
-    ...args: Parameters<typeof enforceSource>
-  ) => {
+  const enforceSource = setup.compression.enforceProviderSource.bind(
+    setup.compression,
+  );
+  setup.compression.enforceProviderSource = <
+    S extends ProviderRequestSelection,
+  >(
+    ...args: Parameters<typeof enforceSource<S>>
+  ): Promise<S> => {
     census.observe('compression.estimate-closure', args[3]);
     census.cleanup.enforcementAttempts++;
-    return enforceSource.apply(setup.compression, args);
-  }) as typeof enforceSource;
+    return enforceSource<S>(...args);
+  };
   const clearCallback = setup.compression.clearProviderCompressionCallback;
   setup.compression.clearProviderCompressionCallback = (provider) => {
     census.cleanup.callbackClearAttempts++;
@@ -58,7 +63,7 @@ function observePreparation(
 async function nativeOracle(
   setup: Awaited<ReturnType<typeof processorFixture>>,
   count: number,
-  large: DiskTextTail,
+  large: DiskTextTail | DistributedTextRows,
 ) {
   const projected = await setup.provider.projectPromptEnvelope({
     contents: callerOwnedRawProviderSource([
@@ -91,12 +96,14 @@ export interface RetainedSetup {
   readonly oracle: Awaited<ReturnType<typeof nativeOracle>>;
   readonly expected: { bytes: number; sha256: string };
   readonly largestRowBytes: number;
+  readonly largestRowTokens: number;
+  readonly contextLimit: number;
   readonly observer: ReturnType<typeof observeRetainedBody>;
   readonly pending: IContent | IContent[];
 }
 
 export async function retainedSetup(
-  large: DiskTextTail = false,
+  large: DiskTextTail | DistributedTextRows = false,
 ): Promise<RetainedSetup> {
   const root = mkdtempSync(join(tmpdir(), 'streamprocessor-retained-'));
   const count = 64;
@@ -109,9 +116,6 @@ export async function retainedSetup(
     large,
     count,
   );
-  // This census sends an 8 MiB mixed-text row without compression. Its native
-  // prompt exceeds the shared fixture's 1M-token compression-test capacity.
-  setup.settings.set('context-limit', 4_000_000);
   const restoreOwners = observeSourceOwners(census, (row) => {
     setup.history.references.push(new WeakRef(row));
     if (setup.history.retainRows) setup.history.retained.push(row);
@@ -120,7 +124,30 @@ export async function retainedSetup(
   const restoreLogging = observeRetainedLogging(setup.runtime, census);
   const oracle = await nativeOracle(setup, count, large);
   const expected = sourceWireOracle(large);
-  const largestRowBytes = largestSourceRowBytes(large);
+  const tokenizer = setup.nativeFactory.getTokenizer(
+    'openai-responses',
+    'gpt-5.6',
+  );
+  if (tokenizer === undefined) throw new Error('Missing route tokenizer');
+  let largestRowBytes = 0;
+  let largestRowTokens = 0;
+  for (let index = 0; index < count; index++) {
+    const row = diskTextRow(index, large);
+    largestRowBytes = Math.max(
+      largestRowBytes,
+      Buffer.byteLength(JSON.stringify(row)),
+    );
+    const text = row.blocks
+      .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+      .join(row.speaker === 'human' ? '\n' : '');
+    largestRowTokens = Math.max(
+      largestRowTokens,
+      await tokenizer.countTokens(text),
+    );
+  }
+  const contextLimit = setup.runtime.ephemerals.contextLimit();
+  if (oracle.estimatedPromptTokens >= contextLimit)
+    throw new Error('Census fixture exceeds the real model window');
   const observer = observeRetainedBody(census);
   const pending: IContent | IContent[] = sourcePending;
   return {
@@ -134,6 +161,8 @@ export async function retainedSetup(
     oracle,
     expected,
     largestRowBytes,
+    largestRowTokens,
+    contextLimit,
     observer,
     pending,
   };

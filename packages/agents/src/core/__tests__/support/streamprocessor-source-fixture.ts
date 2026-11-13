@@ -20,6 +20,7 @@ import { withGpt56DiskSources } from '@vybestack/llxprt-code-providers/tokenizer
 import {
   diskTextRow,
   type DiskTextTail,
+  type DistributedTextRows,
 } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { projectionInstructions } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -94,7 +95,7 @@ export class ObservedResponsesProvider extends OpenAIResponsesProvider {
 export async function processorFixture(
   root: string,
   baseURL: string,
-  large: DiskTextTail = false,
+  large: DiskTextTail | DistributedTextRows = false,
   count = 64,
   telemetry: TelemetrySettings = { enabled: true, logPrompts: false },
   historicalPaddingChars = 0,
@@ -249,7 +250,7 @@ export function largestSourceRowBytes(large: DiskTextTail): number {
 }
 
 export function sourceWireOracle(
-  large: DiskTextTail,
+  large: DiskTextTail | DistributedTextRows,
   pending: IContent = sourcePending,
 ): {
   bytes: number;

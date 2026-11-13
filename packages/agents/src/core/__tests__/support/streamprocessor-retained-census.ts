@@ -17,6 +17,10 @@ export class RetainedOwnerCensus {
     string,
     { seen: WeakSet<object>; refs: Array<WeakRef<object>> }
   >();
+  private readonly blockCharges: Array<{
+    readonly ref: WeakRef<object>;
+    readonly bytes: number;
+  }> = [];
   readonly trap: object[] = [];
   rowRetention: RowRetention = 'none';
   readonly bodyShells: object[] = [];
@@ -43,7 +47,21 @@ export class RetainedOwnerCensus {
     }
     if (cohort.seen.has(value)) return;
     cohort.seen.add(value);
-    cohort.refs.push(new WeakRef(value));
+    const ref = new WeakRef(value);
+    cohort.refs.push(ref);
+    if (category === 'native.row.block')
+      this.blockCharges.push({
+        ref,
+        bytes: Buffer.byteLength(JSON.stringify(value)),
+      });
+  }
+
+  liveBlockBytes(): number {
+    return this.blockCharges.reduce(
+      (bytes, charge) =>
+        bytes + (charge.ref.deref() === undefined ? 0 : charge.bytes),
+      0,
+    );
   }
 
   row(category: string, row: IContent): void {
@@ -112,6 +130,7 @@ export async function retainedCheckpoint(census: RetainedOwnerCensus) {
       objectTypeCounts: stats.objectTypeCounts,
     },
     survivors: census.survivors(),
+    liveBlockBytes: census.liveBlockBytes(),
   };
 }
 

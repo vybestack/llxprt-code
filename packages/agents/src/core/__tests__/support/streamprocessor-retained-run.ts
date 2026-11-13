@@ -1,7 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { existsSync, rmSync } from 'node:fs';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
-import type { DiskTextTail } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
+import type {
+  DiskTextTail,
+  DistributedTextRows,
+} from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import {
   retainedCheckpoint,
   type RowRetention,
@@ -86,6 +89,8 @@ function requestFacts(input: RetainedSetup) {
     bodies: input.http.bodies,
     expected: input.expected,
     largestRowBytes: input.largestRowBytes,
+    largestRowTokens: input.largestRowTokens,
+    contextLimit: input.contextLimit,
     activeBodies: activeRequestBodyCount(setup.provider.requestBodyCensus),
     demand: input.observer.state,
     requests: setup.requests,
@@ -100,7 +105,7 @@ function requestFacts(input: RetainedSetup) {
  */
 export async function runRetainedCensus(
   retention: RowRetention = 'none',
-  tail: DiskTextTail = false,
+  tail: DiskTextTail | DistributedTextRows = false,
 ) {
   await runCensusOnce('none', tail);
   return runCensusOnce(retention, tail);
@@ -114,8 +119,8 @@ export async function runRetainedCensus(
  */
 export async function runRetainedScaling(
   retention: RowRetention,
-  small: DiskTextTail,
-  large: DiskTextTail,
+  small: DiskTextTail | DistributedTextRows,
+  large: DiskTextTail | DistributedTextRows,
 ) {
   await runCensusOnce('none', large);
   return {
@@ -124,7 +129,10 @@ export async function runRetainedScaling(
   };
 }
 
-async function runCensusOnce(retention: RowRetention, tail: DiskTextTail) {
+async function runCensusOnce(
+  retention: RowRetention,
+  tail: DiskTextTail | DistributedTextRows,
+) {
   const input = await retainedSetup(tail);
   input.census.rowRetention = retention;
   try {
