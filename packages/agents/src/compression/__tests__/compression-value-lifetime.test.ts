@@ -2,6 +2,7 @@ import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__te
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createRequire } from 'node:module';
+import { appendFileSync } from 'node:fs';
 import { setImmediate } from 'node:timers/promises';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompressionInputSnapshot } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
@@ -27,12 +28,15 @@ const { gcAndSweep }: { gcAndSweep: () => void } = createRequire(
 class ObservedValueHistory extends ValueCompressionHistory {
   readonly sourceRows: Array<WeakRef<IContent>> = [];
   readonly submittedRows: Array<WeakRef<IContent>> = [];
+  readonly held: IContent[] = [];
+  retain = false;
   override async openCompressionInput(): Promise<CompressionInputSnapshot> {
     const input = await super.openCompressionInput();
     const weak = this.sourceRows;
     const readRow = async (index: number): Promise<IContent> => {
       const row = await input.rows.readRow(index);
       weak.push(new WeakRef(row));
+      if (this.retain) this.held.push(row);
       return row;
     };
     return {
@@ -84,6 +88,7 @@ async function suspendPublication(history: ObservedValueHistory): Promise<{
   history.detachedValues.transform = (candidate, model, options) => {
     const observe = (row: IContent): void => {
       history.submittedRows.push(new WeakRef(row));
+      if (history.retain) history.held.push(row);
     };
     return transform(
       (source, sink) =>
@@ -159,8 +164,49 @@ async function exercise(
     );
     expect(history.getCacheAnchorSeq()).toBe(1);
     expect(history.sourceRows.length).toBeGreaterThanOrEqual(size);
-    expect(await weakAlive(history.sourceRows)).toBeLessThanOrEqual(1);
-    expect(await weakAlive(history.submittedRows)).toBeLessThanOrEqual(1);
+    const sourceLiveRows = await weakAlive(history.sourceRows);
+    const submittedLiveRows = await weakAlive(history.submittedRows);
+    const liveBytes = (references: ReadonlyArray<WeakRef<IContent>>): number =>
+      references.reduce((sum, reference) => {
+        const row = reference.deref();
+        return (
+          sum + (row === undefined ? 0 : Buffer.byteLength(JSON.stringify(row)))
+        );
+      }, 0);
+    let largestRowBytes = 0;
+    let payloadBytes = 0;
+    for (let index = 0; index < size; index++) {
+      const rowBytes = Buffer.byteLength(
+        JSON.stringify(middleoutRow(index, index === 0 ? bytes : 2048)),
+      );
+      largestRowBytes = Math.max(largestRowBytes, rowBytes);
+      payloadBytes += rowBytes;
+    }
+    // Exact JSON ownership charge has zero heap overhead. A second row's
+    // worth covers publication metadata while the original one-object cap stays.
+    const allowance = 2 * largestRowBytes;
+    const sourceLiveBytes = liveBytes(history.sourceRows);
+    const submittedLiveBytes = liveBytes(history.submittedRows);
+    if (history.retain) {
+      expect(sourceLiveRows).toBeGreaterThan(3);
+      expect(submittedLiveRows).toBeGreaterThan(3);
+      expect(sourceLiveBytes).toBeGreaterThan(3 * allowance);
+      expect(submittedLiveBytes).toBeGreaterThan(3 * allowance);
+    } else {
+      expect(sourceLiveRows).toBeLessThanOrEqual(1);
+      expect(submittedLiveRows).toBeLessThanOrEqual(1);
+      expect(sourceLiveBytes).toBeLessThanOrEqual(allowance);
+      expect(submittedLiveBytes).toBeLessThanOrEqual(allowance);
+    }
+    if (bytes === 2048)
+      expect(payloadBytes).toBeGreaterThanOrEqual(4 * allowance);
+    const evidence = process.env['H3_ALLOWANCE_EVIDENCE'];
+    if (evidence !== undefined)
+      appendFileSync(
+        evidence,
+        `${JSON.stringify({ suite: 'compression-lifetime', size, bytes, retain: history.retain, payloadBytes, largestRowBytes, allowance, sourceLiveRows, submittedLiveRows, sourceLiveBytes, submittedLiveBytes })}
+`,
+      );
     expect(suspension.state.published).toBe(history.submittedRows.length);
     const boundedSmallRows =
       bytes !== 2048 ||
@@ -188,12 +234,17 @@ async function exercise(
   expect(history.getCacheAnchorSeq()).toBe(anchor);
   return suspension.state.published;
 }
-function lifetime(size: number, bytes: number): Promise<number> {
+function lifetime(
+  size: number,
+  bytes: number,
+  retain = false,
+): Promise<number> {
   return withCompressionValueRecorder(
     size,
     async ({ history, owners, root }) => {
       if (!(history instanceof ObservedValueHistory))
         throw new Error('Wrong history');
+      history.retain = retain;
       const media = new LocalMediaStore({
         rootDirectory: join(root, 'media'),
         quotaBytes: 1024,
@@ -220,6 +271,9 @@ describe('production compression value source and publication lifetime', () => {
     },
     180_000,
   );
+  it('control: retained source and submitted rows exceed three times the same byte allowance', async () => {
+    expect(await lifetime(65, 2048, true)).toBeGreaterThan(0);
+  }, 180_000);
   it('keeps a valid complete 128-KiB row through acknowledged failure, rollback and real caller retry', async () => {
     expect(await lifetime(16, 128 * 1024)).toBeGreaterThan(0);
   }, 180_000);

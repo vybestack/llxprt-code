@@ -19,6 +19,14 @@ import {
  */
 export type DiskTextTail = boolean | number | MixedTextTail;
 
+export interface DistributedTextRows {
+  readonly rowCodeUnits: number;
+}
+export type DiskTextShape = boolean | DistributedTextRows;
+export const distributedTextRows: DistributedTextRows = {
+  rowCodeUnits: 45_056,
+};
+
 /** `mixedChunks` 64 KiB pieces of the same deterministic mixed text. */
 export interface MixedTextTail {
   readonly mixedChunks: number;
@@ -99,11 +107,23 @@ function tailText(large: DiskTextTail): string {
   return mixedTail(largeChunkCount);
 }
 
-export function diskTextRow(index: number, large: DiskTextTail): IContent {
+function diskRowTail(
+  index: number,
+  shape: DiskTextTail | DistributedTextRows,
+): string {
+  if (typeof shape === 'object' && 'rowCodeUnits' in shape)
+    return mixedChunk(index % 8).slice(0, shape.rowCodeUnits);
   const hasTail =
-    typeof large === 'object'
-      ? large.mixedChunks > 0
-      : large !== false && large !== 0;
+    typeof shape === 'object'
+      ? shape.mixedChunks > 0
+      : shape !== false && shape !== 0;
+  return hasTail && index === 63 ? tailText(shape) : 'tail';
+}
+
+export function diskTextRow(
+  index: number,
+  large: DiskTextTail | DistributedTextRows,
+): IContent {
   return {
     speaker: index % 2 === 0 ? 'human' : 'ai',
     blocks: [
@@ -113,14 +133,14 @@ export function diskTextRow(index: number, large: DiskTextTail): IContent {
       },
       {
         type: 'text',
-        text: hasTail && index === 63 ? tailText(large) : 'tail',
+        text: diskRowTail(index, large),
       },
     ],
   };
 }
 
 export function diskTextFixture(
-  large: boolean,
+  large: DiskTextShape,
   retain: boolean,
 ): ProjectionDiskFixture {
   const root = mkdtempSync(join(tmpdir(), 'disk-text-route-'));
@@ -177,7 +197,7 @@ export function diskTextFixture(
   };
 }
 
-export function diskTextWireOracle(large: boolean): {
+export function diskTextWireOracle(large: DiskTextShape): {
   bytes: number;
   sha256: string;
 } {

@@ -5,6 +5,7 @@ import {
   settledHeap,
 } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { spawnSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import {
   estimatePromptEnvelope,
@@ -22,6 +23,8 @@ import {
   diskTextFixture,
   diskTextRow,
   diskTextWireOracle,
+  distributedTextRows,
+  type DiskTextShape,
 } from './__tests__/support/disk-text-fixture.js';
 import {
   projectionEndpoint,
@@ -32,8 +35,8 @@ import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 
 type Setup = Awaited<ReturnType<typeof projectionRuntime>>;
 type BodyObservation = ReturnType<typeof observeDiskBody>;
-// The median of three settled readings keeps allocator jitter of a few
-// hundred KiB, which is unrelated to what is retained, out of the 1 MiB gate.
+// The median of three settled readings separates allocator jitter from
+// retention that persists throughout the measured lifecycle.
 async function heap(): Promise<number> {
   return median([
     await settledHeap(),
@@ -41,7 +44,18 @@ async function heap(): Promise<number> {
     await settledHeap(),
   ]);
 }
-const HEAP_GATE_BYTES = 1024 * 1024;
+const ORIGINAL_HEAP_GATE_BYTES = 1024 * 1024;
+// Largest checkpoint in two smallest-fixture lifecycle measurements.
+const DISK_TEXT_FIXED_OVERHEAD_BYTES = 542_628;
+// One decoded UTF-16 row, its serialized representation and a transport chunk.
+const DISK_TEXT_ENCODING_FACTOR = 4;
+function heapAllowance(largestRowBytes: number): number {
+  return Math.min(
+    ORIGINAL_HEAP_GATE_BYTES,
+    DISK_TEXT_FIXED_OVERHEAD_BYTES +
+      DISK_TEXT_ENCODING_FACTOR * largestRowBytes,
+  );
+}
 const MEASURED_RUNS = 3;
 function gateDelta(facts: Awaited<ReturnType<typeof acceptance>>): number {
   return (
@@ -57,7 +71,7 @@ function gateDelta(facts: Awaited<ReturnType<typeof acceptance>>): number {
 }
 async function nativeEstimate(
   setup: Setup,
-  large: boolean,
+  large: DiskTextShape,
 ): Promise<PromptEnvelopeEstimate> {
   const rows = {
     count: 64,
@@ -203,21 +217,23 @@ async function uploadMeasurements(
   };
 }
 
-function largestRowSize(large: boolean): number {
-  return diskTextRow(63, large).blocks.reduce(
-    (sum, block) =>
-      sum + (block.type === 'text' ? Buffer.byteLength(block.text) : 0),
-    0,
-  );
+function largestRowSize(large: DiskTextShape): number {
+  let largest = 0;
+  for (let index = 0; index < 64; index++)
+    largest = Math.max(
+      largest,
+      Buffer.byteLength(JSON.stringify(diskTextRow(index, large))),
+    );
+  return largest;
 }
 function requireSource(value: unknown): NativeResponsesEstimateProjection {
   if (!(value instanceof NativeResponsesEstimateProjection))
     throw new Error('Missing actual provider source projection');
   return value;
 }
-async function acceptance(large: boolean, retainRows = false) {
-  const disk = diskTextFixture(large, retainRows);
-  const native = await nativeDiskRows(disk, retainRows);
+async function acceptance(large: DiskTextShape, retainRows = false) {
+  const disk = diskTextFixture(large, false);
+  const native = await nativeDiskRows(disk);
   const http = projectionEndpoint(true);
   const setup = await projectionRuntime(
     `http://127.0.0.1:${http.server.port}/v1`,
@@ -228,6 +244,9 @@ async function acceptance(large: boolean, retainRows = false) {
   const largestRowBytes = largestRowSize(large);
   await warmRuntime(setup);
   const baseline = await heap();
+  if (retainRows)
+    for (let index = 0; index < disk.rows.count; index++)
+      disk.retained.push(await disk.rows.readAt(index));
   const options = setup.options(native.selection);
   const projection = await projectSourcePrompt(setup.provider, options);
   requireSource(projection.finalizedProjection);
@@ -292,7 +311,7 @@ async function acceptance(large: boolean, retainRows = false) {
 
 function assertOwners(facts: Awaited<ReturnType<typeof acceptance>>): void {
   expect(facts.estimate).toStrictEqual(facts.oracle);
-  expect(facts.estimate.estimatedPromptTokens).toBeLessThan(1_000_000);
+  expect(facts.estimate.estimatedPromptTokens + 1024).toBeLessThan(1_000_000);
   expect(facts.bodies).toStrictEqual([facts.expected, facts.expected]);
   expect(facts.preparedScan).toBe(64);
   expect(facts.finalScan).toBe(64);
@@ -308,21 +327,31 @@ function assertOwners(facts: Awaited<ReturnType<typeof acceptance>>): void {
 }
 // One unmeasured full-size run takes the one-time state of this exact path
 // (code blocks, encoder and WASM growth) before three measured runs. Owner
-// facts must hold in every run; the 1 MiB heap gate applies to the median of
+// facts must hold in every run; the fixture-derived heap gate applies to the median of
 // the measured runs, so a single noisy checkpoint cannot decide it while
 // retention that exists in every run still does.
-async function measuredAcceptance(large: boolean, retainRows = false) {
+async function measuredAcceptance(large: DiskTextShape, retainRows = false) {
   await acceptance(large, retainRows);
   const runs: Array<Awaited<ReturnType<typeof acceptance>>> = [];
   for (let run = 0; run < MEASURED_RUNS; run++)
     runs.push(await acceptance(large, retainRows));
-  return { runs, gate: median(runs.map(gateDelta)) };
+  const measured = { runs, gate: median(runs.map(gateDelta)) };
+  const evidence = process.env['H3_ALLOWANCE_EVIDENCE'];
+  if (evidence !== undefined)
+    appendFileSync(
+      evidence,
+      `${JSON.stringify({ suite: 'disk-text', large, retainRows, gate: measured.gate, checkpoints: runs.map(gateDelta), largestRowBytes: runs[0].largestRowBytes, payloadBytes: runs[0].expected.bytes, tokens: runs[0].estimate.estimatedPromptTokens })}
+`,
+    );
+  return measured;
 }
 function assertAcceptance(
   measured: Awaited<ReturnType<typeof measuredAcceptance>>,
 ): void {
   for (const facts of measured.runs) assertOwners(facts);
-  expect(measured.gate).toBeLessThanOrEqual(HEAP_GATE_BYTES);
+  expect(measured.gate).toBeLessThanOrEqual(
+    heapAllowance(measured.runs[0].largestRowBytes),
+  );
 }
 describe('actual stateless disk provider ownership acceptance', () => {
   it.each([false, true])(
@@ -337,10 +366,23 @@ describe('actual stateless disk provider ownership acceptance', () => {
     },
     600000,
   );
+  it('bounds a model-window request distributed over realistic rows', async () => {
+    const measured = await measuredAcceptance(distributedTextRows);
+    expect(measured.runs[0].expected.bytes).toBeGreaterThanOrEqual(
+      4 * heapAllowance(measured.runs[0].largestRowBytes),
+    );
+    assertAcceptance(measured);
+  }, 600000);
   it('trap: rows deliberately held by the test fail the live-row gate', async () => {
-    const measured = await measuredAcceptance(false, true);
+    const measured = await measuredAcceptance(distributedTextRows, true);
     expect(() => assertAcceptance(measured)).toThrow('expect(received)');
-    for (const facts of measured.runs)
+    for (const facts of measured.runs) {
       expect(facts.livePreparedRows).toBeGreaterThan(0);
+      expect(facts.bodies).toStrictEqual([facts.expected, facts.expected]);
+      expect(facts.estimate).toStrictEqual(facts.oracle);
+    }
+    expect(measured.gate).toBeGreaterThan(
+      3 * heapAllowance(measured.runs[0].largestRowBytes),
+    );
   }, 600000);
 });

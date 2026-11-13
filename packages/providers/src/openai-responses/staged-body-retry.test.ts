@@ -455,17 +455,21 @@ describe('bounded Responses text HTTP replay', () => {
       ) + 1024,
     ).toBeLessThan(1_000_000);
   });
-  it('retries byte-identical text BODY from the admitted source without retaining uploaded rows', async () => {
-    // One unmeasured full-size replay takes the one-time state of this path;
-    // The measured one-row formula remains an unresolved retention finding.
-    await replayScenario();
-    const runs = [];
-    for (let run = 0; run < 3; run++) runs.push(await replayScenario());
-    for (let upload = 0; upload < runs[0].retainedBytes.length; upload++)
-      expect(median(runs.map((run) => run.retainedBytes[upload]))).toBeLessThan(
-        UNRESOLVED_REPLAY_HEAP_BOUND,
-      );
-  }, 120000);
+  it.each([REPLAY_ROW_COUNT / 4, REPLAY_ROW_COUNT])(
+    'retries byte-identical text BODY from %i admitted rows without retaining uploaded rows',
+    async (rows) => {
+      // Compare two corpus sizes against the same one-row calibration so
+      // per-row fixture or production retention cannot become fixed overhead.
+      await replayScenario(rows);
+      const runs = [];
+      for (let run = 0; run < 3; run++) runs.push(await replayScenario(rows));
+      for (let upload = 0; upload < runs[0].retainedBytes.length; upload++)
+        expect(
+          median(runs.map((run) => run.retainedBytes[upload])),
+        ).toBeLessThan(UNRESOLVED_REPLAY_HEAP_BOUND);
+    },
+    120000,
+  );
 });
 
 describe('bounded Responses text HTTP cancellation', () => {

@@ -4,7 +4,7 @@ import {
   median,
   settledHeap,
 } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
-import { readdirSync } from 'node:fs';
+import { appendFileSync, readdirSync } from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   estimatePromptEnvelope,
@@ -60,6 +60,9 @@ interface ProjectionFacts {
   readonly sourceRowsRead: number;
   readonly retainedRows: number;
   readonly sourceLiveRows: number;
+  readonly sourceLiveBytes: number;
+  readonly largestRowBytes: number;
+  readonly payloadBytes: number;
 }
 
 // Median of three settled readings: allocator jitter of a few hundred KiB must
@@ -222,9 +225,27 @@ async function runProjectionScenario(
     expect(http.bodies).toStrictEqual([expected, expected]);
     expect(disk.state.active).toBe(0);
     expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
+    let largestRowBytes = 0;
+    let payloadBytes = 0;
+    for (let index = 0; index < rowCount; index++) {
+      const bytes = Buffer.byteLength(
+        JSON.stringify(diskTextRow(index, large)),
+      );
+      largestRowBytes = Math.max(largestRowBytes, bytes);
+      payloadBytes += bytes;
+    }
+    const sourceLiveBytes = disk.references.reduce((sum, reference) => {
+      const row = reference.deref();
+      return (
+        sum + (row === undefined ? 0 : Buffer.byteLength(JSON.stringify(row)))
+      );
+    }, 0);
     const facts = {
       large,
       retain,
+      largestRowBytes,
+      payloadBytes,
+      sourceLiveBytes,
       expected,
       estimate: prepared.estimate,
       preparedBytes,
@@ -238,6 +259,13 @@ async function runProjectionScenario(
         (reference) => reference.deref() !== undefined,
       ).length,
     };
+    const evidence = process.env['H3_ALLOWANCE_EVIDENCE'];
+    if (evidence !== undefined)
+      appendFileSync(
+        evidence,
+        `${JSON.stringify({ suite: 'projection-ownership', ...facts })}
+`,
+      );
     return facts;
   } finally {
     http.readBody.release();
@@ -318,6 +346,9 @@ describe('actual Responses projection disk ownership', () => {
       expect(facts.estimate.projectionRevision).toBe(4);
       expect(facts.estimate.unsupportedMedia).toStrictEqual([]);
       expect(facts.sourceLiveRows).toBe(0);
+      // Exact UTF-8 JSON ownership has zero non-payload overhead. Final-zero
+      // liveness stays stricter than the additional one-row byte allowance.
+      expect(facts.sourceLiveBytes).toBeLessThanOrEqual(facts.largestRowBytes);
       const distinctPrefixes = new Set<string>();
       for (let index = 0; index < rowCount; index++) {
         const block = diskTextRow(index, false).blocks[0];
@@ -383,5 +414,9 @@ describe('actual Responses projection disk ownership', () => {
     const facts = await runProjectionScenario(false, true);
     expect(facts.retainedRows).toBe(rowCount);
     expect(facts.sourceLiveRows).toBe(rowCount);
+    expect(facts.payloadBytes).toBeGreaterThanOrEqual(
+      4 * facts.largestRowBytes,
+    );
+    expect(facts.sourceLiveBytes).toBeGreaterThan(3 * facts.largestRowBytes);
   }, 120000);
 });
