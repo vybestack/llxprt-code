@@ -16,6 +16,7 @@ function fixture(
   core: string,
   files: Readonly<Record<string, string>> = {},
   paths: Readonly<Record<string, readonly string[]>> = {},
+  compilerOptions: Readonly<Record<string, string>> = {},
 ): string {
   const root = mkdtempSync(join(tmpdir(), 'agent-core-boundary-'));
   roots.push(root);
@@ -33,6 +34,7 @@ function fixture(
       compilerOptions: {
         baseUrl: '.',
         paths: { '@workspace/other/*': ['../other/src/*'], ...paths },
+        ...compilerOptions,
       },
     }),
   );
@@ -45,7 +47,7 @@ afterEach(() => {
 });
 
 describe('agent-core import boundary', () => {
-  it('rejects workspace dependencies through every TypeScript import form and transitive barrels', () => {
+  it('rejects each workspace dependency import form and transitive barrel independently', () => {
     const sources = {
       'packages/other/src/leaf.ts': 'export const value = 1;\n',
       'packages/other/src/barrel.ts': "export * from './leaf.js';\n",
@@ -69,12 +71,22 @@ describe('agent-core import boundary', () => {
 
     const violations = scanAgentCoreBoundary(root);
 
-    expect(violations.map((violation) => violation.kind)).toContain(
-      'workspace-import',
-    );
-    expect(
-      new Set(violations.map((violation) => violation.file)).size,
-    ).toBeGreaterThanOrEqual(7);
+    for (const { source, kind } of [
+      { source: 'direct.ts', kind: 'workspace-import' },
+      { source: 'relative.ts', kind: 'runtime-import' },
+      { source: 'alias.ts', kind: 'runtime-import' },
+      { source: 'barrel.ts', kind: 'runtime-import' },
+      { source: 'bridge.ts', kind: 'runtime-import' },
+      { source: 'type-only.ts', kind: 'workspace-import' },
+      { source: 'dynamic.ts', kind: 'workspace-import' },
+    ]) {
+      expect(
+        violations.some(
+          (entry) => entry.file.endsWith(source) && entry.kind === kind,
+        ),
+        `${source} should be rejected`,
+      ).toBe(true);
+    }
   });
 
   it('rejects direct and type-only imports of runtime I/O modules', () => {
@@ -282,11 +294,30 @@ describe('agent-core import boundary', () => {
     const root = fixture("export * from '../../../helpers/bridge.js';", {
       'helpers/bridge.ts': "export * from 'node:fs';",
     });
+
     expect(
       scanAgentCoreBoundary(root).some(
         (entry) => entry.kind === 'runtime-import',
       ),
     ).toBe(true);
+  });
+
+  it('accepts runtime local bindings and imports from an allowed module', () => {
+    const root = fixture(
+      "import { value as process } from 'zod'; function fetch(fetch: () => number): number { return fetch(); } class console {} const Date = 1; export const result = process + fetch() + new console() + Date;",
+      {
+        'node_modules/zod/package.json': JSON.stringify({
+          name: 'zod',
+          types: './pure.d.ts',
+          main: './pure.js',
+          exports: { '.': { types: './pure.d.ts', import: './pure.js' } },
+        }),
+        'node_modules/zod/pure.d.ts': 'export declare const value: number;',
+        'node_modules/zod/pure.js': 'export const value = 1;',
+      },
+    );
+
+    expect(scanAgentCoreBoundary(root)).toEqual([]);
   });
 
   it('checks the runtime export condition of the audited Zod entry point', () => {
@@ -304,6 +335,49 @@ describe('agent-core import boundary', () => {
       scanAgentCoreBoundary(root).some(
         (entry) => entry.kind === 'runtime-import',
       ),
+    ).toBe(true);
+  });
+
+  it('rejects runtime exports selected by import-equals from every Zod condition', () => {
+    const root = fixture(
+      "import z = require('zod'); export { z };",
+      {
+        'node_modules/zod/package.json': JSON.stringify({
+          name: 'zod',
+          type: 'module',
+          types: './pure.d.ts',
+          main: './pure.js',
+          exports: {
+            '.': {
+              types: './pure.d.ts',
+              import: './pure.js',
+              require: './io.cjs',
+            },
+          },
+        }),
+        'node_modules/zod/pure.d.ts': 'export declare const value: number;',
+        'node_modules/zod/pure.js': 'export const value = 1;',
+        'node_modules/zod/io.cjs': "module.exports = require('node:fs');",
+      },
+      {},
+      {},
+      { module: 'NodeNext', moduleResolution: 'NodeNext' },
+    );
+
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'runtime-import',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects ambient declarations that shadow runtime capabilities', () => {
+    const root = fixture(
+      'declare const process: { env: Record<string, string> }; export const env = process.env;',
+    );
+
+    expect(
+      scanAgentCoreBoundary(root).some((entry) => entry.kind === 'ambient-io'),
     ).toBe(true);
   });
 });

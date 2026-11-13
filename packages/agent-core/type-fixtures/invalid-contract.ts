@@ -3,7 +3,11 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { AfterTurnView, ProviderReplayData } from '../index.js';
+import type {
+  AfterTurnView,
+  ModelRecovery,
+  ProviderReplayData,
+} from '../index.js';
 
 const viewWithAgent: AfterTurnView = {
   result: {
@@ -22,7 +26,7 @@ const viewWithAgent: AfterTurnView = {
   continuationPass: 0,
   thinkingOnly: false,
   tools: [],
-  agent: {},
+  agent: {}, // @expect-agent-property
 };
 
 const replayWithExecutableData: ProviderReplayData = {
@@ -35,12 +39,11 @@ const replayWithExecutableData: ProviderReplayData = {
   },
   format: 'provider/v1',
   target: { kind: 'entry' },
-  data: () => null,
+  data: () => null, // @expect-replay-data
 };
 
 export { replayWithExecutableData, viewWithAgent };
 
-import type { AfterTurnView, ModelRecovery } from '../index.js';
 const viewWithCallback: AfterTurnView = {
   result: {
     outcome: 'done',
@@ -58,7 +61,7 @@ const viewWithCallback: AfterTurnView = {
   continuationPass: 0,
   thinkingOnly: false,
   tools: [],
-  callback: () => undefined,
+  callback: () => undefined, // @expect-callback-property
 };
 const recoveryWithExecutableData: ModelRecovery = {
   scope: {
@@ -69,6 +72,6 @@ const recoveryWithExecutableData: ModelRecovery = {
   },
   invalidates: [],
   format: 'provider/v1',
-  data: () => null,
+  data: () => null, // @expect-recovery-data
 };
 export { viewWithCallback, recoveryWithExecutableData };

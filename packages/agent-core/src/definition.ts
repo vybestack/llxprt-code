@@ -23,24 +23,30 @@ import type {
   UsageReport,
 } from './types.js';
 
-const CREDENTIAL_URL_PARAMETER_KEYS = new Set([
-  'access_token',
-  'api_key',
-  'api_secret',
-  'apikey',
-  'auth',
-  'authorization',
-  'bearer',
-  'client_secret',
-  'credential',
-  'credentials',
-  'key',
-  'password',
-  'private_key',
-  'refresh_token',
-  'secret',
-  'token',
-]);
+function normalizeCredentialParameterKey(key: string): string {
+  return key.toLowerCase().replaceAll(/[_-]/g, '');
+}
+
+const CREDENTIAL_URL_PARAMETER_KEYS = new Set(
+  [
+    'access_token',
+    'api_key',
+    'api_secret',
+    'apikey',
+    'auth',
+    'authorization',
+    'bearer',
+    'client_secret',
+    'credential',
+    'credentials',
+    'key',
+    'password',
+    'private_key',
+    'refresh_token',
+    'secret',
+    'token',
+  ].map(normalizeCredentialParameterKey),
+);
 
 function hasCredentialUrlParts(endpoint: string): boolean {
   if (!endpoint.includes('://')) return false;
@@ -55,7 +61,7 @@ function hasCredentialUrlParts(endpoint: string): boolean {
   const fragment = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
   for (const [key] of new URLSearchParams(fragment)) parameters.append(key, '');
   return [...parameters.keys()].some((key) =>
-    CREDENTIAL_URL_PARAMETER_KEYS.has(key.toLowerCase().replaceAll('-', '_')),
+    CREDENTIAL_URL_PARAMETER_KEYS.has(normalizeCredentialParameterKey(key)),
   );
 }
 
