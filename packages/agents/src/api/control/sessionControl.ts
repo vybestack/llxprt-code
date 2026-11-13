@@ -81,6 +81,7 @@ import {
   readRecordingState,
   readSessionInfo,
   resolveCheckpointTarget,
+  type SessionRecordingPaths,
 } from './sessionControlInfo.js';
 import {
   SessionRecordingLifetime,
@@ -117,13 +118,6 @@ function logger(): DebugLogger {
  * @requirement:REQ-010
  */
 
-export interface SessionRecordingPaths {
-  readonly storageRoot: string;
-  readonly projectTempDir: string;
-  readonly projectChatsDir: string;
-  readonly projectRoot: string;
-  readonly persistenceQueueBytes: number;
-}
 export class SessionControl implements AgentSessionControl {
   private readonly recordingLifetime: SessionRecordingLifetime;
   /**

@@ -83,17 +83,63 @@ describe('review reply parsing', () => {
 
   it('accepts a single fenced json block around the object', async () => {
     const window = await windowOf();
+    const explanation = 'insufficient_context: only a summary is shown.';
 
     const parsed = parseReviewReply(
-      '```json\n' +
-        reply({ verdict: 'no_change', explanation: 'Nothing to change.' }) +
-        '\n```',
+      '```json\n' + reply({ verdict: 'no_change', explanation }) + '\n```',
       window,
     );
 
     expect(parsed).toStrictEqual({
       ok: true,
-      decision: { kind: 'no_change', explanation: 'Nothing to change.' },
+      decision: { kind: 'no_change', explanation },
+    });
+  });
+
+  it('accepts no_change that declares insufficient context when entries are editable', async () => {
+    const window = await windowOf();
+    const explanation = 'insufficient_context: the window holds one summary.';
+
+    const parsed = parseReviewReply(
+      reply({ verdict: 'no_change', explanation }),
+      window,
+    );
+
+    expect(parsed).toStrictEqual({
+      ok: true,
+      decision: { kind: 'no_change', explanation },
+    });
+  });
+
+  it('rejects no_change that gives another reason while entries are editable', async () => {
+    const window = await windowOf();
+
+    const parsed = parseReviewReply(
+      reply({ verdict: 'no_change', explanation: 'Nothing to change.' }),
+      window,
+    );
+
+    expect(parsed).toStrictEqual({
+      ok: false,
+      reason: 'reviewer declined to rewrite',
+    });
+  });
+
+  it('accepts no_change with any explanation when no entry is editable', async () => {
+    const service = new HistoryService();
+    await service.addBatch([
+      { speaker: 'human', blocks: [{ type: 'text', text: 'the real goal' }] },
+    ]);
+    const window = buildReviewWindow(service.getAll());
+
+    const parsed = parseReviewReply(
+      reply({ verdict: 'no_change', explanation: 'Nothing editable.' }),
+      window,
+    );
+
+    expect(parsed).toStrictEqual({
+      ok: true,
+      decision: { kind: 'no_change', explanation: 'Nothing editable.' },
     });
   });
 

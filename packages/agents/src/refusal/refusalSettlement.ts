@@ -8,7 +8,14 @@ import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/co
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import { toRefusalAttempt } from './refusalDetection.js';
 import { recordRefusalInJournal } from './refusalJournal.js';
-import type { ModelRefusalSignal, RefusalRecovery } from './refusalTypes.js';
+import type {
+  ModelRefusalSignal,
+  RefusalAttempt,
+  RefusalRecovery,
+  ResolvedRefusalDecision,
+} from './refusalTypes.js';
+import type { PendingTurnContents } from './reviewTypes.js';
+import type { PendingEdit } from './reviewWindow.js';
 
 interface RefusalSettlementDeps {
   readonly recovery: RefusalRecovery;
@@ -16,6 +23,8 @@ interface RefusalSettlementDeps {
   readonly provider: () => string;
   readonly model: () => string;
   readonly execution: AgentChatRecordingExecution | undefined;
+  /** The user turn of the refused request, for a review that reads it. */
+  readonly pending: PendingTurnContents;
   readonly modelParameters: AdmittedModelParameters | undefined;
   readonly signal: AbortSignal | undefined;
 }
@@ -26,8 +35,16 @@ export type RefusalSettlement =
       readonly action: 'retry-same-request';
       readonly delayMs: number;
       readonly notice: string;
+      /** Set when a reviewer rewrote context: rebuild the resend. */
+      readonly rewrite?: { readonly pendingEdits: readonly PendingEdit[] };
     }
-  | { readonly action: 'stop'; readonly notice?: string };
+  | { readonly action: 'stop'; readonly notice?: string }
+  | {
+      /** A reviewer is about to be asked: show `notice`, then `complete`. */
+      readonly action: 'review';
+      readonly notice: string;
+      complete(): Promise<RefusalSettlement>;
+    };
 
 /**
  * Applies the recovery policy to a refused attempt and journals the decision.
@@ -51,21 +68,52 @@ export async function settleRefusal(
   try {
     decision = await deps.recovery.decide(refused, {
       execution: deps.execution,
+      pending: deps.pending,
       modelParameters: deps.modelParameters,
       signal: deps.signal,
     });
   } catch (error: unknown) {
-    // An abort during a review ends the request; no attempt will consume the
-    // prompt's pending token-usage state.
     deps.usageLogger?.finalizePrompt(promptId);
     throw error;
   }
+  if (decision.action === 'review') {
+    const { notice, complete } = decision;
+    return {
+      action: 'review',
+      notice,
+      complete: async () => {
+        try {
+          return await settleResolved(
+            deps,
+            refused,
+            promptId,
+            await complete(),
+          );
+        } catch (error: unknown) {
+          // An abort during a review ends the request; no attempt will
+          // consume the prompt's pending token-usage state.
+          deps.usageLogger?.finalizePrompt(promptId);
+          throw error;
+        }
+      },
+    };
+  }
+  return settleResolved(deps, refused, promptId, decision);
+}
+
+async function settleResolved(
+  deps: RefusalSettlementDeps,
+  refused: RefusalAttempt,
+  promptId: string,
+  decision: ResolvedRefusalDecision,
+): Promise<RefusalSettlement> {
   await recordRefusalInJournal(deps.execution, refused, decision.action);
   if (decision.action === 'retry') {
     return {
       action: 'retry-same-request',
       delayMs: decision.delayMs,
       notice: decision.notice,
+      ...(decision.rewrite !== undefined && { rewrite: decision.rewrite }),
     };
   }
   deps.usageLogger?.finalizePrompt(promptId);

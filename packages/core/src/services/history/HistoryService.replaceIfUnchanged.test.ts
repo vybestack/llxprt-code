@@ -257,4 +257,54 @@ describe('HistoryService.replaceIfUnchanged', () => {
       steps: [],
     });
   });
+
+  it('commits the prepared effect for a rewrite that changes no entry when asked to', async () => {
+    const history = await seeded([createUserMessage('goal'), ai('answer')]);
+    const before = history.getAll();
+    const steps: string[] = [];
+
+    const outcome = await history.replaceIfUnchanged({
+      expected: before,
+      commitUnchanged: true,
+      rewrite: (current) => current,
+      prepareEffect: (next) => {
+        steps.push(`prepare:${texts(next).join('|')}`);
+        return {
+          publish: () => {
+            steps.push('publish');
+          },
+          rollback: () => {
+            steps.push('rollback');
+          },
+          finalize: () => {
+            steps.push('finalize');
+          },
+        };
+      },
+    });
+
+    expect({
+      outcome,
+      steps,
+      same: history.getAll().every((entry, index) => entry === before[index]),
+    }).toStrictEqual({
+      outcome: 'applied',
+      steps: ['prepare:goal|answer', 'publish', 'finalize'],
+      same: true,
+    });
+  });
+
+  it('still refuses a rewrite that changes no entry when the history moved on', async () => {
+    const history = await seeded([createUserMessage('goal'), ai('answer')]);
+    const expected = history.getAll();
+    await history.addBatch([createUserMessage('appended meanwhile')]);
+
+    const outcome = await history.replaceIfUnchanged({
+      expected,
+      commitUnchanged: true,
+      rewrite: (current) => current,
+    });
+
+    expect(outcome).toBe('stale');
+  });
 });

@@ -47,6 +47,23 @@ function rejected(reason: string): ParsedReview {
   return { ok: false, reason };
 }
 
+const DECLINED_TO_REWRITE = 'reviewer declined to rewrite';
+const INSUFFICIENT_CONTEXT_PREFIX = 'insufficient_context:';
+
+/**
+ * The prompt reserves `no_change` for a window too thin to judge or one with
+ * nothing editable. Anything else is a reviewer that would not do the task.
+ */
+function declinesWithoutReason(
+  explanation: string,
+  window: ReviewWindow,
+): boolean {
+  return (
+    window.entries.some((entry) => entry.editable) &&
+    !explanation.startsWith(INSUFFICIENT_CONTEXT_PREFIX)
+  );
+}
+
 function checkRewrite(
   rewrite: ReviewRewrite,
   window: ReviewWindow,
@@ -116,6 +133,9 @@ export function parseReviewReply(
   if (verdict !== 'rewrite') {
     if (rewrites.length > 0) {
       return rejected('rewrites are only allowed with the rewrite verdict');
+    }
+    if (verdict === 'no_change' && declinesWithoutReason(explanation, window)) {
+      return rejected(DECLINED_TO_REWRITE);
     }
     return { ok: true, decision: { kind: verdict, explanation } };
   }

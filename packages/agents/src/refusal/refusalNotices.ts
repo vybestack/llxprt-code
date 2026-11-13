@@ -67,6 +67,15 @@ function preview(text: string): string {
     : firstLine;
 }
 
+/** Shown before the reviewer is called, since a review can take a while. */
+export function describeReviewStart(input: {
+  readonly model: string;
+  readonly refusals: number;
+  readonly reviewer: string;
+}): string {
+  return `Model ${input.model} refused ${input.refusals} time(s); asking ${input.reviewer} to review the recent context.`;
+}
+
 /** Shown when a reviewer rewrote context and the request is about to resend. */
 export function describeReviewRewrite(input: {
   readonly reviewer: string;

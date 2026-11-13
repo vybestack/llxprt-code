@@ -118,7 +118,7 @@ all get it:
    no recompression, no profile reselection.
 3. Retries exhausted, `refusal.rewrite` on and rewrites remaining: run review.
    - `disallowed`: stop. Show the reviewer's explanation. No rewrite, no retry.
-   - `no_change` (including `insufficient_context:`): stop with explanation.
+   - `no_change`: valid only when the context is insufficient (explanation starts with `insufficient_context:`) or no entry is editable; stop with the explanation. With editable entries any other `no_change` is an invalid reply (see round 1, M8).
    - `rewrite`: validate, apply, record, then resend the original model once
      with the rewritten history; that resend gets the same retry budget again
      only if `max-rewrites` allows another round.
@@ -725,3 +725,168 @@ foreground model's counts and records are unchanged.
 - The reviewer prompt is untuned against live models; the tests script the
   reviewer. Tune against real refusals before trusting it.
 - Non-streaming `TurnProcessor.sendMessage` still has no refusal recovery.
+
+## Review round 1 remediation
+
+Each finding was reproduced with a failing behavioral test before the fix
+(public `agent.stream()` over the real OpenAI and Anthropic providers against
+local protocol endpoints that record wire requests, plus unit tests with real
+collaborators where the behavior is a pure contract). Red and green runs are
+noted per finding.
+
+### H1 Reviewer route and parameters (valid, fixed)
+
+- Cause: `refusalReviewer.ts` passed the refused request's admitted
+  `modelParameters` to `buildCompressionChatOptions` even for a named profile,
+  so a cross-provider reviewer threw `Admitted model parameters belong to
+  anthropic, not openai`, and a same-provider one sent the foreground
+  parameters (`top_p 0.2`) instead of its profile's (`0.7`).
+- Fix: the foreground admission is reused only when no profile resolves (the
+  session-model fallback); a profile gets the isolated invocation the shared
+  resolver built, as compression with an explicit profile does
+  (`compressionContextBuilder.ts`, `modelParameters` dropped when
+  `compressionProfile()` is set).
+- Evidence: `refusalReviewRoute.behavior.test.ts` (6 tests; 3 red before the
+  fix): cross-provider Anthropic foreground to OpenAI reviewer works; a
+  same-provider reviewer profile's model and `top_p` appear on the reviewer wire
+  request while the foreground keeps its own; the no-profile fallback sends the
+  foreground route.
+
+### H2 Pending user turn in the review (valid, fixed)
+
+- Cause: the window was cut from committed history only. A first prompt or the
+  results of the tools the model just ran are committed after the model
+  answers, so the reviewer never saw the goal or the newest tool output.
+- Fix: `ReviewRequest.pending` carries the `PreparedUserTurn` contents.
+  `buildReviewWindow(history, pending)` adds its entries (ids `p<n>.<block>`):
+  human text is context only and sets `latestUserGoal`, tool-result text is
+  editable. A rewrite of a pending entry does not touch history; it is returned
+  as `pendingEdits`. `turnForNextAttempt` applies the edits to a copy of the
+  turn (media admission lifecycle unchanged), the resend is rebuilt from it, and
+  the rewritten turn is what commits on success. The `refusal_rewrite` record is
+  still written with the original and new text, as one unit with the history
+  check (`replaceIfUnchanged({ commitUnchanged })` commits the journal effect
+  when only pending text changed).
+- Evidence: `refusalReviewPending.behavior.test.ts` (7 tests, all red before):
+  first-prompt review sees the goal and the non-editable user entry; a
+  tool-continuation review sees and rewrites the pending tool result of a real
+  `read_file` call, the next wire request carries the rewritten text and not the
+  original, history holds the rewritten tool result, the journal keeps the
+  original, and replay restores the rewritten result. `HistoryService.replaceIfUnchanged`
+  tests cover `commitUnchanged`.
+
+### H3 Protected literals (valid, fixed)
+
+- Cause: containment by substring. `42` passed inside `142`, `src/core/a.ts`
+  inside `src/core/a.ts.bak`.
+- Fix: literals are extracted from both texts with the same boundary-anchored
+  patterns and compared as whole tokens. Paths cannot start inside a longer
+  path, numbers cannot start or end inside a word, a sign belongs to a number
+  only at a token start (`3-5` is two numbers), and `5 ms` equals `5ms`.
+  Semantics are set containment of distinct tokens: a rewrite may merge a
+  repeated mention, but may not lose, extend or alter a literal. (The request
+  said multiset; counting repeated mentions would reject legitimate merges, so
+  distinct tokens were kept.)
+- Evidence: `protectedLiterals.test.ts` red for 7 corruption cases (leading
+  digit, path suffix, parent directory, hash digit, url query, version segment,
+  identifier segment); green with a no-false-positive test on a 4.7 KB excerpt of
+  a real observer summary (`refusal/fixtures/classifier-summary-excerpt.txt`,
+  public repo text, no secrets) reworded in plain language, and the same text
+  with `#3998` changed is rejected.
+
+### H4 Journal append as the commit point (valid, fixed)
+
+- Cause: `RecordingIntegration` finalized the persistence transaction (rename
+  of the session file, media commit) in the same finalizer as the journal
+  append. When the journal could not take the record, live history was
+  restored but the persisted session stayed rewritten, and
+  `finalizeMutationEffects` kept running later finalizers after one failed.
+- Fix: the durable journal append (`recording.finalize`) is the single commit
+  point. Persistence is published reversibly before it and only finalized in a
+  new post-commit `settle` step. `finalizeMutationEffects` stops at the first
+  failing finalizer and rolls everything back. After the commit point,
+  `settleMutationEffects` failures are logged and never revert live history.
+  `rollbackAndRethrow` was extracted to keep `HistoryServiceCore.ts` under the
+  800-line limit.
+- Evidence: `RecordingIntegration.journalCommit.test.ts` (real HistoryService,
+  SessionRecordingService and a persistence service whose finalize can fail,
+  journal path replaced by a directory to make the append fail): live,
+  persisted and journaled state agree on the original after a journal failure,
+  and on the rewrite after a post-commit cleanup failure. Two new
+  `HistoryService.batch.test.ts` cases cover stop-at-first-failure and settle.
+  Semantic-media-purge and batch suites pass unchanged.
+
+### M5 Identical retries resend the kept request (valid, fixed)
+
+- Cause: each retry rebuilt the request from live history and ran the
+  BeforeModel hook again.
+- Fix: `SendRequestState` (one per streamed send) keeps the post-hook,
+  post-enforcement contents, tool selection and system prompt;
+  an identical refusal retry resends them without rebuilding or running the hook.
+  A content retry or a reviewer rewrite discards the kept request.
+  `StreamProcessor` stayed under the line limit by moving the AfterModel
+  hook into `streamAfterModelHook.ts` (and two helpers out of `TurnProcessor`).
+- Evidence: `refusalRetained.behavior.test.ts`, red before: a history append
+  during the backoff and a BeforeModel hook that answers differently per call
+  (real subprocess hook) no longer change the retried wire request; the hook
+  runs once.
+
+### M6 Cancellation of the review (valid, fixed)
+
+- Cause: the deadline and abort only raced the stream; the provider request
+  stayed open, and the queued rewrite commit did not check the signal.
+- Fix: `callReviewProvider` links the user and deadline signals into the
+  invocation (`invocation.signal` and `metadata.abortSignal`, as other
+  one-shot calls do), rejects pre-aborted work without calling the provider,
+  and aborts the provider request on timeout, abort or abandonment.
+  `applyReviewedRewrite` throws the abort before the queued commit and again
+  inside the rewrite step.
+- Evidence: `reviewCall.test.ts` (4 red) and `refusalReviewer.test.ts` (abort
+  before commit leaves history untouched, red before);
+  `refusalReviewCancel.behavior.test.ts`: the local reviewer endpoint observes
+  the client disconnect (red before).
+
+### M7 Attempt indexes (valid, fixed)
+
+- Cause: `requestAttempt` restarted at 0 per streamed send while the budget is
+  prompt-owned, so continuations that reuse a prompt id repeated indexes.
+- Fix: `RefusalRecovery.allocateAttempt(promptId)` hands out indexes from the
+  prompt-owned budget; `TurnProcessor` and `advanceAfterAttempt` use it.
+- Evidence: the shared-budget test in `refusalRecovery.behavior.test.ts`
+  asserts 5 unique token-log attempt indexes and unique journal indexes across
+  a task-list continuation (3 unique of 5 before).
+
+### M8 `no_change` contract (valid, fixed)
+
+- `parseReviewReply` rejects `no_change` with editable entries unless the
+  explanation starts with `insufficient_context:` (reason `reviewer declined to
+  rewrite`; the request stops safely); with no editable entries it is accepted.
+  The stale test accepted `Nothing to change.`; it now pins both sides. The
+  prompt wording from the maintainer is unchanged.
+
+### L9 Timeouts and the wait seam (valid, fixed)
+
+- Every full-agent refusal suite now sets `setDefaultTimeout(90_000)`, the
+  convention `refusalReview.behavior.test.ts` already used.
+- The backoff wait is session-owned: `refusalWaitFor(() => sessionId)` is built
+  into each session's recovery, and tests install a wait for one session id
+  (`installRefusalWaitForTesting(sessionId, wait)`). A test that times out can
+  no longer change another session's wait. Evidence: `refusalWait.test.ts`.
+
+### L10 Docs and defaults (valid, fixed)
+
+- `docs/reference/ephemerals.md`: `refusal.retries 0` turns identical retries
+  off; to stop at the first refusal also set `refusal.rewrite false` or
+  `refusal.max-rewrites 0`.
+- `refusalRecovery.behavior.test.ts`: with production defaults and retries 0,
+  the first refusal goes straight to review; the two settings above stop at
+  once. (These passed before the docs fix: the docs, not the code, were wrong.)
+
+### L11 Notice before the review (valid, fixed)
+
+- `RefusalReviewer.begin` resolves the reviewer first; the coordinator returns a
+  `review` decision whose notice is `Model <m> refused <n> time(s); asking
+  <reviewer> to review the recent context.` The turn loop shows it, then awaits
+  the reviewer. No notice when the profile cannot be used.
+- Evidence: `refusalReviewNotice.behavior.test.ts` reads the public events
+  already delivered while the reviewer endpoint is answering (red before).

@@ -224,9 +224,14 @@ export class RecordingIntegration {
             release();
           }
         },
-        finalize: async () => {
-          await effect.finalize?.();
-          release();
+        finalize: () => effect.finalize?.(),
+        // A committed batch is joined until its cleanup ran, success or not.
+        settle: async () => {
+          try {
+            await effect.settle?.();
+          } finally {
+            release();
+          }
         },
       };
     } catch (error: unknown) {
@@ -297,9 +302,13 @@ export class RecordingIntegration {
           throw new AggregateError(failures, 'History batch rollback failed');
         }
       },
+      // The durable journal append is the commit point; the persisted
+      // session stays reversible until it succeeds.
       finalize: async () => {
-        await persistence?.finalize();
         await recording?.finalize();
+      },
+      settle: async () => {
+        await persistence?.finalize();
       },
     };
   }
@@ -339,9 +348,11 @@ export class RecordingIntegration {
           await persistence?.rollback();
         },
         finalize: async () => {
-          await persistence?.finalize();
           await recording.finalize();
           this.rememberRecordedHistory(payload.resultingHistory);
+        },
+        settle: async () => {
+          await persistence?.finalize();
         },
       };
     });

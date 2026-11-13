@@ -25,6 +25,13 @@ export interface RewriteRequest {
   readonly explanation: string;
   readonly operationId: string;
   readonly now: Date;
+  /** The request's cancellation; a rewrite never commits after it aborts. */
+  readonly signal?: AbortSignal;
+  /**
+   * The rewrite only edits the pending user turn, so the history stays as it
+   * is, but the rewrite still commits (and is journaled) as a unit.
+   */
+  readonly historyUnchanged?: boolean;
 }
 
 export type RewriteResult =
@@ -59,17 +66,23 @@ function changedEntries(
  * token total re-estimated, and the `refusal_rewrite` journal record written
  * together. The history must still be exactly the one that was reviewed; if
  * it changed, or if the journal cannot take the record, the history is left as
- * it was and the caller stops.
+ * it was and the caller stops. A request that aborts before the queued commit
+ * runs is not a failed commit: its abort is thrown and nothing is written.
  */
 export async function applyReviewedRewrite(
   request: RewriteRequest,
 ): Promise<RewriteResult> {
+  request.signal?.throwIfAborted();
   const changes = changedEntries(request.window, request.rewrites);
   const prepare = request.execution?.prepareRefusalRewrite;
   try {
     const outcome = await request.history.replaceIfUnchanged({
       expected: request.window.snapshot,
-      rewrite: () => applyReviewRewrites(request.window, request.rewrites),
+      commitUnchanged: request.historyUnchanged,
+      rewrite: () => {
+        request.signal?.throwIfAborted();
+        return applyReviewRewrites(request.window, request.rewrites);
+      },
       prepareEffect: (resultingHistory) => {
         if (prepare === undefined) return undefined;
         const payload: RefusalRewritePayload = {
@@ -89,6 +102,7 @@ export async function applyReviewedRewrite(
       ? { kind: 'applied', changes }
       : { kind: 'history-changed' };
   } catch (error: unknown) {
+    if (request.signal?.aborted === true) throw error;
     return {
       kind: 'commit-failed',
       detail: error instanceof Error ? error.message : String(error),

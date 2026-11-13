@@ -17,8 +17,9 @@
 import { validateHistoryBatch } from './history-batch-validation.js';
 import {
   finalizeMutationEffects,
+  settleMutationEffects,
   notifyObservers,
-  rollbackMutationEffects,
+  rollbackAndRethrow,
 } from './historyMutationFailure.js';
 import { retainContentOrigins } from './historyOrigin.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
@@ -72,7 +73,17 @@ type HistoryTokenizerSelection = Pick<RuntimeTokenizerFactory, 'getTokenizer'>;
 export interface PreparedHistoryBatchEffect {
   publish(): void | Promise<void>;
   rollback(): void | Promise<void>;
+  /**
+   * The effect's commit step, run after the history is published. A failure
+   * reverts the whole mutation, so everything that must still be reversible
+   * belongs after this point, not in it.
+   */
   finalize?(): void | Promise<void>;
+  /**
+   * Cleanup that runs only after every effect finalized: the mutation is
+   * committed, so a failure here is logged and never reverts the history.
+   */
+  settle?(): void | Promise<void>;
 }
 
 /**
@@ -1002,12 +1013,10 @@ export abstract class HistoryServiceCore
         }
       }
       this.restoreChronology(chronology);
-      const rollbackFailures = await rollbackMutationEffects(effects);
-      if (rollbackFailures.length === 0) throw error;
-      throw new AggregateError(
-        [error, ...rollbackFailures],
-        'History mutation and rollback failed',
-      );
+      await rollbackAndRethrow(effects, error);
+    }
+    for (const failure of await settleMutationEffects(effects)) {
+      this.logger.warn('History mutation cleanup failed after commit', failure);
     }
   }
 

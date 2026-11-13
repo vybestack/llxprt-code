@@ -378,7 +378,11 @@ export class ChatSession {
       usageLogger: () =>
         this.compressionHandler.tokenUsageLogger ?? this.tokenUsageLogger,
     });
-    return createRefusalRecovery(this.ports.turn.ephemerals.refusal, reviewer);
+    return createRefusalRecovery(
+      this.ports.turn.ephemerals.refusal,
+      () => this.runtimeState.sessionId,
+      reviewer,
+    );
   }
 
   private createTokenUsageLogger(): TokenUsageLogger {

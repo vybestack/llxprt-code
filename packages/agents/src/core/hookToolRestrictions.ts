@@ -159,3 +159,31 @@ export function isToolNameRestricted(
   const allowed = new Set(allowedTools.map(canonicalizeToolName));
   return !allowed.has(canonicalizeToolName(toolName));
 }
+
+/**
+ * Applies the BeforeToolSelection restriction to a non-streamed response in
+ * place: tool calls outside the allowed set are dropped from its content and
+ * from its automatic-function-calling history.
+ */
+export function applyHookToolFiltering(
+  output: ModelStreamChunk,
+  allowedFunctionNames: string[] | undefined,
+): void {
+  if (allowedFunctionNames === undefined) return;
+  output.content = {
+    ...output.content,
+    blocks: filterHookRestrictedBlocks(
+      output.content.blocks,
+      allowedFunctionNames,
+    ),
+  };
+  // P13 AFC boundary: toModelStreamChunk already extracted AFC into
+  // output.afcHistory and stripped it from providerMetadata. Apply
+  // hook-restriction filtering to the first-class afcHistory field only.
+  if (output.afcHistory !== undefined) {
+    output.afcHistory = filterAfcByHookRestrictions(
+      output.afcHistory,
+      allowedFunctionNames,
+    );
+  }
+}

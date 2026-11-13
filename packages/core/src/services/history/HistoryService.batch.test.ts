@@ -231,6 +231,80 @@ describe('HistoryService atomic batch publication', () => {
     expect(reverted).toStrictEqual([batch]);
   });
 
+  it('stops finalizing at the first failed finalizer and rolls every effect back', async () => {
+    const history = new HistoryService();
+    const steps: string[] = [];
+    history.registerBatchParticipant(() => ({
+      publish: () => undefined,
+      rollback: () => {
+        steps.push('first rollback');
+      },
+      finalize: () => {
+        throw new Error('first finalizer failed');
+      },
+    }));
+    history.registerBatchParticipant(() => ({
+      publish: () => undefined,
+      rollback: () => {
+        steps.push('second rollback');
+      },
+      finalize: () => {
+        steps.push('second finalize');
+      },
+    }));
+
+    await expect(
+      history.addBatch([createUserMessage('never committed')]),
+    ).rejects.toThrow('first finalizer failed');
+
+    expect({ steps, history: history.getAll() }).toStrictEqual({
+      steps: ['second rollback', 'first rollback'],
+      history: [],
+    });
+  });
+
+  it('settles every effect after all finalizers succeeded, and a failed settle keeps the batch', async () => {
+    const history = new HistoryService();
+    const steps: string[] = [];
+    history.registerBatchParticipant(() => ({
+      publish: () => undefined,
+      rollback: () => {
+        steps.push('rollback');
+      },
+      finalize: () => {
+        steps.push('first finalize');
+      },
+      settle: () => {
+        steps.push('first settle');
+        throw new Error('cleanup after commit failed');
+      },
+    }));
+    history.registerBatchParticipant(() => ({
+      publish: () => undefined,
+      rollback: () => {
+        steps.push('rollback');
+      },
+      finalize: () => {
+        steps.push('second finalize');
+      },
+      settle: () => {
+        steps.push('second settle');
+      },
+    }));
+
+    await history.addBatch([createUserMessage('committed')]);
+
+    expect({ steps, history: history.getAll().map(textOf) }).toStrictEqual({
+      steps: [
+        'first finalize',
+        'second finalize',
+        'first settle',
+        'second settle',
+      ],
+      history: ['committed'],
+    });
+  });
+
   it('announces no reversion for a batch that never published or that committed', async () => {
     const history = new HistoryService();
     const reverted: IContent[][] = [];

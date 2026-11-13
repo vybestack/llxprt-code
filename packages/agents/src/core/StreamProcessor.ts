@@ -29,8 +29,6 @@ import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
-import type { AfterModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { StreamProcessorRuntime } from './chatSessionPorts.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -38,16 +36,9 @@ import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/r
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import { fireBeforeModelHook } from './beforeModelHookFire.js';
-import {
-  AgentExecutionBlockedError,
-  AgentExecutionStoppedError,
-} from './chatSession.js';
 import type { ConversationManager } from './ConversationManager.js';
 import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
-import {
-  afterModelBlockingToModelOutput,
-  afterModelModifiedToChunk,
-} from './hookWireAdapter.js';
+import { processAfterModelHook } from './streamAfterModelHook.js';
 import { prepareAtSendSeam } from './promptEnvelopeSendSeam.js';
 import { prepareStreamEnvelope } from './streamEnvelopePreparation.js';
 import {
@@ -62,6 +53,10 @@ import {
   type ToolSelectionHookResult,
 } from './streamRequestHelpers.js';
 import { trackPromptTokens } from './streamResponseHelpers.js';
+import type {
+  ProviderReadyRequest,
+  SendRequestState,
+} from './sendRequestState.js';
 import {
   attachStreamTiming,
   logStreamTelemetry,
@@ -110,6 +105,8 @@ export class StreamProcessor {
   /** Canonical turn identity retained across retries for each logical prompt. */
   private readonly turnIdByPromptId = new Map<string, string>();
   private currentAttemptIndex = 0;
+  /** Whether the attempt in flight resends an earlier attempt of its send. */
+  private currentIsResend = false;
 
   /**
    * Raw token-delta bridge for the attempt in flight (#3493). Null when no
@@ -175,9 +172,11 @@ export class StreamProcessor {
     userInput: IContent | IContent[] | PreparedUserTurn,
     attemptIndex?: number,
     semanticMediaPurge?: SemanticMediaPurgeAttempt,
+    sendState?: SendRequestState,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     this.currentPromptEnvelopeEstimate = null;
     this.currentAttemptIndex = attemptIndex ?? 0;
+    this.currentIsResend = sendState?.begin() ?? this.currentAttemptIndex > 0;
     const provider =
       params.modelParameters?.route?.provider ??
       this.providerResolver('stream');
@@ -236,6 +235,7 @@ export class StreamProcessor {
       stampedUserContent,
       provider,
       semanticMediaPurge,
+      sendState,
     );
 
     return this._createCancellableStream(
@@ -322,6 +322,7 @@ export class StreamProcessor {
     userContent: IContent | IContent[],
     provider: IProvider,
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
+    sendState: SendRequestState | undefined,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     let requestAttempt = 0;
     // retryWithBackoff re-invokes this closure once per attempt, so the
@@ -331,12 +332,17 @@ export class StreamProcessor {
       if (requestAttempt > 0) semanticMediaPurge?.markRetryHandoff();
       requestAttempt += 1;
       this.currentRawTokenDeltaBridge = new RawTokenDeltaBridge();
+      const kept = sendState?.replayable();
+      if (kept !== undefined) {
+        return this._resendKeptRequest(provider, kept, params, promptId);
+      }
       return this._buildAndSendStreamRequest(
         params,
         promptId,
         userContent,
         provider,
         semanticMediaPurge,
+        sendState,
       );
     };
 
@@ -376,6 +382,7 @@ export class StreamProcessor {
     userContent: IContent | IContent[],
     provider: IProvider,
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
+    sendState: SendRequestState | undefined,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     assertAdmittedRoute(params.modelParameters?.route);
     const { contents: requestContents, pending: pendingUserIContents } =
@@ -392,15 +399,12 @@ export class StreamProcessor {
 
     try {
       const { contents: finalContents, ...pendingRegion } =
-        await fireBeforeModelHook({
-          owner: params.hookOwner ?? params.recordingExecution?.hookOwner,
-          requestContents: requestPayload.contents,
+        await this._fireBeforeModel(
+          params,
+          requestPayload.contents,
           pendingUserIContents,
-          tools: toolSelection.tools ?? [],
-          hookRestrictedAllowedTools: toolSelection.allowedFunctionNames,
-          model: this.ports.state.model,
-          log: (msg) => this.logger.debug(() => msg),
-        });
+          toolSelection,
+        );
 
       const streamPreparation = await prepareStreamEnvelope(
         provider,
@@ -430,6 +434,11 @@ export class StreamProcessor {
         this.ports.state.model,
         promptId,
       );
+      sendState?.keep({
+        contents: streamPreparation.contents,
+        toolSelection,
+        systemInstruction: this.generationConfig.systemInstruction,
+      });
 
       const stream = await this._sendProviderRequest(
         provider,
@@ -451,6 +460,70 @@ export class StreamProcessor {
       throw error;
     }
   }
+  private _fireBeforeModel(
+    params: SendMessageParams,
+    requestContents: IContent[],
+    pendingUserIContents: IContent[],
+    toolSelection: ToolSelectionHookResult,
+  ): ReturnType<typeof fireBeforeModelHook> {
+    return fireBeforeModelHook({
+      owner: params.hookOwner ?? params.recordingExecution?.hookOwner,
+      requestContents,
+      pendingUserIContents,
+      tools: toolSelection.tools ?? [],
+      hookRestrictedAllowedTools: toolSelection.allowedFunctionNames,
+      model: this.ports.state.model,
+      log: (msg) => this.logger.debug(() => msg),
+    });
+  }
+
+  /**
+   * Sends a request that was already built, hooked and enforced, exactly as it
+   * was (issue #4036): the BeforeModel hook does not run again and the live
+   * history is not read.
+   */
+  private async _resendKeptRequest(
+    provider: IProvider,
+    kept: ProviderReadyRequest,
+    params: SendMessageParams,
+    promptId: string,
+  ): Promise<AsyncGenerator<ModelStreamChunk>> {
+    assertAdmittedRoute(params.modelParameters?.route);
+    const { requestPayload, runtimeContext } = this._prepareRequestPayload(
+      kept.contents,
+      kept.toolSelection,
+      params,
+    );
+    const bound = this._bindProviderMediaAndFiles(provider);
+    try {
+      logOutgoingRequest(
+        this.turnTelemetryPorts(),
+        requestPayload,
+        this.ports.state.model,
+        promptId,
+      );
+      const stream = await this._sendProviderRequest(
+        bound,
+        requestPayload,
+        runtimeContext,
+        params,
+        promptId,
+        kept.toolSelection.allowedFunctionNames,
+        undefined,
+        { ...this.generationConfig, systemInstruction: kept.systemInstruction },
+      );
+      return withCompressionCallbackCleanup(
+        stream,
+        bound,
+        this.compressionHandler,
+        params.config?.abortSignal,
+      );
+    } catch (error) {
+      this.compressionHandler.clearProviderCompressionCallback(bound);
+      throw error;
+    }
+  }
+
   private _prepareRequestPayload(
     requestContents: IContent[],
     toolSelection: ToolSelectionHookResult,
@@ -492,6 +565,7 @@ export class StreamProcessor {
     promptId: string,
     hookRestrictedAllowedTools: string[] | undefined,
     preparedAtEnforcement?: Awaited<ReturnType<typeof prepareAtSendSeam>>,
+    generation: ChatSessionConfig = this.generationConfig,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const startTime = Date.now();
     try {
@@ -502,7 +576,7 @@ export class StreamProcessor {
         requestPayload,
         runtimeContext.metadata,
         params,
-        this.generationConfig,
+        generation,
         this.currentRawTokenDeltaBridge,
       );
       const prepared =
@@ -521,7 +595,7 @@ export class StreamProcessor {
         historyService: this.historyService,
         requestContents: requestPayload.contents,
         tools: requestPayload.tools,
-        systemInstruction: this.generationConfig.systemInstruction,
+        systemInstruction: generation.systemInstruction,
         turnId: this.turnIdByPromptId.get(promptId) ?? null,
       });
 
@@ -682,13 +756,14 @@ export class StreamProcessor {
           };
         }
         const yieldedChunk =
-          (await this._processAfterModelHook(
+          (await processAfterModelHook({
+            model: this.ports.state.model,
             iContent,
             requestPayload,
             chunk,
             hookRestrictedAllowedTools,
             owner,
-          )) ?? chunk;
+          })) ?? chunk;
         lastIContent = contentForTelemetryPreservingUsage(
           yieldedChunk,
           lastIContent,
@@ -721,109 +796,6 @@ export class StreamProcessor {
 
   private _trackPromptTokens(iContent: IContent): void {
     trackPromptTokens(iContent, this.compressionHandler, this.logger);
-  }
-
-  /**
-   * Process AfterModel hook for a single streamed chunk.
-   *
-   * Returns a neutral ModelStreamChunk when the hook modifies the response,
-   * or `undefined` for passthrough (yield the original chunk).
-   *
-   * Throws AgentExecutionStoppedError / AgentExecutionBlockedError on
-   * stop/block decisions.
-   *
-   * @plan:PLAN-20260707-AGENTNEUTRAL.P13
-   * @requirement:REQ-002.6
-   */
-  private async _processAfterModelHook(
-    iContent: IContent,
-    requestPayload: PreparedRequest['requestPayload'] | undefined,
-    chunk: ModelStreamChunk,
-    hookRestrictedAllowedTools: string[] | undefined,
-    owner?: HookExecutionOwner,
-  ): Promise<ModelStreamChunk | undefined> {
-    if (owner?.afterModel === undefined) return undefined;
-
-    // Build the hook-visible IContent with restricted tool blocks filtered.
-    const filteredBlocks = filterHookRestrictedBlocks(
-      iContent.blocks,
-      hookRestrictedAllowedTools,
-    );
-    const hookIContent = iContentFromBlocks(filteredBlocks, iContent.speaker);
-
-    const afterModelResult = await owner.afterModel(
-      {
-        model: this.ports.state.model,
-        contents: requestPayload?.contents ?? [],
-        ...(requestPayload?.tools !== undefined &&
-        (requestPayload.tools.length > 0 ||
-          hookRestrictedAllowedTools === undefined)
-          ? {
-              tools: requestPayload.tools,
-            }
-          : {}),
-      },
-      {
-        content: hookIContent,
-        // finishReason/rawStopReason live only on terminal chunks; toModelStreamChunk
-        // already lifted them onto the chunk when the provider emitted them.
-        ...(chunk.finishReason !== undefined
-          ? { finishReason: chunk.finishReason }
-          : {}),
-        ...(chunk.rawStopReason !== undefined
-          ? { rawStopReason: chunk.rawStopReason }
-          : {}),
-        ...(chunk.usage !== undefined ? { usage: chunk.usage } : {}),
-      },
-      owner.signal,
-    );
-
-    if (afterModelResult?.shouldStopExecution() === true) {
-      throw new AgentExecutionStoppedError(
-        afterModelResult.getEffectiveReason(),
-        afterModelResult.systemMessage,
-      );
-    }
-
-    if (afterModelResult?.isBlockingDecision() === true) {
-      this._throwAfterModelBlocked(afterModelResult, chunk);
-    }
-
-    // MODIFY branch: convert hook's response to neutral chunk.
-    const modifiedResponse = afterModelResult?.getModifiedResponse();
-    if (modifiedResponse) {
-      return afterModelModifiedToChunk(modifiedResponse, chunk);
-    }
-
-    return undefined;
-  }
-
-  /**
-   * BLOCK branch of the AfterModel hook: build a ModelOutput from the
-   * hook-modified response or the current chunk, carry the block reason
-   * text, and throw AgentExecutionBlockedError.
-   *
-   * P13: neutral — no synthetic GenerateContentResponse is built here.
-   */
-  private _throwAfterModelBlocked(
-    afterModelResult: AfterModelHookOutput,
-    chunk: ModelStreamChunk,
-  ): never {
-    const effectiveReason = afterModelResult.getEffectiveReason();
-    const modifiedResponse = afterModelResult.getModifiedResponse();
-    const blockedOutput: ModelOutput = modifiedResponse
-      ? (afterModelModifiedToChunk(modifiedResponse, chunk) ?? { ...chunk })
-      : { ...chunk };
-    // P13: Use the neutral blocking adapter for the block reason text.
-    const finalBlockedOutput = afterModelBlockingToModelOutput(
-      effectiveReason,
-      blockedOutput,
-    );
-    throw new AgentExecutionBlockedError(
-      effectiveReason,
-      finalBlockedOutput,
-      afterModelResult.systemMessage,
-    );
   }
 
   /**
@@ -933,7 +905,7 @@ export class StreamProcessor {
       userInput,
       includeThoughts,
       semanticMediaPurge,
-      retryHandoff: this.currentAttemptIndex > 0,
+      retryHandoff: this.currentIsResend,
       eagerlyRecordedToolResponseCallIds:
         this.eagerlyRecordedToolResponseCallIds,
       preparedUserTurn,

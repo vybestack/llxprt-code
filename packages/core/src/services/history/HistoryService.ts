@@ -66,11 +66,17 @@ export interface HistoryRewriteRequest {
   readonly modelName?: string;
   /** A caller-owned effect that commits together with the history. */
   readonly prepareEffect?: HistoryEffectFactory;
+  /**
+   * Commit the prepared effect even when the rewrite changes no entry, for a
+   * rewrite whose substance lies outside the history (and is journaled).
+   */
+  readonly commitUnchanged?: boolean;
 }
 
 /**
  * `stale`: the history is no longer the expected one and nothing changed.
- * `unchanged`: the rewrite returned the same entries and nothing was committed.
+ * `unchanged`: the rewrite returned the same entries and nothing was committed
+ * (unless the request asked to commit the unchanged history with its effect).
  */
 export type HistoryRewriteOutcome = 'applied' | 'stale' | 'unchanged';
 
@@ -269,11 +275,16 @@ export class HistoryService extends HistoryServiceCore {
     const rewritten = [...request.rewrite([...current])];
     validateHistoryBatch(rewritten);
     const firstChanged = firstDifference(current, rewritten);
-    if (firstChanged === undefined) return 'unchanged';
+    if (firstChanged === undefined && request.commitUnchanged !== true) {
+      return 'unchanged';
+    }
     const anchorIndex = current.findIndex(
       (entry) => entry.metadata?.chronology?.seq === this.cacheAnchorSeq,
     );
-    const nextHistory = invalidateRetainedRewrite(rewritten, firstChanged);
+    const nextHistory =
+      firstChanged === undefined
+        ? rewritten
+        : invalidateRetainedRewrite(rewritten, firstChanged);
     await this.waitForTokenUpdates();
     const nextHistoryTokens = await this.estimateTokensForContents(
       nextHistory,
@@ -285,7 +296,11 @@ export class HistoryService extends HistoryServiceCore {
       options: {},
       prepareEffect: request.prepareEffect,
     });
-    if (this.cacheAnchorSeq > 0 && anchorIndex >= firstChanged) {
+    if (
+      firstChanged !== undefined &&
+      this.cacheAnchorSeq > 0 &&
+      anchorIndex >= firstChanged
+    ) {
       this.cacheAnchorSeq = 0;
     }
     return 'applied';

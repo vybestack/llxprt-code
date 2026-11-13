@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { callReviewProvider, ReviewTimeoutError } from './reviewCall.js';
@@ -104,5 +105,106 @@ describe('reviewer provider call', () => {
       .catch((error: unknown) => error);
 
     expect(failure).toStrictEqual(new Error('endpoint said no'));
+  });
+
+  describe('abort reaches the provider request', () => {
+    const REQUEST_WITH_INVOCATION: RuntimeGenerateChatOptions = {
+      contents: [],
+      invocation: createRuntimeInvocationContext({
+        fetch: globalThis.fetch,
+        providerName: 'openai',
+        runtimeId: 'review-call-test',
+        ephemeralsSnapshot: {},
+      }),
+    };
+
+    /** A provider that never answers and keeps the options it was given. */
+    function hangingProvider() {
+      const received: RuntimeGenerateChatOptions[] = [];
+      return {
+        received,
+        provider: {
+          generateChatCompletion(
+            options: RuntimeGenerateChatOptions,
+          ): AsyncIterable<IContent> {
+            received.push(options);
+            return NEVER_ANSWERS.generateChatCompletion();
+          },
+        },
+      };
+    }
+
+    function signalsOf(options: RuntimeGenerateChatOptions | undefined) {
+      return {
+        invocation: options?.invocation?.signal,
+        metadata: options?.metadata?.['abortSignal'],
+      };
+    }
+
+    it('aborts the signal the provider holds when the request aborts', async () => {
+      const { received, provider } = hangingProvider();
+      const controller = new AbortController();
+      const pending = callReviewProvider(provider, REQUEST_WITH_INVOCATION, {
+        timeoutMs: 60_000,
+        signal: controller.signal,
+      }).catch(() => undefined);
+
+      controller.abort();
+      await pending;
+
+      const held = signalsOf(received[0]);
+      expect({
+        invocationAborted: held.invocation?.aborted,
+        metadataAborted:
+          held.metadata instanceof AbortSignal && held.metadata.aborted,
+      }).toStrictEqual({ invocationAborted: true, metadataAborted: true });
+    });
+
+    it('aborts the signal the provider holds at the deadline', async () => {
+      const { received, provider } = hangingProvider();
+
+      await callReviewProvider(provider, REQUEST_WITH_INVOCATION, {
+        timeoutMs: 20,
+      }).catch(() => undefined);
+
+      expect(signalsOf(received[0]).invocation?.aborted).toBe(true);
+    });
+
+    it('does not abort the provider signal of a call that finished', async () => {
+      const received: RuntimeGenerateChatOptions[] = [];
+      const answering = {
+        generateChatCompletion(options: RuntimeGenerateChatOptions) {
+          received.push(options);
+          return streamOf([
+            { speaker: 'ai', blocks: [{ type: 'text', text: 'done' }] },
+          ]).generateChatCompletion();
+        },
+      };
+
+      await callReviewProvider(answering, REQUEST_WITH_INVOCATION, {
+        timeoutMs: 1000,
+      });
+
+      expect(signalsOf(received[0]).invocation?.aborted).toBe(false);
+    });
+
+    it('rejects an already aborted request without calling the provider', async () => {
+      const { received, provider } = hangingProvider();
+      const controller = new AbortController();
+      controller.abort();
+
+      const failure = await callReviewProvider(
+        provider,
+        REQUEST_WITH_INVOCATION,
+        { timeoutMs: 60_000, signal: controller.signal },
+      )
+        .then(() => undefined)
+        .catch((error: unknown) => error);
+
+      expect({
+        failed: failure instanceof Error,
+        providerCalls: received.length,
+      }).toStrictEqual({ failed: true, providerCalls: 0 });
+    });
   });
 });

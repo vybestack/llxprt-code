@@ -12,12 +12,17 @@ import {
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type { RefusalSettlement } from './refusalSettlement.js';
 import type { RefusalRecovery } from './refusalTypes.js';
+import type { PendingTurnContents } from './reviewTypes.js';
+import { applyPendingEdits, type PendingEdit } from './reviewWindow.js';
 
 /** Counters for the attempts of one streamed turn. */
 export interface AttemptCounters {
   /** Content-retry count: drives the retry temperature and its budget. */
   contentAttempt: number;
-  /** Requests sent so far for this turn, whatever caused each resend. */
+  /**
+   * Index of the request being sent, allocated from the prompt-owned counter
+   * so it is unique over every send that reuses the prompt id.
+   */
   requestAttempt: number;
   /** Whether the next attempt must announce that it replaces a failed one. */
   announceRetry: boolean;
@@ -26,7 +31,13 @@ export interface AttemptCounters {
 /** How one stream attempt ended, for the turn's retry loop. */
 export type StreamAttemptOutcome =
   | { error: unknown; action: 'retry' | 'stop' }
-  | { error: null; action: 'retry-same-request'; delayMs: number };
+  | {
+      error: null;
+      action: 'retry-same-request';
+      delayMs: number;
+      /** Set when a reviewer rewrote context: the resend is rebuilt. */
+      rewrite?: { readonly pendingEdits: readonly PendingEdit[] };
+    };
 
 export function refusalNotice(message: string): StreamEvent {
   return {
@@ -44,6 +55,10 @@ export function refusalNotice(message: string): StreamEvent {
 export async function* announceRefusalSettlement(
   settlement: RefusalSettlement,
 ): AsyncGenerator<StreamEvent, StreamAttemptOutcome> {
+  if (settlement.action === 'review') {
+    yield refusalNotice(settlement.notice);
+    return yield* announceRefusalSettlement(await settlement.complete());
+  }
   if (settlement.action === 'retry-same-request') {
     yield { type: StreamEventType.RETRY };
     yield refusalNotice(settlement.notice);
@@ -51,6 +66,7 @@ export async function* announceRefusalSettlement(
       error: null,
       action: 'retry-same-request',
       delayMs: settlement.delayMs,
+      ...(settlement.rewrite !== undefined && { rewrite: settlement.rewrite }),
     };
   }
   if (settlement.notice !== undefined) {
@@ -107,7 +123,7 @@ export async function advanceAfterAttempt(
       deps.promptId,
       deps.signal,
     );
-    attempt.requestAttempt++;
+    attempt.requestAttempt = deps.recovery.allocateAttempt(deps.promptId);
     attempt.announceRetry = false;
     return true;
   }
@@ -116,7 +132,52 @@ export async function advanceAfterAttempt(
     deps.signal,
   );
   attempt.contentAttempt++;
-  attempt.requestAttempt++;
+  attempt.requestAttempt = deps.recovery.allocateAttempt(deps.promptId);
   attempt.announceRetry = true;
   return true;
+}
+
+/**
+ * The user turn to send with the next attempt: the same one, or, after a
+ * reviewer rewrote tool results it carries, that turn with the rewritten text.
+ * The turn keeps its media-admission lifecycle, so the rewritten turn is what
+ * finally commits to the history.
+ */
+export function turnForNextAttempt<T extends PendingTurnContents>(
+  turn: T,
+  outcome: StreamAttemptOutcome,
+): T {
+  if (outcome.action !== 'retry-same-request') return turn;
+  const edits = outcome.rewrite?.pendingEdits ?? [];
+  if (edits.length === 0) return turn;
+  return {
+    ...turn,
+    userContents: applyPendingEdits(turn.userContents, edits),
+    userIContents: applyPendingEdits(turn.userIContents, edits),
+  };
+}
+
+/** What the next attempt's request is: the one just sent, or a fresh build. */
+interface KeptRequest {
+  resendIdentically(): void;
+  discard(): void;
+}
+
+/**
+ * Decides whether the next attempt resends the request just sent. Only an
+ * identical refusal retry does; a content retry or a reviewer rewrite changes
+ * what should be sent, so the next attempt builds its request afresh.
+ */
+export function keepRequestForNextAttempt(
+  request: KeptRequest,
+  outcome: StreamAttemptOutcome,
+): void {
+  if (
+    outcome.action === 'retry-same-request' &&
+    outcome.rewrite === undefined
+  ) {
+    request.resendIdentically();
+  } else {
+    request.discard();
+  }
 }

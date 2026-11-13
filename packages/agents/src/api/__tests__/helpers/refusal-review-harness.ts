@@ -10,9 +10,15 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { ApprovalMode, createAgent } from '@vybestack/llxprt-code-agents';
 import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
 import { replaySession } from '@vybestack/llxprt-code-core';
@@ -23,13 +29,15 @@ import {
   REVIEW_DATA_CLOSE,
   REVIEW_DATA_OPEN,
 } from '../../../refusal/reviewPrompt.js';
-import { drain } from './agentHarness.js';
+import { startAnthropicEndpoint } from './anthropic-refusal-endpoint.js';
 import {
   emptyRefusalReply,
   readJsonl,
   startScriptedEndpoint,
   stopReply,
   type EndpointReply,
+  type ReplyResponder,
+  type RequestConnection,
   type ScriptedEndpoint,
   type WireRequest,
 } from './refusal-endpoint.js';
@@ -64,22 +72,32 @@ function messageText(message: { content?: unknown }): string {
     .join('');
 }
 
-/** The entries a reviewer was shown, read back from its wire request. */
-export function reviewEntries(request: WireRequest): ReviewWireEntry[] {
+export interface ReviewWireData {
+  readonly refusal: { readonly provider: string; readonly model: string };
+  readonly latestUserGoal: string | null;
+  readonly entries: readonly ReviewWireEntry[];
+}
+
+/** The data block a reviewer was shown, read back from its wire request. */
+export function reviewData(request: WireRequest): ReviewWireData | undefined {
   for (const message of request.messages) {
     const text = messageText(message);
     // The prompt itself names the delimiters; the data block is the last one.
     const start = text.lastIndexOf(REVIEW_DATA_OPEN);
     const end = text.indexOf(REVIEW_DATA_CLOSE, start);
     if (start < 0 || end < 0) continue;
-    const data = JSON.parse(
+    return JSON.parse(
       text.slice(start + REVIEW_DATA_OPEN.length, end),
-    ) as {
-      entries: ReviewWireEntry[];
-    };
-    return data.entries;
+    ) as ReviewWireData;
   }
-  return [];
+  return undefined;
+}
+
+/** The entries a reviewer was shown, read back from its wire request. */
+export function reviewEntries(
+  request: WireRequest,
+): readonly ReviewWireEntry[] {
+  return reviewData(request)?.entries ?? [];
 }
 
 export function isReviewRequest(request: WireRequest): boolean {
@@ -127,6 +145,13 @@ export function seedHistory(summaryText: string): IContent[] {
   ];
 }
 
+export type WireProtocol = 'openai' | 'anthropic';
+
+/** What a scripted answer may need to know about the run it belongs to. */
+export interface ScenarioEnv {
+  readonly workingDir: string;
+}
+
 export interface ReviewScenario {
   /** Ephemeral settings applied before the prompt (on top of retries 1). */
   readonly settings?: Readonly<Record<string, unknown>>;
@@ -137,13 +162,37 @@ export interface ReviewScenario {
   readonly profile?: {
     readonly name: string;
     readonly setting: 'refusal.review-profile' | 'compression.profile';
+    /** Provider the profile uses. Default: openai. */
+    readonly protocol?: WireProtocol;
+    readonly model?: string;
+    readonly modelParams?: Readonly<Record<string, unknown>>;
   };
+  /** Provider, model and model parameters of the foreground session. */
+  readonly foregroundProtocol?: WireProtocol;
+  readonly foregroundModel?: string;
+  readonly foregroundParams?: Readonly<Record<string, unknown>>;
+  /** Files written under the working directory before the prompt. */
+  readonly files?: Readonly<Record<string, string>>;
+  readonly prompt?: string;
   /** Foreground answer to a non-review request. Default: refuse while marked. */
-  readonly foreground?: (request: WireRequest) => EndpointReply;
+  readonly foreground?: (
+    request: WireRequest,
+    env: ScenarioEnv,
+  ) => EndpointReply;
   /** Answer to a review request, wherever it lands. Default: valid rewrite. */
-  readonly reviewer?: (request: WireRequest) => EndpointReply;
-  /** Runs while the reviewer is "thinking", before its answer is sent. */
-  readonly duringReview?: (agent: Agent) => Promise<void>;
+  readonly reviewer?: (
+    request: WireRequest,
+    env: ScenarioEnv,
+    connection: RequestConnection,
+  ) => EndpointReply | Promise<EndpointReply>;
+  /**
+   * Runs while the reviewer is "thinking", before its answer is sent. It is
+   * given the public events the host has received so far.
+   */
+  readonly duringReview?: (
+    agent: Agent,
+    eventsSoFar: readonly AgentEvent[],
+  ) => Promise<void>;
   /** Abort the request while the reviewer is "thinking". */
   readonly abortDuringReview?: boolean;
   readonly history?: readonly IContent[];
@@ -161,6 +210,8 @@ export interface ReviewRun {
   readonly profileEndpoint: readonly WireRequest[];
   /** Everything the foreground endpoint received, review calls included. */
   readonly foregroundEndpoint: readonly WireRequest[];
+  /** Review requests whose client hung up before the reply ended. */
+  readonly abandonedReviews: number;
   readonly historyAfter: Awaited<ReturnType<Agent['getHistory']>>;
   readonly tokenRecords: ReadonlyArray<Record<string, unknown>>;
   readonly journalRecords: ReadonlyArray<Record<string, unknown>>;
@@ -175,19 +226,39 @@ function refuseWhileMarked(request: WireRequest): EndpointReply {
 }
 
 async function saveProfile(
-  name: string,
+  profile: NonNullable<ReviewScenario['profile']>,
   endpoint: ScriptedEndpoint,
 ): Promise<void> {
-  await new ProfileManager().saveProfile(name, {
+  await new ProfileManager().saveProfile(profile.name, {
     version: 1,
-    provider: 'openai',
-    model: REVIEWER_MODEL,
-    modelParams: {},
+    provider: profile.protocol ?? 'openai',
+    model: profile.model ?? REVIEWER_MODEL,
+    modelParams: { ...profile.modelParams },
     ephemeralSettings: {
       'base-url': endpoint.url,
       'auth-key': 'reviewer-local-key',
     },
   });
+}
+
+function startEndpoint(
+  protocol: WireProtocol | undefined,
+  responder: ReplyResponder,
+): Promise<ScriptedEndpoint> {
+  return protocol === 'anthropic'
+    ? startAnthropicEndpoint(responder)
+    : startScriptedEndpoint(responder);
+}
+
+function writeFiles(
+  workingDir: string,
+  files: Readonly<Record<string, string>> | undefined,
+): void {
+  for (const [relative, content] of Object.entries(files ?? {})) {
+    const target = join(workingDir, relative);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, content);
+  }
 }
 
 async function replayJournal(
@@ -220,6 +291,9 @@ async function prepareAgent(
   }
   for (const [key, value] of Object.entries(settings)) {
     agent.setEphemeralSetting(key, value);
+  }
+  for (const [key, value] of Object.entries(scenario.foregroundParams ?? {})) {
+    agent.setModelParam(key, value);
   }
   await agent.setHistory([
     ...(scenario.history ?? seedHistory(SUMMARY_ORIGINAL)),
@@ -266,6 +340,13 @@ async function collectRun(input: {
     reviews: everything.filter(isReviewRequest),
     profileEndpoint: [...endpoints.profile.requests()],
     foregroundEndpoint: [...endpoints.foreground.requests()],
+    abandonedReviews: [endpoints.foreground, endpoints.profile]
+      .flatMap((endpoint) =>
+        endpoint
+          .disconnectedRequests()
+          .map((index) => endpoint.requests()[index]),
+      )
+      .filter(isReviewRequest).length,
     historyAfter,
     tokenRecords: readJsonl(tokenLog),
     journalRecords,
@@ -280,43 +361,49 @@ export async function runReviewScenario(
   const workingDir = realpathSync(
     mkdtempSync(join(tmpdir(), 'llxprt-review-')),
   );
+  const env: ScenarioEnv = { workingDir };
   const sessionId = `review-${randomUUID()}`;
-  const answerReview = scenario.reviewer ?? ((r) => summaryRewriteReply(r));
+  const answerReview =
+    scenario.reviewer ?? ((request) => summaryRewriteReply(request));
+  const answerForeground = scenario.foreground ?? refuseWhileMarked;
   let agent: Agent | undefined;
+  const events: AgentEvent[] = [];
   const controller = new AbortController();
-  const respond = async (request: WireRequest): Promise<EndpointReply> => {
-    if (!isReviewRequest(request)) {
-      return (scenario.foreground ?? refuseWhileMarked)(request);
-    }
-    if (agent !== undefined) await scenario.duringReview?.(agent);
+  const respond: ReplyResponder = async (request, _index, connection) => {
+    if (!isReviewRequest(request)) return answerForeground(request, env);
+    if (agent !== undefined) await scenario.duringReview?.(agent, [...events]);
     if (scenario.abortDuringReview === true) controller.abort();
-    return answerReview(request);
+    return answerReview(request, env, connection);
   };
+  const foregroundProtocol = scenario.foregroundProtocol ?? 'openai';
   const endpoints: Endpoints = {
-    foreground: await startScriptedEndpoint(respond),
-    profile: await startScriptedEndpoint(respond),
+    foreground: await startEndpoint(foregroundProtocol, respond),
+    profile: await startEndpoint(scenario.profile?.protocol, respond),
   };
   const waits: number[] = [];
-  const restoreWait = installRefusalWaitForTesting((ms) => {
+  const restoreWait = installRefusalWaitForTesting(sessionId, (ms) => {
     waits.push(ms);
     return Promise.resolve();
   });
   try {
+    writeFiles(workingDir, scenario.files);
     if (scenario.profile !== undefined) {
-      await saveProfile(scenario.profile.name, endpoints.profile);
+      await saveProfile(scenario.profile, endpoints.profile);
     }
     agent = await createAgent({
-      provider: 'openai',
-      model: 'scripted-model',
+      provider: foregroundProtocol,
+      model: scenario.foregroundModel ?? 'scripted-model',
       workingDir,
       sessionId,
       approvalMode: ApprovalMode.YOLO,
       auth: { apiKey: 'local-test-key', baseUrl: endpoints.foreground.url },
     });
     await prepareAgent(agent, scenario);
-    const events = await drain(
-      agent.stream(PROMPT, { signal: controller.signal }),
-    );
+    for await (const event of agent.stream(scenario.prompt ?? PROMPT, {
+      signal: controller.signal,
+    })) {
+      events.push(event);
+    }
     return await collectRun({
       agent,
       events,

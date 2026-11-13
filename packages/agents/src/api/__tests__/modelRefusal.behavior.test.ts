@@ -15,7 +15,7 @@
  * extra request.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, setDefaultTimeout } from 'bun:test';
 import { isDoneEvent, isErrorEvent } from './helpers/agentHarness.js';
 import {
   aiTexts,
@@ -28,6 +28,10 @@ import {
   turnRecords,
 } from './helpers/refusal-endpoint.js';
 import type { ScriptedRun } from './helpers/refusal-endpoint.js';
+
+// Each case runs a whole agent against a local endpoint; a loaded machine
+// needs more than Bun's 5 s default.
+setDefaultTimeout(90_000);
 
 const UNREQUESTED = 'this response must never be requested';
 

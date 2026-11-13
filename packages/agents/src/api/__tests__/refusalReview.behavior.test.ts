@@ -156,6 +156,7 @@ describe('a refusal that a reviewer rewrite recovers (issue #4036)', () => {
 
     expect(notices(run)).toStrictEqual([
       'Model scripted-model refused the request; retrying in 15 s (retry 1 of 1).',
+      `Model scripted-model refused 2 time(s); asking ${REVIEWER_MODEL} to review the recent context.`,
       `Refusal review by ${REVIEWER_MODEL}: rewrote 1 message(s) [summary: "${preview(SUMMARY_ORIGINAL)}" → "${preview(SUMMARY_REWRITTEN)}"] (operation ${operationId}). Retrying.`,
       `Refusal recovered after rewrite by ${REVIEWER_MODEL}.`,
     ]);

@@ -15,7 +15,7 @@
  * delays without sleeping.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, setDefaultTimeout } from 'bun:test';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { isDoneEvent, isNoticeEvent } from './helpers/agentHarness.js';
 import {
@@ -29,6 +29,10 @@ import {
   turnRecords,
 } from './helpers/refusal-endpoint.js';
 import type { ScriptedRun } from './helpers/refusal-endpoint.js';
+
+// Each case runs a whole agent against a local endpoint; a loaded machine
+// needs more than Bun's 5 s default.
+setDefaultTimeout(90_000);
 
 const UNREQUESTED = 'this response must never be requested';
 const PROMPT = 'please summarise the work';
@@ -241,6 +245,61 @@ describe('refusal.retries 0 (issue #4036)', () => {
     expect(notices(run)).toStrictEqual([]);
     expect(journalActions(run)).toStrictEqual(['stop']);
   });
+
+  describe('with the production defaults for review', () => {
+    const NO_CHANGE = JSON.stringify({
+      verdict: 'no_change',
+      explanation: 'Nothing editable in this context.',
+      rewrites: [],
+    });
+
+    it('goes straight to review, because rewrite is on by default', async () => {
+      const run = await runScriptedPrompt(
+        [emptyRefusalReply(), stopReply(NO_CHANGE), stopReply(UNREQUESTED)],
+        [PROMPT],
+        { settings: { 'refusal.retries': 0, 'refusal.rewrite': undefined } },
+      );
+
+      expect({
+        requests: run.requests.length,
+        waits: run.waits,
+        actions: journalActions(run),
+        reasons: doneReasons(run),
+      }).toStrictEqual({
+        requests: 2,
+        waits: [],
+        actions: ['review', 'stop'],
+        reasons: ['refusal'],
+      });
+    });
+
+    it.each([
+      ['refusal.rewrite is false', { 'refusal.rewrite': false }],
+      ['refusal.max-rewrites is 0', { 'refusal.max-rewrites': 0 }],
+    ])('stops at the first refusal when %s', async (_name, settings) => {
+      const run = await runScriptedPrompt(
+        [emptyRefusalReply(), stopReply(UNREQUESTED)],
+        [PROMPT],
+        {
+          settings: {
+            'refusal.retries': 0,
+            'refusal.rewrite': undefined,
+            ...settings,
+          },
+        },
+      );
+
+      expect({
+        requests: run.requests.length,
+        actions: journalActions(run),
+        reasons: doneReasons(run),
+      }).toStrictEqual({
+        requests: 1,
+        actions: ['stop'],
+        reasons: ['refusal'],
+      });
+    });
+  });
 });
 
 describe('cancelling during the backoff (issue #4036)', () => {
@@ -294,6 +353,45 @@ describe('retry budget belongs to the logical request (issue #4036)', () => {
     expect(run.requests).toHaveLength(5);
     expect(run.waits).toStrictEqual([15000, 60000]);
     expect(lastOf(doneReasons(run))).toBe('refusal');
+  });
+
+  it('numbers every attempt of a prompt once, across the sends that reuse its id', async () => {
+    const run = await runScriptedPrompt(
+      [
+        pendingTodoReply(),
+        emptyRefusalReply(),
+        stopReply('Working on the report.'),
+        emptyRefusalReply(),
+        emptyRefusalReply(),
+        stopReply(UNREQUESTED),
+      ],
+      [PROMPT],
+      { settings: TWO_RETRIES },
+    );
+
+    const logged = turnRecords(run.tokenRecords).map(
+      (r) => `${String(r['prompt_id'])}#${String(r['attempt_index'])}`,
+    );
+    const journaled = run.journalRecords
+      .filter((record) => record['type'] === 'refusal')
+      .map((record) => {
+        const payload = record['payload'] as {
+          promptId: string;
+          attemptIndex: number;
+        };
+        return `${payload.promptId}#${payload.attemptIndex}`;
+      });
+    expect({
+      loggedAttempts: logged.length,
+      uniqueLogged: new Set(logged).size,
+      uniqueJournaled: new Set(journaled).size,
+      journaledAttempts: journaled.length,
+    }).toStrictEqual({
+      loggedAttempts: 5,
+      uniqueLogged: 5,
+      uniqueJournaled: 3,
+      journaledAttempts: 3,
+    });
   });
 });
 

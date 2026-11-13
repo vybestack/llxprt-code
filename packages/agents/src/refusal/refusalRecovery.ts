@@ -10,6 +10,7 @@ import {
   describeRefusalStop,
   describeReviewDisallowed,
   describeReviewRewrite,
+  describeReviewStart,
   describeReviewStopped,
   type RewriteSummary,
 } from './refusalNotices.js';
@@ -26,8 +27,9 @@ import type {
   RefusalContext,
   RefusalDecision,
   RefusalRecovery,
+  ResolvedRefusalDecision,
 } from './refusalTypes.js';
-import type { RefusalReviewer } from './reviewTypes.js';
+import type { RefusalReviewer, ReviewOutcome } from './reviewTypes.js';
 
 /** Logical requests whose budgets are remembered before the oldest is dropped. */
 const MAX_TRACKED_REQUESTS = 64;
@@ -45,6 +47,8 @@ interface RequestBudget {
   /** Reviews that rewrote context, for the summary and the recovery notice. */
   readonly rewrites: RewriteSummary[];
   recoveryAnnounced: boolean;
+  /** Attempt indexes handed out so far, over every send under the prompt id. */
+  attemptsAllocated: number;
 }
 
 export interface RefusalRecoveryDeps {
@@ -78,6 +82,13 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
   /** Fixes the policy for `promptId` the first time the request is seen. */
   admit(promptId: string): void {
     this.budgetFor(promptId);
+  }
+
+  allocateAttempt(promptId: string): number {
+    const budget = this.budgetFor(promptId);
+    const index = budget.attemptsAllocated;
+    budget.attemptsAllocated += 1;
+    return index;
   }
 
   async decide(
@@ -122,9 +133,10 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
   }
 
   /**
-   * Hands the refused request to the reviewer. A rewrite starts a fresh retry
-   * round for the rewritten request; every other outcome ends the request
-   * with the reviewer's own explanation.
+   * Hands the refused request to the reviewer. The caller is told who is being
+   * asked before the answer is awaited. A rewrite starts a fresh retry round
+   * for the rewritten request; every other outcome ends the request with the
+   * reviewer's own explanation.
    */
   private async review(
     reviewer: RefusalReviewer,
@@ -133,14 +145,33 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
     context: RefusalContext,
   ): Promise<RefusalDecision> {
     await recordRefusalInJournal(context.execution, attempt, 'review');
-    const outcome = await reviewer.review({
+    const started = await reviewer.begin({
       attempt,
       reviewProfile: budget.policy.reviewProfile,
       retriesTried: budget.delaysMs.length,
       execution: context.execution,
+      pending: context.pending,
       modelParameters: context.modelParameters,
       signal: context.signal,
     });
+    const resolve = async (): Promise<ResolvedRefusalDecision> =>
+      this.afterReview(await started.run(), budget);
+    if (started.reviewer === undefined) return resolve();
+    return {
+      action: 'review',
+      notice: describeReviewStart({
+        model: attempt.model,
+        refusals: budget.refusals,
+        reviewer: started.reviewer.model,
+      }),
+      complete: resolve,
+    };
+  }
+
+  private afterReview(
+    outcome: ReviewOutcome,
+    budget: RequestBudget,
+  ): ResolvedRefusalDecision {
     if (outcome.kind === 'rewritten') {
       budget.rewritesUsed += 1;
       budget.retriesUsed = 0;
@@ -156,6 +187,7 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
           changes: outcome.changes,
           operationId: outcome.operationId,
         }),
+        rewrite: { pendingEdits: outcome.pendingEdits },
       };
     }
     if (outcome.kind === 'disallowed') {
@@ -180,7 +212,7 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
   private stop(
     attempt: RefusalAttempt,
     budget: RequestBudget,
-  ): RefusalDecision {
+  ): ResolvedRefusalDecision {
     if (budget.delaysMs.length === 0 && budget.rewrites.length === 0) {
       return { action: 'stop' };
     }
@@ -206,6 +238,7 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
       delaysMs: [],
       rewrites: [],
       recoveryAnnounced: false,
+      attemptsAllocated: 0,
     };
     this.budgets.set(promptId, created);
     if (this.budgets.size > MAX_TRACKED_REQUESTS) {

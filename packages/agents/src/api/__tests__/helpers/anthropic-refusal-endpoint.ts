@@ -6,10 +6,12 @@
 
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import type {
-  EndpointReply,
-  ScriptedEndpoint,
-  WireRequest,
+import {
+  trackConnection,
+  type EndpointReply,
+  type ReplyResponder,
+  type ScriptedEndpoint,
+  type WireRequest,
 } from './refusal-endpoint.js';
 
 const PROMPT_TOKENS = 120;
@@ -75,21 +77,30 @@ function renderAnthropicReply(reply: EndpointReply): string {
 }
 
 /**
- * A local Anthropic Messages endpoint answering request N with reply N. A
- * request beyond the script gets a marker answer and is still recorded.
+ * A local Anthropic Messages endpoint answering request N with reply N, or with
+ * whatever a responder decides from the request itself. A request beyond the
+ * script gets a marker answer and is still recorded.
  */
 export async function startAnthropicEndpoint(
-  replies: readonly EndpointReply[],
+  replies: readonly EndpointReply[] | ReplyResponder,
 ): Promise<ScriptedEndpoint> {
   const requests: WireRequest[] = [];
+  const disconnected: number[] = [];
   const server = createServer((request, response) => {
     void (async (): Promise<void> => {
       const buffers: Buffer[] = [];
       for await (const part of request) buffers.push(Buffer.from(part));
-      requests.push(
-        JSON.parse(Buffer.concat(buffers).toString('utf8')) as WireRequest,
-      );
-      const reply = replies[requests.length - 1] ?? {
+      const body = JSON.parse(
+        Buffer.concat(buffers).toString('utf8'),
+      ) as WireRequest;
+      requests.push(body);
+      const index = requests.length - 1;
+      const connection = trackConnection(response, index, disconnected);
+      const scripted =
+        typeof replies === 'function'
+          ? await replies(body, index, connection)
+          : replies.find((_, position) => position === index);
+      const reply = scripted ?? {
         kind: 'finish' as const,
         finishReason: 'stop',
         text: 'UNSCRIPTED REQUEST: the agent asked for more than expected',
@@ -109,6 +120,7 @@ export async function startAnthropicEndpoint(
   return {
     url: `http://127.0.0.1:${address.port}`,
     requests: () => requests,
+    disconnectedRequests: () => disconnected,
     stop: async () => {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));

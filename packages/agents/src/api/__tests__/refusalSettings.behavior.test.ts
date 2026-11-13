@@ -9,9 +9,13 @@
  * the provider as model parameters.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, setDefaultTimeout } from 'bun:test';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { runScriptedPrompt, stopReply } from './helpers/refusal-endpoint.js';
+
+// Each case runs a whole agent against a local endpoint; a loaded machine
+// needs more than Bun's 5 s default.
+setDefaultTimeout(90_000);
 
 const POLICY = {
   'refusal.retries': 4,

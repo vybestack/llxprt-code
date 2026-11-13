@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildCompressionChatOptions } from '../compression/compressionSystemPrompt.js';
@@ -26,9 +27,14 @@ import type {
   ReviewOutcome,
   ReviewRequest,
   ReviewerIdentity,
+  StartedReview,
 } from './reviewTypes.js';
 import { parseReviewReply } from './reviewVerdict.js';
-import { buildReviewWindow, type ReviewWindow } from './reviewWindow.js';
+import {
+  buildReviewWindow,
+  pendingEditsOf,
+  type ReviewWindow,
+} from './reviewWindow.js';
 import { applyReviewedRewrite } from './rewriteApplier.js';
 
 /** What the session lends the reviewer; everything is read when a review runs. */
@@ -86,13 +92,7 @@ function reviewContents(data: string): IContent[] {
 export class HistoryRefusalReviewer implements RefusalReviewer {
   constructor(private readonly deps: RefusalReviewerDeps) {}
 
-  async review(request: ReviewRequest): Promise<ReviewOutcome> {
-    const run = await this.run(request);
-    await this.log(request, run);
-    return run.outcome;
-  }
-
-  private async run(request: ReviewRequest): Promise<ReviewRun> {
+  async begin(request: ReviewRequest): Promise<StartedReview> {
     const setting: ReviewProfileSetting =
       request.reviewProfile === undefined
         ? 'compression.profile'
@@ -103,12 +103,13 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
       resolved = await this.deps.resolveProvider(profile, setting);
     } catch (error: unknown) {
       this.rethrowIfAborted(request, error);
-      return this.stopped(
+      const run = this.stopped(
         'unusable-profile',
         'error',
         undefined,
         messageOf(error),
       );
+      return { reviewer: undefined, run: () => Promise.resolve(run.outcome) };
     }
     const reviewer: ReviewerIdentity = {
       ...(profile !== undefined && { profile }),
@@ -117,19 +118,44 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
         resolved.resolved?.model ??
         String(resolved.runtime.metadata?.model ?? request.attempt.model),
     };
-    return this.callAndApply(request, resolved, reviewer);
+    // A named profile is an isolated route with parameters of its own; only
+    // the session-model fallback may reuse the refused request's admission.
+    const modelParameters =
+      profile === undefined ? request.modelParameters : undefined;
+    return {
+      reviewer,
+      run: async () => {
+        const run = await this.callAndApply(
+          request,
+          resolved,
+          reviewer,
+          modelParameters,
+        );
+        await this.log(request, run);
+        return run.outcome;
+      },
+    };
+  }
+
+  /** Asks the reviewer and applies its answer, in one step. */
+  async review(request: ReviewRequest): Promise<ReviewOutcome> {
+    return (await this.begin(request)).run();
   }
 
   private async callAndApply(
     request: ReviewRequest,
     resolved: CompressionProviderResult,
     reviewer: ReviewerIdentity,
+    modelParameters: AdmittedModelParameters | undefined,
   ): Promise<ReviewRun> {
     const history = this.deps.history();
-    const window = buildReviewWindow(history.getAll());
+    const window = buildReviewWindow(
+      history.getAll(),
+      request.pending?.userContents,
+    );
     let call: ReviewCallResult;
     try {
-      call = await this.call(request, resolved, window);
+      call = await this.call(request, resolved, window, modelParameters);
     } catch (error: unknown) {
       this.rethrowIfAborted(request, error);
       return this.stopped(
@@ -189,6 +215,7 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
   ): Promise<ReviewRun> {
     const { reviewer, call, decision } = input;
     const operationId = (this.deps.newOperationId ?? randomUUID)();
+    const pendingEdits = pendingEditsOf(input.window, decision.rewrites);
     const result = await applyReviewedRewrite({
       history: input.history,
       window: input.window,
@@ -199,6 +226,8 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
       explanation: decision.explanation,
       operationId,
       now: (this.deps.now ?? (() => new Date()))(),
+      signal: request.signal,
+      historyUnchanged: pendingEdits.length === decision.rewrites.length,
     });
     if (result.kind === 'history-changed') {
       return this.stopped('history-changed', 'error', reviewer, '', call);
@@ -219,6 +248,7 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
         operationId,
         explanation: decision.explanation,
         changes: result.changes,
+        pendingEdits,
       },
       verdict: 'rewrite',
       reviewer,
@@ -230,6 +260,7 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
     request: ReviewRequest,
     resolved: CompressionProviderResult,
     window: ReviewWindow,
+    modelParameters: AdmittedModelParameters | undefined,
   ): Promise<ReviewCallResult> {
     const data = buildReviewData(window, request.attempt, request.retriesTried);
     const options = await buildCompressionChatOptions({
@@ -242,7 +273,7 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
       fallbackModel: this.deps.runtimeState.model,
       runtimeState: this.deps.runtimeState,
       provider: resolved.provider,
-      modelParameters: request.modelParameters,
+      modelParameters,
       source: 'RefusalReviewer.callProvider',
     });
     return callReviewProvider(resolved.provider, options, {

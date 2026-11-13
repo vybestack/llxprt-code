@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
-import { createServer } from 'node:http';
+import { createServer, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ApprovalMode, createAgent } from '@vybestack/llxprt-code-agents';
@@ -33,6 +33,11 @@ export type EndpointReply =
       readonly content: string;
       /** End the stream with the refusal finish reason after the tool call. */
       readonly refused?: boolean;
+    }
+  | {
+      readonly kind: 'tool-call';
+      readonly name: string;
+      readonly args: Readonly<Record<string, unknown>>;
     };
 
 /** The endpoint rejects the request with this HTTP status. */
@@ -67,6 +72,14 @@ export function refusedTodoReply(): EndpointReply {
     content: 'write the quarterly report',
     refused: true,
   };
+}
+
+/** The model asks the agent to run one tool with these arguments. */
+export function toolCallReply(
+  name: string,
+  args: Readonly<Record<string, unknown>>,
+): EndpointReply {
+  return { kind: 'tool-call', name, args };
 }
 
 /** A task-list write that leaves one pending item, so a continuation is due. */
@@ -104,24 +117,36 @@ function usageChunk(outputTokens: number): string {
   })}\n\n`;
 }
 
+function renderToolCall(
+  name: string,
+  args: object,
+  finishReason: string,
+): string {
+  const call = {
+    index: 0,
+    id: `call-${name}-1`,
+    type: 'function',
+    function: { name, arguments: JSON.stringify(args) },
+  };
+  return (
+    chunk({ role: 'assistant', tool_calls: [call] }, finishReason) +
+    usageChunk(8) +
+    'data: [DONE]\n\n'
+  );
+}
+
 function renderReply(
   reply: Exclude<EndpointReply, { kind: 'http-error' }>,
 ): string {
+  if (reply.kind === 'tool-call') {
+    return renderToolCall(reply.name, reply.args, 'tool_calls');
+  }
   if (reply.kind === 'todo-write') {
     const todos = [{ id: '1', content: reply.content, status: 'pending' }];
-    const call = {
-      index: 0,
-      id: 'call-todo-1',
-      type: 'function',
-      function: { name: 'todo_write', arguments: JSON.stringify({ todos }) },
-    };
-    return (
-      chunk(
-        { role: 'assistant', tool_calls: [call] },
-        reply.refused === true ? 'refusal' : 'tool_calls',
-      ) +
-      usageChunk(8) +
-      'data: [DONE]\n\n'
+    return renderToolCall(
+      'todo_write',
+      { todos },
+      reply.refused === true ? 'refusal' : 'tool_calls',
     );
   }
   const delta =
@@ -135,16 +160,43 @@ function renderReply(
   );
 }
 
+/** Notes a client that hangs up before the reply ended, by request index. */
+export function trackConnection(
+  response: ServerResponse,
+  index: number,
+  disconnected: number[],
+): RequestConnection {
+  let notify: () => void = () => undefined;
+  const clientClosed = new Promise<void>((resolve) => {
+    notify = resolve;
+  });
+  response.on('close', () => {
+    if (response.writableEnded) return;
+    disconnected.push(index);
+    notify();
+  });
+  return { clientClosed };
+}
+
 export interface ScriptedEndpoint {
   readonly url: string;
   requests(): readonly WireRequest[];
+  /** Indexes of requests whose client hung up before the reply ended. */
+  disconnectedRequests(): readonly number[];
   stop(): Promise<void>;
+}
+
+/** What a responder can learn about the connection a request arrived on. */
+export interface RequestConnection {
+  /** Settles when the client drops the connection before the reply ended. */
+  readonly clientClosed: Promise<void>;
 }
 
 /** Chooses the reply to one request from what the endpoint received. */
 export type ReplyResponder = (
   request: WireRequest,
   index: number,
+  connection: RequestConnection,
 ) => EndpointReply | Promise<EndpointReply>;
 
 /**
@@ -157,6 +209,7 @@ export async function startScriptedEndpoint(
   replies: readonly EndpointReply[] | ReplyResponder,
 ): Promise<ScriptedEndpoint> {
   const requests: WireRequest[] = [];
+  const disconnected: number[] = [];
   const server = createServer((request, response) => {
     void (async (): Promise<void> => {
       const buffers: Buffer[] = [];
@@ -166,9 +219,10 @@ export async function startScriptedEndpoint(
       ) as WireRequest;
       requests.push(body);
       const index = requests.length - 1;
+      const connection = trackConnection(response, index, disconnected);
       const scripted =
         typeof replies === 'function'
-          ? await replies(body, index)
+          ? await replies(body, index, connection)
           : replies.find((_, position) => position === index);
       const reply =
         scripted ??
@@ -196,6 +250,7 @@ export async function startScriptedEndpoint(
   return {
     url: `http://127.0.0.1:${address.port}/v1`,
     requests: () => requests,
+    disconnectedRequests: () => disconnected,
     stop: async () => {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -278,10 +333,13 @@ export async function runScriptedPrompt(
     : await startScriptedEndpoint(replies);
   const waits: number[] = [];
   let agent: Agent | undefined;
-  const restoreWait = installRefusalWaitForTesting(async (ms, signal) => {
-    waits.push(ms);
-    if (agent !== undefined) await options.wait?.({ ms, signal, agent });
-  });
+  const restoreWait = installRefusalWaitForTesting(
+    sessionId,
+    async (ms, signal) => {
+      waits.push(ms);
+      if (agent !== undefined) await options.wait?.({ ms, signal, agent });
+    },
+  );
   try {
     agent = await createAgent({
       provider: anthropic ? 'anthropic' : 'openai',

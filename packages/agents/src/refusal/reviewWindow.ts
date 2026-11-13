@@ -32,6 +32,8 @@ export interface ReviewEntry {
 type EditableField = 'text' | 'result' | 'output';
 
 interface EntryLocation {
+  /** The committed history, or the user turn that is waiting to be committed. */
+  readonly source: 'history' | 'pending';
   readonly contentIndex: number;
   readonly blockIndex: number;
   readonly field: EditableField;
@@ -44,6 +46,14 @@ export interface ReviewWindow {
   /** The exact history the window was cut from, for the commit-time check. */
   readonly snapshot: readonly IContent[];
   readonly locations: ReadonlyMap<string, EntryLocation>;
+}
+
+/** One block of the pending user turn whose text a rewrite replaces. */
+export interface PendingEdit {
+  readonly contentIndex: number;
+  readonly blockIndex: number;
+  readonly field: EditableField;
+  readonly newText: string;
 }
 
 export interface ReviewRewrite {
@@ -192,20 +202,24 @@ function latestGoal(history: readonly IContent[]): string | undefined {
   return index < 0 ? undefined : clip(humanText(history[index]), GOAL_LIMIT);
 }
 
-/**
- * Cuts the history down to what a reviewer should read after a refusal, and
- * marks which of it may be edited: compression-summary text, tool-result text
- * and the assistant's own visible text. Everything else (human messages, tool
- * calls, media, thinking, ordering) is context only.
- */
-export function buildReviewWindow(history: readonly IContent[]): ReviewWindow {
+interface WindowPart {
+  readonly contents: readonly IContent[];
+  /** Positions in `contents` that belong to the window, oldest first. */
+  readonly indexes: readonly number[];
+  readonly source: EntryLocation['source'];
+}
+
+function windowEntries(
+  part: WindowPart,
+  idOf: (content: IContent, contentIndex: number, block: number) => string,
+): { entries: ReviewEntry[]; locations: Map<string, EntryLocation> } {
   const entries: ReviewEntry[] = [];
   const locations = new Map<string, EntryLocation>();
-  for (const contentIndex of windowIndexes(history)) {
-    const content = history[contentIndex];
+  for (const contentIndex of part.indexes) {
+    const content = part.contents[contentIndex];
     for (const [blockIndex, block] of content.blocks.entries()) {
       const found = blockEntry(content, block);
-      const id = entryId(content, contentIndex, blockIndex);
+      const id = idOf(content, contentIndex, blockIndex);
       entries.push({
         id,
         role: content.speaker,
@@ -216,15 +230,53 @@ export function buildReviewWindow(history: readonly IContent[]): ReviewWindow {
           : clip(found.text, CONTEXT_TEXT_LIMIT),
       });
       if (found.editable && found.field !== undefined) {
-        locations.set(id, { contentIndex, blockIndex, field: found.field });
+        locations.set(id, {
+          source: part.source,
+          contentIndex,
+          blockIndex,
+          field: found.field,
+        });
       }
     }
   }
+  return { entries, locations };
+}
+
+/**
+ * Cuts the history down to what a reviewer should read after a refusal, and
+ * marks which of it may be edited: compression-summary text, tool-result text
+ * and the assistant's own visible text. Everything else (human messages, tool
+ * calls, media, thinking, ordering) is context only.
+ *
+ * The user turn that was refused is not in the history yet (it is committed
+ * with the model's answer), so it is read separately: its human text is the
+ * newest goal and context only, its tool results are editable like any other.
+ */
+export function buildReviewWindow(
+  history: readonly IContent[],
+  pending: readonly IContent[] = [],
+): ReviewWindow {
+  const committed = windowEntries(
+    {
+      contents: history,
+      indexes: windowIndexes(history),
+      source: 'history',
+    },
+    entryId,
+  );
+  const waiting = windowEntries(
+    {
+      contents: pending,
+      indexes: pending.map((_, index) => index),
+      source: 'pending',
+    },
+    (_content, contentIndex, block) => `p${contentIndex}.${block}`,
+  );
   return {
-    entries,
-    goal: latestGoal(history),
+    entries: [...committed.entries, ...waiting.entries],
+    goal: latestGoal(pending) ?? latestGoal(history),
     snapshot: [...history],
-    locations,
+    locations: new Map([...committed.locations, ...waiting.locations]),
   };
 }
 
@@ -241,32 +293,76 @@ function withEditedBlock(
   return { ...block, result: newText };
 }
 
+interface BlockEdit {
+  readonly contentIndex: number;
+  readonly blockIndex: number;
+  readonly field: EditableField;
+  readonly newText: string;
+}
+
+function applyBlockEdits(
+  contents: readonly IContent[],
+  edits: readonly BlockEdit[],
+): IContent[] {
+  return contents.map((content, contentIndex) => {
+    const forContent = edits.filter((e) => e.contentIndex === contentIndex);
+    if (forContent.length === 0) return content;
+    const blocks = content.blocks.map((block, blockIndex) => {
+      const edit = forContent.find((e) => e.blockIndex === blockIndex);
+      return edit === undefined
+        ? block
+        : withEditedBlock(block, edit.field, edit.newText);
+    });
+    return { ...content, blocks };
+  });
+}
+
+function editsAt(
+  window: ReviewWindow,
+  rewrites: readonly ReviewRewrite[],
+  source: EntryLocation['source'],
+): BlockEdit[] {
+  return rewrites.flatMap((rewrite) => {
+    const at = window.locations.get(rewrite.id);
+    return at === undefined || at.source !== source
+      ? []
+      : [
+          {
+            contentIndex: at.contentIndex,
+            blockIndex: at.blockIndex,
+            field: at.field,
+            newText: rewrite.newText,
+          },
+        ];
+  });
+}
+
 /**
  * The window's snapshot with the given edits applied. Only the targeted block
  * text changes: other blocks, call ids and names, metadata and chronology
- * markers are carried over, and untouched entries keep their identity.
+ * markers are carried over, and untouched entries keep their identity. Edits
+ * to the pending user turn are not part of the history; see
+ * {@link pendingEditsOf}.
  */
 export function applyReviewRewrites(
   window: ReviewWindow,
   rewrites: readonly ReviewRewrite[],
 ): IContent[] {
-  const edits = new Map<number, Array<{ at: EntryLocation; text: string }>>();
-  for (const rewrite of rewrites) {
-    const at = window.locations.get(rewrite.id);
-    if (at === undefined) continue;
-    const forContent = edits.get(at.contentIndex) ?? [];
-    forContent.push({ at, text: rewrite.newText });
-    edits.set(at.contentIndex, forContent);
-  }
-  return window.snapshot.map((content, contentIndex) => {
-    const forContent = edits.get(contentIndex);
-    if (forContent === undefined) return content;
-    const blocks = content.blocks.map((block, blockIndex) => {
-      const edit = forContent.find((e) => e.at.blockIndex === blockIndex);
-      return edit === undefined
-        ? block
-        : withEditedBlock(block, edit.at.field, edit.text);
-    });
-    return { ...content, blocks };
-  });
+  return applyBlockEdits(window.snapshot, editsAt(window, rewrites, 'history'));
+}
+
+/** The rewrites that land on the pending user turn rather than the history. */
+export function pendingEditsOf(
+  window: ReviewWindow,
+  rewrites: readonly ReviewRewrite[],
+): PendingEdit[] {
+  return editsAt(window, rewrites, 'pending');
+}
+
+/** The pending user turn's contents with the given edits applied. */
+export function applyPendingEdits(
+  contents: readonly IContent[],
+  edits: readonly PendingEdit[],
+): IContent[] {
+  return applyBlockEdits(contents, edits);
 }

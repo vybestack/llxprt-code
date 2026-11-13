@@ -33,10 +33,7 @@ import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/st
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import { resolveGeneratingModel } from './generatingModelResolver.js';
-import {
-  filterAfcByHookRestrictions,
-  filterHookRestrictedBlocks,
-} from './hookToolRestrictions.js';
+import { applyHookToolFiltering } from './hookToolRestrictions.js';
 import { normalizeToolInteractionInput } from './MessageConverter.js';
 import {
   bindPreparedTransportSignal,
@@ -45,6 +42,7 @@ import {
   prepareAtSendSeam,
 } from './promptEnvelopeSendSeam.js';
 import { withRetryRequestState } from './retry-request-state.js';
+import { SendRequestState } from './sendRequestState.js';
 import type { StreamProcessor } from './StreamProcessor.js';
 import { withReportedUsage } from './streamRequestHelpers.js';
 import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
@@ -59,6 +57,7 @@ import { hookControlStreamEvents } from './turnHookControl.js';
 import {
   createProviderSendTiming,
   logModelOutputResponse,
+  logToolDiagnostics,
   readProviderStreamResponse,
   turnTelemetryPorts,
   validateProviderForSend,
@@ -93,8 +92,10 @@ import {
   ModelRefusalSignal,
   advanceAfterAttempt,
   announceRefusalSettlement,
+  keepRequestForNextAttempt,
   refusalNotice,
   settleRefusal,
+  turnForNextAttempt,
   type AttemptCounters,
   type RefusalRecovery,
   type StreamAttemptOutcome,
@@ -341,9 +342,13 @@ export class TurnProcessor {
       // whatever caused the resend, so token-log attempt indexes stay unique.
       const attempt: AttemptCounters = {
         contentAttempt: 0,
-        requestAttempt: 0,
+        requestAttempt: this.refusalRecovery.allocateAttempt(prompt_id),
         announceRetry: false,
       };
+      // A reviewer may rewrite the tool results this turn carries; the
+      // rewritten turn is then what is resent and finally committed.
+      let turn = prepared;
+      const sendState = new SendRequestState();
       let retrying = true;
       while (
         retrying &&
@@ -352,11 +357,14 @@ export class TurnProcessor {
         const outcome = yield* this._runStreamAttempt(
           requestParams,
           prompt_id,
-          prepared,
+          turn,
           attempt,
           semanticMediaPurge,
+          sendState,
         );
         lastError = outcome.error;
+        turn = turnForNextAttempt(turn, outcome);
+        keepRequestForNextAttempt(sendState, outcome);
         retrying = await advanceAfterAttempt(outcome, attempt, {
           recovery: this.refusalRecovery,
           usageLogger: this.compressionHandler.tokenUsageLogger,
@@ -398,6 +406,7 @@ export class TurnProcessor {
     prepared: PreparedUserTurn,
     attempt: AttemptCounters,
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
+    sendState: SendRequestState,
   ): AsyncGenerator<StreamEvent, StreamAttemptOutcome> {
     if (attempt.announceRetry) {
       yield { type: StreamEventType.RETRY };
@@ -416,6 +425,7 @@ export class TurnProcessor {
         prepared,
         attempt.requestAttempt,
         semanticMediaPurge,
+        sendState,
       );
       for await (const chunk of stream) {
         hasYieldedChunk ||= chunkHasVisibleOutput(chunk);
@@ -439,6 +449,7 @@ export class TurnProcessor {
               route?.provider.name ?? this.providerResolver('stream').name,
             model: () => route?.model ?? this.ports.state.model,
             execution: params.recordingExecution,
+            pending: prepared,
             modelParameters: params.modelParameters,
             signal: params.config?.abortSignal,
           },
@@ -675,7 +686,12 @@ export class TurnProcessor {
   ): Promise<ModelOutput> {
     const tools = toolSelection.tools;
     const allowedFunctionNames = toolSelection.allowedFunctionNames;
-    this._logToolDiagnostics(provider, tools, providerBaseUrl);
+    logToolDiagnostics(this.logger, {
+      provider,
+      tools,
+      baseUrl: providerBaseUrl,
+      model: this.ports.state.model,
+    });
     const timeoutController = new AbortController();
     const upstreamAbortSignal = params.config?.abortSignal;
     const onAbort = () => timeoutController.abort();
@@ -726,7 +742,7 @@ export class TurnProcessor {
         upstreamAbortSignal,
       );
       const output = toModelStreamChunk(lastResponse);
-      this._applyHookToolFiltering(output, lastResponse, allowedFunctionNames);
+      applyHookToolFiltering(output, allowedFunctionNames);
       return output;
     } catch (error) {
       this.currentPromptEnvelopeEstimate = null;
@@ -734,30 +750,6 @@ export class TurnProcessor {
     } finally {
       timeoutController.abort();
       upstreamAbortSignal?.removeEventListener('abort', onAbort);
-    }
-  }
-
-  private _applyHookToolFiltering(
-    output: ModelStreamChunk,
-    _lastResponse: IContent,
-    allowedFunctionNames: string[] | undefined,
-  ): void {
-    if (allowedFunctionNames === undefined) return;
-    output.content = {
-      ...output.content,
-      blocks: filterHookRestrictedBlocks(
-        output.content.blocks,
-        allowedFunctionNames,
-      ),
-    };
-    // P13 AFC boundary: toModelStreamChunk already extracted AFC into
-    // output.afcHistory and stripped it from providerMetadata. Apply
-    // hook-restriction filtering to the first-class afcHistory field only.
-    if (output.afcHistory !== undefined) {
-      output.afcHistory = filterAfcByHookRestrictions(
-        output.afcHistory,
-        allowedFunctionNames,
-      );
     }
   }
 
@@ -881,31 +873,6 @@ export class TurnProcessor {
       allowedNames.has(canonicalizeToolName(decl.name)),
     );
     return { tools: filteredTools, allowedFunctionNames: allowedFunctions };
-  }
-
-  private _logToolDiagnostics(
-    provider: IProvider,
-    tools: ToolDeclaration[] | undefined,
-    baseUrl: string | undefined,
-  ): void {
-    if (Array.isArray(tools)) {
-      const total = tools.length;
-      if (total === 0)
-        this.logger.warn(
-          () =>
-            `[TurnProcessor] Tools array exists but has 0 function declarations!`,
-          { tools, provider: provider.name },
-        );
-    }
-    this.logger.debug(
-      () => '[TurnProcessor] Calling provider.generateChatCompletion',
-      {
-        providerName: provider.name,
-        model: this.ports.state.model,
-        toolCount: Array.isArray(tools) ? tools.length : 0,
-        baseUrl,
-      },
-    );
   }
 
   /**
