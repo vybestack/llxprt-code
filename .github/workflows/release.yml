@@ -234,7 +234,7 @@ jobs:
           done
       - name: Upload release model diagnostics
         if: always()
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
           name: release-model-diagnostics-${{ github.run_id }}
           path: ${{ runner.temp }}/release-diagnostics/
@@ -404,7 +404,7 @@ jobs:
           tar -czf "$RUNNER_TEMP/sandbox-release-inputs.tgz" packages/*/dist/*.tgz -C "$RUNNER_TEMP" release-package-tarballs.sha256
       - name: Upload release consumer proof
         if: always()
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
           name: release-consumer-proof-${{ github.run_id }}
           path: |
@@ -453,15 +453,16 @@ jobs:
           find . -type f ! -name release-artifacts.sha256 -print0 | sort -z | xargs -0 sha256sum > "$RUNNER_TEMP/release-artifacts.sha256"
           mv "$RUNNER_TEMP/release-artifacts.sha256" release-artifacts.sha256
       - name: Upload prepared release artifacts
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
           name: prepared-release-artifacts-${{ github.run_id }}
           path: ${{ runner.temp }}/release-artifacts/
+          include-hidden-files: true
           if-no-files-found: error
       - name: Upload versioned sandbox input artifact
         if: ${{ inputs.publish_vscode_only != true }}
         id: upload
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
           name: sandbox-release-inputs-${{ github.run_id }}
           path: ${{ runner.temp }}/sandbox-release-inputs.tgz
@@ -485,7 +486,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
       - name: Download prepared release artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # ratchet:actions/download-artifact@v8
         with:
           name: prepared-release-artifacts-${{ github.run_id }}
           path: ${{ runner.temp }}/release-artifacts
@@ -509,7 +510,7 @@ jobs:
           git checkout --detach "$RELEASE_COMMIT_SHA"
           test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT_SHA"
       - name: Download shared versioned sandbox inputs
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # ratchet:actions/download-artifact@v8
         with:
           name: sandbox-release-inputs-${{ github.run_id }}
       - name: Restore and verify sandbox input tarballs
@@ -545,7 +546,7 @@ jobs:
           echo "sha256=$(cut -d' ' -f1 "$RUNNER_TEMP/candidate-amd64.tar.sha256")" >> "$GITHUB_OUTPUT"
       - name: Upload amd64 candidate image
         id: upload
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
           name: sandbox-candidate-amd64-${{ github.run_id }}
           path: |
@@ -571,7 +572,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
       - name: Download prepared release artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # ratchet:actions/download-artifact@v8
         with:
           name: prepared-release-artifacts-${{ github.run_id }}
           path: ${{ runner.temp }}/release-artifacts
@@ -595,7 +596,7 @@ jobs:
           git checkout --detach "$RELEASE_COMMIT_SHA"
           test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT_SHA"
       - name: Download shared versioned sandbox inputs
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # ratchet:actions/download-artifact@v8
         with:
           name: sandbox-release-inputs-${{ github.run_id }}
       - name: Restore and verify sandbox input tarballs
@@ -633,7 +634,7 @@ jobs:
           echo "sha256=$(cut -d' ' -f1 "$RUNNER_TEMP/candidate-arm64.tar.sha256")" >> "$GITHUB_OUTPUT"
       - name: Upload arm64 candidate image
         id: upload
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
           name: sandbox-candidate-arm64-${{ github.run_id }}
           path: |
@@ -692,7 +693,7 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Download prepared release artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # ratchet:actions/download-artifact@v8
         with:
           name: prepared-release-artifacts-${{ github.run_id }}
           path: ${{ runner.temp }}/release-artifacts
@@ -849,14 +850,14 @@ jobs:
 
       - name: Download amd64 candidate image
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # ratchet:actions/download-artifact@v8
         with:
           name: sandbox-candidate-amd64-${{ github.run_id }}
           path: ${{ runner.temp }}/candidate-amd64
 
       - name: Download arm64 candidate image
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # ratchet:actions/download-artifact@v8
         with:
           name: sandbox-candidate-arm64-${{ github.run_id }}
           path: ${{ runner.temp }}/candidate-arm64

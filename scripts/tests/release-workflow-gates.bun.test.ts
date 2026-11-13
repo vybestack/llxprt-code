@@ -28,6 +28,38 @@ const verificationJobs = [
   'candidate_arm64',
 ] as const;
 
+function standardArtifactAction(actionName: string): string {
+  const ratchetMarker = `# ratchet:actions/${actionName}@v`;
+  const candidates = [
+    readRootFile('.github/workflows/nightly.yml'),
+    readRootFile('.github/workflows/evals-nightly.yml'),
+  ].flatMap((source) =>
+    source
+      .split('\n')
+      .filter((line) => line.includes(ratchetMarker))
+      .map((line) => {
+        const match = line.match(
+          /uses:\s*['\"]?(actions\/[a-z-]+@[a-f0-9]+)['\"]?\s+# ratchet:actions\/[a-z-]+@v(\d+)/,
+        );
+        if (match === null) {
+          throw new Error(`Malformed ratcheted action line: ${line}`);
+        }
+        return match;
+      }),
+  );
+  const latest = candidates.reduce<RegExpMatchArray | undefined>(
+    (selected, candidate) =>
+      selected === undefined || Number(candidate[2]) > Number(selected[2])
+        ? candidate
+        : selected,
+    undefined,
+  );
+  if (latest === undefined) {
+    throw new Error(`No ratcheted pin found for actions/${actionName}`);
+  }
+  return latest[1] as string;
+}
+
 const checkCommandsBefore = [
   'npm run format',
   'npm run build',
@@ -56,6 +88,46 @@ const checkCommandsAfter = [
 function needsOf(jobName: string): string[] {
   return asStringArray(workflowJob(workflow, jobName)['needs']);
 }
+describe('release artifact action compatibility', () => {
+  it('uses the repository artifact action pins and publishes each compared digest', () => {
+    const uploadAction = standardArtifactAction('upload-artifact');
+    const downloadAction = standardArtifactAction('download-artifact');
+
+    for (const job of Object.values(jobs)) {
+      const jobRecord = asRecord(job);
+      const steps = jobSteps(jobRecord);
+      for (const step of steps) {
+        if (typeof step.uses !== 'string') continue;
+        const uses = step.uses;
+        if (uses.startsWith('actions/upload-artifact@')) {
+          expect(uses).toBe(uploadAction);
+        } else if (uses.startsWith('actions/download-artifact@')) {
+          expect(uses).toBe(downloadAction);
+        }
+      }
+
+      const outputs =
+        jobRecord.outputs === undefined ? {} : asRecord(jobRecord.outputs);
+      for (const [outputName, outputValue] of Object.entries(outputs)) {
+        const match = asString(outputValue).match(
+          /steps\.([^.]+)\.outputs\.artifact-digest/,
+        );
+        if (match === null) continue;
+        const sourceStep = steps.find((step) => step.id === match[1]);
+        expect(
+          asString(sourceStep?.uses),
+          `${outputName} must come from the repository upload-artifact action`,
+        ).toBe(uploadAction);
+      }
+    }
+
+    const prepareSteps = jobSteps(workflowJob(workflow, 'prepare_artifact'));
+    const preparedUpload = prepareSteps.find(
+      (step) => step.name === 'Upload prepared release artifacts',
+    );
+    expect(asRecord(preparedUpload?.with)['include-hidden-files']).toBe(true);
+  });
+});
 
 function runCommands(jobName: string): string[] {
   return jobSteps(workflowJob(workflow, jobName))
