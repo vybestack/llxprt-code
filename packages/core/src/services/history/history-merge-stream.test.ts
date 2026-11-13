@@ -136,7 +136,7 @@ describe('history merge self append and large row', () => {
     );
   });
 
-  it('accepts a valid two MiB row without applying the controlled-fixture byte limit as an input cap', async () => {
+  it('merges every byte of a valid two-MiB row', async () => {
     const bytes = 2 * 1024 * 1024;
     await withCoreSuffixFixture(
       1,

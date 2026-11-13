@@ -147,7 +147,7 @@ describe('addBatch value ownership and real compensation', () => {
     });
   });
 
-  it('accepts a complete row of two MiB without a blanket row-size ban', async () => {
+  it('accepts a complete row of two MiB without truncation', async () => {
     await withNativeDetachedFixture(async ({ history, primaryRows }) => {
       const marker = { seq: 1, userTurn: 1, step: 0, recordedAt: 0 };
       const caller = {

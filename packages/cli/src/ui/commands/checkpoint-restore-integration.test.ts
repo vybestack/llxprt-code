@@ -154,7 +154,7 @@ async function compatibleRestore(active: boolean): Promise<string> {
 }
 
 describe('CLI checkpoint restoration compatibility contracts', () => {
-  it('restores a saved 128-KiB native row without a byte gate or uncharged ownership', async () => {
+  it('restores a complete saved 128-KiB native row with charged ownership', async () => {
     expect(await oversized()).toBe(1);
   }, 180000);
   it.each([false, true])(

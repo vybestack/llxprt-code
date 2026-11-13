@@ -267,7 +267,7 @@ describe('normalized request owner lifetime', () => {
 });
 
 describe('normalized request row size', () => {
-  it('permits a two MiB disk row with no product cap and repeatable bytes', async () => {
+  it('preserves repeatable bytes for a two-MiB disk row', async () => {
     await withCoreSuffixFixture(
       1,
       async (history) => {

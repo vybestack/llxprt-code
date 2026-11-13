@@ -119,8 +119,9 @@ interface CodexImageGenerateResponse {
 const MAX_BODY_SNIPPET_LENGTH = 500;
 
 function truncateForSnippet(text: string): string {
+  // Detach the prefix from the response allocation without changing UTF-16 units.
   return text.length > MAX_BODY_SNIPPET_LENGTH
-    ? `${text.slice(0, MAX_BODY_SNIPPET_LENGTH)}…`
+    ? `${Buffer.from(text.slice(0, MAX_BODY_SNIPPET_LENGTH), 'utf16le').toString('utf16le')}…`
     : text;
 }
 

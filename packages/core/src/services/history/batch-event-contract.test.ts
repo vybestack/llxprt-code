@@ -155,7 +155,7 @@ describe('journal contentBatchAdded scope', () => {
     });
   });
 
-  it('delivers the complete large row without a universal byte rejection', async () => {
+  it('delivers every byte of a two-MiB row to the batch listener', async () => {
     await withValueTransformFixture(async ({ history }) => {
       let bytes: Promise<number[]> | undefined;
       history.once('contentBatchAdded', (value) => {

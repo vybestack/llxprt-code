@@ -193,7 +193,7 @@ for (const size of [65]) {
 registerControls(512);
 
 describe('large active journal row', () => {
-  it('preserves a valid 128-KiB row without a byte admission cap', async () => {
+  it('preserves every byte of a valid 128-KiB row through reinitialization', async () => {
     await withReinitializeHistory(
       1,
       async (client) => {

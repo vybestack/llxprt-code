@@ -111,7 +111,7 @@ describe('streamed deferred history admission', () => {
   }
 });
 
-describe('deferred source failures and oversized rows', () => {
+describe('deferred source failures and complete 128-KiB rows', () => {
   it.each([false, true])(
     'rolls back a source failure and cancellation without changing admitted history, replacement=%s',
     async (replacement) => {

@@ -178,7 +178,7 @@ describe('scalar empty and single-row membership', () => {
     });
   });
 
-  it('returns the entire valid last row of two MiB without imposing a fixture cap', async () => {
+  it('returns the entire valid last row of two MiB', async () => {
     await withBatchFixture(async ({ history, owners }) => {
       const row = batchRow(0, 2 * 1024 * 1024);
       await history.addBatch([row]);

@@ -39,8 +39,8 @@ for (const { size, explicitFalse } of cases) {
   });
 }
 
-describe('chat default oversized row', () => {
-  it('streams a valid 128 KiB row without narrowing the row contract', async () => {
+describe('chat default 128-KiB row', () => {
+  it('streams every byte of a valid 128 KiB row', async () => {
     await withSuffixFixture(
       1,
       async (history, reader) => {

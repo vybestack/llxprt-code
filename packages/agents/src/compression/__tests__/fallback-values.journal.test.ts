@@ -88,7 +88,7 @@ describe('native persisted fallback value compensation', () => {
     }, 180_000);
   }
 
-  it('persists a complete candidate of 128 KiB without a row-size fallback', async () => {
+  it('persists every byte of a complete 128-KiB candidate', async () => {
     await withNativeValueFixture(async ({ history, durable, owners }) => {
       const rows = new DetachedHistoryJournal(historyScratchRoots, owners);
       try {

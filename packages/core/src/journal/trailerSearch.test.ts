@@ -28,7 +28,6 @@ import { bufferReader } from './__tests__/support/memoryIo.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
 
 const FILE = 'memory.llxj';
-const MIB = 1024 * 1024;
 
 async function committedSeq(bytes: Uint8Array): Promise<number | undefined> {
   const state = await locateCommittedState(
@@ -73,13 +72,38 @@ describe('finding the last trailer', () => {
     expect(await committedSeq(built.bytes)).toBe(1);
   });
 
-  it('steps back over an uncommitted tail of several chunks', async () => {
+  it('steps beyond the initial search window over an uncommitted 128-KiB tail', async () => {
     const seams = testJournalSeams({ failFlushAt: 1 });
     const file = path.join(tempDir(), 'long-tail.llxj');
     const built = await buildJournalKeepingTail(file, seams, [
       standardGroup(1),
-      standardGroup(2, { rowBodyBytes: 9 * MIB }),
+      standardGroup(2, { rowBodyBytes: 128 * 1024 }),
     ]);
+
+    expect(built.bytes.length - built.acks[0].durableEnd).toBeGreaterThan(
+      TRAILER_WINDOW_BYTES,
+    );
+    expect(await committedSeq(built.bytes)).toBe(1);
+  });
+
+  it('steps back over several chunks of uncommitted 128-KiB rows', async () => {
+    const rowBytes = 128 * 1024;
+    const rowCount = Math.ceil(
+      (2 * TRAILER_CHUNK_BYTES + TRAILER_WINDOW_BYTES) / rowBytes,
+    );
+    const built = await buildJournalKeepingTail(
+      path.join(tempDir(), 'batch-tail.llxj'),
+      testJournalSeams({ failFlushAt: 1 }),
+      [
+        standardGroup(1),
+        {
+          records: Array.from({ length: rowCount }, (_, index) =>
+            plainRecord(RECORD_KIND.ROW, 100 + index, rowBytes),
+          ),
+          trailer: () => trailerStateFor(2, {}),
+        },
+      ],
+    );
 
     expect(built.bytes.length - built.acks[0].durableEnd).toBeGreaterThan(
       2 * TRAILER_CHUNK_BYTES,

@@ -164,7 +164,7 @@ describe('CLI cleanup ownership controls', () => {
   }
 });
 
-describe('CLI cleanup oversized valid rows', () => {
+describe('CLI cleanup complete 128-KiB rows', () => {
   for (const active of [false, true]) {
     it(`accepts one valid 128-KiB row through ${active ? 'active' : 'inactive'} CLI cleanup`, async () => {
       const bytes = 128 * 1024;

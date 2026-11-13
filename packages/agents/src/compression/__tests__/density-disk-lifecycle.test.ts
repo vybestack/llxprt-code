@@ -128,7 +128,7 @@ describe('disk density publication and lifetime', () => {
       densityRow,
     );
   }, 180_000);
-  it('accepts a valid surviving row of 128 KiB without a cap', async () => {
+  it('preserves every byte of a surviving 128-KiB row', async () => {
     const large = 128 * 1024;
     await withSuffixFixture(
       512,

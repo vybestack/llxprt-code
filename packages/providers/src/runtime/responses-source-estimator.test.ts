@@ -165,6 +165,8 @@ describe('Responses serializer to opt-in GPT56 image estimator', () => {
     ).toBeGreaterThan(0);
   }, 180000);
   it('preserves independent bytes and string-oracle tokens for 128 budget-admissible images', async () => {
+    // Responses permits up to 1,500 images per request; this is not an Anthropic route.
+    // https://developers.openai.com/api/docs/guides/images-vision#image-input-requirements
     const rows = Array.from({ length: 128 }, (_, i) =>
       row(i, [image(i % 2 === 0 ? png(31, 33) : 'YQ==')]),
     );

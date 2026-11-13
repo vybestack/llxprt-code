@@ -97,7 +97,7 @@ describe('journal submission value semantics', () => {
     });
   });
 
-  it('preserves a complete row of two MiB without imposing the small-row cap', async () => {
+  it('preserves every byte of a complete two-MiB row', async () => {
     await withNativeDetachedFixture(async ({ history }) => {
       const row = batchRow(0, 2 * 1024 * 1024 + 17);
       await history.addBatch([row]);
