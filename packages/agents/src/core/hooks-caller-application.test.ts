@@ -814,11 +814,11 @@ describe('Hook Caller Application', () => {
       async () => {
         // This test verifies that stream handling passes systemMessage from
         // AfterModel hook output to AgentExecutionStoppedError when execution is stopped.
-        // After decomposition, this logic lives in StreamProcessor.ts.
+        // After decomposition, this logic lives in streamAfterModelHook.ts.
 
         const fs = await import('node:fs/promises');
         const streamProcessorPath = fileURLToPath(
-          new URL('../core/StreamProcessor.ts', import.meta.url),
+          new URL('../core/streamAfterModelHook.ts', import.meta.url),
         );
         const sourceCode = await fs.readFile(streamProcessorPath, 'utf-8');
 
@@ -860,11 +860,11 @@ describe('Hook Caller Application', () => {
         //     );
         //   }
         //
-        // After decomposition, this logic lives in StreamProcessor.ts.
+        // After decomposition, this logic lives in streamAfterModelHook.ts.
 
         const fs = await import('node:fs/promises');
         const streamProcessorPath = fileURLToPath(
-          new URL('../core/StreamProcessor.ts', import.meta.url),
+          new URL('../core/streamAfterModelHook.ts', import.meta.url),
         );
         const sourceCode = await fs.readFile(streamProcessorPath, 'utf-8');
 

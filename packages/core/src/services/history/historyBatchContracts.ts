@@ -95,6 +95,7 @@ export interface PreparedHistoryBatchEffect {
   publish(): void | Promise<void>;
   rollback(): void | Promise<void>;
   finalize?(): void | Promise<void>;
+  settle?(): void | Promise<void>;
 }
 
 export interface HistoryOwnedMediaReservation {

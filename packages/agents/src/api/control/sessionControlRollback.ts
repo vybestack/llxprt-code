@@ -1,3 +1,4 @@
+import type { RefusalPayload } from '@vybestack/llxprt-code-core';
 import type { SessionRecordingState } from '../agent-control-info-types.js';
 /**
  * @license
@@ -178,6 +179,15 @@ export class SessionRecordingLifetime {
    * @requirement:REQ-010
    */
   integration: RecordingIntegration | null = null;
+
+  /**
+   * Audit-only refusal record (issue #4036). A no-op while no recording is
+   * active.
+   */
+  async recordRefusal(refusal: RefusalPayload): Promise<void> {
+    this.integration?.recordRefusal(refusal);
+    await this.integration?.flushAtTurnBoundary();
+  }
 
   /**
    * The on-disk session lock acquired by a successful resume, or null when no

@@ -69,6 +69,7 @@ export async function copyPreparedMetadata(
         'meta',
         key,
         value,
+        'body',
       );
       continue;
     }

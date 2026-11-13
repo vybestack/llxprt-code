@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { SendRequestState } from './sendRequestState.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { StreamProcessorRuntime } from './chatSessionPorts.js';
@@ -32,6 +33,7 @@ import { logApiError, turnTelemetryPorts } from './turnLogging.js';
 
 export interface StreamRequestInput {
   readonly runtime: StreamProcessorRuntime;
+  readonly sendState?: SendRequestState;
   readonly compression: CompressionHandler;
   readonly history: HistoryService;
   readonly provider: RuntimeProvider;
@@ -174,6 +176,16 @@ async function diskRequest(
         progress.pinned = undefined;
       },
       onPrepared: preparedRequestLogger(input, tools, progress),
+      takeSource:
+        input.sendState === undefined
+          ? undefined
+          : async (prepared) => {
+              await input.sendState?.keep({
+                prepared,
+                toolSelection: tools,
+                systemInstruction: prepared.options.systemInstruction,
+              });
+            },
     });
     return await input.consumeSource(
       stream,

@@ -2,6 +2,7 @@
   "issue": 3161,
   "configs": {
     "packages/a2a-server/tsconfig.json": [],
+    "packages/agent-core/tsconfig.json": [],
     "packages/agents/tsconfig.json": [
       "src/api/__tests__/activationPreflightState.behavior.test.ts",
       "src/api/__tests__/agent-bootstrap.spec.ts",

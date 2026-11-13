@@ -47,6 +47,21 @@ function createStatRow(
   return row;
 }
 
+function buildRefusalRows(activeModels: ActiveModelEntry[]): StatRowData[] {
+  if (!activeModels.some(([, m]) => m.api.totalRefusals > 0)) return [];
+  return [
+    createStatRow(activeModels, 'Refusals', (m) => (
+      <Text
+        color={
+          m.api.totalRefusals > 0 ? theme.status.warning : theme.text.primary
+        }
+      >
+        {m.api.totalRefusals.toLocaleString()}
+      </Text>
+    )),
+  ];
+}
+
 function buildApiSectionRows(activeModels: ActiveModelEntry[]): StatRowData[] {
   return [
     { metric: 'API', isSection: true },
@@ -65,6 +80,7 @@ function buildApiSectionRows(activeModels: ActiveModelEntry[]): StatRowData[] {
         </Text>
       );
     }),
+    ...buildRefusalRows(activeModels),
     createStatRow(activeModels, 'Avg Latency', (m) =>
       formatDuration(calculateAverageLatency(m)),
     ),

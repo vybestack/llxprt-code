@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { RefusalPayload } from './refusalPayload.js';
 import type { JournalWatermarks } from '../journal/journal-watermarks.js';
 import type { LockHandle } from './SessionLockManager.js';
 import type { RecordingCheckpointInfo, SessionForkedPayload } from './types.js';
@@ -36,6 +37,7 @@ export interface SessionRecordingPort {
   getOwnedLockHandle(): LockHandle | null;
 
   // Session facts.
+  recordRefusal(payload: RefusalPayload): void;
   recordProviderSwitch(provider: string, model: string): void;
   recordSessionEvent(
     severity: 'info' | 'warning' | 'error',

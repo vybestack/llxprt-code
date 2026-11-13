@@ -71,6 +71,7 @@ export function projectSessionStats(
     turnCount: readTurnCount(historyService),
     apiRequests: snap.totalApiRequests,
     apiErrors: snap.totalApiErrors,
+    apiRefusals: snap.totalRefusals,
     toolCalls: snap.totalToolCalls,
     toolSuccesses: snap.totalToolSuccesses,
     toolFailures: snap.totalToolFailures,

@@ -1,3 +1,4 @@
+import { createRefusalRecovery } from '../refusal/index.js';
 import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
@@ -98,6 +99,13 @@ describe('agent transport recording wiring', () => {
             setup.history,
             setup.processor,
             () => setup.runtime.state.baseUrl,
+            createRefusalRecovery({
+              retries: () => 0,
+              backoffMs: () => 0,
+              rewrite: () => false,
+              reviewProfile: () => undefined,
+              maxRewrites: () => 0,
+            }),
           );
           const receipt = await processor.sendMessage(
             { message: 'question' },

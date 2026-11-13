@@ -35,6 +35,7 @@ export type {
  */
 
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core';
+import type { RefusalPayload } from '@vybestack/llxprt-code-core';
 import {
   RecordingIntegration,
   SessionDiscovery,
@@ -420,6 +421,10 @@ export class SessionControl implements AgentSessionControl {
       if (this.recordingLifetime.integration !== null)
         await this.attachHistory(this.recordingLifetime.integration);
     });
+
+  /** Internal refusal journaling (issue #4036); not on the public surface. */
+  recordRefusal = (refusal: RefusalPayload): Promise<void> =>
+    this.recordingLifetime.recordRefusal(refusal);
 
   async createCheckpoint(
     name: string,

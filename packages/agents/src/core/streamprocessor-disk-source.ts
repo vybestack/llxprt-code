@@ -60,6 +60,9 @@ interface StreamDiskSourceInput {
     attemptIndex: number,
   ) => AsyncIterableIterator<IContent>;
   readonly onReleased?: () => void;
+  readonly takeSource?: (
+    prepared: PreparedSourcePromptEnvelopeSend,
+  ) => Promise<void>;
   readonly recordingExecution?: AgentChatRecordingExecution;
   readonly hookOwner?: HookExecutionOwner;
   readonly modelParameters?: AdmittedModelParameters;
@@ -160,16 +163,7 @@ export async function streamDiskSource(
     input.history,
   );
   await submitSourcePrompt(input, preparedPending);
-  const requestPending: IContent[] = [];
-  const snapshot = await input.history
-    .prepareCuratedForProviderSnapshot(
-      requestPending,
-      { signal: input.signal },
-      input.historyOverride,
-    )
-    .catch((error: unknown) => {
-      throw new HistorySourceError(error);
-    });
+  const snapshot = await prepareDiskSnapshot(input);
   const source = await sourceBeforeModelHook({
     owner: hookOwner,
     snapshot,
@@ -224,9 +218,24 @@ export async function streamDiskSource(
           sourceImageView(input),
         ),
       onPrepared: input.onPrepared,
+      takeSource: input.takeSource,
       send: input.send,
       onReleased: input.onReleased,
       shouldRetryOnError: input.shouldRetryOnError ?? (() => false),
     }),
   );
+}
+
+async function prepareDiskSnapshot(
+  input: StreamDiskSourceInput,
+): ReturnType<HistoryService['prepareCuratedForProviderSnapshot']> {
+  return input.history
+    .prepareCuratedForProviderSnapshot(
+      [],
+      { signal: input.signal },
+      input.historyOverride,
+    )
+    .catch((error: unknown) => {
+      throw new HistorySourceError(error);
+    });
 }

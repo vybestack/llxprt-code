@@ -130,9 +130,16 @@ export type AgentModelInfoEvent = Readonly<{
   info: ModelInfo;
 }>;
 
+/**
+ * A user-facing status message. `source` is present when the message belongs
+ * to a subsystem whose notices every host should show (for example
+ * `refusal-recovery`); notices without a source are informational and hosts
+ * may ignore them.
+ */
 export type AgentNoticeEvent = Readonly<{
   type: 'notice';
   message: string;
+  source?: 'refusal-recovery';
 }>;
 
 export type AgentCompressionEvent = Readonly<{

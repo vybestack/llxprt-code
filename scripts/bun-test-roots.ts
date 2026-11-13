@@ -158,6 +158,13 @@ export function integrationTestTimeoutOverrides(
 
 export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
   {
+    root: 'agent-core',
+    preload: [
+      '../../scripts/tests/storage-isolation-guard.ts',
+      '../../scripts/tests/browser-launch-guard.ts',
+    ],
+  },
+  {
     root: 'a2a-server',
     preload: ['bun-preload-storage-isolation.ts'],
   },

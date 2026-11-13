@@ -85,6 +85,34 @@ Control how much context the model sees and when/how history is compressed. Thes
 | `compression.density.compressHeadroom`  | number  | `0.6`            | yes     | Multiplier for compression target (0–1). Lower = more aggressive compression.                                                                                   |
 | `compression.density.optimizeThreshold` | number  | strategy default | yes     | Context usage fraction that triggers density optimization.                                                                                                      |
 
+## Refusal Recovery
+
+Some models, notably Claude Opus through the Anthropic API, sometimes end a request with the stop reason `refusal` and no output, even when the request is ordinary work. Retrying the identical request often succeeds. These settings control how LLxprt Code retries. A refused attempt never enters the conversation history, and the same request is resent unchanged (same messages, model and parameters). The policy is read once when a request starts, so a `/set` during a retry wait applies to the next request.
+
+| Setting                  | Type    | Default | Profile | Description                                                                                                                                                                                                                                                                                                          |
+| ------------------------ | ------- | ------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `refusal.retries`        | number  | `2`     | yes     | Identical retries after a refusal, 0 to 10. `0` turns the identical retries off, so the first refusal goes straight to review. To stop at the first refusal, set `refusal.rewrite` to `false` or `refusal.max-rewrites` to `0` as well. Todo continuation and hook follow-ups of the same request share this budget. |
+| `refusal.backoff-ms`     | number  | `15000` | yes     | Base wait before the first retry, in milliseconds. Retry n waits `min(base * 4^(n-1), 180000)`, so the defaults wait 15 s, 60 s, then 180 s. `0` retries immediately.                                                                                                                                                |
+| `refusal.rewrite`        | boolean | `true`  | yes     | Once identical retries are exhausted, let a review model check the recent context and rewrite it in plain wording before the original model is tried again. `false` stops at the first exhausted refusal.                                                                                                            |
+| `refusal.review-profile` | string  | —       | yes     | Saved profile for the review model. Unset falls back to `compression.profile`, then to the model that was refused. An unknown profile stops recovery with an error that names it. Cannot be empty when set.                                                                                                          |
+| `refusal.max-rewrites`   | number  | `1`     | yes     | Review and rewrite rounds allowed per request, 0 to 3. Each rewrite starts a fresh round of identical retries.                                                                                                                                                                                                       |
+
+Each retry shows a notice with the wait and the attempt number. Press Escape or cancel the request during the wait to stop it at once. When the retries run out, a notice states how many times the model refused and what was tried, followed by the usual safety notice. In headless text mode these notices go to stderr, and `--quiet` suppresses them. With `--output-format stream-json` they appear as warning events, and plain `--output-format json` leaves them out of stdout.
+
+### Review and rewrite
+
+When the retries run out and `refusal.rewrite` is on, the review model reads what changed since the last successful response: everything after it, plus the newest compression summary if it was written after that response. Anthropic refusals after compression are the usual case, and the real contexts that were refused held ordinary engineering work such as mutation tests that "kill" mutants, rules that stop processes the agent owns, or 3D mesh fitting.
+
+The reviewer returns one of three verdicts, and anything else it returns is rejected without touching the conversation:
+
+- `disallowed`: the work is genuinely disallowed. Nothing is rewritten, the refused model is not asked again, and the notice shows the reviewer's explanation.
+- `no_change`: the context is not enough to judge, or nothing in it may be edited. The request stops with the explanation. Refusals rarely have one trigger phrase, so when nothing is disallowed the reviewer is told to reword at least one entry, starting with the compression summary.
+- `rewrite`: the reviewer replaces the text of compression summaries, tool results or the assistant's own text. Human messages, tool calls, media and thinking blocks are never edited. Every number, path, URL, hash, identifier, `code span` and `SCREAMING_CASE` token in the original must appear unchanged in the replacement, and the history must not have changed while the reviewer worked.
+
+A rewrite is one commit: the history changes together with a `refusal_rewrite` record in the session journal that keeps the original text, the reviewer and the resulting history. Resuming the session restores the rewritten history. The notice names the reviewer model, the changed entries and the operation id, and says again when the rewritten request succeeds. If the rewritten request is also refused and `refusal.max-rewrites` is reached, the notice summarizes everything that was tried.
+
+The review call is a single tool-less request that never runs refusal recovery itself and is logged under its own purpose (`refusal-review`) in the token-usage log. If the reviewer is itself refused, errors, times out, or returns an unusable answer, the request stops and nothing is rewritten. When the reviewer was refused, set `refusal.review-profile` to a different model.
+
 ## Tool Output Limits
 
 Prevent tools from flooding the context. Applied to all tools via the batch scheduler. See [Settings and Profiles](../settings-and-profiles.md#tool-output-limits) for how these interact.

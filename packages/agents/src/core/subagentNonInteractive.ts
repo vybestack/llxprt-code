@@ -53,8 +53,10 @@ import {
   handleExecutionError,
   processNonInteractiveTextResponse,
   recordTurnOutputTokens,
+  terminateOnRefusal,
 } from './subagentExecution.js';
 import { completeWithGoal, finalizeOutput } from './subagentToolProcessing.js';
+import { isRefusalFinishReason } from '../refusal/refusalDetection.js';
 import {
   SCOPE_LOCAL_EMIT_TOOL_NAME,
   canonicalizeToolName,
@@ -184,6 +186,8 @@ export interface NonInteractiveStreamResult {
   hookRestrictedAllowedTools: string[] | undefined;
   reportedOutputTokens: number | undefined;
   outputCharacterCount: number;
+  /** The attempt ended with a refusal (issue #4036). */
+  refused: boolean;
 }
 
 /** Empty stream result returned when the stream is aborted before reading. */
@@ -195,6 +199,7 @@ function emptyStreamResult(): NonInteractiveStreamResult {
     hookRestrictedAllowedTools: undefined,
     reportedOutputTokens: undefined,
     outputCharacterCount: 0,
+    refused: false,
   };
 }
 
@@ -227,6 +232,7 @@ export async function consumeNonInteractiveStream(
   let hookRestrictedAllowedTools: string[] | undefined;
   let reportedOutputTokens: number | undefined;
   let outputCharacterCount = 0;
+  let refused = false;
   const iterator = responseStream[Symbol.asyncIterator]();
   const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(timeoutPolicy);
 
@@ -247,6 +253,7 @@ export async function consumeNonInteractiveStream(
     parseableTextResponse = readResult.parseableTextResponse;
     reportedOutputTokens = readResult.reportedOutputTokens;
     outputCharacterCount = readResult.outputCharacterCount;
+    refused = readResult.refused;
     if (readResult.aborted) {
       return {
         functionCalls: [],
@@ -255,6 +262,7 @@ export async function consumeNonInteractiveStream(
         hookRestrictedAllowedTools,
         reportedOutputTokens,
         outputCharacterCount,
+        refused: false,
       };
     }
     hookRestrictedAllowedTools = readResult.hookRestrictedAllowedTools;
@@ -271,6 +279,33 @@ export async function consumeNonInteractiveStream(
     hookRestrictedAllowedTools,
     reportedOutputTokens,
     outputCharacterCount,
+    refused,
+  };
+}
+
+function abortedRead(
+  collected: {
+    textResponse: string;
+    hookRestrictedAllowedTools: string[] | undefined;
+  },
+  reportedOutputTokens: number | undefined,
+  outputCharacterCount: number,
+): {
+  textResponse: string;
+  parseableTextResponse: string;
+  hookRestrictedAllowedTools: string[] | undefined;
+  reportedOutputTokens: number | undefined;
+  outputCharacterCount: number;
+  aborted: true;
+  refused: false;
+} {
+  return {
+    ...collected,
+    parseableTextResponse: collected.textResponse,
+    reportedOutputTokens,
+    outputCharacterCount,
+    aborted: true,
+    refused: false,
   };
 }
 
@@ -296,32 +331,32 @@ async function readStreamToCompletion(
   reportedOutputTokens: number | undefined;
   outputCharacterCount: number;
   aborted: boolean;
+  refused: boolean;
 }> {
   let textResponse = '';
-  let parseableTextResponse = '';
   let hookRestrictedAllowedTools: string[] | undefined;
   let reportedOutputTokens: number | undefined;
-  const outputCounter = new GeneratedOutputCounter();
+  let refused = false;
+  let outputCounter = new GeneratedOutputCounter();
 
-  let result = await readNextNonInteractiveEvent(
-    iterator,
-    abortController,
-    timeoutController,
-    timeoutSignal,
-    effectiveTimeoutMs,
-    output,
-  );
+  const readNext = () =>
+    readNextNonInteractiveEvent(
+      iterator,
+      abortController,
+      timeoutController,
+      timeoutSignal,
+      effectiveTimeoutMs,
+      output,
+    );
+  let result = await readNext();
   while (result.done !== true) {
     const resp = result.value;
     if (abortController.signal.aborted) {
-      return {
-        textResponse,
-        parseableTextResponse,
-        hookRestrictedAllowedTools,
+      return abortedRead(
+        { textResponse, hookRestrictedAllowedTools },
         reportedOutputTokens,
-        outputCharacterCount: outputCounter.total,
-        aborted: true,
-      };
+        outputCounter.total,
+      );
     }
     if (resp.type === StreamEventType.CHUNK) {
       outputCounter.add(resp.value.content.blocks);
@@ -337,25 +372,30 @@ async function readStreamToCompletion(
       hookRestrictedAllowedTools =
         chunkResult.hookRestrictedAllowedTools ?? hookRestrictedAllowedTools;
       textResponse += chunkResult.text;
-      parseableTextResponse += chunkResult.text;
+      // The latest finish reason decides the attempt's outcome.
+      const reason = resp.value.finishReason;
+      if (reason !== undefined) refused = isRefusalFinishReason(reason);
+    } else if (resp.type === StreamEventType.RETRY) {
+      // The stream discarded the attempt read so far (a refusal resent
+      // unchanged, or a content retry): nothing it produced may be acted on.
+      functionCalls.length = 0;
+      textResponse = '';
+      hookRestrictedAllowedTools = undefined;
+      reportedOutputTokens = undefined;
+      outputCounter = new GeneratedOutputCounter();
+      refused = false;
     }
-    result = await readNextNonInteractiveEvent(
-      iterator,
-      abortController,
-      timeoutController,
-      timeoutSignal,
-      effectiveTimeoutMs,
-      output,
-    );
+    result = await readNext();
   }
 
   return {
     textResponse,
-    parseableTextResponse,
+    parseableTextResponse: textResponse,
     hookRestrictedAllowedTools,
     reportedOutputTokens,
     outputCharacterCount: outputCounter.total,
     aborted: false,
+    refused,
   };
 }
 
@@ -395,6 +435,21 @@ function resolveNonInteractiveToolName(
   return resolveToolName(rawName);
 }
 
+/** A turn that yields nothing to act on (aborted, or refused by the model). */
+function emptyTurn(refused: boolean): {
+  functionCalls: ToolCallBlock[];
+  textResponse: string;
+  effectiveEmitterAvailable: boolean;
+  refused: boolean;
+} {
+  return {
+    functionCalls: [],
+    textResponse: '',
+    effectiveEmitterAvailable: false,
+    refused,
+  };
+}
+
 export async function runNonInteractiveTurn(
   currentMessages: IContent[],
   toolsList: ToolDeclaration[],
@@ -406,6 +461,7 @@ export async function runNonInteractiveTurn(
   functionCalls: ToolCallBlock[];
   textResponse: string;
   effectiveEmitterAvailable: boolean;
+  refused: boolean;
 }> {
   const responseStream = await ctx.streamModel(
     currentMessages[0]?.blocks ?? [],
@@ -421,6 +477,7 @@ export async function runNonInteractiveTurn(
     hookRestrictedAllowedTools,
     reportedOutputTokens,
     outputCharacterCount,
+    refused,
   } = await consumeNonInteractiveStream(
     responseStream,
     abortController,
@@ -430,14 +487,9 @@ export async function runNonInteractiveTurn(
     ctx.subagentId,
     ctx.output,
   );
-  if (abortController.signal.aborted === true) {
-    return {
-      functionCalls: [],
-      textResponse: '',
-      effectiveEmitterAvailable: false,
-    };
-  }
+  if (abortController.signal.aborted === true) return emptyTurn(false);
   recordTurnOutputTokens(execCtx, reportedOutputTokens, outputCharacterCount);
+  if (refused) return emptyTurn(true);
   const effectiveEmitterAvailable = hasEffectiveEmitter(
     toolsList,
     hookRestrictedAllowedTools,
@@ -464,6 +516,7 @@ export async function runNonInteractiveTurn(
     functionCalls,
     textResponse,
     effectiveEmitterAvailable,
+    refused: false,
   };
 }
 
@@ -565,7 +618,7 @@ async function runNonInteractiveLoopIteration(
     () => `Subagent ${ctx.subagentId} turn=${currentTurn} promptId=${promptId}`,
   );
 
-  const { functionCalls, effectiveEmitterAvailable } =
+  const { functionCalls, effectiveEmitterAvailable, refused } =
     await runNonInteractiveTurn(
       currentMessages,
       toolsList,
@@ -575,6 +628,10 @@ async function runNonInteractiveLoopIteration(
       ctx,
     );
   if (abortController.signal.aborted === true) return { action: 'abort' };
+  if (refused) {
+    terminateOnRefusal(execCtx);
+    return { action: 'stop' };
+  }
 
   // Only the output budget is re-checked here. Re-checking the turn and time
   // limits between receiving a response and dispatching its tool calls throws

@@ -1,3 +1,9 @@
+import {
+  finalizeMutationEffects,
+  settleMutationEffects,
+  rollbackMutationEffects,
+} from './historyMutationFailure.js';
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
 import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /**
@@ -351,6 +357,95 @@ describe('HistoryService atomic batch publication', () => {
     });
     expect(await Promise.all(published)).toStrictEqual([batch.map(textOf)]);
     expect(await Promise.all(reverted)).toStrictEqual([batch.map(textOf)]);
+  });
+
+  it('stops finalizing at the first failed finalizer and rolls every effect back', async () => {
+    await withNativeDetachedFixture(async ({ history }) => {
+      const steps: string[] = [];
+      const effects = [
+        {
+          publish: () => {},
+          rollback: () => {
+            steps.push('first rollback');
+          },
+          finalize: () => {
+            throw new Error('first finalizer failed');
+          },
+        },
+        {
+          publish: () => {},
+          rollback: () => {
+            steps.push('second rollback');
+          },
+          finalize: () => {
+            steps.push('second finalize');
+          },
+        },
+      ];
+      await expect(
+        history.addBatch([createUserMessage('never committed')], undefined, {
+          afterPublication: async () => {
+            try {
+              await finalizeMutationEffects(effects);
+            } catch (error) {
+              await rollbackMutationEffects(effects);
+              throw error;
+            }
+          },
+        }),
+      ).rejects.toThrow('first finalizer failed');
+      expect(steps).toStrictEqual(['second rollback', 'first rollback']);
+      await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+        expect(rows).toStrictEqual([]);
+      });
+    });
+  });
+
+  it('settles every effect after all finalizers succeeded, and a failed settle keeps the batch', async () => {
+    await withNativeDetachedFixture(async ({ history }) => {
+      const steps: string[] = [];
+      const effects = [
+        {
+          publish: () => {},
+          rollback: () => {
+            steps.push('rollback');
+          },
+          finalize: () => {
+            steps.push('first finalize');
+          },
+          settle: () => {
+            steps.push('first settle');
+            throw new Error('cleanup after commit failed');
+          },
+        },
+        {
+          publish: () => {},
+          rollback: () => {
+            steps.push('rollback');
+          },
+          finalize: () => {
+            steps.push('second finalize');
+          },
+          settle: () => {
+            steps.push('second settle');
+          },
+        },
+      ];
+      await history.addBatch([createUserMessage('committed')], undefined, {
+        afterPublication: () => finalizeMutationEffects(effects),
+      });
+      const failures = await settleMutationEffects(effects);
+      expect(failures).toHaveLength(1);
+      expect(steps).toStrictEqual([
+        'first finalize',
+        'second finalize',
+        'first settle',
+        'second settle',
+      ]);
+      await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+        expect(rows.map(textOf)).toStrictEqual(['committed']);
+      });
+    });
   });
 
   it('announces no reversion for a batch that never published or that committed', async () => {

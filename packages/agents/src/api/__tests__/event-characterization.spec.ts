@@ -257,6 +257,25 @@ describe('Event characterization — adapter-characterization @plan:PLAN-2026061
     expect(done[0].finished?.reason).toBe('stop');
   });
 
+  it('Finished with canonical reason refusal and no stopReason → done{refusal} @issue:4036', async () => {
+    const events = await runAdapterStatic([
+      wrapStream(streamFinished('refusal')),
+    ]);
+    const done = doneEvents(events);
+    expect(done).toHaveLength(1);
+    expect(done[0].reason).toBe('refusal');
+    expect(done[0].finished?.reason).toBe('refusal');
+  });
+
+  it('Finished with canonical reason refusal and a different raw stopReason → done{refusal} @issue:4036', async () => {
+    const events = await runAdapterStatic([
+      wrapStream(streamFinished('refusal', 'content_policy')),
+    ]);
+    const done = doneEvents(events);
+    expect(done).toHaveLength(1);
+    expect(done[0].reason).toBe('refusal');
+  });
+
   it('Finished with a non-refusal stopReason → done{stop} @issue:2329', async () => {
     const events = await runAdapterStatic([
       wrapStream(streamFinished('stop', 'end_turn')),

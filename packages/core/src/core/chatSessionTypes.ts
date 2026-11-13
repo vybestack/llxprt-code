@@ -6,12 +6,17 @@
 
 import type { ModelStreamChunk } from '../llm-types/index.js';
 
+/** Which subsystem produced a user-facing notice. Hosts render known sources. */
+export type SystemNoticeSource = 'refusal-recovery';
+
 export enum StreamEventType {
   /** A regular content chunk from the API. */
   CHUNK = 'chunk',
   /** A signal that a retry is about to happen. The UI should discard any partial
    * content from the attempt that just failed. */
   RETRY = 'retry',
+  /** A user-facing status message about the request in flight. */
+  NOTICE = 'notice',
   /** Agent execution was stopped by a hook. */
   AGENT_EXECUTION_STOPPED = 'agent_execution_stopped',
   /** Agent execution was blocked by a hook. */
@@ -21,6 +26,11 @@ export enum StreamEventType {
 export type StreamEvent =
   | { type: StreamEventType.CHUNK; value: ModelStreamChunk }
   | { type: StreamEventType.RETRY }
+  | {
+      type: StreamEventType.NOTICE;
+      message: string;
+      source: SystemNoticeSource;
+    }
   | {
       type: StreamEventType.AGENT_EXECUTION_STOPPED;
       reason: string;

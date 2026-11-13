@@ -19,7 +19,12 @@ import type {
 describe('calculateErrorRate', () => {
   it('should return 0 if totalRequests is 0', () => {
     const metrics: ModelMetrics = {
-      api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
+      api: {
+        totalRequests: 0,
+        totalErrors: 0,
+        totalRefusals: 0,
+        totalLatencyMs: 0,
+      },
       tokens: {
         input: 0,
         prompt: 0,
@@ -35,7 +40,12 @@ describe('calculateErrorRate', () => {
 
   it('should calculate the error rate correctly', () => {
     const metrics: ModelMetrics = {
-      api: { totalRequests: 10, totalErrors: 2, totalLatencyMs: 0 },
+      api: {
+        totalRequests: 10,
+        totalErrors: 2,
+        totalRefusals: 0,
+        totalLatencyMs: 0,
+      },
       tokens: {
         input: 0,
         prompt: 0,
@@ -53,7 +63,12 @@ describe('calculateErrorRate', () => {
 describe('calculateAverageLatency', () => {
   it('should return 0 if totalRequests is 0', () => {
     const metrics: ModelMetrics = {
-      api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 1000 },
+      api: {
+        totalRequests: 0,
+        totalErrors: 0,
+        totalRefusals: 0,
+        totalLatencyMs: 1000,
+      },
       tokens: {
         input: 0,
         prompt: 0,
@@ -69,7 +84,12 @@ describe('calculateAverageLatency', () => {
 
   it('should calculate the average latency correctly', () => {
     const metrics: ModelMetrics = {
-      api: { totalRequests: 10, totalErrors: 0, totalLatencyMs: 1500 },
+      api: {
+        totalRequests: 10,
+        totalErrors: 0,
+        totalRefusals: 0,
+        totalLatencyMs: 1500,
+      },
       tokens: {
         input: 0,
         prompt: 0,
@@ -87,7 +107,12 @@ describe('calculateAverageLatency', () => {
 describe('calculateCachedTokenRatio', () => {
   it('should return 0 if prompt tokens is 0', () => {
     const metrics: ModelMetrics = {
-      api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
+      api: {
+        totalRequests: 0,
+        totalErrors: 0,
+        totalRefusals: 0,
+        totalLatencyMs: 0,
+      },
       tokens: {
         input: 0,
         prompt: 0,
@@ -103,7 +128,12 @@ describe('calculateCachedTokenRatio', () => {
 
   it('should calculate the cached token ratio correctly', () => {
     const metrics: ModelMetrics = {
-      api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
+      api: {
+        totalRequests: 0,
+        totalErrors: 0,
+        totalRefusals: 0,
+        totalLatencyMs: 0,
+      },
       tokens: {
         input: 150,
         prompt: 200,
@@ -119,7 +149,12 @@ describe('calculateCachedTokenRatio', () => {
 
   it('should clamp to 100 when cached exceeds prompt (cached > prompt)', () => {
     const metrics: ModelMetrics = {
-      api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
+      api: {
+        totalRequests: 0,
+        totalErrors: 0,
+        totalRefusals: 0,
+        totalLatencyMs: 0,
+      },
       tokens: {
         input: 1000,
         prompt: 1000,
@@ -135,7 +170,12 @@ describe('calculateCachedTokenRatio', () => {
 
   it('should clamp to 0 for invalid (NaN/Infinity) token values', () => {
     const metrics: ModelMetrics = {
-      api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
+      api: {
+        totalRequests: 0,
+        totalErrors: 0,
+        totalRefusals: 0,
+        totalLatencyMs: 0,
+      },
       tokens: {
         input: Number.NaN,
         prompt: Number.POSITIVE_INFINITY,
@@ -151,7 +191,12 @@ describe('calculateCachedTokenRatio', () => {
 
   it('should clamp negative cached tokens to 0', () => {
     const metrics: ModelMetrics = {
-      api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
+      api: {
+        totalRequests: 0,
+        totalErrors: 0,
+        totalRefusals: 0,
+        totalLatencyMs: 0,
+      },
       tokens: {
         input: 1000,
         prompt: 1000,
@@ -255,7 +300,12 @@ describe('computeSessionStats', () => {
       },
       models: {
         'gemini-pro': {
-          api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 750 },
+          api: {
+            totalRequests: 1,
+            totalErrors: 0,
+            totalRefusals: 0,
+            totalLatencyMs: 750,
+          },
           tokens: {
             input: 10,
             prompt: 10,
@@ -289,7 +339,12 @@ describe('computeSessionStats', () => {
       ...baseMetrics,
       models: {
         'gemini-pro': {
-          api: { totalRequests: 2, totalErrors: 0, totalLatencyMs: 1000 },
+          api: {
+            totalRequests: 2,
+            totalErrors: 0,
+            totalRefusals: 0,
+            totalLatencyMs: 1000,
+          },
           tokens: {
             input: 100,
             prompt: 150,

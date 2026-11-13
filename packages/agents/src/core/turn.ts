@@ -12,7 +12,6 @@
 import {
   emitThoughtContent,
   emitTextContent,
-  filterBlocksByAllowedTools,
   toolRequestFromBlock,
 } from './turnChunkEvents.js';
 import type {
@@ -35,6 +34,7 @@ import {
   toFriendlyError,
 } from '@vybestack/llxprt-code-core/utils/errors.js';
 import type { ChatSession } from './chatSession.js';
+import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
@@ -241,7 +241,7 @@ export class Turn {
     traceId: string | undefined,
     cumulativeOutcome: ResponseOutcome,
   ): Generator<ServerAgentStreamEvent> {
-    const allowedBlocks = filterBlocksByAllowedTools(
+    const allowedBlocks = filterHookRestrictedBlocks(
       chunk.content.blocks,
       chunk.hookRestrictions?.allowedToolNames,
     );
@@ -412,6 +412,15 @@ export class Turn {
       return { action: 'continue', outcome, chunk: null };
     }
 
+    if (streamEvent.type === StreamEventType.NOTICE) {
+      yield {
+        type: AgentEventType.SystemNotice,
+        value: streamEvent.message,
+        source: streamEvent.source,
+      };
+      return { action: 'continue', outcome: cumulativeOutcome, chunk: null };
+    }
+
     // Handle AGENT_EXECUTION_STOPPED event
     if (streamEvent.type === StreamEventType.AGENT_EXECUTION_STOPPED) {
       yield {
@@ -444,7 +453,7 @@ export class Turn {
     chunk: ModelStreamChunk,
   ): ResponseOutcome {
     const allowedToolNames = chunk.hookRestrictions?.allowedToolNames;
-    const allowedBlocks = filterBlocksByAllowedTools(
+    const allowedBlocks = filterHookRestrictedBlocks(
       chunk.content.blocks,
       allowedToolNames,
     );

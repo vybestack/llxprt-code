@@ -1,3 +1,4 @@
+import type { RefusalPayload } from './refusalPayload.js';
 import { JournalMaintenanceScope } from '../journal/deferred-maintenance.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdir, rm } from 'node:fs/promises';
@@ -298,6 +299,20 @@ export class JournalRecordingService implements SessionRecordingPort {
   }
 
   // Session facts.
+
+  recordRefusal(payload: RefusalPayload): void {
+    this.requireActive('record refusal');
+    this.enqueue(() =>
+      this.commitFacts([
+        {
+          kind: 'setState',
+          key: `refusal:${payload.promptId}:${payload.attemptIndex}:${payload.action}`,
+          value: new TextEncoder().encode(JSON.stringify(payload)),
+          storage: 'body',
+        },
+      ]),
+    ).catch(ignore);
+  }
 
   recordProviderSwitch(provider: string, model: string): void {
     if (!this.isActive()) return;

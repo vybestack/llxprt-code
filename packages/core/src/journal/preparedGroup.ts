@@ -20,6 +20,17 @@ import type { MapKind } from './keyedMap.js';
 import { buildStreamedAppend } from './streamed-append-build.js';
 import type { AppendInput } from './streamed-append-pass.js';
 
+function retainedKeys(
+  kind: MapKind,
+  key: string,
+  previous: readonly string[] | undefined,
+): readonly string[] | undefined {
+  if (kind !== 'meta') return previous;
+  if (!key.startsWith('submission:') && !key.startsWith('refusal_rewrite:'))
+    return previous;
+  return [...(previous ?? []), key];
+}
+
 export type ArrivalPreparation = (
   context: BuildContext,
   appender: RecordAppender,
@@ -40,7 +51,11 @@ export interface PreparedGroup {
     root: number,
     keys: readonly string[],
   ): Promise<void>;
-  retainMetadata(key: string, value: Uint8Array): Promise<void>;
+  retainMetadata(
+    key: string,
+    value: Uint8Array,
+    storage?: 'body',
+  ): Promise<void>;
 }
 
 export type GroupPreparation = (group: PreparedGroup) => Promise<void>;
@@ -319,10 +334,11 @@ class PreparedBuilder {
         value,
         storage,
       ),
-      retainedMetadataKeys:
-        kind === 'meta' && key.startsWith('submission:')
-          ? [...(this.result.retainedMetadataKeys ?? []), key]
-          : this.result.retainedMetadataKeys,
+      retainedMetadataKeys: retainedKeys(
+        kind,
+        key,
+        this.result.retainedMetadataKeys,
+      ),
     };
   }
 }
@@ -366,8 +382,8 @@ export async function prepareBuild(
       adopt: (rows, nextLabel) => builder.adopt(rows, nextLabel),
       copyMetadata: (source, root, keys) =>
         builder.copyMetadata(source, root, keys, writes.appender),
-      retainMetadata: (key, value) =>
-        builder.retain(key, value, writes.appender),
+      retainMetadata: (key, value, storage) =>
+        builder.retain(key, value, writes.appender, 'meta', storage),
     });
     for (const edit of edits) {
       if (edit.kind === 'setState')

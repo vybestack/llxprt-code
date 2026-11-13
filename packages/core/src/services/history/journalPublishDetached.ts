@@ -61,6 +61,7 @@ export async function publishDetachedOnJournal(
   let publication: JournalDetachedPublication | undefined;
   let failure: { error: unknown } | undefined;
   try {
+    options.assertCurrent?.();
     snapshot = await store.settledSnapshot(
       () => host.waitForTokenUpdates(),
       options.signal,
@@ -268,9 +269,17 @@ async function createCandidate(
     produce: async () => {
       if (appendOnly) return produce();
       const result: { value?: Parameters<DetachedHistoryHost['apply']> } = {};
+      options.assertCurrent?.();
       await publication.prepare(async (group) => {
         densitySpans = new JournalDensitySpans(group);
         result.value = await produce();
+        options.signal?.throwIfAborted();
+        if (options.audit !== undefined)
+          await group.retainMetadata(
+            options.audit.key,
+            options.audit.value,
+            'body',
+          );
       }, owner.edits);
       if (result.value === undefined)
         throw new Error('Detached producer returned no result');

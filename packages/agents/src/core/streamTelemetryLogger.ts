@@ -22,6 +22,16 @@ import {
   recordActualTokenUsage,
   usageStatsToActualInput,
 } from './tokenUsageActualLogger.js';
+import { isRefusalFinishReason } from '../refusal/refusalDetection.js';
+
+/**
+ * Terminal finish reasons of a stream attempt, taken from the newest chunk
+ * that carried them. A refusal is recorded as its own attempt outcome.
+ */
+export interface StreamFinishInfo {
+  readonly finishReason?: string;
+  readonly rawStopReason?: string;
+}
 
 /**
  * Per-attempt provider timing measured at the agents-layer stream seam,
@@ -145,8 +155,10 @@ export class RawTokenDeltaBridge {
  * Log the API response telemetry and record actual token usage for a
  * completed stream attempt.
  *
- * `attemptIndex` stamps the 0-based attempt number (AC-4). A successful
- * stream completion always carries `attempt_outcome: 'success'`.
+ * `attemptIndex` stamps the 0-based attempt number (AC-4). A stream that
+ * completed carries `attempt_outcome: 'success'`, except an attempt whose
+ * terminal finish reason is `refusal`, which is recorded as `'refusal'` with
+ * its real usage (issue #4036).
  */
 export async function logStreamTelemetry(
   telemetryPorts: TurnTelemetryPorts,
@@ -160,6 +172,7 @@ export async function logStreamTelemetry(
   lastIContent: IContent | undefined,
   tokenUsageLogger: TokenUsageLogger | null | undefined,
   timing?: StreamTimingMeasurement,
+  finish: StreamFinishInfo = {},
 ): Promise<void> {
   // An empty stream (no chunks) still carries elapsed provider time; the
   // caller throws EmptyStreamError after this returns, outside the
@@ -173,6 +186,7 @@ export async function logStreamTelemetry(
       telemetry,
       lastIContent,
       tokenUsageLogger,
+      finish,
     );
   } catch (error) {
     // Fail-open boundary: this runs on the completion path of a real turn, so
@@ -220,6 +234,7 @@ async function emitStreamTelemetry(
   telemetry: { promptId: string; startTime: number; attemptIndex?: number },
   lastIContent: IContent,
   tokenUsageLogger: TokenUsageLogger | null | undefined,
+  finish: StreamFinishInfo,
 ): Promise<void> {
   const durationMs = Date.now() - telemetry.startTime;
   const usage = lastIContent.metadata?.usage;
@@ -237,7 +252,15 @@ async function emitStreamTelemetry(
     usage
       ? usageStatsToActualInput(usage, {
           attemptIndex: telemetry.attemptIndex ?? 0,
-          attemptOutcome: 'success',
+          attemptOutcome: isRefusalFinishReason(finish.finishReason)
+            ? 'refusal'
+            : 'success',
+          ...(finish.finishReason !== undefined && {
+            finishReason: finish.finishReason,
+          }),
+          ...(finish.rawStopReason !== undefined && {
+            rawStopReason: finish.rawStopReason,
+          }),
         })
       : undefined,
   );

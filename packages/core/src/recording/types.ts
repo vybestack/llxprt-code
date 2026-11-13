@@ -29,6 +29,9 @@ import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 export const SESSION_TITLE_MAX_LENGTH = 120;
 
+export type { RefusalPayload } from './refusalPayload.js';
+export type { RefusalRewritePayload } from './refusalRewritePayload.js';
+
 // ---------------------------------------------------------------------------
 // Event type discriminator
 // ---------------------------------------------------------------------------
@@ -62,7 +65,9 @@ export type SessionEventType =
   | 'compression_detail'
   | 'replace_begin'
   | 'replace_commit'
-  | 'replace_abort';
+  | 'replace_abort'
+  | 'refusal'
+  | 'refusal_rewrite';
 
 // ---------------------------------------------------------------------------
 // Event envelope

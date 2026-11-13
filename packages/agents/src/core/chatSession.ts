@@ -114,7 +114,11 @@ import {
   semanticPurgeRuntime,
 } from './chatSessionMediaLifecycle.js';
 import { createCompressionHookTrigger } from './compressionHookWiring.js';
-import { resolveCompressionProvider } from './CompressionProfileResolver.js';
+import {
+  COMPRESSION_PROFILE_PURPOSE,
+  resolveCompressionProvider,
+  type AuxiliaryProfilePurpose,
+} from './CompressionProfileResolver.js';
 import { ConversationManager } from './ConversationManager.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import {
@@ -129,6 +133,12 @@ import type { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import { StreamProcessor } from './StreamProcessor.js';
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
 import { TurnProcessor } from './TurnProcessor.js';
+import {
+  createRefusalRecovery,
+  HistoryRefusalReviewer,
+  refusalReviewPurpose,
+  type RefusalRecovery,
+} from '../refusal/index.js';
 
 // Re-exports — consumers import from './chatSession.js'
 export {
@@ -307,8 +317,6 @@ export class ChatSession {
     logChatInitialization(this.logger, model, initialHistory.length);
 
     // Create composed modules
-    const resolveBaseUrl = (p: IProvider) =>
-      resolveProviderBaseUrl(p, this.runtimeState.baseUrl);
 
     this.compressionHandler = this.createCompression(triggerCompressionHook);
 
@@ -362,9 +370,26 @@ export class ChatSession {
       this.generationConfig,
       this.historyService,
       this.streamProcessor,
-      resolveBaseUrl,
+      (provider) => resolveProviderBaseUrl(provider, this.runtimeState.baseUrl),
+      this.createRefusalRecovery(),
     );
     this.directProcessor = this.createDirectMessageProcessor();
+  }
+
+  /** Refusal recovery whose reviewer reads this session's live history. */
+  private createRefusalRecovery(): RefusalRecovery {
+    const reviewer = new HistoryRefusalReviewer({
+      history: () => this.historyService,
+      runtimeState: this.runtimeState,
+      config: () => this.getConfig(),
+      compressionProfile: () =>
+        this.ports.compression.ephemerals.compressionProfile(),
+      resolveProvider: (profile, setting) =>
+        this.resolveAuxiliaryProvider(profile, refusalReviewPurpose(setting)),
+      usageLogger: () =>
+        this.compressionHandler.tokenUsageLogger ?? this.tokenUsageLogger,
+    });
+    return createRefusalRecovery(this.ports.turn.ephemerals.refusal, reviewer);
   }
 
   private createTokenUsageLogger(): TokenUsageLogger {
@@ -462,29 +487,43 @@ export class ChatSession {
     return supportsChatCompletion(provider);
   }
 
-  // ── Compression profile resolution (delegated to CompressionProfileResolver) ──
+  // ── Auxiliary profile resolution (delegated to CompressionProfileResolver) ──
 
-  private async resolveCompressionProvider(
+  private resolveCompressionProvider(
     profileName: string | undefined,
+  ): Promise<CompressionProviderResult> {
+    return this.resolveAuxiliaryProvider(
+      profileName,
+      COMPRESSION_PROFILE_PURPOSE,
+    );
+  }
+
+  /**
+   * Resolves a saved profile into an isolated provider for compression or
+   * refusal review. The foreground session never loads the profile.
+   */
+  private async resolveAuxiliaryProvider(
+    profileName: string | undefined,
+    purpose: AuxiliaryProfilePurpose,
   ): Promise<CompressionProviderResult> {
     return resolveCompressionProvider(
       {
+        purpose,
         profileDefinitions: this.ports.runtime.profileDefinitions,
         providerRuntime: this.ports.runtime.providerRuntime,
         prepareProviderInvocation: this.ports.runtime.prepareProviderInvocation,
         runtimeState: this.runtimeState,
         readProviderKeys: () => this.ports.runtime.provider.getProviderKeys(),
-        resolveExplicitCompressionProvider:
-          this.providerResolution.resolveExplicitCompression.bind(
-            this.providerResolution,
+        resolveExplicitCompressionProvider: (profile, provider) =>
+          this.providerResolution.resolveExplicitAuxiliary(
+            purpose,
+            profile,
+            provider,
           ),
         roundRobinIndexes: this.compressionLoadBalancerRoundRobinIndexes,
       },
       profileName,
-      () =>
-        this.resolveProviderForRuntime(
-          'ChatSession.resolveCompressionProvider.default',
-        ),
+      () => this.resolveProviderForRuntime(`${purpose.source}.default`),
       this.mediaResolver,
       this.requestMediaBudgetBytes,
       this.providerFileBindings,

@@ -16,7 +16,7 @@ import { LocalMediaStore, ScratchRootOwner } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
 import { SessionControl } from '../control/sessionControl.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { SessionRecordingPaths } from '../control/sessionControl.js';
+import type { SessionRecordingPaths } from '../control/session-control-deps.js';
 import { SessionConversationBinding } from '../../session/session-conversation-binding.js';
 import type {
   IContent,

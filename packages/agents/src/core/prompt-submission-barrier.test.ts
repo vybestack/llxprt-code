@@ -1,3 +1,4 @@
+import { createRefusalRecovery } from '../refusal/index.js';
 import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
@@ -35,6 +36,13 @@ function directProcessor(
     setup.history,
     setup.processor,
     () => setup.runtime.state.baseUrl,
+    createRefusalRecovery({
+      retries: () => 0,
+      backoffMs: () => 0,
+      rewrite: () => false,
+      reviewProfile: () => undefined,
+      maxRewrites: () => 0,
+    }),
   );
 }
 

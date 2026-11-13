@@ -89,6 +89,7 @@ describe('release package derivation', () => {
       '@vybestack/llxprt-code-settings',
       '@vybestack/llxprt-code-telemetry',
       '@vybestack/llxprt-code-ide-integration',
+      '@vybestack/llxprt-code-agent-core',
       '@vybestack/llxprt-code-policy',
       '@vybestack/llxprt-code-mcp',
       '@vybestack/llxprt-code-core',
@@ -444,7 +445,7 @@ ${path.posix.join(realFixture, 'plugins/google-mcp-auth')}|install --omit=peer
     ).toBeGreaterThan(toolsIndex);
   });
 
-  it('publishes storage, auth, settings, telemetry, ide-integration, and policy before MCP, core, providers, agents, and CLI', () => {
+  it('publishes storage, auth, settings, telemetry, ide-integration, agent-core, and policy before MCP, core, providers, agents, and CLI', () => {
     const storageIndex = releaseYml.indexOf(
       'name: Publish @vybestack/llxprt-code-storage\n',
     );
@@ -459,6 +460,9 @@ ${path.posix.join(realFixture, 'plugins/google-mcp-auth')}|install --omit=peer
     );
     const ideIntegrationIndex = releaseYml.indexOf(
       'name: Publish @vybestack/llxprt-code-ide-integration\n',
+    );
+    const agentCoreIndex = releaseYml.indexOf(
+      'name: Publish @vybestack/llxprt-code-agent-core\n',
     );
     const policyIndex = releaseYml.indexOf(
       'name: Publish @vybestack/llxprt-code-policy\n',
@@ -484,7 +488,8 @@ ${path.posix.join(realFixture, 'plugins/google-mcp-auth')}|install --omit=peer
     expect(settingsIndex).toBeGreaterThan(authIndex);
     expect(telemetryIndex).toBeGreaterThan(settingsIndex);
     expect(ideIntegrationIndex).toBeGreaterThan(telemetryIndex);
-    expect(policyIndex).toBeGreaterThan(ideIntegrationIndex);
+    expect(agentCoreIndex).toBeGreaterThan(ideIntegrationIndex);
+    expect(policyIndex).toBeGreaterThan(agentCoreIndex);
     expect(mcpIndex).toBeGreaterThan(policyIndex);
     expect(coreIndex).toBeGreaterThan(mcpIndex);
     expect(providersIndex).toBeGreaterThan(coreIndex);

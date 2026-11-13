@@ -14,6 +14,7 @@ export const productionPackages = [
   'a2a-server',
   'agents',
   'auth',
+  'agent-core',
   'cli',
   'core',
   'ide-integration',

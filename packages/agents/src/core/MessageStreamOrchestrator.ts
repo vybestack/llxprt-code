@@ -53,6 +53,8 @@ import {
   emitAfterAgentContextClear,
 } from './afterAgentDecisionStream.js';
 import { AttemptBoundaryTracker } from './AttemptBoundaryTracker.js';
+import { finishWithRefusal } from '../refusal/index.js';
+import { recordAttemptActivity, type AttemptState } from './attemptActivity.js';
 
 export interface MessageStreamDeps {
   config: Config;
@@ -116,23 +118,17 @@ export interface IterationResult {
   hadContent: boolean;
   deferredEvents: ServerAgentStreamEvent[];
   outcome?: ServerFinishedOutcome;
+  /**
+   * The attempt ended with a refusal. Terminal for the request: no tools, no
+   * continuation of any kind (issue #4036).
+   */
+  refused?: boolean;
 }
 
 interface PostTurnResult {
   done: boolean;
   retryCount: number;
   newBaseRequest: AgentMessageInput | undefined;
-}
-
-/**
- * Mutable per-attempt accumulators owned by `_processStreamIteration`. Held in
- * a single record so {@link discardAbandonedAttempt} can reset them by
- * reference on a transport Retry.
- */
-interface AttemptState {
-  hadThinking: boolean;
-  hadContent: boolean;
-  hadToolCallsThisTurn: boolean;
 }
 
 /**
@@ -172,6 +168,7 @@ function createAttemptRollbackContext(
     hadThinking: false,
     hadContent: false,
     hadToolCallsThisTurn: hadToolCallsPrior,
+    refused: false,
   };
   const deferredEvents: ServerAgentStreamEvent[] = [];
   return {
@@ -214,21 +211,12 @@ function discardAbandonedAttempt(rollback: AttemptRollbackContext): void {
   rollback.state.hadThinking = false;
   rollback.state.hadContent = false;
   rollback.state.hadToolCallsThisTurn = rollback.hadToolCallsPrior;
+  rollback.state.refused = false;
   rollback.deferredEvents.length = 0;
   rollback.loopDetector.restore(rollback.checkpoint.loopDetection);
   rollback.todoContinuationService.restore(
     rollback.checkpoint.todoContinuation,
   );
-}
-
-function recordAttemptActivity(
-  event: ServerAgentStreamEvent,
-  state: AttemptState,
-): void {
-  if (event.type === AgentEventType.ToolCallRequest)
-    state.hadToolCallsThisTurn = true;
-  if (event.type === AgentEventType.Thought) state.hadThinking = true;
-  if (event.type === AgentEventType.Content) state.hadContent = true;
 }
 
 function normalizeTodoSnapshotEntry(todo: Todo): Todo {
@@ -647,6 +635,10 @@ export class MessageStreamOrchestrator {
     retryCount: number,
     ctx: StreamContext,
   ): AsyncGenerator<ServerAgentStreamEvent, PostTurnResult> {
+    if (iter.refused === true) {
+      return yield* finishWithRefusal(this.deps, iter.deferredEvents, ctx);
+    }
+
     if (iter.hadToolCallsThisTurn) {
       return yield* this._finishWithToolCalls(iter.deferredEvents, ctx);
     }

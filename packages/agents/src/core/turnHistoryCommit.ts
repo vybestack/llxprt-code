@@ -148,6 +148,8 @@ export async function commitTurnHistory(
           lastPromptTokenCount: options.lastPromptTokenCount,
           attemptIndex: options.attemptIndex,
           promptId: options.promptId,
+          finishReason: options.response.finishReason,
+          rawStopReason: options.response.rawStopReason,
         });
         await settlePublishedMediaAdmissions(options, mediaAdmissions);
       },

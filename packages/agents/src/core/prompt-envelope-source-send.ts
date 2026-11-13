@@ -107,6 +107,10 @@ export class SourcePromptEnvelopePreparer {
     private readonly tokenizerFactory?: SourceTokenizerFactory,
   ) {}
 
+  transfer(source: PromptEnvelopeSource): void {
+    this.sources.delete(source);
+  }
+
   own(source: PromptEnvelopeSource): void {
     this.sources.add(source);
   }
@@ -255,6 +259,9 @@ export async function prepareSourcePromptEnvelopeAfterEnforcement(
 }
 
 interface SourceStreamInput extends SourceEnforcementInput {
+  readonly takeSource?: (
+    prepared: PreparedSourcePromptEnvelopeSend,
+  ) => Promise<void>;
   readonly onPrepared?: (
     prepared: PreparedSourcePromptEnvelopeSend,
     attemptIndex: number,
@@ -315,6 +322,10 @@ async function openSourceResponse(
       const index = attemptIndex++;
       let iterator: AsyncIterableIterator<IContent> | undefined;
       try {
+        if (input.takeSource !== undefined) {
+          preparer.transfer(source);
+          await input.takeSource(prepared);
+        }
         if (input.onPrepared !== undefined) {
           await raceWithAbort(
             Promise.resolve(input.onPrepared(prepared, index)),

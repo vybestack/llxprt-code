@@ -9,6 +9,8 @@ import type { AgentRuntimeProviderAdapter } from '@vybestack/llxprt-code-core/ru
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { CompressionProfileNotFoundError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { NoActiveProviderError } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { resolveExplicitAuxiliaryProvider } from './chatSessionProviderRuntime.js';
+import type { AuxiliaryProfilePurpose } from './CompressionProfileResolver.js';
 import { tryReadActiveProvider } from './chatSessionProviderRuntime.js';
 
 /**
@@ -93,6 +95,25 @@ export class ChatSessionProviderResolution {
     }
 
     return provider;
+  }
+
+  resolveExplicitAuxiliary(
+    purpose: AuxiliaryProfilePurpose,
+    profileName: string,
+    providerName: string,
+    lookupProviderName: string = providerName,
+  ): IProvider {
+    return resolveExplicitAuxiliaryProvider(
+      {
+        adapter: this.readAdapter(),
+        active: () => this.getActiveProvider(),
+        logger: this.logger,
+      },
+      purpose,
+      profileName,
+      providerName,
+      lookupProviderName,
+    );
   }
 
   resolveExplicitCompression(

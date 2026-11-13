@@ -21,6 +21,8 @@ import { validateHistoryEntry } from './historyBatchContracts.js';
 export interface DetachedHistoryOptions
   extends Omit<HistoryBatchOptions, 'replaceAll'> {
   readonly signal?: AbortSignal;
+  readonly audit?: { readonly key: string; readonly value: Uint8Array };
+  readonly assertCurrent?: () => void;
   readonly onAcknowledged?: () => void | Promise<void>;
   /** Publish batch/token observers before participant finalization, as replaceBatch does. */
   readonly publishBatch?: boolean;

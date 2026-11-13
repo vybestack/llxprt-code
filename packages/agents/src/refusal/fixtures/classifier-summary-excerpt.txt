@@ -1,0 +1,58 @@
+<scratchpad>
+**Sources reviewed:** the full visible history, the prior snapshot (truncated, but its scratchpad survived), and the injected active todo.
+
+**Prior context to keep**
+- **Ctrl+Enter steering (done).** The path is Konsole → jefe → tmux → LLxprt. The Konsole keytab must send `\E[13;5u`; `\E[27;5;13~` fails because jefe's crossterm 0.28.1 drops it. Steering is verified working.
+- **#3998.** The intermittent "first Ctrl+Enter becomes a newline" race. Type Bug, milestone 0.14.0, label Ink UI, on the LLxprt Roadmap project.
+- **gh token** has the `project` scope.
+- **User preferences.** Be concise. Don't redo steps the user already did (they objected when I repeated a finished step). Treat jefe's tmux as read-only unless permitted.
+
+**This segment**
+- **Issue #4000 filed.** Labels Loopbreaker and Context Management, type Bug, milestone 0.12.0, on Roadmap project 8.
+- **Fix built.** User said "create a branch fix it and drive it to pr". Branch issue4000 has 3 commits.
+- **Reviews.** Two architect review rounds, then a final remediation.
+- **PR #4015 created.** CI is currently failing.
+  - E2E: bun download returned 504 and the ollama log was missing. One rerun of the failed jobs; the second attempt failed again and has not been inspected.
+  - Lint (GitHub Actions) and Lint (Shell): tar "not a tar archive", so the tool download is probably also infra. The aggregate "Lint" job also failed.
+  - CodeRabbit comments not checked yet.
+
+**Injected todo vs. visible history.** The current active todo is "Find the open gh tool issue, then branch, fix, PR, CI and CodeRabbit". It is not in the visible history. Likely link: the `github` tool's `pr.checks` op failed with "unknown flag: --json" (gh pr checks has no --json flag). That may be the bug in the gh tool issue, but this is an inference. The #4015 CI watch may still be outstanding, so check both.
+
+**Tool limits.** The shell tool caps at 900s total and kills a command after 600s with no output. Use polling loops that print, e.g. `sleep 280`.
+</scratchpad>
+
+<state_snapshot>
+<overall_goal>
+Support the user's LLxprt workflow. The current active todo is to find the open GitHub issue about the gh/`github` tool, then branch, fix, open a PR, and drive CI and CodeRabbit to green. It is unclear whether CI and CodeRabbit on PR #4015 (Fixes #4000, media-budget turn-ending bug) are also still outstanding; this is likely, so verify with gh. Do not merge anything.
+</overall_goal>
+
+<key_knowledge>
+**User preferences**
+- Be concise.
+- Don't redo steps the user already did. The user objected when the agent repeated a finished step.
+- Inspect jefe's tmux only read-only, unless permitted.
+- Never merge PRs; report status and ask first.
+
+**Session journal (full tool results)**
+- Path: /home/devuser/.local/state/example-agent/tmp/0123456789abcdef/chats/session-2026-01-01T00-00-00-sample.jsonl
+- It may be incomplete. Search it (grep) for dropped details; never read it whole.
+
+**Repo, branch and GitHub settings**
+- Repo: /home/devuser/projects/example-app/main. Remote: git@github.com:example-org/example-app.git.
+- Workflow skill: `llxprt-issue-workflow` (activate it).
+  - Branch name `issueNUM`. Assign the issue to the maintainer.
+  - Plans go in `project-plans/issueNUM.md`, never in dev-docs.
+  - Implement test-first, then review (max 2 rounds), then open the PR with the pr-creator skill. The title includes "(Fixes #N)" and the body has "Fixes #N".
+  - Watch CI with `gh pr checks N`. Address every CodeRabbit comment: reply to it and resolve it.
+  - Never call a CI failure unrelated without gh proof.
+- PR template: `.github/pull_request_template.md`. Sections: TLDR, Dive Deeper, Reviewer Test Plan, Testing Matrix, Linked issues.
+- Issue filing conventions:
+  - Set the issue type with the `github` tool `issue.edit` `type`.
+  - Loop-breaking bugs go in the current milestone, 0.12.0.
+  - Add issues to the LLxprt Roadmap with `gh project item-add 8 --owner example-org --url <issue>`.
+  - The gh token has the project scope.
+
+**Agent environment differences from the skill**
+- Subagents: there is no typescriptexpert or deepthinker. Use `backupcoder` (implementation) and `architect` (review). Others available: quickcoder, chess-*.
+- `ocr` is NOT installed and there is no ~/.opencodereview. Substitute architect reviews and note that in the PR.
+- Smoke-test profile `zai-glm-flash` does not exist here. Use `bun scripts/start.ts --profile-load gpt-6-luna "write me a haiku and nothing else"`, which works. Other profiles: claude-sonnet-5-5, deepseek-flash-fireworks, gpt-luna-high, gpt-sol-high, opus, sonnet.

@@ -11,6 +11,7 @@ import { describe, expect, it } from 'bun:test';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import { TurnProcessor } from './TurnProcessor.js';
+import { createRefusalRecovery } from '../refusal/index.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
 import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
 
@@ -52,6 +53,13 @@ async function facadeCallback0(): Promise<void> {
   let calls = 0;
   const processor = Object.create(TurnProcessor.prototype) as TurnProcessor;
   Object.assign(processor, {
+    refusalRecovery: createRefusalRecovery({
+      retries: () => 0,
+      backoffMs: () => 0,
+      rewrite: () => false,
+      reviewProfile: () => undefined,
+      maxRewrites: () => 0,
+    }),
     compressionHandler: {
       enforceProviderSource: async (
         _provider: unknown,
@@ -118,6 +126,13 @@ async function facadeCallback1(): Promise<void> {
     DirectMessageProcessor.prototype,
   ) as DirectMessageProcessor;
   Object.assign(processor, {
+    refusalRecovery: createRefusalRecovery({
+      retries: () => 0,
+      backoffMs: () => 0,
+      rewrite: () => false,
+      reviewProfile: () => undefined,
+      maxRewrites: () => 0,
+    }),
     retry: retryWithBackoff,
     _executeDirectProviderCall: async () => {
       calls++;
@@ -152,6 +167,13 @@ async function facadeCallback2(): Promise<void> {
     DirectMessageProcessor.prototype,
   ) as DirectMessageProcessor;
   Object.assign(processor, {
+    refusalRecovery: createRefusalRecovery({
+      retries: () => 0,
+      backoffMs: () => 0,
+      rewrite: () => false,
+      reviewProfile: () => undefined,
+      maxRewrites: () => 0,
+    }),
     retry: retryWithBackoff,
     _executeDirectProviderCall: async () => {
       calls++;
@@ -185,6 +207,14 @@ async function facadeCallback3(): Promise<void> {
   });
   const processor = Object.create(TurnProcessor.prototype) as TurnProcessor;
   Object.assign(processor, {
+    refusalRecovery: createRefusalRecovery({
+      retries: () => 0,
+      backoffMs: () => 0,
+      rewrite: () => false,
+      reviewProfile: () => undefined,
+      maxRewrites: () => 0,
+    }),
+    compressionHandler: { tokenUsageLogger: null },
     streamProcessor: {
       releasePromptTurnIdentity: () => undefined,
     },

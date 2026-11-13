@@ -8,6 +8,23 @@ import {
 import type { IdNodeCache } from './idTrieCache.js';
 import { readMapEntries, readValueBody } from './mapEntries.js';
 import type { RecordAccess } from './recordAccess.js';
+import type { PinnedRead } from './pinLease.js';
+
+export async function* pinnedCheckpoints(
+  openRead: () => Promise<PinnedRead>,
+  cache: IdNodeCache,
+): AsyncGenerator<ListedCheckpoint> {
+  const read = await openRead();
+  try {
+    yield* listCheckpoints(
+      read.access,
+      cache,
+      read.version?.roots.stateRoot ?? 0,
+    );
+  } finally {
+    await read.close();
+  }
+}
 
 /** A live checkpoint of a state map: its id and what it names. */
 export interface ListedCheckpoint {

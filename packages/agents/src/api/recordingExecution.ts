@@ -29,6 +29,7 @@ export function createRecordingExecution(
     hookOwner: hooks?.execution(identity) ?? identity,
     transcriptPath: () => currentRecordingPath(session),
     persistSemanticMediaPurge: () => session.persistSemanticMediaPurge(),
+    recordRefusal: (refusal) => session.recordRefusal(refusal),
   };
 }
 

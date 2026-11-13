@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { PinnedRead } from './pinLease.js';
+
 import { JournalFormatError } from './errors.js';
 import type { FrameHead } from './frame.js';
 import type { IdNodeCache } from './idTrieCache.js';
@@ -7,6 +9,25 @@ import { IdTrieReader } from './idTrieReader.js';
 import { decodeMapRef, MAP_VALUE_MAX_BYTES } from './keyedMap.js';
 import type { RecordAccess } from './recordAccess.js';
 import { RECORD_KIND } from './recordKinds.js';
+
+export async function* pinnedMapValues(
+  openRead: () => Promise<PinnedRead>,
+  cache: IdNodeCache,
+  prefix: string,
+  kind: 'meta' | 'state',
+): AsyncGenerator<{ readonly key: string; readonly value: Uint8Array }> {
+  const read = await openRead();
+  try {
+    const root =
+      kind === 'meta'
+        ? read.version?.roots.metaRoot
+        : read.version?.roots.stateRoot;
+    if (root !== undefined && root !== 0)
+      yield* readMapValues(read.access, cache, root, prefix);
+  } finally {
+    await read.close();
+  }
+}
 
 /** A `VALUE` frame head plus a key and a small value arrive in one read. */
 const VALUE_PREFETCH_BYTES = 1024;
@@ -77,4 +98,16 @@ export async function readValueBody(
     at += chunk.length;
   }
   return value;
+}
+
+export async function* readMapValues(
+  access: RecordAccess,
+  cache: IdNodeCache,
+  root: number,
+  prefix: string,
+): AsyncGenerator<{ readonly key: string; readonly value: Uint8Array }> {
+  for await (const entry of readMapEntries(access, cache, root)) {
+    if (entry.key.startsWith(prefix))
+      yield { key: entry.key, value: await readValueBody(access, entry.head) };
+  }
 }

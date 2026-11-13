@@ -430,7 +430,7 @@ Every `stream()` turn yields a sequence of `AgentEvent` values discriminated by
 | `tool-status`       | `update: ToolUpdate`                                | No                 |
 | `usage`             | `usage: UsageMetadataValue`                         | No                 |
 | `model-info`        | `info: ModelInfo`                                   | No                 |
-| `notice`            | `message: string`                                   | No                 |
+| `notice`            | `message: string`, `source?: 'refusal-recovery'`    | No                 |
 | `compression`       | `info: ChatCompressionInfo \| null`                 | No                 |
 | `context-warning`   | `estimatedRequestTokenCount`, `remainingTokenCount` | No (precedes done) |
 | `retry`             | _(none)_                                            | No                 |

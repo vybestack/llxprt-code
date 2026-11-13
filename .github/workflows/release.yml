@@ -893,6 +893,10 @@ jobs:
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish "${{ runner.temp }}/release-artifacts/vybestack-llxprt-code-ide-integration-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
+      - name: Publish @vybestack/llxprt-code-agent-core
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        run: npm publish "${{ runner.temp }}/release-artifacts/vybestack-llxprt-code-agent-core-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+
       - name: Publish @vybestack/llxprt-code-policy
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish "${{ runner.temp }}/release-artifacts/vybestack-llxprt-code-policy-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}

@@ -174,6 +174,11 @@ export interface ProfileEphemeralSettings {
   'responses-stateful'?: boolean;
   'compression.strategy'?: string;
   'compression.profile'?: string;
+  'refusal.retries'?: number;
+  'refusal.backoff-ms'?: number;
+  'refusal.rewrite'?: boolean;
+  'refusal.review-profile'?: string;
+  'refusal.max-rewrites'?: number;
   'compression.density.readWritePruning'?: boolean;
   'compression.density.fileDedupe'?: boolean;
   'compression.density.recencyPruning'?: boolean;

@@ -52,7 +52,7 @@ function withHookResponseFields<T extends ModelOutput>(
 /**
  * Maps a hook-modified v2 response payload to a neutral ModelStreamChunk.
  *
- * Called from StreamProcessor._processAfterModelHook when the AfterModel
+ * Called from processAfterModelHook (streamAfterModelHook.ts) when the AfterModel
  * hook returns a MODIFY decision. `ModelStreamChunk` is an alias of
  * `ModelOutput`, so this single mapper also serves the direct
  * (non-streaming) path in DirectMessageProcessor._applyAfterModelResult.

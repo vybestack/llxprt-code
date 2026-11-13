@@ -63,11 +63,18 @@ import {
 } from './streamRequestHelpers.js';
 import { buildAndSendStreamRequest } from './streamprocessor-request.js';
 import { trackPromptTokens } from './streamResponseHelpers.js';
+import type {
+  SendRequestState,
+  ProviderReadyRequest,
+} from './sendRequestState.js';
+import { resendKeptRequestSource } from './streamprocessor-refusal-resend.js';
+import { throwIfRefused } from '../refusal/refusalDetection.js';
 import {
   attachStreamTiming,
   logStreamTelemetry,
   RawTokenDeltaBridge,
   StreamTimingTracker,
+  type StreamFinishInfo,
 } from './streamTelemetryLogger.js';
 import { submitUserPrompt } from './prompt-submission.js';
 import {
@@ -113,6 +120,8 @@ export class StreamProcessor {
   /** Canonical turn identity retained across retries for each logical prompt. */
   private readonly turnIdByPromptId = new Map<string, string>();
   private currentAttemptIndex = 0;
+  /** Whether the attempt in flight resends an earlier attempt of its send. */
+  private currentIsResend = false;
 
   /**
    * Raw token-delta bridge for the attempt in flight (#3493). Null when no
@@ -192,9 +201,11 @@ export class StreamProcessor {
     userInput: IContent | IContent[] | PreparedUserTurn,
     attemptIndex?: number,
     semanticMediaPurge?: SemanticMediaPurgeAttempt,
+    sendState?: SendRequestState,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     this.currentPromptEnvelopeEstimate = null;
     this.currentAttemptIndex = attemptIndex ?? 0;
+    this.currentIsResend = sendState?.begin() ?? this.currentAttemptIndex > 0;
     const provider =
       params.modelParameters?.route?.provider ??
       this.providerResolver('stream');
@@ -258,6 +269,7 @@ export class StreamProcessor {
       stampedUserContent,
       provider,
       semanticMediaPurge,
+      sendState,
     );
 
     return this._createCancellableStream(
@@ -300,6 +312,7 @@ export class StreamProcessor {
     userContent: IContent | IContent[],
     provider: IProvider,
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
+    sendState: SendRequestState | undefined,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     let requestAttempt = 0;
     // retryWithBackoff re-invokes this closure once per attempt, so the
@@ -309,12 +322,17 @@ export class StreamProcessor {
       if (requestAttempt > 0) semanticMediaPurge?.markRetryHandoff();
       requestAttempt += 1;
       this.currentRawTokenDeltaBridge = new RawTokenDeltaBridge();
+      const kept = sendState?.replayable();
+      if (kept !== undefined) {
+        return this._resendKeptRequest(provider, kept, params, promptId);
+      }
       return this._buildAndSendStreamRequest(
         params,
         promptId,
         userContent,
         provider,
         semanticMediaPurge,
+        sendState,
       );
     };
 
@@ -345,9 +363,11 @@ export class StreamProcessor {
     userContent: IContent | IContent[],
     provider: IProvider,
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
+    sendState: SendRequestState | undefined,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     assertAdmittedRoute(params.modelParameters?.route);
     return buildAndSendStreamRequest({
+      sendState,
       runtime: this.ports,
       compression: this.compressionHandler,
       history: this.historyService,
@@ -401,6 +421,45 @@ export class StreamProcessor {
         }),
       log: (message) => this.logger.debug(() => message),
     });
+  }
+
+  private async _resendKeptRequest(
+    provider: IProvider,
+    kept: ProviderReadyRequest,
+    params: SendMessageParams,
+    promptId: string,
+  ): Promise<AsyncGenerator<ModelStreamChunk>> {
+    const bound = this._bindProviderMediaAndFiles(provider);
+    const start = Date.now();
+    const source = kept.prepared.source;
+    const stream = await resendKeptRequestSource(
+      this.ports,
+      bound,
+      kept,
+      params,
+      promptId,
+      this.turnIdByPromptId.get(promptId) ?? promptId,
+      this.generationConfig,
+      this.currentRawTokenDeltaBridge,
+      (estimate) => {
+        this.currentPromptEnvelopeEstimate = estimate;
+      },
+    );
+    return this._consumeFirstChunkAndReturn(
+      stream,
+      undefined,
+      promptId,
+      start,
+      kept.toolSelection.allowedFunctionNames,
+      this.currentRawTokenDeltaBridge,
+      {
+        rows: () => source,
+        tools: kept.toolSelection.tools,
+        signal: params.config?.abortSignal,
+      },
+      params.hookOwner ?? params.recordingExecution?.hookOwner,
+      params.recordingExecution?.historyOrigin,
+    );
   }
 
   private _buildStreamChatOptions(
@@ -540,6 +599,7 @@ export class StreamProcessor {
     owner?: HookExecutionOwner,
   ): AsyncGenerator<ModelStreamChunk> {
     let lastIContent: IContent | undefined;
+    let finish: StreamFinishInfo = {};
     // Constructed at generator-body start (first pull — the provider call
     // boundary), so provider_request_ms covers the stream lifecycle alone
     // and excludes send-seam estimation (#3257).
@@ -576,6 +636,10 @@ export class StreamProcessor {
           yieldedChunk,
           lastIContent,
         );
+        finish = {
+          finishReason: yieldedChunk.finishReason ?? finish.finishReason,
+          rawStopReason: yieldedChunk.rawStopReason ?? finish.rawStopReason,
+        };
         yield yieldedChunk;
       }
     } catch (error) {
@@ -594,6 +658,7 @@ export class StreamProcessor {
       lastIContent,
       this.compressionHandler.tokenUsageLogger,
       timing.measure(),
+      finish,
     );
   }
 
@@ -772,6 +837,9 @@ export class StreamProcessor {
         await this._recordStreamAfc(historyChunk, arrival);
         yield { ...chunk, content: filteredContent };
       }
+      // Classified before validation, history commit and success accounting:
+      // a refused attempt's output never reaches any of them (issue #4036).
+      throwIfRefused(terminal, turnId);
       await this._finalizeStreamProcessing(
         terminal,
         userInput,
@@ -835,7 +903,7 @@ export class StreamProcessor {
       userInput,
       includeThoughts,
       semanticMediaPurge,
-      retryHandoff: this.currentAttemptIndex > 0,
+      retryHandoff: this.currentIsResend,
       eagerlyRecordedToolResponseCallIds:
         this.eagerlyRecordedToolResponseCallIds,
       preparedUserTurn,

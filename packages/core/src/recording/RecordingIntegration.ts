@@ -1,3 +1,4 @@
+import type { RefusalPayload } from './refusalPayload.js';
 import type { ScratchRootOwner } from '../storage/scratch-root.js';
 /**
  * Copyright 2025 Vybestack LLC
@@ -278,6 +279,16 @@ export class RecordingIntegration {
       return;
     }
     this.recording.recordSessionEvent(severity, message);
+  }
+
+  /**
+   * Audit-only record of a refused provider attempt (issue #4036).
+   */
+  recordRefusal(payload: RefusalPayload): void {
+    if (this.disposed) {
+      return;
+    }
+    this.recording.recordRefusal(payload);
   }
 
   /**

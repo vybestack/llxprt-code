@@ -1,0 +1,7 @@
+# Copyright 2026 Vybestack LLC
+
+[test]
+preload = [
+  "../../scripts/tests/storage-isolation-guard.ts",
+  "../../scripts/tests/browser-launch-guard.ts",
+]

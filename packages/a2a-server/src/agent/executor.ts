@@ -508,10 +508,18 @@ export class CoderAgentExecutor implements AgentExecutor {
           task.sendTextContent(`\n\n[safety notice] ${REFUSAL_NOTICE_MESSAGE}`);
         }
         return false;
+      case 'notice':
+        // Refusal-recovery progress is appended like the refusal safety
+        // notice; unsourced notices stay informational.
+        if (event.source === 'refusal-recovery') {
+          sequencer.flushBuffered();
+          task.sendTextContent(`\n\n[recovery notice] ${event.message}`);
+        }
+        return false;
       default:
         // usage, compression, context-warning, citation, loop-detected,
-        // notice, hook-blocked, tool-result: informational in the legacy
-        // loop as well; log nothing further.
+        // hook-blocked, tool-result: informational in the legacy loop as
+        // well; log nothing further.
         return false;
     }
   }

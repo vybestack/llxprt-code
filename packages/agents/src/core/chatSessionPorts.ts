@@ -82,7 +82,7 @@ export interface TurnProcessorRuntime {
   readonly promptEstimator?: AgentRuntimeContext['promptEstimator'];
   readonly mediaAdmission?: MediaAdmissionService;
   readonly readStreamTimeoutPolicy: () => StreamTimeoutPolicy;
-  readonly ephemerals: Pick<RuntimeEphemerals, 'reasoning'>;
+  readonly ephemerals: Pick<RuntimeEphemerals, 'reasoning' | 'refusal'>;
 }
 
 /**

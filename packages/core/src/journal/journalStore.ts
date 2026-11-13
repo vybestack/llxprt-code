@@ -3,6 +3,7 @@ import {
   DeferredMaintenance,
   JournalMaintenanceScope,
 } from './deferred-maintenance.js';
+import { pinnedMapValues } from './mapEntries.js';
 import { rootRef } from './groupSegments.js';
 import type { ArrivalStore } from './arrival-group.js';
 import {
@@ -40,7 +41,7 @@ import {
   parseCheckpointEntry,
   type CheckpointDescriptor,
 } from './checkpointDescriptor.js';
-import { listCheckpoints, type ListedCheckpoint } from './checkpointList.js';
+import { pinnedCheckpoints, type ListedCheckpoint } from './checkpointList.js';
 import { JournalFormatError } from './errors.js';
 import {
   effectAppender,
@@ -482,6 +483,19 @@ export class JournalStore {
     );
   }
 
+  /** Stream a pinned version's audit metadata without retaining the map. */
+  metadata(
+    prefix: string,
+    kind: 'meta' | 'state',
+  ): AsyncGenerator<{ readonly key: string; readonly value: Uint8Array }> {
+    return pinnedMapValues(
+      () => this.openRead(),
+      kind === 'meta' ? this.metaCache : this.stateCache,
+      prefix,
+      kind,
+    );
+  }
+
   /** A meta map entry of the published version. */
   getMeta(key: string): Promise<Uint8Array | undefined> {
     return this.whilePinned(() =>
@@ -505,17 +519,8 @@ export class JournalStore {
   }
 
   /** The live checkpoints of the published version (design 4.9). */
-  async *checkpoints(): AsyncGenerator<ListedCheckpoint> {
-    const read = await this.openRead();
-    try {
-      yield* listCheckpoints(
-        this.requireAccess(),
-        this.stateCache,
-        this.currentVersion?.roots.stateRoot ?? 0,
-      );
-    } finally {
-      await read.close();
-    }
+  checkpoints(): AsyncGenerator<ListedCheckpoint> {
+    return pinnedCheckpoints(() => this.openRead(), this.stateCache);
   }
 
   /** One checkpoint of the published version; undefined when it does not exist or was deleted. */

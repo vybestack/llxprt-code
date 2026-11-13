@@ -24,6 +24,7 @@ import {
   buildChronologyTrace,
   type ChronologyTraceEntry,
 } from './historyChronology.js';
+import type { ProviderRequestRows } from './provider-request-snapshot.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import { countDecodedRow } from './journalRowCounters.js';
@@ -105,6 +106,15 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
     this.readers.requireOpen();
     return this.snapshot.curatedRows;
   }
+  get callerOwnedRows(): ProviderRequestRows {
+    return {
+      count: this.rawLength,
+      callerOwned: true,
+      openReader: (signal) => this.checkpointRows(signal),
+      readAt: (index) => this.readRawRow(index),
+    };
+  }
+
   get rawLength(): number {
     this.readers.requireOpen();
     return this.snapshot.rows;

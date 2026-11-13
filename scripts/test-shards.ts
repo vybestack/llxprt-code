@@ -83,6 +83,7 @@ export const TEST_SHARDS: readonly ShardDefinition[] = [
       'settings',
       'telemetry',
       'ide-integration',
+      'agent-core',
       'policy',
       'mcp',
       'lsp',
