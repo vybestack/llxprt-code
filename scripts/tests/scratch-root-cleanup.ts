@@ -14,13 +14,22 @@ import { readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+// Test module mocks can replace live imports before this hook runs.
+const readDirectory = readdirSync.bind(undefined);
+const removeDirectory = rmSync.bind(undefined);
+const temporaryDirectory = tmpdir.bind(undefined);
+const joinPath = join.bind(undefined);
+
 afterAll(() => {
-  const directory = tmpdir();
+  const directory = temporaryDirectory();
   const ownedRoot = new RegExp(
     `^llxprt-scratch-${process.pid}-[A-Za-z0-9]{6}$`,
   );
-  for (const name of readdirSync(directory)) {
+  for (const name of readDirectory(directory)) {
     if (ownedRoot.test(name))
-      rmSync(join(directory, name), { recursive: true, force: true });
+      removeDirectory(joinPath(directory, name), {
+        recursive: true,
+        force: true,
+      });
   }
 });
