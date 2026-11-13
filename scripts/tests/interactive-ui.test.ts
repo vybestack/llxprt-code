@@ -33,6 +33,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'bun:test';
+import { SessionDiscovery } from '@vybestack/llxprt-code-core';
 import { parseSamples } from '../memory/sample.ts';
 import { assertBoundedPostClearRetention } from './memory/retention-checkpoints.ts';
 import { withShortUiWorkspace } from '../short-ui-workspace.js';
@@ -245,6 +246,28 @@ describe('Interactive UI (tmux harness)', () => {
       );
     }
   }
+  runTmuxE2E(
+    'first startup paste followed immediately by Enter is submitted and journaled',
+    async () => {
+      const testName = 'startup-input-admission';
+      assertHarnessSuccess(
+        runHarness('tmux-script.startup-input.fake.json', testName),
+      );
+      const directory = getArtifactDir(testName);
+      const journals = readdirSync(directory, {
+        recursive: true,
+        encoding: 'utf8',
+      }).filter((file) => file.endsWith('.llxj'));
+      expect(journals).toHaveLength(1);
+      expect(
+        await SessionDiscovery.readFirstUserMessage(
+          path.join(directory, journals[0]),
+        ),
+      ).toBe('STARTUP_PASTE_ADMISSION');
+    },
+    300_000,
+  );
+
   runTmuxE2E(
     'clean startup renders a non-blank first frame with the composer',
     () => {

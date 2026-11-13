@@ -162,7 +162,9 @@ function bufferFastReturn(keypressHandler: KeypressHandler): KeypressHandler {
     } else {
       keypressHandler(key);
     }
-    lastKeyTime = now;
+    // A paste-end marker closes the payload. An Enter after that boundary is
+    // an explicit submit even when startup buffering delivers both together.
+    lastKeyTime = key.name === 'paste' ? Number.NEGATIVE_INFINITY : now;
   };
 }
 

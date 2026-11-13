@@ -60,6 +60,16 @@ describe('bracketed paste decoding (AC4)', () => {
     ]);
   });
 
+  it('submits an Enter outside a completed paste even in the same startup chunk', () => {
+    const keys = feed(['\x1b[200~first prompt\x1b[201~\r']);
+    expect(
+      keys.map((key) => [key.name, key.sequence, key.shift]),
+    ).toStrictEqual([
+      ['paste', 'first prompt', false],
+      ['return', '\r', false],
+    ]);
+  });
+
   it('an empty paste emits no key at all (AC4.2)', () => {
     const keys = feed(['\x1b[200~\x1b[201~']);
     expect(keys).toHaveLength(0);
