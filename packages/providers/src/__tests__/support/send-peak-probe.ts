@@ -33,6 +33,7 @@ import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__te
  */
 
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { applicationRetention } from './application-retention.js';
 import { openSendPeakSampleLog } from './send-peak-sample-log.js';
 import { join } from 'node:path';
 import { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
@@ -128,12 +129,14 @@ const envTrap = parseSendTrap(process.env[SEND_TRAP_ENV]);
  * `retain` leaks across sends, so it applies to the accumulation run only.
  * `estimate` is armed at the estimate step, not when the rows are opened.
  */
+const accumulationTrap: SendTrap | undefined =
+  envTrap?.startsWith('retain') === true ? envTrap : undefined;
 const peakTrap: SendTrap | undefined =
-  envTrap === 'retain' || envTrap === 'estimate' ? undefined : envTrap;
+  accumulationTrap !== undefined || envTrap === 'estimate'
+    ? undefined
+    : envTrap;
 const estimateTrap: SendTrap | undefined =
   envTrap === 'estimate' ? envTrap : undefined;
-const accumulationTrap: SendTrap | undefined =
-  envTrap === 'retain' ? envTrap : undefined;
 const deadline = setTimeout(() => {
   throw new Error('Send peak probe did not settle');
 }, 600000);
@@ -516,14 +519,22 @@ async function measure(
 
 /** Median of a few settled readings, taken once teardown has had a moment. */
 async function accumulationReading(): Promise<AccumulationReading> {
-  const heaps: number[] = [];
-  const arrayBuffers: number[] = [];
+  const heaps = new Array<number>(ACCUMULATION_READINGS).fill(0);
+  const objects = new Array<number>(ACCUMULATION_READINGS).fill(0);
+  const arrayBuffers = new Array<number>(ACCUMULATION_READINGS).fill(0);
   for (let reading = 0; reading < ACCUMULATION_READINGS; reading++) {
     await sleep(ACCUMULATION_PAUSE_MS);
-    heaps.push(await settledHeap());
-    arrayBuffers.push(process.memoryUsage().arrayBuffers);
+    await settledHeap();
+    const application = applicationRetention(Bun.generateHeapSnapshot());
+    heaps[reading] = application.heap;
+    objects[reading] = application.objects;
+    arrayBuffers[reading] = process.memoryUsage().arrayBuffers;
   }
-  return { heap: median(heaps), arrayBuffers: median(arrayBuffers) };
+  return {
+    heap: median(heaps),
+    objects: median(objects),
+    arrayBuffers: median(arrayBuffers),
+  };
 }
 
 /**
@@ -535,7 +546,12 @@ async function accumulate(
   wireRoute: WireRoute,
   job: Job,
 ): Promise<AccumulationReading[]> {
-  const readings: AccumulationReading[] = [];
+  // The probe's result containers must not look like per-send application leaks.
+  const readings = Array.from({ length: SEND_PEAK_ACCUMULATION_SENDS }, () => ({
+    heap: 0,
+    objects: 0,
+    arrayBuffers: 0,
+  }));
   let sha256: string | undefined;
   for (let sent = 0; sent < SEND_PEAK_ACCUMULATION_SENDS; sent++) {
     progress('accumulation-send-start', job);
@@ -553,7 +569,7 @@ async function accumulate(
     if (evidence.sha256 !== sha256) {
       throw new Error('accumulation sends put different bytes on the wire');
     }
-    readings.push(await accumulationReading());
+    Object.assign(readings[sent], await accumulationReading());
     progress('accumulation-send-complete', job);
   }
   return readings;

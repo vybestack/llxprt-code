@@ -44,7 +44,10 @@ export const SEND_PEAK_ACCUMULATION_SENDS = 6;
  * offset from collection timing; only the change between sends means anything.
  */
 export interface AccumulationReading {
+  /** Application self bytes, excluding JSC executable/code metadata. */
   readonly heap: number;
+  /** Data containers, independent of their payload size. */
+  readonly objects: number;
   readonly arrayBuffers: number;
 }
 
@@ -107,7 +110,9 @@ function isAccumulationReading(value: unknown): value is AccumulationReading {
   if (typeof value !== 'object' || value === null) return false;
   const record: Record<string, unknown> = { ...value };
   return (
-    typeof record.heap === 'number' && typeof record.arrayBuffers === 'number'
+    typeof record.heap === 'number' &&
+    typeof record.objects === 'number' &&
+    typeof record.arrayBuffers === 'number'
   );
 }
 
@@ -211,6 +216,8 @@ export interface SendPeakVerdict {
    * the heap and the `arrayBuffers` figure. This is what the gate judges.
    */
   readonly retainedGrowth: number;
+  /** A repeated request must not accumulate even small data containers. */
+  readonly retainedObjectsGrowth: number;
   readonly retainedGrowthWithinBound: boolean;
   /**
    * Settled growth between the first and the last send of the accumulation
@@ -328,6 +335,9 @@ export function judgeSendPeak(
   const heapGrowth = peakHeap.large - peakHeap.small;
   const arrayBufferGrowth = peakArrayBuffers.large - peakArrayBuffers.small;
   const retained = retainedGrowthOf(series.accumulation);
+  const retainedObjectsGrowth = trendGrowth(
+    series.accumulation.map((reading) => reading.objects),
+  );
   return {
     bytesMatchOracle:
       sameBody(series.small, oracles.small) &&
@@ -339,7 +349,9 @@ export function judgeSendPeak(
     arrayBufferGrowth,
     arrayBufferGrowthWithinBound: arrayBufferGrowth <= SEND_PEAK_BOUND_BYTES,
     retainedGrowth: retained.trend,
-    retainedGrowthWithinBound: retained.trend <= SEND_PEAK_BOUND_BYTES,
+    retainedObjectsGrowth,
+    retainedGrowthWithinBound:
+      retained.trend <= SEND_PEAK_BOUND_BYTES && retainedObjectsGrowth <= 0,
     retainedEndpointGrowth: retained.endpoints,
     medians: {
       peakHeap,

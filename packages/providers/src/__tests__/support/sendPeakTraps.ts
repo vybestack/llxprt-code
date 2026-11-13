@@ -25,6 +25,8 @@
  *   probe's accumulation run and never lets go of it, so every send leaves a
  *   whole history behind. This is the per-send leak the retained-growth gate
  *   exists to catch. It is armed for the accumulation run only.
+ * - `retain-row` and `retain-metadata`: keep one row or one 4 KiB metadata
+ *   object per send, proving that leaks below the byte allowance are rejected.
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -32,22 +34,32 @@ import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputL
 import { SyntheticToolResponseHandler } from '../../openai/syntheticToolResponses.js';
 import { buildOpenAIResponsesInput } from '../../openai-responses/OpenAIResponsesInputBuilder.js';
 
-export type SendTrap = 'array' | 'fill' | 'estimate' | 'retain';
+export type SendTrap =
+  | 'array'
+  | 'fill'
+  | 'estimate'
+  | 'retain'
+  | 'retain-row'
+  | 'retain-metadata';
 
 export const SEND_TRAP_ENV = 'ISSUE854_SEND_TRAP';
 
 /** An unset or empty value means no trap; anything unknown is an error. */
 export function parseSendTrap(value: string | undefined): SendTrap | undefined {
   if (value === undefined || value === '') return undefined;
-  if (
-    value === 'array' ||
-    value === 'fill' ||
-    value === 'estimate' ||
-    value === 'retain'
-  )
-    return value;
+  switch (value) {
+    case 'array':
+    case 'fill':
+    case 'estimate':
+    case 'retain':
+    case 'retain-row':
+    case 'retain-metadata':
+      return value;
+    default:
+      break;
+  }
   throw new Error(
-    `${SEND_TRAP_ENV} must be "array", "fill", "estimate" or "retain", got: ${value}`,
+    `${SEND_TRAP_ENV} must be "array", "fill", "estimate", "retain", "retain-row" or "retain-metadata", got: ${value}`,
   );
 }
 
@@ -69,6 +81,20 @@ export async function armSendTrap(
   trap: SendTrap,
   rows: AsyncIterable<IContent>,
 ): Promise<TrapHold> {
+  if (trap === 'retain-row') {
+    for await (const row of rows) {
+      retainedAcrossSends.push(row);
+      break;
+    }
+    return { release: () => undefined };
+  }
+  if (trap === 'retain-metadata') {
+    retainedAcrossSends.push({
+      requestId: retainedAcrossSends.length,
+      detail: `request-${retainedAcrossSends.length}-${'x'.repeat(4096)}`,
+    });
+    return { release: () => undefined };
+  }
   const all = await collect(rows);
   if (trap === 'retain') {
     retainedAcrossSends.push(all);

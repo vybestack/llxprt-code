@@ -57,7 +57,7 @@ async function verifySingleMeasurement(
 
 describe('Anthropic repeated atom conversion', () => {
   const directory = useTempDir('anthropic-repeated-work-');
-  for (const count of [2048, 8192]) {
+  for (const count of [256, 1536]) {
     it(`serializes ${count} tool-heavy rows once and measures redaction-independent blocks once`, async () => {
       const physical = { reads: 0, bytes: 0 };
       const session = await JournalSession.create(

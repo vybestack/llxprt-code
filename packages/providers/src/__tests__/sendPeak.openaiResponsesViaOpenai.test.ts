@@ -17,16 +17,20 @@ import { SEND_PEAK_BOUND_BYTES } from './support/sendPeakMeasurement.js';
 import { shapeRun, sharedSendPeak } from './support/sendPeakRunner.js';
 
 const TEST_TIMEOUT_MS = 170000;
-const measured = sharedSendPeak('openai-responses-via-openai', {
+const measuredText = sharedSendPeak('openai-responses-via-openai', {
   source: 'rows',
-  shapes: ['text-only', 'tool-heavy'],
+  shapes: ['text-only'],
+});
+const measuredTools = sharedSendPeak('openai-responses-via-openai', {
+  source: 'rows',
+  shapes: ['tool-heavy'],
 });
 
 describe('peak memory while sending, the openai provider, Responses route', () => {
   it(
     'text-only: sends the bytes the route sends today with a matching content-length',
     async () => {
-      const { verdict } = shapeRun(await measured(), 'text-only');
+      const { verdict } = shapeRun(await measuredText(), 'text-only');
       expect(verdict.bytesMatchOracle).toBe(true);
       expect(verdict.contentLengthMatchesBytes).toBe(true);
     },
@@ -36,7 +40,7 @@ describe('peak memory while sending, the openai provider, Responses route', () =
   it(
     'tool-heavy: sends the bytes the route sends today with a matching content-length',
     async () => {
-      const { verdict } = shapeRun(await measured(), 'tool-heavy');
+      const { verdict } = shapeRun(await measuredTools(), 'tool-heavy');
       expect(verdict.bytesMatchOracle).toBe(true);
       expect(verdict.contentLengthMatchesBytes).toBe(true);
     },
@@ -46,12 +50,13 @@ describe('peak memory while sending, the openai provider, Responses route', () =
   it(
     'text-only: bounds growth from 256 to 1536 rows and repeated-send retention by one row plus measured overhead',
     async () => {
-      const { verdict } = shapeRun(await measured(), 'text-only');
+      const { verdict } = shapeRun(await measuredText(), 'text-only');
       expect(verdict.heapGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
       expect(verdict.arrayBufferGrowth).toBeLessThanOrEqual(
         SEND_PEAK_BOUND_BYTES,
       );
       expect(verdict.retainedGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
+      expect(verdict.retainedGrowthWithinBound).toBe(true);
     },
     TEST_TIMEOUT_MS,
   );
@@ -59,12 +64,13 @@ describe('peak memory while sending, the openai provider, Responses route', () =
   it(
     'tool-heavy: bounds growth from 256 to 1536 rows and repeated-send retention by one row plus measured overhead',
     async () => {
-      const { verdict } = shapeRun(await measured(), 'tool-heavy');
+      const { verdict } = shapeRun(await measuredTools(), 'tool-heavy');
       expect(verdict.heapGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
       expect(verdict.arrayBufferGrowth).toBeLessThanOrEqual(
         SEND_PEAK_BOUND_BYTES,
       );
       expect(verdict.retainedGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
+      expect(verdict.retainedGrowthWithinBound).toBe(true);
     },
     TEST_TIMEOUT_MS,
   );

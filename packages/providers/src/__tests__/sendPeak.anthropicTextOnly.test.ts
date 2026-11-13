@@ -25,8 +25,6 @@ import { SEND_PEAK_BOUND_BYTES } from './support/sendPeakMeasurement.js';
 import { shapeRun, sharedSendPeak } from './support/sendPeakRunner.js';
 
 const TEST_TIMEOUT_MS = 170000;
-/** Unchanged: repeated sends retained 395,400 / 400,348 bytes against the one-row gate. */
-const CURRENT_RETAINED_BOUND_BYTES = 1024 * 1024;
 const measured = sharedSendPeak('anthropic-cache-1h', {
   source: 'rows',
   shapes: ['text-only'],
@@ -53,9 +51,8 @@ describe('peak memory while sending, the anthropic provider, text-only', () => {
       expect(verdict.arrayBufferGrowth).toBeLessThanOrEqual(
         SEND_PEAK_BOUND_BYTES,
       );
-      expect(verdict.retainedGrowth).toBeLessThanOrEqual(
-        CURRENT_RETAINED_BOUND_BYTES,
-      );
+      expect(verdict.retainedGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
+      expect(verdict.retainedGrowthWithinBound).toBe(true);
     },
     TEST_TIMEOUT_MS,
   );

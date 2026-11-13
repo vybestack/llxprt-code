@@ -43,6 +43,7 @@ describe('peak memory while sending, the openai-responses provider, one-shot row
         SEND_PEAK_BOUND_BYTES,
       );
       expect(verdict.retainedGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
+      expect(verdict.retainedGrowthWithinBound).toBe(true);
     },
     TEST_TIMEOUT_MS,
   );

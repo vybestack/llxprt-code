@@ -13,5 +13,6 @@ describe('native plain Chat journal-backed tool-heavy memory', () => {
       SEND_PEAK_BOUND_BYTES,
     );
     expect(verdict.retainedGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
+    expect(verdict.retainedGrowthWithinBound).toBe(true);
   }, 180000);
 });

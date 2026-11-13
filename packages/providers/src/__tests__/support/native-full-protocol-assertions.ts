@@ -29,4 +29,5 @@ export function assertNativeFullProtocol(
   expect(verdict.heapGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
   expect(verdict.arrayBufferGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
   expect(verdict.retainedGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
+  expect(verdict.retainedGrowthWithinBound).toBe(true);
 }

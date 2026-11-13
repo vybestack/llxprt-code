@@ -39,5 +39,6 @@ describe('native plain Chat journal-backed 256/1536-row send and estimate', () =
       SEND_PEAK_BOUND_BYTES,
     );
     expect(verdict.retainedGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
+    expect(verdict.retainedGrowthWithinBound).toBe(true);
   }, 180000);
 });
