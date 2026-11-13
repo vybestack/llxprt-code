@@ -45,7 +45,11 @@ export type ResolvedRefusalDecision =
       readonly action: 'retry';
       readonly delayMs: number;
       readonly notice: string;
-      readonly rewrite?: { readonly pendingEdits: readonly PendingEdit[] };
+      readonly rewrite?: {
+        readonly pendingEdits: readonly PendingEdit[];
+        /** The committed history was rewritten, not just the pending turn. */
+        readonly historyRewritten: boolean;
+      };
     }
   | { readonly action: 'stop'; readonly notice?: string };
 

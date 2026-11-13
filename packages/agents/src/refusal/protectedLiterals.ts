@@ -11,7 +11,15 @@
 interface LiteralPattern {
   readonly pattern: RegExp;
   readonly key?: (match: string) => string;
+  /**
+   * Trailing characters that are sentence punctuation for this kind of fact.
+   * A "!" or "?" can end a URL ("/run!" and "/run" are different resources),
+   * so URLs trim less than the other kinds.
+   */
+  readonly trailing?: string;
 }
+
+const SENTENCE_PUNCTUATION = '.,;:!?';
 
 /** Units that may follow a number after a space ("5 ms"). */
 const SPACED_UNITS =
@@ -35,7 +43,7 @@ const LITERAL_PATTERNS: readonly LiteralPattern[] = [
   { pattern: /```[\s\S]*?```/g },
   { pattern: /`[^`\n]+`/g },
   // URLs.
-  { pattern: /\bhttps?:\/\/[^\s)>\]"'`]+/g },
+  { pattern: /\bhttps?:\/\/[^\s)>\]"'`]+/g, trailing: '.,;:' },
   // Windows paths, then POSIX-style paths. A path never starts inside a
   // longer one, so the tail of "vendor/src/a.ts" is not a path of its own.
   { pattern: /\b[A-Za-z]:\\(?:[\w .-]+\\)*[\w.-]+/g },
@@ -61,18 +69,21 @@ const LITERAL_PATTERNS: readonly LiteralPattern[] = [
   { pattern: /\b[A-Za-z_]\w+(?:\.[A-Za-z_]\w*)+/g },
 ];
 
-function trimTrailingPunctuation(literal: string): string {
+function trimTrailingPunctuation(literal: string, trailing: string): string {
   let end = literal.length;
-  while (end > 0 && '.,;:!?'.includes(literal[end - 1])) end -= 1;
+  while (end > 0 && trailing.includes(literal[end - 1])) end -= 1;
   return literal.slice(0, end);
 }
 
 /** Protected literals of `text`: compared token, shown text, once per token. */
 function literalTokens(text: string): Map<string, string> {
   const found = new Map<string, string>();
-  for (const { pattern, key } of LITERAL_PATTERNS) {
+  for (const { pattern, key, trailing } of LITERAL_PATTERNS) {
     for (const match of text.matchAll(pattern)) {
-      const literal = trimTrailingPunctuation(match[0]);
+      const literal = trimTrailingPunctuation(
+        match[0],
+        trailing ?? SENTENCE_PUNCTUATION,
+      );
       if (literal === '') continue;
       const token = key === undefined ? literal : key(literal);
       if (!found.has(token)) found.set(token, literal);

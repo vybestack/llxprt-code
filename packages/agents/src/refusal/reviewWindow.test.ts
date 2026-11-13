@@ -56,7 +56,7 @@ function texts(window: ReturnType<typeof buildReviewWindow>): string[] {
 }
 
 describe('review window selection', () => {
-  it('excludes everything up to the last successful provider response', async () => {
+  it('starts at the last successful provider response and excludes what came before it', async () => {
     const history = await historyOf([
       human('first goal'),
       ai('first answer'),
@@ -67,7 +67,38 @@ describe('review window selection', () => {
 
     const window = buildReviewWindow(history);
 
-    expect(texts(window)).toStrictEqual(['tool output after the last answer']);
+    expect(texts(window)).toStrictEqual([
+      'second answer',
+      'tool output after the last answer',
+    ]);
+  });
+
+  it('lets the reviewer edit the last response a refused continue request resends', async () => {
+    const history = await historyOf([
+      human('goal'),
+      ai('the agent kills the surviving mutants'),
+    ]);
+
+    const window = buildReviewWindow(history, [human('continue')]);
+
+    expect(
+      window.entries.map(({ text, editable }) => ({ text, editable })),
+    ).toStrictEqual([
+      { text: 'the agent kills the surviving mutants', editable: true },
+      { text: 'continue', editable: false },
+    ]);
+  });
+
+  it('does not clip a long human request, so the goal is classified from all of it', async () => {
+    const request = `${'context '.repeat(900)}and the decisive last sentence`;
+    const history = await historyOf([human(request)]);
+
+    const window = buildReviewWindow(history);
+
+    expect({
+      goal: window.goal,
+      entry: window.entries[0].text,
+    }).toStrictEqual({ goal: request, entry: request });
   });
 
   it('includes the whole history when no provider response has succeeded yet', async () => {
@@ -95,6 +126,7 @@ describe('review window selection', () => {
 
     expect(texts(window)).toStrictEqual([
       'state snapshot after compression',
+      'old answer',
       'tail output',
     ]);
   });
@@ -109,7 +141,7 @@ describe('review window selection', () => {
 
     const window = buildReviewWindow(history);
 
-    expect(texts(window)).toStrictEqual([]);
+    expect(texts(window)).toStrictEqual(['answer since then']);
   });
 
   it('reports the latest human goal that is not a summary', async () => {

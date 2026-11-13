@@ -51,17 +51,31 @@ function textsOf(history: readonly IContent[]): string[] {
   );
 }
 
-/** A persistence service whose finalizer fails after really finalizing. */
+/**
+ * A persistence service whose finalizer fails after really finalizing, and
+ * whose publication can be held open and then made to fail.
+ */
 class FailingFinalizerPersistence extends SessionPersistenceService {
   failFinalize = false;
+  /** Held open until released, so other writes can run during publication. */
+  publishGate: Promise<void> | undefined;
+  failPublish = false;
+  persistenceRollbacks = 0;
 
   override async prepareSave(
     history: readonly IContent[],
   ): Promise<PreparedPersistenceSave> {
     const prepared = await super.prepareSave(history);
     return {
-      publish: () => prepared.publish(),
-      rollback: () => prepared.rollback(),
+      publish: async () => {
+        await this.publishGate;
+        if (this.failPublish) throw new Error('persistence publish failed');
+        await prepared.publish();
+      },
+      rollback: async () => {
+        this.persistenceRollbacks += 1;
+        await prepared.rollback();
+      },
       finalize: async () => {
         await prepared.finalize();
         if (this.failFinalize) {
@@ -197,6 +211,106 @@ describe('journal append is the commit point of a refusal rewrite (issue #4036)'
       persisted: [ORIGINAL],
       rewriteRecords: [],
     });
+  });
+
+  it('keeps the rewrite out of the journal when another write drains while persistence publishes and then fails', async () => {
+    let release: () => void = () => undefined;
+    persistence.publishGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    persistence.failPublish = true;
+
+    const rewriting = rewriteSummary().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    recording.recordSessionEvent('info', 'written while the rewrite commits');
+    await recording.flush();
+    release();
+    const failure = await rewriting;
+    await integration.flushAtTurnBoundary();
+
+    expect({
+      failed: failure instanceof Error,
+      live: textsOf(history.getAll()),
+      journal: await journalTypes(),
+    }).toStrictEqual({
+      failed: true,
+      live: [ORIGINAL],
+      journal: ['session_start', 'content', 'session_event'],
+    });
+  });
+
+  it('still rolls back the persisted snapshot when the journal cleanup fails', async () => {
+    const freshDir = await fs.mkdtemp(path.join(os.tmpdir(), 'journal-fresh-'));
+    try {
+      const storage = new Storage(freshDir);
+      const chatsDir = storage.getProjectChatsDir();
+      await fs.mkdir(chatsDir, { recursive: true });
+      const freshRecording = new SessionRecordingService({
+        sessionId: 'journal-fresh-session-0001',
+        projectHash: 'project-hash-journal-fresh',
+        chatsDir,
+        workspaceDirs: [freshDir],
+        provider: 'anthropic',
+        model: 'claude-opus-5-5',
+      });
+      const freshPersistence = new FailingFinalizerPersistence(
+        { projectRoot: storage.getProjectRoot(), chatsDir },
+        'journal-fresh-session-0001',
+      );
+      const freshIntegration = new RecordingIntegration(
+        freshRecording,
+        freshPersistence,
+      );
+      // Content that existed before recording attached is never journaled, so
+      // the rewrite is the first record and creates the journal file.
+      const freshHistory = new HistoryService();
+      freshHistory.add(summary(ORIGINAL));
+      freshIntegration.subscribeToHistory(freshHistory);
+      let release: () => void = () => undefined;
+      freshPersistence.publishGate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      freshPersistence.failPublish = true;
+
+      const rewriting = freshHistory
+        .replaceIfUnchanged({
+          expected: freshHistory.getAll(),
+          rewrite: (current) =>
+            current.map((entry) => ({
+              ...entry,
+              blocks: [{ type: 'text', text: REWRITTEN }],
+            })),
+          prepareEffect: (next) =>
+            freshIntegration.prepareRefusalRewrite(payloadFor(next)),
+        })
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const journal = freshRecording.getFilePath();
+      if (journal === null) throw new Error('Recording journal missing');
+      await fs.rm(journal);
+      release();
+      const failure = await rewriting;
+
+      expect({
+        failed: failure instanceof Error,
+        persistenceRollbacks: freshPersistence.persistenceRollbacks,
+        live: textsOf(freshHistory.getAll()),
+      }).toStrictEqual({
+        failed: true,
+        persistenceRollbacks: 1,
+        live: [ORIGINAL],
+      });
+      await freshIntegration.dispose().catch(() => undefined);
+      await freshRecording.dispose().catch(() => undefined);
+    } finally {
+      await fs.rm(freshDir, { recursive: true, force: true });
+    }
   });
 
   it('applies the rewrite everywhere when the journal append succeeds', async () => {

@@ -337,7 +337,7 @@ async function readStreamToCompletion(
   let hookRestrictedAllowedTools: string[] | undefined;
   let reportedOutputTokens: number | undefined;
   let refused = false;
-  const outputCounter = new GeneratedOutputCounter();
+  let outputCounter = new GeneratedOutputCounter();
 
   const readNext = () =>
     readNextNonInteractiveEvent(
@@ -372,13 +372,17 @@ async function readStreamToCompletion(
       hookRestrictedAllowedTools =
         chunkResult.hookRestrictedAllowedTools ?? hookRestrictedAllowedTools;
       textResponse += chunkResult.text;
-      refused ||= isRefusalFinishReason(resp.value.finishReason);
+      // The latest finish reason decides the attempt's outcome.
+      const reason = resp.value.finishReason;
+      if (reason !== undefined) refused = isRefusalFinishReason(reason);
     } else if (resp.type === StreamEventType.RETRY) {
       // The stream discarded the attempt read so far (a refusal resent
       // unchanged, or a content retry): nothing it produced may be acted on.
       functionCalls.length = 0;
       textResponse = '';
       hookRestrictedAllowedTools = undefined;
+      reportedOutputTokens = undefined;
+      outputCounter = new GeneratedOutputCounter();
       refused = false;
     }
     result = await readNext();

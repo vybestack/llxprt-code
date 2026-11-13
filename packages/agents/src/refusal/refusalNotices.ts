@@ -82,12 +82,13 @@ export function describeReviewRewrite(input: {
   readonly changes: readonly RewriteChangeSummary[];
   readonly operationId: string;
 }): string {
-  const shown = input.changes
-    .slice(0, PREVIEWED_CHANGES)
-    .map(
-      (change) =>
-        `${change.kind}: "${preview(change.originalText)}" → "${preview(change.newText)}"`,
-    );
+  const shown = input.changes.slice(0, PREVIEWED_CHANGES).map((change) =>
+    // Tool results can hold credentials and the notice reaches every
+    // reader of the task, so only their size is reported.
+    change.kind === 'tool_result'
+      ? `${change.kind}: ${change.originalText.length} → ${change.newText.length} characters (text omitted)`
+      : `${change.kind}: "${preview(change.originalText)}" → "${preview(change.newText)}"`,
+  );
   const more = input.changes.length - shown.length;
   const list = more > 0 ? [...shown, `+${more} more`] : shown;
   return `Refusal review by ${input.reviewer}: rewrote ${input.changes.length} message(s) [${list.join('; ')}] (operation ${input.operationId}). Retrying.`;
@@ -111,6 +112,7 @@ export type ReviewStopReason =
   | 'reviewer-refused'
   | 'reviewer-failed'
   | 'invalid-reply'
+  | 'context-too-large'
   | 'no-change'
   | 'history-changed'
   | 'commit-failed';
@@ -139,6 +141,8 @@ export function describeReviewStopped(input: {
       return `${by} failed (${input.detail}), so nothing was rewritten. Stopping.`;
     case 'invalid-reply':
       return `${by} gave an unusable answer (${input.detail}), so nothing was rewritten. Stopping.`;
+    case 'context-too-large':
+      return `${by} was not asked: ${input.detail} Nothing was rewritten. Stopping.`;
     case 'no-change':
       return `${by} found nothing to change: ${input.detail} Stopping.`;
     case 'history-changed':

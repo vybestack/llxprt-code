@@ -36,7 +36,11 @@ export type RefusalSettlement =
       readonly delayMs: number;
       readonly notice: string;
       /** Set when a reviewer rewrote context: rebuild the resend. */
-      readonly rewrite?: { readonly pendingEdits: readonly PendingEdit[] };
+      readonly rewrite?: {
+        readonly pendingEdits: readonly PendingEdit[];
+        /** The committed history was rewritten, not just the pending turn. */
+        readonly historyRewritten: boolean;
+      };
     }
   | { readonly action: 'stop'; readonly notice?: string }
   | {

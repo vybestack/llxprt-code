@@ -36,7 +36,11 @@ export type StreamAttemptOutcome =
       action: 'retry-same-request';
       delayMs: number;
       /** Set when a reviewer rewrote context: the resend is rebuilt. */
-      rewrite?: { readonly pendingEdits: readonly PendingEdit[] };
+      rewrite?: {
+        readonly pendingEdits: readonly PendingEdit[];
+        /** The committed history was rewritten, not just the pending turn. */
+        readonly historyRewritten: boolean;
+      };
     };
 
 export function refusalNotice(message: string): StreamEvent {
@@ -155,6 +159,20 @@ export function turnForNextAttempt<T extends PendingTurnContents>(
     userContents: applyPendingEdits(turn.userContents, edits),
     userIContents: applyPendingEdits(turn.userIContents, edits),
   };
+}
+
+/**
+ * Whether the next attempt must drop its semantic media purge: a reviewer
+ * rewrote committed history, so the purge attempt's frozen copy of the history
+ * is stale and its commit would find the history changed.
+ */
+export function rewroteCommittedHistory(
+  outcome: StreamAttemptOutcome,
+): boolean {
+  return (
+    outcome.action === 'retry-same-request' &&
+    outcome.rewrite?.historyRewritten === true
+  );
 }
 
 /** What the next attempt's request is: the one just sent, or a fresh build. */

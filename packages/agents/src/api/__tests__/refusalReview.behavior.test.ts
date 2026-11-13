@@ -178,7 +178,7 @@ describe('a refusal that a reviewer rewrite recovers (issue #4036)', () => {
     }).toStrictEqual({
       actions: ['retry', 'review', 'retry'],
       reviewer: {
-        profile: PROFILE.name,
+        profile: run.profileName,
         provider: 'openai',
         model: REVIEWER_MODEL,
       },

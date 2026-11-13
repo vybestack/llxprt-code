@@ -112,6 +112,18 @@ describe('protected literals', () => {
       'https://example.com/report',
     ],
     [
+      'a url that lost a significant trailing bang',
+      'Fetch https://example.com/run!',
+      'Fetch https://example.com/run',
+      'https://example.com/run!',
+    ],
+    [
+      'a url that gained a significant trailing bang',
+      'Fetch https://example.com/run',
+      'Fetch https://example.com/run!',
+      'https://example.com/run',
+    ],
+    [
       'a code span that gained an argument',
       'Run `pkill -f server` first',
       'Run `pkill -f server -9` first',
@@ -140,6 +152,15 @@ describe('protected literals', () => {
     },
   );
 
+  it('ignores sentence punctuation after a url', () => {
+    expect(
+      findDroppedLiterals(
+        'See https://example.com/run, then stop.',
+        'Stop after you see https://example.com/run.',
+      ),
+    ).toStrictEqual([]);
+  });
+
   it('accepts a number and its unit written with or without a space', () => {
     expect(
       findDroppedLiterals('It took 5 ms and 20 MB', 'It took 5ms and 20MB'),
@@ -154,7 +175,7 @@ describe('protected literals', () => {
     expect(findDroppedLiterals(original, replacement)).toStrictEqual([]);
   });
 
-  describe('a real compression summary (observer data, 5 to 11 Nov 2026)', () => {
+  describe('a realistic compression summary (synthetic fixture)', () => {
     const plainWording: ReadonlyArray<readonly [string, string]> = [
       ['Be concise.', 'Keep answers short.'],
       ['Fix built.', 'Fix implemented.'],

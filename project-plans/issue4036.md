@@ -957,3 +957,7 @@ noted per finding.
   notice. The two default-settings tests (retries 2, 15 s base) abort on the
   first notice instead of sitting out 15 s; the later 60 s and 180 s waits
   are covered by `refusalPolicy.test.ts` and `refusalRecovery.test.ts`.
+
+## CodeRabbit round 1 on PR #4077
+
+All 18 threads were fixed. Highlights: the test fixture now uses invented paths and session details; a published-but-uncommitted rewrite batch is held out of the journal until it commits or rolls back; batch completion remembers finished batches so finalize cannot wait forever; a committed-history rewrite retires the semantic media purge so the retry is built from the rewritten history; the review window includes the last successful response and never clips human text, and a window too large for the reviewer stops with `context-too-large` instead of being clipped; tool-result text no longer appears in rewrite notices; URL literals keep a trailing `!` or `?`.

@@ -201,6 +201,51 @@ describe('refusal_rewrite journal record (issue #4036)', () => {
     ]);
   });
 
+  it('keeps a published rewrite off disk while another write drains, until it is finalized', async () => {
+    const service = createService();
+    service.recordContent(summary(ORIGINAL));
+    await service.flush();
+    const prepared = service.prepareRefusalRewrite(
+      rewritePayload([summary(REWRITTEN)]),
+    );
+
+    prepared.publish();
+    service.recordContent(makeContent('during', 'human'));
+    await service.flush();
+    const beforeFinalize = await recordTypes(service);
+    await prepared.finalize();
+    await service.flush();
+
+    expect({
+      beforeFinalize,
+      afterFinalize: await recordTypes(service),
+    }).toStrictEqual({
+      beforeFinalize: ['session_start', 'content'],
+      afterFinalize: ['session_start', 'content', 'refusal_rewrite', 'content'],
+    });
+  });
+
+  it('never writes a rewrite that is rolled back after another write drained', async () => {
+    const service = createService();
+    service.recordContent(summary(ORIGINAL));
+    await service.flush();
+    const prepared = service.prepareRefusalRewrite(
+      rewritePayload([summary(REWRITTEN)]),
+    );
+
+    prepared.publish();
+    service.recordContent(makeContent('during', 'human'));
+    await service.flush();
+    prepared.rollback();
+    await service.flush();
+
+    expect(await recordTypes(service)).toStrictEqual([
+      'session_start',
+      'content',
+      'content',
+    ]);
+  });
+
   it('reports a rewrite record with an invalid payload as malformed and keeps history', async () => {
     const service = createService();
     service.recordContent(summary(ORIGINAL));

@@ -769,8 +769,8 @@ export class StreamProcessor {
           lastIContent,
         );
         finish = {
-          finishReason: chunk.finishReason ?? finish.finishReason,
-          rawStopReason: chunk.rawStopReason ?? finish.rawStopReason,
+          finishReason: yieldedChunk.finishReason ?? finish.finishReason,
+          rawStopReason: yieldedChunk.rawStopReason ?? finish.rawStopReason,
         };
         yield yieldedChunk;
       }

@@ -61,9 +61,12 @@ export interface ReviewRewrite {
   readonly newText: string;
 }
 
-/** Text of entries that cannot be edited is only context; keep it short. */
+/**
+ * Tool calls, media descriptions and unreadable results are context only; keep
+ * them short. Human messages are never clipped: the reviewer classifies the
+ * work from them, and the review budget check stops a window that does not fit.
+ */
 const CONTEXT_TEXT_LIMIT = 4000;
-const GOAL_LIMIT = 2000;
 
 function clip(text: string, limit: number): string {
   return text.length <= limit ? text : `${text.slice(0, limit)}…[truncated]`;
@@ -97,14 +100,19 @@ function lastIndexWhere(
 }
 
 /**
- * Indexes of the history that make up the window: everything after the last
- * successful provider response, plus the newest compression summary when it
- * was written after that response (a summary sits at the head of the array but
- * carries a newer chronology marker than the tail it precedes).
+ * Indexes of the history that make up the window: the last successful
+ * provider response and everything after it, plus the newest compression
+ * summary when it was written after that response (a summary sits at the head
+ * of the array but carries a newer chronology marker than the tail it
+ * precedes). The response itself is part of the window because the refused
+ * request resends it as input, so its own wording can be what the classifier
+ * objected to.
  */
 function windowIndexes(history: readonly IContent[]): number[] {
   const boundary = lastIndexWhere(history, isProviderResponse);
-  const after = history.map((_, index) => index).filter((i) => i > boundary);
+  const after = history
+    .map((_, index) => index)
+    .filter((i) => i >= Math.max(boundary, 0));
   const summaryIndex = lastIndexWhere(history, isSummary);
   if (summaryIndex < 0 || summaryIndex > boundary) return after;
   const boundarySeq = boundary < 0 ? undefined : seqOf(history[boundary]);
@@ -199,7 +207,7 @@ function latestGoal(history: readonly IContent[]): string | undefined {
       !isSummary(entry) &&
       humanText(entry).trim() !== '',
   );
-  return index < 0 ? undefined : clip(humanText(history[index]), GOAL_LIMIT);
+  return index < 0 ? undefined : humanText(history[index]);
 }
 
 interface WindowPart {
@@ -225,9 +233,10 @@ function windowEntries(
         role: content.speaker,
         kind: found.kind,
         editable: found.editable,
-        text: found.editable
-          ? found.text
-          : clip(found.text, CONTEXT_TEXT_LIMIT),
+        text:
+          found.editable || found.kind === 'user'
+            ? found.text
+            : clip(found.text, CONTEXT_TEXT_LIMIT),
       });
       if (found.editable && found.field !== undefined) {
         locations.set(id, {

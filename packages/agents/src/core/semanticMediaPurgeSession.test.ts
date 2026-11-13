@@ -132,6 +132,33 @@ describe('SemanticMediaPurgeSession', () => {
     ]);
   });
 
+  it('lets a later attempt begin once a retired attempt gave its purge up, without changing history', async () => {
+    const history = historyWithImage();
+    const session = new SemanticMediaPurgeSession({
+      history,
+      mode: () => 'remove',
+      requiresExplicitCacheWrite: () => false,
+      persist: () => Promise.resolve(),
+    });
+    const first = await session.begin();
+    assertDefined(first, 'Expected purge attempt');
+    const before = history.getAll();
+
+    first.retire();
+    const second = await session.begin();
+
+    expect({
+      historyUntouched: history.getAll()[0] === before[0],
+      imagesKept: history.getAll()[0]?.blocks.length,
+      nextAttemptBegan: second !== undefined,
+    }).toStrictEqual({
+      historyUntouched: true,
+      imagesKept: 2,
+      nextAttemptBegan: true,
+    });
+    await first.failAfterProcessingError();
+  });
+
   it('exposes the exact candidate and commits it only after observed provider success', async () => {
     const history = historyWithImage();
     let persisted: readonly IContent[] | undefined;

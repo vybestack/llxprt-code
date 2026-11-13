@@ -37,6 +37,7 @@ export {
   advanceAfterAttempt,
   announceRefusalSettlement,
   keepRequestForNextAttempt,
+  rewroteCommittedHistory,
   refusalNotice,
   turnForNextAttempt,
   type AttemptCounters,

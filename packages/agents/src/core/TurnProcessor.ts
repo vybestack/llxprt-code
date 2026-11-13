@@ -93,6 +93,7 @@ import {
   advanceAfterAttempt,
   announceRefusalSettlement,
   keepRequestForNextAttempt,
+  rewroteCommittedHistory,
   refusalNotice,
   settleRefusal,
   turnForNextAttempt,
@@ -348,6 +349,7 @@ export class TurnProcessor {
       // A reviewer may rewrite the tool results this turn carries; the
       // rewritten turn is then what is resent and finally committed.
       let turn = prepared;
+      let attemptPurge = semanticMediaPurge;
       const sendState = new SendRequestState();
       let retrying = true;
       while (
@@ -359,12 +361,17 @@ export class TurnProcessor {
           prompt_id,
           turn,
           attempt,
-          semanticMediaPurge,
+          attemptPurge,
           sendState,
         );
         lastError = outcome.error;
         turn = turnForNextAttempt(turn, outcome);
         keepRequestForNextAttempt(sendState, outcome);
+        if (rewroteCommittedHistory(outcome)) {
+          // The next request is built from the rewritten history.
+          attemptPurge?.retire();
+          attemptPurge = undefined;
+        }
         retrying = await advanceAfterAttempt(outcome, attempt, {
           recovery: this.refusalRecovery,
           usageLogger: this.compressionHandler.tokenUsageLogger,

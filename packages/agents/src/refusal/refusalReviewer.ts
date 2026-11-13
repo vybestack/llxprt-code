@@ -20,6 +20,7 @@ import {
   REVIEW_TIMEOUT_MS,
   type ReviewCallResult,
 } from './reviewCall.js';
+import { reviewBudgetShortfall, reviewerContextLimit } from './reviewBudget.js';
 import { buildReviewData, REFUSAL_REVIEW_PROMPT } from './reviewPrompt.js';
 import type { ReviewProfileSetting } from './reviewProfile.js';
 import type {
@@ -153,9 +154,26 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
       history.getAll(),
       request.pending?.userContents,
     );
+    const data = buildReviewData(window, request.attempt, request.retriesTried);
+    const shortfall = reviewBudgetShortfall(
+      data,
+      reviewerContextLimit({
+        model: reviewer.model,
+        profileLimit: resolved.invocation?.getEphemeral('context-limit'),
+        providerLimit: resolved.provider.getContextLimit?.(),
+      }),
+    );
+    if (shortfall !== undefined) {
+      return this.stopped(
+        'context-too-large',
+        'error',
+        reviewer,
+        `the context to review is about ${shortfall.requestTokens} tokens, more than the ${shortfall.budgetTokens} that fit the reviewer's context window.`,
+      );
+    }
     let call: ReviewCallResult;
     try {
-      call = await this.call(request, resolved, window, modelParameters);
+      call = await this.call(request, resolved, data, modelParameters);
     } catch (error: unknown) {
       this.rethrowIfAborted(request, error);
       return this.stopped(
@@ -259,10 +277,9 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
   private async call(
     request: ReviewRequest,
     resolved: CompressionProviderResult,
-    window: ReviewWindow,
+    data: string,
     modelParameters: AdmittedModelParameters | undefined,
   ): Promise<ReviewCallResult> {
-    const data = buildReviewData(window, request.attempt, request.retriesTried);
     const options = await buildCompressionChatOptions({
       contents: reviewContents(data),
       providerRuntime: resolved.runtime,

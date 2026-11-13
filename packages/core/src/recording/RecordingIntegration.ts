@@ -344,8 +344,20 @@ export class RecordingIntegration {
           await persistence?.publish();
         },
         rollback: async () => {
-          recording.rollback();
-          await persistence?.rollback();
+          // Both rollbacks run even if the first fails, so a journal cleanup
+          // error cannot leave the rewritten snapshot persisted.
+          const failures: unknown[] = [];
+          try {
+            recording.rollback();
+          } catch (error: unknown) {
+            failures.push(error);
+          }
+          try {
+            await persistence?.rollback();
+          } catch (error: unknown) {
+            failures.push(error);
+          }
+          this.throwFailures(failures, 'Refusal rewrite rollback failed');
         },
         finalize: async () => {
           await recording.finalize();

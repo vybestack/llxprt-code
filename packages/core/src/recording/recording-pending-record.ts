@@ -110,3 +110,14 @@ function containsMediaReference(
 export function recordingVersion(payload: unknown): number {
   return containsMediaReference(payload) ? 2 : 1;
 }
+
+/** The queue state a prepared batch restores if it is rolled back. */
+export interface QueueSnapshot {
+  readonly queue: PendingRecord[];
+  readonly queueBytes: number;
+  readonly preContent: PendingRecord[];
+  readonly preContentBytes: number;
+  readonly materialized: boolean;
+  readonly filePath: string | null;
+  readonly watcher: { close(): void } | null;
+}

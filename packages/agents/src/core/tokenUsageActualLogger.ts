@@ -5,6 +5,7 @@
  */
 
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
+import { isRefusalFinishReason } from '../refusal/refusalDetection.js';
 import type {
   TokenUsageActualInput,
   TokenUsageAttemptOutcome,
@@ -136,7 +137,8 @@ export async function syncAndRecordTurnUsage(input: {
 }
 
 /**
- * Build the actual-usage input for a turn that completed successfully.
+ * Build the actual-usage input for a turn that completed. A turn whose
+ * finish reason is `refusal` is recorded as a refusal attempt, not a success.
  *
  * Prefers the provider-reported usage; falls back to the last observed prompt
  * token count when the provider reported none. Returns `undefined` when
@@ -151,7 +153,9 @@ export function buildSuccessfulTurnUsage(
 ): ActualTokenUsageInput | undefined {
   const attempt = {
     attemptIndex,
-    attemptOutcome: 'success' as const,
+    attemptOutcome: isRefusalFinishReason(finish.finishReason)
+      ? ('refusal' as const)
+      : ('success' as const),
     ...finish,
   };
   if (usage !== undefined) {

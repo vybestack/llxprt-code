@@ -5,7 +5,7 @@
 - **Ctrl+Enter steering (done).** The path is Konsole → jefe → tmux → LLxprt. The Konsole keytab must send `\E[13;5u`; `\E[27;5;13~` fails because jefe's crossterm 0.28.1 drops it. Steering is verified working.
 - **#3998.** The intermittent "first Ctrl+Enter becomes a newline" race. Type Bug, milestone 0.14.0, label Ink UI, on the LLxprt Roadmap project.
 - **gh token** has the `project` scope.
-- **User preferences.** Be concise. Don't redo steps the user already did (they said "calm down" after I reopened the browser). Treat jefe's tmux as read-only unless permitted.
+- **User preferences.** Be concise. Don't redo steps the user already did (they objected when I repeated a finished step). Treat jefe's tmux as read-only unless permitted.
 
 **This segment**
 - **Issue #4000 filed.** Labels Loopbreaker and Context Management, type Bug, milestone 0.12.0, on Roadmap project 8.
@@ -29,18 +29,18 @@ Support the user's LLxprt workflow. The current active todo is to find the open 
 <key_knowledge>
 **User preferences**
 - Be concise.
-- Don't redo steps the user already did. The user said "calm down" after the agent reopened the browser.
+- Don't redo steps the user already did. The user objected when the agent repeated a finished step.
 - Inspect jefe's tmux only read-only, unless permitted.
 - Never merge PRs; report status and ask first.
 
 **Session journal (full tool results)**
-- Path: /home/acoliver/.local/state/llxprt-code/tmp/4b3d0c06c7ad3d7f52966e783415715860d4fcefa5383a5240d32cdc640a8621/chats/session-2026-11-03T14-49-29-d93cf3fc-9742-48e8-adbe-23c0ae7b64cd-982473b1-a03.jsonl
+- Path: /home/devuser/.local/state/example-agent/tmp/0123456789abcdef/chats/session-2026-01-01T00-00-00-sample.jsonl
 - It may be incomplete. Search it (grep) for dropped details; never read it whole.
 
 **Repo, branch and GitHub settings**
-- Repo: /home/acoliver/projects/llxprt-code/branch-1. Remote: git@github.com:vybestack/llxprt-code.git.
+- Repo: /home/devuser/projects/example-app/main. Remote: git@github.com:example-org/example-app.git.
 - Workflow skill: `llxprt-issue-workflow` (activate it).
-  - Branch name `issueNUM`. Assign the issue to acoliver.
+  - Branch name `issueNUM`. Assign the issue to the maintainer.
   - Plans go in `project-plans/issueNUM.md`, never in dev-docs.
   - Implement test-first, then review (max 2 rounds), then open the PR with the pr-creator skill. The title includes "(Fixes #N)" and the body has "Fixes #N".
   - Watch CI with `gh pr checks N`. Address every CodeRabbit comment: reply to it and resolve it.
@@ -49,7 +49,7 @@ Support the user's LLxprt workflow. The current active todo is to find the open 
 - Issue filing conventions:
   - Set the issue type with the `github` tool `issue.edit` `type`.
   - Loop-breaking bugs go in the current milestone, 0.12.0.
-  - Add issues to the LLxprt Roadmap with `gh project item-add 8 --owner vybestack --url <issue>`.
+  - Add issues to the LLxprt Roadmap with `gh project item-add 8 --owner example-org --url <issue>`.
   - The gh token has the project scope.
 
 **Agent environment differences from the skill**

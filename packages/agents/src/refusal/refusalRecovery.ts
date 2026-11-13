@@ -187,7 +187,11 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
           changes: outcome.changes,
           operationId: outcome.operationId,
         }),
-        rewrite: { pendingEdits: outcome.pendingEdits },
+        rewrite: {
+          pendingEdits: outcome.pendingEdits,
+          historyRewritten:
+            outcome.changes.length > outcome.pendingEdits.length,
+        },
       };
     }
     if (outcome.kind === 'disallowed') {

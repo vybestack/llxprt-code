@@ -38,11 +38,11 @@ const ATTEMPT: RefusalAttempt = {
   model: 'fake-model',
 };
 
-function seed(): IContent[] {
+function seed(summaryText: string = SUMMARY): IContent[] {
   return [
     {
       speaker: 'human',
-      blocks: [{ type: 'text', text: SUMMARY }],
+      blocks: [{ type: 'text', text: summaryText }],
       metadata: { isSummary: true, synthetic: true },
     },
     {
@@ -93,13 +93,16 @@ describe('reviewer commit (issue #4036)', () => {
     readonly abortBeforeCommit: boolean;
     /** Abort while the journal record is being prepared, mid-commit. */
     readonly abortWhilePreparing?: boolean;
+    /** The reviewer profile's `context-limit`. */
+    readonly contextLimit?: number;
+    readonly summaryText?: string;
   }): Promise<{
     readonly outcome: ReviewOutcome | { readonly aborted: true };
     readonly history: HistoryService;
     readonly before: readonly IContent[];
   }> {
     const history = new HistoryService();
-    await history.addBatch(seed());
+    await history.addBatch(seed(options.summaryText));
     const before = history.getAll();
     const summaryId =
       buildReviewWindow(before).entries.find((e) => e.kind === 'summary')?.id ??
@@ -149,7 +152,10 @@ describe('reviewer commit (issue #4036)', () => {
             fetch: globalThis.fetch,
             providerName: 'fake',
             runtimeId: 'reviewer-test',
-            ephemeralsSnapshot: {},
+            ephemeralsSnapshot:
+              options.contextLimit === undefined
+                ? {}
+                : { 'context-limit': options.contextLimit },
           }),
         }),
       usageLogger: () => null,
@@ -188,6 +194,33 @@ describe('reviewer commit (issue #4036)', () => {
       kind: 'rewritten',
       texts: [REWRITTEN, 'Continuing from the snapshot.'],
     });
+  });
+
+  it('stops without asking when the editable entries do not fit the reviewer context window', async () => {
+    const { outcome, history, before } = await review({
+      abortBeforeCommit: false,
+      contextLimit: 2000,
+      summaryText: `${SUMMARY} ${'filler sentence about engineering. '.repeat(400)}`,
+    });
+
+    expect({
+      kind: 'kind' in outcome ? outcome.kind : 'aborted',
+      reason: 'reason' in outcome ? outcome.reason : undefined,
+      untouched: history.getAll().every((c, i) => c === before[i]),
+    }).toStrictEqual({
+      kind: 'stopped',
+      reason: 'context-too-large',
+      untouched: true,
+    });
+  });
+
+  it('asks the reviewer when the window fits its context window', async () => {
+    const { outcome } = await review({
+      abortBeforeCommit: false,
+      contextLimit: 50_000,
+    });
+
+    expect('kind' in outcome ? outcome.kind : 'aborted').toBe('rewritten');
   });
 
   it('rejects and leaves the history untouched when the request is aborted before the commit', async () => {

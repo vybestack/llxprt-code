@@ -150,9 +150,10 @@ export async function consumeInteractiveTurnOutput(
       reportedOutputTokens =
         readInteractiveOutputTokens(event) ?? reportedOutputTokens;
       textResponse += processInteractiveStreamEvent(event, execCtx);
-      refused ||=
-        event.type === AgentEventType.Finished &&
-        isRefusalFinishReason(event.value.reason);
+      // The latest Finished event decides the attempt's outcome.
+      if (event.type === AgentEventType.Finished) {
+        refused = isRefusalFinishReason(event.value.reason);
+      }
     }
   } catch (primary) {
     if (signal.aborted) throw createAbortError();

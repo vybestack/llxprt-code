@@ -113,9 +113,7 @@ export async function callReviewProvider(
 ): Promise<ReviewCallResult> {
   if (limits.signal?.aborted === true) throw abortReasonOf(limits.signal);
   const guard = linkedRequestSignal(limits.timeoutMs, limits.signal);
-  const iterator = provider
-    .generateChatCompletion(withRequestSignal(options, guard.signal))
-    [Symbol.asyncIterator]();
+  let iterator: AsyncIterator<IContent> | undefined;
   let text = '';
   let lastBlockWasNonText = false;
   let usage: UsageStats | undefined;
@@ -123,6 +121,11 @@ export async function callReviewProvider(
   let rawStopReason: string | undefined;
   let completed = false;
   try {
+    // Built inside the cleanup scope so a provider that throws before it
+    // returns a stream still settles the guard and its deadline timer.
+    iterator = provider
+      .generateChatCompletion(withRequestSignal(options, guard.signal))
+      [Symbol.asyncIterator]();
     for (;;) {
       const next = await Promise.race([iterator.next(), guard.expired]);
       if (next.done === true) break;
@@ -141,7 +144,7 @@ export async function callReviewProvider(
   } finally {
     guard.settle(!completed);
     // Closing the stream must not hold the caller if the provider ignores it.
-    void Promise.resolve(iterator.return?.()).catch(() => undefined);
+    void Promise.resolve(iterator?.return?.()).catch(() => undefined);
   }
   return {
     text,

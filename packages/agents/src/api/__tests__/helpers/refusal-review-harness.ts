@@ -218,6 +218,8 @@ export interface ReviewRun {
   readonly journalRecords: ReadonlyArray<Record<string, unknown>>;
   /** History a resume of the recorded session would restore. */
   readonly replayed: readonly IContent[];
+  /** The unique name the scenario's reviewer profile was saved under. */
+  readonly profileName: string | undefined;
 }
 
 function refuseWhileMarked(request: WireRequest): EndpointReply {
@@ -226,11 +228,20 @@ function refuseWhileMarked(request: WireRequest): EndpointReply {
     : stopReply('recovered answer');
 }
 
+/**
+ * Every test file shares one session root, so a fixed profile name would let
+ * two scenarios overwrite each other's base-url before either loads it.
+ */
+function uniqueProfileName(name: string): string {
+  return `${name}-${randomUUID().slice(0, 8)}`;
+}
+
 async function saveProfile(
   profile: NonNullable<ReviewScenario['profile']>,
+  profileName: string,
   endpoint: ScriptedEndpoint,
 ): Promise<void> {
-  await new ProfileManager().saveProfile(profile.name, {
+  await new ProfileManager().saveProfile(profileName, {
     version: 1,
     provider: profile.protocol ?? 'openai',
     model: profile.model ?? REVIEWER_MODEL,
@@ -279,6 +290,7 @@ async function replayJournal(
 async function prepareAgent(
   agent: Agent,
   scenario: ReviewScenario,
+  profileName: string | undefined,
 ): Promise<void> {
   const settings: Record<string, unknown> = {
     'refusal.retries': 1,
@@ -287,8 +299,8 @@ async function prepareAgent(
     'refusal.max-rewrites': 1,
     ...scenario.settings,
   };
-  if (scenario.profile !== undefined) {
-    settings[scenario.profile.setting] = scenario.profile.name;
+  if (scenario.profile !== undefined && profileName !== undefined) {
+    settings[scenario.profile.setting] = profileName;
   }
   for (const [key, value] of Object.entries(settings)) {
     agent.setEphemeralSetting(key, value);
@@ -314,8 +326,9 @@ async function collectRun(input: {
   readonly endpoints: Endpoints;
   readonly workingDir: string;
   readonly sessionId: string;
+  readonly profileName: string | undefined;
 }): Promise<ReviewRun> {
-  const { agent, endpoints } = input;
+  const { agent, endpoints, profileName } = input;
   const historyAfter = await agent.getHistory();
   const journalPath = agent.session.getRecording().path ?? '';
   const stats = agent.getStats();
@@ -351,6 +364,7 @@ async function collectRun(input: {
     tokenRecords: readJsonl(tokenLog),
     journalRecords,
     replayed: await replayJournal(journalPath, journalRecords),
+    profileName,
   };
 }
 
@@ -380,10 +394,14 @@ export async function runReviewScenario(
     foreground: await startEndpoint(foregroundProtocol, respond),
     profile: await startEndpoint(scenario.profile?.protocol, respond),
   };
+  const profileName =
+    scenario.profile === undefined
+      ? undefined
+      : uniqueProfileName(scenario.profile.name);
   try {
     writeFiles(workingDir, scenario.files);
-    if (scenario.profile !== undefined) {
-      await saveProfile(scenario.profile, endpoints.profile);
+    if (scenario.profile !== undefined && profileName !== undefined) {
+      await saveProfile(scenario.profile, profileName, endpoints.profile);
     }
     agent = await createAgent({
       provider: foregroundProtocol,
@@ -393,7 +411,7 @@ export async function runReviewScenario(
       approvalMode: ApprovalMode.YOLO,
       auth: { apiKey: 'local-test-key', baseUrl: endpoints.foreground.url },
     });
-    await prepareAgent(agent, scenario);
+    await prepareAgent(agent, scenario, profileName);
     for await (const event of agent.stream(scenario.prompt ?? PROMPT, {
       signal: controller.signal,
     })) {
@@ -405,11 +423,15 @@ export async function runReviewScenario(
       endpoints,
       workingDir,
       sessionId,
+      profileName,
     });
   } finally {
     await agent?.dispose();
     await endpoints.foreground.stop();
     await endpoints.profile.stop();
+    if (profileName !== undefined) {
+      await new ProfileManager().deleteProfile(profileName).catch(() => {});
+    }
     rmSync(workingDir, { recursive: true, force: true });
   }
 }

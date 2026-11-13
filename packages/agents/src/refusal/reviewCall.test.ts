@@ -188,6 +188,32 @@ describe('reviewer provider call', () => {
       expect(signalsOf(received[0]).invocation?.aborted).toBe(false);
     });
 
+    it('settles the request when the provider fails before returning a stream', async () => {
+      const received: RuntimeGenerateChatOptions[] = [];
+      const failing = {
+        generateChatCompletion(
+          options: RuntimeGenerateChatOptions,
+        ): AsyncIterable<IContent> {
+          received.push(options);
+          throw new Error('provider unavailable');
+        },
+      };
+
+      const failure = await callReviewProvider(
+        failing,
+        REQUEST_WITH_INVOCATION,
+        { timeoutMs: 60_000 },
+      ).catch((error: unknown) => error);
+
+      expect({
+        message: (failure as Error).message,
+        providerSignalAborted: signalsOf(received[0]).invocation?.aborted,
+      }).toStrictEqual({
+        message: 'provider unavailable',
+        providerSignalAborted: true,
+      });
+    });
+
     it('rejects an already aborted request without calling the provider', async () => {
       const { received, provider } = hangingProvider();
       const controller = new AbortController();
