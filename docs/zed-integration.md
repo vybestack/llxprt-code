@@ -146,6 +146,39 @@ Configure multiple entries to switch between providers in Zed:
 | `--set <key=value>`     | Set ephemeral settings (repeatable)          |
 | `--yolo`                | Auto-approve all actions                     |
 
+## Running in a Sandbox
+
+`--experimental-acp` honors `--sandbox`. When you start it with `--sandbox`, LLxprt Code relaunches itself inside the configured sandbox and runs the ACP server there, so the commands the agent runs are confined. Zed's stdin and stdout stay the ACP transport, and the host process does not read them.
+
+Add `--sandbox` to the agent's `args`, and add `--sandbox-engine` or `--sandbox-profile-load` when you want a specific engine or profile:
+
+```json
+{
+  "agent_servers": {
+    "llxprt-sandboxed": {
+      "command": "/opt/homebrew/bin/llxprt",
+      "args": [
+        "--experimental-acp",
+        "--profile-load",
+        "myprofile",
+        "--sandbox",
+        "--sandbox-profile-load",
+        "myprofile-sandbox",
+        "--yolo"
+      ]
+    }
+  }
+}
+```
+
+To check that the sandbox is active, ask the agent to run `echo SANDBOX=$SANDBOX`. A sandboxed session prints a non-empty value, such as `SANDBOX=sandbox-exec` under Seatbelt.
+
+- Sign-in happens per session, from inside the sandbox. The credential rules of the engine you chose apply. See [Sandboxing](./sandbox.md#credential-handling-in-containers).
+- Seatbelt on macOS restricts writes to an allow-list of paths and grants broad read access to the host filesystem, including with the `permissive-open` profile.
+- Without `--sandbox`, ACP mode runs in the host process.
+
+See [Sandboxing](./sandbox.md) for the engines, profiles and limitations.
+
 ## Debug Logging
 
 Add `LLXPRT_DEBUG` to the environment if something isn't working:
@@ -206,4 +239,5 @@ When the terminal capability is absent (or `false`), shell output is captured as
 - [Zed External Agents Documentation](https://zed.dev/docs/ai/external-agents)
 - [Authentication](./cli/authentication.md) — keyring setup
 - [Profiles](./cli/profiles.md) — saving and loading configurations
+- [Sandboxing](./sandbox.md): engines, profiles and limitations
 - [Providers](./cli/providers.md) — provider setup
