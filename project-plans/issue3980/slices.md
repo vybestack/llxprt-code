@@ -6,7 +6,7 @@ Each numbered section below is a complete issue body, beginning with its propose
 
 Every issue inherits the verification and PR rules in `adaptation-plan.md`: test-first Bun tests, real boundary behavior, no weakened checks, short-lived branch from main, one slice per PR, `Refs #3980`, `Refs #4037` when retiring baseline sites, and `Fixes #<slice-issue>` only after its exit criteria pass. The parent closes only after the final deletion slice.
 
-The 30 slices (completed P01 plus 29 remaining) and their dependencies/magnitudes match the roadmap. Start with P01a, then P02-P04, P05a, P05b and P06-P28; P01 is delivery history, not reopened work. Total 50,400-81,300 LoC includes P01's historical estimate; remaining planned work is 49,000-79,100 authored LoC. Relocation is separate: P05a 4,600-6,000 and P26 2,000-5,000, totaling 6,600-11,000 LoC. D14-D19, the policy translation matrix and approved offline import in the plan are inherited contracts; Q1/Q4 gate affected release behavior; Q5 remains open and is required before P05b implements decision/dispatch integration. P01a, P02 and pure P05a can proceed without choosing Q4/Q5. Q2 and Q3 are decided. P23-P26 merge independently before the atomic P27 Ink switch.
+The 30 slices (completed P01 plus 29 remaining) and their dependencies/magnitudes match the roadmap. Start with P01a, then P02-P04, P05a, P05b and P06-P28; P01 is delivery history, not reopened work. Total 55,500-89,100 LoC includes P01's historical estimate; remaining planned work is 54,100-86,900 authored LoC. Relocation is separate: P05a 4,600-6,000 and P26 2,000-5,000, totaling 6,600-11,000 LoC. D14-D20, the policy translation matrix and approved offline import are inherited contracts. Q1 is decided through D20; Q4/Q5 use Option A with separate changed-outcome fixtures. Q2/Q3 remain decided. There are no open product-choice gates within this scope; the three direct-control changes are excluded, with current outcomes pinned as parity rather than treated as approved changes. P23-P26 merge independently before the atomic P27 Ink switch.
 
 ## P01: Create agent-core contracts and enforce its import boundary
 
@@ -64,13 +64,13 @@ No #4037 entries retire. Add the stricter core graph rule; preserve every existi
 
 Completed by [PR #4076](https://github.com/vybestack/llxprt-code/pull/4076), branch `issue4039`, closing #4039. No new P01 issue or PR. The parent #3980 remains open for the later slices.
 
-## P01a: Amend the delivered contracts for policy parity and offline import
+## P01a: Amend the delivered contracts for policy parity, hooks and offline import
 
-**Plan:** PLAN-20261112-AGENT-API.P01a. **Dependencies:** completed P01 / merged PR #4076. **Magnitude:** 800-1,300 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P01a. **Dependencies:** completed P01 / merged PR #4076. **Magnitude:** 1,600-2,600 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
 
 ### Scope
 
-Amend the existing package in place before P02. Preserve delivered D14-D17 contracts and the import boundary. Replace the pre-D19 policy/shell shapes and their fixtures with the approved shapes, without a compatibility union, parallel schema or facade. Add approved Q2 import value contracts; importer behavior remains P14. This slice supplies native regex compilation/definition validation, not a runtime permission evaluator.
+Amend the existing package in place before P02. Preserve delivered D14-D17 ownership and the import boundary, extending the value types for D20 without weakening replay/accounting guarantees. Replace the pre-D19 policy/shell shapes and their fixtures with the approved shapes, without a compatibility union, parallel schema or facade. Add approved Q2 import value contracts and D20 hook contracts; importer behavior remains P14 and hook adaptation remains P17. This slice supplies native regex compilation/definition validation, not a runtime permission evaluator.
 
 ### Packages and files
 
@@ -78,9 +78,17 @@ Amend the existing package in place before P02. Preserve delivered D14-D17 contr
 
 ### Public contract
 
+D20 adds beforeToolSelection/afterModel to Interceptors. All three model-hook points return HookEventResult<T>: one effective control/value with final-field provenance, reason/stopReason/systemMessage/suppressOutput/context, plus independent configured-order HookAuditEntry records. Value and audit can coexist with stop/block; core never applies audit entries as patches. Add HookProvenance, HookRequestPatch, RequestBoundary (absent/valid/malformed), HookModelResponse, BeforeModelEffect, AfterModelEffect, HookStop and typed HookError (including model-not-allowed and tool-set-widened). ModelRequestView includes the selected ModelRef. ModelRequest gains typed ModelToolChoice; ModelParameters gains topP, responseJsonSchema and reasoning.includeInOutput, while settings.systemInstruction maps to request-local instructions. Interceptors.deadlineMs is a single-hook default, not a configured event's batch cutoff; configured hook deadlines remain individual and the turn deadline bounds the event.
+
+ModelResponseFrame carries one exact source response projection, not part IDs reconstructed from deltas. HookResponsePart contains a TranscriptPart, append/replace accumulation, optional stream ID/status and versioned JSON hookFields for remaining hook-visible block fields. Hook-only signatures/encrypted fields/metadata never authorize replay; separately validated D14 envelopes do. Preserve source snapshots A, AB, completed AB and their fields while presentation appends only A, B, then no text. Fold transformed frames once, replacing same-stream thinking at its first position; provider deltas are buffered presentation input, not a second history fold. Add part IDs to provisional text/thinking events and model.part.replaced for non-prefix snapshot revisions. An empty hook replacement removes only that frame's contribution, not prior accepted snapshots. Expand attempt/response/accounting events with source provider/hook and producing-hook provenance. Bind accepted calls to their attempt's final effective tool subset through dispatch and edits. Add model-attempt and hook-change journal records with audit blobs, effective-versus-superseded outcomes and invalidated replay IDs; every producer survives final aggregation, including on stop/block.
+
 PolicyDocument gains approvalMode, independent RestrictionRule authority and paired sourceStacks; PolicyRule gains priority/order/provenance and allowRedirection; PolicyMatch gains sourceTool, modes and unless; ArgMatcher gains serializedArgs: PolicyRegex. Add ApprovalMode, PolicyRegex with required PolicyRegexInput path/input evidence, PolicyProvenance, RestrictionRule and PolicySourceStack. Export pure normalizePolicyRegex(input: PolicyRegexInput): PolicyRegex and derivePolicySourceStack(id: string, preferences: readonly PolicyLayer[]): PolicySourceStack; definition/command validators verify pairs against that derivation. Neither helper returns permission outcomes. PreparedShell gains exact raw command, whole-command redirection and policySplit text/facts separate from parsed argv/failure. Add required ToolDescriptor.policyIdentity: { readonly name: string; readonly server?: string }; validate a closed shape with a nonempty name and optional string server when descriptors are pinned. Core checks nonempty server prefixes before policy/dispatch; absent or empty server retains the current no-server-check behavior. Source identity is never reconstructed from qualified/versioned ToolId. Update set-preferences with atomic independently editable layers/approvalMode, set-authority with independent restrictions only, add atomic set-source-stacks for paired source-owned copies, and give Grant stable order. Add ImportNotice, imported-history and StoreError import-required. Compile plain-data patterns with native RegExp during definition validation, retaining existing flavor, flags, source validation and subject semantics; instances remain private, never definition data.
 
 ### Tests first
+
+D20 contract fixtures precede implementation: request-only message rewrite with valid/absent/malformed boundary; model override and typed disallowed-model error that cannot trigger provider fallback; subset tool IDs and typed widening error; all toolChoice modes/allowlists; synthetic response with source hook, zero complete measured counters and no replay; per-frame replacement plus original audit reference and removed replay IDs. Positive/negative fixtures distinguish hook-declared usage from measured accounting and preserve known-zero versus unreported usage and finish/raw-stop metadata. Round-trip exact A, AB, completed AB source projections with identical-text completion, late signature/replay, stream ID/status and hidden/encrypted/provider fields; reject using hookFields as replay. Express replacement/removal of any one frame and non-prefix provisional part replacement without duplicate deltas. Add projection/index mapping for text, thinking, media and tool blocks.
+
+Envelope fixtures carry mutation plus informational systemMessage, superseded producers, mutation plus final stop/block and process-error output with denial; final-field provenance and audit order remain distinct. Represent contents-then-settings whole-object replacement and response replacement with omitted optional fields without pretending audit entries are effective patches. Contract fixtures retain the attempt's request subset for provider/synthetic/replacement calls and argument edits. Deadline fixtures distinguish individual no-output timeout, failed process with output, typed invariant failure and turn cancellation. Empty synthetic translation fixtures include effective reason, undefined and explicit empty helper reason, independent systemMessage and optional response metadata; direct stop/block combinations retain their existing content behavior, distinct from enforced streamed controls. Resolve effective.control from the aggregate for the caller path, preserving simultaneous stop/block until that translation; retain ignored direct flags in audit. These are schema/fake-port fixtures; P03/P07/P17 own runtime behavior.
 
 1. Round-trip every added plain-data form and reject RegExp instances/callbacks, malformed predicates, nonfinite priorities and authority allow. Preserve literal source names and inactive mode filters.
 2. Native compilation rejects invalid syntax, duplicate/unknown flags and u+v with rule/field provenance before effects, including inactive and unless patterns. Exercise every path in the Regex decision validation table, its 1,024/1,025 checks and adjacent-quantifier heuristic at the specified stage. A 1,024-unit commandRegex passes directory validation but fails its 1,035-unit single-file wrapper check; 513 forward slashes pass authored validation and single-file loading but fail directory native-source validation at 1,026 units. Test prefix expansion boundaries, no new cap on direct/utils-prefix paths, malformed path evidence and effective source/flags mismatch.
@@ -90,6 +98,8 @@ PolicyDocument gains approvalMode, independent RestrictionRule authority and pai
 6. Source-stack pairs validate against pure derivation, including cross-file ties and modes; missing/stale predicates, duplicate group IDs and mismatched source-rule copies fail. Amended command fixtures distinguish paired replacement from independent authority/preferences. P02 owns reducer installation tests; no decisions, evaluator or loop implementation is required here.
 
 ### Exit criteria
+
+D20 declarations, validators and fakes expose all eight points and typed toolChoice; no new runtime is needed to express hook attempts, per-change provenance, replay invalidation or boundary failures.
 
 All emitted declarations, closed schemas, fakes and fixtures use one amended shape. Definition validation compiles every regex with provenance and no port effects. P02 can consume the amended command shape and P05a can reuse the native compiler. G0 passes independently with no host switched and no placeholder runtime.
 
@@ -159,9 +169,11 @@ One short-lived PR from current main. Implement the numbered pseudocode range ab
 
 ## P03: Run model attempts, context management and budgets in agent-core
 
-**Plan:** PLAN-20261112-AGENT-API.P03. **Dependencies:** P02. **Magnitude:** 2,600-4,000 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P03. **Dependencies:** P02. **Magnitude:** 3,700-5,700 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
 
 ### Scope
+
+Implement D20 request-local BeforeToolSelection/BeforeModel application and AfterModel frame replacement. Distinguish provider attempts from hook-sourced synthetic attempts, without routing synthetic content through ModelClient.stream. Resolve model overrides through the allowed ModelSelection and re-check ModelClient.info, context, fallback rules and final request reservation. Rebuild each later call from committed history, not the preceding hook patch.
 
 Assemble ready createAgent for the supported in-memory model path; implement one-attempt streaming, explicit retry/fallback, context lifetimes, compaction, loop limits and usage reservations. Incrementally connect tools/policy/journal in following slices before host adoption. No legacy ChatSessionFactory or client ownership enters the package.
 
@@ -169,13 +181,29 @@ Implement the Provider replay and attempt accounting decision and D16 recovery a
 
 ### Packages and files
 
-**New:** packages/agent-core/src/create-agent.ts, src/loop.ts, src/model-attempt.ts, src/context.ts, src/budget.ts, src/loop.test.ts, src/context.test.ts. **Modify:** packages/agent-core/index.ts, src/mailbox.ts, src/testing/fake-ports.ts. **Read:** packages/agents/src/core/agenticLoop/AgenticLoop.ts, packages/agents/src/core/ChatSessionFactory.ts, packages/providers/src/IProvider.ts.
+**New:** packages/agent-core/src/create-agent.ts, src/loop.ts, src/model-attempt.ts, src/context.ts, src/budget.ts, src/interceptors.ts, src/interceptors.test.ts, src/loop.test.ts, src/context.test.ts. P03 owns the common execution seam's model-hook deadline/cancellation, effective-result and audit handling; P05b extends it for tool decisions. **Modify:** packages/agent-core/index.ts, src/mailbox.ts, src/testing/fake-ports.ts. **Read:** packages/agents/src/core/agenticLoop/AgenticLoop.ts, packages/agents/src/core/ChatSessionFactory.ts, packages/providers/src/IProvider.ts.
 
 ### Public contract
+
+D20 model attempt source is provider or hook. Hook attempts have complete zero measured usage/charge, no replay and normal step/attempt/deadline limits. HookError carries provenance; no raw hook model name bypasses selection. Core applies only HookEventResult.effective, retains all audit entries and journals them before any effect or terminal control publication. Configured event aggregation is host-owned, with individual hook deadlines and no outer deadline-as-continue race. Turn cancellation/deadline aborts and joins work and retains completed audit through finalization; it cannot become successful continuation.
+
+Core freezes the final request-local tool subset after BeforeToolSelection, BeforeModel and toolChoice, including only the existing already-pinned stream emitter exception. Provider, synthetic and replacement calls/results outside it are filtered before hook visibility and again after transformation, before publication/commit/scheduling; keep audit and filtering diagnostics, but no active call/result or tool lifecycle event. P04 retains the originating subset through edits/preparation and checks it before dispatch; P05b still evaluates policy. Source-frame projection and append/replace folding precede visible output. Preserve cumulative snapshots, identical-text completion and source fields without duplicating presentation or history. Empty replacement suppresses that source frame only. Changed targets stay replay-ineligible for the whole attempt, even if replay arrives later.
 
 createAgent(definition, host, start?, signal), ModelSelection, ModelClient, ModelChunk, ModelError, Usage, Limits, ContextStrategy; submit returns Turn and result resolves to an outcome, never rejects for turn failure.
 
 ### Tests first
+
+1. Add/remove/rewrite messages for one request; verify the following request and committed input history are unchanged. A model/settings-only patch preserves contents; empty contents replacement retains the existing no-op behavior. Narrow tools, reject widening/changed descriptors, and keep earlier tool-choice restrictions.
+2. An allowed model override uses that model's capability/context checks and final token/cost reservation; an unlisted override fails typed before dispatch. Retry/fallback still obey fallbackOn/order, maxAttempts and budgets and cannot reuse a stale request patch or recovery scope. No snapshot model mutation occurs.
+3. A synthetic tool response emits source hook attempt/response/accounting records with all measured counters zero, no estimated charge and no replay; a nonzero declared usage field is audit-only. Repeated synthetic responses hit step/attempt limits. P04/P05b integration proves denied or invalid synthetic calls never execute.
+4. AfterModel replacement preserves original provider accounting on finish/failure, removes replay for changed/removed parts and entry-scoped replay for any changed entry, keeps unchanged-part replay, and rejects injected provider replay. Reused IDs with changed content still invalidate. Tools from the replacement alone are scheduled after commitment, through P04/P05b policy. R9 includes before-hook request replay invalidation as well.
+5. Boundary fixtures cover key presence, suffix count/default count, malformed throw/skip, absent-only differential recovery, in-place changes on detached data, prepend and duplicate ambiguity, pending-tail mismatch, and compressed real-history prefix with verbatim pending suffix. Frame replacement occurs before visible deltas; later failure discards both original/replaced provisional content.
+6. For A, AB, completed AB from one thinking stream, assert exact hook inputs and all hook-visible fields, visible A then B with no repeated completion text, and one committed AB part at its original position. Replace each frame in turn, including a non-prefix change, or remove it; assert transformed snapshots/deltas, prior-snapshot retention for an empty frame and final history against the accumulator oracle. Replay arriving only on completion must stay excluded for previously changed targets, with original signatures retained only in audit. Repeat for the one-frame direct response.
+7. Pin two policy-allowed tools A/B but expose only A in the final request. Provider output, synthetic output and AfterModel replacement each try B: B is filtered before commitment with audit/diagnostic evidence, no visible call or transcript result, no proposed/started/finished tool event and no execution. P04/P05b complete real scheduler checks, including argument edits and approval waits retaining this attempt subset. Separately test pinned stream emitter, unpinned emitter and direct-path exclusion.
+8. Supply effective settings-only output plus audit of earlier contents mutation; only original contents and final settings reach the model. Preserve mutation plus informational messages and mutation followed by stop/block in durable P07 audit without applying superseded edits or edits rejected by that path's existing controls; ignored direct stop/block flags do not reject otherwise effective edits. P17 proves actual aggregation, configured ordering, sequential BeforeModel propagation and unchanged sequential AfterModel inputs.
+9. Fake-clock tests combine a completed denial or replacement with a timed-out sibling; keep the completed result and all audits. Sequential timeout proceeds to the next hook while active. Failed process output containing exit-2 denial remains effective, including empty stderr's default reason. Distinguish optional-field no-op, spawn failure and typed D20 invariant failure. Turn abort/deadline joins siblings, forbids dispatch and successful continuation, and persists completed audit under finalization.
+10. Direct and streamed control fixtures preserve their separate current outcomes, with P17 old/new parity. Direct BeforeModel stop alone still dispatches with any applied contents; stop plus synthetic returns synthetic output without dispatch or AfterModel; block/deny, including stop plus block, instead returns reason text. Direct AfterModel stop, block/deny or both return the original response or request-tool-filtered replacement, without suppressing otherwise eligible calls. Streamed controls retain stop before block, prevent controlled content/tool effects and BeforeModel dispatch, and retain AfterModel measured usage. All accepted calls still obey D20 subset and policy limits. Allowed empty synthetic output uses effective reason; helper-only undefined uses 'Execution blocked' and explicit empty remains empty. Preserve metadata and informational messages without treating them as model content.
+11. Combine D16 repaired retries with a different allowed BeforeModel model/message patch on each attempt. Rebuild from real history, revalidate selection and reconstruction scope, preserve repairs only within that scope and never carry earlier patches or admit an extra generation.
 
 Text/thinking remain provisional until finish; partial failing attempt is discarded before retry/fallback and its tool fragments never dispatch. Retry-after and abortable backoff; unsupported fallback modality/context skips that candidate; missing price with cost budget fails creation. Compaction occurs only at preparation and is charged; next-turn context expires, until-replaced context replaces by ID, untrusted context stays data. Timeout aborts without waiting for a boundary. S9.4 final text plus queued steer causes another step. All retries, compaction and reasoning count toward reservations; overshoot is reported.
 
@@ -184,6 +212,8 @@ Use early input/cache usage followed by truncation, cancellation after usage, cu
 Conformance sequence: an initial 400 image-dimension error, a retryable transport failure on the repaired successor, then a further core-admitted retry. Assert every later payload stays repaired using core-retained validated instructions, without an adapter cache or another repair cycle; each stream call issues at most one generation, and usage is charged once per attempt. Cancellation or exhausted limits, including maxAttempts and budgets, must prevent the final send. Verify retained reconstruction state is cleared at logical-request end or scope incompatibility.
 
 ### Exit criteria
+
+D20 provider and hook attempts settle once with distinct source metadata; synthetic attempts never fabricate provider usage, replay or a provider call. Response replacements retain audit evidence and original billing. P04/P05b complete tool-effect checks before any host switches.
 
 Model-only input to final transcript/result works through real core and scripted ports. Creation rejects invalid capabilities and failed resolve without publishing an agent. No silent provider defaults or duplicate retry owner.
 
@@ -227,7 +257,7 @@ ToolSet, ToolHandle, ToolDescriptor, PreparedCall, PreparedToken, ToolOutcome, T
 
 ### Tests first
 
-Unknown/unpinned IDs get results without executing. Exclusive A before parallel B/C before exclusive D preserves segment ordering even when A awaits a decision in the later integrated fixture. Per-call/per-step caps handle multibyte content and all truncation strategies; writer refuses excess before accumulation. Mid-turn additions appear next turn; revocation aborts running work and marks pending work not-run/revoked. S9.4/S16.3 cancel waits for running effects, preserves their actual result and prevents next-turn mutation.
+Unknown/unpinned IDs get results without executing. Carry each accepted call's originating attempt and final request-local tool subset through scheduling, argument edits and preparation; recheck membership before dispatch. With pinned, policy-allowed A/B but request-visible A only, provider/synthetic/replacement B blocks are filtered before becoming proposals, so they have audit/diagnostic evidence but no active transcript call/result or tool lifecycle event. Test the already-pinned stream emitter separately. Exclusive A before parallel B/C before exclusive D preserves segment ordering even when A awaits a decision in the later integrated fixture. Per-call/per-step caps handle multibyte content and all truncation strategies; writer refuses excess before accumulation. Mid-turn additions appear next turn; revocation aborts running work and marks pending work not-run/revoked. S9.4/S16.3 cancel waits for running effects, preserves their actual result and prevents next-turn mutation.
 
 ### Exit criteria
 
@@ -255,11 +285,11 @@ One short-lived PR from current main. Implement the numbered pseudocode range ab
 
 ## P05a: Implement policy matching and evaluation with parity on every form
 
-**Plan:** PLAN-20261112-AGENT-API.P05a. **Dependencies:** P04; P01a amended contracts and native compiler. **Magnitude:** 2,600-4,000 LoC authored additions/changes, including tests, plus 4,600-6,000 LoC mechanical relocation counted separately. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P05a. **Dependencies:** P04; P01a amended contracts and native compiler. **Magnitude:** 2,800-4,300 LoC authored additions/changes, including tests, plus 4,600-6,000 LoC mechanical relocation counted separately. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
 
 ### Scope
 
-Implement every core-owned form in the Policy source translation matrix: serialized regex, source identity, priority/ties, authority-owned exceptions, mode filters, parsed-prefix matching, exact shell branches/exemptions and destructive hard deny. Reuse P01a's native RegExp compiler and the existing subject handling. P16 loads/translates sources; no ToolHandle calls PolicyEngine. Q4 conflict fixtures remain explicit release conditions; Q5 is a prerequisite of P05b. Neither permits removal of forms, and this pure slice selects neither outcome.
+Implement every core-owned form in the Policy source translation matrix: serialized regex, source identity, priority/ties, authority-owned exceptions, mode filters, parsed-prefix matching, exact shell branches/exemptions and destructive hard deny. Reuse P01a's native RegExp compiler and the existing subject handling. P16 loads/translates sources; no ToolHandle calls PolicyEngine. Apply approved Q4 Option A to cross-authority outcomes with provenance diagnostics. Preserve the initial matched-ask result for Q5 Option A; P05b adds its post-approval dispatch check. Neither decision removes a form.
 
 Keep this slice independently green as a pure evaluator exercised through package-local behavior tests. Do not switch a host or dispatch tools through an incomplete permission path. P05b integrates its typed results with decisions, grants and dispatch; no temporary allow stub or second evaluator is permitted.
 
@@ -269,7 +299,7 @@ Keep this slice independently green as a pure evaluator exercised through packag
 
 **Move pure behavior into new core modules:** packages/policy/src/destructive-commands.ts, destructive-credentials.ts and destructive-forkbomb.ts with their regression cases; move stable-stringify.ts and the shell splitting/redirection helpers too, exposing a narrow pure shell-facts helper usable by host preparation but no permission evaluator; update the old policy engine to import the one shared pure classifier through an explicit agent-core safety export, not a re-export shim. **Read:** packages/policy/src/types.ts, toml-loader.ts, utils.ts and utils/shell-utils.ts. Add packages/agent-core/src/shell-policy.test.ts; document the narrow pure safety export in public-surface checks.
 
-**Relocation evidence:** the five existing source files total 2,601 lines (1,098 destructive commands, 309 credentials, 852 fork-bomb, 183 stable stringify, 159 shell helpers). The four destructive suites total 1,982 lines: destructive-commands.test.ts (871), destructive-commands.redirect-forkbomb.test.ts (682), destructive-commands.dd-of-credential.test.ts (54), destructive-disabled-list.test.ts (375). Move all four without reducing their assertions. The measured baseline is 4,583 relocated lines at e3c1782b96d0a968f12a09401c04671cc29cacb9; budget 4,600-6,000 for this and additional helper fixture moves found at preflight. Count relocated content once, not as both deletion and addition. Import edits, test-port changes, the new evaluator and new behavior tests belong to the separate 2,600-4,000 authored range. P05a's combined magnitude is 7,200-10,000 LoC; it does not consume P26's relocation budget.
+**Relocation evidence:** the five existing source files total 2,601 lines (1,098 destructive commands, 309 credentials, 852 fork-bomb, 183 stable stringify, 159 shell helpers). The four destructive suites total 1,982 lines: destructive-commands.test.ts (871), destructive-commands.redirect-forkbomb.test.ts (682), destructive-commands.dd-of-credential.test.ts (54), destructive-disabled-list.test.ts (375). Move all four without reducing their assertions. The measured baseline is 4,583 relocated lines at e3c1782b96d0a968f12a09401c04671cc29cacb9; budget 4,600-6,000 for this and additional helper fixture moves found at preflight. Count relocated content once, not as both deletion and addition. Import edits, test-port changes, the new evaluator and new behavior tests belong to the separate 2,800-4,300 authored range. P05a's combined magnitude is 7,400-10,300 LoC; it does not consume P26's relocation budget.
 
 ### Public contract
 
@@ -280,7 +310,7 @@ Consume the P01a PolicyDocument, PolicyLayer, PolicyRule, PolicyMatch, ArgMatche
 Tests assert real evaluator outcomes for every form; all denied/error fixtures perform no tool execution:
 
 1. Stable sorted JSON argsPattern matching, directory-loader dot-star behavior versus direct patterns, commandRegex anchors/alternation/JSON escaping, exact/prefix/literal-star identities and missing arguments.
-2. Default/user/admin tiers, missing priority zero, overlapping equal-priority rules, base-before-overlay ties, later rule insertion and preference/grant priority 2.95. High admin allow/ask over lower admin deny; high admin ask over lower user deny; an independent authority restriction survives all exceptions/preferences/grants. Assert that editing ordinary preferences cannot change source-owned unless predicates, and evaluate successive complete source-stack revisions, including removals; never accept a mismatched pair. Include Q4's code-derived old allow versus independent-authority restriction as an explicit conflict fixture.
+2. Default/user/admin tiers, missing priority zero, overlapping equal-priority rules, base-before-overlay ties, later rule insertion and preference/grant priority 2.95. High admin allow/ask over lower admin deny; high admin ask over lower user deny; an independent authority restriction survives all exceptions/preferences/grants. Assert that editing ordinary preferences cannot change source-owned unless predicates, and evaluate successive complete source-stack revisions, including removals; never accept a mismatched pair. Add Q4's exact code-derived fixture: raw runtime allow priority 4 and trusted-admin deny priority 3 for the same call. The old PolicyEngine returns allow; the new evaluator returns deny and a diagnostic citing both rules' source/rule IDs, priorities, mode and revision. Repeat with independent ask, expecting ask. The label alone cannot confer authority. Keep both rules unchanged and test within-admin exceptions separately.
 3. default/autoEdit/yolo filters including absent/empty/multiple modes, restriction and exception activation, evaluations against successive revisions and one immutable revision across all compound segments. Invalid inactive patterns fail creation too. P05b adds mid-turn/waiting-decision changes and grant lifecycle tests.
 4. Compound/pipeline/background commands with mixed allow/ask/deny; whole-call matches versus no match; fallback ask retained despite all-allow segments; unchanged dir_path; quoted separators; empty split and unmatched quotes with the actual lightweight splitter. Assert Q5's whole-call ask short circuit separately from post-approval dispatch safety.
 5. Redirection omitted/false/true on competing winning rules, non-inheritance of an outer exemption, quotes versus real redirects, pipes not redirects, simple fallback allow exemption and explicit camel-case versus loaded YOLO behavior. Destructive inputs always evaluate to deny under YOLO, simulated remembered approvals and allowRedirection true; P05b proves dispatch is prevented. Never execute classifier fixture commands.
@@ -291,7 +321,7 @@ Realpath/new parsed argv matchers retain bypass tests for text prefixes, missing
 
 ### Exit criteria
 
-Every matrix form has a passing pure evaluator fixture. Non-bypassable effective restrictions survive priority exceptions, YOLO and simulated remembered-approval rules. Audit facts identify provenance, mode/revision, selected priority and authority exceptions. Native compilation and subject parity pass before P16 adopts them. G0 passes with no new host/runtime route; Q4/Q5 remain explicitly recorded conflicts.
+Every matrix form has a passing pure evaluator fixture. Non-bypassable effective restrictions survive priority exceptions, YOLO and simulated remembered-approval rules. Audit facts identify provenance, mode/revision, selected priority and authority exceptions. Native compilation and subject parity pass before P16 adopts them. G0 passes with no new host/runtime route; Q4 changed outcomes and Q5 unchanged initial ask are explicit approved fixtures.
 
 ### Deletions
 
@@ -315,19 +345,21 @@ One short-lived PR from current main. Write failing behavior and integration tes
 
 ## P05b: Integrate typed decisions, grants and headless behavior
 
-**Plan:** PLAN-20261112-AGENT-API.P05b. **Dependencies:** P05a and a recorded Q5 disposition before implementing this slice's chosen decision/dispatch behavior. Q5 remains open in this plan; no option is assumed. **Magnitude:** 2,000-3,200 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P05b. **Dependencies:** P05a; Q4/Q5 Option A is recorded above. **Magnitude:** 2,300-3,600 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
 
 ### Scope
 
 Wire P05a's sole evaluator into the prepared-tool loop. Implement decision lifecycle, typed replies, edited/stale approval, grant ranking/expiration/revalidation, plan mode and built-in ask_user/propose_plan. Add constrained interceptor execution at policy-sensitive points; host hook translation comes later. No compatibility path or executor-side evaluator.
 
-Complete policy command timing with P02: set-preferences changes independently editable layers and approvalMode atomically; set-source-stacks replaces paired restrictions/ranked source copies and removals in one revision while preserving independent authority. Only after installation may pending decisions and grants be re-evaluated against that revision before dispatch. Apply the recorded Q5 disposition to approval of compound calls without weakening destructive deny or independent authority.
+Complete policy command timing with P02: set-preferences changes independently editable layers and approvalMode atomically; set-source-stacks replaces paired restrictions/ranked source copies and removals in one revision while preserving independent authority. Only after installation may pending decisions and grants be re-evaluated against that revision before dispatch. Implement Q5 Option A: preserve the initial whole-command ask, then evaluate every segment after approval and before dispatch under one mode/revision. Any deny blocks the entire prepared call. Approval satisfies only asks for that prepared compound call. An edit, re-preparation, mode or revision change invalidates the approval; re-evaluate and ask again when needed.
 
 ### Packages and files
 
-**New:** packages/agent-core/src/decisions.ts, src/interceptors.ts, src/decisions.test.ts and src/testing/turn-scenarios.ts. **Modify:** src/loop.ts, src/tools.ts, src/mailbox.ts and src/policy.test.ts under packages/agent-core. **Read:** packages/core/src/policy/policy-owner.ts and packages/policy/src/confirmation-bus/message-bus.ts.
+**New:** packages/agent-core/src/decisions.ts, src/decisions.test.ts and src/testing/turn-scenarios.ts. **Modify:** src/interceptors.ts and src/interceptors.test.ts from P03, src/loop.ts, src/tools.ts, src/mailbox.ts and src/policy.test.ts under packages/agent-core. Extend the common interceptor seam for tool decisions without replacing its model-hook deadline/audit semantics. **Read:** packages/core/src/policy/policy-owner.ts and packages/policy/src/confirmation-bus/message-bus.ts.
 
 ### Public contract
+
+Compound approval binds to the prepared token, command/args, mode and policy revision. It satisfies only asks within that prepared call; the core evaluator still supplies each segment decision. This binding is separate from any explicitly requested Grant.
 
 Grant, GrantScope, DecisionRequest, Resolution, ToolApproval, PlanApproval and DecisionPort use the amended P01a types. Decision replies are request-scoped and abortable; grants cannot exceed offered scopes or override effective authority. Interceptor patches revalidate and re-prepare before P05a evaluation.
 
@@ -338,10 +370,15 @@ Grant, GrantScope, DecisionRequest, Resolution, ToolApproval, PlanApproval and D
 3. Through the real mailbox/loop/evaluator, test authority and approval-mode changes in both directions while decisions wait and between compound evaluations. Recheck stale approvals/grants, use one revision across segments and re-evaluate before dispatch after any revision change. Include turn-end application without another evaluation, cancel settlement, close rejection and already dispatched effects settling unchanged. Move an admin exception from operation A to B while an independent ask keeps calls pending, then remove its source rule/group. Assert exactly the complete old or complete new outcome, never a hybrid evaluation or irreversible decision settlement. An invalid replacement changes neither revision nor pending requests; independent authority still applies.
 4. Headless human tools are absent and denied at dispatch; plan mode rejects headless. Exercise onAsk deny/fail/explicit approve through a real DecisionPort adapter fixture, comparing completed denial with today's nonInteractive behavior rather than confusing ask with denial.
 5. Interceptor timeout reports continue as specified; patches revalidate and redaction preserves raw audit data when the store supports blobs. Credential prompts stay outside tool decisions.
-6. Keep Q4's old-result/authority-conflict fixture distinct from parity without selecting its still-open release disposition. Q5 must be recorded before implementing this slice: assert the selected timing (initial ask then pre-dispatch segment check, or deny before asking) against the old short circuit in separate contract tests. A compound call with any denied segment cannot dispatch after approval; no tool is executed to discover whether it is safe.
-7. Through pinned descriptors and prepared calls, use catalog IDs different from policyIdentity.name and assert original-name exact matching, literal stars, exact OR prefix matching, and rejection of a nonempty mismatched server identity before any execute. Model arguments/description cannot override the pinned identity; edited approval retains the same trusted descriptor.
+6. Q4 Option A: raw priority-4 allow cannot bypass priority-3 independent deny/ask, even with a remembered grant or YOLO; diagnostics retain both rules' provenance. Assert the changed contract separately from old-engine equality.
+7. Q5 Option A: use `echo ok && restricted-cmd` with a matching whole-command ask and a higher-priority regex matching only the later segment as deny. Assert initial ask, approval, segment evaluation under that same mode/revision, final deny and no execution of either segment. Compare the old initial ask separately; never change this case into deny-before-asking.
+8. Q5 all-allow and mixed allow/ask segments dispatch once after approval with no second ask for that prepared call. A later call still asks, and approval cannot cover a different prepared token or implicitly install a grant. Preserve dir_path, quoted separators, pipelines/background forms and each segment's own redirection rule. A denied first/middle/last segment blocks the whole call.
+9. A policy, source-stack or mode change during the decision wait invalidates the old approval; apply the new revision atomically, evaluate whole command and all segments against that one snapshot, and re-ask if needed. Edit/re-prepare, stale token, timeout and cancellation never dispatch with an old approval. No tool runs to discover whether it is safe.
+10. Through pinned descriptors and prepared calls, use catalog IDs different from policyIdentity.name and assert original-name exact matching, literal stars, exact OR prefix matching, and rejection of a nonempty mismatched server identity before any execute. Model arguments/description cannot override the pinned identity; edited approval retains the same trusted descriptor.
 
 ### Exit criteria
+
+Q5 retains the initial ask and rejects every approved compound call containing a denied segment before execute. Source/mode changes cannot mix evaluation revisions or reuse stale approval. Q4 changed-outcome diagnostics cite both rules.
 
 All decision scenarios produce ordered audit events, consistent tool results and correct outcomes. Effective authority denial never reaches execute under any mode, exact/session grant or child grant. The full core path uses P05a exactly once per required evaluation, with no host policy callback. G0 passes independently before P06; no host switch occurs here.
 
@@ -383,6 +420,8 @@ Agent.events({after?}), Agent.snapshot(), Sequence, CursorExpired, Lagging; even
 
 ### Tests first
 
+D20 hook-sourced attempts and responses retain source/provenance in live and replayed events. Hook attempt events report zero tokens and source hook with required producing-hook provenance. A UI never labels synthetic content as provider output or presents hook-declared usage as measured billing; transformed frame output replaces the original before publication. Text/thinking deltas append by part ID; model.part.replaced revises a provisional part without appending its snapshot. Test cumulative thinking, non-prefix replacement, identical-text completion and attempt discard through live and replayed reducers, asserting visible content matches the transformed accumulator.
+
 S16.7 expired cursor: snapshot plus after cursor gives no duplicate/gap under a concurrent transition. Slow reader gets Lagging without stalling a fast reader or model. Replay retains current turn even beyond ordinary window; progress coalesces. Every turn-scoped event has turn ID. Attempt discard removes only that attempt in a test view reducer; state.changed is absent for ordinary text deltas.
 
 ### Exit criteria
@@ -411,13 +450,13 @@ One short-lived PR from current main. Implement the numbered pseudocode range ab
 
 ## P07: Journal turns and recover without repeating uncertain effects
 
-**Plan:** PLAN-20261112-AGENT-API.P07. **Dependencies:** P06. **Magnitude:** 2,200-3,500 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P07. **Dependencies:** P06. **Magnitude:** 2,600-4,100 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
 
 ### Scope
 
 Implement append-before-effect journal semantics, checkpoint consistency, transcript, resume, fork and rewind. Persist sequence allocation metadata and distinguish abandoned branches. The physical store follows P14.
 
-Persist D14 committed replay and D15 reserved/settled attempt accounting, plus D16 recovery invalidation facts. History remains agent-owned and restart never needs a provider conversation cache.
+Persist D14 committed replay and D15 reserved/settled attempt accounting, plus D16 recovery invalidation facts and D20 model-attempt/hook-change records. History remains agent-owned and restart never needs a provider conversation cache.
 
 ### Packages and files
 
@@ -425,9 +464,13 @@ Persist D14 committed replay and D15 reserved/settled attempt accounting, plus D
 
 ### Public contract
 
+D20 model-attempt records carry source provider/hook and hook provenance for synthetic attempts. Each hook-change records attempt/frame linkage, producing hook identity/order, request or response audit BlobRef, changed/replaced data and invalidated entry/envelope IDs. Preserve the complete configured-order audit independently of the effective aggregate and final-field provenance, including superseded changes, messages, failed executions with output and mutations preceding stop/block. Audit records are evidence, never patches to replay. The committed entry contains transformed content and only surviving replay; hook-only source projections never become native replay. Audit blobs preserve exact source frames, hook inputs/outputs and hook-declared usage; budget records preserve original measured provider usage or complete zero for synthetic attempts. With a SessionStore, required audit blobs are durable before referencing records, publication, commit or dispatch, including terminal control publication; require blob support before admitting mutating hooks. Cancellation uses the separate finalization signal to preserve completed audits. Without a store, retain equivalent in-memory audit data for the session lifetime.
+
 JournalRecord and durable metadata, CheckpointId, TranscriptEntry, StoreError; Agent.transcript(range), createAgent resume/fork options, rewind/clear commands.
 
 ### Tests first
+
+R9 faults at original-blob write, hook-change append and replacement entry commit. Failed audit persistence prevents publication/dispatch; resume never re-runs a hook or repeats its tools. Verify every producer survives last-write-wins composition, original response stays audit-only, replacement history survives resume/fork and changed replay never returns on restart. Hook synthetic attempts round-trip complete zero usage and no replay, including crash after admission. Rewind/fork retain branch-correct audit references and do not reactivate invalidated envelopes.
 
 A valid imported-history record plus imported terminal/indeterminate results resumes without dispatch, has no restored grants and preserves uncertainty notices. Reject an old recording at the store boundary with import-required rather than accepting it as empty new history. No synthetic tool-started proof is required or invented for imported content.
 
@@ -436,6 +479,8 @@ S16.5 crash after tool-started becomes indeterminate without repeated file effec
 Resume/fork/rewind preserve replay targets and bytes at retained checkpoints; compaction does not inherit signatures. Crash after reservation settles it conservatively without resend. Duplicate usage records cannot inflate totals. A rejected parent recorded before retry stays invalid after restart. A discarded attempt contributes accounting but neither transcript content nor replay.
 
 ### Exit criteria
+
+Original-response audit blobs and per-hook provenance survive resume/fork independently of replacement history. D20 replay invalidation and source-aware accounting survive each fault boundary without duplicate billing or hook execution.
 
 Fault-injected MemorySessionStore demonstrates recovery at every record boundary and does not hide append failures. Complete transcript and checkpoint tests before physical store implementation.
 
@@ -603,9 +648,11 @@ One short-lived PR from current main. Write failing integration/conformance test
 
 ## P11: Adapt provider attempts and authentication to ModelPort
 
-**Plan:** PLAN-20261112-AGENT-API.P11. **Dependencies:** P10 passed. **Magnitude:** 2,800-4,600 LoC added/changed, including tests. **Requirements:** REQ-PORTS, REQ-VERIFY; preserve REQ-CORE and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P11. **Dependencies:** P10 passed. **Magnitude:** 3,200-5,200 LoC added/changed, including tests. **Requirements:** REQ-PORTS, REQ-VERIFY; preserve REQ-CORE and REQ-DELETE.
 
 ### Scope
+
+D20 preserves exact source response-frame projections for AfterModel, including ordered HookResponsePart content, append/replace semantics, stream ID/status, terminal metadata and versioned hook-only block fields. Cumulative thinking snapshots and identical-text completion are not reconstructed from append deltas. Keep those fields separate from scoped D14 replay and measured D15 usage; core folds a transformed frame once and derives presentation. Translate typed ModelRequest.toolChoice to existing neutral provider settings without changing the final request subset or adding another hook runner.
 
 Implement explicit per-model clients over existing provider transports/auth. Separate configuration/selection from provider construction, remove Config/SessionSettingsOwner requirements at the census seams, and give the core one model attempt at a time. Shared fixes apply to both old and new callers while both exist.
 
@@ -622,6 +669,8 @@ Complete the single-dispatch cuts in the Provider-internal recovery census; all 
 providerAdapters(explicitProviderInputs): ModelPort; host-owned provider catalog/auth and utility generation operations with explicit arguments. ModelClient.info/stream/countTokens/price and typed ModelError are the only conversation-facing capability.
 
 ### Tests first
+
+D20 controlled-provider fixtures preserve exact streamed source projections and direct-response framing with terminal finish/raw-stop metadata, without duplicated text or usage. For A, AB, completed AB from the same thinking stream, assert exact status/signature/hidden/encrypted/provider fields and completion with no new presentation text. Deliver replay only at completion, replace or remove each frame via P03, and assert exact hook input, visible output and final committed history with no invalidated replay revival. Hook-only fields cannot supply native replay. Request toolChoice auto/required/none and narrowed allowed IDs reach provider mapping, including explicit empty tools; a provider ignoring that subset cannot get an excluded call committed or executed. Preserve topP/schema/reasoning settings and required system prompts. R9 runs the same chunks through the P17 hook adapter.
 
 Run ModelPort conformance for each provider family and Google plugin using real converters/transports against controlled HTTP. Assert prompt roles, tool IDs, image/audio mapping, system prompt preservation, resolved model/endpoint, token totals, partial-attempt discard, abort settlement, auth/quota/rate-limit/overloaded taxonomy and retryAfterMs. Re-auth permits a later submit without injecting credentials into definition/events. Two agents with different profiles cannot leak model params or credentials. Bucket failover must not hide extra model requests.
 
@@ -765,7 +814,7 @@ Implement approved Q2 Option A and `llxprt sessions import <old-file>` as specif
 
 Implement a versioned physical journal store and blob operations with durable append, explicit errors, bounded acquisition and exclusive writer ownership. Reuse storage path/media/lock mechanisms after extracting their owner-neutral inputs. Keep legacy logging distinct from the agent journal.
 
-Store D14-D16 replay/accounting/recovery records losslessly. Expose task snapshot blob/index operations so P17 can bind todo/pause snapshots to core checkpoints and fork a separate task namespace without aliasing the live source file.
+Store D14-D16 replay/accounting/recovery records and D20 per-hook audit blobs, source-aware attempts and replay-invalidations losslessly. Expose task snapshot blob/index operations so P17 can bind todo/pause snapshots to core checkpoints and fork a separate task namespace without aliasing the live source file.
 
 ### Packages and files
 
@@ -871,9 +920,11 @@ One short-lived PR from current main. Write failing integration/conformance test
 
 ## P16: Load host sources and build closed AgentDefinition values
 
-**Plan:** PLAN-20261112-AGENT-API.P16. **Dependencies:** P15, transitively P05b's recorded Q5 disposition; Q4 disposition before affected release flows switch. **Magnitude:** 4,000-6,400 LoC added/changed, including tests. **Requirements:** REQ-PORTS, REQ-VERIFY; preserve REQ-CORE and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P16. **Dependencies:** P15; approved Q4/Q5 Option A fixtures from P05a/P05b. **Magnitude:** 4,200-6,700 LoC added/changed, including tests. **Requirements:** REQ-PORTS, REQ-VERIFY; preserve REQ-CORE and REQ-DELETE.
 
 ### Scope
+
+Identify Q4-affected raw-policy inputs at construction, addRule, replaceRules and evaluation overlay seams before host switches. Preserve the original numeric priorities and provenance. Associate independent authority only through trusted source ownership; do not infer it from an admin-looking label. Build a source inventory that distinguishes unchanged TOML tiers/within-admin exceptions from raw runtime priority overrides.
 
 Move shared settings/profile/argv/environment/trust resolution into host-kit, preserving observed precedence and profile/auth semantics. Separate pure definition building from source I/O and adapter acquisition. Include narrow host profile/session/catalog/IDE utility APIs needed by all four hosts; no new service locator.
 
@@ -893,11 +944,13 @@ PolicySourceError carries source kind/file/rule/field and the invalid value expl
 
 ### Tests first
 
+Use the same raw/base/overlay source inputs for old and new routes: trusted-admin deny at 3 and runtime allow at 4. Assert the old allow, new deny, and diagnostic citing both source/rule IDs and priorities. Add an independent-ask variant, missing/spoofed source-label cases, add/replace/removal and live overlay updates. Identify the actual loader/caller that supplied each value, without silently capping priority or promoting labels to authority. Combine Q5 whole-command ask/approval with source or mode changes and verify one evaluation revision per dispatch decision.
+
 Source-builder conformance: system/user/project settings, profile and argv precedence match existing behavior; invalid profile/model/required limits fail before side effects; source cancellation releases acquisitions. No credentials, functions, environment objects or source paths in definition. Folder trust cannot be widened by YOLO or project settings. Same source fixture yields identical definition for CLI/ACP/a2a after explicit protocol differences. Profile change during active turn cannot rewrite request history. Skills/memory/IDE context respect trust and lifetime. Browser/profile management works before any agent exists.
 
 Write a parity test that feeds the same real shipped and temporary admin/user/default policy files to the current loaders plus PolicyEngine and to the new translator plus agent-core evaluator. Use a fixed versioned corpus of tool identities and JSON calls with exact expected allow/ask/deny, including nested/escaped argsPattern, commandRegex anchors/alternation, both commandPrefix transforms, camel-case exemptions, actual shipped snake-case YOLO behavior, priority tiers/overlapping ties, admin allow/ask exceptions, inactive/active mode-restricted authority and mode switches. Exercise loadPoliciesFromToml and loadPolicyFromToml separately because their transforms differ. Compare the same settings, CLI allowlist, trusted/excluded MCP, dynamic confirmation and persisted-reload cases at their actual priorities; include base-before-overlay ordering.
 
-Run the corpus through real preparation/core for compound mixed matches, fallback/redirection, destructive deny under YOLO and mode changes while a decision is pending, admin exceptions moving from operation A to B under a pending independent ask, and source-rule/group removal. Observe complete policy revisions and decision settlement to prove no hybrid stack is visible. Each test asserts decisions/results and absence of denied effects, not just emitted definitions. Q5 cases assert the old result and its prerequisite selected new behavior in separate contract tests. Q4 retains the old-result/independent-authority conflict fixture without assuming its open release choice; add the chosen source-migration assertions before affected host switches. Neither conflict can be silently excluded or counted as a parity pass. Compare raw interactive decisions and then completed headless onAsk-deny decisions separately. P28 retains all corpus fixtures/results while deleting the old executable test oracle.
+Run the corpus through real preparation/core for compound mixed matches, fallback/redirection, destructive deny under YOLO and mode changes while a decision is pending, admin exceptions moving from operation A to B under a pending independent ask, and source-rule/group removal. Observe complete policy revisions and decision settlement to prove no hybrid stack is visible. Each test asserts decisions/results and absence of denied effects, not just emitted definitions. Q5 cases assert the old initial ask and the approved post-approval segment check separately. Q4 asserts old allow versus new independent deny/ask, with both provenances in diagnostics. Neither approved change can be silently excluded or counted as a parity pass. Compare raw interactive decisions and then completed headless onAsk-deny decisions separately. P28 retains all corpus fixtures/results while deleting the old executable test oracle.
 
 Invalid syntax, flags, existing source-length violations, bad priorities and malformed files fail with file/rule/field provenance before agent creation, including inactive modes. Include ordinary 1,024/1,025 checks, the 1,024-unit commandRegex accepted by the directory path but rejected at the 1,035-unit single-file wrapper, and 513 slashes accepted by single-file argsPattern but rejected at the 1,026-unit directory native-source check. Cover prefix expansion/heuristic stage differences and input/effective-pattern mismatch too. No partial loading or fallback to ask/allow; valid regex/exemption/authority-mode forms compile. Verify definition-validation errors from P01a/P05a propagate without permissive recovery. Distinguish session-submit ceiling from per-turn steps in built sources.
 
@@ -905,7 +958,7 @@ Invalid syntax, flags, existing source-length violations, bad priorities and mal
 
 Every Config/preflight group in mapping has a concrete owner; no AgentProfilePreflight is used by new hosts. All host-only settings remain usable without exposing them to core. Both old/new composition use shared extracted resolution where practical; no duplicated precedence logic.
 
-Every matrix form has a tested exact translation and the fixed corpus matches old decisions under the existing regex/subject handling. Q5 chosen-contract assertions use the prerequisite recorded before P05b; Q4 changed-outcome contracts require recorded disposition before affected switches; do not report them as parity. No unsupported-form rejection list, silent source correction or second evaluator remains.
+Every matrix form has a tested exact translation and the fixed corpus matches old decisions under the existing regex/subject handling. Q4/Q5 Option A changed-outcome contracts pass separately; do not report them as parity. No unsupported-form rejection list, silent source correction or second evaluator remains.
 
 ### Deletions
 
@@ -929,11 +982,11 @@ One short-lived PR from current main. Write failing integration/conformance test
 
 ## P17: Adapt user hooks and built-in continuation without a host model loop
 
-**Plan:** PLAN-20261112-AGENT-API.P17. **Dependencies:** P16; Q1 disposition recorded for unsupported mutations. **Magnitude:** 1,900-3,000 LoC added/changed, including tests. **Requirements:** REQ-PORTS, REQ-VERIFY; preserve REQ-CORE and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P17. **Dependencies:** P16; D20 contracts/runtime/journal/framing from P01a/P03/P07/P11. **Magnitude:** 3,600-5,600 LoC added/changed, including tests. **Requirements:** REQ-PORTS, REQ-VERIFY; preserve REQ-CORE and REQ-DELETE.
 
 ### Scope
 
-Implement host hook execution and output validation for the six approved interceptor points. Event-only observers are subscriptions; session lifecycle hooks belong to host acquisition/close. Resolve the Q1 release behavior without expanding core hook authority.
+Implement host hook execution and v2 translation for the eight D20 interceptor points. Preserve BeforeModel request changes/synthetic responses, AfterModel replacement and BeforeToolSelection toolChoice, subject to request-local selection, subset, accounting, replay and policy limits. Event-only observers remain subscriptions; session lifecycle hooks belong to host acquisition/close. Hooks return data and provenance; they never drive the model loop.
 
 Also implement mandatory built-in thinking-only/todo/reminder/pause continuation using D17 AfterTurnView and the Session admission and built-in continuation decision. User hooks disabled does not disable these built-ins. Share one afterTurn composition; it returns data, never drives another model request.
 
@@ -945,29 +998,49 @@ Also implement mandatory built-in thinking-only/todo/reminder/pause continuation
 
 ### Public contract
 
-hookInterceptors(explicitHookInputs): Interceptors; host observer subscription and session-start/session-end lifecycle helpers. No synthetic-response or arbitrary request-rewrite port is introduced.
+hookInterceptors(explicitHookInputs): Interceptors with HookEventResult envelopes for the three model-hook points. Each envelope carries one effective control/value with final-field provenance, independent reason/systemMessage/context, and configured-order per-hook audit, including superseded output and output preceding stop/block. Preserve v2 wire payloads outside core and translate to plain values, including RequestBoundary and lossless source-frame projections. Core never applies the audit list as patches. Host observer/session lifecycle helpers remain explicit. Model selection, accounting, journal commitment and policy remain in core.
+
+Preserve planner matching/deduplication/order, default parallel execution and whole-event sequential execution if any matching definition requests it. Aggregate in configured order, not completion order. Model-event top-level fields replace when present; hookSpecificOutput shallow-merges, so later llm_request/llm_response replaces that entire object. Apply the aggregate request patch to the original request; settings shallow-merge there. Successful sequential BeforeModel outputs independently update later hook inputs; AfterModel replacements do not. Failed executions with output still aggregate but never propagate input. Final response replacement inherits omitted optional metadata from the source frame, not a superseded response. Keep tool-choice mode/intersection rules and other event-specific merges.
+
+Configured hook timeouts or the existing per-hook default apply individually. Interceptors.deadlineMs must not race the entire event and discard completed siblings; the turn deadline still bounds all work. A timed-out hook supplies no output, with a diagnostic; sequential execution continues while active. Spawn failures without output are nonblocking. Aggregate output even on success false, including exit-2 denial with empty stderr's default reason; other exits keep existing warnings/no-output behavior. Optional-field decoder no-ops differ from typed D20 invariant failures. Turn abort/deadline stops admission, cancels and joins subprocesses, retains completed audit under finalization and settles cancelled/limit, never successful continue.
 
 builtinContinuation(explicitTodoStoreAndOptions): Interceptors plus a tested composition with user hooks. Inputs are AfterTurnView and bounded task-store data; no Agent reference, native history or submit callback. Hook ownership remains outside core, scheduling and budgets remain inside it.
 
 ### Tests first
 
-Interceptor conformance: deadline/abort, block, addContext, patchArgs validation and policy re-evaluation, redaction preserves raw blob audit, afterTurn continuation bounded by turn limits. Real subprocess hook fixtures test malformed output and process cancellation. Session start fails before submit and still cleans up; session end failure does not skip other cleanup. Unsupported mutating outputs fail explicitly according to Q1 rather than disappearing.
+Build a Bun behavioral harness that runs the existing fixtures through both the old ChatSession/direct/stream paths and the new hookInterceptors plus real agent-core. Reuse input/output scenarios from `packages/agents/src/core/chatSession.issue1749.test.ts`, `hooks-caller-application.test.ts`, `__tests__/boundaryRecovery.test.ts` and `packages/agents/src/compression/__tests__/compression-unsafe-extraction.test.ts`, `streamRequestHelpers.test.ts`, and core `hooks/types.test.ts`, `hookTranslator.test.ts`, `hookAggregator.test.ts` and `hookRunner.test.ts`. Do not copy source-string assertions as evidence of parity. Issue1749 must preserve rewritten response text, unchanged provider text and thinking exclusion; add multi-chunk replacement and replacement tool calls. Retain fixtures after deleting the old oracle in P28.
+
+Assert exact outgoing request/history/event/journal behavior: one-call message edits, contents-less and empty-array guards, per-hook audit provenance, setting shallow merges, permitted/disallowed model changes, subset-only tools and all toolChoice modes/normalized allowlist intersections. With pinned and policy-allowed tools A/B but only A request-visible, provider, synthetic and replacement outputs each attempt B. Filter excluded calls/results before hook visibility and again after replacement, before publication/commit/scheduling. Assert audit/diagnostic evidence, no active B call/result, no tool lifecycle event or decision prompt, and no execution; retain the originating subset through argument edits and approval waits. Separately test the already-pinned stream emitter exception, unpinned emitter rejection and direct-path exclusion.
+
+AfterModel runs once per source response frame. For A, AB, completed AB from one thinking stream, assert exact wire hook inputs including stream ID/status, late signature and hidden/encrypted/provider fields, visible A then B with no repeated completion text, and one committed AB part. Replace or remove each frame, including non-prefix replacement and metadata-only completion; assert transformed visible snapshots, model.part.replaced when needed, prior snapshot retained for empty replacement, and exact final history. Repeat with one direct-response frame. Replay arriving only on completion cannot revive a previously changed target. Original/replacement content and declared/measured usage stay distinct; hook-only fields cannot restore signatures, encrypted reasoning or entry parent IDs to native replay.
+
+Multi-hook fixtures run in default parallel mode with reversed completion order and in sequential mode. Hook A supplies contents, hook B settings-only llm_request: the final request uses original contents and B settings, while sequential B sees A's contents. AfterModel A replaces content/optional metadata and B replaces content only: B sees the source frame even sequentially, and final optional fields come from that source. Exercise later allow/deny and continue true/false fields, including reversal of earlier controls under current model-event replacement rules, then resolve controls using each caller's existing semantics: streamed stop before block, direct BeforeModel block before synthetic/request changes while ignoring stop, and direct AfterModel response application regardless of stop/block. Mutation plus informational systemMessage and mutation followed by stop/block retain every producer in durable ordered audit without applying superseded edits or edits rejected by that path's existing controls; ignored direct flags do not reject otherwise effective edits. Assert synthetic producer provenance as well as final-field provenance.
+
+Run all boundary fixtures on both routes: omitted/undefined versus null/false/0/empty string, structural and positional failures with throw/skip, suffix default count, unmodified caller precedence, pre-hook in-place mutation snapshot, append/modify-pending, prepend, duplicate ambiguity, normalized pending-tail mismatch and compression replacing only the declared prefix. Preserve text/tool/thinking/media blocks and the wire-to-core index mapping.
+
+Pin direct controls with old/new parity fixtures against DirectMessageProcessor._handleBeforeModelHook and _fireAfterModelAndApply/_applyAfterModelResult. Use continue: false for stop and both decision: 'block' and 'deny' for blocking. BeforeModel stop without a block or synthetic response still dispatches and applies any nonempty request-content replacement; repeat with contents-less and empty-array no-op changes. Stop plus synthetic returns the synthetic content without provider dispatch or AfterModel invocation. Block/deny alone or combined with stop and synthetic content takes the block branch instead: reason text, finishReason stop and rawStopReason, with no synthetic tools or dispatch. AfterModel stop, block/deny and both together each preserve the original response when no replacement exists, or return the filtered replacement when present, including an empty replacement without restoring provider text. None of those direct AfterModel flags creates a stopped/blocking outcome or suppresses otherwise eligible tool calls. Assert exact returned text/tool blocks and optional metadata, outgoing request and dispatch/AfterModel invocation behavior; P03/P04/P05b integration keeps accepted calls subject to D20 subset, preparation and policy limits and retains original measured provider usage and audit. These three direct controls are parity obligations, not approved behavior changes.
+
+Keep separate streamed control parity fixtures combining stop/block with synthetic/replacement tools: final stop precedes block, controlled content/tools do not proceed, BeforeModel prevents provider dispatch, and AfterModel retains original measured usage. Streamed AfterModel block returns reason text rather than replacement tools, preserving the helper fallback 'Execution blocked by AfterModel hook'. Across both paths, preserve stopReason-before-reason, absent/empty selected reason as 'No reason provided', and independent systemMessage/suppressOutput without giving ignored direct flags new control effects. Allowed empty synthetic response becomes effective-reason text; helper-only undefined reason uses 'Execution blocked' and explicit empty helper reason remains empty. Assert optional metadata survives and informative systemMessage is not model content.
+
+Use separate changed-contract tests for the current callers' ignored model/settings/tool-list outputs, missing streaming synthetic substitution, declared required-mode propagation, D20 synthetic zero accounting and D14 replay removal. Do not call those old/new equality passes. Model overrides still use ModelClient.info, reservations and fallback; combine a changing model/message patch with D16 repaired retries to prove no stale patch or cross-scope recovery.
+
+Interceptor conformance uses real subprocesses and deterministic latches/fake clocks: completed deny plus timed-out sibling, completed replacement plus timed-out sibling, sequential timeout followed by a successful hook, exit 2 with empty stderr, spawn failure and other nonzero warning/no-output cases. Assert actual aggregate, audit, outgoing request/response and absence of unauthorized effects, not only completion counts. A timeout discards only its own unfinished output. Turn cancellation/deadline joins all children, prevents continuation/dispatch and preserves completed audit through finalization. Test malformed output, optional-field no-ops and typed D20 failures separately. Preserve addContext, patchArgs validation/subset retention/policy re-evaluation, raw blob audit on redaction and bounded afterTurn continuation. Session start fails before submit and still cleans up; session end failure does not skip other cleanup. Absent/wrong-typed optional fields and v1-shaped mutation payloads retain decoder no-ops; valid mutations obey D20 and invalid core values fail with typed provenance. The current runner, not the stale empty-stderr warning in writing-hooks.md, is the exit-2 oracle.
 
 With user hooks absent/disabled, pending/in-progress todos continue, thinking-only gets a concrete-action continuation, pending reminders survive no-active-todo cases, successful persisted pause stops and failed pause does not. Test three-pass bound, unchanged turn ID/budget/deadline, one terminal result, cancellation during todo read, no discard of prior committed text, explicit next-input unpause, restart with paused tasks, and checkpoint/fork task isolation. Task I/O errors fail visibly rather than manufacturing empty todos. User continueWith cannot bypass pause or reset limits.
 
 ### Exit criteria
 
-All supported existing hook behaviors have externally meaningful tests on both paths while both exist. Unsupported behavior has a recorded product disposition and user-facing error/release note; no hidden engine override.
+Existing hook behavior has old/new fixtures with externally meaningful assertions while both paths exist, including issue1749 and boundary recovery. D20 limits and observed implementation gaps have separately asserted amended outcomes and release notes; no hidden engine override or silently removed hook capability remains.
 
 No continuation remains unmapped when old MessageStreamOrchestrator is deleted. Journal tool outcomes and task snapshots supply restart/fork state; host event subscribers do not race afterTurn to infer pause.
 
 ### Deletions
 
-Remove transferred supported hook execution code from the old composition when shared callers use new implementation. Old mutation-only integration is deleted with old engine at P28 once Q1 authorizes disposition.
+Remove transferred supported hook execution code from the old composition when shared callers use new implementation. Delete the old mutation integration with the old engine in P28 after preserving its fixture corpus and the D20 replacement coverage.
 
 ### Risks
 
-Old hooks intentionally override model responses; mapping them to afterTool would change their meaning. Deadline-as-continue is explicitly approved behavior, not permission to swallow malformed or denied hook results.
+Old hooks intentionally override model responses; mapping them to afterTool would change their meaning. A single-hook timeout is nonblocking, but a batch deadline-as-continue would lose completed results. Keep aggregation, sequential input propagation and ordered audit separate. Do not drop an output solely because execution failed or omit messages accompanying mutations; preserve later explicit control overrides under the event's existing merge rules. Source-frame snapshots must not be mistaken for append-only deltas or replay authority.
 
 ### Verification and boundary retirement
 
@@ -1049,7 +1122,7 @@ Test-only HostScenarioRunner accepts external input and returns wire output, exi
 
 ### Tests first
 
-Shared host fixtures include import-required on old IDs versus explicit import then new-ID resume, plus the P16 fixed policy corpus and D19 atomic mode changes. Distinguish approved contract changes and Q4/Q5 conflict fixtures from equality assertions.
+Shared host fixtures include import-required on old IDs versus explicit import then new-ID resume, plus the P16 fixed policy corpus and D19 atomic mode changes. Distinguish approved contract changes and Q4/Q5 Option A changed-outcome fixtures from equality assertions.
 
 Boundary fixtures reject hidden flag reads from core/host-kit/adapters/UI reducers, unknown flag values fail, and the selected new route never falls back on construction/runtime failure. One external test body runs against legacy and new entry factories; compare files, protocol outputs and lifecycle, not mock calls. Tests must still catch a missing output event or skipped cleanup in either factory.
 
@@ -1079,7 +1152,7 @@ One short-lived PR from current main. Test both paths while both exist; final cu
 
 ## P20: Switch non-interactive CLI to agent-core and delete its old path
 
-**Plan:** PLAN-20261112-AGENT-API.P20. **Dependencies:** P19; Q1/Q4/Q5 release dispositions before affected flows switch; approved P14 import and P16 parity are prerequisites. **Magnitude:** 1,600-2,600 LoC added/changed, including tests. **Requirements:** REQ-HOST, REQ-DELETE, REQ-VERIFY; preserve REQ-CORE and REQ-PORTS.
+**Plan:** PLAN-20261112-AGENT-API.P20. **Dependencies:** P19; approved P14 import, P16 policy fixtures and P17 D20 hook parity/changed-contract tests are prerequisites. **Magnitude:** 1,600-2,600 LoC added/changed, including tests. **Requirements:** REQ-HOST, REQ-DELETE, REQ-VERIFY; preserve REQ-CORE and REQ-PORTS.
 
 ### Scope
 
@@ -1241,7 +1314,7 @@ subscribeView(agent) returns a host-owned read-only view store and subscription 
 
 ### Tests first
 
-Run a real core with scripted external ports through snapshot/subscribe races, expired cursors, lagging subscribers, discard after partial text, committed continuations with paragraph separation, tool progress, cancellation and close. Assert displayed records/order and bounded retained state, not dispatch spy counts. S9.1/S9.4/S9.5 traces project consistently. Test replacing a snapshot never duplicates transcript entries or hides failed-attempt charges.
+Run a real core with scripted external ports through snapshot/subscribe races, expired cursors, lagging subscribers, discard after partial text, committed continuations with paragraph separation, tool progress, cancellation and close. Assert displayed records/order and bounded retained state, not dispatch spy counts. S9.1/S9.4/S9.5 traces project consistently. Test replacing a snapshot never duplicates transcript entries or hides failed-attempt charges. D20 thinking A, AB, completed AB renders AB once; non-prefix model.part.replaced revises that provisional part in place, while an empty replacement frame retains the earlier accepted snapshot. Replay and live display must agree, including discard after a replacement.
 
 ### Exit criteria
 
