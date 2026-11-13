@@ -196,12 +196,18 @@ export type HookStop = {
   readonly reason: string;
   readonly systemMessage?: string;
 };
-export interface HookAuditEntry {
-  readonly provenance: HookProvenance;
-  readonly status: 'success' | 'timeout' | 'process-error' | 'cancelled';
-  readonly output?: JsonValue;
-  readonly diagnostic?: string;
-}
+export type HookAuditEntry =
+  | {
+      readonly provenance: HookProvenance;
+      readonly status: 'success' | 'process-error';
+      readonly output?: JsonValue;
+      readonly diagnostic?: string;
+    }
+  | {
+      readonly provenance: HookProvenance;
+      readonly status: 'timeout' | 'cancelled';
+      readonly diagnostic?: string;
+    };
 export interface HookEventResult<T> {
   readonly effective: {
     readonly control: Continue | Block | HookStop;

@@ -124,7 +124,11 @@ import type {
   PolicyRegex,
 } from '../index.js';
 
-const missingRegexEvidence: PolicyRegex = {}; // @expect-regex-evidence
+const missingRegexEvidence: PolicyRegex = /* @expect-regex-evidence */ {
+  flavor: 'ecmascript',
+  source: 'match',
+  flags: '',
+};
 const missingRequestBoundary: HookRequestPatch = {}; // @expect-request-boundary
 const executableHookFields: HookResponsePart = {
   value: { id: 'part', thinking: 'text' },
@@ -196,8 +200,19 @@ const afterModelWithoutReplayInvalidation: AfterModelJournalRecord =
     point: 'after-model',
     audit: 'audit-1',
   };
+// @expect-hook-change-outcome
+const hookChangeWithoutOutcome: AfterModelJournalRecord = {
+  kind: 'hook-change',
+  attempt: 'attempt-2',
+  frame: 'frame-2',
+  provenance: { id: 'hook', event: 'after-model', source: 'test', order: 0 },
+  point: 'after-model',
+  audit: 'audit-2',
+  invalidatedReplay: [],
+};
 export {
   afterModelWithoutReplayInvalidation,
+  hookChangeWithoutOutcome,
   hookResultWithInvalidAudit,
   invalidAttemptSource,
   obsoleteApprovalMode,

@@ -28,6 +28,8 @@ export {
   ImportedHistoryRecordSchema,
   ToolDescriptorSchema,
   HookModelResponseSchema,
+  BeforeModelEffectSchema,
+  AfterModelEffectSchema,
   HookRequestPatchSchema,
   ModelToolChoiceSchema,
   ImportNoticeSchema,

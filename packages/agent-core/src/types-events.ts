@@ -214,6 +214,15 @@ export type JournalRecord =
       readonly provenance: HookProvenance;
       readonly point: 'before-tool-selection' | 'before-model' | 'after-model';
       readonly audit: BlobRef;
+      readonly disposition:
+        | { readonly kind: 'effective' }
+        | { readonly kind: 'superseded'; readonly by: string }
+        | {
+            readonly kind: 'retained-on-terminal';
+            readonly control: 'stop' | 'block';
+          };
+      readonly changed: BlobRef;
+      readonly aggregate: BlobRef;
       readonly invalidatedReplay: ReadonlyArray<{
         readonly entry: string;
         readonly replay: string;

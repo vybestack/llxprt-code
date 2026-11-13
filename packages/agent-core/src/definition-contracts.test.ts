@@ -4,11 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { z } from 'zod';
 import { MemorySessionStore } from './testing/fake-ports.js';
 import {
+  AfterModelEffectSchema,
+  BeforeModelEffectSchema,
   DefinitionError,
   derivePolicySourceStack,
+  normalizePolicyRegex,
   validateAgentCommand,
   validateDefinition,
   validateHookEventResult,
@@ -233,7 +235,7 @@ describe('P01a agent-core contracts', () => {
           },
         ],
       },
-      z.unknown(),
+      BeforeModelEffectSchema,
     );
     expect(result.effective.control.action).toBe('stop');
     expect(result.audit[0]?.status).toBe('process-error');
@@ -243,7 +245,7 @@ describe('P01a agent-core contracts', () => {
           effective: { control: { action: 'continue' }, producers: [] },
           audit: [{ provenance, status: 'success', output: () => undefined }],
         },
-        z.unknown(),
+        BeforeModelEffectSchema,
       ),
     ).toThrow(DefinitionError);
   });
@@ -304,6 +306,21 @@ describe('P01a agent-core contracts', () => {
     );
     expect(() =>
       validateAgentCommand({
+        type: 'set-authority',
+        rules: [invalidPatternRule],
+      }),
+    ).toThrow(DefinitionError);
+    const invalidStack = derivePolicySourceStack('invalid-stack', [
+      { name: 'invalid-stack', rules: [invalidPatternRule] },
+    ]);
+    expect(() =>
+      validateAgentCommand({
+        type: 'set-source-stacks',
+        stacks: [invalidStack],
+      }),
+    ).toThrow(DefinitionError);
+    expect(() =>
+      validateAgentCommand({
         type: 'set-source-stacks',
         stacks: [{ ...stack, restrictions: [] }],
       }),
@@ -349,6 +366,9 @@ describe('P01a agent-core contracts', () => {
       },
       point: 'after-model',
       audit: 'audit-1',
+      disposition: { kind: 'effective' },
+      changed: 'change-1',
+      aggregate: 'aggregate-1',
       invalidatedReplay: [
         { entry: 'entry-1', replay: 'replay-1' },
         { entry: 'entry-2', replay: 'replay-2' },
@@ -360,5 +380,309 @@ describe('P01a agent-core contracts', () => {
     await store.append('session-1', [record], signal);
     expect(await store.load('session-1', signal)).toStrictEqual([record]);
     expect(record.invalidatedReplay).toHaveLength(2);
+  });
+
+  it('validates nested policies and accumulates policy semantics with structural errors', () => {
+    const invalidRule: PolicyRule = {
+      id: 'invalid-regex',
+      match: {
+        args: [
+          {
+            serializedArgs: {
+              flavor: 'ecmascript',
+              source: '[',
+              flags: '',
+              input: { path: 'direct', source: '[', flags: '' },
+            },
+          },
+        ],
+      },
+      outcome: 'deny',
+      priority: 1,
+      order: 0,
+      provenance: {
+        source: 'admin',
+        sourceId: 'nested-policy',
+        ruleIndex: 0,
+        expansionIndex: 0,
+      },
+    };
+    const invalidPolicy = {
+      ...validDefinition.policy,
+      preferences: [{ name: 'invalid', rules: [invalidRule] }],
+    };
+    let nestedError: unknown;
+    try {
+      validateDefinition({
+        ...validDefinition,
+        subagents: [
+          {
+            name: 'child',
+            instructions: [],
+            tools: [],
+            policy: invalidPolicy,
+            limits: validDefinition.limits,
+          },
+        ],
+      });
+    } catch (error) {
+      nestedError = error;
+    }
+    expect(nestedError).toBeInstanceOf(DefinitionError);
+    if (!(nestedError instanceof DefinitionError))
+      throw new Error('Expected nested policy validation failure');
+    expect(
+      nestedError.problems.some((problem) =>
+        problem.path
+          .join('.')
+          .includes('subagents.0.policy.preferences.0.rules.0'),
+      ),
+    ).toBe(true);
+
+    let combinedError: unknown;
+    try {
+      validateDefinition({
+        ...validDefinition,
+        name: '',
+        policy: invalidPolicy,
+      });
+    } catch (error) {
+      combinedError = error;
+    }
+    expect(combinedError).toBeInstanceOf(DefinitionError);
+    if (!(combinedError instanceof DefinitionError))
+      throw new Error('Expected combined definition validation failure');
+    expect(
+      combinedError.problems.some(
+        (problem) => problem.path.join('.') === 'name',
+      ),
+    ).toBe(true);
+    expect(
+      combinedError.problems.some((problem) =>
+        problem.message.includes('sourceId=nested-policy'),
+      ),
+    ).toBe(true);
+  });
+
+  it('accepts native normalized effective regex sources and rejects unnormalized evidence', () => {
+    const normalized = normalizePolicyRegex({
+      path: 'directory-commandRegex',
+      text: '/',
+    });
+    const rule: PolicyRule = {
+      id: 'slash-command',
+      match: { args: [{ serializedArgs: normalized }] },
+      outcome: 'deny',
+      priority: 1,
+      order: 0,
+      provenance: {
+        source: 'admin',
+        sourceId: 'slash-source',
+        ruleIndex: 0,
+        expansionIndex: 0,
+      },
+    };
+    const definition = {
+      ...validDefinition,
+      policy: {
+        ...validDefinition.policy,
+        preferences: [{ name: 'slash', rules: [rule] }],
+      },
+    };
+    expect(
+      validateDefinition(definition).policy.preferences[0]?.rules[0]?.id,
+    ).toBe('slash-command');
+    expect(() =>
+      validateDefinition({
+        ...definition,
+        policy: {
+          ...definition.policy,
+          preferences: [
+            {
+              name: 'slash',
+              rules: [
+                {
+                  ...rule,
+                  match: {
+                    args: [
+                      {
+                        serializedArgs: {
+                          ...normalized,
+                          source: normalized.source.replaceAll('\\/', '/'),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toThrow(DefinitionError);
+  });
+
+  it('accepts optional command IDs on every closed variant and rejects unrelated keys', () => {
+    const stack = derivePolicySourceStack('source', []);
+    const commands = [
+      { type: 'set-model', selection: validDefinition.model },
+      { type: 'set-preferences', layers: [], approvalMode: 'default' },
+      { type: 'set-authority', rules: [] },
+      { type: 'set-source-stacks', stacks: [stack] },
+      { type: 'set-limits', limits: validDefinition.limits },
+      { type: 'set-mode', mode: 'normal' },
+      { type: 'set-instructions', instructions: [] },
+      { type: 'set-context', items: [] },
+      { type: 'remove-context', ids: [] },
+      { type: 'revoke-grant', grant: 'grant-1' },
+      { type: 'compact' },
+      { type: 'rewind', to: 'checkpoint-1' },
+      { type: 'clear' },
+    ];
+
+    for (const [index, command] of commands.entries()) {
+      const id = `cmd-${index + 1}`;
+      expect(validateAgentCommand({ ...command, id })).toHaveProperty('id', id);
+      expect(validateAgentCommand(command)).not.toHaveProperty('id');
+    }
+    expect(() =>
+      validateAgentCommand({ id: 'cmd-invalid', type: 'clear', extra: true }),
+    ).toThrow(DefinitionError);
+  });
+
+  it('round-trips effective and superseded hook-change dispositions', async () => {
+    const provenance = {
+      id: 'hook-1',
+      event: 'after-model',
+      source: 'configuration',
+      order: 0,
+    };
+    const records: JournalRecord[] = [
+      {
+        kind: 'hook-change',
+        attempt: 'attempt-1',
+        frame: 'frame-1',
+        provenance,
+        point: 'after-model',
+        audit: 'audit-superseded',
+        disposition: { kind: 'superseded', by: 'hook-2' },
+        changed: 'change-superseded',
+        aggregate: 'aggregate-1',
+        invalidatedReplay: [],
+      },
+      {
+        kind: 'hook-change',
+        attempt: 'attempt-1',
+        frame: 'frame-1',
+        provenance: { ...provenance, id: 'hook-2', order: 1 },
+        point: 'after-model',
+        audit: 'audit-effective',
+        disposition: { kind: 'effective' },
+        changed: 'change-effective',
+        aggregate: 'aggregate-1',
+        invalidatedReplay: [{ entry: 'entry-1', replay: 'replay-1' }],
+      },
+      {
+        kind: 'hook-change',
+        attempt: 'attempt-2',
+        frame: 'frame-2',
+        provenance,
+        point: 'after-model',
+        audit: 'audit-before-stop',
+        disposition: { kind: 'retained-on-terminal', control: 'stop' },
+        changed: 'change-terminal',
+        aggregate: 'aggregate-2',
+        invalidatedReplay: [],
+      },
+    ];
+    const afterModel = validateHookEventResult(
+      {
+        effective: {
+          control: { action: 'continue' },
+          value: { replacement: { parts: [] } },
+          producers: [
+            {
+              path: 'replacement',
+              provenance: { ...provenance, id: 'hook-2', order: 1 },
+            },
+          ],
+        },
+        audit: [
+          {
+            provenance,
+            status: 'success',
+            output: { replacement: { parts: [{ text: 'superseded' }] } },
+          },
+          {
+            provenance: { ...provenance, id: 'hook-2', order: 1 },
+            status: 'success',
+            output: { replacement: { parts: [] } },
+          },
+        ],
+      },
+      AfterModelEffectSchema,
+    );
+    expect(afterModel.effective.producers[0]?.provenance.id).toBe('hook-2');
+    expect(afterModel.audit).toHaveLength(2);
+    expect(
+      records[0]?.kind === 'hook-change' && records[0].disposition,
+    ).toStrictEqual({
+      kind: 'superseded',
+      by: 'hook-2',
+    });
+    expect(records[1]?.kind === 'hook-change' && records[1].audit).toBe(
+      'audit-effective',
+    );
+    expect(
+      records[1]?.kind === 'hook-change' && records[1].invalidatedReplay,
+    ).toContainEqual({
+      entry: 'entry-1',
+      replay: 'replay-1',
+    });
+    const store = new MemorySessionStore();
+    const signal = new AbortController().signal;
+    await store.append('session-1', records, signal);
+    expect(await store.load('session-1', signal)).toStrictEqual(records);
+  });
+
+  it('retains exact source-frame metadata, zero measured usage, and typed request selection fixtures', () => {
+    const frame: HookModelResponse = {
+      parts: [
+        {
+          value: { id: 'thinking-1', thinking: 'AB' },
+          accumulation: 'replace',
+          stream: { id: 'stream-1', status: 'complete' },
+          hookFields: { format: 'provider/v1', data: { signature: 'opaque' } },
+        },
+      ],
+      finishReason: 'stop',
+      rawStopReason: 'end_turn',
+      declaredUsage: {
+        totals: {
+          inputTokens: 0,
+          outputTokens: 0,
+          reasoningTokens: 0,
+          cacheReadInputTokens: 0,
+          cacheWriteInputTokens: 0,
+        },
+        complete: true,
+      },
+    };
+    const request = validateHookRequestPatch({
+      boundary: { status: 'valid', boundary: { pendingMessageStartIndex: 1 } },
+      model: { provider: 'provider', model: 'selected' },
+      toolIds: ['tool/read'],
+      toolChoice: { mode: 'required', allowedToolIds: ['tool/read'] },
+    });
+    expect(request.toolChoice?.mode).toBe('required');
+    expect(validateHookModelResponse(frame)).toStrictEqual(frame);
+    expect(() =>
+      validateHookModelResponse({
+        ...frame,
+        parts: [
+          { ...frame.parts[0], hookFields: { format: 'v1', data: () => 1 } },
+        ],
+      }),
+    ).toThrow(DefinitionError);
   });
 });

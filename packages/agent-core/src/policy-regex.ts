@@ -125,9 +125,12 @@ export function normalizePolicyRegex(input: PolicyRegexInput): PolicyRegex {
       break;
     case 'directory-commandPrefix':
     case 'utils-commandPrefix':
-    case 'dynamic-commandPrefix':
       source = input.text;
       effective = commandPrefix(jsonEscaped(source));
+      break;
+    case 'dynamic-commandPrefix':
+      source = input.text;
+      effective = commandPrefix(source);
       break;
     case 'single-file-commandPrefix':
       source = input.text;
@@ -137,6 +140,11 @@ export function normalizePolicyRegex(input: PolicyRegexInput): PolicyRegex {
     default:
       throw new Error('Unsupported policy regex input path.');
   }
-  compile(effective, flags, input);
-  return { flavor: 'ecmascript', source: effective, flags, input };
+  const compiled = compile(effective, flags, input);
+  return {
+    flavor: 'ecmascript',
+    source: compiled.source,
+    flags: compiled.flags,
+    input,
+  };
 }

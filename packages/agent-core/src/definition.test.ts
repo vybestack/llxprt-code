@@ -182,6 +182,44 @@ describe('validateDefinition', () => {
     );
   });
 
+  it('rejects executable replay and recovery payloads through public validators', () => {
+    const executable = (): number => 1;
+    expect(() =>
+      validateTranscriptEntry({
+        id: 'entry-1',
+        role: 'model',
+        parts: [],
+        replay: [
+          {
+            id: 'replay-1',
+            scope: {
+              provider: 'provider',
+              model: 'model',
+              endpoint: 'endpoint',
+              principal: 'principal',
+            },
+            format: 'provider/v1',
+            target: { kind: 'entry' },
+            data: executable,
+          },
+        ],
+      }),
+    ).toThrow(DefinitionError);
+    expect(() =>
+      validateModelRecovery({
+        scope: {
+          provider: 'provider',
+          model: 'model',
+          endpoint: 'endpoint',
+          principal: 'principal',
+        },
+        invalidates: [],
+        format: 'provider/v1',
+        data: executable,
+      }),
+    ).toThrow(DefinitionError);
+  });
+
   it('rejects complete reports with missing values, negative values, and cache subtotals above input', () => {
     expect(() =>
       validateUsageReport({ totals: { inputTokens: 1 }, complete: true }),

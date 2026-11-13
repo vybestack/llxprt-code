@@ -422,7 +422,8 @@ describe('agent-core import boundary', () => {
 
     expect(
       scanAgentCoreBoundary(root).some(
-        (entry) => entry.kind === 'runtime-import',
+        (entry) =>
+          entry.file.endsWith('nested.cjs') && entry.kind === 'runtime-import',
       ),
     ).toBe(true);
   });
@@ -451,15 +452,22 @@ describe('agent-core import boundary', () => {
     const root = fixture("import 'zod';", {
       'node_modules/zod/package.json': JSON.stringify({
         name: 'zod',
-        exports: { '.': { import: './index.js' } },
+        types: './index.d.ts',
+        exports: {
+          '.': { types: './index.d.ts', import: './index.js' },
+        },
       }),
+      'node_modules/zod/index.d.ts': 'export declare const value: number;',
       'node_modules/zod/index.js': "import '../outside.js';",
       'node_modules/outside.js': 'export const env = process.env;',
     });
 
     expect(
       scanAgentCoreBoundary(root).some(
-        (entry) => entry.kind === 'runtime-import',
+        (entry) =>
+          entry.file.endsWith('node_modules/zod/index.js') &&
+          entry.kind === 'runtime-import' &&
+          entry.detail.includes('outside.js'),
       ),
     ).toBe(true);
   });

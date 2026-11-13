@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'bun:test';
 import { DefinitionError, normalizePolicyRegex } from '../index.js';
 import type { PolicyRegexInput } from '../index.js';
+import { buildArgsPatterns, escapeRegex } from '../../policy/src/utils.js';
 
 describe('normalizePolicyRegex', () => {
   it('preserves input evidence and applies directory args expansion', () => {
@@ -135,5 +136,45 @@ describe('normalizePolicyRegex', () => {
         text: 'a'.repeat(2048),
       }).source,
     ).toContain('a'.repeat(2048));
+  });
+
+  it('preserves the per-path escaping and native source returned by legacy producers', () => {
+    const text = 'echo "x" \\\\ /tmp/a';
+    const directory = normalizePolicyRegex({
+      path: 'directory-commandPrefix',
+      text,
+    });
+    const singleFile = normalizePolicyRegex({
+      path: 'single-file-commandPrefix',
+      text,
+    });
+    const dynamic = normalizePolicyRegex({
+      path: 'dynamic-commandPrefix',
+      text,
+    });
+    const directoryExpected = buildArgsPatterns(undefined, text)[0];
+    const singleFileExpected = new RegExp(
+      `"command":"${escapeRegex(text)}(?:[\\s"]|$)`,
+    );
+    const dynamicExpected = new RegExp(
+      `"command":"${escapeRegex(text)}(?:[\\s"]|$)`,
+    );
+
+    expect(directoryExpected).toBeDefined();
+    expect(directory.source).toBe(directoryExpected.source);
+    expect(singleFile.source).toBe(singleFileExpected.source);
+    expect(dynamic.source).toBe(dynamicExpected.source);
+    expect(dynamic.source).not.toBe(directory.source);
+  });
+
+  it('returns normalized native sources for generated slash patterns', () => {
+    for (const input of [
+      { path: 'directory-commandRegex', text: '/' },
+      { path: 'single-file-commandRegex', text: '/' },
+      { path: 'directory-commandPrefix', text: 'cat /tmp/a' },
+    ] satisfies readonly PolicyRegexInput[]) {
+      const regex = normalizePolicyRegex(input);
+      expect(regex.source).toBe(new RegExp(regex.source, regex.flags).source);
+    }
   });
 });

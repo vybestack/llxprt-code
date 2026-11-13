@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { z } from 'zod';
+import { DefinitionError } from './errors.js';
 import {
   contentSchema,
   transcriptPartSchema,
@@ -24,7 +25,7 @@ import {
   provenanceSchema,
   policySourceStackSchema,
   restrictionRuleSchema,
-  validatePolicyContract,
+  validateEmbeddedPolicyDocuments,
 } from './definition.js';
 import type {
   AgentCommand,
@@ -35,6 +36,7 @@ import type {
   ImportNotice,
   JournalRecord,
   ModelToolChoice,
+  PolicyDocument,
   PolicyEvaluationError,
   StoreError,
   ToolDescriptor,
@@ -101,14 +103,38 @@ const hookProvenanceSchema = z
     order: z.number().int().nonnegative(),
   })
   .strict();
-const hookAuditEntrySchema = z
-  .object({
-    provenance: hookProvenanceSchema,
-    status: z.enum(['success', 'timeout', 'process-error', 'cancelled']),
-    output: jsonValueSchema.optional(),
-    diagnostic: z.string().optional(),
-  })
-  .strict();
+const hookAuditEntrySchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      provenance: hookProvenanceSchema,
+      status: z.literal('success'),
+      output: jsonValueSchema.optional(),
+      diagnostic: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      provenance: hookProvenanceSchema,
+      status: z.literal('process-error'),
+      output: jsonValueSchema.optional(),
+      diagnostic: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      provenance: hookProvenanceSchema,
+      status: z.literal('timeout'),
+      diagnostic: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      provenance: hookProvenanceSchema,
+      status: z.literal('cancelled'),
+      diagnostic: z.string().optional(),
+    })
+    .strict(),
+]);
 const hookProducerSchema = z
   .object({ path: nonEmpty, provenance: hookProvenanceSchema })
   .strict();
@@ -159,71 +185,95 @@ const hookEventEnvelopeSchema = z
     audit: z.array(hookAuditEntrySchema),
   })
   .strict();
-export const AgentCommandSchema = z.object({ id: nonEmpty.optional() }).and(
-  z.discriminatedUnion('type', [
-    z
-      .object({
-        type: z.literal('set-model'),
-        selection: modelSelectionSchema,
-      })
-      .strict(),
-    z
-      .object({
-        type: z.literal('set-preferences'),
-        layers: z.array(policyLayerSchema),
-        approvalMode: z.enum(['default', 'autoEdit', 'yolo']),
-      })
-      .strict(),
-    z
-      .object({
-        type: z.literal('set-authority'),
-        rules: z.array(restrictionRuleSchema),
-      })
-      .strict(),
-    z
-      .object({
-        type: z.literal('set-source-stacks'),
-        stacks: z.array(policySourceStackSchema),
-      })
-      .strict(),
-    z.object({ type: z.literal('set-limits'), limits: limitsSchema }).strict(),
-    z
-      .object({
-        type: z.literal('set-mode'),
-        mode: z.enum(['normal', 'plan']),
-      })
-      .strict(),
-    z
-      .object({
-        type: z.literal('set-instructions'),
-        instructions: z.array(instructionSchema),
-      })
-      .strict(),
-    z
-      .object({
-        type: z.literal('set-context'),
-        items: z.array(
-          z
-            .object({
-              id: nonEmpty,
-              source: nonEmpty,
-              trust: z.enum(['trusted', 'untrusted']),
-              lifetime: z.enum(['next-turn', 'until-replaced', 'session']),
-              parts: z.array(contentSchema),
-            })
-            .strict(),
-        ),
-      })
-      .strict(),
-    z
-      .object({ type: z.literal('remove-context'), ids: z.array(nonEmpty) })
-      .strict(),
-    z.object({ type: z.literal('revoke-grant'), grant: nonEmpty }).strict(),
-    z.object({ type: z.literal('compact') }).strict(),
-    z.object({ type: z.literal('rewind'), to: nonEmpty }).strict(),
-    z.object({ type: z.literal('clear') }).strict(),
-  ]),
-);
+const commandBase = { id: nonEmpty.optional() };
+export const AgentCommandSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-model'),
+      selection: modelSelectionSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-preferences'),
+      layers: z.array(policyLayerSchema),
+      approvalMode: z.enum(['default', 'autoEdit', 'yolo']),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-authority'),
+      rules: z.array(restrictionRuleSchema),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-source-stacks'),
+      stacks: z.array(policySourceStackSchema),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-limits'),
+      limits: limitsSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-mode'),
+      mode: z.enum(['normal', 'plan']),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-instructions'),
+      instructions: z.array(instructionSchema),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-context'),
+      items: z.array(
+        z
+          .object({
+            id: nonEmpty,
+            source: nonEmpty,
+            trust: z.enum(['trusted', 'untrusted']),
+            lifetime: z.enum(['next-turn', 'until-replaced', 'session']),
+            parts: z.array(contentSchema),
+          })
+          .strict(),
+      ),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('remove-context'),
+      ids: z.array(nonEmpty),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('revoke-grant'),
+      grant: nonEmpty,
+    })
+    .strict(),
+  z.object({ ...commandBase, type: z.literal('compact') }).strict(),
+  z
+    .object({ ...commandBase, type: z.literal('rewind'), to: nonEmpty })
+    .strict(),
+  z.object({ ...commandBase, type: z.literal('clear') }).strict(),
+]);
 export const PolicyEvaluationErrorSchema = z
   .object({
     code: z.literal('authority-overrides-preference'),
@@ -289,6 +339,15 @@ export const HookModelResponseSchema = z
     declaredUsage: UsageReportSchema.optional(),
   })
   .strict();
+export const BeforeModelEffectSchema = z
+  .object({
+    request: HookRequestPatchSchema.optional(),
+    synthetic: HookModelResponseSchema.optional(),
+  })
+  .strict();
+export const AfterModelEffectSchema = z
+  .object({ replacement: HookModelResponseSchema.optional() })
+  .strict();
 export const StoreErrorSchema = z
   .object({
     kind: z.enum(['unavailable', 'corrupt', 'aborted', 'import-required']),
@@ -343,13 +402,17 @@ export function validateAgentCommand(value: unknown): AgentCommand {
     command.type === 'set-preferences' ||
     command.type === 'set-authority'
   ) {
-    validatePolicyContract({
+    const policy: PolicyDocument = {
       authority: command.type === 'set-authority' ? command.rules : [],
       preferences: command.type === 'set-preferences' ? command.layers : [],
       sourceStacks: command.type === 'set-source-stacks' ? command.stacks : [],
       approvalMode: 'default',
       fallback: 'deny',
-    });
+    };
+    const problems = validateEmbeddedPolicyDocuments([
+      { value: policy, path: ['policy'] },
+    ]);
+    if (problems.length > 0) throw new DefinitionError(problems);
   }
   return command;
 }
@@ -407,6 +470,19 @@ export function validateHookEventResult<T>(
     value,
     'Invalid hook event result',
   );
+  const auditOrderProblem = envelope.audit.findIndex(
+    (entry, index) =>
+      index > 0 &&
+      envelope.audit[index - 1].provenance.order > entry.provenance.order,
+  );
+  if (auditOrderProblem >= 0)
+    throw new DefinitionError([
+      {
+        code: 'invalid-hook-audit-order',
+        path: ['audit', auditOrderProblem, 'provenance', 'order'],
+        message: 'Hook audit entries must retain configured order.',
+      },
+    ]);
   const { value: effectiveValue, ...effective } = envelope.effective;
   if (effectiveValue === undefined) return { effective, audit: envelope.audit };
   return {

@@ -483,6 +483,59 @@ export function validatePolicyContract(policy: PolicyDocument): void {
   if (problems.length > 0) throw new DefinitionError(problems);
 }
 
+export function validateEmbeddedPolicyDocuments(
+  documents: ReadonlyArray<{
+    readonly value: unknown;
+    readonly path: ReadonlyArray<string | number>;
+  }>,
+): DefinitionProblem[] {
+  const problems: DefinitionProblem[] = [];
+  for (const document of documents) {
+    const parsed = policySchema.safeParse(document.value);
+    if (!parsed.success) continue;
+    try {
+      validatePolicyContract(parsed.data);
+    } catch (error) {
+      if (!(error instanceof DefinitionError)) throw error;
+      problems.push(
+        ...error.problems.map((problem) => ({
+          ...problem,
+          path: [
+            ...document.path,
+            ...(problem.path[0] === 'policy'
+              ? problem.path.slice(1)
+              : problem.path),
+          ],
+        })),
+      );
+    }
+  }
+  return problems;
+}
+
+function embeddedPolicies(value: unknown): ReadonlyArray<{
+  readonly value: unknown;
+  readonly path: ReadonlyArray<string | number>;
+}> {
+  if (!isStringRecord(value)) return [];
+  const documents: Array<{
+    readonly value: unknown;
+    readonly path: ReadonlyArray<string | number>;
+  }> = [];
+  if (Object.hasOwn(value, 'policy'))
+    documents.push({ value: value.policy, path: ['policy'] });
+  if (Array.isArray(value.subagents)) {
+    for (const [index, subagent] of value.subagents.entries()) {
+      if (isStringRecord(subagent) && Object.hasOwn(subagent, 'policy'))
+        documents.push({
+          value: subagent.policy,
+          path: ['subagents', index, 'policy'],
+        });
+    }
+  }
+  return documents;
+}
+
 export function validateDefinition(value: unknown): AgentDefinition {
   const plainData = isPlainData(value, new Set(), true);
   if (!plainData) {
@@ -495,12 +548,13 @@ export function validateDefinition(value: unknown): AgentDefinition {
       },
     ]);
   }
-  const result = AgentDefinitionSchema.safeParse(cloneDataDescriptors(value));
+  const cloned = cloneDataDescriptors(value);
+  const result = AgentDefinitionSchema.safeParse(cloned);
   const problems = result.success ? [] : problemsFrom(result.error);
+  problems.push(...validateEmbeddedPolicyDocuments(embeddedPolicies(cloned)));
   if (problems.length > 0) throw new DefinitionError(problems);
   if (!result.success)
     throw new Error('Definition parsing failed without diagnostics.');
-  validatePolicyContract(result.data.policy);
   return result.data;
 }
 

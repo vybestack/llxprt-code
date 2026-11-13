@@ -73,21 +73,20 @@ describe('agent-core public type contracts', () => {
         if (line < 0) throw new Error(`Missing diagnostic marker: ${marker}`);
         return line + 1;
       };
-      const diagnostics = ts
+      const fixtureDiagnostics = ts
         .getPreEmitDiagnostics(program)
         .filter(
           (diagnostic) => diagnostic.file?.fileName === invalidTypeFixturePath,
-        )
-        .map((diagnostic) => {
-          const file = diagnostic.file;
-          if (!file) throw new Error('Fixture diagnostic is missing its file.');
-          return {
-            code: diagnostic.code,
-            line:
-              file.getLineAndCharacterOfPosition(diagnostic.start ?? 0).line +
-              1,
-          };
-        });
+        );
+      const diagnostics = fixtureDiagnostics.map((diagnostic) => {
+        const file = diagnostic.file;
+        if (!file) throw new Error('Fixture diagnostic is missing its file.');
+        return {
+          code: diagnostic.code,
+          line:
+            file.getLineAndCharacterOfPosition(diagnostic.start ?? 0).line + 1,
+        };
+      });
 
       expect(diagnostics).toContainEqual({
         code: 2353,
@@ -126,9 +125,25 @@ describe('agent-core public type contracts', () => {
         line: lineForMarker('@expect-import-notice'),
       });
       expect(diagnostics).toContainEqual({
-        code: 2739,
+        code: 2741,
         line: lineForMarker('@expect-regex-evidence'),
       });
+      const regexEvidenceDiagnostic = fixtureDiagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === 2741 &&
+          diagnostic.file !== undefined &&
+          diagnostic.start !== undefined &&
+          diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start).line +
+            1 ===
+            lineForMarker('@expect-regex-evidence'),
+      );
+      expect(
+        regexEvidenceDiagnostic &&
+          ts.flattenDiagnosticMessageText(
+            regexEvidenceDiagnostic.messageText,
+            '\\n',
+          ),
+      ).toContain("Property 'input'");
       expect(diagnostics).toContainEqual({
         code: 2741,
         line: lineForMarker('@expect-request-boundary'),
@@ -162,9 +177,31 @@ describe('agent-core public type contracts', () => {
         line: lineForMarker('@expect-source-stack-command'),
       });
       expect(diagnostics).toContainEqual({
-        code: 2741,
+        code: 2739,
         line: lineForMarker('@expect-replay-invalidation') - 1,
       });
+      expect(diagnostics).toContainEqual({
+        code: 2739,
+        line: lineForMarker('@expect-hook-change-outcome') + 1,
+      });
+      const hookChangeDiagnostic = fixtureDiagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === 2739 &&
+          diagnostic.file !== undefined &&
+          diagnostic.start !== undefined &&
+          diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start).line +
+            1 ===
+            lineForMarker('@expect-hook-change-outcome') + 1,
+      );
+      const hookChangeMessage =
+        hookChangeDiagnostic &&
+        ts.flattenDiagnosticMessageText(
+          hookChangeDiagnostic.messageText,
+          '\\n',
+        );
+      expect(hookChangeMessage).toContain('disposition');
+      expect(hookChangeMessage).toContain('changed');
+      expect(hookChangeMessage).toContain('aggregate');
     },
   );
 });
