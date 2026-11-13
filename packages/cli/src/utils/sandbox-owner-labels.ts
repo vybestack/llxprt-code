@@ -91,7 +91,8 @@ function observeCurrentProcessStartTime(): number | undefined {
   }
 }
 
-function buildCurrentSandboxOwner(): SandboxOwnerMetadata {
+/** Identity of this process instance, recorded on every resource it owns. */
+export function buildCurrentSandboxOwner(): SandboxOwnerMetadata {
   const observedStartTimeMs = observeCurrentProcessStartTime();
   return observedStartTimeMs === undefined
     ? {

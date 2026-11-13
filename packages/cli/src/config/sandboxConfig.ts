@@ -22,6 +22,7 @@ import {
 } from './sandboxProfiles.js';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { probeBwrapCapability } from '../utils/sandbox-bwrap-capability.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -84,6 +85,7 @@ type RuntimeSandboxProfile = Omit<
 const VALID_SANDBOX_COMMANDS: ReadonlyArray<SandboxConfig['command']> = [
   'docker',
   'podman',
+  'bwrap',
   'sandbox-exec',
 ];
 
@@ -91,6 +93,7 @@ const VALID_ENGINE_CHOICES: readonly SandboxProfileEngine[] = [
   'auto',
   'docker',
   'podman',
+  'bwrap',
   'sandbox-exec',
   'none',
 ];
@@ -310,6 +313,9 @@ function pickAvailableSandboxCommand(): SandboxConfig['command'] | '' {
   if (os.platform() === 'darwin' && commandExists.sync('sandbox-exec')) {
     return 'sandbox-exec';
   }
+  if (os.platform() === 'linux' && commandExists.sync('bwrap')) {
+    return 'bwrap';
+  }
   return '';
 }
 
@@ -335,7 +341,11 @@ export function isLlxprtWrittenSandboxValue(
   if (value === undefined || value === '') {
     return false;
   }
-  return value === 'sandbox-exec' || NESTED_CONTAINER_NAME.test(value);
+  return (
+    value === 'bwrap' ||
+    value === 'sandbox-exec' ||
+    NESTED_CONTAINER_NAME.test(value)
+  );
 }
 
 /**
@@ -461,9 +471,12 @@ function pickRequestedSandboxCommand(
   if (commandExists.sync('podman')) {
     return 'podman';
   }
+  if (os.platform() === 'linux' && commandExists.sync('bwrap')) {
+    return 'bwrap';
+  }
   throw new FatalSandboxError(
     `${source} is true but failed to determine command for sandbox; ` +
-      `install docker or podman, or ${sandboxEngineGuidance(source)}`,
+      `install docker, podman, or bwrap, or ${sandboxEngineGuidance(source)}`,
   );
 }
 
@@ -489,6 +502,15 @@ function resolveSandboxEngine(
 ): SandboxConfig['command'] | '' {
   if (engine === 'none') {
     return '';
+  }
+
+  if (engine === 'bwrap') {
+    if (os.platform() !== 'linux' || !commandExists.sync('bwrap')) {
+      throw new FatalSandboxError(
+        'The explicit bwrap sandbox engine requires Linux and an installed bwrap binary; no fallback sandbox will be started.',
+      );
+    }
+    return 'bwrap';
   }
 
   if (engine && engine !== 'auto') {
@@ -667,6 +689,99 @@ function resolveBaseSandboxCommand(
   return baseCommand;
 }
 
+function resolveBwrapNetwork(
+  sandboxProfile: SandboxProfile | undefined,
+): 'on' | 'off' | undefined {
+  if (sandboxProfile?.network === 'proxied') {
+    throw new FatalSandboxError(
+      'bwrap does not support network: "proxied" because direct connections cannot be blocked; use network: "off" or "on".',
+    );
+  }
+  const variable = ['LLXPRT_SANDBOX_NETWORK', 'SANDBOX_NETWORK'].find((key) =>
+    process.env[key]?.trim(),
+  );
+  const value = variable
+    ? process.env[variable]?.trim().toLowerCase()
+    : undefined;
+  if (value === 'proxied') {
+    throw new FatalSandboxError(
+      `bwrap does not support proxied network mode from ${variable}; use network: "off" or "on".`,
+    );
+  }
+  if (value !== undefined && value !== 'on' && value !== 'off') {
+    throw new FatalSandboxError(
+      `Invalid bwrap network mode '${value}' from ${variable}; use 'off' or 'on'.`,
+    );
+  }
+  return sandboxProfile?.network ?? value;
+}
+
+function assertNoUnsupportedBwrapControls(
+  network: 'on' | 'off' | undefined,
+): void {
+  const abstractBusVisible = [
+    process.env.DBUS_SESSION_BUS_ADDRESS,
+    process.env.DBUS_SYSTEM_BUS_ADDRESS,
+  ].some((address) => address?.includes('unix:abstract=') === true);
+  if (abstractBusVisible && network !== 'off') {
+    throw new FatalSandboxError(
+      'bwrap cannot hide an abstract D-Bus socket while sharing the host network; set network: "off" or use a pathname D-Bus address.',
+    );
+  }
+  if (process.env.SANDBOX_FLAGS?.trim()) {
+    throw new FatalSandboxError(
+      'bwrap does not accept SANDBOX_FLAGS; express access through sandbox-profile mounts and environment fields.',
+    );
+  }
+  const controls = [
+    'LLXPRT_SANDBOX_CPUS',
+    'SANDBOX_CPUS',
+    'LLXPRT_SANDBOX_MEMORY',
+    'SANDBOX_MEMORY',
+    'LLXPRT_SANDBOX_PIDS',
+    'SANDBOX_PIDS',
+  ].filter((key) => process.env[key]?.trim());
+  if (controls.length > 0) {
+    throw new FatalSandboxError(
+      `bwrap cannot enforce resource environment controls (${controls.join(', ')}); remove them or select Docker or Podman.`,
+    );
+  }
+}
+
+function warnBwrapImage(
+  argv: SandboxCliArgs,
+  sandboxProfile: SandboxProfile | undefined,
+): void {
+  if (argv.sandboxImage || sandboxProfile?.image) {
+    globalThis.console.warn(
+      'bwrap does not use a sandbox image; the configured image is ignored.',
+    );
+  }
+}
+
+function resolveBwrapSandboxConfig(
+  sandboxProfile: SandboxProfile | undefined,
+  argv: SandboxCliArgs,
+): SandboxConfig {
+  const unsupportedResources = Object.keys(sandboxProfile?.resources ?? {});
+  if (unsupportedResources.length > 0) {
+    throw new FatalSandboxError(
+      `bwrap cannot enforce sandbox profile resource limits (${unsupportedResources.map((key) => `resources.${key}`).join(', ')}); remove those fields or select Docker or Podman.`,
+    );
+  }
+  const network = resolveBwrapNetwork(sandboxProfile);
+  assertNoUnsupportedBwrapControls(network);
+  probeBwrapCapability();
+  warnBwrapImage(argv, sandboxProfile);
+  return {
+    command: 'bwrap',
+    mounts: sandboxProfile?.mounts,
+    env: sandboxProfile?.env,
+    network,
+    sshAgent: sandboxProfile?.sshAgent,
+  };
+}
+
 export async function loadSandboxConfig(
   settings: Settings,
   argv: SandboxCliArgs,
@@ -720,6 +835,10 @@ export async function loadSandboxConfig(
 
   if (!command) {
     return undefined;
+  }
+
+  if (command === 'bwrap') {
+    return resolveBwrapSandboxConfig(sandboxProfile, argv);
   }
 
   const image = resolveSandboxImage(

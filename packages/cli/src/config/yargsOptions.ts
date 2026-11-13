@@ -228,8 +228,8 @@ export const innerCommandOptions: Record<string, Options> = {
   },
   'sandbox-engine': {
     type: 'string',
-    choices: ['auto', 'docker', 'podman', 'sandbox-exec', 'none'],
-    description: 'Sandbox engine (auto|docker|podman|sandbox-exec|none).',
+    choices: ['auto', 'docker', 'podman', 'bwrap', 'sandbox-exec', 'none'],
+    description: 'Sandbox engine (auto|docker|podman|bwrap|sandbox-exec|none).',
   },
   'sandbox-profile-load': {
     type: 'string',

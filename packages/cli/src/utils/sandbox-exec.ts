@@ -8,7 +8,10 @@ import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  ContainerSandboxConfig,
+} from '@vybestack/llxprt-code-core';
 import {
   FatalSandboxError,
   getErrorMessage,
@@ -79,7 +82,7 @@ function removeSessionTmpdir(sessionTmpdir: string): void {
 
 /** Validates image and builds initial container run args. */
 async function prepareContainerImageAndArgs(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   workspacePlan: ContainerWorkspacePlan,
   dependencyMountPlan: DependencyMountPlan,
   lifecycle: SandboxLaunchLifecycle,
@@ -165,7 +168,7 @@ async function prepareContainerImageAndArgs(
 
 /** Sets up SSH forwarding, port forwarding, networking, and env vars. */
 async function prepareContainerNetworkAndEnv(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   args: string[],
   workdir: string,
   isPodmanMacOS: boolean,
@@ -243,7 +246,7 @@ async function prepareContainerEntrypoint({
 }
 
 async function planWorkspacesAndDependencies(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   cliConfig: Config | undefined,
   directories: (() => readonly string[]) | undefined,
 ): Promise<{
@@ -272,7 +275,7 @@ async function planWorkspacesAndDependencies(
  * no stanza and keep today's fully-ephemeral behavior.
  */
 function planCheckpointPersistence(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   workdir: string,
   cliConfig: Config | undefined,
 ): { plan: CheckpointStoragePlan; stanza: string | undefined } {
@@ -289,7 +292,7 @@ function planCheckpointPersistence(
 
 /** Runs the Docker/Podman sandbox path: image build, arg assembly, and proxy setup. */
 async function prepareContainerSandbox(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   nodeArgs: string[],
   cliConfig: Config | undefined,
   cliArgs: string[],
@@ -381,7 +384,7 @@ async function prepareContainerSandbox(
 
 async function startCredentialProxyGuarded(
   args: string[],
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   sessionTmpdir: string,
   reservedTunnelPorts: Set<number>,
   entrypointPrefixes: string[],
@@ -447,7 +450,7 @@ export async function awaitSandboxExit(
 
 /** Spawns container and proxy, wires cleanup, and waits for exit. */
 async function executeContainerSandbox(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   cliConfig: Config | undefined,
   prepared: Awaited<ReturnType<typeof prepareContainerSandbox>>,
   lifecycle: SandboxLaunchLifecycle,
@@ -533,7 +536,7 @@ async function executeContainerSandbox(
 
 /** Runs the Docker/Podman sandbox path. */
 export async function runContainerSandbox(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   nodeArgs: string[],
   cliConfig?: Config,
   cliArgs: string[] = [],
@@ -599,7 +602,7 @@ function buildSandboxImage(
   isCustomProjectSandbox: boolean,
   projectSandboxDockerfile: string,
   image: string,
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
 ): void {
   const normalizedGcPath = gcPath.split(/[\\/]/).join('/');
   if (!normalizedGcPath.includes('gemini-cli/packages/')) {

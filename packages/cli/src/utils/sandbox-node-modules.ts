@@ -35,7 +35,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { globSync } from 'glob';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
-import type { SandboxConfig } from '@vybestack/llxprt-code-core';
+import type { ContainerSandboxConfig } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   canonicalizeExistingPath,
@@ -360,7 +360,7 @@ interface MutableDependencyVolumeLifecycle extends DependencyVolumeLifecycle {
   recordCreatedVolume(name: string): void;
 }
 
-function containerEngine(config: SandboxConfig): 'docker' | 'podman' {
+function containerEngine(config: ContainerSandboxConfig): 'docker' | 'podman' {
   if (config.command === 'docker' || config.command === 'podman') {
     return config.command;
   }
@@ -555,7 +555,7 @@ export function planPrivateDependencyMounts(
 }
 
 export function addPrivateDependencyMounts(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   args: string[],
   workspaceRoots: WorkspaceRoots,
   planned: DependencyMountPlan = planPrivateDependencyMounts(workspaceRoots),

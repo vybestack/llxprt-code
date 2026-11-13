@@ -16,6 +16,7 @@ import {
 } from './sandbox-env.js';
 import { runSeatbeltSandbox } from './sandbox-seatbelt.js';
 import { runContainerSandbox } from './sandbox-exec.js';
+import { runBwrapSandbox } from './sandbox-bwrap.js';
 
 export {
   buildSandboxEnvArgs,
@@ -106,6 +107,14 @@ export async function start_sandbox(
   try {
     if (config.command === 'sandbox-exec') {
       exitCode = await runSeatbeltSandbox(
+        config,
+        nodeArgs,
+        cliConfig,
+        cliArgs,
+        directories,
+      );
+    } else if (config.command === 'bwrap') {
+      exitCode = await runBwrapSandbox(
         config,
         nodeArgs,
         cliConfig,
