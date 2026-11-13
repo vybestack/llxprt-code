@@ -18,6 +18,7 @@ import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { createMockCommandContext } from '../packages/cli/src/__tests__/mockCommandContext.js';
 import { createDumpcontextCommand } from '../packages/cli/src/ui/commands/dumpcontextCommand.js';
 import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 class WatchedHistory extends HistoryService {
   opened = 0;
@@ -106,7 +107,8 @@ async function run(
 }> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dump-runtime-plugin-'));
   const cache = spyOn(Storage, 'getGlobalCacheDir').mockReturnValue(root);
-  const history = new WatchedHistory();
+  const scratchRoots = new ScratchRootOwner();
+  const history = new WatchedHistory({ scratchRoots });
   const agent = await createAgent({
     provider: PLUGIN_NAME,
     model: PLUGIN_MODEL,
@@ -207,6 +209,7 @@ async function run(
     };
   } finally {
     await history.dispose();
+    scratchRoots.removeRoot();
     cache.mockRestore();
     await agent.dispose();
     await fs.rm(root, { recursive: true, force: true });

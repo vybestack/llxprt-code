@@ -103,8 +103,10 @@ class RecordingProvider implements IProvider {
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     this.projectionInput = observe(options);
-    const serialized = JSON.stringify(options.contents);
-    const tokens = Math.max(Math.ceil(serialized.length / 4), 1);
+    let bytes = 0;
+    for await (const row of options.contents)
+      bytes += Buffer.byteLength(JSON.stringify(row));
+    const tokens = Math.max(Math.ceil(bytes / 4), 1);
     return {
       model: 'test-model',
       protocol: 'anthropic-messages',

@@ -1,4 +1,4 @@
-import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { ScratchRootOwner } from '../../../packages/core/src/storage/scratch-root.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -6,7 +6,7 @@ import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__te
  */
 
 import { createRuntimeTokenizerFactory } from '../../../packages/providers/src/composition/runtimeTokenizerFactory.js';
-const tokenizerScratchRoots = createTestScratchOwner();
+const tokenizerScratchRoots = new ScratchRootOwner();
 
 const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 if (typeof factory.prepareTokenizer !== 'function') {
