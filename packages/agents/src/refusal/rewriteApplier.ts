@@ -68,6 +68,8 @@ function changedEntries(
  * it changed, or if the journal cannot take the record, the history is left as
  * it was and the caller stops. A request that aborts before the queued commit
  * runs is not a failed commit: its abort is thrown and nothing is written.
+ * The signal stays live inside the commit: an abort before the journal append
+ * rolls everything back and is thrown, one after it leaves the rewrite in place.
  */
 export async function applyReviewedRewrite(
   request: RewriteRequest,
@@ -79,6 +81,7 @@ export async function applyReviewedRewrite(
     const outcome = await request.history.replaceIfUnchanged({
       expected: request.window.snapshot,
       commitUnchanged: request.historyUnchanged,
+      signal: request.signal,
       rewrite: () => {
         request.signal?.throwIfAborted();
         return applyReviewRewrites(request.window, request.rewrites);

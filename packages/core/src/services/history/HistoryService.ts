@@ -71,6 +71,14 @@ export interface HistoryRewriteRequest {
    * rewrite whose substance lies outside the history (and is journaled).
    */
   readonly commitUnchanged?: boolean;
+  /**
+   * Cancels the rewrite until its commit point. The signal is checked after
+   * every awaited step and right before the effect finalizers (the last of
+   * which, the caller-owned effect, is the commit point); an abort before then
+   * rolls the rewrite back and rejects with the abort reason. Once the commit
+   * point is passed the rewrite stays committed.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -270,6 +278,7 @@ export class HistoryService extends HistoryServiceCore {
   private async replaceIfUnchangedInQueue(
     request: HistoryRewriteRequest,
   ): Promise<HistoryRewriteOutcome> {
+    request.signal?.throwIfAborted();
     const current = this.history;
     if (!sameEntries(current, request.expected)) return 'stale';
     const rewritten = [...request.rewrite([...current])];
@@ -286,15 +295,18 @@ export class HistoryService extends HistoryServiceCore {
         ? rewritten
         : invalidateRetainedRewrite(rewritten, firstChanged);
     await this.waitForTokenUpdates();
+    request.signal?.throwIfAborted();
     const nextHistoryTokens = await this.estimateTokensForContents(
       nextHistory,
       request.modelName,
     );
+    request.signal?.throwIfAborted();
     await this.commitHistoryMutation({
       nextHistory,
       nextHistoryTokens,
       options: {},
       prepareEffect: request.prepareEffect,
+      signal: request.signal,
     });
     if (
       firstChanged !== undefined &&

@@ -307,4 +307,77 @@ describe('HistoryService.replaceIfUnchanged', () => {
 
     expect(outcome).toBe('stale');
   });
+
+  it('rejects with the abort and prepares nothing when cancelled after the rewrite was computed', async () => {
+    const history = await seeded([createUserMessage('goal'), ai('answer')]);
+    const before = history.getAll();
+    const controller = new AbortController();
+    const steps: string[] = [];
+
+    const failure = await history
+      .replaceIfUnchanged({
+        expected: before,
+        signal: controller.signal,
+        rewrite: (current) => {
+          const rewritten = replaceText(current, 1, 'answer rewritten');
+          controller.abort();
+          return rewritten;
+        },
+        prepareEffect: () => {
+          steps.push('prepare');
+          return undefined;
+        },
+      })
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    expect({
+      aborted: failure === controller.signal.reason,
+      steps,
+      same: history.getAll().every((entry, index) => entry === before[index]),
+    }).toStrictEqual({ aborted: true, steps: [], same: true });
+  });
+
+  it('rolls back the prepared effect and keeps the history when cancelled while the effect publishes', async () => {
+    const history = await seeded([createUserMessage('goal'), ai('answer')]);
+    const before = history.getAll();
+    const controller = new AbortController();
+    const steps: string[] = [];
+
+    const failure = await history
+      .replaceIfUnchanged({
+        expected: before,
+        signal: controller.signal,
+        rewrite: (current) => replaceText(current, 1, 'answer rewritten'),
+        prepareEffect: () => ({
+          publish: async () => {
+            steps.push('publish');
+            controller.abort();
+            await Promise.resolve();
+          },
+          rollback: () => {
+            steps.push('rollback');
+          },
+          finalize: () => {
+            steps.push('finalize');
+          },
+        }),
+      })
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    expect({
+      aborted: failure === controller.signal.reason,
+      steps,
+      final: texts(history.getAll()),
+    }).toStrictEqual({
+      aborted: true,
+      steps: ['publish', 'rollback'],
+      final: ['goal', 'answer'],
+    });
+  });
 });

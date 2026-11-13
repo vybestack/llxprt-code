@@ -890,3 +890,40 @@ noted per finding.
   the reviewer. No notice when the profile cannot be used.
 - Evidence: `refusalReviewNotice.behavior.test.ts` reads the public events
   already delivered while the reviewer endpoint is answering (red before).
+
+## Review round 2 remediation
+
+### M6 (incomplete) Cancellation inside the rewrite commit (valid, fixed)
+
+- Cause: round 1 checked the abort before the queued rewrite ran, but the
+  commit then awaited token estimation, effect preparation (flush, persistence
+  `prepareSave`) and publication with no further check. Aborting inside an
+  asynchronous `prepareRefusalRewrite` still returned `applied`, published,
+  appended the `refusal_rewrite` record and replaced the live summary.
+- Fix: `HistoryRewriteRequest.signal` (optional) is threaded into the queued
+  mutation and into `commitHistoryMutation`. It is checked at the start of the
+  queued mutation, after the token wait and the estimate, after each prepared
+  effect (the effect is recorded first, so an abort rolls it back instead of
+  leaking its persistence preparation), after each `publish`, and, through
+  `finalizeMutationEffects(effects, signal)`, immediately before each
+  finalizer. The caller-owned effect is last, so the check before its finalizer
+  (`recording.finalize`, the H4 commit point) is the last one: an abort before
+  it rolls back live, persisted and journal state and rejects with the abort
+  reason, which `applyReviewedRewrite` rethrows so recovery stops without
+  resending. Nothing is checked after the journal append, so a later cancel
+  keeps the committed rewrite. Batch, compression, density and
+  semantic-media-purge commits pass no signal and behave as before.
+- Evidence: `RecordingIntegration.cancelBeforeCommit.test.ts` (real
+  HistoryService, SessionRecordingService, SessionPersistenceService): a cancel
+  while the rewrite is prepared or published leaves live, persisted and journal
+  on the original and rejects with `AbortError` (both red before: `applied`
+  and a `refusal_rewrite` record); a cancel after the journal append leaves all
+  three on the rewrite. `rewriteApplier.test.ts` (red before) covers the abort
+  inside an asynchronous `prepareRefusalRewrite`; `refusalReviewer.test.ts` and
+  `HistoryService.replaceIfUnchanged.test.ts` cover the reviewer-level abort and
+  the post-rewrite and publish checks (added with the fix).
+- Limit: no agent-level test aborts inside the commit, because the public agent
+  offers no seam to hold the real journal preparation open without a timing
+  race. The agent-level `refusalReviewCancel.behavior.test.ts` still proves an
+  aborted request is not resent; the reviewer-level test proves the commit
+  abort reaches the caller as an abort rather than a stopped review.

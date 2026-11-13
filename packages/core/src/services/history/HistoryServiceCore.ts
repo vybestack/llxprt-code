@@ -67,6 +67,7 @@ import {
   type MutationFailure,
   combineMutationFailures,
 } from './historyMutationFailure.js';
+import { prepareMutationEffects } from './historyMutationEffects.js';
 
 type HistoryTokenizerSelection = Pick<RuntimeTokenizerFactory, 'getTokenizer'>;
 
@@ -918,38 +919,14 @@ export abstract class HistoryServiceCore
     }
   }
 
-  private async prepareMutationEffects(
-    effects: PreparedHistoryBatchEffect[],
-    publication: HistoryBatchPublication | undefined,
-    previousHistory: readonly IContent[],
-    nextHistory: readonly IContent[],
-    adopted: readonly HistoryOwnedMediaReservation[],
-    prepareEffect: HistoryEffectFactory | undefined,
-  ): Promise<void> {
-    if (this.mediaOwner !== undefined) {
-      effects.push(
-        await this.mediaOwner.prepareReplacement({
-          previous: previousHistory,
-          next: nextHistory,
-          adopted,
-        }),
-      );
-    }
-    if (publication !== undefined) {
-      for (const participant of this.batchParticipants) {
-        effects.push(await participant(publication));
-      }
-    }
-    const requested = await prepareEffect?.(nextHistory);
-    if (requested !== undefined) effects.push(requested);
-  }
-
   protected async commitHistoryMutation(input: {
     readonly nextHistory: readonly IContent[];
     readonly nextHistoryTokens: number;
     readonly publishedContents?: readonly IContent[];
     readonly options: HistoryBatchOptions;
     readonly prepareEffect?: HistoryEffectFactory;
+    /** Aborting before the finalizers run rolls the mutation back. */
+    readonly signal?: AbortSignal;
   }): Promise<void> {
     const previousHistory = this.history;
     const previousTokens = this.totalTokens;
@@ -970,16 +947,19 @@ export abstract class HistoryServiceCore
     const effects: PreparedHistoryBatchEffect[] = [];
     let historyPublished = false;
     try {
-      await this.prepareMutationEffects(
-        effects,
+      await prepareMutationEffects(effects, {
+        mediaOwner: this.mediaOwner,
+        participants: this.batchParticipants,
         publication,
         previousHistory,
         nextHistory,
-        input.options.adoptedOwners ?? [],
-        input.prepareEffect,
-      );
+        adopted: input.options.adoptedOwners ?? [],
+        prepareEffect: input.prepareEffect,
+        signal: input.signal,
+      });
       for (const effect of effects) {
         await effect.publish();
+        input.signal?.throwIfAborted();
       }
 
       this.invalidatePendingSyncs();
@@ -993,7 +973,7 @@ export abstract class HistoryServiceCore
         contentId: null,
       });
       await input.options.afterPublication?.();
-      await finalizeMutationEffects(effects);
+      await finalizeMutationEffects(effects, input.signal);
       this.contentOrigins = retainContentOrigins(
         this.contentOrigins,
         nextHistory,

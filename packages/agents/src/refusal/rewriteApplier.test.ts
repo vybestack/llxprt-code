@@ -39,6 +39,8 @@ function summary(text: string): IContent {
 class Journal {
   readonly published: RefusalRewritePayload[] = [];
   readonly rolledBack: RefusalRewritePayload[] = [];
+  /** Runs inside the asynchronous preparation, before it resolves. */
+  onPrepare: (() => Promise<void>) | undefined;
   constructor(private readonly failToPublish = false) {}
 
   execution(): AgentChatRecordingExecution {
@@ -47,8 +49,9 @@ class Journal {
       hookOwner: { sessionId: () => 's', transcriptPath: () => undefined },
       transcriptPath: () => undefined,
       persistSemanticMediaPurge: () => Promise.resolve(),
-      prepareRefusalRewrite: (payload) =>
-        Promise.resolve({
+      prepareRefusalRewrite: async (payload) => {
+        await this.onPrepare?.();
+        return {
           publish: () => {
             if (this.failToPublish) throw new Error('journal is unwritable');
             this.published.push(payload);
@@ -56,7 +59,8 @@ class Journal {
           rollback: () => {
             this.rolledBack.push(payload);
           },
-        }),
+        };
+      },
     };
   }
 }
@@ -182,6 +186,42 @@ describe('applying a reviewed rewrite', () => {
     expect({ kind: result.kind, live: texts(s.history) }).toStrictEqual({
       kind: 'applied',
       live: ['terminates 3 mutants in src/a.ts', 'keep going'],
+    });
+  });
+
+  it('stops at the abort and writes nothing when the request is cancelled while the journal record is being prepared', async () => {
+    const s = await scenario();
+    const journal = new Journal();
+    const controller = new AbortController();
+    let releasePrepare: () => void = () => undefined;
+    const released = new Promise<void>((resolve) => {
+      releasePrepare = resolve;
+    });
+    journal.onPrepare = async () => {
+      controller.abort();
+      await released;
+    };
+
+    const pending = applyReviewedRewrite({
+      ...request(s, journal.execution()),
+      signal: controller.signal,
+    }).then(
+      (result) => result.kind,
+      (error: unknown) =>
+        error instanceof Error ? `rejected:${error.name}` : 'rejected',
+    );
+    releasePrepare();
+
+    expect({
+      result: await pending,
+      live: texts(s.history),
+      published: journal.published.length,
+      rolledBack: journal.rolledBack.length,
+    }).toStrictEqual({
+      result: 'rejected:AbortError',
+      live: ['kills 3 mutants in src/a.ts', 'keep going'],
+      published: 0,
+      rolledBack: 1,
     });
   });
 });

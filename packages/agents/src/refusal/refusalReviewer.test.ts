@@ -18,6 +18,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { HistoryRefusalReviewer } from './refusalReviewer.js';
 import type { RefusalAttempt } from './refusalTypes.js';
 import type { ReviewOutcome } from './reviewTypes.js';
@@ -60,6 +61,23 @@ function textsOf(history: readonly IContent[]): string[] {
   );
 }
 
+/** A journal whose record preparation is where the cancel lands. */
+function journalAbortingTheRequest(
+  controller: AbortController,
+): AgentChatRecordingExecution {
+  return {
+    historyOrigin: {},
+    hookOwner: { sessionId: () => 's', transcriptPath: () => undefined },
+    transcriptPath: () => undefined,
+    persistSemanticMediaPurge: () => Promise.resolve(),
+    prepareRefusalRewrite: async () => {
+      controller.abort();
+      await Promise.resolve();
+      return { publish: () => undefined, rollback: () => undefined };
+    },
+  };
+}
+
 describe('reviewer commit (issue #4036)', () => {
   let directory: string;
 
@@ -73,6 +91,8 @@ describe('reviewer commit (issue #4036)', () => {
 
   async function review(options: {
     readonly abortBeforeCommit: boolean;
+    /** Abort while the journal record is being prepared, mid-commit. */
+    readonly abortWhilePreparing?: boolean;
   }): Promise<{
     readonly outcome: ReviewOutcome | { readonly aborted: true };
     readonly history: HistoryService;
@@ -146,7 +166,10 @@ describe('reviewer commit (issue #4036)', () => {
         attempt: ATTEMPT,
         reviewProfile: undefined,
         retriesTried: 1,
-        execution: undefined,
+        execution:
+          options.abortWhilePreparing === true
+            ? journalAbortingTheRequest(controller)
+            : undefined,
         pending: undefined,
         modelParameters: undefined,
         signal: controller.signal,
@@ -170,6 +193,23 @@ describe('reviewer commit (issue #4036)', () => {
   it('rejects and leaves the history untouched when the request is aborted before the commit', async () => {
     const { outcome, history, before } = await review({
       abortBeforeCommit: true,
+    });
+
+    expect({
+      aborted: 'aborted' in outcome,
+      untouched: history.getAll().every((c, i) => c === before[i]),
+      texts: textsOf(history.getAll()),
+    }).toStrictEqual({
+      aborted: true,
+      untouched: true,
+      texts: [SUMMARY, 'Continuing from the snapshot.'],
+    });
+  });
+
+  it('rejects and leaves the history untouched when the request is aborted while the journal record is being prepared', async () => {
+    const { outcome, history, before } = await review({
+      abortBeforeCommit: false,
+      abortWhilePreparing: true,
     });
 
     expect({
