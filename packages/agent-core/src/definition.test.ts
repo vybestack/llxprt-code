@@ -5,10 +5,8 @@
  */
 import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import ts from 'typescript';
 import { MemorySessionStore } from './testing/fake-ports.js';
+import { validDefinition } from '../type-fixtures/definition-fixtures.js';
 import {
   DefinitionError,
   mergeUsageReports,
@@ -20,44 +18,11 @@ import {
   validateTranscriptEntry,
   validateUsage,
   validateUsageReport,
-  type AgentDefinition,
   type JournalRecord,
   type PreparedCall,
   type Usage,
   type UsageReport,
 } from '../index.js';
-const packageDirectory = dirname(
-  fileURLToPath(new URL('../tsconfig.json', import.meta.url)),
-);
-const invalidTypeFixturePath = fileURLToPath(
-  new URL('../type-fixtures/invalid-contract.ts', import.meta.url),
-);
-
-const validDefinition: AgentDefinition = {
-  name: 'assistant',
-  instructions: [],
-  model: {
-    primary: { ref: { provider: 'local', model: 'test' }, parameters: {} },
-    fallbacks: [],
-    fallbackOn: [],
-  },
-  tools: [],
-  policy: { authority: [], preferences: [], fallback: 'deny' },
-  limits: { maxStepsPerTurn: 12, maxParallelChildren: 2 },
-  context: {
-    compactAtRatio: 0.8,
-    keepRecentTurns: 4,
-    summarizer: 'active-model',
-  },
-  retry: { maxAttempts: 3, backoffMs: [10, 30] },
-  loop: { maxIdenticalCalls: 2, maxStepsWithoutProgress: 5 },
-  subagents: [],
-  toolOutput: {
-    maxResultBytes: 4096,
-    maxStepResultBytes: 8192,
-    truncation: 'head-and-tail',
-  },
-};
 
 describe('validateDefinition', () => {
   it('accepts complete definitions and preserves optional undefined fields', () => {
@@ -284,7 +249,9 @@ describe('validateDefinition', () => {
       args: { command: 'echo ok' },
       shell: {
         parsed: true,
-        command: 'echo ok',
+        rawCommand: 'echo ok',
+        hasRedirection: false,
+        policySplit: [{ text: 'echo ok', hasRedirection: false }],
         segments: [
           { command: 'echo ok', argv: ['echo', 'ok'], hasRedirection: false },
         ],
@@ -428,68 +395,6 @@ describe('validateDefinition', () => {
     );
   });
 
-  it(
-    'rejects the negative public-contract compilation fixture',
-    { timeout: 30_000 },
-    () => {
-      const configPath = fileURLToPath(
-        new URL('../tsconfig.json', import.meta.url),
-      );
-      const config = ts.readConfigFile(configPath, ts.sys.readFile);
-      const parsed = ts.parseJsonConfigFileContent(
-        config.config,
-        ts.sys,
-        packageDirectory,
-      );
-      const program = ts.createProgram({
-        rootNames: [invalidTypeFixturePath],
-        options: { ...parsed.options, noEmit: true },
-        projectReferences: parsed.projectReferences,
-      });
-      const fixtureSource = ts.sys.readFile(invalidTypeFixturePath);
-      if (!fixtureSource) throw new Error('Negative type fixture is missing.');
-      const lineForMarker = (marker: string): number => {
-        const line = fixtureSource
-          .split('\n')
-          .findIndex((entry) => entry.includes(marker));
-        if (line < 0) throw new Error(`Missing diagnostic marker: ${marker}`);
-        return line + 1;
-      };
-      const diagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .filter(
-          (diagnostic) => diagnostic.file?.fileName === invalidTypeFixturePath,
-        )
-        .map((diagnostic) => {
-          const file = diagnostic.file;
-          if (!file) throw new Error('Fixture diagnostic is missing its file.');
-          return {
-            code: diagnostic.code,
-            line:
-              file.getLineAndCharacterOfPosition(diagnostic.start ?? 0).line +
-              1,
-          };
-        });
-
-      expect(diagnostics).toContainEqual({
-        code: 2353,
-        line: lineForMarker('@expect-agent-property'),
-      });
-      expect(diagnostics).toContainEqual({
-        code: 2322,
-        line: lineForMarker('@expect-replay-data'),
-      });
-      expect(diagnostics).toContainEqual({
-        code: 2353,
-        line: lineForMarker('@expect-callback-property'),
-      });
-      expect(diagnostics).toContainEqual({
-        code: 2322,
-        line: lineForMarker('@expect-recovery-data'),
-      });
-    },
-  );
-
   it('reports authority allow with independent structural definition errors', () => {
     let caught: unknown;
     try {
@@ -498,6 +403,8 @@ describe('validateDefinition', () => {
         policy: {
           authority: [{ match: {}, outcome: 'allow' }],
           preferences: [],
+          sourceStacks: [],
+          approvalMode: 'default',
           fallback: 'deny',
         },
       });
@@ -524,6 +431,8 @@ describe('validateDefinition', () => {
         policy: {
           authority: [{ id: 'allow', match: {}, outcome: 'allow' }],
           preferences: [],
+          sourceStacks: [],
+          approvalMode: 'default',
         },
       });
     } catch (error) {
@@ -652,7 +561,9 @@ describe('validateDefinition', () => {
       args: { command: "printf '%s' ''" },
       shell: {
         parsed: true,
-        command: "printf '%s' ''",
+        rawCommand: "printf '%s' ''",
+        hasRedirection: false,
+        policySplit: [{ text: "printf '%s' ''", hasRedirection: false }],
         segments: [
           {
             command: "printf '%s' ''",
@@ -734,66 +645,6 @@ describe('validateDefinition', () => {
           ...validDefinition.toolOutput,
           maxStepResultBytes: validDefinition.toolOutput.maxResultBytes - 1,
         },
-      }),
-    ).toThrow(DefinitionError);
-  });
-
-  it(
-    'compiles positive image and audio union extraction fixtures',
-    { timeout: 30_000 },
-    () => {
-      const configPath = fileURLToPath(
-        new URL('../tsconfig.json', import.meta.url),
-      );
-      const config = ts.readConfigFile(configPath, ts.sys.readFile);
-      const parsed = ts.parseJsonConfigFileContent(
-        config.config,
-        ts.sys,
-        packageDirectory,
-      );
-      const fixturePath = fileURLToPath(
-        new URL('../type-fixtures/valid-content-unions.ts', import.meta.url),
-      );
-      const program = ts.createProgram({
-        rootNames: [fixturePath],
-        options: { ...parsed.options, noEmit: true },
-      });
-      const diagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .filter((diagnostic) => diagnostic.file?.fileName === fixturePath);
-      expect(diagnostics).toStrictEqual([]);
-    },
-  );
-
-  it('rejects executable replay and recovery payloads through their public validators', () => {
-    const scope = {
-      provider: 'p',
-      model: 'm',
-      endpoint: 'https://example.test',
-      principal: 'p1',
-    };
-    expect(() =>
-      validateModelRecovery({
-        scope,
-        invalidates: [],
-        format: 'v1',
-        data: { callback: () => undefined },
-      }),
-    ).toThrow(DefinitionError);
-    expect(() =>
-      validateTranscriptEntry({
-        id: 'entry-1',
-        role: 'model',
-        parts: [],
-        replay: [
-          {
-            id: 'replay-1',
-            scope,
-            format: 'v1',
-            target: { kind: 'entry' },
-            data: { callback: () => undefined },
-          },
-        ],
       }),
     ).toThrow(DefinitionError);
   });

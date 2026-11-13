@@ -20,12 +20,17 @@ import type {
   GrantId,
   ModelErrorKind,
   ModelRecovery,
+  ModelAttemptSource,
+  HookProvenance,
+  BlobRef,
+  ImportNotice,
   ModelRef,
   PreparedToken,
   RequestId,
   Resolution,
   RuleId,
   ToolCall,
+  ToolId,
   ToolOutcome,
   ToolProgress,
   ToolResult,
@@ -45,10 +50,13 @@ export type AgentEvent = AgentEventBase &
         readonly attempt: AttemptId;
         readonly model: ModelRef;
         readonly tokens: number;
+        readonly source: ModelAttemptSource;
+        readonly requestTools: readonly ToolId[];
       }
     | {
         readonly type: 'model.text' | 'model.thinking';
         readonly attempt: AttemptId;
+        readonly part: string;
         readonly delta: string;
       }
     | {
@@ -59,6 +67,7 @@ export type AgentEvent = AgentEventBase &
     | {
         readonly type: 'model.response';
         readonly attempt: AttemptId;
+        readonly source: ModelAttemptSource;
         readonly usage: Usage;
         readonly finish: FinishReason;
       }
@@ -116,11 +125,13 @@ export type AgentEvent = AgentEventBase &
     | {
         readonly type: 'attempt.usage';
         readonly attempt: AttemptId;
+        readonly source: ModelAttemptSource;
         readonly report: UsageReport;
       }
     | {
         readonly type: 'attempt.budget.reserved';
         readonly attempt: AttemptId;
+        readonly source: ModelAttemptSource;
         readonly reported: UsageReport;
         readonly charged: Usage;
         readonly estimated: boolean;
@@ -128,9 +139,16 @@ export type AgentEvent = AgentEventBase &
     | {
         readonly type: 'attempt.budget.settled';
         readonly attempt: AttemptId;
+        readonly source: ModelAttemptSource;
         readonly reported: UsageReport;
         readonly charged: Usage;
         readonly estimated: boolean;
+      }
+    | {
+        readonly type: 'model.part.replaced';
+        readonly attempt: AttemptId;
+        readonly part: string;
+        readonly value: string;
       }
     | {
         readonly type: 'model.recovery';
@@ -184,5 +202,28 @@ export type JournalRecord =
       readonly kind: 'model-recovery';
       readonly attempt: string;
       readonly recovery: ModelRecovery;
+    }
+  | ({
+      readonly kind: 'model-attempt';
+      readonly attempt: string;
+    } & ModelAttemptSource)
+  | {
+      readonly kind: 'hook-change';
+      readonly attempt: string;
+      readonly frame?: string;
+      readonly provenance: HookProvenance;
+      readonly point: 'before-tool-selection' | 'before-model' | 'after-model';
+      readonly audit: BlobRef;
+      readonly invalidatedReplay: ReadonlyArray<{
+        readonly entry: string;
+        readonly replay: string;
+      }>;
+    }
+  | {
+      readonly kind: 'imported-history';
+      readonly sourceDigest: string;
+      readonly format: string;
+      readonly audit?: BlobRef;
+      readonly notices: readonly ImportNotice[];
     }
   | { readonly kind: 'turn-ended'; readonly result: TurnResult };

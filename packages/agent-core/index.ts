@@ -6,17 +6,50 @@
 export * from './src/types.js';
 export * from './src/errors.js';
 export {
+  normalizePolicyRegex,
+  MAX_POLICY_REGEX_SOURCE_LENGTH,
+} from './src/policy-regex.js';
+export {
+  derivePolicySourceStack,
+  validatePolicySourceStacks,
+} from './src/policy-source-stack.js';
+export {
   AgentDefinitionSchema,
+  validateAdapterFormat,
+  validateDefinition,
+  validateJsonValue,
+  validatePreparedCall,
+} from './src/definition.js';
+export {
+  AgentCommandSchema,
+  PolicyEvaluationErrorSchema,
+  HookErrorSchema,
+  StoreErrorSchema,
+  ImportedHistoryRecordSchema,
+  ToolDescriptorSchema,
+  HookModelResponseSchema,
+  HookRequestPatchSchema,
+  ModelToolChoiceSchema,
+  ImportNoticeSchema,
+  validateAgentCommand,
+  validatePolicyEvaluationError,
+  validateHookError,
+  validateStoreError,
+  validateImportedHistoryRecord,
+  validateToolDescriptor,
+  validateHookModelResponse,
+  validateHookRequestPatch,
+  validateHookEventResult,
+  validateModelToolChoice,
+  validateImportNotice,
+} from './src/definition-contracts.js';
+export {
   ModelRecoverySchema,
   TranscriptEntrySchema,
   UsageReportSchema,
   mergeUsageReports,
-  validateAdapterFormat,
-  validateDefinition,
-  validateJsonValue,
   validateModelRecovery,
-  validatePreparedCall,
   validateTranscriptEntry,
   validateUsage,
   validateUsageReport,
-} from './src/definition.js';
+} from './src/definition-replay-usage.js';
