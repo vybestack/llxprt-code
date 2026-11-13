@@ -360,7 +360,6 @@ describe('agent-core import boundary', () => {
         'node_modules/zod/io.cjs': "module.exports = require('node:fs');",
       },
       {},
-      {},
       { module: 'NodeNext', moduleResolution: 'NodeNext' },
     );
 
@@ -378,6 +377,90 @@ describe('agent-core import boundary', () => {
 
     expect(
       scanAgentCoreBoundary(root).some((entry) => entry.kind === 'ambient-io'),
+    ).toBe(true);
+  });
+
+  it('rejects import.meta.require calls to runtime modules', () => {
+    const root = fixture("export const fs = import.meta.require('node:fs');");
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'runtime-import',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects import.meta.env while allowing import.meta.url', () => {
+    const environmentRoot = fixture('export const env = import.meta.env;');
+    const urlRoot = fixture('export const url = import.meta.url;');
+
+    expect(
+      scanAgentCoreBoundary(environmentRoot).some(
+        (entry) => entry.kind === 'ambient-io',
+      ),
+    ).toBe(true);
+    expect(scanAgentCoreBoundary(urlRoot)).toEqual([]);
+  });
+
+  it('scans the literal CommonJS runtime target instead of its declaration', () => {
+    const root = fixture(
+      "import value = require('zod'); export { value };",
+      {
+        'node_modules/zod/package.json': JSON.stringify({
+          name: 'zod',
+          types: './index.d.cts',
+          exports: { '.': { types: './index.d.cts', require: './index.cjs' } },
+        }),
+        'node_modules/zod/index.d.cts': 'export declare const value: number;',
+        'node_modules/zod/index.cjs':
+          "module.exports = require('./nested.cjs');",
+        'node_modules/zod/nested.d.cts': 'export declare const value: number;',
+        'node_modules/zod/nested.cjs': "module.exports = require('node:fs');",
+      },
+      {},
+      { module: 'NodeNext', moduleResolution: 'NodeNext' },
+    );
+
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'runtime-import',
+      ),
+    ).toBe(true);
+  });
+
+  it('scans the literal ES module runtime target from an .mjs source', () => {
+    const root = fixture("import value from 'zod'; export { value };", {
+      'node_modules/zod/package.json': JSON.stringify({
+        name: 'zod',
+        types: './index.d.mts',
+        exports: { '.': { types: './index.d.mts', import: './index.mjs' } },
+      }),
+      'node_modules/zod/index.d.mts': 'export declare const value: number;',
+      'node_modules/zod/index.mjs': "export * from './nested.mjs';",
+      'node_modules/zod/nested.d.mts': 'export declare const value: number;',
+      'node_modules/zod/nested.mjs': "export * from 'node:fs';",
+    });
+
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'runtime-import',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects a literal JavaScript runtime target outside the audited packages', () => {
+    const root = fixture("import 'zod';", {
+      'node_modules/zod/package.json': JSON.stringify({
+        name: 'zod',
+        exports: { '.': { import: './index.js' } },
+      }),
+      'node_modules/zod/index.js': "import '../outside.js';",
+      'node_modules/outside.js': 'export const env = process.env;',
+    });
+
+    expect(
+      scanAgentCoreBoundary(root).some(
+        (entry) => entry.kind === 'runtime-import',
+      ),
     ).toBe(true);
   });
 });

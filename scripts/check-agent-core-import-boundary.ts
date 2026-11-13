@@ -110,12 +110,40 @@ function isInside(path: string, directory: string): boolean {
   );
 }
 
+function isImportMeta(expression: ts.Expression): boolean {
+  return (
+    ts.isMetaProperty(expression) &&
+    expression.keywordToken === ts.SyntaxKind.ImportKeyword &&
+    expression.name.text === 'meta'
+  );
+}
+
+function isImportMetaRequire(expression: ts.Expression): boolean {
+  return (
+    ts.isPropertyAccessExpression(expression) &&
+    isImportMeta(expression.expression) &&
+    expression.name.text === 'require'
+  );
+}
+
+function isImportMetaEnvAccess(node: ts.Node): boolean {
+  return (
+    ts.isPropertyAccessExpression(node) &&
+    isImportMeta(node.expression) &&
+    node.name.text === 'env'
+  );
+}
+
 function importCallSpecifier(node: ts.Node): ts.Expression | undefined {
   if (!ts.isCallExpression(node)) return undefined;
   const expression = node.expression;
   const isRequire =
     ts.isIdentifier(expression) && expression.text === 'require';
-  if (expression.kind !== ts.SyntaxKind.ImportKeyword && !isRequire)
+  if (
+    expression.kind !== ts.SyntaxKind.ImportKeyword &&
+    !isRequire &&
+    !isImportMetaRequire(expression)
+  )
     return undefined;
   return node.arguments[0];
 }
@@ -244,9 +272,16 @@ function resolveImport(
   context: ScanContext,
   violations: AgentCoreBoundaryViolation[],
 ): string[] {
-  if (extname(source.fileName) === '.js' && specifier.startsWith('.')) {
+  if (
+    ['.js', '.cjs', '.mjs'].includes(extname(source.fileName)) &&
+    specifier.startsWith('.')
+  ) {
     const runtimeTarget = resolve(dirname(source.fileName), specifier);
-    if (ts.sys.fileExists(runtimeTarget)) return [runtimeTarget];
+    const zodPackage = packageRoot(source.fileName, 'zod');
+    const isAllowed =
+      isInside(runtimeTarget, context.packageDir) ||
+      (zodPackage !== undefined && isInside(runtimeTarget, zodPackage));
+    if (isAllowed && ts.sys.fileExists(runtimeTarget)) return [runtimeTarget];
   }
   const resolved = ts.resolveModuleName(
     specifier,
@@ -448,6 +483,15 @@ function scanAmbientCapabilities(
   };
   collectLocals(source);
   const inspect = (node: ts.Node): void => {
+    if (isImportMetaEnvAccess(node))
+      violations.push(
+        violation(
+          source,
+          node,
+          'ambient-io',
+          'Ambient runtime capability is forbidden: import.meta.env',
+        ),
+      );
     if (isForbiddenCapabilityUse(node)) {
       const symbol = checker?.getSymbolAtLocation(node);
       const isLocal = checker

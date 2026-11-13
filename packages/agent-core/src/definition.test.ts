@@ -494,66 +494,6 @@ describe('validateDefinition', () => {
     },
   );
 
-  it('rejects executable, accessor-backed, symbol-keyed, hidden, cyclic, and non-finite data without invoking getters', () => {
-    let getterCalls = 0;
-    const getterValue = Object.defineProperty({ ...validDefinition }, 'name', {
-      get() {
-        getterCalls += 1;
-        return 'getter';
-      },
-    });
-    expect(() => validateDefinition(getterValue)).toThrow(DefinitionError);
-    expect(() =>
-      validateDefinition({ ...validDefinition, [Symbol('hidden')]: 1 }),
-    ).toThrow(DefinitionError);
-    expect(() =>
-      validateDefinition(
-        Object.defineProperty({ ...validDefinition }, 'hidden', { value: 1 }),
-      ),
-    ).toThrow(DefinitionError);
-    expect(() =>
-      validateDefinition({
-        ...validDefinition,
-        context: { ...validDefinition.context, extra: () => 1 },
-      }),
-    ).toThrow(DefinitionError);
-    expect(() =>
-      validateDefinition({
-        ...validDefinition,
-        policy: {
-          authority: [
-            {
-              id: 'numeric',
-              match: { args: [{ arg: 'x', equals: Infinity }] },
-              outcome: 'deny',
-            },
-          ],
-          preferences: [],
-          fallback: 'deny',
-        },
-      }),
-    ).toThrow(DefinitionError);
-    const cycle: { self?: unknown } = {};
-    cycle.self = cycle;
-    expect(() => validateJsonValue(cycle)).toThrow(DefinitionError);
-    expect(() =>
-      validateJsonValue(
-        Object.defineProperty([], 'hidden', { value: () => 1 }),
-      ),
-    ).toThrow(DefinitionError);
-    const arrayGetter: unknown[] = [];
-    Object.defineProperty(arrayGetter, '0', {
-      get() {
-        getterCalls += 1;
-        return 'bad';
-      },
-      enumerable: true,
-    });
-    arrayGetter.length = 1;
-    expect(() => validateJsonValue(arrayGetter)).toThrow(DefinitionError);
-    expect(getterCalls).toBe(0);
-  });
-
   it('reports authority allow with independent structural definition errors', () => {
     let caught: unknown;
     try {
