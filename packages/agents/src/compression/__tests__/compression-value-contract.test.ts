@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -15,6 +16,7 @@ import {
   withNativeValueFixture,
   type ValueFixture,
 } from './support/native-value-fixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 type Backend = 'journal';
 
@@ -36,7 +38,7 @@ async function withCandidate(
   await withFixture(backend, async ({ history }) => {
     await history.detachedValues.replace(detachedRows(8, 16));
     const previous = await history.openDumpSnapshot();
-    const candidate = new HistoryDensityRows();
+    const candidate = new HistoryDensityRows(historyScratchRoots);
     try {
       for (let index = 0; index < 4; index++)
         candidate.append(detachedRow(index, 16));
@@ -145,7 +147,7 @@ describe.each(['journal'] as const)('%s compression values', (backend) => {
         await history.detachedValues.replace(detachedRows(8, 16));
         const baseline = await compressionValueDigest(detachedRows(8, 16));
         const previous = await history.openDumpSnapshot();
-        const candidate = new HistoryDensityRows();
+        const candidate = new HistoryDensityRows(historyScratchRoots);
         try {
           for (let index = 0; index < 4; index++)
             candidate.append(detachedRow(index, 16));

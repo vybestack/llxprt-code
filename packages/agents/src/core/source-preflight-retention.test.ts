@@ -1,7 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
+import {
+  activeRequestBodyCount,
+  RequestBodyCensus,
+} from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import {
   buildSourceProviderChatOptions,
   enforceAndStreamSourcePromptEnvelopeRetries,
@@ -23,7 +26,11 @@ const retained: Array<
 > = [];
 const weakPrepared: Array<WeakRef<PreparedSourcePromptEnvelopeSend>> = [];
 const weakRows: Array<WeakRef<IContent>> = [];
-async function prepareCycle(large: boolean, trap: boolean): Promise<void> {
+async function prepareCycle(
+  large: boolean,
+  trap: boolean,
+  census: RequestBodyCensus,
+): Promise<void> {
   const fixture = await preflightDisk(root(), large);
   const http = preflightEndpoint();
   const setup = preflightRuntime(
@@ -31,6 +38,7 @@ async function prepareCycle(large: boolean, trap: boolean): Promise<void> {
     `http://127.0.0.1:${http.server.port}/v1`,
     false,
     'gpt-5.6',
+    census,
   );
   const arrived = barrier();
   const held = barrier();
@@ -85,7 +93,7 @@ async function prepareCycle(large: boolean, trap: boolean): Promise<void> {
     expect(callbacks).toBe(1);
     expect(fixture.state.active).toBe(0);
     expect(fixture.state.closed).toBe(1);
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(census)).toBe(0);
   } finally {
     held.release();
     await stream.return?.();
@@ -94,19 +102,20 @@ async function prepareCycle(large: boolean, trap: boolean): Promise<void> {
   }
 }
 async function measureRetention(trap: boolean) {
+  const census = new RequestBodyCensus();
   retained.length = 0;
   weakPrepared.length = 0;
   weakRows.length = 0;
   // The measured cycle runs the full-size path (chunked token estimation, lazy
   // encoder initialisation); warm that same path so the baseline excludes
   // one-time initialisation and only per-cycle growth is measured.
-  await prepareCycle(true, false);
-  await prepareCycle(true, false);
+  await prepareCycle(true, false, census);
+  await prepareCycle(true, false, census);
   await sourceHeap();
   weakPrepared.length = 0;
   weakRows.length = 0;
   const baseline = await sourceHeap();
-  await prepareCycle(true, trap);
+  await prepareCycle(true, trap, census);
   const settled = await sourceHeap();
   return {
     baseline,
@@ -116,7 +125,7 @@ async function measureRetention(trap: boolean) {
       .length,
     liveRows: weakRows.filter((ref) => ref.deref() !== undefined).length,
     retainedClosures: retained.length,
-    activeBodies: activeRequestBodyCount(),
+    activeBodies: activeRequestBodyCount(census),
   };
 }
 function expectReleased(facts: Awaited<ReturnType<typeof measureRetention>>) {

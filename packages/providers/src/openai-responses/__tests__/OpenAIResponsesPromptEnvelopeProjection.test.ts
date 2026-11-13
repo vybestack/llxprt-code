@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -27,6 +28,7 @@ import {
 import { PROJECTION_REVISION } from '../../runtime/promptEnvelopeProjections.js';
 import { createRuntimeTokenizerFactory } from '../../composition/runtimeTokenizerFactory.js';
 import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 void vi.mock('openai', () => ({
   default: class FakeOpenAI {
@@ -81,7 +83,7 @@ async function projectedTokens(
   const estimate = await estimatePromptEnvelope(
     provider.name,
     projection,
-    createRuntimeTokenizerFactory(),
+    createRuntimeTokenizerFactory(tokenizerScratchRoots),
   );
   return estimate.transmittedTokens;
 }
@@ -181,7 +183,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
     const estimate = await estimatePromptEnvelope(
       provider.name,
       projection,
-      createRuntimeTokenizerFactory(),
+      createRuntimeTokenizerFactory(tokenizerScratchRoots),
     );
 
     expect(estimate.statefulParentUsed).toBe(false);
@@ -222,7 +224,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
     const fullHistory = await provider.projectPromptEnvelope(
       buildCallOptions(provider, { contents }),
     );
-    const factory = createRuntimeTokenizerFactory();
+    const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 
     const estimate = await estimatePromptEnvelope(
       provider.name,
@@ -279,7 +281,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
     const estimate = await estimatePromptEnvelope(
       provider.name,
       projection,
-      createRuntimeTokenizerFactory(),
+      createRuntimeTokenizerFactory(tokenizerScratchRoots),
     );
 
     expect(estimate.retainedBaselineTokens).toBe(1_000);
@@ -332,7 +334,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
         ephemerals: { 'responses-stateful': true },
       }),
     );
-    const factory = createRuntimeTokenizerFactory();
+    const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 
     const configuredEstimate = await estimatePromptEnvelope(
       provider.name,
@@ -398,7 +400,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       const fullHistory = await provider.projectPromptEnvelope(
         buildCallOptions(provider, { contents }),
       );
-      const factory = createRuntimeTokenizerFactory();
+      const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
       const statefulEstimate = await estimatePromptEnvelope(
         provider.name,
         stateful,

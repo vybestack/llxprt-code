@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readAtOf } from '../__tests__/requestRowsTestSupport.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -11,7 +12,6 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import type { GenerateChatOptions } from '../IProvider.js';
 import { requestSelection } from './__tests__/support/request-selection.js';
 import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const completed =
   'data: {"type":"response.output_text.delta","delta":"ok"}\n\n' +
@@ -166,9 +166,9 @@ async function send(
   }));
 }
 
-function tmpPromptDirs(): Set<string> {
+function tmpPromptDirs(scratchRoots: ScratchRootOwner): Set<string> {
   return new Set(
-    readdirSync(getScratchRoot()).filter((name) =>
+    readdirSync(scratchRoots.getRoot()).filter((name) =>
       name.startsWith('responses-prompt-keys-'),
     ),
   );
@@ -216,7 +216,7 @@ describe('Responses source route stateful accounting', () => {
     list: readonly IContent[],
     ephemerals: Record<string, unknown>,
   ): Promise<string[]> {
-    const before = tmpPromptDirs();
+    const before = tmpPromptDirs(setup.config.scratchRoots);
     const rows = rowsOf(list);
     await send(
       setup,
@@ -232,7 +232,9 @@ describe('Responses source route stateful accounting', () => {
     );
     expect(bodies).toStrictEqual(arrayBodies);
     expect(
-      [...tmpPromptDirs()].filter((entry) => !before.has(entry)),
+      [...tmpPromptDirs(setup.config.scratchRoots)].filter(
+        (entry) => !before.has(entry),
+      ),
     ).toHaveLength(0);
     return arrayBodies;
   }

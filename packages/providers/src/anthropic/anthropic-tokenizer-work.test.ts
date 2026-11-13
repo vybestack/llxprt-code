@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
-import { estimatePieceFact } from './anthropic-estimate-facts.js';
+import { AnthropicEstimateFacts } from './anthropic-estimate-facts.js';
 import { getO200kBaseEncoder } from '../tokenizers/o200kBaseCounter.js';
 
 describe('Anthropic atom tokenizer work', () => {
@@ -8,11 +8,12 @@ describe('Anthropic atom tokenizer work', () => {
     it(`counts shared payloads once across cache variants for ${count} rows`, async () => {
       const encoder = await getO200kBaseEncoder();
       const encode = spyOn(encoder, 'encode');
+      const estimator = new AnthropicEstimateFacts();
       let totalTokens = 0;
       try {
         for (let at = 0; at < count; at++) {
           const text = `row ${at} ${'bounded payload 雪 '.repeat(16)}`;
-          const fact = await estimatePieceFact(
+          const fact = await estimator.estimatePieceFact(
             [
               { type: 'text', text },
               {

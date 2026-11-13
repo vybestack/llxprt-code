@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -49,6 +52,8 @@ import {
   journalRows,
   type RecordedJournalGroup,
 } from './__tests__/support/journal-read-test-helpers.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 const PROJECT_HASH = 'project-hash-recording-integration';
 
@@ -148,6 +153,8 @@ let historyService: HistoryService;
 let emitter: EventEmitter;
 
 describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   beforeEach(beforeEachRecordingCore);
 
   afterEach(afterEachRecordingCore);
@@ -599,9 +606,14 @@ async function beforeEachRecordingCore(): Promise<void> {
   chatsDir = path.join(tempDir, 'chats');
   await fs.mkdir(chatsDir, { recursive: true });
 
-  recordingService = createSessionRecorder(makeConfig(chatsDir));
-  integration = new RecordingIntegration(recordingService);
-  historyService = new HistoryService({});
+  recordingService = createSessionRecorder(
+    withTestNamedWriters(makeConfig(chatsDir)),
+  );
+  integration = new RecordingIntegration(
+    recordingService,
+    recordingScratchRoots,
+  );
+  historyService = new HistoryService({ scratchRoots: recordingScratchRoots });
   emitter = historyEmitter(historyService);
 }
 

@@ -1,3 +1,5 @@
+import { registerScratchInspection } from '../__tests__/support/scratch-inspection.js';
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -28,7 +30,7 @@ import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
 import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 import { observeNativeBodies } from '../__tests__/support/native-body-lifecycle.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import { readdirSync } from 'node:fs';
 import {
   estimatePromptEnvelope,
@@ -37,6 +39,7 @@ import {
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { NativeAnthropicEstimateProjection } from './native-anthropic-estimate.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const liveBodies = observeNativeBodies();
 
@@ -413,7 +416,7 @@ describe('Anthropic transport-owned request rows body (WP07)', () => {
   });
 });
 
-const tokenizerFactory = createRuntimeTokenizerFactory();
+const tokenizerFactory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 
 function sourceOf(
   projection: PromptEnvelopeProjection,
@@ -449,15 +452,17 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
     const provider = harness.provider;
     const probe = probeRows(scenario.rows);
     const options = rowsOptions(harness, scenario, probe);
-    const startingScratch = new Set(readdirSync(getScratchRoot()));
+    const startingScratch = new Set(
+      readdirSync(harness.config.scratchRoots.getRoot()),
+    );
     const before = liveBodies();
     const projection = await provider.projectPromptEnvelope(options);
     expect(liveBodies()).toBe(before);
     const source = sourceOf(projection);
     expect(projection.finalizedProjection).toBe(source);
-    expect(new Set(readdirSync(getScratchRoot()))).toStrictEqual(
-      startingScratch,
-    );
+    expect(
+      new Set(readdirSync(harness.config.scratchRoots.getRoot())),
+    ).toStrictEqual(startingScratch);
     expect(await tokensOf(provider, projection)).toBeGreaterThan(0);
     expect(await tokensOf(provider, projection)).toBe(
       await tokensOf(provider, projection),
@@ -466,9 +471,9 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
     let during = -1;
     mockMessagesCreate.mockImplementation(async () => {
       during = liveBodies();
-      expect(new Set(readdirSync(getScratchRoot()))).toStrictEqual(
-        startingScratch,
-      );
+      expect(
+        new Set(readdirSync(harness.config.scratchRoots.getRoot())),
+      ).toStrictEqual(startingScratch);
       return okResponse(false);
     });
     await drain(
@@ -479,9 +484,9 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
     );
     expect(during).toBe(before + 1);
     expect(liveBodies()).toBe(before);
-    expect(new Set(readdirSync(getScratchRoot()))).toStrictEqual(
-      startingScratch,
-    );
+    expect(
+      new Set(readdirSync(harness.config.scratchRoots.getRoot())),
+    ).toStrictEqual(startingScratch);
     expect(probe.opened()).toBe(readsBeforeSend + 0);
     await expect(tokensOf(provider, projection)).rejects.toThrow('closed');
     expect(sentBodies()).toStrictEqual(await sendArray(scenario));
@@ -632,8 +637,10 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
   });
 });
 
+const scratchEntries = registerScratchInspection();
+
 function scratchNames(): Set<string> {
-  return new Set(readdirSync(getScratchRoot()));
+  return new Set(scratchEntries());
 }
 
 describe('Anthropic native send (issue #854 E4)', () => {

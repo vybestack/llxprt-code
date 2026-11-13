@@ -1,14 +1,19 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { HistoryDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
 import type { DetachedHistoryAPI } from '@vybestack/llxprt-code-core/services/history/detachedHistoryAPI.js';
 import { detachedValueSubmission } from '@vybestack/llxprt-code-core/services/history/detachedHistoryMutation.js';
 import type { OwnedJournal } from '@vybestack/llxprt-code-core/services/history/journalOwnedFixture.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 /** What the compression modules ask of a history, served by a JournalHistoryStore. */
 export type JournalBackedHistory = Pick<
   HistoryService,
-  'detachedValues' | 'setCacheAnchorSeq' | 'resetCacheAnchorSeq'
+  | 'scratchRoots'
+  | 'detachedValues'
+  | 'setCacheAnchorSeq'
+  | 'resetCacheAnchorSeq'
 >;
 
 /**
@@ -46,6 +51,7 @@ export function journalBackedHistory(
       store.publishDetached({ transform }, host, model, options),
   };
   return {
+    scratchRoots: historyScratchRoots,
     detachedValues,
     setCacheAnchorSeq: () => {},
     resetCacheAnchorSeq: () => {},
@@ -59,7 +65,7 @@ export function journalBackedHistory(
  * service's own store stays empty; it supplies the tokenizer and cache anchor.
  */
 export function journalRoutedHistory(owned: OwnedJournal): HistoryService {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const snapshot = (): HistoryDumpSnapshot => ({
     rows: () => owned.store.streamRows(),
     async *chronology() {},

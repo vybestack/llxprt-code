@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -51,16 +52,18 @@ export async function recordJournal(
   sessionId: string,
   options: RecordOptions = {},
 ): Promise<RecordedJournal> {
-  const recording = JournalRecordingService.create({
-    sessionId,
-    projectHash: options.projectHash ?? PROJECT,
-    chatsDir,
-    workspaceDirs: ['/work/a'],
-    provider: options.provider ?? 'anthropic',
-    model: 'model-1',
-    kind: options.kind ?? 'main',
-    journal: journalSeams(),
-  });
+  const recording = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId,
+      projectHash: options.projectHash ?? PROJECT,
+      chatsDir,
+      workspaceDirs: ['/work/a'],
+      provider: options.provider ?? 'anthropic',
+      model: 'model-1',
+      kind: options.kind ?? 'main',
+      journal: journalSeams(),
+    }),
+  );
   let filePath: string | null;
   const checkpoints: RecordingCheckpointInfo[] = [];
   try {

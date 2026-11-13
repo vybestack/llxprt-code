@@ -2,13 +2,17 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createScratchDirSync } from './scratch-root.js';
+import type { ScratchRootOwner } from './scratch-root.js';
 
 export class MediaMetricByteIndex {
   private directory: string | undefined;
 
+  constructor(private readonly scratchRoots: ScratchRootOwner) {}
+
   add(contentId: string, byteLength: number): number {
-    this.directory ??= createScratchDirSync('llxprt-media-metric-index-');
+    this.directory ??= this.scratchRoots.createDirSync(
+      'llxprt-media-metric-index-',
+    );
     const path = join(
       this.directory,
       createHash('sha256').update(contentId).digest('hex'),

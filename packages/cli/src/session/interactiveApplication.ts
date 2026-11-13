@@ -643,6 +643,8 @@ export class InteractiveApplication {
       subscribeContextRange: this.props.subscribeContextRange,
       registerCredentials,
       readAgentRecordingPath: this.readAgentRecordingPath,
+      readAgentRecordingWatermarks: () =>
+        this.props.session.getRecordingWatermarks(),
       generateSubagentPrompt: this.generateSubagentPrompt,
     };
   }

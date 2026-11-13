@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '../../storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import type { IContent } from './IContent.js';
@@ -23,7 +24,7 @@ const open: HistoryRowOrigins[] = [];
 function originsOf(
   origins: ReadonlyArray<string | undefined>,
 ): HistoryRowOrigins {
-  const captured = HistoryRowOrigins.capture({
+  const captured = HistoryRowOrigins.capture(scratchRoots, {
     length: origins.length,
     originAt: (index) => origins[index],
   });
@@ -99,3 +100,5 @@ describe('planHistoryMutation with the origins of the rows it writes', () => {
     ]);
   });
 });
+
+const scratchRoots = new ScratchRootOwner();

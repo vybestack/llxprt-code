@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -7,6 +8,7 @@ import {
   exactTokenizer,
   rowsOf,
 } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class ValueAnchorHistory extends HistoryService {
   override replaceAll(): Promise<void> {
@@ -16,7 +18,9 @@ class ValueAnchorHistory extends HistoryService {
 
 describe('cache anchor value publication', () => {
   it('publishes ordered values, anchor, span and stateful invalidation without the legacy array replacement route', async () => {
-    const history = new ValueAnchorHistory();
+    const history = new ValueAnchorHistory({
+      scratchRoots: historyScratchRoots,
+    });
     history.setTokenizerFactory(exactTokenizer());
     try {
       await history.detachedValues.replace([

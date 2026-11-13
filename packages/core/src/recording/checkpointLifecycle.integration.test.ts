@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -100,14 +104,16 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
 
   describe('A6: lifecycle folds by stable ID', () => {
     it('rename preserves ID and sequence', async () => {
-      const svc = JournalRecordingService.create(makeConfig(chatsDir()));
+      const svc = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(svc, [makeContent('A', 'human')]);
       await recordRowsForTest(svc, [makeContent('B', 'ai')]);
       const cp = await svc.createCheckpoint('original');
       await svc.flush();
       await svc.dispose();
 
-      const cpService = new JournalCheckpointService();
+      const cpService = new JournalCheckpointService(testJournalOptions());
       await cpService.renameCheckpointClosed(
         svc.getFilePath()!,
         PROJECT_HASH,
@@ -131,7 +137,9 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
     });
 
     it('delete removes only the reference, not other checkpoints', async () => {
-      const svc = JournalRecordingService.create(makeConfig(chatsDir()));
+      const svc = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(svc, [makeContent('A', 'human')]);
       const cp1 = await svc.createCheckpoint('foo');
       await recordRowsForTest(svc, [makeContent('B', 'ai')]);
@@ -139,7 +147,7 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
       await svc.flush();
       await svc.dispose();
 
-      const cpService = new JournalCheckpointService();
+      const cpService = new JournalCheckpointService(testJournalOptions());
       await cpService.deleteCheckpointClosed(
         svc.getFilePath()!,
         PROJECT_HASH,
@@ -157,17 +165,17 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
   describe('project-wide lifecycle coordination', () => {
     it('rejects a second concurrent creator of the same project-wide name', async () => {
       const first = await JournalRecordingService.createLocked(
-        makeConfig(chatsDir()),
+        withTestNamedWriters(makeConfig(chatsDir())),
       );
       const second = await JournalRecordingService.createLocked(
-        makeConfig(chatsDir()),
+        withTestNamedWriters(makeConfig(chatsDir())),
       );
       await recordRowsForTest(first, [makeContent('first')]);
       await recordRowsForTest(second, [makeContent('second')]);
       await Promise.all([first.flush(), second.flush()]);
 
       try {
-        const service = new JournalCheckpointService();
+        const service = new JournalCheckpointService(testJournalOptions());
         const results = await Promise.allSettled([
           service.createCheckpoint(first, PROJECT_HASH, 'shared-name'),
           service.createCheckpoint(second, PROJECT_HASH, 'shared-name'),
@@ -185,18 +193,22 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
     });
 
     it('rejects a duplicate name when creating a checkpoint on a closed session', async () => {
-      const first = JournalRecordingService.create(makeConfig(chatsDir()));
+      const first = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(first, [makeContent('first')]);
       await first.createCheckpoint('shared-name');
       await first.flush();
       await first.dispose();
 
-      const second = JournalRecordingService.create(makeConfig(chatsDir()));
+      const second = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(second, [makeContent('second')]);
       await second.flush();
       await second.dispose();
 
-      const service = new JournalCheckpointService();
+      const service = new JournalCheckpointService(testJournalOptions());
       await expect(
         service.createCheckpointClosed(
           second.getFilePath()!,
@@ -212,19 +224,25 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
     });
 
     it('overwrites a colliding closed-session checkpoint after confirmation', async () => {
-      const replaced = JournalRecordingService.create(makeConfig(chatsDir()));
+      const replaced = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(replaced, [makeContent('replaced')]);
       const oldCheckpoint = await replaced.createCheckpoint('shared-name');
       await replaced.flush();
       await replaced.dispose();
 
-      const source = JournalRecordingService.create(makeConfig(chatsDir()));
+      const source = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(source, [makeContent('source')]);
       const sourceCheckpoint = await source.createCheckpoint('source-name');
       await source.flush();
       await source.dispose();
 
-      await new JournalCheckpointService().renameCheckpointClosed(
+      await new JournalCheckpointService(
+        testJournalOptions(),
+      ).renameCheckpointClosed(
         source.getFilePath()!,
         PROJECT_HASH,
         chatsDir(),
@@ -259,19 +277,16 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
 
     it('overwrites a colliding checkpoint in the active recording', async () => {
       const recording = await JournalRecordingService.createLocked(
-        makeConfig(chatsDir()),
+        withTestNamedWriters(makeConfig(chatsDir())),
       );
       await recordRowsForTest(recording, [makeContent('source')]);
       const replaced = await recording.createCheckpoint('shared-name');
       await recordRowsForTest(recording, [makeContent('tail')]);
 
       try {
-        const created = await new JournalCheckpointService().createCheckpoint(
-          recording,
-          PROJECT_HASH,
-          'shared-name',
-          true,
-        );
+        const created = await new JournalCheckpointService(
+          testJournalOptions(),
+        ).createCheckpoint(recording, PROJECT_HASH, 'shared-name', true);
 
         const replay = await readJournalSnapshot(
           recording.getFilePath()!,
@@ -296,7 +311,7 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
 
     it('restores an overwritten checkpoint when the replacement action fails', async () => {
       const recording = await JournalRecordingService.createLocked(
-        makeConfig(chatsDir()),
+        withTestNamedWriters(makeConfig(chatsDir())),
       );
       await recordRowsForTest(recording, [makeContent('source')]);
       const existing = await recording.createCheckpoint('shared-name');
@@ -307,7 +322,7 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
 
       try {
         await expect(
-          new JournalCheckpointService().createCheckpoint(
+          new JournalCheckpointService(testJournalOptions()).createCheckpoint(
             recording,
             PROJECT_HASH,
             'shared-name',
@@ -335,7 +350,9 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
 
   describe('A15: metadata fold exposes checkpoints separately from history', () => {
     it('checkpoint events never appear in replayed history', async () => {
-      const svc = JournalRecordingService.create(makeConfig(chatsDir()));
+      const svc = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(svc, [makeContent('A', 'human')]);
       await svc.createCheckpoint('foo');
       await recordRowsForTest(svc, [makeContent('B', 'ai')]);
@@ -359,7 +376,9 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
 
   describe('A17: closed-source append is lock-checked and monotonic', () => {
     it('held lock causes error and no write', async () => {
-      const svc = JournalRecordingService.create(makeConfig(chatsDir()));
+      const svc = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(svc, [makeContent('A', 'human')]);
       const cp = await svc.createCheckpoint('foo');
       await svc.flush();
@@ -373,7 +392,7 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
       );
 
       try {
-        const cpService = new JournalCheckpointService();
+        const cpService = new JournalCheckpointService(testJournalOptions());
         await expect(
           cpService.deleteCheckpointClosed(
             svc.getFilePath()!,
@@ -400,7 +419,9 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
     });
 
     it('commits one metadata group without changing prior bytes', async () => {
-      const svc = JournalRecordingService.create(makeConfig(chatsDir()));
+      const svc = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(svc, [
         makeContent('A', 'human'),
         makeContent('B', 'ai'),
@@ -410,7 +431,9 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
       const filePath = svc.getFilePath()!;
       const beforeBytes = await fs.readFile(filePath);
       const before = await readJournalSnapshot(filePath, PROJECT_HASH);
-      await new JournalCheckpointService().renameCheckpointClosed(
+      await new JournalCheckpointService(
+        testJournalOptions(),
+      ).renameCheckpointClosed(
         filePath,
         PROJECT_HASH,
         chatsDir(),
@@ -444,10 +467,12 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
       mimeType: 'image/png',
       semanticMetadata: {},
     });
-    const recording = JournalRecordingService.create({
-      ...makeConfig(chatsDir()),
-      mediaStore,
-    });
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        ...makeConfig(chatsDir()),
+        mediaStore,
+      }),
+    );
     await recordRowsForTest(recording, [
       { speaker: 'human', blocks: [reference] },
     ]);
@@ -456,19 +481,23 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
     const filePath = recording.getFilePath();
     assertNotNull(filePath, 'Expected recording path');
     expect(
-      (await new JournalCheckpointService().listCheckpoints(filePath)).map(
-        ({ checkpointId, name, sequence, deleted }) => ({
-          checkpointId,
-          name,
-          sequence,
-          deleted,
-        }),
-      ),
+      (
+        await new JournalCheckpointService(
+          testJournalOptions(),
+        ).listCheckpoints(filePath)
+      ).map(({ checkpointId, name, sequence, deleted }) => ({
+        checkpointId,
+        name,
+        sequence,
+        deleted,
+      })),
     ).toStrictEqual([{ ...checkpoint, deleted: false }]);
   });
 
   it('does not append closed metadata to a corrupt journal', async () => {
-    const recording = JournalRecordingService.create(makeConfig(chatsDir()));
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters(makeConfig(chatsDir())),
+    );
     await recordRowsForTest(recording, [makeContent('A', 'human')]);
     const checkpoint = await recording.createCheckpoint('foo');
     await recording.dispose();
@@ -490,7 +519,7 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
     }
     const corruptBytes = await fs.readFile(filePath);
     await expect(
-      new JournalCheckpointService().deleteCheckpointClosed(
+      new JournalCheckpointService(testJournalOptions()).deleteCheckpointClosed(
         filePath,
         PROJECT_HASH,
         chatsDir(),
@@ -521,7 +550,9 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
       const config = makeConfig(chatsDir, {
         sessionId: 'dispose-flush-failure-session',
       });
-      service = await JournalRecordingService.createLocked(config);
+      service = await JournalRecordingService.createLocked(
+        withTestNamedWriters(config),
+      );
       vi.spyOn(service, 'flush').mockRejectedValueOnce(
         new Error('final flush failed'),
       );

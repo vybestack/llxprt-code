@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach } from 'bun:test';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -8,6 +9,7 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const owners: SessionSettingsOwner[] = [];
 afterEach(async () => {
@@ -28,8 +30,9 @@ export function makeRuntimeContext(
   const owner = new SessionSettingsOwner(settingsService);
   owners.push(owner);
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     state,
-    history: new HistoryService(),
+    history: new HistoryService({ scratchRoots: historyScratchRoots }),
     settings: {
       compressionThreshold: 0.8,
       contextLimit: 128000,

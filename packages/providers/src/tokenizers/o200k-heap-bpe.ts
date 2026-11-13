@@ -9,10 +9,13 @@ import { diskAssets } from './o200k-disk-assets.js';
 export const MAX_HEAP_PIECE_BYTES = 2 ** 24 - 1;
 
 /** Exact in-memory counting using the shared fixed-depth rank queue. */
-export function countPieceInMemory(bytes: Buffer): number {
+export function countPieceInMemory(
+  bytes: Buffer,
+  ranks: ReadonlyMap<string, number> = diskAssets().ranks,
+): number {
   if (bytes.length > MAX_HEAP_PIECE_BYTES)
     throw new RangeError(
       `Heap BPE piece of ${bytes.length} bytes is too large`,
     );
-  return countBpePiece(bytes, diskAssets().ranks);
+  return countBpePiece(bytes, ranks);
 }

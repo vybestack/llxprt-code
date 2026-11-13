@@ -53,7 +53,7 @@ import {
   type StreamedChatPrompt,
 } from './native-chat-estimate.js';
 import { measurableChatRow } from './chat-measure-media.js';
-import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
+import { createRuntimeTokenizerRegistry } from '../composition/runtimeTokenizerFactory.js';
 import {
   canonicalizePromptValue,
   PROJECTION_REVISION,
@@ -740,7 +740,7 @@ async function chatPlanning(
             wireMethod: 'chat/completions/v1',
             projectionRevision: PROJECTION_REVISION,
           },
-          createRuntimeTokenizerFactory(),
+          createRuntimeTokenizerRegistry(),
         )
       : {
           registration: plainChatLengthRegistration(settings),

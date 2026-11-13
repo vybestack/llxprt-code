@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
@@ -11,10 +12,11 @@ import { CompressionHandler } from '../CompressionHandler.js';
 import { HighDensityStrategy } from '../HighDensityStrategy.js';
 import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
 import { exactTokenizer } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export class DensityDiskHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'density materialization forbidden',

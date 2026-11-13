@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 
 /**
@@ -21,7 +22,7 @@ import {
   estimatePromptEnvelope,
   type PromptEnvelopeProjection,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import { createRuntimeTokenizerFactory } from '../../composition/runtimeTokenizerFactory.js';
 import { projectAnthropicPromptEnvelope } from '../../runtime/promptEnvelopeProjections.js';
 import { NativeAnthropicEstimateProjection } from '../native-anthropic-estimate.js';
@@ -40,6 +41,7 @@ import { AnthropicProvider } from '../AnthropicProvider.js';
 import { createMediaSupportPredicate } from '../AnthropicEndpointUtils.js';
 import { TEST_PROVIDER_CONFIG } from '../../__tests__/providerTestConfig.js';
 import { collectUnsupportedMedia } from '../../utils/mediaUtils.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const OAUTH_TOKEN = 'sk-ant-oat-estimate-parity';
 
@@ -117,7 +119,7 @@ const parityRoutes: readonly ParityRoute[] = caching.flatMap((route) => [
   } as const,
 ]);
 
-const factory = createRuntimeTokenizerFactory();
+const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 
 function rowsOptions(parity: ParityRoute, entry: HistoryCase) {
   const options = buildRouteCallOptions(
@@ -171,7 +173,9 @@ async function projectionOf(
 describe.each(parityRoutes.map((parity) => [parity.id, parity] as const))(
   'anthropic estimate from segment files, route %s',
   (_id, parity) => {
-    const startingScratch = new Set(readdirSync(getScratchRoot()));
+    const startingScratch = new Set(
+      readdirSync(tokenizerScratchRoots.getRoot()),
+    );
 
     for (const entry of [...estimatorCorpus(), unsupportedMediaCase]) {
       it(`${entry.id} counts the same as the body that is sent`, async () => {
@@ -228,9 +232,9 @@ describe.each(parityRoutes.map((parity) => [parity.id, parity] as const))(
     }
 
     it('leaves no scratch files behind', () => {
-      expect(new Set(readdirSync(getScratchRoot()))).toStrictEqual(
-        startingScratch,
-      );
+      expect(
+        new Set(readdirSync(tokenizerScratchRoots.getRoot())),
+      ).toStrictEqual(startingScratch);
     });
   },
 );

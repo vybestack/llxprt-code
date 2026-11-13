@@ -1,8 +1,10 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { HistoryService } from './HistoryService.js';
 import { createUserMessage } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 /**
  * A provider token count that was requested before clear() describes rows
@@ -15,7 +17,7 @@ describe.each(['journal'] as const)(
   () => {
     let history: HistoryService;
     beforeEach(() => {
-      history = new HistoryService();
+      history = new HistoryService({ scratchRoots: historyScratchRoots });
     });
     afterEach(async () => {
       await history.dispose();

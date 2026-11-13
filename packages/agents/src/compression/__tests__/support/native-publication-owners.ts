@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
@@ -17,13 +18,14 @@ import {
   highdensitySetup,
 } from '../highdensity-disk-helpers.js';
 import { nativeFileRows } from './native-file-rows.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 class CountedMediaOwner extends HistoryMediaOwnership {
   constructor(
     store: LocalMediaStore,
     private readonly census: RowOwnership,
   ) {
-    super(store);
+    super(store, historyScratchRoots);
   }
 
   override prepareReferenceReplacement(

@@ -1,8 +1,11 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 import { afterEach } from 'bun:test';
+const historyScratchRoots = new ScratchRootOwner();
+
 type HistoryBackend = 'old' | 'journal';
 
 export function compressionBackendFixture(_backend: HistoryBackend): {
@@ -20,7 +23,7 @@ export function compressionBackendFixture(_backend: HistoryBackend): {
   });
   return {
     createHistory: (): HistoryService => {
-      const history = new HistoryService({});
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       histories.push(history);
       return history;
     },

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
@@ -14,11 +15,12 @@ import { compressTopDownArray } from './support/topdown-array-oracle.js';
 import { middleoutSetup, middleoutRow } from './middleout-disk-helpers.js';
 import { collectRows } from './truncation-stream-helpers.js';
 import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class HardlimitHistory extends HistoryService {
   eagerAccess = false;
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'eager hard-limit preparation forbidden',
@@ -127,7 +129,7 @@ describe('actual provider hard-limit disk fallback', () => {
     180000,
   );
   it('preserves a valid surviving row over eight MiB on the actual route', async () => {
-    const history = new HardlimitHistory();
+    const history = new HardlimitHistory({ scratchRoots: historyScratchRoots });
     try {
       const { handler } = setup(history);
       await history.detachedValues.replace(

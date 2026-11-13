@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { recordedMessages as emittedCandidate } from './__tests__/wire-reference/support/recorded-wire-oracle.js';
 import { describe, expect, it } from 'bun:test';
@@ -104,9 +105,12 @@ async function payloadRanges(
 describe('native stored Anthropic length planning', () => {
   const directory = useTempDir('stored-anthropic-');
   it('persists actual native transfers and last-kept lengths for every thinking policy', async () => {
-    const session = await JournalSession.create(`${directory()}/length.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/length.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await fillStored(session, rows);
       const pin = await session.store.snapshot();
@@ -160,7 +164,7 @@ describe('native stored Anthropic length planning', () => {
       ).dependencies;
       const session = await JournalSession.create(
         `${directory()}/read-${count}.llxj`,
-        {
+        testJournalOptions({
           journal: {
             ...dependencies,
             open: async (path, flags) => {
@@ -181,7 +185,7 @@ describe('native stored Anthropic length planning', () => {
               };
             },
           },
-        },
+        }),
       );
       try {
         const fillStart = counter.reads;
@@ -230,9 +234,12 @@ describe('native stored Anthropic length planning', () => {
     });
   });
   it('refuses absent, mismatched and unsupported measurement settings', async () => {
-    const session = await JournalSession.create(`${directory()}/missing.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/missing.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([text('not measured')]);
       const pin = await session.store.snapshot();

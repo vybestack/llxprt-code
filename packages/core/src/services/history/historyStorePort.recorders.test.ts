@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
@@ -39,9 +40,12 @@ describe('HistoryStorePort scalars and recorder binding (journal store)', () => 
 
   async function opened(): Promise<Store> {
     const store: Store = new JournalHistoryStore(
-      await JournalSession.create(path.join(directory(), 'recorders.llxj'), {
-        journal: testJournalSeams({}).dependencies,
-      }),
+      await JournalSession.create(
+        path.join(directory(), 'recorders.llxj'),
+        testJournalOptions({
+          journal: testJournalSeams({}).dependencies,
+        }),
+      ),
     );
     open.push(store);
     return store;

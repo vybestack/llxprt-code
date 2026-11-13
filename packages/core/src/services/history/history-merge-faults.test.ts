@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
@@ -9,11 +10,12 @@ import {
   rowsOf,
   withRollbackFixture,
 } from './chronology-rollback-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function withSource(
   action: (source: HistoryService) => Promise<void>,
 ): Promise<void> {
-  const source = new HistoryService({});
+  const source = new HistoryService({ scratchRoots: historyScratchRoots });
   source.setTokenizerFactory(exactTokenizer());
   source.addAll([mergeRow(10), mergeRow(11), mergeRow(12)]);
   await source.waitForCommit();

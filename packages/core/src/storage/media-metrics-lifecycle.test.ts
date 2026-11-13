@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '../services/history/IContent.js';
@@ -12,12 +13,15 @@ import {
   StreamMetricHistory,
   withMetricStore,
 } from './media-metrics-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function withRows<T>(
   rows: readonly IContent[],
   action: (history: StreamMetricHistory) => Promise<T>,
 ): Promise<T> {
-  const history = new StreamMetricHistory();
+  const history = new StreamMetricHistory({
+    scratchRoots: historyScratchRoots,
+  });
   try {
     for (const row of rows) history.add(row);
     return await action(history);

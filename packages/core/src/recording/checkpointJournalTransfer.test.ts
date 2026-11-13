@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { mkdtemp, open, readdir, rm } from 'node:fs/promises';
@@ -19,6 +21,7 @@ import {
 } from './__tests__/support/journalRecordingFixture.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import type { ContinueTarget } from './types.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(text: string, seq: number): IContent {
   return {
@@ -42,11 +45,13 @@ async function fixture(
   seed: (session: JournalSession) => Promise<void>,
 ): Promise<Target> {
   const recording = JournalRecordingService.create(
-    recordingConfig(root, {
-      sessionId: 'source',
-      projectHash: 'project',
-      kind: 'subagent',
-    }),
+    withTestNamedWriters(
+      recordingConfig(root, {
+        sessionId: 'source',
+        projectHash: 'project',
+        kind: 'subagent',
+      }),
+    ),
   );
   try {
     const session = await recording.session();
@@ -80,9 +85,11 @@ async function fork(
   target: Target,
   mediaStore?: LocalMediaStore,
 ): Promise<Child> {
-  const result = await new SessionTransitionService({
-    mediaStore,
-  }).forkFromCheckpoint(target, root, 'project', 'new', 'new', []);
+  const result = await new SessionTransitionService(
+    withTestNamedWriters({
+      mediaStore,
+    }),
+  ).forkFromCheckpoint(target, root, 'project', 'new', 'new', []);
   if (!result.ok) throw new Error(result.error);
   requireBoot(result);
   children.push(result);
@@ -236,8 +243,10 @@ describe('checkpoint logical journal range', () => {
     });
     const child = await fork(target, store);
     expect(await store.hasReservations(block.contentId)).toBe(false);
-    const history = new HistoryService();
-    await history.registerMediaOwner(new HistoryMediaOwnership(store));
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
+    await history.registerMediaOwner(
+      new HistoryMediaOwnership(store, historyScratchRoots),
+    );
     try {
       await history.adoptResumeBoot(child.recording, child.boot);
       expect(await store.hasReservations(block.contentId)).toBe(true);
@@ -272,14 +281,9 @@ describe('checkpoint logical journal range', () => {
       },
     );
     try {
-      const result = await new SessionTransitionService().forkFromCheckpoint(
-        target,
-        root,
-        'project',
-        'new',
-        'new',
-        [],
-      );
+      const result = await new SessionTransitionService(
+        withTestNamedWriters({}),
+      ).forkFromCheckpoint(target, root, 'project', 'new', 'new', []);
       expect(result.ok).toBe(false);
       if (result.ok) {
         children.push(result);
@@ -299,17 +303,19 @@ describe('checkpoint logical journal range', () => {
       await session.append([row('prefix', 1)]);
     });
     let childOpens = 0;
-    const result = await new SessionTransitionService({
-      journal: {
+    const result = await new SessionTransitionService(
+      withTestNamedWriters({
         journal: {
-          open: async (file, flags) => {
-            if (file !== source && flags === 'r+' && ++childOpens === 2)
-              throw new Error('recorder creation failed');
-            return open(file, flags);
+          journal: {
+            open: async (file, flags) => {
+              if (file !== source && flags === 'r+' && ++childOpens === 2)
+                throw new Error('recorder creation failed');
+              return open(file, flags);
+            },
           },
         },
-      },
-    }).forkFromCheckpoint(target, root, 'project', 'new', 'new', []);
+      }),
+    ).forkFromCheckpoint(target, root, 'project', 'new', 'new', []);
     expect(result).toMatchObject({
       ok: false,
       error: expect.stringContaining('recorder creation failed'),
@@ -323,7 +329,9 @@ describe('checkpoint logical journal range', () => {
       await session.append([row('removed', 1)]);
     });
     const recording = await JournalRecordingService.open(
-      recordingConfig(root, { sessionId: 'source', projectHash: 'project' }),
+      withTestNamedWriters(
+        recordingConfig(root, { sessionId: 'source', projectHash: 'project' }),
+      ),
       source,
     );
     const session = await recording.session();

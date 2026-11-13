@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from './named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { gcAndSweep, heapSize } from 'bun:jsc';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -26,6 +28,7 @@ import {
   processorFixture,
   sourcePending,
 } from '../../packages/agents/src/core/__tests__/support/streamprocessor-source-fixture.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 type Mode = 'direct' | 'streaming';
 interface Measurement {
@@ -200,7 +203,7 @@ class ObservedMediaOwner extends HistoryMediaOwnership {
     store: LocalMediaStore,
     private readonly observe: () => Promise<void>,
   ) {
-    super(store);
+    super(store, historyScratchRoots);
   }
   override prepareReferenceAddition(
     references:
@@ -226,14 +229,16 @@ async function probe(
   mode: Mode,
 ): Promise<object> {
   const setup = await processorFixture(root, 'http://127.0.0.1:1/v1', false, 0);
-  const recording = createSessionRecorder({
-    sessionId: 'response-memory',
-    projectHash: 'response-memory',
-    chatsDir: root,
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'gpt-5.6',
-  });
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'response-memory',
+      projectHash: 'response-memory',
+      chatsDir: root,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'gpt-5.6',
+    }),
+  );
   await setup.history.attachJournal(recording);
   const census = new ArrivalMemoryCensus(chunks, trap, await settled());
   const media = new LocalMediaStore({

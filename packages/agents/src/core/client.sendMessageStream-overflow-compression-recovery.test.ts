@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 /**
  * @license
@@ -39,6 +40,7 @@ import {
   PREFLIGHT_BASELINE,
 } from './__tests__/support/client.sendMessageStream-overflow-compression-fixture.js';
 import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2755)', () => {
   beforeEach(initializeClient);
@@ -128,7 +130,9 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
         ENFORCEMENT_TOKEN_LIMIT,
       );
 
-      const historyService = new HistoryService();
+      const historyService = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
       const fillText = 'x'.repeat(12_000);
       historyService.add(makeUserMessage(fillText), 'test-model');
       historyService.add(makeAiText(fillText), 'test-model');

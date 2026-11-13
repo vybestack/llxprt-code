@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -25,9 +26,10 @@ import {
 import { Gpt56SourceProjection } from './gpt56-source-projection.js';
 import { withGpt56DiskSources } from './gpt56-disk-tokenizer-factory.js';
 import { SourceFamilyInput } from './source-family-input.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const scratch = mkdtempSync(join(tmpdir(), 'source-family-'));
-const baseFactory = createRuntimeTokenizerFactory();
+const baseFactory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 let sequence = 0;
 
 /** 3-byte and 4-byte characters so 64 KiB read blocks end inside a character. */

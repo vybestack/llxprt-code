@@ -1,8 +1,11 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { createLockedSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export async function openParent(directory: string): Promise<{
   history: HistoryService;
@@ -10,15 +13,20 @@ export async function openParent(directory: string): Promise<{
   before: Buffer<ArrayBuffer>;
   close(): Promise<void>;
 }> {
-  const recording = await createLockedSessionRecorder({
-    sessionId: 'childaccept-parent',
-    projectHash: basename(directory),
-    chatsDir: join(directory, 'chats'),
-    workspaceDirs: [directory],
-    provider: 'openai-responses',
-    model: 'gpt-5.2',
+  const recording = await createLockedSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'childaccept-parent',
+      projectHash: basename(directory),
+      chatsDir: join(directory, 'chats'),
+      workspaceDirs: [directory],
+      provider: 'openai-responses',
+      model: 'gpt-5.2',
+    }),
+  );
+  const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
+    recording,
   });
-  const history = new HistoryService({ recording });
   history.add({
     speaker: 'ai',
     blocks: [

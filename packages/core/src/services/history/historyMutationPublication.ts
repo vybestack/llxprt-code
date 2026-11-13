@@ -11,7 +11,6 @@ import { planMutation } from './planHistoryMutation.js';
 import { OpenReplaceTracker } from './historyReplaceOps.js';
 import { trackMutationOwners } from './historyMutationOwnership.js';
 import { journalPublicationOwners } from './historyPublicationOwners.js';
-import { historyOriginId } from './historyOriginId.js';
 
 export class HistoryMutationPublication {
   admittedCount = 0;
@@ -41,7 +40,7 @@ export class HistoryMutationPublication {
     this.origin =
       input.options.origin === undefined
         ? undefined
-        : historyOriginId(input.options.origin);
+        : this.journal.originIds.get(input.options.origin);
     if (streaming) this.journal.adoptMutationBoundary(previous.durableTail);
     const plan = planMutation(
       previous,

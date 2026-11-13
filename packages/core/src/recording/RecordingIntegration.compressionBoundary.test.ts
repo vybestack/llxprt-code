@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { JournalResumeBoot, resumePointOf } from './journalResume.js';
 /**
@@ -46,6 +49,8 @@ import {
   type RecordedJournalGroup,
 } from './__tests__/support/journal-read-test-helpers.js';
 import { MUTATION } from '../journal/recordKinds.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 const PROJECT_HASH = 'project-hash-compression-boundary';
 const SESSION_ID = 'compression-boundary-session-0001';
@@ -197,9 +202,16 @@ async function createHarness(): Promise<RecordingHarness> {
   );
   const chatsDir = path.join(tempDir, 'chats');
   await fs.mkdir(chatsDir, { recursive: true });
-  const recordingService = JournalRecordingService.create(makeConfig(chatsDir));
-  const integration = new RecordingIntegration(recordingService);
-  const historyService = new HistoryService({});
+  const recordingService = JournalRecordingService.create(
+    withTestNamedWriters(makeConfig(chatsDir)),
+  );
+  const integration = new RecordingIntegration(
+    recordingService,
+    recordingScratchRoots,
+  );
+  const historyService = new HistoryService({
+    scratchRoots: recordingScratchRoots,
+  });
   await integration.subscribeToJournal(historyService);
   return {
     tempDir,
@@ -241,6 +253,8 @@ function recordToolTurn(label: string): IContent[] {
 }
 
 describe('RecordingIntegration duplicate content guard @issue:3132', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   beforeEach(async () => {
     harness = await createHarness();
   });
@@ -482,11 +496,16 @@ async function testRecordingCompressionBoundary07(): Promise<void> {
   // Resume: append to the same file, restore the replayed history, then
   // subscribe. A later rebuild must not append the restored entries again.
   const resumedRecording = await JournalRecordingService.open(
-    makeConfig(harness.chatsDir),
+    withTestNamedWriters(makeConfig(harness.chatsDir)),
     sessionPath,
   );
-  const resumedIntegration = new RecordingIntegration(resumedRecording);
-  const resumedHistory = new HistoryService();
+  const resumedIntegration = new RecordingIntegration(
+    resumedRecording,
+    recordingScratchRoots,
+  );
+  const resumedHistory = new HistoryService({
+    scratchRoots: recordingScratchRoots,
+  });
   await resumedHistory.adoptResumeBoot(
     resumedRecording,
     new JournalResumeBoot(
@@ -525,7 +544,9 @@ async function testRecordingCompressionBoundary08(): Promise<void> {
 }
 
 async function testRecordingCompressionBoundary09(): Promise<void> {
-  const replacementService = new HistoryService({});
+  const replacementService = new HistoryService({
+    scratchRoots: recordingScratchRoots,
+  });
   await harness.integration.subscribeToJournal(replacementService);
 
   try {
@@ -578,11 +599,14 @@ async function resumeHarnessSession(
 
   const replayed = { history: await journalRows(sessionPath) };
   const recording = await JournalRecordingService.open(
-    makeConfig(harness.chatsDir),
+    withTestNamedWriters(makeConfig(harness.chatsDir)),
     sessionPath,
   );
-  const integration = new RecordingIntegration(recording);
-  const history = new HistoryService();
+  const integration = new RecordingIntegration(
+    recording,
+    recordingScratchRoots,
+  );
+  const history = new HistoryService({ scratchRoots: recordingScratchRoots });
   await history.adoptResumeBoot(
     recording,
     new JournalResumeBoot(recording, await resumePointOf(recording)),

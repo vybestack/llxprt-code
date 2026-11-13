@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -72,9 +73,15 @@ async function verifyPreservesReplayRetentionMixedTextOrderAndDuplicateCallResol
     } satisfies IContent,
   ];
   const actual: HistoryItem[] = [];
-  for await (const item of streamHistoryItems(source, 'allowed', undefined, {
-    temporaryRoot: directory,
-  }))
+  for await (const item of streamHistoryItems(
+    scratchRoots,
+    source,
+    'allowed',
+    undefined,
+    {
+      temporaryRoot: directory,
+    },
+  ))
     actual.push(item);
   expect(actual).toStrictEqual(iContentToHistoryItems(source, 'allowed'));
   const group = actual[1];
@@ -88,9 +95,15 @@ async function verifyPreservesReplayRetentionMixedTextOrderAndDuplicateCallResol
 
 async function verifyKeepsTheDiskGroupUnderBackpressureAndRemovesItOnReturn(): Promise<void> {
   const ownership = new RowOwnership();
-  const iterator = streamHistoryItems([ai, response], 'allowed', ownership, {
-    temporaryRoot: directory,
-  })[Symbol.asyncIterator]();
+  const iterator = streamHistoryItems(
+    scratchRoots,
+    [ai, response],
+    'allowed',
+    ownership,
+    {
+      temporaryRoot: directory,
+    },
+  )[Symbol.asyncIterator]();
   await iterator.next();
   expect((await readdir(directory)).length).toBe(1);
   expect(ownership.snapshot().liveRows).toBeGreaterThan(0);
@@ -106,9 +119,15 @@ async function verifyCleansUpOnUpstreamError(): Promise<void> {
     yield response;
     throw new Error('fetch failed');
   }
-  const iterator = streamHistoryItems(rows(), undefined, ownership, {
-    temporaryRoot: directory,
-  })[Symbol.asyncIterator]();
+  const iterator = streamHistoryItems(
+    scratchRoots,
+    rows(),
+    undefined,
+    ownership,
+    {
+      temporaryRoot: directory,
+    },
+  )[Symbol.asyncIterator]();
   await expect(iterator.next()).rejects.toThrow('fetch failed');
   expect(ownership.snapshot().liveRows).toBe(0);
   expect(await readdir(directory)).toStrictEqual([]);
@@ -137,10 +156,16 @@ async function verifyCancelsAPendingUpstreamFetchBeforePublishingAndReleasesItsG
       upstreamClosed = true;
     }
   }
-  const iterator = streamHistoryItems(rows(), undefined, ownership, {
-    temporaryRoot: directory,
-    signal: controller.signal,
-  })[Symbol.asyncIterator]();
+  const iterator = streamHistoryItems(
+    scratchRoots,
+    rows(),
+    undefined,
+    ownership,
+    {
+      temporaryRoot: directory,
+      signal: controller.signal,
+    },
+  )[Symbol.asyncIterator]();
   const result = iterator.next();
   await fetching;
   controller.abort(new Error('fetch cancelled'));
@@ -161,9 +186,15 @@ async function verifyRejectsAConsumerRetainingProjectedGroupsAfterGeneratorAdvan
     }
   }
   try {
-    for await (const item of streamHistoryItems(rows(), undefined, ownership, {
-      temporaryRoot: directory,
-    })) {
+    for await (const item of streamHistoryItems(
+      scratchRoots,
+      rows(),
+      undefined,
+      ownership,
+      {
+        temporaryRoot: directory,
+      },
+    )) {
       ownership.retain(item);
       retained.push(item);
     }
@@ -177,3 +208,5 @@ async function verifyRejectsAConsumerRetainingProjectedGroupsAfterGeneratorAdvan
   }
   expect(ownership.snapshot().liveRows).toBe(0);
 }
+
+const scratchRoots = new ScratchRootOwner();

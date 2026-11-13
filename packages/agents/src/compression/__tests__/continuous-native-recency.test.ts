@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { getScratchRoot } from '../../../../core/src/storage/scratch-root.js';
+
 import { withNativeFallbackFixture } from './support/native-fallback-fixture.js';
 import { operationFileCreates } from './support/operation-file-creates.js';
 import {
@@ -26,7 +26,7 @@ describe('native continuous recency decision', () => {
         );
         const expected = digestRows(densityOracle(size, 4));
         const handler = densityHandler(history, 4);
-        getScratchRoot();
+        history.scratchRoots.getRoot();
         const files = await operationFileCreates(
           () => handler.ensureDensityOptimized(),
           true,
@@ -58,7 +58,7 @@ describe('native continuous recency decision', () => {
         })(),
       );
       const handler = densityHandler(history, 4);
-      getScratchRoot();
+      history.scratchRoots.getRoot();
       const files = await operationFileCreates(
         () => handler.ensureDensityOptimized(),
         true,

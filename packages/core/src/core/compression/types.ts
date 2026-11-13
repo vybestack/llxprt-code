@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '../../storage/scratch-root.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -147,6 +148,7 @@ export interface CompressionProviderResult {
  * agent runtime.
  */
 export interface CompressionStrategyRuntime {
+  readonly scratchRoots: ScratchRootOwner;
   readonly ephemerals: {
     compressionThreshold(): number;
     contextLimit(): number;
@@ -269,6 +271,7 @@ export interface CompressionStrategy {
   optimizeRows?(
     history: HistoryIndexedRows,
     config: DensityConfig,
+    scratchRoots: ScratchRootOwner,
   ): DiskDensityResult;
 }
 

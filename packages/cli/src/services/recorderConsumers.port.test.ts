@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { ResumeBootHandle } from '@vybestack/llxprt-code-core';
@@ -27,14 +28,16 @@ export function entryPointsAcceptTheJournalRecorder(
 
 describe('CLI recorder consumers take the session surface', () => {
   it('a resume swap callback set holds a journal recorder as the current recording', async () => {
-    const journal = JournalRecordingService.create({
-      sessionId: 'session-port-0003',
-      projectHash: 'project',
-      chatsDir: 'unused',
-      workspaceDirs: [],
-      provider: 'anthropic',
-      model: 'model-1',
-    });
+    const journal = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'session-port-0003',
+        projectHash: 'project',
+        chatsDir: 'unused',
+        workspaceDirs: [],
+        provider: 'anthropic',
+        model: 'model-1',
+      }),
+    );
     let current: ReturnType<RecordingSwapCallbacks['getCurrentRecording']> =
       null;
     const callbacks: Pick<

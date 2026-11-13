@@ -11,29 +11,45 @@ import type {
   AnthropicMessageBlock,
 } from './AnthropicMessageNormalizer.js';
 
-const references = new WeakMap<MediaBlock, MediaReferenceBlock>();
-const wireMedia = new WeakMap<object, MediaBlock>();
-const mediaTurns = new WeakMap<MediaBlock, string>();
+const MEDIA_MEASUREMENT = Symbol('anthropicMediaMeasurement');
+class MediaMeasurement {
+  constructor(
+    readonly media: MediaBlock,
+    readonly turnId?: string,
+  ) {}
+}
+
+function measurementFor(block: object): MediaMeasurement | undefined {
+  const source = 'source' in block ? block.source : block;
+  if (typeof source !== 'object' || source === null) return undefined;
+  const measurement =
+    MEDIA_MEASUREMENT in source ? source[MEDIA_MEASUREMENT] : undefined;
+  return measurement instanceof MediaMeasurement ? measurement : undefined;
+}
+
+function bindMeasurement(block: object, measurement: MediaMeasurement): void {
+  const source = 'source' in block ? block.source : block;
+  Object.defineProperty(source, MEDIA_MEASUREMENT, {
+    value: measurement,
+    enumerable: false,
+    configurable: true,
+  });
+}
 
 export function anthropicWireMediaTurn(block: object): string | undefined {
-  const media = anthropicWireMedia(block);
-  return media === undefined ? undefined : mediaTurns.get(media);
+  return measurementFor(block)?.turnId;
 }
 
 export function anthropicWireMedia(block: object): MediaBlock | undefined {
-  const source = 'source' in block ? block.source : block;
-  return typeof source === 'object' && source !== null
-    ? wireMedia.get(source)
-    : undefined;
+  return measurementFor(block)?.media;
 }
 
 export function copyAnthropicWireMedia(
   source: AnthropicMessageBlock,
   target: AnthropicMessageBlock,
 ): void {
-  const media = anthropicWireMedia(source);
-  if (media !== undefined)
-    wireMedia.set('source' in target ? target.source : target, media);
+  const measurement = measurementFor(source);
+  if (measurement !== undefined) bindMeasurement(target, measurement);
 }
 
 export function anthropicMediaReference(
@@ -47,17 +63,25 @@ export function measurableAnthropicRow(row: IContent): IContent {
   return {
     ...row,
     blocks: row.blocks.map((block) => {
-      if (block.type === 'media' && typeof row.metadata?.turnId === 'string')
-        mediaTurns.set(block, row.metadata.turnId);
-      if (block.type !== 'media' || block.encoding !== 'reference')
-        return block;
-      const inline: InlineMediaBlock = {
-        ...block,
-        encoding: 'base64',
-        data: '',
-      };
-      references.set(inline, block);
-      return inline;
+      if (block.type !== 'media') return block;
+      const measurable: MediaBlock =
+        block.encoding === 'reference'
+          ? ({
+              ...block,
+              encoding: 'base64',
+              data: '',
+            } satisfies InlineMediaBlock)
+          : { ...block };
+      bindMeasurement(
+        measurable,
+        new MediaMeasurement(
+          block,
+          typeof row.metadata?.turnId === 'string'
+            ? row.metadata.turnId
+            : undefined,
+        ),
+      );
+      return measurable;
     }),
   };
 }
@@ -68,8 +92,7 @@ export function measuredAnthropicMedia<
     | AnthropicDocumentBlock
     | { type: 'text'; text: string },
 >(media: MediaBlock, block: T): T {
-  const reference = references.get(media);
-  wireMedia.set('source' in block ? block.source : block, reference ?? media);
+  bindMeasurement(block, measurementFor(media) ?? new MediaMeasurement(media));
   return block;
 }
 

@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { randomUUID } from 'node:crypto';
 import { suspendJournalMaintenance } from '@vybestack/llxprt-code-core/journal/deferred-maintenance.js';
@@ -23,6 +25,7 @@ import {
   loggingChatSession,
   readLoggingChatStream,
 } from './chat-session-logging-fixture.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const MODEL = 'gpt-5.6';
 /**
@@ -152,7 +155,7 @@ async function createConfig(
     trustedFolder: true,
     telemetry: { enabled: false },
   });
-  const nativeFactory = createRuntimeTokenizerFactory();
+  const nativeFactory = createRuntimeTokenizerFactory(historyScratchRoots);
   await nativeFactory.prepareTokenizer?.('openai-responses', MODEL);
   return {
     config,
@@ -257,6 +260,7 @@ function workloadRuntime(
     runtimeId,
   });
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     promptEstimator: tokenizerFactory,
     readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
     prepareProviderInvocation: (name, parameters, signal) =>
@@ -308,18 +312,20 @@ export async function createWorkload(
     contextLimit,
   );
   const settingsOwner = new SessionSettingsOwner(settings);
-  const recording = await createLockedSessionRecorder({
-    sessionId: config.getSessionId(),
-    projectHash: basename(root),
-    chatsDir: join(root, 'chats'),
-    workspaceDirs: [root],
-    provider: 'openai-responses',
-    model: MODEL,
-  });
+  const recording = await createLockedSessionRecorder(
+    withTestNamedWriters({
+      sessionId: config.getSessionId(),
+      projectHash: basename(root),
+      chatsDir: join(root, 'chats'),
+      workspaceDirs: [root],
+      provider: 'openai-responses',
+      model: MODEL,
+    }),
+  );
   const history =
     mode === 'normal'
-      ? new HistoryService({ recording })
-      : new RetainingHistory({ recording });
+      ? new HistoryService({ scratchRoots: historyScratchRoots, recording })
+      : new RetainingHistory({ scratchRoots: historyScratchRoots, recording });
   await history.waitForCommit();
   const provider = new OpenAIResponsesProvider('test-key', baseURL);
   const runtime = workloadRuntime({
@@ -345,7 +351,9 @@ export async function createWorkload(
       settings.set('context-limit', limit);
     },
     async runTurn(turn) {
-      const resumeMaintenance = await suspendJournalMaintenance();
+      const resumeMaintenance = await suspendJournalMaintenance(
+        history.maintenanceScope,
+      );
       try {
         if (turn > 1) addToolExchange(history, turn);
         const output = await readLoggingChatStream(

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -91,7 +92,10 @@ describe('Property-based tests #1', () => {
           // Pick a random valid index
           const validIndex = Math.floor(Math.random() * sessionCount) + 1;
 
-          const result = await performResume(String(validIndex), context);
+          const result = await performResume(
+            String(validIndex),
+            withTestNamedWriters(context),
+          );
 
           expect(result.ok).toBe(true);
           assertTruthy(result.ok);

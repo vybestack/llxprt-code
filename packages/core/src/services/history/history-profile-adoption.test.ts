@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 import { openIndependentJournal } from './__tests__/support/independent-journal.js';
 /**
  * @license
@@ -13,6 +15,7 @@ import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js
 import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function rawHistory(history: HistoryService): Promise<IContent[]> {
   return Array.fromAsync(history.streamRawHistory());
@@ -36,16 +39,21 @@ const histories: ProfileHistory[] = [];
 const recorders: SessionRecordingPort[] = [];
 
 function journalHistory(): ProfileHistory {
-  const recording = createSessionRecorder({
-    sessionId: randomUUID(),
-    projectHash: 'profile-adoption',
-    chatsDir: directory,
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
-  });
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: randomUUID(),
+      projectHash: 'profile-adoption',
+      chatsDir: directory,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
   recorders.push(recording);
-  const history = new ProfileHistory({ recording });
+  const history = new ProfileHistory({
+    scratchRoots: historyScratchRoots,
+    recording,
+  });
   histories.push(history);
   return history;
 }

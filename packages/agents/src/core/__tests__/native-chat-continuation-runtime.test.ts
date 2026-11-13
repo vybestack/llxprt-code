@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
@@ -26,6 +28,7 @@ import { operationFileCreates } from '../../compression/__tests__/support/operat
 import { StreamEventType } from '../chatSession.js';
 import { loggingChatSession } from './support/chat-session-logging-fixture.js';
 import { occupyMistralFormats } from './support/occupied-mistral-formats.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const calls: ContinuationToolCall[] = [
   {
@@ -149,16 +152,21 @@ describe('public native plain Chat automatic continuation HTTP', () => {
       const storedLengths: number[] = [];
       const requestOrdinals: bigint[][] = [];
       const estimates: number[] = [];
-      const tokenizer = createRuntimeTokenizerFactory();
-      const recording = JournalRecordingService.create({
-        sessionId: 'native-chat-session',
-        projectHash: 'chat-tail',
-        chatsDir: directory(),
-        workspaceDirs: [],
-        provider: 'openai',
-        model,
+      const tokenizer = createRuntimeTokenizerFactory(historyScratchRoots);
+      const recording = JournalRecordingService.create(
+        withTestNamedWriters({
+          sessionId: 'native-chat-session',
+          projectHash: 'chat-tail',
+          chatsDir: directory(),
+          workspaceDirs: [],
+          provider: 'openai',
+          model,
+        }),
+      );
+      const history = new HistoryService({
+        scratchRoots: historyScratchRoots,
+        recording,
       });
-      const history = new HistoryService({ recording });
       const server = Bun.serve({
         hostname: '127.0.0.1',
         port: 0,
@@ -199,6 +207,7 @@ describe('public native plain Chat automatic continuation HTTP', () => {
       });
       const owner = new SessionSettingsOwner(settings);
       const runtime = createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         promptEstimator: {
           ...tokenizer,
           async estimatePrompt(request) {

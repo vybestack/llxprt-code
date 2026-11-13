@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
@@ -10,14 +11,16 @@ describe('workspace metadata through discovery and continuation', () => {
   const directory = useTempDir('issue854-metadata-budget-');
 
   it('preserves workspace metadata in real discovery and continuation', async () => {
-    const recording = JournalRecordingService.create({
-      sessionId: 'metadata-budget',
-      projectHash: 'budget-project',
-      chatsDir: directory(),
-      provider: 'test',
-      model: 'test',
-      workspaceDirs: ['/workspace/雪', '/workspace/second'],
-    });
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'metadata-budget',
+        projectHash: 'budget-project',
+        chatsDir: directory(),
+        provider: 'test',
+        model: 'test',
+        workspaceDirs: ['/workspace/雪', '/workspace/second'],
+      }),
+    );
     await recording.setSessionName('workspace-session');
     await recording.dispose();
     const file = recording.getFilePath();

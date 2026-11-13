@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,6 +9,7 @@ import { describe, expect, it } from 'bun:test';
 import { createUserMessage } from './IContent.js';
 import type { IContent } from './IContent.js';
 import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function texts(content: IContent): string[] {
   return content.blocks.flatMap((block) =>
@@ -24,7 +26,7 @@ async function historyTexts(history: HistoryService): Promise<string[]> {
 
 describe('HistoryService detached transform serialization', () => {
   it('sees entries committed by writes queued before it', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.add(createUserMessage('first'));
     const queued = history.addBatch([createUserMessage('queued batch')]);
     const seen: string[] = [];
@@ -46,7 +48,7 @@ describe('HistoryService detached transform serialization', () => {
   });
 
   it('commits nothing when the transform throws and keeps the queue usable', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.add(createUserMessage('first'));
 
     const failure = await history.detachedValues

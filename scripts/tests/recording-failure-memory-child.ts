@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '../../packages/core/src/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { gcAndSweep, heapSize } from 'bun:jsc';
 import { randomBytes } from 'node:crypto';
@@ -5,6 +6,8 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RecordingFailureStore } from '../../packages/core/src/recording/recording-failure-report.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 async function settled(): Promise<{ heap: number; external: number }> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -25,11 +28,17 @@ if (!Number.isSafeInteger(count) || count < 1)
   throw new Error('Expected positive failure count');
 const root = mkdtempSync(join(tmpdir(), 'recording-failure-memory-'));
 try {
-  const warmup = new RecordingFailureStore(join(root, 'warmup'));
+  const warmup = new RecordingFailureStore(
+    recordingScratchRoots,
+    join(root, 'warmup'),
+  );
   for (let generation = 1; generation <= 32; generation += 1)
     warmup.record(generation, new Error('warmup'));
   await warmup.takeThrough(32, 'warmup')?.close();
-  const store = new RecordingFailureStore(join(root, 'probe'));
+  const store = new RecordingFailureStore(
+    recordingScratchRoots,
+    join(root, 'probe'),
+  );
   const before = await settled();
   const probes: Array<WeakRef<{ text: string }>> = [];
   const retained: Error[] = [];

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,6 +18,7 @@ import {
   estimateRowSourceTokens,
   type EstimationRowSource,
 } from './loadBalancerTokenEstimator.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const texts = ['alpha 雪', 'beta\n\n  gamma', ''.padEnd(5000, 'delta ')];
 const rows: readonly IContent[] = texts.map((text, index) => ({
@@ -98,7 +100,9 @@ describe('row-source load balancer estimation', () => {
   });
 
   it('matches the array estimate with a real tokenizer factory', async () => {
-    const tokenizerFactory = createRuntimeTokenizerFactory();
+    const tokenizerFactory = createRuntimeTokenizerFactory(
+      tokenizerScratchRoots,
+    );
     const { rows: reader } = repeatableRows(rows);
     const actual = await estimateRowSourceTokens(
       rowSource(reader),

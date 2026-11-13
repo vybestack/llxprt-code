@@ -1,8 +1,10 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { applyCompressionValuesWithAnchor } from '../../cache-anchor-values.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 async function publishValues(
   history: HistoryService,
@@ -47,7 +49,7 @@ export function publishCompressionArrayValues(
   let candidate: HistoryDensityRows | undefined;
   try {
     signal?.throwIfAborted();
-    candidate = new HistoryDensityRows();
+    candidate = new HistoryDensityRows(historyScratchRoots);
     for (const row of rows) {
       signal?.throwIfAborted();
       candidate.append(row);

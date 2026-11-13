@@ -115,6 +115,7 @@ export interface InteractiveApplicationInputs
     | 'subscribeHistoryTokens'
     | 'connectRecordingHistory'
     | 'getRecording'
+    | 'getRecordingWatermarks'
     | 'resume'
     | 'listBrowserTargetsDetailed'
     | 'importSession'

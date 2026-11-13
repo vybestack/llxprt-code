@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -22,6 +25,8 @@ import { JournalRecordingService } from './journalRecordingService.js';
 import { recordedRows } from './__tests__/support/native-integration-fixture.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 function text(speaker: 'human' | 'ai', value: string): IContent {
   return { speaker, blocks: [{ type: 'text', text: value }] };
 }
@@ -41,6 +46,8 @@ function gate(): { promise: Promise<void>; release: () => void } {
 }
 
 describe('RecordingIntegration generated exchange publication', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   let tempDir: string;
   let history: HistoryService;
   let recording: JournalRecordingService;
@@ -67,16 +74,18 @@ describe('RecordingIntegration generated exchange publication', () => {
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'recording-generation-'));
-    history = new HistoryService();
-    recording = JournalRecordingService.create({
-      sessionId: 'recording-generation-0001',
-      projectHash: 'project-hash-recording-generation',
-      chatsDir: tempDir,
-      workspaceDirs: ['/workspace/project-a'],
-      provider: 'anthropic',
-      model: 'claude-4',
-    });
-    integration = new RecordingIntegration(recording);
+    history = new HistoryService({ scratchRoots: recordingScratchRoots });
+    recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'recording-generation-0001',
+        projectHash: 'project-hash-recording-generation',
+        chatsDir: tempDir,
+        workspaceDirs: ['/workspace/project-a'],
+        provider: 'anthropic',
+        model: 'claude-4',
+      }),
+    );
+    integration = new RecordingIntegration(recording, recordingScratchRoots);
     await integration.subscribeToJournal(history, {});
     // Content added before the batch materializes the journal.
     for (const content of seed) history.add(structuredClone(content));

@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { resumeSession, type ResumeResult } from '@vybestack/llxprt-code-core';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
@@ -8,6 +10,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { restoreResumeBoot } from './restoreResumeBoot.js';
+const historyScratchRoots = createTestScratchOwner();
 
 let root: string;
 let resumed: ResumeResult;
@@ -16,31 +19,35 @@ let history: HistoryService;
 describe('startup restoration from a journal session', () => {
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'caller-boot-journal-'));
-    const recording = JournalRecordingService.create({
-      chatsDir: root,
-      sessionId: 'source',
-      projectHash: 'project',
-      provider: 'test',
-      model: 'test',
-      workspaceDirs: [],
-    });
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        chatsDir: root,
+        sessionId: 'source',
+        projectHash: 'project',
+        provider: 'test',
+        model: 'test',
+        workspaceDirs: [],
+      }),
+    );
     await (
       await recording.session()
     ).append([
       { speaker: 'human', blocks: [{ type: 'text', text: 'original' }] },
     ]);
     await recording.dispose();
-    const result = await resumeSession({
-      continueRef: 'source',
-      chatsDir: root,
-      projectHash: 'project',
-      currentProvider: 'test',
-      currentModel: 'test',
-      workspaceDirs: [],
-    });
+    const result = await resumeSession(
+      withTestNamedWriters({
+        continueRef: 'source',
+        chatsDir: root,
+        projectHash: 'project',
+        currentProvider: 'test',
+        currentModel: 'test',
+        workspaceDirs: [],
+      }),
+    );
     if (!result.ok) throw new Error(result.error);
     resumed = result;
-    history = new HistoryService({});
+    history = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(async () => {
     await history.dispose();

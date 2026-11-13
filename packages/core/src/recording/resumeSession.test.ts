@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -71,7 +72,9 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resumes the mo
         contents: [makeContent('second session message')],
       });
 
-      const result = await resumeSession(makeResumeRequest(chatsDir()));
+      const result = await resumeSession(
+        withTestNamedWriters(makeResumeRequest(chatsDir())),
+      );
 
       const okResult = expectOk(result);
       recordings.push(okResult.recording);
@@ -114,7 +117,9 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resumes a spec
       });
 
       const result = await resumeSession(
-        makeResumeRequest(chatsDir(), { continueRef: targetId }),
+        withTestNamedWriters(
+          makeResumeRequest(chatsDir(), { continueRef: targetId }),
+        ),
       );
 
       const okResult = expectOk(result);
@@ -158,7 +163,9 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: reconstructs h
         contents,
       });
 
-      const result = await resumeSession(makeResumeRequest(chatsDir()));
+      const result = await resumeSession(
+        withTestNamedWriters(makeResumeRequest(chatsDir())),
+      );
 
       const okResult = expectOk(result);
       recordings.push(okResult.recording);
@@ -213,7 +220,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: reconstructs h
         sessionId,
         projectHash: PROJECT_HASH,
       });
-      const svc = JournalRecordingService.create(config);
+      const svc = JournalRecordingService.create(withTestNamedWriters(config));
       const session = await svc.session();
 
       // Add initial content
@@ -245,7 +252,9 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: reconstructs h
       await svc.flush();
       await svc.dispose();
 
-      const result = await resumeSession(makeResumeRequest(chatsDir()));
+      const result = await resumeSession(
+        withTestNamedWriters(makeResumeRequest(chatsDir())),
+      );
 
       const okResult = expectOk(result);
       recordings.push(okResult.recording);
@@ -296,10 +305,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns correc
       });
 
       const result = await resumeSession(
-        makeResumeRequest(chatsDir(), {
-          currentProvider: 'google',
-          currentModel: 'gemini-3',
-        }),
+        withTestNamedWriters(
+          makeResumeRequest(chatsDir(), {
+            currentProvider: 'google',
+            currentModel: 'gemini-3',
+          }),
+        ),
       );
 
       const okResult = expectOk(result);
@@ -327,7 +338,9 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
      * @requirement REQ-RSM-001
      */
     it('returns error when no sessions exist', async () => {
-      const result = await resumeSession(makeResumeRequest(chatsDir()));
+      const result = await resumeSession(
+        withTestNamedWriters(makeResumeRequest(chatsDir())),
+      );
 
       const errResult = expectNotOk(result);
       expect(errResult.error.toLowerCase()).toContain('no session');
@@ -351,9 +364,11 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
       await createJournalTestSession(chatsDir(), { projectHash: PROJECT_HASH });
 
       const result = await resumeSession(
-        makeResumeRequest(chatsDir(), {
-          continueRef: 'nonexistent-session-id',
-        }),
+        withTestNamedWriters(
+          makeResumeRequest(chatsDir(), {
+            continueRef: 'nonexistent-session-id',
+          }),
+        ),
       );
 
       const errResult = expectNotOk(result);
@@ -385,7 +400,9 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
       lockHandles.push(handle);
 
       const result = await resumeSession(
-        makeResumeRequest(chatsDir(), { continueRef: sessionId }),
+        withTestNamedWriters(
+          makeResumeRequest(chatsDir(), { continueRef: sessionId }),
+        ),
       );
 
       const errResult = expectNotOk(result);
@@ -426,7 +443,9 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: CONTINUE_LATES
       );
       lockHandles.push(handle);
 
-      const result = await resumeSession(makeResumeRequest(chatsDir()));
+      const result = await resumeSession(
+        withTestNamedWriters(makeResumeRequest(chatsDir())),
+      );
 
       const okResult = expectOk(result);
       recordings.push(okResult.recording);
@@ -470,7 +489,9 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
         lockHandles.push(handle);
       }
 
-      const result = await resumeSession(makeResumeRequest(chatsDir()));
+      const result = await resumeSession(
+        withTestNamedWriters(makeResumeRequest(chatsDir())),
+      );
 
       const errResult = expectNotOk(result);
       expect(errResult.error.toLowerCase()).toContain('in use');
@@ -499,10 +520,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: records provid
       });
 
       const result = await resumeSession(
-        makeResumeRequest(chatsDir(), {
-          currentProvider: 'openai',
-          currentModel: 'gpt-5',
-        }),
+        withTestNamedWriters(
+          makeResumeRequest(chatsDir(), {
+            currentProvider: 'openai',
+            currentModel: 'gpt-5',
+          }),
+        ),
       );
 
       const okResult = expectOk(result);
@@ -537,7 +560,9 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returned recor
       });
 
       const result = await resumeSession(
-        makeResumeRequest(chatsDir(), { continueRef: sessionId }),
+        withTestNamedWriters(
+          makeResumeRequest(chatsDir(), { continueRef: sessionId }),
+        ),
       );
 
       const okResult = expectOk(result);

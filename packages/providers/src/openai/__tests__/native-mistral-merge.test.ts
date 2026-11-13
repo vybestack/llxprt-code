@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { operationFileCreates } from '../../../../agents/src/compression/__tests__/support/operation-file-creates.js';
@@ -60,9 +61,12 @@ describe('Mistral simultaneous historical mapping changes', () => {
         { speaker: 'ai', blocks: blockers.map((id) => call(id)) },
       ];
       const readCounter = { reads: 0 };
-      const session = await JournalSession.create(`${directory()}/case.llxj`, {
-        journal: testJournalSeams({ readCounter }, 1, false).dependencies,
-      });
+      const session = await JournalSession.create(
+        `${directory()}/case.llxj`,
+        testJournalOptions({
+          journal: testJournalSeams({ readCounter }, 1, false).dependencies,
+        }),
+      );
       try {
         await session.append(rows);
         await session.registerRowFormat(

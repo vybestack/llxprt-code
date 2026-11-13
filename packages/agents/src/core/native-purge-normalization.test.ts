@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { streamCuratedProviderHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
@@ -14,6 +15,7 @@ import { exactTokenizer } from '../../../core/src/services/history/chronology-ro
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import { streamSemanticPurgeRequest } from './streamRequestHelpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function collect(rows: ProviderRequestRows): Promise<IContent[]> {
   const output: IContent[] = [];
@@ -39,7 +41,7 @@ describe('native purge request normalization', () => {
   ])(
     'matches caller-owned units and pending membership for %j without scratch',
     async ({ mode, explicit }) => {
-      const history = new HistoryService({});
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       history.setTokenizerFactory(exactTokenizer());
       try {
         await history.replaceAll([

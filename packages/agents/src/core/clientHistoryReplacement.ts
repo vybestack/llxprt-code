@@ -129,6 +129,9 @@ export async function replaceClientHistorySource(
     initialized && existing !== undefined
       ? existing
       : new HistoryService({
+          scratchRoots: deps.scratchRoots,
+          originIds: existing?.originIds,
+          maintenanceScope: existing?.maintenanceScope,
           mutationOwnership: options.ownership,
           attachmentCounters: options.counters,
         });

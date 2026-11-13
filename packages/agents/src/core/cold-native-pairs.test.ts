@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
@@ -85,16 +86,17 @@ describe('cold native pair catch-up', () => {
         call,
       ];
       const path = `${directory()}/${provider}.llxj`;
-      const original = await JournalSession.create(path);
+      const original = await JournalSession.create(path, testJournalOptions());
       try {
         await original.append(prefix);
         await register(original, registration);
       } finally {
         await original.close();
       }
-      const resumed = await JournalSession.open(path);
+      const resumed = await JournalSession.open(path, testJournalOptions());
       const cold = await JournalSession.create(
         `${directory()}/${provider}-cold.llxj`,
+        testJournalOptions(),
       );
       try {
         await resumed.store.commit([

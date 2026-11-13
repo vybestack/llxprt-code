@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { recordedMessages as emittedCandidate } from './__tests__/wire-reference/support/recorded-wire-oracle.js';
 import { describe, expect, it } from 'bun:test';
@@ -133,9 +134,12 @@ async function checkAppends(
   input: readonly IContent[],
   path: string,
 ): Promise<number | undefined> {
-  const session = await JournalSession.create(path, {
-    journal: testJournalSeams().dependencies,
-  });
+  const session = await JournalSession.create(
+    path,
+    testJournalOptions({
+      journal: testJournalSeams().dependencies,
+    }),
+  );
   try {
     await session.append(input.slice(0, 1));
     await session.store.commit([
@@ -154,9 +158,12 @@ async function checkAppends(
   } finally {
     await session.close();
   }
-  const reopened = await JournalSession.open(path, {
-    journal: testJournalSeams().dependencies,
-  });
+  const reopened = await JournalSession.open(
+    path,
+    testJournalOptions({
+      journal: testJournalSeams().dependencies,
+    }),
+  );
   try {
     const policies: readonly StripPolicy[] = ['none', 'all', 'allButLast'];
     for (const strip of policies) await assertCached(reopened, input, strip);

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -75,7 +76,7 @@ describe('Core resume flow #2', () => {
       currentSessionId: 'different-session',
     });
 
-    const result = await performResume('1', context);
+    const result = await performResume('1', withTestNamedWriters(context));
 
     expect(result.ok).toBe(true);
     assertTruthy(result.ok);

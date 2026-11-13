@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
@@ -15,7 +16,7 @@ import { useTempDir } from './__tests__/support/useTempDir.js';
 const OWNERS = [1, 2, 1, 2, 3, 0] as const;
 
 async function ownedStore(file: string): Promise<JournalStore> {
-  const store = await JournalStore.create(file, storeDeps());
+  const store = await JournalStore.create(file, storeDeps(), testNamedWriters);
   await appendEach(
     store,
     scenarioDrafts().map((draft, index) => ({

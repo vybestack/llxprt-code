@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
@@ -71,15 +72,17 @@ describe('JournalHistoryStore over an opener', () => {
   }
 
   function journalRecorder(): JournalRecordingService {
-    const created = JournalRecordingService.create({
-      sessionId: 'lazy-open-recorder',
-      projectHash: PROJECT,
-      chatsDir: chatsDirIn(directory()),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-      journal: journalSeams(),
-    });
+    const created = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'lazy-open-recorder',
+        projectHash: PROJECT,
+        chatsDir: chatsDirIn(directory()),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+        journal: journalSeams(),
+      }),
+    );
     recorders.push(created);
     return created;
   }

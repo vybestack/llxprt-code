@@ -248,7 +248,10 @@ describe('profile-commit-publication', () => {
       builtCredentials().authority,
       builtCallerRelease,
     );
-    const factoriesTokenizer = configureProviderTokenizer(builtCallerManager);
+    const factoriesTokenizer = configureProviderTokenizer(
+      builtCallerManager,
+      builtCallerConfig.scratchRoots,
+    );
     const factoriesContent = createRuntimeContentGeneratorFactory();
     builtCallerTokenizer = factoriesTokenizer;
     builtCallerContent = factoriesContent;

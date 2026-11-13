@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { batchGate } from '@vybestack/llxprt-code-core/services/history/__tests__/support/addbatch-stream-test-helpers.js';
@@ -18,6 +19,7 @@ import {
   WIRE_ROUTES,
 } from './support/wireBodyCapture.js';
 import { buildHistoryCases } from './support/wireBodyHistories.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('native plain Chat history media lease', () => {
   it('keeps a blob through concurrent clear while an actual HTTP body is paused before its read', async () => {
@@ -48,8 +50,10 @@ describe('native plain Chat history media lease', () => {
         budgetBytes: 1024,
       }),
     );
-    const history = new HistoryService({});
-    await history.registerMediaOwner(new HistoryMediaOwnership(store));
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
+    await history.registerMediaOwner(
+      new HistoryMediaOwnership(store, historyScratchRoots),
+    );
     await history.addBatch(input.rows);
     const selection = await history.prepareCuratedForProviderSnapshot();
     const sink = await localWireHashSink(route);
@@ -133,8 +137,10 @@ describe('native plain Chat history media lease', () => {
     const expected = recordOf(
       await sendThroughRoute(route, input, 'rows', media),
     );
-    const history = new HistoryService({});
-    await history.registerMediaOwner(new HistoryMediaOwnership(store));
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
+    await history.registerMediaOwner(
+      new HistoryMediaOwnership(store, historyScratchRoots),
+    );
     await history.addBatch(input.rows);
     const selection = await history.prepareCuratedForProviderSnapshot();
     const sink = await localWireHashSink(route);

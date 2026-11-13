@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,6 +18,7 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -52,6 +54,7 @@ export function createHistoryRuntimeFixture(options: {
   const owner = new SessionSettingsOwner(settingsService);
   roots.push(owner);
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     state: options.state,
     history: options.history,
     settings: {

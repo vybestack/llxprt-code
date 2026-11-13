@@ -1,3 +1,11 @@
+import type {
+  SessionRecordingPaths,
+  SessionControlDeps,
+} from './session-control-deps.js';
+export type {
+  SessionRecordingPaths,
+  SessionControlDeps,
+} from './session-control-deps.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -104,33 +112,7 @@ function logger(): DebugLogger {
  * @plan:PLAN-20260617-COREAPI.P20
  * @requirement:REQ-010
  */
-export interface SessionRecordingPaths {
-  readonly storageRoot: string;
-  readonly projectTempDir: string;
-  readonly projectChatsDir: string;
-  readonly projectRoot: string;
-  readonly persistenceQueueBytes: number;
-}
-export interface SessionControlDeps {
-  readonly paths: SessionRecordingPaths;
-  readonly mediaStore: LocalMediaStore;
-  readonly readRecordingQueueLimit: () => number;
-  readonly directories: () => readonly string[];
-  readonly sessionIdentityOwnership: 'config' | 'facade';
-  readonly sessionId: () => string;
-  readonly nativeHistory: SessionNativeHistory;
-  readonly withSessionTransition: (
-    operation: () => Promise<void>,
-  ) => Promise<void>;
-  readonly closeSessionAdmission: () => void;
-  readonly prepareNewSessionClient: (
-    sessionId: string,
-  ) => Promise<PreparedRecordingSession>;
-  readonly getProvider: () => string;
-  readonly getModel: () => string;
-  readonly readOwnedSessionId: () => string;
-  readonly adoptOwnedSessionId: (sessionId: string) => void;
-}
+
 export class SessionControl implements AgentSessionControl {
   private readonly recordingLifetime: SessionRecordingLifetime;
   private readonly deps: SessionControlDeps;
@@ -284,7 +266,9 @@ export class SessionControl implements AgentSessionControl {
   private checkpointService: CheckpointServicePort | undefined;
 
   private getCheckpointService(): CheckpointServicePort {
-    this.checkpointService ??= createCheckpointService();
+    this.checkpointService ??= createCheckpointService({
+      namedWriters: this.deps.paths.namedWriters,
+    });
     return this.checkpointService;
   }
 
@@ -679,6 +663,7 @@ export class SessionControl implements AgentSessionControl {
           await this.resumeInternal(imported.sessionId);
           return this.currentSessionInfo();
         },
+        { namedWriters: this.deps.paths.namedWriters },
       ),
     );
   }
@@ -761,12 +746,13 @@ export class SessionControl implements AgentSessionControl {
    * @requirement:REQ-010
    */
   getRecording(): SessionRecordingState {
-    const path = this.recordingLifetime.recording?.getFilePath() ?? null;
-    return {
-      enabled: this.recordingLifetime.recording?.isActive() ?? false,
-      format: 'journal',
-      ...(path !== null ? { path } : {}),
-    };
+    return this.recordingLifetime.readState();
+  }
+
+  getRecordingWatermarks(): ReturnType<
+    NonNullable<SessionRecordingPort['getJournalWatermarks']>
+  > {
+    return this.recordingLifetime.recording?.getJournalWatermarks?.();
   }
 
   getRecordingTitle(): string | null | undefined {
@@ -836,6 +822,7 @@ export class SessionControl implements AgentSessionControl {
         : undefined;
     const result = await new SessionTransitionService({
       mediaStore: this.deps.mediaStore,
+      journal: { namedWriters: this.deps.paths.namedWriters },
       maxQueueBytes: this.deps.readRecordingQueueLimit(),
     }).forkFromCheckpoint(
       target,
@@ -931,13 +918,17 @@ export class SessionControl implements AgentSessionControl {
           model: this.deps.getModel(),
         }),
         mediaStore: this.deps.mediaStore,
+        journal: { namedWriters: this.deps.paths.namedWriters },
         maxQueueBytes: this.deps.readRecordingQueueLimit(),
       },
       this.adoptedPath,
     );
     // The integration attaches to the journal, which seeds the new recording
     // from the durable history rows; no history array is read here.
-    const integration = new RecordingIntegration(service);
+    const integration = new RecordingIntegration(
+      service,
+      this.deps.paths.scratchRoots,
+    );
     try {
       const subscribed = await this.attachHistory(integration);
       await service.flush();

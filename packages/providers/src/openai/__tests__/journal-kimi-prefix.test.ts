@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '../../../../core/src/services/history/IContent.js';
@@ -53,9 +54,12 @@ async function verifyRows(
 describe('Kimi consumed prefixes and written digits against actual conversion', () => {
   const directory = useTempDir('kimi-prefix-wire-');
   it('separates dropped counter consumption from written digits at every decimal boundary and on frozen source families', async () => {
-    const session = await JournalSession.create(`${directory()}/digits.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/digits.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     const cases: ReadonlyArray<readonly IContent[]> = [
       [{ speaker: 'tool', blocks: [call('', 'split'), response('')] }],
       [
@@ -114,9 +118,12 @@ describe('Kimi consumed prefixes and written digits against actual conversion', 
   }, 120000);
 
   it('projects counters before each normalized unit after a pending eligible duplicate maps earlier unnamed holders', async () => {
-    const session = await JournalSession.create(`${directory()}/tail.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/tail.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     const rows: readonly IContent[] = [
       {
         speaker: 'ai',

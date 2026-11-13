@@ -86,14 +86,15 @@ async function captureBody(
     { preconnect: original.preconnect },
   );
   try {
-    for await (const chunk of providerFor(name).generateChatCompletion(options))
+    const provider = providerFor(name);
+    for await (const chunk of provider.generateChatCompletion(options))
       void chunk;
     expect({ pulled, opens, closed }).toStrictEqual({
       pulled: rows,
       opens: 1,
       closed: true,
     });
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(provider.requestBodyCensus)).toBe(0);
     expect(bodies).toHaveLength(1);
     return bodies[0];
   } finally {

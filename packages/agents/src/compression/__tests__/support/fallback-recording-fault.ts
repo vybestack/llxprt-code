@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect, spyOn } from 'bun:test';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -39,28 +40,31 @@ export async function fallbackRecordingFault(root: string): Promise<{
     }
     if (remaining !== undefined) remaining--;
   };
-  const session = await JournalSession.create(join(root, 'primary.llxj'), {
-    journal: {
-      open: async (path, flags) => {
-        const handle = await open(path, flags);
-        return {
-          fd: handle.fd,
-          read: (...args) => handle.read(...args),
-          stat: () => handle.stat(),
-          truncate: (length) => handle.truncate(length),
-          close: () => handle.close(),
-          write: (...args) => {
-            admit();
-            return handle.write(...args);
-          },
-          writev: (buffers, position) => {
-            admit();
-            return handle.writev([...buffers], position);
-          },
-        };
+  const session = await JournalSession.create(
+    join(root, 'primary.llxj'),
+    testJournalOptions({
+      journal: {
+        open: async (path, flags) => {
+          const handle = await open(path, flags);
+          return {
+            fd: handle.fd,
+            read: (...args) => handle.read(...args),
+            stat: () => handle.stat(),
+            truncate: (length) => handle.truncate(length),
+            close: () => handle.close(),
+            write: (...args) => {
+              admit();
+              return handle.write(...args);
+            },
+            writev: (buffers, position) => {
+              admit();
+              return handle.writev([...buffers], position);
+            },
+          };
+        },
       },
-    },
-  });
+    }),
+  );
   return {
     failure,
     failAdmissionAfter: (successes) => {

@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '../../storage/scratch-root.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -102,9 +103,13 @@ function indexToolBlocks(index: ToolPairingIndex, row: IContent): void {
 export async function* findUnmatchedToolCalls(
   logger: DebugLogger,
   history: AsyncIterable<IContent>,
-  options: ToolPairingStreamOptions = {},
+  options: ToolPairingStreamOptions & {
+    readonly scratchRoots: ScratchRootOwner;
+  },
 ): AsyncGenerator<ToolCallBlock, void, unknown> {
-  const index = new ToolPairingIndex(options.root);
+  const index = new ToolPairingIndex(
+    options.root ?? options.scratchRoots.getRoot(),
+  );
   let unmatchedCount = 0;
   try {
     for await (const row of history) indexToolBlocks(index, row);

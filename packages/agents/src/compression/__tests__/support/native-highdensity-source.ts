@@ -70,7 +70,7 @@ export async function nativeHighdensitySourceFailure(
     expect(before.count).toBe(size);
     expect(await durable()).toStrictEqual(before);
     const range = history.getContextRange();
-    const scratch = checkpointScratch();
+    const scratch = checkpointScratch(history);
     const failure =
       mode === 'cancel'
         ? new DOMException('cancelled native source', 'AbortError')
@@ -84,7 +84,7 @@ export async function nativeHighdensitySourceFailure(
     expect(probe.visited).toBe(31);
     expect(probe.closed).toBe(1);
     await expect(probe.next()).rejects.toThrow('Dump snapshot is closed');
-    expect(checkpointScratch()).toStrictEqual(scratch);
+    expect(checkpointScratch(history)).toStrictEqual(scratch);
     expect(
       await compressionValueDigest(history.streamRawHistory()),
     ).toStrictEqual(before);
@@ -108,7 +108,7 @@ export async function nativeHighdensitySourceFailure(
     expect(owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 })).toBe(
       true,
     );
-    expect(checkpointScratch()).toStrictEqual(scratch);
+    expect(checkpointScratch(history)).toStrictEqual(scratch);
   });
   return size;
 }

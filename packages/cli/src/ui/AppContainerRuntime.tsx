@@ -221,6 +221,7 @@ export interface AppContainerRuntimeProps
   subagentWrites: AppDialogsParams['subagentWrites'];
   profileDefinitions: AppDialogsParams['profileDefinitions'];
   readAgentRecordingPath: () => string | undefined;
+  readAgentRecordingWatermarks?: AppBootstrapProps['readRecordingWatermarks'];
   generateSubagentPrompt: (description: string) => Promise<string>;
   settings: LoadedSettings;
   startupWarnings?: string[];
@@ -633,6 +634,7 @@ function useApplicationBootstrap(
       resumedBoot: props.resumedBoot,
       readJournal: props.readJournal,
       readRecordingPath: props.readAgentRecordingPath,
+      readRecordingWatermarks: props.readAgentRecordingWatermarks,
       settings: props.settings,
       version: props.version,
       memoryController: props.memoryController,

@@ -1,9 +1,12 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it } from 'bun:test';
 import { setImmediate } from 'node:timers/promises';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
+
 type HistoryBackend = 'old' | 'journal';
 
 const backends: HistoryBackend[] = ['journal'];
@@ -15,7 +18,7 @@ const row = (text: string): IContent => ({
 
 describe.each(backends)('compression public promises on %s', () => {
   it('keeps clear pending until release and applies it between its FIFO neighbors', async () => {
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.addBatch([row('initial')]);
       history.startCompression();
@@ -40,7 +43,7 @@ describe.each(backends)('compression public promises on %s', () => {
   });
 
   it('keeps validation pending until its compression FIFO position is reached', async () => {
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.addBatch([row('initial')]);
       history.startCompression();

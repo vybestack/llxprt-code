@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import { truncateSourceToolResponses } from '../source-tool-truncation.js';
 import { withNativeFallbackFixture } from './support/native-fallback-fixture.js';
 import { operationFileCreates } from './support/operation-file-creates.js';
@@ -32,7 +32,7 @@ describe('native public last-resort source truncation', () => {
       const limit = Math.floor(
         (await totalRequestTokens(history, pending)) * 0.85,
       );
-      getScratchRoot();
+      history.scratchRoots.getRoot();
       const files = await operationFileCreates(async () => {
         const result = await truncateSourceToolResponses(
           stageInput(history, candidate, limit),

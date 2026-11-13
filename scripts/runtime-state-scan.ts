@@ -13,6 +13,7 @@ import type {
 import { scanRuntimeStateStructure } from './tests/runtime-state-structure-guard.js';
 import { compilerHostWithWorkspaceModules } from './runtime-state-workspace-modules.js';
 import { resolveStateRoots } from './runtime-state-roots.js';
+import { isTestSource } from './runtime-source-discovery.js';
 
 export function workspacePath(workspace: string, file: string): string {
   const path = resolve(workspace, file);
@@ -45,8 +46,10 @@ export function scanState(
     ...entry,
     file: workspacePath(workspace, entry.file),
   }));
-  const stateFiles = files.filter((file) =>
-    inRoots(workspace, file, [...mutableRoots, ...alsRoots]),
+  const stateFiles = files.filter(
+    (file) =>
+      !isTestSource(file) &&
+      inRoots(workspace, file, [...mutableRoots, ...alsRoots]),
   );
   const options: ts.CompilerOptions = {
     allowJs: true,

@@ -1,3 +1,4 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -70,6 +71,7 @@ describe('native ranking and summary facts across compaction', () => {
   it('copies persisted and pending ranks, summary ranges, owners and checkpoint roots without changing commit identity', async () => {
     const session = await JournalSession.create(
       join(directory(), 'ranked.llxj'),
+      testJournalOptions(),
     );
     try {
       await session.append(

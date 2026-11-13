@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { appendFileSync } from 'node:fs';
@@ -10,10 +11,11 @@ import { rollbackRow } from '../../chronology-rollback-test-helpers.js';
 import type { JournalSession } from '../../journalSession.js';
 import { withNativeDetachedFixture } from './detached-contract-fixture.js';
 import type { DetachedIOFaults } from './detached-io-faults.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export class BatchStreamHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'addBatch eager materialization reached',

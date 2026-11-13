@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
@@ -6,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { HistoryMediaIndex } from './history-media-index.js';
 import { LocalMediaStore } from './local-media-store.js';
 import { RowOwnership } from '../recording/rowOwnership.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('disk media index resources', () => {
   it('deduplicates on disk, counts decoded copies and closes enumeration on cancellation', async () => {
@@ -14,7 +16,7 @@ describe('disk media index resources', () => {
       rootDirectory: join(directory, 'media'),
       quotaBytes: 1024,
     });
-    const index = new HistoryMediaIndex(directory);
+    const index = new HistoryMediaIndex(historyScratchRoots, directory);
     const ownership = new RowOwnership();
     try {
       const reference = await store.admit({

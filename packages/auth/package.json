@@ -70,6 +70,11 @@
       "types": "./dist/src/mcp-auth-provider-type.d.ts",
       "bun": "./src/mcp-auth-provider-type.ts",
       "import": "./dist/src/mcp-auth-provider-type.js"
+    },
+    "./network-fetch.js": {
+      "types": "./dist/src/network-fetch.d.ts",
+      "bun": "./src/network-fetch.ts",
+      "import": "./dist/src/network-fetch.js"
     }
   },
   "scripts": {

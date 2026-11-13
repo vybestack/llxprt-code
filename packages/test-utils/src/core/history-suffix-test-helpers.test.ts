@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '../__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { existsSync } from 'node:fs';
@@ -13,6 +14,7 @@ import {
   withSuffixFixtureGraph,
 } from './history-suffix-test-helpers.js';
 import { createRecorderForTest } from './recorder-for-test.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function realGraph(root: string): {
   service: HistoryService;
@@ -29,6 +31,7 @@ function realGraph(root: string): {
   const ownership = new RowOwnership();
   const counters = createRowCounters();
   const service = new HistoryService({
+    scratchRoots: historyScratchRoots,
     recording,
     attachmentCounters: { ...counters.counters, ownership },
   });

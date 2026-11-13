@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 
+import type { JournalSessionOptions } from '../services/history/journalSession.js';
 import { JournalCheckpointService } from './journalCheckpointService.js';
 
 /**
@@ -23,6 +24,8 @@ export type CheckpointServicePort = Pick<
  * `createSessionRecorder`. A service is used with recorders of its own kind;
  * the journal service refuses any other.
  */
-export function createCheckpointService(): CheckpointServicePort {
-  return new JournalCheckpointService();
+export function createCheckpointService(
+  journal?: JournalSessionOptions,
+): CheckpointServicePort {
+  return new JournalCheckpointService(journal);
 }

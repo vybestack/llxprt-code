@@ -7,6 +7,7 @@ import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
 
 import { encoding_for_model } from '@dqbd/tiktoken';
 import {
+  EncodingCache,
   encodingBpeRanks,
   encodingLongTextCounter,
 } from './neutral-long-piece.js';
@@ -35,7 +36,19 @@ export interface MiddleClipResult {
 // Escape overhead buffer to account for JSON stringification inflation
 export const ESCAPE_BUFFER_PERCENTAGE = 0.8; // Use 80% of limit to leave 20% buffer
 
-let cachedEncoder: ReturnType<typeof encoding_for_model> | null = null;
+interface NeutralTokenRuntime {
+  encoder: ReturnType<typeof encoding_for_model> | null;
+  readonly encodings: EncodingCache;
+}
+let cachedEncoder: NeutralTokenRuntime | null = null;
+
+function neutralTokenRuntime(): NeutralTokenRuntime {
+  return (cachedEncoder ??= { encoder: null, encodings: new EncodingCache() });
+}
+
+export function neutralEncodingCache(): EncodingCache {
+  return neutralTokenRuntime().encodings;
+}
 let encoderInitFailed = false;
 const utf8Decoder = new TextDecoder();
 const isWindows = process.platform === 'win32';
@@ -45,12 +58,13 @@ function getEncoder(): ReturnType<typeof encoding_for_model> | null {
     return null;
   }
 
-  if (!cachedEncoder) {
+  const runtime = neutralTokenRuntime();
+  if (!runtime.encoder) {
     try {
-      cachedEncoder = encoding_for_model('gpt-4o');
+      runtime.encoder = encoding_for_model('gpt-4o');
       if (!isWindows) {
         process.once('exit', () => {
-          cachedEncoder?.free();
+          runtime.encoder?.free();
         });
       }
     } catch {
@@ -60,7 +74,7 @@ function getEncoder(): ReturnType<typeof encoding_for_model> | null {
     }
   }
 
-  return cachedEncoder;
+  return runtime.encoder;
 }
 
 function encodeText(text: string): Uint32Array | null {
@@ -79,7 +93,7 @@ function encodeText(text: string): Uint32Array | null {
 
 export function prepareNeutralTokenCounter(): void {
   getEncoder();
-  encodingBpeRanks('o200k_base');
+  encodingBpeRanks('o200k_base', neutralEncodingCache());
 }
 
 // Token estimation using tiktoken for better accuracy
@@ -87,7 +101,7 @@ export function estimateTokens(text: string): number {
   if (text.length > 512 && !text.includes('<|endof')) {
     const encoder = getEncoder();
     if (encoder !== null)
-      return encodingLongTextCounter('o200k_base')(
+      return encodingLongTextCounter('o200k_base', neutralEncodingCache())(
         text,
         (piece) => encoder.encode(piece).length,
         undefined,
@@ -114,7 +128,7 @@ export function createUnitTokenCounter(): (text: string) => number {
     const encoder = getEncoder();
     if (encoder === null || text.includes('<|endof'))
       return estimateTokens(text);
-    return encodingLongTextCounter('o200k_base')(
+    return encodingLongTextCounter('o200k_base', neutralEncodingCache())(
       text,
       (piece) => encoder.encode(piece).length,
       cache,

@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { join } from 'node:path';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
@@ -24,6 +26,8 @@ import {
   fixtureText,
 } from './wholememory-fixture.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 function verifyWindow(
   items: readonly HistoryItem[],
   limit: number,
@@ -47,7 +51,9 @@ type ResumeOptions = Parameters<typeof performResume>[1];
 
 export class MemoryCommand {
   mediaStore: LocalMediaStore | undefined;
-  readonly history = new HistoryService();
+  readonly history = new HistoryService({
+    scratchRoots: recordingScratchRoots,
+  });
   readonly counters = createRowCounters();
   recording: SessionRecordingPort | null = null;
   integration: RecordingIntegration | null = null;
@@ -71,7 +77,10 @@ export class MemoryCommand {
     target: string,
   ): Promise<void> {
     await this.registerMediaOwner(directory, workload);
-    const result = await performResume(target, this.resumeOptions(directory));
+    const result = await performResume(
+      target,
+      withTestNamedWriters(this.resumeOptions(directory)),
+    );
     if (!result.ok) throw new Error(result.error);
     for await (const _row of verifyRows(result.history, count, workload)) {
       // Validate the adopted source without creating a second transcript.
@@ -93,13 +102,14 @@ export class MemoryCommand {
         quotaBytes: 1024 * 1024,
       });
       await this.history.registerMediaOwner(
-        new HistoryMediaOwnership(this.mediaStore),
+        new HistoryMediaOwnership(this.mediaStore, recordingScratchRoots),
       );
     }
   }
 
   private resumeOptions(directory: string): ResumeOptions {
     return {
+      scratchRoots: recordingScratchRoots,
       chatsDir: directory,
       mediaStore: this.mediaStore,
       projectHash: MEMORY_PROJECT,

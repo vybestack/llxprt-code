@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -35,6 +36,7 @@ describe('store compaction memory with growing checkpoint counts (design 13.6)',
     const store = await JournalStore.open(
       file,
       storeDeps({ seams: testJournalSeams({}, 1, false) }),
+      testNamedWriters,
     );
     open.push(store);
     return store;

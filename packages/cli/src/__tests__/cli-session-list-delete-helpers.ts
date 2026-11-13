@@ -1,3 +1,4 @@
+import { testJournalOptions } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -114,7 +115,7 @@ export async function writeCorruptSession(
     sessionId,
     '2026-10-08T21:18:08.000Z',
   );
-  const session = await JournalSession.open(path);
+  const session = await JournalSession.open(path, testJournalOptions());
   try {
     await session.store.commit([
       {

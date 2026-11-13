@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { gcAndSweep } from 'bun:jsc';
@@ -15,6 +16,7 @@ import {
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { SemanticMediaPurgeStreamCoordinator } from './semantic-purge-stream.js';
+const historyScratchRoots = createTestScratchOwner();
 
 export function purgeRow(index: number, bytes = 2048): IContent {
   const row = ownerFixtureRow(index, bytes);
@@ -41,7 +43,7 @@ const success = { status: 'success', cachePrefixWritten: true } as const;
 
 class NoArrayHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'whole-history materializer seam',
@@ -55,7 +57,7 @@ class NoArrayHistory extends HistoryService {
 
 describe('journal materialization guard', () => {
   it('NoArrayHistory rejects journal eager materialization', async () => {
-    const history = new NoArrayHistory();
+    const history = new NoArrayHistory({ scratchRoots: historyScratchRoots });
 
     try {
       await expect(history.attemptMaterialization()).rejects.toThrow(

@@ -1,3 +1,5 @@
+import { registerScratchInspection } from '../__tests__/support/scratch-inspection.js';
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,9 +15,8 @@
 import { projectOpenAIChatPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 import { readAtOf } from '../__tests__/requestRowsTestSupport.js';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import { readdirSync } from 'node:fs';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
@@ -27,6 +28,8 @@ import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFa
 import { NativeChatEstimateProjection } from './native-chat-estimate.js';
 import { observeNativeBodies } from '../__tests__/support/native-body-lifecycle.js';
 import { OpenAIProvider } from './OpenAIProvider.js';
+const tokenizerScratchRoots = createTestScratchOwner();
+const scratchEntries = registerScratchInspection();
 
 const liveBodies = observeNativeBodies();
 
@@ -343,7 +346,7 @@ describe('OpenAI chat transport-owned request rows body (WP08)', () => {
   });
 });
 
-const tokenizerFactory = createRuntimeTokenizerFactory();
+const tokenizerFactory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 
 function sourceOf(
   projection: PromptEnvelopeProjection,
@@ -378,15 +381,13 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
     const provider = new OpenAIProvider('test-key');
     const probe = probeRows(scenario.rows);
     const options = rowsOptions(scenario, probe);
-    const startingScratch = new Set(readdirSync(getScratchRoot()));
+    const startingScratch = new Set(scratchEntries());
     const before = liveBodies();
     const projection = await provider.projectPromptEnvelope(options);
     expect(liveBodies()).toBe(before);
     const source = sourceOf(projection);
     expect(projection.finalizedProjection).toBe(source);
-    expect(new Set(readdirSync(getScratchRoot()))).toStrictEqual(
-      startingScratch,
-    );
+    expect(new Set(scratchEntries())).toStrictEqual(startingScratch);
     expect(await tokensOf(provider, projection)).toBeGreaterThan(0);
     expect(await tokensOf(provider, projection)).toBe(
       await tokensOf(provider, projection),
@@ -395,9 +396,7 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
     let during = -1;
     mockChatCreate.mockImplementation(async () => {
       during = liveBodies();
-      expect(new Set(readdirSync(getScratchRoot()))).toStrictEqual(
-        startingScratch,
-      );
+      expect(new Set(scratchEntries())).toStrictEqual(startingScratch);
       return okResponse(false);
     });
     await drain(
@@ -408,9 +407,7 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
     );
     expect(during).toBe(before + 1);
     expect(liveBodies()).toBe(before);
-    expect(new Set(readdirSync(getScratchRoot()))).toStrictEqual(
-      startingScratch,
-    );
+    expect(new Set(scratchEntries())).toStrictEqual(startingScratch);
     expect(probe.opened()).toBe(readsBeforeSend + 1);
     await expect(tokensOf(provider, projection)).rejects.toThrow('closed');
     expect(sentBodies()).toStrictEqual(await sendArray(scenario));
@@ -575,7 +572,7 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
     });
     const options = rowsOptions(scenario, probe, controller.signal);
     const before = liveBodies();
-    const scratchBefore = readdirSync(getScratchRoot());
+    const scratchBefore = scratchEntries();
     await expect(provider.projectPromptEnvelope(options)).rejects.toThrow(
       'cancelled after first chunk',
     );
@@ -583,7 +580,7 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
     expect(probe.returned()).toBe(1);
     expect(mockChatCreate).not.toHaveBeenCalled();
     expect(liveBodies()).toBe(before);
-    expect(readdirSync(getScratchRoot())).toStrictEqual(scratchBefore);
+    expect(scratchEntries()).toStrictEqual(scratchBefore);
   });
 });
 

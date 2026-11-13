@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
@@ -57,7 +58,7 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
   }
 
   beforeEach(() => {
-    historyService = new HistoryService();
+    historyService = new HistoryService({ scratchRoots: historyScratchRoots });
     conversationManager = createManager(true);
   });
 
@@ -214,7 +215,7 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
 
     await fc.assert(
       fc.asyncProperty(chunksArb, async (texts: string[]) => {
-        const hs = new HistoryService();
+        const hs = new HistoryService({ scratchRoots: historyScratchRoots });
         const ctx = makeRuntimeContext(true);
         const mgr = new ConversationManager(hs, ctx);
 
@@ -252,7 +253,7 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
         answerArb,
         sigArb,
         async (thought: string, answer: string, sig: string) => {
-          const hs = new HistoryService();
+          const hs = new HistoryService({ scratchRoots: historyScratchRoots });
           const ctx = makeRuntimeContext(false);
           const mgr = new ConversationManager(hs, ctx);
 
@@ -292,7 +293,7 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
 
     await fc.assert(
       fc.asyncProperty(textArb, async (text: string) => {
-        const hs = new HistoryService();
+        const hs = new HistoryService({ scratchRoots: historyScratchRoots });
         const ctx = makeRuntimeContext(true);
         const mgr = new ConversationManager(hs, ctx);
 
@@ -339,6 +340,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
 import { generateJson } from '../clientLlmUtilities.js';
 import type { BaseLLMClient } from '../baseLlmClient.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function makeConfig(): Config {
   return new Config({

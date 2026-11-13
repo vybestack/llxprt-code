@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
@@ -28,6 +29,7 @@ import { ChatSession } from './chatSession.js';
 import { TodoContinuationService } from './TodoContinuationService.js';
 import { setClientTools } from './clientSetTools.js';
 import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const schema = {
   type: 'object',
@@ -90,7 +92,7 @@ function makeHarness(names: string[], disabled: string[] = []) {
     registry.registerTool(
       new MockTool({ name, description: `Inspect ${name}`, params: schema }),
     );
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const runtime = createProviderRuntimeContext({
     runtimeId: 'flat-client-seam',
   });
@@ -111,6 +113,7 @@ function makeHarness(names: string[], disabled: string[] = []) {
   };
   const runtimeId = 'flat-client-seam';
   const context = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       settingsOwner.prepareProviderInvocation(
         runtimeId,

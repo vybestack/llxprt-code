@@ -1,9 +1,11 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 
 import type { HistoryBatchRowSource } from './history-batch-values.js';
 import { HistoryService } from './HistoryService.js';
 import { createUserMessage, type IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function textOf(row: IContent): string {
   const block = row.blocks[0];
@@ -27,7 +29,7 @@ describe.each(['journal'] as const)(
     });
 
     function service(): HistoryService {
-      const history = new HistoryService();
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       created.push(history);
       return history;
     }
@@ -111,7 +113,7 @@ describe.each(['journal'] as const)(
 /** The old store's rows live in the publication's own scope, so its dispatcher waits for the passes it was handed. */
 describe('contentBatchAdded on the old store', () => {
   it('holds the publication until a pass started during dispatch has read its last row', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     let release: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => {
       release = resolve;

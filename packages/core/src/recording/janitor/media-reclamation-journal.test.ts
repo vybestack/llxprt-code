@@ -1,3 +1,9 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import * as fsp from 'node:fs/promises';
@@ -27,6 +33,8 @@ import {
 import { resolveRetentionConfig } from './retentionPolicy.js';
 import { runSessionCleanup } from './sessionJanitor.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 const PROJECT = 'a'.repeat(64);
 const BACKENDS: readonly HistoryBackend[] = ['journal'];
 
@@ -46,6 +54,8 @@ async function firstRowBody(filePath: string): Promise<number> {
 }
 
 describe('validated journal media ownership without persisted snapshots', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const directory = useTempDir('media-reclamation-journal-');
 
   const chatsDir = (): string => path.join(directory(), PROJECT, 'chats');
@@ -79,20 +89,29 @@ describe('validated journal media ownership without persisted snapshots', () => 
   for (const backend of BACKENDS) {
     it(`keeps turn media after owner shutdown and reclaims it only after session cleanup on ${backend}`, async () => {
       const { store, reference, objectPath } = await media();
-      const recording = await createLockedSessionRecorder({
-        sessionId: 'media-turn',
-        projectHash: PROJECT,
-        chatsDir: chatsDir(),
-        workspaceDirs: ['/work'],
-        provider: 'test',
-        model: 'test',
-        mediaStore: store,
+      const recording = await createLockedSessionRecorder(
+        withTestNamedWriters({
+          sessionId: 'media-turn',
+          projectHash: PROJECT,
+          chatsDir: chatsDir(),
+          workspaceDirs: ['/work'],
+          provider: 'test',
+          model: 'test',
+          mediaStore: store,
+        }),
+      );
+      const history = new HistoryService({
+        scratchRoots: recordingScratchRoots,
       });
-      const history = new HistoryService();
-      const integration = new RecordingIntegration(recording);
+      const integration = new RecordingIntegration(
+        recording,
+        recordingScratchRoots,
+      );
       let file: string;
       try {
-        await history.registerMediaOwner(new HistoryMediaOwnership(store));
+        await history.registerMediaOwner(
+          new HistoryMediaOwnership(store, recordingScratchRoots),
+        );
         await integration.subscribeToJournal(history);
         await history.addBatch([{ speaker: 'human', blocks: [reference] }]);
         await integration.flushAtTurnBoundary();
@@ -262,7 +281,7 @@ describe('validated journal media ownership without persisted snapshots', () => 
         ],
         checkpoints: ['saved'],
       });
-      const session = await JournalSession.open(filePath);
+      const session = await JournalSession.open(filePath, testJournalOptions());
       try {
         const snapshot = await session.store.snapshot();
         try {

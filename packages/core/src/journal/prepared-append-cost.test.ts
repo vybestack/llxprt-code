@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { IdFactBatch } from './idFactBatch.js';
@@ -37,6 +38,7 @@ describe('prepared append group write cost', () => {
     const store = await JournalStore.create(
       join(directory(), 'finalize.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     await store.commit([{ kind: 'append', rows: [draftRow()] }]);
     const finalizes = spyOn(IdFactBatch.prototype, 'commit');
@@ -64,7 +66,11 @@ describe('prepared append group write cost', () => {
   });
   it('shares changed paths while filling an active format for a streamed group', async () => {
     const file = join(directory(), 'active-format.llxj');
-    const store = await JournalStore.create(file, storeDeps());
+    const store = await JournalStore.create(
+      file,
+      storeDeps(),
+      testNamedWriters,
+    );
     const registration: RowFormatRegistration = {
       settings: {
         formatId: 'openai-chat:plain',
@@ -114,7 +120,11 @@ describe('prepared append group write cost', () => {
     'shares row-tree paths for %i streamed rows',
     async (count) => {
       const file = join(directory(), `${count}.llxj`);
-      const store = await JournalStore.create(file, storeDeps());
+      const store = await JournalStore.create(
+        file,
+        storeDeps(),
+        testNamedWriters,
+      );
       try {
         await store.commit([
           {

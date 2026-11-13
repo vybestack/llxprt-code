@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -15,6 +16,7 @@ import {
   reopenedRows,
   persistedEntries,
 } from './__tests__/support/service-atomicity.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const stages = [
   'producer',
@@ -38,7 +40,7 @@ describe('HistoryService replacement compensation with real primary and mirror',
         rootDirectory: join(rig.directory, 'media'),
         quotaBytes: 4096,
       });
-      const owner = new DetachedMediaOwner(media);
+      const owner = new DetachedMediaOwner(media, historyScratchRoots);
       try {
         const previousMedia = await media.admit({
           bytes: new Uint8Array([1]),

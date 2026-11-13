@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { JournalFileHandle } from '../../../../../core/src/journal/positionalFile.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -22,6 +24,7 @@ import { prepareRequest } from '../../OpenAIRequestPreparation.js';
 import { oldMistralUnitTokens } from './mistral-unit-token-oracle.js';
 import { observeRowFormat } from './observeRowFormat.js';
 import { readPreparedChatBody } from './prepareRequestBody.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 function observedRows(
   rows: ProviderRequestSelection,
@@ -173,21 +176,23 @@ function coldRecording(
   state: ColdState,
 ): JournalRecordingService {
   const seams = testJournalSeams({}, 1, false);
-  return JournalRecordingService.create({
-    sessionId: 'cold-' + scenario + '-' + size,
-    projectHash: 'cold-fill',
-    chatsDir: directory,
-    workspaceDirs: [],
-    provider: 'openai',
-    model,
-    journal: {
+  return JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: 'cold-' + scenario + '-' + size,
+      projectHash: 'cold-fill',
+      chatsDir: directory,
+      workspaceDirs: [],
+      provider: 'openai',
+      model,
       journal: {
-        ...seams.dependencies,
-        open: async (path, flags) =>
-          observedFile(await seams.dependencies.open(path, flags), state),
+        journal: {
+          ...seams.dependencies,
+          open: async (path, flags) =>
+            observedFile(await seams.dependencies.open(path, flags), state),
+        },
       },
-    },
-  });
+    }),
+  );
 }
 
 function prepareCold(
@@ -279,7 +284,7 @@ async function assertCold(
       model,
       releaseIfUnsent: async () => undefined,
     }),
-    createRuntimeTokenizerFactory(),
+    createRuntimeTokenizerFactory(historyScratchRoots),
   );
   const continuation = await prepared.continuation.build([
     {
@@ -330,7 +335,10 @@ async function checkCold(
   };
   const counts = { entries: 0, units: 0, formats: 0 };
   const recording = coldRecording(directory, scenario, size, state);
-  const history = new HistoryService({ recording });
+  const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
+    recording,
+  });
   try {
     for (let index = 0; index < size; index++)
       await history.addBatch([rowAt(index, scenario)]);

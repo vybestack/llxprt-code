@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import {
@@ -21,6 +22,9 @@ import { TEST_PROVIDER_CONFIG } from './providerTestConfig.js';
 import { anthropicJournalSink } from './support/anthropic-journal-case.js';
 import { publicChat } from './support/public-anthropic-tail.js';
 import { rowsSelection } from './support/wireBodyCapture.js';
+const tokenizerScratchRoots = createTestScratchOwner();
+
+const historyScratchRoots = createTestScratchOwner();
 
 class ObservedMediaProvider extends AnthropicProvider {
   override requestMediaResolver: RequestMediaResolver | undefined = undefined;
@@ -51,7 +55,7 @@ class ObservedMediaProvider extends AnthropicProvider {
     this.estimate = await estimatePromptEnvelope(
       this.name,
       projection,
-      createRuntimeTokenizerFactory(),
+      createRuntimeTokenizerFactory(tokenizerScratchRoots),
     );
     this.estimatePayloadReads.push(
       this.requestMediaResolver.accounting().storeReadCount - before,
@@ -108,8 +112,10 @@ async function publicMediaCase(
         semanticMetadata: {},
       })
     : undefined;
-  const history = new HistoryService({});
-  await history.registerMediaOwner(new HistoryMediaOwnership(store));
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
+  await history.registerMediaOwner(
+    new HistoryMediaOwnership(store, historyScratchRoots),
+  );
   const resolver = new RequestMediaResolver(store);
   const settings = new SettingsService();
   settings.setProviderSetting('anthropic', 'model', sink.route.model);
@@ -258,7 +264,7 @@ async function publicMediaCase(
       const estimate = await estimatePromptEnvelope(
         builder.name,
         oracle,
-        createRuntimeTokenizerFactory(),
+        createRuntimeTokenizerFactory(history.scratchRoots),
       );
       for await (const chunk of builder.generateChatCompletion({
         ...reference,

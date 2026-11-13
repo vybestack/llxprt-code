@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
@@ -120,6 +121,7 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 import type { TodoContinuationService } from './TodoContinuationService.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { installChatSessionFactoryConfigFixture } from './__tests__/support/chatSessionFactoryConfigFixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const createFixtureConfig = installChatSessionFactoryConfigFixture();
 
@@ -313,7 +315,9 @@ describe('createChatSession explicit media input', () => {
         }
 
         const { HistoryService: RealHistoryService } = realHistoryServiceModule;
-        const historyService = new RealHistoryService();
+        const historyService = new RealHistoryService({
+          scratchRoots: historyScratchRoots,
+        });
         await createChatSession({
           ...createSessionPolicyFixture(),
           instructions: instructionFixture(
@@ -397,7 +401,9 @@ describe('createChatSession explicit media input', () => {
       mediaStore: store,
       runtimeState: makeRuntimeState(),
       contentGenerator: makeContentGenerator(),
-      storedHistoryService: new RealHistoryService(),
+      storedHistoryService: new RealHistoryService({
+        scratchRoots: historyScratchRoots,
+      }),
       clearStoredHistoryService: vi.fn(),
       extraHistory: history,
       generateContentConfig: {},

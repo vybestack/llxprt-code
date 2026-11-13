@@ -1,3 +1,5 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
+import { testNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { statSync } from 'node:fs';
@@ -48,7 +50,7 @@ describe('unpublished native density span facts', () => {
     const seams = testJournalSeams(failures);
     const session = await JournalSession.create(
       join(directory(), 'poison.llxj'),
-      { journal: seams.dependencies },
+      testJournalOptions({ journal: seams.dependencies }),
     );
     try {
       await session.append([
@@ -83,6 +85,7 @@ describe('unpublished native density span facts', () => {
     async (size) => {
       const session = await JournalSession.create(
         join(directory(), 'cap.llxj'),
+        testJournalOptions(),
       );
       try {
         await session.append([
@@ -159,6 +162,7 @@ describe('unpublished native density span facts', () => {
   it('matches the independent array merge with overlap, adjacency, stable reasons, standing spans and rewind', async () => {
     const session = await JournalSession.create(
       join(directory(), 'overlap.llxj'),
+      testJournalOptions(),
     );
     const incoming = randomSpans(8192);
     const accumulated: RemovedInteriorSpan[] = [
@@ -200,6 +204,7 @@ describe('unpublished native density span facts', () => {
   it('aborts private facts and metadata without publishing and preserves the producer cause', async () => {
     const session = await JournalSession.create(
       join(directory(), 'abort.llxj'),
+      testJournalOptions(),
     );
     const failure = new Error('projection failed');
     try {
@@ -246,6 +251,7 @@ describe('unpublished native density span facts', () => {
         storeDeps({
           seams: testJournalSeams({ readCounter: counter }, 1, false),
         }),
+        testNamedWriters,
       );
       try {
         await store.commit([

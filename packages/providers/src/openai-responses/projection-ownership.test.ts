@@ -30,7 +30,6 @@ import {
 } from './__tests__/support/disk-text-fixture.js';
 import { requestSelection } from './__tests__/support/request-selection.js';
 import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 // Real sends hand the provider a request selection (requestRows), which takes
 // the source projection. Plain rows select the legacy collecting projection,
@@ -152,7 +151,7 @@ async function prepareMeasured(
   const estimate = await estimatePromptEnvelope(
     setup.provider.name,
     projection,
-    withGpt56DiskSources(setup.factory, getScratchRoot()),
+    withGpt56DiskSources(setup.factory, setup.config.scratchRoots.getRoot()),
   );
   return {
     projection,
@@ -233,7 +232,7 @@ async function runProjectionScenario(
     await drainProjectionResponse(stream, firstResult.value);
     expect(http.bodies).toStrictEqual([expected, expected]);
     expect(disk.state.active).toBe(0);
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
     const facts = {
       large,
       retain,
@@ -305,7 +304,7 @@ async function abortPausedProjection(): Promise<string> {
     expect(disk.state.opened - readersBeforeSend).toBe(0);
     expect(http.bodies).toHaveLength(0);
     expect(disk.state.active).toBe(0);
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
     return outcome;
   } finally {
     http.readBody.release();
@@ -347,12 +346,12 @@ describe('actual Responses projection disk ownership', () => {
   it('removes its scratch workspaces when an unused actual projection is released', async () => {
     const disk = projectionDiskRows(false, false);
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
-    const before = new Set(readdirSync(getScratchRoot()));
+    const before = new Set(readdirSync(setup.config.scratchRoots.getRoot()));
     try {
       const prepared = await prepareMeasuredLease(setup, disk);
       await prepared.releaseIfUnsent?.();
-      expect(activeRequestBodyCount()).toBe(0);
-      const abandoned = readdirSync(getScratchRoot()).filter(
+      expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
+      const abandoned = readdirSync(setup.config.scratchRoots.getRoot()).filter(
         (name) =>
           (name.startsWith('responses-request-snapshot-') ||
             name.startsWith('responses-prompt-keys-')) &&

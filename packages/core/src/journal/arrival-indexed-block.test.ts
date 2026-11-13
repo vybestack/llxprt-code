@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -13,6 +14,7 @@ describe('arrival source identity index', () => {
     const store = await JournalStore.create(
       join(directory(), 'indexed.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     const first = new JournalArrivalRecorder(store);
     const second = new JournalArrivalRecorder(store);

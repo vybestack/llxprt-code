@@ -200,7 +200,7 @@ export function buildDiskPurgeCandidate(
   candidate: SemanticPurgeDiskRows;
   frontier: SemanticMediaPurgeFrontier;
 } {
-  const candidate = new SemanticPurgeDiskRows(ownership);
+  const candidate = new SemanticPurgeDiskRows(base.scratchRoots, ownership);
   let removed = false;
   try {
     let index = 0;

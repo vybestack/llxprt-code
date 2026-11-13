@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { recordedMessages as emittedCandidate } from './__tests__/wire-reference/support/recorded-wire-oracle.js';
 import { describe, expect, it } from 'bun:test';
@@ -76,7 +77,9 @@ describe('actual native Anthropic cache-off wire parity', () => {
     it(`compares all normalized frozen source histories ${first}..${first + 499} without oracle overlays`, async () => {
       const session = await JournalSession.create(
         `${directory()}/repair.llxj`,
-        { journal: testJournalSeams({}, 1, false).dependencies },
+        testJournalOptions({
+          journal: testJournalSeams({}, 1, false).dependencies,
+        }),
       );
       try {
         for (let seed = first; seed < first + 500; seed++) {

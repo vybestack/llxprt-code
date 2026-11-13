@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -13,9 +14,11 @@ import {
   middleoutRow,
   MiddleoutDiskHistory,
 } from './middleout-disk-helpers.js';
+const historyScratchRoots = new ScratchRootOwner();
+
 export class HighdensityDiskHistory extends MiddleoutDiskHistory {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'eager high-density getAll forbidden',
@@ -25,7 +28,7 @@ export class HighdensityDiskHistory extends MiddleoutDiskHistory {
 
 export class HighdensityPreparationHistory extends HighdensityDiskHistory {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'eager high-density preparation materialization forbidden',

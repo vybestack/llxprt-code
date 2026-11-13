@@ -6,10 +6,10 @@
 import { describe, expect, it } from 'bun:test';
 import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import type { ConversationRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
+import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import {
   logConversationRequestEntry,
   type ConversationLogContext,
@@ -80,7 +80,6 @@ function assertToolSchemas(
 describe('conversation request tool persistence', () => {
   it('groups flat declarations only on output and preserves schemas and missing versus empty tools', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'issue3694-logger-'));
-    resetConversationFileWriterForTesting();
     const events: ConversationRequestEvent[] = [];
     try {
       const config: ProviderRequestDiagnostics = {
@@ -92,6 +91,7 @@ describe('conversation request tool persistence', () => {
           build();
           return () => undefined;
         },
+        conversationFileWriter: getConversationFileWriter(dir),
         redaction: {
           redactApiKeys: false,
           redactCredentials: false,
@@ -151,7 +151,6 @@ describe('conversation request tool persistence', () => {
         expect(artifact.row_count).toBe(0);
       }
     } finally {
-      resetConversationFileWriterForTesting();
       await rm(dir, { recursive: true, force: true });
     }
   });

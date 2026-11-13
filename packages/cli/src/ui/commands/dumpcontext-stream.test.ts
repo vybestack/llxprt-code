@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
@@ -12,10 +13,11 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 import { createDumpcontextCommand } from './dumpcontextCommand.js';
 import { bindDumpcontextCommand } from './dumpcontextCommandHost.js';
 import { getProviderDumpMetadata } from '@vybestack/llxprt-code-agents';
+const historyScratchRoots = createTestScratchOwner();
 
 class StreamingHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'dumpcontext materialized history',
@@ -33,7 +35,9 @@ describe('dumpcontext real streaming command', () => {
         path.join(os.tmpdir(), 'dumpcontext-command-stream-'),
       );
       const cache = spyOn(Storage, 'getGlobalCacheDir').mockReturnValue(root);
-      const history = new StreamingHistory();
+      const history = new StreamingHistory({
+        scratchRoots: historyScratchRoots,
+      });
       try {
         for (let index = 0; index < count; index++)
           history.add({

@@ -1,3 +1,4 @@
+import { testNamedWriters } from './namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import type { SourceRow, VersionEdit } from '../../groupEdits.js';
@@ -47,6 +48,7 @@ export async function bigPrimary(
   const primary = await JournalStore.create(
     path.join(directory, `primary-${rows}.llxj`),
     memoryDeps(),
+    testNamedWriters,
   );
   await primary.commit([{ kind: 'replace', rows: baseDrafts(rows) }]);
   return primary;
@@ -89,10 +91,18 @@ export async function seedWithProbe(
   return withPinnedAccess(async (accessOf) => {
     const version = primary.published;
     if (version === undefined) throw new Error('nothing is published');
-    const mirror = await JournalStore.create(mirrorFile, memoryDeps());
+    const mirror = await JournalStore.create(
+      mirrorFile,
+      memoryDeps(),
+      testNamedWriters,
+    );
     // One unwatched copy first, so the caches and compiled code of the copy are
     // warm and the baseline is not taken before they fill.
-    const warm = await JournalStore.create(`${mirrorFile}.warm`, memoryDeps());
+    const warm = await JournalStore.create(
+      `${mirrorFile}.warm`,
+      memoryDeps(),
+      testNamedWriters,
+    );
     await warm.commit(
       resyncEdits(
         { store: warm, owner: MIRROR_OWNER },

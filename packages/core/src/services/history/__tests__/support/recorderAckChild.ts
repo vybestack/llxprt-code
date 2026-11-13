@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { JournalRecordingService } from '../../../../recording/journalRecordingService.js';
@@ -15,16 +19,19 @@ if (process.argv.length !== 5) {
 }
 const [directory, sessionId, rowCount] = process.argv.slice(2);
 
-const recorder = JournalRecordingService.create({
-  sessionId,
-  projectHash: 'project',
-  chatsDir: path.join(directory, 'chats'),
-  workspaceDirs: ['/work/a'],
-  provider: 'anthropic',
-  model: 'model-1',
-});
+const recorder = JournalRecordingService.create(
+  withTestNamedWriters({
+    sessionId,
+    projectHash: 'project',
+    chatsDir: path.join(directory, 'chats'),
+    workspaceDirs: ['/work/a'],
+    provider: 'anthropic',
+    model: 'model-1',
+  }),
+);
 const primary = await JournalSession.create(
   path.join(directory, 'primary.llxj'),
+  testJournalOptions(),
 );
 const store = new JournalHistoryStore(primary);
 await store.attachJournal(recorder, true, undefined, 'agent-a');

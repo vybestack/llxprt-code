@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { Tiktoken } from '@dqbd/tiktoken';
@@ -11,6 +12,7 @@ import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFa
 import { chatTokenMeasure } from './native-chat-estimate.js';
 import { foldChatUnits } from './journal-chat-length.js';
 import { oldMistralUnitTokens } from './__tests__/support/mistral-unit-token-oracle.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const model = 'mistral-large-latest';
 const settings: RowFormatSettings = {
@@ -53,7 +55,7 @@ describe('native Chat thinking-variant tokenizer work', () => {
           wireMethod: 'chat/completions/v1',
           projectionRevision: 1,
         },
-        createRuntimeTokenizerFactory(),
+        createRuntimeTokenizerFactory(tokenizerScratchRoots),
       );
       const expected = await Promise.all([
         oldMistralUnitTokens([row], 'none'),

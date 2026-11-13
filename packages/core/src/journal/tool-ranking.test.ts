@@ -1,3 +1,4 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -70,7 +71,7 @@ describe('versioned native tool ranking', () => {
   const directory = useTempDir('native-tool-ranking-');
   it('preserves rank ties, float scores and old pins through append, rewrite, clone, compaction and reopen', async () => {
     const path = join(directory(), 'ranking.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     let measured = 0;
     const registration = policy('rank:1', () => {
       measured++;
@@ -129,7 +130,7 @@ describe('versioned native tool ranking', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path);
+    const reopened = await JournalSession.open(path, testJournalOptions());
     try {
       const before = (await stat(path)).size;
       await reopened.store.commit([
@@ -147,6 +148,7 @@ describe('versioned native tool ranking', () => {
   it('discards a partially filled policy and lets the same writer continue', async () => {
     const session = await JournalSession.create(
       join(directory(), 'failure.llxj'),
+      testJournalOptions(),
     );
     const failure = new Error('ranking measurement rejected');
     try {

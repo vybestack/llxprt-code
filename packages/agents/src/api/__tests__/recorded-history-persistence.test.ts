@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -12,6 +14,7 @@ import {
   persistSemanticMediaPurge,
   restoreRecordedHistory,
 } from '../control/journalRecordingLifecycle.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const image: IContent = {
   speaker: 'human',
@@ -35,15 +38,17 @@ async function withJournal(
   ) => Promise<void>,
 ): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'w17-persistence-'));
-  const recording = await JournalRecordingService.createLocked({
-    sessionId: 'persisted',
-    projectHash: 'project',
-    chatsDir: root,
-    workspaceDirs: [],
-    provider: 'fake',
-    model: 'fake',
-  });
-  const history = new HistoryService({});
+  const recording = await JournalRecordingService.createLocked(
+    withTestNamedWriters({
+      sessionId: 'persisted',
+      projectHash: 'project',
+      chatsDir: root,
+      workspaceDirs: [],
+      provider: 'fake',
+      model: 'fake',
+    }),
+  );
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   try {
     history.add(image);
     await history.attachJournal(recording);

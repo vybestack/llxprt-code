@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import createDebug from 'debug';
@@ -11,6 +12,7 @@ import {
   useNativeIntegration,
 } from './__tests__/support/native-integration-fixture.js';
 import { readSessionFacts } from './sessionMetaKeys.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function rejected(operation: Promise<void>): Promise<unknown> {
   try {
@@ -304,7 +306,9 @@ describe('native recording integration lifecycle', () => {
       (event) => event.type === 'write',
     ).length;
     history.add(nativeText('failed mirror'));
-    const replacement = new HistoryService({});
+    const replacement = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     histories.push(replacement);
     const failure = await rejected(integration.subscribeToJournal(replacement));
     expect(failure).toHaveProperty('message', 'injected write failure');

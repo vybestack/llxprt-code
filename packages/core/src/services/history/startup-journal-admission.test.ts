@@ -1,9 +1,11 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import * as codec from './journalRowCodec.js';
 import type { RowDraft } from '../../journal/rowDraft.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -11,7 +13,7 @@ function row(text: string): IContent {
 
 describe('startup journal admission', () => {
   it('journals 8192 startup rows without retaining their drafts', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const drafts: Array<WeakRef<RowDraft>> = [];
     const original = codec.encodeContentRow;
     const encode = spyOn(codec, 'encodeContentRow').mockImplementation(

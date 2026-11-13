@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
@@ -17,6 +18,7 @@ import {
   sendThroughRoute,
   WIRE_ROUTES,
 } from './support/wireBodyCapture.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const histories: ReadonlyArray<readonly IContent[]> = [
   [{ speaker: 'human', blocks: [{ type: 'text', text: 'question 雪' }] }],
@@ -187,7 +189,7 @@ describe('native Mistral production HTTP', () => {
         directory: 'tmp/p6/chat-mistral-run-bj/fixtures',
       });
       const sink = await localWireHashSink(route);
-      createRuntimeTokenizerFactory();
+      createRuntimeTokenizerFactory(tokenizerScratchRoots);
       try {
         const provider = route.createProvider();
         const options = buildHistoryCallOptions(

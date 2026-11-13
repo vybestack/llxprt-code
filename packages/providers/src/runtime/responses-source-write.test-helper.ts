@@ -1,12 +1,14 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { readOwnedSource } from './__tests__/owned-source-read.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
+const requestScratchRoots = new ScratchRootOwner();
 
 const fifo = process.argv[2];
-const before = new Set(fs.readdirSync(getScratchRoot()));
+const before = new Set(fs.readdirSync(requestScratchRoots.getRoot()));
 const controller = new AbortController();
 const reason = new Error('abort queued during a synchronous disk write');
 const write = spyOn(fs, 'writeSync').mockImplementation((fd, buffer) => {
@@ -41,7 +43,11 @@ async function* contents(): AsyncIterable<IContent> {
     blocks: [{ type: 'text', text: 'no body after abort' }],
   };
 }
-const pending = readOwnedSource(contents(), controller.signal);
+const pending = readOwnedSource(
+  contents(),
+  requestScratchRoots,
+  controller.signal,
+);
 const outcome = await pending.then(
   () => 'resolved',
   (error: unknown) => (error === reason ? 'aborted' : 'wrong error'),
@@ -53,7 +59,7 @@ fs.writeFileSync(
     outcome,
     cleanup,
     leaked: fs
-      .readdirSync(getScratchRoot())
+      .readdirSync(requestScratchRoots.getRoot())
       .filter((name) => !before.has(name)),
   }),
 );

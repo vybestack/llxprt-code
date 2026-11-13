@@ -1,13 +1,15 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { gcAndSweep } from 'bun:jsc';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { collectResumeRows, displayBoot } from './resumeRows.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('relocated resume row values', () => {
   it('retains decoded values after the history is cleared and disposed', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       history.addAll([suffixRow(0), suffixRow(1)]);
       await history.waitForCommit();

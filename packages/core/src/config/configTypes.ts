@@ -1,3 +1,5 @@
+import type { ScratchRootOwner } from '../storage/scratch-root.js';
+import type { NamedWriterOwnership } from '../journal/named-writer-ownership.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -341,6 +343,8 @@ export interface MemorySettings {
 }
 
 export interface ConfigParameters {
+  readonly namedWriters?: NamedWriterOwnership;
+  readonly scratchRoots?: ScratchRootOwner;
   readonly profileDirectory?: string;
   readonly subagentDirectory?: string;
   memorySettings?: Omit<MemorySettings, 'filenames'> & {

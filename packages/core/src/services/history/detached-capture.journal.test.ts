@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
@@ -7,6 +8,7 @@ import { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import type { HistoryCheckpoint } from './historyCheckpointRows.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function collect(
   source: AsyncIterable<IContent> | Iterable<IContent>,
@@ -31,6 +33,7 @@ describe('native detached capture version and owner lifecycle', () => {
       const owners = new RowOwnership();
       const counters = createRowCounters();
       const history = new HistoryService({
+        scratchRoots: historyScratchRoots,
         mutationOwnership: owners,
         attachmentCounters: { ...counters.counters, ownership: owners },
       });

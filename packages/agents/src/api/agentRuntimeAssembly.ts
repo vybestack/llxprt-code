@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import type { SettingsStateSnapshot } from '@vybestack/llxprt-code-settings';
 import { runCleanupSteps } from '../core/subagent-cleanup.js';
@@ -242,6 +243,8 @@ export class PreferredAgentAssembly {
     );
     const config = new Config({
       ...params,
+      namedWriters: raw.namedWriters,
+      scratchRoots: raw.scratchRoots ?? new ScratchRootOwner(),
       includeDirectories: [
         ...(params.includeDirectories ?? []),
         ...((parsed.harness?.includeProcessCwd ?? true) ? [process.cwd()] : []),
@@ -318,6 +321,7 @@ export class PreferredAgentAssembly {
         async (manager, oauth) => {
           const tokenizerFactory = configureProviderTokenizer(
             manager,
+            config.scratchRoots,
             raw.tokenizerFactory,
           );
           const contentGeneratorFactory =
@@ -385,6 +389,7 @@ class PreferredProviderAssembly {
     let disposeMcpRuntime = async (): Promise<void> => policyOwner.dispose();
     try {
       const mcpRuntime = await assembleOwnedMcpRuntime(
+        manager.fetchNetwork,
         config,
         {
           ...mcpOptions,

@@ -158,7 +158,10 @@ async function withChildOwner(
     authority,
     builtRelease,
   );
-  const builtTokenizer = configureProviderTokenizer(builtManager);
+  const builtTokenizer = configureProviderTokenizer(
+    builtManager,
+    builtConfig.scratchRoots,
+  );
   const builtContent = createRuntimeContentGeneratorFactory();
   const builtOAuth = acquirePreferredOAuth(
     undefined,

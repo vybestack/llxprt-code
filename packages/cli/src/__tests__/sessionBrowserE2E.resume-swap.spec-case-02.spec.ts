@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -60,7 +61,7 @@ describe('Two-phase swap #2', () => {
       sessionId: 'old-preserved-session',
       projectHash: PROJECT_HASH,
     });
-    const oldRecording = createSessionRecorder(oldConfig);
+    const oldRecording = createSessionRecorder(withTestNamedWriters(oldConfig));
     await recordRowsForTest(oldRecording, [makeContent('old message')]);
     await oldRecording.flush();
     const oldFilePath = oldRecording.getFilePath()!;
@@ -84,7 +85,7 @@ describe('Two-phase swap #2', () => {
     });
 
     // Attempt resume - should fail
-    const result = await performResume(targetId, context);
+    const result = await performResume(targetId, withTestNamedWriters(context));
     expect(result.ok).toBe(false);
 
     // Old recording should still be functional

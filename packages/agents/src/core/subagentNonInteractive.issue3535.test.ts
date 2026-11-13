@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { CoreToolRegistryHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolRegistryHostAdapter.js';
 import { afterAll } from 'bun:test';
@@ -85,6 +86,7 @@ import {
   classifyToolCompletions,
   processFunctionCalls,
 } from './subagentToolProcessing.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class RuntimeDisabledTool extends BaseDeclarativeTool<
   Record<string, unknown>,
@@ -466,7 +468,7 @@ async function runInteractiveDirect(
   // spreading it after construction would leave runtimeContext with the
   // default adapter, which yields an empty blocks[] IContent.
   const bundle = createStatelessRuntimeBundle({
-    history: new HistoryService(),
+    history: new HistoryService({ scratchRoots: historyScratchRoots }),
     providerAdapter,
     toolRegistry,
   });

@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 
 /**
@@ -15,6 +17,7 @@ import { HistoryService } from './HistoryService.js';
 
 import { createResumableSession } from '../../recording/__tests__/support/resumableSession.js';
 import { resumeSession } from '../../recording/resumeSession.js';
+const historyScratchRoots = createTestScratchOwner();
 
 let root: string;
 
@@ -25,16 +28,18 @@ interface JournalRowsShape {
 }
 
 async function resumeJournalOnce(sessionId: string): Promise<JournalRowsShape> {
-  const result = await resumeSession({
-    continueRef: sessionId,
-    chatsDir: root,
-    projectHash: PROJECT_HASH,
-    currentProvider: 'anthropic',
-    currentModel: 'model-1',
-    workspaceDirs: [],
-  });
+  const result = await resumeSession(
+    withTestNamedWriters({
+      continueRef: sessionId,
+      chatsDir: root,
+      projectHash: PROJECT_HASH,
+      currentProvider: 'anthropic',
+      currentModel: 'model-1',
+      workspaceDirs: [],
+    }),
+  );
   if (!result.ok) throw new Error(result.error);
-  const service = new HistoryService({});
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   try {
     await service.adoptResumeBoot(result.recording, result.boot);
     await result.recording.flush();

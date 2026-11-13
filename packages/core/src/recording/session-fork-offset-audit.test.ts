@@ -1,3 +1,7 @@
+import {
+  testJournalOptions,
+  withTestNamedWriters,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
@@ -128,7 +132,10 @@ describe('service checkpoint forks have no source-file offsets', () => {
         encodeContentRow(contentOf(row), { owner: 1 + (index % 2) }),
       ),
     );
-    const seeded = await JournalSession.open(sourcePath, journalSeams());
+    const seeded = await JournalSession.open(
+      sourcePath,
+      testJournalOptions(journalSeams()),
+    );
     await seeded.store.commit([{ kind: 'mistral', slot: MISTRAL_SLOT }]);
     await seeded.store.commit([
       {
@@ -151,7 +158,7 @@ describe('service checkpoint forks have no source-file offsets', () => {
     await seeded.close();
     const recording = proof.keep(
       await JournalRecordingService.open(
-        {
+        withTestNamedWriters({
           sessionId: 'mapped',
           projectHash: PROJECT,
           chatsDir: chats,
@@ -159,7 +166,7 @@ describe('service checkpoint forks have no source-file offsets', () => {
           provider: 'mistral',
           model: 'model',
           journal: journalSeams(),
-        },
+        }),
         sourcePath,
       ),
     );
@@ -224,7 +231,10 @@ describe('service checkpoint forks have no source-file offsets', () => {
     for (const result of [first, second]) await result.recording.dispose();
     for (const childPath of children) {
       if (childPath === null) throw new Error('No child file');
-      const child = await JournalSession.open(childPath, journalSeams());
+      const child = await JournalSession.open(
+        childPath,
+        testJournalOptions(journalSeams()),
+      );
       try {
         expect(await ownedRows(child)).toStrictEqual(expected);
         expect(await mapContents(child.store, 'meta')).toStrictEqual(

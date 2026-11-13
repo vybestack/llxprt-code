@@ -78,7 +78,7 @@ describe('source prepared transactional cleanup failure', () => {
       expect(retries).toBe(0);
       expect(fixture.state.closed).toBe(1);
       expect(fixture.state.active).toBe(0);
-      expect(activeRequestBodyCount()).toBe(0);
+      expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
     } finally {
       await stream.return?.();
       await http.server.stop(true);

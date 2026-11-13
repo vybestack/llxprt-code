@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
@@ -12,6 +13,7 @@ import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership
 import { buildCliStyleConfig } from '../../../api/__tests__/helpers/buildCliStyleConfig.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export class ControlledOrchestratorHistory extends HistoryService {
   readonly paused = deferred();
@@ -25,7 +27,7 @@ export class ControlledOrchestratorHistory extends HistoryService {
   digest: string | undefined;
   private captured = false;
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'orchestrator eager history forbidden',

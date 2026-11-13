@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
@@ -48,6 +49,7 @@ void vi.mock('./turnLogging.js', () => ({
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { prependAsyncGenerator } from '@vybestack/llxprt-code-core/utils/asyncIterator.js';
 import { logApiResponse } from './turnLogging.js';
+const historyScratchRoots = createTestScratchOwner();
 
 // Helper to create valid IContent with blocks
 function createIContent(text: string): IContent {
@@ -250,7 +252,9 @@ function facadeCallback0(): void {
     recordHistory: vi.fn(),
   };
 
-  const mockHistoryService = new HistoryService();
+  const mockHistoryService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
 
   const mockProviderRuntimeBuilder = () => ({
     config: createRuntimeConfigStub(new SettingsService(), {
@@ -678,7 +682,7 @@ async function facadeCallback9(): Promise<void> {
     generateChatCompletion: vi.fn(),
   };
 
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const processor = Object.create(StreamProcessor.prototype) as StreamProcessor;
   Object.assign(processor, {
     ports: {

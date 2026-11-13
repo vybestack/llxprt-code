@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdir, mkdtemp } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -20,7 +21,10 @@ export async function replaceFact(
   key: string,
   value: unknown,
 ): Promise<void> {
-  const session = await JournalSession.open(filePath, journalSeams());
+  const session = await JournalSession.open(
+    filePath,
+    testJournalOptions(journalSeams()),
+  );
   try {
     await session.store.commit([
       { kind: 'setState', key, value: encodeSessionFact(value) },

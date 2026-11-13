@@ -1,9 +1,10 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { closeSync, mkdtempSync, openSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from 'bun:test';
 import { z } from 'zod';
-import { createScratchDirSync } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import {
   CHECKPOINT_COUNT,
   CHECKPOINT_SPACING_TURNS,
@@ -11,6 +12,7 @@ import {
   MIN_COMPRESSIONS,
 } from './journal-retained-growth-plan.js';
 import { evaluateRetainedSizes } from './journal-retained-size-predicate.js';
+const testScratchRoots = createTestScratchOwner();
 
 /**
  * Per-test budget. The runner kills a whole test file at 300 s; each file
@@ -43,7 +45,7 @@ export async function runWorker(
   const evidenceRoot = process.env['LLXPRT_RETAINED_EVIDENCE_ROOT'];
   const root = evidenceRoot
     ? mkdtempSync(join(evidenceRoot, `${mode}-`))
-    : createScratchDirSync('journal-retained-growth-');
+    : testScratchRoots.createDirSync('journal-retained-growth-');
   process.stdout.write(`retained worker artifacts: ${root}\n`);
   const log = join(root, 'worker.log');
   const fd = openSync(log, 'w');

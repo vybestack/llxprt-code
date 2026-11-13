@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -31,6 +32,7 @@ import type {
 } from '../runtime/AgentRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
 import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const noopProviderAdapter: AgentRuntimeProviderAdapter = {
   getActiveProvider: () => ({ name: 'stub-provider' }) as IProvider,
@@ -66,6 +68,7 @@ function buildRuntimeContext(
     };
 
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     state,
     settings: settings as ReadonlySettingsSnapshot,
     provider: overrides.provider ?? noopProviderAdapter,

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from './journalSession.js';
@@ -64,14 +65,17 @@ describe('token usage after response replacement', () => {
   it('does not read previous chronology for fresh appended rows', async () => {
     const counter = { reads: 0 };
     let measured = 0;
-    const session = await JournalSession.create(`${directory()}/append.llxj`, {
-      journal: testJournalSeams({ readCounter: counter }, 1, false)
-        .dependencies,
-      tokenUsageCountTokens: (value) => {
-        measured++;
-        return value.length;
-      },
-    });
+    const session = await JournalSession.create(
+      `${directory()}/append.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({ readCounter: counter }, 1, false)
+          .dependencies,
+        tokenUsageCountTokens: (value) => {
+          measured++;
+          return value.length;
+        },
+      }),
+    );
     const rows = (from: number, count: number): IContent[] =>
       Array.from({ length: count }, (_, index) => ({
         speaker: 'human',

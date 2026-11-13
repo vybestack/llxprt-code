@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -12,6 +13,7 @@ import {
 import { HighDensityStrategy } from '../HighDensityStrategy.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
 import { deferred } from './highdensity-disk-fault-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function ownerMetadata(
   history: Parameters<typeof highdensitySetup>[0],
@@ -38,8 +40,9 @@ async function owners(size: number): Promise<number> {
     size,
     async (history, sourceOwner) => {
       const strategy = new HighDensityStrategy();
-      const rows = new HistoryDensityRows();
+      const rows = new HistoryDensityRows(historyScratchRoots);
       const candidate = new HistoryDensityRows(
+        historyScratchRoots,
         strategy.diskCompressionOwnership,
       );
       const snapshot = await history.openDumpSnapshot();

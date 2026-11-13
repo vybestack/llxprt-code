@@ -1,3 +1,5 @@
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { ScratchRootOwner } from '../storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
@@ -6,10 +8,14 @@ import { join } from 'node:path';
 import { RecordingFailureStore } from './recording-failure-report.js';
 import { withRecordingFailureReport } from './recording-failure-consumer.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 describe('recording failure consumer ownership', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   it('drains nested reports in order and closes them before propagating the original summary', async () => {
     const root = mkdtempSync(join(tmpdir(), 'recording-failure-consumer-'));
-    const store = new RecordingFailureStore(root);
+    const store = new RecordingFailureStore(recordingScratchRoots, root);
     try {
       store.record(2, new Error('second'));
       store.record(1, new Error('first'));
@@ -37,7 +43,7 @@ describe('recording failure consumer ownership', () => {
 
   it('propagates a diagnostic consumer error after the original persistence failure', async () => {
     const root = mkdtempSync(join(tmpdir(), 'recording-failure-consumer-'));
-    const store = new RecordingFailureStore(root);
+    const store = new RecordingFailureStore(recordingScratchRoots, root);
     try {
       store.record(1, new Error('original persistence error'));
       const report = store.takeThrough(1, 'flush');

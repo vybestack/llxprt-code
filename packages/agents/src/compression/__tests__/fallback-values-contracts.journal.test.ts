@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
@@ -18,6 +19,7 @@ import {
   withNativeFallbackFixture,
   reachesGate,
 } from './support/native-fallback-fixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function pendingDeps(
   history: PendingFallbackDeps['historyService'],
@@ -48,7 +50,7 @@ async function partialAdmission(size: number): Promise<void> {
       history.setBaseTokenOffset(37);
       history.setCacheAnchorSeq(1);
       const failure = failAdmissionAfter(1);
-      const rows = new DetachedHistoryJournal(owners);
+      const rows = new DetachedHistoryJournal(historyScratchRoots, owners);
       rows.append(suffixRow(size));
       rows.append(suffixRow(size + 1));
       try {
@@ -104,7 +106,7 @@ async function pendingQueued(size: number): Promise<void> {
     history.add(suffixRow(size + 1));
     history.startCompression();
     history.add(suffixRow(size + 2));
-    const rows = new DetachedHistoryJournal(owners);
+    const rows = new DetachedHistoryJournal(historyScratchRoots, owners);
     rows.append(suffixRow(size));
     rows.append(suffixRow(size + 1));
     const ready = batchGate();

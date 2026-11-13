@@ -1,3 +1,4 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -23,7 +24,7 @@ describe('journal display commands', () => {
 
   it('persists notice and distinct result display without changing model rows or facts', async () => {
     const path = join(directory(), 'session.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     try {
       await session.append([
         { speaker: 'human', blocks: [{ type: 'text', text: 'model prompt' }] },
@@ -77,7 +78,7 @@ describe('journal display commands', () => {
 
   it('streams a display body and retains a retracted id across reopen', async () => {
     const path = join(directory(), 'stream.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     const writer = new JournalDisplayWriter(session.store);
     const source = (async function* () {
       for (let index = 0; index < 40; index++) yield '\ud800🌙'.repeat(2048);
@@ -101,7 +102,7 @@ describe('journal display commands', () => {
 
   it('retains display descriptors, bodies and retractions after compaction and reopen', async () => {
     const path = join(directory(), 'compacted.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     const writer = new JournalDisplayWriter(session.store);
     const retained = await writer.append(
       { type: 'shell' },
@@ -135,7 +136,7 @@ describe('journal display commands', () => {
 
   it('preserves an acknowledged prefix when an external display producer fails', async () => {
     const path = join(directory(), 'failed-source.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     const writer = new JournalDisplayWriter(session.store);
     const source = (async function* () {
       yield 'accepted prefix';
@@ -165,6 +166,7 @@ describe('journal display commands', () => {
   it('refuses to retract a model row', async () => {
     const session = await JournalSession.create(
       join(directory(), 'refusal.llxj'),
+      testJournalOptions(),
     );
     try {
       await session.append([

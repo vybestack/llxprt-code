@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { createHistoryRuntimeFixture } from '../../core/__tests__/history-runtime-fixture.js';
 /**
  * @license
@@ -40,6 +41,7 @@ import {
   type HandlerHarness,
 } from './support/handler-harness.js';
 import { CONTEXT_TRUNCATION_MARKER } from '../toolResultTruncator.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function buildRuntimeContext(
   historyService: HistoryService,
@@ -116,7 +118,9 @@ function buildEnforcerHarness(
     performCompressionResult?: PerformCompressionResult;
   } = {},
 ): EnforcerHarness {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const runtimeContext = buildRuntimeContext(historyService, {
     compressionThreshold: overrides.compressionThreshold,
     contextLimit: overrides.contextLimit,

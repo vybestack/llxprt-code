@@ -1,3 +1,5 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -57,10 +59,12 @@ describe('restored prefix read cost', () => {
         storeDeps({
           seams: testJournalSeams({ readCounter: counter }, 1, false),
         }),
+        testNamedWriters,
       );
       const expected = await JournalStore.create(
         join(directory(), `expected-${size}.llxj`),
         storeDeps(),
+        testNamedWriters,
       );
       const prefix = Array.from({ length: size }, (_, index) =>
         draftRow({
@@ -116,6 +120,7 @@ describe('restored prefix read cost', () => {
     const store = await JournalStore.create(
       join(directory(), 'pop-and-append.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     try {
       await store.commit([{ kind: 'append', rows: [draftRow()] }]);
@@ -157,11 +162,11 @@ describe('restored prefix read cost', () => {
   it('preserves normalized occurrence lists when retained responses change prefix contributions', async () => {
     const actual = await JournalSession.create(
       join(directory(), 'normalized-actual.llxj'),
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     const reference = await JournalSession.create(
       join(directory(), 'normalized-reference.llxj'),
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     const prefix: IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },

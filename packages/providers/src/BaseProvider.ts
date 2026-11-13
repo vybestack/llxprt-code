@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { RequestBodyCensus } from './utils/requestScopedBody.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { readInvocationPolicyValue } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
@@ -146,9 +147,8 @@ const unboundProviderFetch: NetworkFetch = () =>
  */
 export abstract class BaseProvider implements IProvider {
   readonly name: string;
+  readonly requestBodyCensus: RequestBodyCensus;
   protected authResolver: AuthPrecedenceResolver;
-  protected baseProviderConfig: BaseProviderConfig;
-  protected providerConfig?: IProviderConfig;
   /**
    * @plan PLAN-20250218-STATELESSPROVIDER.P05
    * @requirement REQ-SP-001
@@ -166,26 +166,26 @@ export abstract class BaseProvider implements IProvider {
   protected throttleTracker?: (waitTimeMs: number) => void;
 
   constructor(
-    config: BaseProviderConfig,
-    providerConfig?: IProviderConfig,
+    protected baseProviderConfig: BaseProviderConfig,
+    protected providerConfig?: IProviderConfig,
     globalConfig?: Config,
     settingsService?: SettingsService,
   ) {
-    this.name = config.name;
-    this.baseProviderConfig = config;
-    this.providerConfig = providerConfig;
+    this.name = baseProviderConfig.name;
+    this.requestBodyCensus =
+      providerConfig?.requestBodyCensus ?? new RequestBodyCensus();
     this.mediaTransportCapabilities = copyMediaTransportCapabilities(
-      config.mediaTransportCapabilities ??
+      baseProviderConfig.mediaTransportCapabilities ??
         conservativeMediaTransportCapabilities(),
     );
 
     const fallbackSettingsService = settingsService ?? new SettingsService();
 
     this.authResolver = createProviderAuthResolver(
-      config,
+      baseProviderConfig,
       this.supportsOAuth(),
       fallbackSettingsService,
-      config.providerKeyStorage,
+      baseProviderConfig.providerKeyStorage,
     );
     this.owner = composeProviderOwner(
       this.name,

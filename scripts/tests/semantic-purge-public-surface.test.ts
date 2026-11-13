@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '../../packages/core/src/storage/__tests__/support/scratch-owner.js';
 import { materializeHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
@@ -6,17 +7,20 @@ import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class StreamOnlyHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(this, 'public purge materializer trap');
   }
 }
 
 describe('journal materialization guard', () => {
   it('StreamOnlyHistory rejects journal eager materialization', async () => {
-    const history = new StreamOnlyHistory();
+    const history = new StreamOnlyHistory({
+      scratchRoots: historyScratchRoots,
+    });
 
     try {
       await expect(materializeHistoryForTest(history)).rejects.toThrow(

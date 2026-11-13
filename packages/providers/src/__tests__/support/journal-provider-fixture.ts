@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -12,6 +13,7 @@ import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test
 import { expect } from 'bun:test';
 import { closeInOrder } from './close-in-order.js';
 import type { HistoryCase } from './wireBodyHistories.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export function eagerProviderOracle(input: HistoryCase): HistoryCase {
   const logger = new DebugLogger('native-provider-eager-oracle');
@@ -28,7 +30,10 @@ export function eagerProviderOracle(input: HistoryCase): HistoryCase {
 function guardedHistory(
   options?: ConstructorParameters<typeof HistoryService>[0],
 ): HistoryService {
-  const history = new HistoryService(options);
+  const history = new HistoryService({
+    ...options,
+    scratchRoots: historyScratchRoots,
+  });
   forbidHistoryMaterializationForTest(
     history,
     'native provider eagerly read history',

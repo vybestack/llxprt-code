@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -71,7 +72,7 @@ describe('trailer aggregate against the accumulators over the frozen mutation se
     it(`${fixture.name}: statistics and context boundary after every step`, async () => {
       const session = await JournalSession.create(
         path.join(directory(), `${fixture.name}.llxj`),
-        { journal: testJournalSeams({}).dependencies },
+        testJournalOptions({ journal: testJournalSeams({}).dependencies }),
       );
       const store = new JournalHistoryStore(session);
       open.push(store);

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
@@ -16,6 +17,7 @@ import { CompressionHandler } from '../CompressionHandler.js';
 import { HighDensityArrayOracle } from './support/highdensity-array-oracle.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
 import { collectRows } from './truncation-stream-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function ratio(size: number): Promise<number> {
   return withSuffixFixture(
@@ -23,6 +25,7 @@ async function ratio(size: number): Promise<number> {
     async (history) => {
       const { runtime: seed, transport } = highdensitySetup(history);
       const runtime = createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         prepareProviderInvocation: seed.prepareProviderInvocation,
         state: seed.state,
         history,

@@ -6,23 +6,32 @@ import type {
 import { HistoryReaderScope } from '../services/history/historyReaderScope.js';
 import type { LocalMediaStore } from './local-media-store.js';
 
-const sources = new WeakMap<MediaReferenceBlock, AdmittedMediaSource>();
-const reservations = new WeakMap<
-  LocalMediaStore,
-  Map<string, Set<AdmittedMediaSource>>
->();
+const admissionSource = Symbol('admitted-media-source');
 
-export async function closeAdmissionReservation(
-  store: LocalMediaStore,
-  contentId: string,
-  ownerId: string,
-): Promise<void> {
-  const held = reservations.get(store);
-  const key = `${ownerId}\u0000${contentId}`;
-  const owners = held?.get(key);
-  if (owners === undefined) return;
-  held?.delete(key);
-  for (const source of owners) await source.close();
+export class AdmissionSourceReservations {
+  private readonly held = new Map<string, Set<AdmittedMediaSource>>();
+
+  retain(
+    contentId: string,
+    ownerId: string,
+    source: AdmittedMediaSource,
+  ): void {
+    const key = `${ownerId}\u0000${contentId}`;
+    let owners = this.held.get(key);
+    if (owners === undefined) {
+      owners = new Set();
+      this.held.set(key, owners);
+    }
+    owners.add(source);
+  }
+
+  async close(contentId: string, ownerId: string): Promise<void> {
+    const key = `${ownerId}\u0000${contentId}`;
+    const owners = this.held.get(key);
+    if (owners === undefined) return;
+    this.held.delete(key);
+    for (const source of owners) await source.close();
+  }
 }
 
 export class AdmittedMediaSource {
@@ -52,10 +61,10 @@ export class AdmittedMediaSource {
       reference.originalObject.contentId !== this.originalContentId
     )
       throw new Error('Media admission source does not own this reference');
+    Object.defineProperty(reference, admissionSource, { value: this });
     Object.freeze(reference.selectedObject);
     Object.freeze(reference.originalObject);
     Object.freeze(reference);
-    sources.set(reference, this);
   }
 
   close(): Promise<void> {
@@ -67,7 +76,10 @@ export class AdmittedMediaSource {
 export function admittedMediaSource(
   reference: MediaReferenceBlock,
 ): AdmittedMediaSource | undefined {
-  return sources.get(reference);
+  return admissionSource in reference &&
+    reference[admissionSource] instanceof AdmittedMediaSource
+    ? reference[admissionSource]
+    : undefined;
 }
 
 export function captureAdmittedMediaSource(
@@ -75,25 +87,14 @@ export function captureAdmittedMediaSource(
   store: LocalMediaStore,
   ownerId: string,
 ): MediaReferenceBlock {
-  const captured = { ...reference };
   const source = new AdmittedMediaSource(
     store,
     reference.contentId,
     reference.originalObject.contentId,
   );
+  const captured = { ...reference };
   source.capture(captured);
-  let held = reservations.get(store);
-  if (held === undefined) {
-    held = new Map();
-    reservations.set(store, held);
-  }
-  const key = `${ownerId}\u0000${reference.contentId}`;
-  let owners = held.get(key);
-  if (owners === undefined) {
-    owners = new Set();
-    held.set(key, owners);
-  }
-  owners.add(source);
+  store.admissionSources.retain(reference.contentId, ownerId, source);
   return captured;
 }
 
@@ -103,6 +104,6 @@ export async function closeAdmittedMediaSources(
   for (const row of contents)
     for (const block of row.blocks) {
       if (block.type === 'media' && block.encoding === 'reference')
-        await sources.get(block)?.close();
+        await admittedMediaSource(block)?.close();
     }
 }

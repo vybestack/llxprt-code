@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '../../storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { ResolverIntervalIndex } from '../../recording/resolverIntervalIndex.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
@@ -13,12 +14,13 @@ const reasons: ReadonlyArray<RemovedInteriorSpan['reason']> = [
 ];
 
 export class DensitySpanRows {
+  constructor(private readonly scratchRoots: ScratchRootOwner) {}
   private index: ResolverIntervalIndex | undefined;
   private peakResidentSpans = 0;
   private closed = false;
 
   private get rows(): ResolverIntervalIndex {
-    this.index ??= new ResolverIntervalIndex();
+    this.index ??= new ResolverIntervalIndex(this.scratchRoots.getRoot());
     return this.index;
   }
 
@@ -52,7 +54,7 @@ export class DensitySpanRows {
       );
       return retained;
     }
-    const sorted = new DensitySpanRows();
+    const sorted = new DensitySpanRows(this.scratchRoots);
     try {
       for (const span of accumulated) sorted.append(span);
       this.appendOrderedTo(sorted);

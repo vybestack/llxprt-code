@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { RequestBodyCensus } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -94,6 +95,7 @@ export function preflightRuntime(
   baseURL: string,
   logging = false,
   model = 'gpt-5.6',
+  requestBodyCensus?: RequestBodyCensus,
 ) {
   const settings = new SettingsService();
   settings.setProviderSetting('openai-responses', 'model', model);
@@ -117,10 +119,12 @@ export function preflightRuntime(
     },
   });
   const tokenizerFactory = withGpt56DiskSources(
-    createRuntimeTokenizerFactory(),
+    createRuntimeTokenizerFactory(config.scratchRoots),
     root,
   );
-  const provider = new OpenAIResponsesProvider('test-key', baseURL);
+  const provider = new OpenAIResponsesProvider('test-key', baseURL, {
+    requestBodyCensus,
+  });
   const context = { config, settingsService: settings, runtimeId: root };
   const invocation = captureProviderInvocation(
     {

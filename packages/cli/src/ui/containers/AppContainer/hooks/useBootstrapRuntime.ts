@@ -31,6 +31,7 @@ type BootstrapInputs = Pick<
   | 'readJournal'
   | 'settings'
   | 'readRecordingPath'
+  | 'readRecordingWatermarks'
   | 'version'
   | 'memoryController'
   | 'readIdeMode'

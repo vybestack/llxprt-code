@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
@@ -8,6 +10,7 @@ import { sha256KeyHash } from '../../journal/idKeys.js';
 import { openJournalReadOnly } from '../../journal/journalReader.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const prompt: IContent = {
   speaker: 'human',
@@ -25,8 +28,11 @@ describe('prompt submission mirrors', () => {
       provider: 'test',
       model: 'test',
     };
-    const first = JournalRecordingService.create(config);
-    const history = new HistoryService({ recording: first });
+    const first = JournalRecordingService.create(withTestNamedWriters(config));
+    const history = new HistoryService({
+      scratchRoots: historyScratchRoots,
+      recording: first,
+    });
     await history.submitPrompt('resume-id', [prompt]);
     const session = await first.session();
     const version = session.store.published;
@@ -40,8 +46,11 @@ describe('prompt submission mirrors', () => {
     };
     await history.dispose();
     await first.dispose();
-    const recording = await JournalRecordingService.open(config, path);
-    const resumed = new HistoryService();
+    const recording = await JournalRecordingService.open(
+      withTestNamedWriters(config),
+      path,
+    );
+    const resumed = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await resumed.adoptResumeBoot(recording, boot);
       await resumed.submitPrompt('resume-id', [prompt]);
@@ -55,15 +64,17 @@ describe('prompt submission mirrors', () => {
   it.each([false, true])(
     'preserves the prompt receipt in a mirror (late attach: %s)',
     async (late) => {
-      const history = new HistoryService();
-      const recording = JournalRecordingService.create({
-        sessionId: 'mirror',
-        projectHash: 'mirror',
-        chatsDir: directory(),
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'test',
-      });
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
+      const recording = JournalRecordingService.create(
+        withTestNamedWriters({
+          sessionId: 'mirror',
+          projectHash: 'mirror',
+          chatsDir: directory(),
+          workspaceDirs: [],
+          provider: 'test',
+          model: 'test',
+        }),
+      );
       try {
         await history.addBatch([
           { speaker: 'ai', blocks: [{ type: 'text', text: 'existing' }] },

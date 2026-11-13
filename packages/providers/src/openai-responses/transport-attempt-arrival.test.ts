@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -24,6 +26,7 @@ import {
   connectionLimitErrorFrame,
   frame,
 } from './__tests__/openAIResponsesWebSocketTransport.test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function appendContent(
   arrival: ResponseArrival,
@@ -86,15 +89,17 @@ async function runArrival(
   result: 'text' | 'tool' = 'text',
   abandonedRaw = true,
 ): Promise<void> {
-  const history = new HistoryService();
-  const recording = createSessionRecorder({
-    sessionId: 'attempts',
-    projectHash: 'attempts',
-    chatsDir,
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
-  });
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'attempts',
+      projectHash: 'attempts',
+      chatsDir,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
   await history.attachJournal(recording);
   const arrival = await history.openResponseArrival({
     id: 'first',

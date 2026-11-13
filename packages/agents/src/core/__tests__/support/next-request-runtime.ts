@@ -1,3 +1,5 @@
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { ScratchRootOwner } from '../../../../../core/src/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { RecordingIntegration } from '@vybestack/llxprt-code-core/recording/RecordingIntegration.js';
@@ -20,6 +22,8 @@ import { recordCompletedToolHistory } from '../../agenticLoop/loopHelpers.js';
 import { callerRecording } from './next-request-recorders.js';
 import { diskToolState, recordingFile } from './service-tool-recorders.js';
 import { requestFacts, toolGate } from './service-tool-runtime.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 export type Variant =
   | 'directory'
@@ -217,7 +221,9 @@ export async function nextRequestRuntime(
       await resumePointOf(primary.recording),
     ),
   );
-  const integrations = [new RecordingIntegration(primary.recording)];
+  const integrations = [
+    new RecordingIntegration(primary.recording, recordingScratchRoots),
+  ];
   for (const integration of integrations)
     await integration.subscribeToJournal(history, agent.session);
   const sessions = [await primary.recording.session()];
@@ -256,3 +262,5 @@ export async function nextRequestRuntime(
     },
   };
 }
+
+afterRecordingTests(() => recordingScratchRoots.removeRoot());

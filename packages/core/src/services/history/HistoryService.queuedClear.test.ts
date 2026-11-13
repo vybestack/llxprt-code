@@ -1,8 +1,10 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function textRow(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -23,7 +25,7 @@ describe('a clear in the journal history mutation queue', () => {
   });
 
   function service(): HistoryService {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     created.push(history);
     return history;
   }

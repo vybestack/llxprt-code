@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -25,6 +26,7 @@ describe('committed group payload ownership', () => {
     const store = await JournalStore.create(
       join(directory(), 'history.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     try {
       const { group, bytes } = await appendTracked(store);

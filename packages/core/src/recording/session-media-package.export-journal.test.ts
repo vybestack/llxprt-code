@@ -1,3 +1,5 @@
+import { testJournalOptions } from '../journal/__tests__/support/namedWriterOwner.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as files from 'node:fs/promises';
@@ -42,14 +44,16 @@ describe('native recording export', () => {
       mimeType: 'image/png',
       semanticMetadata: {},
     });
-    const recording = await JournalRecordingService.createLocked({
-      sessionId: 'source',
-      projectHash: 'project',
-      chatsDir: join(root, 'chats'),
-      workspaceDirs: ['/private'],
-      provider: 'test',
-      model: 'test',
-    });
+    const recording = await JournalRecordingService.createLocked(
+      withTestNamedWriters({
+        sessionId: 'source',
+        projectHash: 'project',
+        chatsDir: join(root, 'chats'),
+        workspaceDirs: ['/private'],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
     const session = await recording.session();
     await session.append([{ speaker: 'human', blocks: [reference] }]);
     await session.store.commit([
@@ -156,6 +160,8 @@ describe('native recording export', () => {
       chats,
       'moved',
       target,
+      undefined,
+      testJournalOptions(),
     );
     expect(
       (await readJournalFileFacts(imported.recordingPath))?.facts,
@@ -169,15 +175,17 @@ describe('native recording export', () => {
         (point) => point.name,
       ),
     ).toStrictEqual(['Saved']);
-    const resumed = await resumeSession({
-      chatsDir: chats,
-      projectHash: 'moved',
-      mediaStore: target,
-      continueRef: imported.sessionId,
-      currentProvider: 'test',
-      currentModel: 'test',
-      workspaceDirs: [],
-    });
+    const resumed = await resumeSession(
+      withTestNamedWriters({
+        chatsDir: chats,
+        projectHash: 'moved',
+        mediaStore: target,
+        continueRef: imported.sessionId,
+        currentProvider: 'test',
+        currentModel: 'test',
+        workspaceDirs: [],
+      }),
+    );
     if (!resumed.ok) throw new Error(resumed.error);
     try {
       const rows = [];

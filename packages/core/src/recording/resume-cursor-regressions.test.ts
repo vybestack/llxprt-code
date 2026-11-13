@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -30,9 +31,11 @@ describe('native resume row and metadata regressions', () => {
   it('strips stored-response markers only from rows predating the resume boundary', async () => {
     const seed = await seedRecording(directory(), 0);
     const writer = await JournalRecordingService.open(
-      recordingConfig(directory(), {
-        sessionId: seed.recording.getSessionId(),
-      }),
+      withTestNamedWriters(
+        recordingConfig(directory(), {
+          sessionId: seed.recording.getSessionId(),
+        }),
+      ),
       seed.filePath,
     );
     await (
@@ -41,14 +44,16 @@ describe('native resume row and metadata regressions', () => {
       { ...textRow('retained', 'ai'), metadata: { responsesStored: true } },
     ]);
     await writer.dispose();
-    const result = await resumeSession({
-      continueRef: writer.getSessionId(),
-      projectHash: PROJECT_HASH,
-      chatsDir: directory(),
-      currentProvider: 'test',
-      currentModel: 'model',
-      workspaceDirs: [],
-    });
+    const result = await resumeSession(
+      withTestNamedWriters({
+        continueRef: writer.getSessionId(),
+        projectHash: PROJECT_HASH,
+        chatsDir: directory(),
+        currentProvider: 'test',
+        currentModel: 'model',
+        workspaceDirs: [],
+      }),
+    );
     const boot = requireBoot(result);
     if (!result.ok) throw new Error(result.error);
     recordings.push(result.recording);
@@ -69,14 +74,16 @@ describe('native resume row and metadata regressions', () => {
 
   it('releases a cancelled row iterator while the recorder remains usable', async () => {
     const seed = await seedRecording(directory(), 3);
-    const result = await resumeSession({
-      continueRef: seed.recording.getSessionId(),
-      projectHash: PROJECT_HASH,
-      chatsDir: directory(),
-      currentProvider: 'test',
-      currentModel: 'model',
-      workspaceDirs: [],
-    });
+    const result = await resumeSession(
+      withTestNamedWriters({
+        continueRef: seed.recording.getSessionId(),
+        projectHash: PROJECT_HASH,
+        chatsDir: directory(),
+        currentProvider: 'test',
+        currentModel: 'model',
+        workspaceDirs: [],
+      }),
+    );
     const boot = requireBoot(result);
     if (!result.ok) throw new Error(result.error);
     recordings.push(result.recording);
@@ -94,9 +101,11 @@ describe('native resume row and metadata regressions', () => {
   it('reads current provider, directories and title with bounded descriptor reads and no row decode', async () => {
     const seed = await seedRecording(directory(), 40);
     const writer = await JournalRecordingService.open(
-      recordingConfig(directory(), {
-        sessionId: seed.recording.getSessionId(),
-      }),
+      withTestNamedWriters(
+        recordingConfig(directory(), {
+          sessionId: seed.recording.getSessionId(),
+        }),
+      ),
       seed.filePath,
     );
     writer.recordProviderSwitch('other', 'new-model');
@@ -138,9 +147,11 @@ describe('native resume row and metadata regressions', () => {
         });
         const seed = await seedRecording(directory(), 0);
         const writer = await JournalRecordingService.open(
-          recordingConfig(directory(), {
-            sessionId: seed.recording.getSessionId(),
-          }),
+          withTestNamedWriters(
+            recordingConfig(directory(), {
+              sessionId: seed.recording.getSessionId(),
+            }),
+          ),
           seed.filePath,
         );
         const block =
@@ -157,15 +168,17 @@ describe('native resume row and metadata regressions', () => {
             mimeType: 'image/png',
             semanticMetadata: {},
           });
-        const result = await resumeSession({
-          continueRef: writer.getSessionId(),
-          projectHash: PROJECT_HASH,
-          chatsDir: directory(),
-          currentProvider: 'test',
-          currentModel: 'model',
-          workspaceDirs: [],
-          mediaStore: media,
-        });
+        const result = await resumeSession(
+          withTestNamedWriters({
+            continueRef: writer.getSessionId(),
+            projectHash: PROJECT_HASH,
+            chatsDir: directory(),
+            currentProvider: 'test',
+            currentModel: 'model',
+            workspaceDirs: [],
+            mediaStore: media,
+          }),
+        );
         const boot = requireBoot(result);
         if (!result.ok) throw new Error(result.error);
         recordings.push(result.recording);

@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, vi } from 'bun:test';
@@ -13,6 +14,7 @@ import { providerFixtureRow } from './provider-curated-test-helpers.js';
 import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 import { buildProviderContent } from '../../historyProviderPipeline.js';
 import { buildCuratedHistory } from '../../historyCuration.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const oracleLogger = new DebugLogger('llxprt:history:service');
 
@@ -53,7 +55,7 @@ export function useDiagnosticSink(): () => Diagnostic[] {
 
 export class DiagnosticsCursorHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(this, 'eager diagnostics preparation');
   }
 }

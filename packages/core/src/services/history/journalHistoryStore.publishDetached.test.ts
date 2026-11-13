@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -20,6 +22,7 @@ import type { IContent } from './IContent.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
 import { JournalSession } from './journalSession.js';
 import type { HistoryBatchRowSource } from './history-batch-values.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const SEED = 8;
 const SEED_BYTES = 256;
@@ -75,7 +78,7 @@ async function openJournal(
   file: string,
   bytes = SEED_BYTES,
 ): Promise<JournalFixture> {
-  const session = await JournalSession.create(file);
+  const session = await JournalSession.create(file, testJournalOptions());
   const store = new JournalHistoryStore(session);
   const stamper = new ChronologyStamper(() => 0);
   const rows = seedRows(bytes);
@@ -84,7 +87,7 @@ async function openJournal(
     store.apply({ kind: 'content', content });
     await store.waitForDurable();
   }
-  const estimator = new HistoryService();
+  const estimator = new HistoryService({ scratchRoots: historyScratchRoots });
   estimator.setTokenizerFactory(exactTokenizer());
   const startTokens = await estimator.estimateTokensForContents(rows);
   const observed: Observed = { applied: [], ranges: [], batches: [] };

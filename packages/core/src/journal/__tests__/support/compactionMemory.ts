@@ -1,3 +1,4 @@
+import { testNamedWriters } from './namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { gcAndSweep, heapSize } from 'bun:jsc';
 import {
@@ -208,6 +209,7 @@ export async function isolatedSessionWithCheckpoints(
   return JournalStore.open(
     file,
     storeDeps({ seams: testJournalSeams({}, 1, false) }),
+    testNamedWriters,
   );
 }
 

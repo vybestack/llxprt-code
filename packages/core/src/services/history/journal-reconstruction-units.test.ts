@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from './journalSession.js';
@@ -118,7 +119,7 @@ describe('indexed reconstructed call units', () => {
       const expected = frozenUnits(input);
       const session = await JournalSession.create(
         `${directory()}/${input.id}.llxj`,
-        { journal: testJournalSeams().dependencies },
+        testJournalOptions({ journal: testJournalSeams().dependencies }),
       );
       try {
         await session.append(input.rows);

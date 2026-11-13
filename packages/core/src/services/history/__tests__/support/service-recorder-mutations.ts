@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach } from 'bun:test';
 import { join } from 'node:path';
@@ -18,6 +21,8 @@ import type { SessionRecordingPort } from '../../../../recording/recordingPort.j
 import { HistoryService } from '../../HistoryService.js';
 import type { IContent } from '../../IContent.js';
 import { decodeStoredRow } from '../../journalRowCodec.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 export interface PersistedMutationRow {
   readonly content: IContent;
@@ -69,6 +74,8 @@ export function useServiceRecorderMutations(): {
   history(): HistoryService;
   recorder(name: string): Promise<ObservedRecorder>;
 } {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const directory = useTempDir('service-recorder-mutations-');
   const resources: Array<{ dispose(): Promise<void> }> = [];
   afterEach(async () => {
@@ -77,30 +84,37 @@ export function useServiceRecorderMutations(): {
   });
   return {
     history: () => {
-      const history = new HistoryService({});
+      const history = new HistoryService({
+        scratchRoots: recordingScratchRoots,
+      });
       resources.push(history);
       return history;
     },
     recorder: async (name) => {
       const flush = await loadFlushRecords();
       let flushes = 0;
-      const recording = JournalRecordingService.create({
-        sessionId: `service-mutations-${name}`,
-        projectHash: 'service-mutations',
-        chatsDir: join(directory(), 'chats'),
-        workspaceDirs: ['/work'],
-        provider: 'anthropic',
-        model: 'model-1',
-        journal: {
+      const recording = JournalRecordingService.create(
+        withTestNamedWriters({
+          sessionId: `service-mutations-${name}`,
+          projectHash: 'service-mutations',
+          chatsDir: join(directory(), 'chats'),
+          workspaceDirs: ['/work'],
+          provider: 'anthropic',
+          model: 'model-1',
           journal: {
-            flush: (fd) => {
-              flush(fd);
-              flushes++;
+            journal: {
+              flush: (fd) => {
+                flush(fd);
+                flushes++;
+              },
             },
           },
-        },
-      });
-      const integration = new RecordingIntegration(recording);
+        }),
+      );
+      const integration = new RecordingIntegration(
+        recording,
+        recordingScratchRoots,
+      );
       resources.push(recording, integration);
       return { recording, integration, origin: {}, flushes: () => flushes };
     },

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { journalPathOf } from './__tests__/support/journalPathOf.js';
@@ -50,9 +51,12 @@ describe('journal history store', () => {
     seams: ReturnType<typeof testJournalSeams>;
   }> {
     const seams = testJournalSeams(failures);
-    const session = await JournalSession.create(path.join(directory(), name), {
-      journal: seams.dependencies,
-    });
+    const session = await JournalSession.create(
+      path.join(directory(), name),
+      testJournalOptions({
+        journal: seams.dependencies,
+      }),
+    );
     const store = new JournalHistoryStore(session);
     open.push(store);
     return { store, seams };
@@ -301,16 +305,22 @@ describe('journal history store', () => {
     const file = path.join(directory(), 'reopen.llxj');
     const seams = testJournalSeams();
     const first = new JournalHistoryStore(
-      await JournalSession.create(file, { journal: seams.dependencies }),
+      await JournalSession.create(
+        file,
+        testJournalOptions({ journal: seams.dependencies }),
+      ),
     );
     first.apply({ kind: 'content', content: row('human', 'a', 1) });
     first.apply({ kind: 'content', content: row('ai', 'b', 2) });
     await first.dispose();
 
     const second = new JournalHistoryStore(
-      await JournalSession.open(file, {
-        journal: testJournalSeams().dependencies,
-      }),
+      await JournalSession.open(
+        file,
+        testJournalOptions({
+          journal: testJournalSeams().dependencies,
+        }),
+      ),
     );
     open.push(second);
     expect(second.getLength()).toBe(2);

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -65,14 +66,16 @@ describe('recording instance pathname ownership', () => {
   });
 
   function owner(): JournalRecordingService {
-    const recording = JournalRecordingService.create(config);
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters(config),
+    );
     recordings.push(recording);
     return recording;
   }
 
   it('keeps simultaneous same-label journals independent through disposal, surviving append and original-path resume', async () => {
-    const first = JournalRecordingService.create(config);
-    const second = JournalRecordingService.create(config);
+    const first = JournalRecordingService.create(withTestNamedWriters(config));
+    const second = JournalRecordingService.create(withTestNamedWriters(config));
     const native = [first, second];
     try {
       await (await first.session()).append([content('first owner')]);
@@ -118,7 +121,10 @@ describe('recording instance pathname ownership', () => {
       ]);
       for (const file of [firstPath, secondPath])
         expect(file.endsWith('.llxj')).toBe(true);
-      const resumed = await JournalRecordingService.open(config, firstPath);
+      const resumed = await JournalRecordingService.open(
+        withTestNamedWriters(config),
+        firstPath,
+      );
       native.push(resumed);
       await (await resumed.session()).append([content('resumed first owner')]);
       await resumed.flush();

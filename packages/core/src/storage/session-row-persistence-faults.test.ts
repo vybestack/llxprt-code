@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdir } from 'node:fs/promises';
@@ -41,7 +42,10 @@ describe('journal row persistence failures', () => {
         expect(observed).toBeGreaterThan(0);
         expect(probe.getPendingByteCount()).toBe(0);
         await session.close();
-        const reopened = await JournalSession.open(session.path);
+        const reopened = await JournalSession.open(
+          session.path,
+          testJournalOptions(),
+        );
         try {
           expect(await journalHistoryDigest(reopened)).toBe(before);
         } finally {

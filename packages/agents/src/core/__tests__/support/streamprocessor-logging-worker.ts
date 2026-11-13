@@ -33,7 +33,6 @@ import { LoggingProviderWrapper } from '../../../../../providers/src/LoggingProv
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import {
   processorFixture,
   sourcePending,
@@ -305,7 +304,7 @@ function collectFacts(
         : input.chat.getPromptEnvelopeEstimate(),
     oracle: expectedEstimate,
     owners: setup.history.owners,
-    activeBodies: activeRequestBodyCount(),
+    activeBodies: activeRequestBodyCount(setup.provider.requestBodyCensus),
     liveOriginalRows: setup.history.inputReferences.filter(
       (ref) => ref.deref() !== undefined,
     ).length,
@@ -410,7 +409,6 @@ async function run(
       ),
     );
   } finally {
-    resetConversationFileWriterForTesting();
     await setup.history.dispose();
     await http.server.stop(true);
     await shutdownTelemetry(telemetry);

@@ -1,3 +1,8 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import {
+  testJournalOptions,
+  withTestNamedWriters,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -21,12 +26,13 @@ import {
   validateSessionMediaPackage,
 } from '../recording/session-media-package.js';
 import type { IContent } from '../services/history/IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function replayRows(
   path: string,
   mediaStore: LocalMediaStore,
 ): Promise<IContent[]> {
-  const session = await JournalSession.open(path);
+  const session = await JournalSession.open(path, testJournalOptions());
   try {
     const history: IContent[] = [];
     for await (const row of session.rows()) {
@@ -68,16 +74,21 @@ async function record(
     semanticMetadata: {},
   });
   const content: IContent = { speaker: 'human', blocks: [reference] };
-  const recording = createSessionRecorder({
-    sessionId: 'durable-owner',
-    projectHash: 'owner-project',
-    chatsDir: join(directory, 'chats'),
-    workspaceDirs: [directory],
-    provider: 'test',
-    model: 'test-model',
-    mediaStore: owner.store,
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'durable-owner',
+      projectHash: 'owner-project',
+      chatsDir: join(directory, 'chats'),
+      workspaceDirs: [directory],
+      provider: 'test',
+      model: 'test-model',
+      mediaStore: owner.store,
+    }),
+  );
+  const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
+    recording,
   });
-  const history = new HistoryService({ recording });
   await history.addBatch([content]);
   await history.waitForCommit();
   await history.dispose();
@@ -125,6 +136,8 @@ describe('session media durable transfer', () => {
         join(directory, 'second', 'chats'),
         'owner-project',
         second.store,
+        undefined,
+        testJournalOptions(),
       );
       await second.dispose();
       const fresh = new SessionMediaOwner(
@@ -212,6 +225,8 @@ describe('durable import failure cleanup', () => {
             join(directory, 'limited', 'chats'),
             'owner-project',
             limited.store,
+            undefined,
+            testJournalOptions(),
           ),
         ).rejects.toThrow(/quota/i);
         expect(await limited.store.getStoredByteLength()).toBe(0);
@@ -240,17 +255,22 @@ describe('import activation durability', () => {
         second.store,
         async (imported) => {
           const replay = await replayRows(imported.recordingPath, second.store);
-          const recording = createSessionRecorder({
-            sessionId: 'activation-journal',
-            projectHash: 'owner-project',
-            chatsDir: join(directory, 'second', 'chats'),
-            workspaceDirs: [directory],
-            provider: 'test',
-            model: 'test',
-            mediaStore: second.store,
-          });
+          const recording = createSessionRecorder(
+            withTestNamedWriters({
+              sessionId: 'activation-journal',
+              projectHash: 'owner-project',
+              chatsDir: join(directory, 'second', 'chats'),
+              workspaceDirs: [directory],
+              provider: 'test',
+              model: 'test',
+              mediaStore: second.store,
+            }),
+          );
           try {
-            const history = new HistoryService({ recording });
+            const history = new HistoryService({
+              scratchRoots: historyScratchRoots,
+              recording,
+            });
             await history.addBatch([replay[0]]);
             await history.waitForCommit();
             await history.dispose();
@@ -259,6 +279,7 @@ describe('import activation durability', () => {
             await recording.dispose();
           }
         },
+        testJournalOptions(),
       );
     });
   }, 10000);
@@ -348,6 +369,8 @@ describe('durable packaged snapshots', () => {
           join(directory, 'second', 'chats'),
           'owner-project',
           second.store,
+          undefined,
+          testJournalOptions(),
         );
         expect(await second.store.readVerified(reference)).toStrictEqual(
           new Uint8Array([8, 6, 4, 2]),

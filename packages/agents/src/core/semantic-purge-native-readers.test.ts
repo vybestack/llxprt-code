@@ -1,9 +1,11 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { JournalDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/journalDumpSnapshot.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function failureOf(action: () => Promise<unknown>): Promise<unknown> {
   try {
@@ -16,7 +18,7 @@ async function failureOf(action: () => Promise<unknown>): Promise<unknown> {
 
 describe('native semantic purge cleanup identity', () => {
   it('preserves the primary cause and independent close error while releasing the next attempt', async () => {
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const primary = new Error('purge persistence failed');
     const cleanup = new Error('purge descriptor close failed');
     try {
@@ -80,7 +82,7 @@ describe('native semantic purge cleanup identity', () => {
 describe('native semantic purge reader retirement', () => {
   for (const explicit of [false, true]) {
     it(`retires a suspended ${explicit ? 'tagged pre-image' : 'candidate'} reader before releasing its version`, async () => {
-      const history = new HistoryService({});
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       const ownership = new RowOwnership();
       try {
         await history.detachedValues.replace([

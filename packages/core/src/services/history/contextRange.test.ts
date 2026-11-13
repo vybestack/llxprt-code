@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -25,6 +26,7 @@ import { describe, expect, it } from 'bun:test';
 import type { IContent } from './IContent.js';
 import type { ContextRange } from './historyEventTypes.js';
 import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function textContent(speaker: 'human' | 'ai', text: string): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
@@ -49,7 +51,7 @@ async function seqOf(
 
 describe('HistoryService context range', () => {
   it('reports the boundary of the curated history after adds', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     for (const text of ['one', 'two', 'three', 'four', 'five']) {
       service.add(textContent('human', text));
     }
@@ -63,7 +65,7 @@ describe('HistoryService context range', () => {
   });
 
   it('reports an empty range after clear', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     service.add(textContent('human', 'only'));
     await service.clear();
     expect(service.getContextRange()).toStrictEqual({
@@ -78,7 +80,7 @@ describe('HistoryService context range', () => {
 
 describe('HistoryService context range publication', () => {
   it('emits once for the first entry and once per boundary-moving commit after', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     const events: ContextRange[] = [];
     service.on('contextRangeChanged', (range) => {
       events.push(range);
@@ -125,7 +127,7 @@ describe('HistoryService context range publication', () => {
   });
 
   it('emits on clear with a zero-entry range', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     service.add(textContent('human', 'one'));
     const events: ContextRange[] = [];
     service.on('contextRangeChanged', (range) => {
@@ -145,7 +147,7 @@ describe('HistoryService context range publication', () => {
 
 describe('HistoryService context summaries', () => {
   it('exposes compression summaries with their replaced span and text', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     for (const text of ['one', 'two', 'three', 'four']) {
       service.add(textContent('human', text));
     }

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -36,9 +37,10 @@ async function compress(session: JournalSession): Promise<void> {
   ]);
 }
 
-function pagerFor(path: string) {
+function pagerFor(session: JournalSession) {
   return createScrollbackPagerStore({
-    filePath: path,
+    filePath: session.path,
+    watermarks: session.store.watermarks,
     pageRows: 4,
     viewport: { visibleKeys: [], viewportLines: 4, rowHeightLines: () => 1 },
     settings: { marginViewports: 1, byteFloorBytes: 65536, purgeDebounceMs: 0 },
@@ -52,7 +54,7 @@ describe('complete transcript pager', () => {
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'transcript-pager-'));
     path = join(directory, 'session.llxj');
-    session = await JournalSession.create(path);
+    session = await JournalSession.create(path, testJournalOptions());
   });
   afterEach(async () => {
     await session.close();
@@ -126,7 +128,7 @@ describe('complete transcript pager', () => {
 
   it('refreshes an acknowledged live row in place and preserves its key on seal', async () => {
     const recorder = new JournalArrivalRecorder(session.store);
-    const pager = pagerFor(path);
+    const pager = pagerFor(session);
     try {
       const row = await recorder.beginRow(
         encodeContentRow({ speaker: 'ai', blocks: [] }, { owner: 0 }),

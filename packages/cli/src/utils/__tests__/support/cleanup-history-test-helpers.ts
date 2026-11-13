@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { expect } from 'bun:test';
 import type { SessionClientOwner } from '../../../../../agents/src/session/session-client-owner.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
@@ -25,6 +26,7 @@ import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { buildCliStyleConfig } from '../../../../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export const cleanupBounds = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
 const mediaInput = {
@@ -56,7 +58,7 @@ export class CleanupHistory extends HistoryService {
   retaining: 'borrowed' | 'copy' | undefined;
   digest: string | undefined;
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'cleanup eager history forbidden',

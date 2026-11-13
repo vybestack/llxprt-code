@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -6,6 +7,7 @@ import { expectedSemanticPurge } from './__tests__/support/semantic-purge-row-or
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function fixture(): IContent[] {
   const contents: IContent[] = [
@@ -146,8 +148,10 @@ describe('native semantic purge independent eager policy parity', () => {
     'remove' | 'summary'
   >) {
     it(`preserves complete history and token values across repeated ${mode} operations`, async () => {
-      const oracleHistory = new HistoryService({});
-      const history = new HistoryService({});
+      const oracleHistory = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       oracleHistory.setTokenizerFactory(exactTokenizer());
       history.setTokenizerFactory(exactTokenizer());
       try {

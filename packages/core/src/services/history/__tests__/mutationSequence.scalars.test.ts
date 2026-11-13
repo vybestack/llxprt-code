@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -58,7 +59,7 @@ describe('journal store scalars over the frozen mutation sequences', () => {
     it(`${fixture.name}: statistics, boundary and last rows after every step`, async () => {
       const session = await JournalSession.create(
         path.join(directory(), `${fixture.name}.llxj`),
-        { journal: testJournalSeams({}).dependencies },
+        testJournalOptions({ journal: testJournalSeams({}).dependencies }),
       );
       const store = new JournalHistoryStore(session);
       open.push(store);

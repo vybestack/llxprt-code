@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
@@ -11,6 +13,7 @@ import {
   type HistoryItem,
   type IndividualToolCallDisplay,
 } from '../../types.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('journal-positioned tool controls', () => {
   const directory = useTempDir('journal-controls-');
@@ -18,15 +21,17 @@ describe('journal-positioned tool controls', () => {
   async function withRequests(
     run: (items: HistoryItem[]) => Promise<void>,
   ): Promise<void> {
-    const recording = createSessionRecorder({
-      sessionId: 'controls',
-      projectHash: 'controls',
-      chatsDir: directory(),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
-    const history = new HistoryService();
+    const recording = createSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'controls',
+        projectHash: 'controls',
+        chatsDir: directory(),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     await history.attachJournal(recording, true);
     try {
       for (const id of ['first-attempt', 'second-attempt']) {

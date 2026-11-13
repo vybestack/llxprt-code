@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
@@ -55,6 +57,7 @@ import {
 import { createLockedSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function restoreBackend(): void {}
 
@@ -271,14 +274,16 @@ describe('mandatory launch journal lifecycle', () => {
     setSystemTime(new Date('2026-09-21T12:00:00Z'));
     const config = makeForegroundConfig();
     const chatsDir = config.projectChatsDir;
-    const parent = await createLockedSessionRecorder({
-      sessionId: PARENT_SESSION_ID,
-      projectHash: 'parent',
-      chatsDir,
-      workspaceDirs: [],
-      provider: 'gemini',
-      model: 'gemini-1.5-flash',
-    });
+    const parent = await createLockedSessionRecorder(
+      withTestNamedWriters({
+        sessionId: PARENT_SESSION_ID,
+        projectHash: 'parent',
+        chatsDir,
+        workspaceDirs: [],
+        provider: 'gemini',
+        model: 'gemini-1.5-flash',
+      }),
+    );
     await recordRowsForTest(parent, [
       { speaker: 'human', blocks: [{ type: 'text', text: 'parent' }] },
     ]);
@@ -407,15 +412,20 @@ describe.each(['journal'] as const)('production child history on %s', () => {
     'persists isolated child history and releases it after %s',
     async (mode) => {
       const config = makeForegroundConfig();
-      const parent = await createLockedSessionRecorder({
-        sessionId: PARENT_SESSION_ID,
-        projectHash: 'parent',
-        chatsDir: config.projectChatsDir,
-        workspaceDirs: [],
-        provider: 'gemini',
-        model: 'gemini-1.5-flash',
+      const parent = await createLockedSessionRecorder(
+        withTestNamedWriters({
+          sessionId: PARENT_SESSION_ID,
+          projectHash: 'parent',
+          chatsDir: config.projectChatsDir,
+          workspaceDirs: [],
+          provider: 'gemini',
+          model: 'gemini-1.5-flash',
+        }),
+      );
+      const parentHistory = new HistoryService({
+        scratchRoots: historyScratchRoots,
+        recording: parent,
       });
-      const parentHistory = new HistoryService({ recording: parent });
       parentHistory.add({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'parent' }],

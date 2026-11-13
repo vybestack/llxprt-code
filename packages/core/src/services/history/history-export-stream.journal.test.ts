@@ -1,9 +1,11 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 
 import { exportSummaryRow, sha256 } from './export-summary-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 /**
  * The journal twin of history-export-stream.test.ts. The old-store test seeds
@@ -17,7 +19,7 @@ import { HistoryService } from './HistoryService.js';
 describe('streamed history JSON export on the journal store', () => {
   let history: HistoryService;
   beforeEach(() => {
-    history = new HistoryService();
+    history = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(async () => {
     await history.dispose();

@@ -1,7 +1,7 @@
+import { testJournalOptions } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
-import { historyOriginId } from '../services/history/historyOriginId.js';
 import { JournalHistoryStore } from '../services/history/journalHistoryStore.js';
 import { JournalSession } from '../services/history/journalSession.js';
 
@@ -43,10 +43,10 @@ describe('late recorder and checkpoint fork use current row ownership', () => {
     if (!(store instanceof JournalHistoryStore))
       throw new Error('Expected journal store');
     store.changeOwnersOf([
-      { position: 0, origin: historyOriginId(b) },
-      { position: 1, origin: historyOriginId(a) },
+      { position: 0, origin: history.originIds.get(b) },
+      { position: 1, origin: history.originIds.get(a) },
       { position: 2, origin: undefined },
-      { position: 3, origin: historyOriginId(b) },
+      { position: 3, origin: history.originIds.get(b) },
     ]);
     await history.waitForCommit();
     const primary = await primaryRows(history);
@@ -54,16 +54,17 @@ describe('late recorder and checkpoint fork use current row ownership', () => {
       before.map(({ content }) => content),
     );
     expect(primary.map(({ origin }) => origin)).toStrictEqual([
-      historyOriginId(b),
-      historyOriginId(a),
+      history.originIds.get(b),
+      history.originIds.get(a),
       undefined,
-      historyOriginId(b),
+      history.originIds.get(b),
       undefined,
-      historyOriginId(b),
-      historyOriginId(a),
+      history.originIds.get(b),
+      history.originIds.get(a),
     ]);
     const expected = primary.filter(
-      ({ origin }) => origin === undefined || origin === historyOriginId(b),
+      ({ origin }) =>
+        origin === undefined || origin === history.originIds.get(b),
     );
 
     await history.attachJournal(late, false, undefined, b);
@@ -76,9 +77,12 @@ describe('late recorder and checkpoint fork use current row ownership', () => {
     const sourcePath = late.getFilePath();
     if (sourcePath === null) throw new Error('Missing late recorder file');
     await late.dispose();
-    const persisted = await JournalSession.open(sourcePath, {
-      journal: undefined,
-    });
+    const persisted = await JournalSession.open(
+      sourcePath,
+      testJournalOptions({
+        journal: undefined,
+      }),
+    );
     try {
       expect(
         (await ownedRows(persisted)).slice(0, expected.length),
@@ -96,7 +100,7 @@ describe('late recorder and checkpoint fork use current row ownership', () => {
     const childPath = result.recording.getFilePath();
     if (childPath === null) throw new Error('Missing child file');
     await result.recording.dispose();
-    const child = await JournalSession.open(childPath);
+    const child = await JournalSession.open(childPath, testJournalOptions());
     try {
       expect(await ownedRows(child)).toStrictEqual(expected);
     } finally {

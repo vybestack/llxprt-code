@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 /**
  * @license
@@ -35,6 +36,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { ChatSession } from './chatSession.js';
+const historyScratchRoots = createTestScratchOwner();
 
 interface ReaderCensus {
   opened: number;
@@ -127,9 +129,10 @@ function createFixture(): Fixture {
     },
   };
   const setup = createChatSessionRuntime({ provider });
-  const history = new CountingHistory();
+  const history = new CountingHistory({ scratchRoots: historyScratchRoots });
   seedHistory(history);
   const runtime = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     ...createSessionPolicyFixture(
       setup.settingsService,
       'source-default-no-collector',

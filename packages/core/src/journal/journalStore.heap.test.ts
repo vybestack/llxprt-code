@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -74,6 +75,7 @@ describe('journal store heap', () => {
     const store = await JournalStore.create(
       path.join(directory(), name),
       storeDeps({ createCache, seams }),
+      testNamedWriters,
     );
     open.push(store);
     const model = new ArrayModel();

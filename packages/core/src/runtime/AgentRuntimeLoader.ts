@@ -126,7 +126,6 @@ const defaultContentGeneratorFactory: ContentGeneratorFactory = (
 ) => createContentGenerator(contentConfig, config, sessionId);
 
 function hydrateContentGeneratorConfig(
-  profile: AgentRuntimeProfileSnapshot,
   contentConfig: ContentGeneratorConfig,
 ): ContentGeneratorConfig {
   const contentGeneratorFactory = contentConfig.contentGeneratorFactory;
@@ -200,12 +199,70 @@ export function loadAgentRuntime(
 export async function loadAgentRuntime(
   options: AgentRuntimeLoaderOptions,
 ): Promise<AgentRuntimeLoaderResult> {
-  const { overrides = {}, signal } = options;
+  const { profile, mediaStore, overrides = {}, signal } = options;
   throwIfAborted(signal);
-
-  const history = overrides.historyService ?? new HistoryService();
+  const history =
+    overrides.historyService ??
+    new HistoryService({ scratchRoots: profile.config.scratchRoots });
   try {
-    return await assembleAgentRuntime(options, history);
+    const providerAdapter: AgentRuntimeProviderAdapter =
+      overrides.providerAdapter ??
+      createProviderAdapterFromManager(profile.providerManager);
+
+    const sessionIdentity = { getSessionId: () => profile.state.sessionId };
+    const telemetryAdapter: AgentRuntimeTelemetryAdapter =
+      overrides.telemetryAdapter ??
+      createTelemetryAdapter(sessionIdentity, profile.telemetry);
+
+    const toolsView: ToolRegistryView =
+      overrides.toolsView ??
+      createFilteredToolRegistryView(
+        profile.toolRegistry,
+        profile.readToolGovernance,
+      );
+    const mediaAdmission =
+      overrides.mediaAdmission ?? new MediaAdmissionService(mediaStore);
+    const mediaResolver =
+      overrides.mediaResolver ?? new RequestMediaResolver(mediaStore);
+
+    const runtimeContext = createAgentRuntimeContext({
+      scratchRoots: profile.config.scratchRoots,
+      state: profile.state,
+      promptEstimator: profile.promptEstimator,
+      settings: profile.settings,
+      provider: providerAdapter,
+      telemetry: telemetryAdapter,
+      requestDiagnostics: profile.requestDiagnostics,
+      tools: toolsView,
+      history,
+      readRuntimeSettings: profile.readRuntimeSettings,
+      prepareProviderInvocation: profile.prepareProviderInvocation,
+      providerRuntime: profile.providerRuntime,
+      mediaStore,
+      mediaAdmission,
+      mediaResolver,
+    });
+
+    await adoptRuntimeMedia(runtimeContext);
+    const contentGenerator = await resolveContentGenerator(
+      profile.contentGeneratorConfig,
+      profile.config,
+      profile.state.sessionId,
+      overrides.contentGenerator,
+      overrides.contentGeneratorFactory,
+    );
+
+    return {
+      runtimeContext,
+      history,
+      providerAdapter,
+      telemetryAdapter,
+      telemetryRoot: options.profile.telemetry,
+      toolsView,
+      contentGenerator,
+      toolRegistry: profile.toolRegistry,
+      settingsSnapshot: profile.settings,
+    };
   } catch (error) {
     if (overrides.historyService === undefined) {
       try {
@@ -221,83 +278,21 @@ export async function loadAgentRuntime(
   }
 }
 
-async function assembleAgentRuntime(
-  options: AgentRuntimeLoaderOptions,
-  history: HistoryService,
-): Promise<AgentRuntimeLoaderResult> {
-  const { profile, mediaStore, overrides = {} } = options;
-  const providerAdapter: AgentRuntimeProviderAdapter =
-    overrides.providerAdapter ??
-    createProviderAdapterFromManager(profile.providerManager);
-
-  const sessionIdentity = { getSessionId: () => profile.state.sessionId };
-  const telemetryAdapter: AgentRuntimeTelemetryAdapter =
-    overrides.telemetryAdapter ??
-    createTelemetryAdapter(sessionIdentity, profile.telemetry);
-
-  const toolsView: ToolRegistryView =
-    overrides.toolsView ??
-    createFilteredToolRegistryView(
-      profile.toolRegistry,
-      profile.readToolGovernance,
+async function resolveContentGenerator(
+  contentConfig: ContentGeneratorConfig | undefined,
+  config: Config,
+  sessionId: string,
+  override: ContentGenerator | undefined,
+  factory: ContentGeneratorFactory = defaultContentGeneratorFactory,
+): Promise<ContentGenerator> {
+  if (override !== undefined) return override;
+  if (contentConfig === undefined)
+    throw new Error(
+      'AgentRuntimeLoader requires contentGeneratorConfig when no contentGenerator override is supplied.',
     );
-  const mediaAdmission =
-    overrides.mediaAdmission ?? new MediaAdmissionService(mediaStore);
-  const mediaResolver =
-    overrides.mediaResolver ?? new RequestMediaResolver(mediaStore);
-
-  const runtimeContext = createAgentRuntimeContext({
-    state: profile.state,
-    promptEstimator: profile.promptEstimator,
-    settings: profile.settings,
-    provider: providerAdapter,
-    telemetry: telemetryAdapter,
-    requestDiagnostics: profile.requestDiagnostics,
-    tools: toolsView,
-    history,
-    readRuntimeSettings: profile.readRuntimeSettings,
-    prepareProviderInvocation: profile.prepareProviderInvocation,
-    providerRuntime: profile.providerRuntime,
-    mediaStore,
-    mediaAdmission,
-    mediaResolver,
-  });
-
-  await adoptRuntimeMedia(runtimeContext);
-  let contentGenerator: ContentGenerator;
-  if (overrides.contentGenerator) {
-    contentGenerator = overrides.contentGenerator;
-  } else {
-    const contentConfig = profile.contentGeneratorConfig;
-    if (!contentConfig) {
-      throw new Error(
-        'AgentRuntimeLoader requires contentGeneratorConfig when no contentGenerator override is supplied.',
-      );
-    }
-
-    const hydratedConfig = hydrateContentGeneratorConfig(
-      profile,
-      contentConfig,
-    );
-
-    const factory =
-      overrides.contentGeneratorFactory ?? defaultContentGeneratorFactory;
-    contentGenerator = await factory(
-      hydratedConfig,
-      profile.config,
-      profile.state.sessionId,
-    );
-  }
-
-  return {
-    runtimeContext,
-    history,
-    providerAdapter,
-    telemetryAdapter,
-    telemetryRoot: options.profile.telemetry,
-    toolsView,
-    contentGenerator,
-    toolRegistry: profile.toolRegistry,
-    settingsSnapshot: profile.settings,
-  };
+  return factory(
+    hydrateContentGeneratorConfig(contentConfig),
+    config,
+    sessionId,
+  );
 }

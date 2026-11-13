@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -24,6 +25,7 @@ import {
   truncateLargestToolResponses,
   truncateOversizedToolResponsesUnified,
 } from '../toolResultTruncator.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function makeToolResponse(
   callId: string,
@@ -98,7 +100,7 @@ describe('Unified truncation actually stops on concurrent history mutation (issu
   let historyService: HistoryService;
 
   beforeEach(() => {
-    historyService = new HistoryService();
+    historyService = new HistoryService({ scratchRoots: historyScratchRoots });
   });
 
   it('stops the loop (not skips) when history is mutated mid-replacement', async () => {
@@ -159,7 +161,7 @@ describe('Legacy truncateLargestToolResponses history guard (issue #1321)', () =
   let historyService: HistoryService;
 
   beforeEach(() => {
-    historyService = new HistoryService();
+    historyService = new HistoryService({ scratchRoots: historyScratchRoots });
   });
 
   it('aborts safely when history is concurrently cleared during ranking', async () => {

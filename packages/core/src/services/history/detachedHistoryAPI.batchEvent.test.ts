@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '../../recording/rowOwnership.js';
@@ -5,6 +6,7 @@ import { notifyDetachedRows } from './detachedHistoryAPI.js';
 import type { HistoryBatchEvent } from './history-batch-values.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function textRow(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -22,7 +24,7 @@ function sourceOf(rows: readonly IContent[]) {
 
 describe('notifyDetachedRows', () => {
   it('emits one contentBatchAdded whose rows a listener reads asynchronously after dispatch', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const events: HistoryBatchEvent[] = [];
     history.on('contentBatchAdded', (batch) => {
       events.push(batch);
@@ -52,7 +54,7 @@ describe('notifyDetachedRows', () => {
   });
 
   it('counts a row as owned only while the listener holds it', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const ownership = new RowOwnership();
     const live: number[] = [];
     let consumed: Promise<void> | undefined;

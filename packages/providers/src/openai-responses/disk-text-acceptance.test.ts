@@ -273,7 +273,7 @@ async function acceptance(large: boolean, retainRows = false) {
           error.message === 'Native Responses prompt is closed',
       ),
       bodies: http.bodies,
-      activeBodies: activeRequestBodyCount(),
+      activeBodies: activeRequestBodyCount(setup.provider.requestBodyCensus),
     };
     return facts;
   } finally {

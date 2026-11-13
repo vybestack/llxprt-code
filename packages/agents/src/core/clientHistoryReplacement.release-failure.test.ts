@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -13,6 +14,7 @@ import {
   replaceDeferredClientSource,
 } from './clientHistoryReplacement.js';
 import { RetainedHistoryAdmissions } from './retainedHistoryAdmissions.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function* rows(): AsyncGenerator<IContent> {
   yield { speaker: 'human', blocks: [{ type: 'text', text: 'replacement' }] };
@@ -39,10 +41,13 @@ describe('history source replacement cleanup', () => {
     priorReleased: () => boolean;
     replacement: Parameters<typeof replaceDeferredClientSource>[2];
   }> {
-    const existing = new HistoryService();
+    const existing = new HistoryService({ scratchRoots: historyScratchRoots });
     existing.dispose = (): Promise<void> =>
       Promise.reject(new Error('prior dispose failed'));
-    const admissions = new RetainedHistoryAdmissions(store);
+    const admissions = new RetainedHistoryAdmissions(
+      store,
+      historyScratchRoots,
+    );
     const prior = admissions.prepareDeferredArray([], {}).retained;
     let priorReleased = false;
     return {
@@ -50,7 +55,7 @@ describe('history source replacement cleanup', () => {
       admissions,
       priorReleased: () => priorReleased,
       replacement: {
-        deps: { mediaStore: store },
+        deps: { scratchRoots: historyScratchRoots, mediaStore: store },
         runtime: createAgentRuntimeState({
           runtimeId: 'runtime-replacement',
           provider: 'gemini',

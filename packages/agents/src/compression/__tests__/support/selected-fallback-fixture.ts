@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,6 +13,7 @@ import {
   digestRows,
   toolRankingRow,
 } from '../tool-truncation-stream-helpers.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export async function withSelectedFallbackFixture(
   size: number,
@@ -27,6 +29,7 @@ export async function withSelectedFallbackFixture(
   const reads = createRowCounters();
   const owners = new RowOwnership();
   const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
     recording: recorder,
     attachmentCounters: { ...reads.counters, ownership: owners },
     mutationOwnership: owners,

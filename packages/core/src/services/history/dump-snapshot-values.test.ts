@@ -1,9 +1,11 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createRowCounters } from '../../recording/journalCounters.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(index: number): IContent {
   return {
@@ -14,7 +16,7 @@ function row(index: number): IContent {
 
 describe('dump snapshot scoped values', () => {
   it('keeps repeated reads independent of mutations to a returned row', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       history.add(row(0));
       const snapshot = await history.openDumpSnapshot();
@@ -48,6 +50,7 @@ describe('dump snapshot scoped reader closure', () => {
     const ownership = new RowOwnership();
     const counters = createRowCounters();
     const history = new HistoryService({
+      scratchRoots: historyScratchRoots,
       attachmentCounters: { ...counters.counters, ownership },
     });
     try {

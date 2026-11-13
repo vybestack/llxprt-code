@@ -84,7 +84,10 @@ import { TodoContinuationService } from './TodoContinuationService.js';
 export { PostTurnAction } from './TodoContinuationService.js';
 import { IdeContextTracker } from './IdeContextTracker.js';
 import { AgentHookManager } from './AgentHookManager.js';
-import type { CreateChatSessionDeps } from './ChatSessionFactory.js';
+import {
+  createChatSessionSafe,
+  type CreateChatSessionDeps,
+} from './ChatSessionFactory.js';
 import {
   MessageStreamOrchestrator,
   type MessageStreamDeps,
@@ -101,7 +104,7 @@ import {
   setHistoryFromSource as setDeferredHistoryFromSource,
   startChatWithDeferredHistory,
   storeHistoryForLaterUse as storeDeferredHistory,
-  type ChatSessionInputs,
+  type DeferredChatCreation,
   type DeferredHistoryPort,
 } from './client-deferred-history.js';
 
@@ -231,7 +234,10 @@ export class AgentClient
     assertClientRuntimeState(runtimeState);
 
     this.runtimeState = runtimeState;
-    this.historyAdmissions = new RetainedHistoryAdmissions(mediaStore);
+    this.historyAdmissions = new RetainedHistoryAdmissions(
+      mediaStore,
+      this.config.scratchRoots,
+    );
     this.deferredHistory = this.createDeferredHistoryPort();
     this._historyService = historyService;
     this.logger = new DebugLogger('llxprt:core:client');
@@ -576,6 +582,7 @@ export class AgentClient
 
   private deferredHistoryDeps(): DeferredHistoryDeps {
     return {
+      scratchRoots: this.config.scratchRoots,
       mediaStore: this.mediaStore,
       historyTokenization: this.historyTokenization,
     };
@@ -764,7 +771,7 @@ export class AgentClient
     const previous = this.chat;
     const chat = await startChatWithDeferredHistory(
       this.deferredHistory,
-      () => this.chatSessionInputs(),
+      (history) => this.createDeferredChat(history),
       extraHistory,
     );
     if (
@@ -776,8 +783,11 @@ export class AgentClient
     return chat;
   }
 
-  private chatSessionInputs(): ChatSessionInputs {
-    return {
+  private createDeferredChat(
+    history: DeferredChatCreation,
+  ): Promise<ChatSession> {
+    return createChatSessionSafe({
+      ...history,
       config: this.config,
       historyTokenization: this.historyTokenization,
       providerFileLifecycle: this.providerFileLifecycle,
@@ -792,12 +802,13 @@ export class AgentClient
       generateContentConfig: this.generateContentConfig,
       todoContinuationService: this.todoContinuationService,
       toolRegistry: this.tools,
-      createHistoryService: () => new HistoryService(),
+      createHistoryService: () =>
+        new HistoryService({ scratchRoots: this.config.scratchRoots }),
       createChatSessionInstance: (...args) => new ChatSession(...args),
       providerSelection: this.providerSelection,
       prepareProviderInvocation: this.prepareProviderInvocation,
       ...this.chatPolicyInputs(),
-    };
+    });
   }
 
   async *sendMessageStream(

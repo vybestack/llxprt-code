@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
@@ -8,6 +10,7 @@ import { createRowCounters } from '../../recording/journalCounters.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryService } from './HistoryService.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function expectClosed(
   rows: ReturnType<HistoryService['streamRawHistory']>,
@@ -30,7 +33,7 @@ async function commitRows(history: HistoryService): Promise<void> {
 
 describe('closed history stream access and durable cleanup', () => {
   it('rejects cold and new reads before closing its unlinked journal', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await commitRows(history);
       expect(history.journalPath()).toBeNull();
@@ -51,17 +54,20 @@ describe('closed history stream access and durable cleanup', () => {
 
   it('rejects access to an injected journal without deleting caller-owned durable records or retaining read ownership', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'history-disposal-stream-'));
-    const recorder = JournalRecordingService.create({
-      sessionId: 'closed-stream',
-      projectHash: 'closed-stream',
-      chatsDir: directory,
-      workspaceDirs: [directory],
-      provider: 'test',
-      model: 'test',
-    });
+    const recorder = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'closed-stream',
+        projectHash: 'closed-stream',
+        chatsDir: directory,
+        workspaceDirs: [directory],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
     const counters = createRowCounters();
     const ownership = new RowOwnership();
     const history = new HistoryService({
+      scratchRoots: historyScratchRoots,
       recording: recorder,
       attachmentCounters: { ...counters.counters, ownership },
     });

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /// <reference lib="esnext.array" />
 /*
@@ -9,6 +10,8 @@ import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/cor
 import { afterEach, describe, it, expect, beforeEach } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
+
 let historyService: HistoryService;
 function syntheticResponseCount(curated: IContent[]): number {
   return curated.filter(
@@ -58,7 +61,7 @@ describe('Circular Reference Bug', () => {
 });
 
 function facadeCallback0(): void {
-  historyService = new HistoryService();
+  historyService = new HistoryService({ scratchRoots: historyScratchRoots });
 }
 
 async function facadeCallback1(): Promise<void> {

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   createLockedSessionRecorder,
@@ -154,15 +155,17 @@ export async function withCLI(
     const history = client.getHistoryService();
     if (history === null) throw new Error('Missing initialized history');
     await beforeRecording?.(history);
-    recording = await createLockedSessionRecorder({
-      sessionId: crypto.randomUUID(),
-      projectHash: 'cli-native-prefix',
-      chatsDir: `${root}/chats`,
-      workspaceDirs: [root],
-      cwd: root,
-      provider: 'fake',
-      model: 'fake-model',
-    });
+    recording = await createLockedSessionRecorder(
+      withTestNamedWriters({
+        sessionId: crypto.randomUUID(),
+        projectHash: 'cli-native-prefix',
+        chatsDir: `${root}/chats`,
+        workspaceDirs: [root],
+        cwd: root,
+        provider: 'fake',
+        model: 'fake-model',
+      }),
+    );
     await history.attachJournal(recording, true);
     await history.waitForCommit();
     const currentRecording = recording;

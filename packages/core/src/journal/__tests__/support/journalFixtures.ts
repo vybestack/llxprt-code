@@ -1,3 +1,4 @@
+import { JournalWatermarks } from '../../journal-watermarks.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import type { FlushRecords } from '../../flushRecords.js';
@@ -157,6 +158,7 @@ export function testJournalSeams(
       throw new Error('injected flush failure');
   };
   const dependencies: JournalOpenDependencies = {
+    watermarks: new JournalWatermarks(),
     open: async (path, flags) => {
       sink.push({ type: 'open', flags });
       return wrapHandle(await fsp.open(path, flags), sink, failures, gate);

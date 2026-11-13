@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { chatSessionPorts } from '../../chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { randomUUID, createHash } from 'node:crypto';
@@ -27,6 +28,7 @@ import { ConversationManager } from '../../ConversationManager.js';
 import { CompressionHandler } from '../../../compression/CompressionHandler.js';
 import type { ChatSessionConfig } from '../../chatSession.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export const sourcePending: IContent = {
   speaker: 'human',
@@ -115,10 +117,10 @@ export async function processorFixture(
     hooks: {},
     telemetry,
   });
-  const nativeFactory = createRuntimeTokenizerFactory();
+  const nativeFactory = createRuntimeTokenizerFactory(historyScratchRoots);
   await nativeFactory.prepareTokenizer?.('openai-responses', 'gpt-5.6');
   const provider = new ObservedResponsesProvider('test-key', baseURL);
-  const history = new ObservedHistory();
+  const history = new ObservedHistory({ scratchRoots: historyScratchRoots });
   for (let index = 0; index < count; index++) {
     const row = diskTextRow(index, large);
     history.inputReferences.push(new WeakRef(row));
@@ -161,6 +163,7 @@ export function assembleProcessorFixture(
     runtimeId: randomUUID(),
   };
   const runtime = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         {

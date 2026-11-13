@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -64,7 +65,7 @@ describe('Edge cases #1', () => {
       currentSessionId: 'different-session',
     });
 
-    const result = await performResume('latest', context);
+    const result = await performResume('latest', withTestNamedWriters(context));
     const newRecording = context.recordingCallbacks.getCurrentRecording();
     if (newRecording !== null) state.recordingsToDispose.push(newRecording);
     const newLock = context.recordingCallbacks.getCurrentLockHandle();

@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readAtOf } from '../__tests__/requestRowsTestSupport.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -18,7 +19,6 @@ import {
   createCodexResponsesWebSocketTransport,
   type WebSocketTransport,
 } from './openAIResponsesWebSocketTransport.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const codexOAuthManager = {
   getOAuthToken: async () => ({
@@ -89,9 +89,9 @@ function rowsOf(list: readonly IContent[]): ProviderRequestRows {
   };
 }
 
-function tmpPromptDirs(): Set<string> {
+function tmpPromptDirs(scratchRoots: ScratchRootOwner): Set<string> {
   return new Set(
-    readdirSync(getScratchRoot()).filter((name) =>
+    readdirSync(scratchRoots.getRoot()).filter((name) =>
       name.startsWith('responses-prompt-keys-'),
     ),
   );
@@ -126,7 +126,7 @@ describe('Responses source route with Codex over the WebSocket', () => {
   }
 
   it('sends the same frame and handshake as the array route', async () => {
-    const before = tmpPromptDirs();
+    const before = tmpPromptDirs(setup.config.scratchRoots);
     const rows = rowsOf(history);
     for await (const _ of provider.generateChatCompletion(codexOptions(rows)));
     const selection = requestSelection({ ...rows, close: () => {} });
@@ -152,13 +152,15 @@ describe('Responses source route with Codex over the WebSocket', () => {
       'codex_cli_rs',
     );
     expect(
-      [...tmpPromptDirs()].filter((entry) => !before.has(entry)),
+      [...tmpPromptDirs(setup.config.scratchRoots)].filter(
+        (entry) => !before.has(entry),
+      ),
     ).toHaveLength(0);
   }, 60000);
 
   for (const afterFirstChunk of [false, true]) {
     it(`releases the frame source and segments when the consumer returns ${afterFirstChunk ? 'after the first chunk' : 'before the first next'}`, async () => {
-      const before = tmpPromptDirs();
+      const before = tmpPromptDirs(setup.config.scratchRoots);
       const options = codexOptions(
         requestSelection({ ...rowsOf(history), close: () => {} }),
       );
@@ -171,9 +173,11 @@ describe('Responses source route with Codex over the WebSocket', () => {
       expect(first?.done).toBe(afterFirstChunk ? false : undefined);
       await stream.return?.();
       await projection.releaseIfUnsent?.();
-      expect(activeRequestBodyCount()).toBe(0);
+      expect(activeRequestBodyCount(provider.requestBodyCensus)).toBe(0);
       expect(
-        [...tmpPromptDirs()].filter((entry) => !before.has(entry)),
+        [...tmpPromptDirs(setup.config.scratchRoots)].filter(
+          (entry) => !before.has(entry),
+        ),
       ).toHaveLength(0);
     }, 60000);
   }

@@ -42,7 +42,6 @@ import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import {
   createConfig,
   makeContent,
@@ -370,7 +369,7 @@ describe('Focused lifecycle review findings', () => {
         join(tmpdir(), 'llxprt-exact-response-'),
       );
       vi.spyOn(config, 'getConversationLogPath').mockReturnValue(directory);
-      resetConversationFileWriterForTesting();
+
       try {
         const wrapper = buildStack(new SuccessProvider(SUCCESS_CHUNKS), config);
         await consumeStream(
@@ -400,7 +399,6 @@ describe('Focused lifecycle review findings', () => {
           metadata: { success: true },
         });
       } finally {
-        resetConversationFileWriterForTesting();
         await fs.rm(directory, { recursive: true, force: true });
       }
     });

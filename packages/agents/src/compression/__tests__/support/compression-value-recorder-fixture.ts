@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect, spyOn } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -23,6 +25,7 @@ import {
   valueGate,
 } from '../compression-value-fixture.js';
 import { nativeFileRows } from './native-file-rows.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export interface CompressionValueRecorderFixture {
   readonly root: string;
@@ -86,28 +89,31 @@ async function nativeWriter(
   root: string,
   wait: () => Promise<void>,
 ): Promise<JournalSession> {
-  return JournalSession.create(join(root, 'primary.llxj'), {
-    journal: {
-      open: async (path, flags) => {
-        const handle = await open(path, flags);
-        return {
-          fd: handle.fd,
-          read: (...args) => handle.read(...args),
-          stat: () => handle.stat(),
-          truncate: (length) => handle.truncate(length),
-          close: () => handle.close(),
-          write: async (...args) => {
-            await wait();
-            return handle.write(...args);
-          },
-          writev: async (buffers, position) => {
-            await wait();
-            return handle.writev([...buffers], position);
-          },
-        };
+  return JournalSession.create(
+    join(root, 'primary.llxj'),
+    testJournalOptions({
+      journal: {
+        open: async (path, flags) => {
+          const handle = await open(path, flags);
+          return {
+            fd: handle.fd,
+            read: (...args) => handle.read(...args),
+            stat: () => handle.stat(),
+            truncate: (length) => handle.truncate(length),
+            close: () => handle.close(),
+            write: async (...args) => {
+              await wait();
+              return handle.write(...args);
+            },
+            writev: async (buffers, position) => {
+              await wait();
+              return handle.writev([...buffers], position);
+            },
+          };
+        },
       },
-    },
-  });
+    }),
+  );
 }
 
 function recordedHistory(
@@ -121,6 +127,7 @@ function recordedHistory(
   );
   try {
     return create({
+      scratchRoots: historyScratchRoots,
       recording: recorder,
       mutationOwnership: owners,
       attachmentCounters: {

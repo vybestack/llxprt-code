@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { link, mkdtemp } from 'node:fs/promises';
@@ -37,22 +41,24 @@ async function fixture(): Promise<{
     quotaBytes: 1024 * 1024,
     recordingArchive: archive,
   });
-  const recording = JournalRecordingService.create({
-    sessionId: 'media-recording',
-    projectHash: 'media-project',
-    chatsDir: join(root, 'chats'),
-    workspaceDirs: [root],
-    provider: 'fake',
-    model: 'fake',
-    mediaStore: store,
-    journal: {
+  const recording = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: 'media-recording',
+      projectHash: 'media-project',
+      chatsDir: join(root, 'chats'),
+      workspaceDirs: [root],
+      provider: 'fake',
+      model: 'fake',
+      mediaStore: store,
       journal: {
-        flush: () => {
-          if (journalRejected) throw new Error('journal durability refused');
+        journal: {
+          flush: () => {
+            if (journalRejected) throw new Error('journal durability refused');
+          },
         },
       },
-    },
-  });
+    }),
+  );
   return {
     root,
     store,
@@ -133,7 +139,7 @@ describe('native recording media archive', () => {
       recordingArchive: freshArchive,
     });
     const reopened = await JournalRecordingService.open(
-      {
+      withTestNamedWriters({
         sessionId: 'media-recording',
         projectHash: 'media-project',
         chatsDir: join(root, 'chats'),
@@ -141,7 +147,7 @@ describe('native recording media archive', () => {
         provider: 'fake',
         model: 'fake',
         mediaStore: fresh,
-      },
+      }),
       path,
     );
     try {
@@ -215,7 +221,10 @@ describe('native recording media archive', () => {
       } finally {
         await recording.dispose();
         expect(await archive.hasReservations(old.contentId)).toBe(false);
-        const recovered = await JournalSession.open(session.path);
+        const recovered = await JournalSession.open(
+          session.path,
+          testJournalOptions(),
+        );
         await recovered.close();
         await archive.reclaimUnreferenced(
           await projectRecordedContentIds(root),

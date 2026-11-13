@@ -16,7 +16,6 @@ import {
 import type { HistoryRowOrigins } from './historyRowOrigins.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
 import { planDiskDensityMutation } from './historyDiskDensity.js';
-import { historyOriginId } from './historyOriginId.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
 import type { DensityResult } from '../../core/compression/types.js';
 import type { DensityReplacementRecordShape } from './historyJournalGuards.js';
@@ -133,7 +132,7 @@ export async function compensateMutation(
   const origin =
     input.options.origin === undefined
       ? undefined
-      : historyOriginId(input.options.origin);
+      : journal.originIds.get(input.options.origin);
   const stamped = (op: HistoryJournalOp): HistoryJournalOp =>
     origin === undefined ? op : { ...op, origin };
   const abort = replacements.abortOp();

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -61,7 +62,10 @@ describe('native truncation source ownership', () => {
         );
         expect(await owned.originsOfRows()).toStrictEqual(expected);
         await owned.dispose();
-        const reopened = await JournalSession.open(owned.session.path);
+        const reopened = await JournalSession.open(
+          owned.session.path,
+          testJournalOptions(),
+        );
         try {
           const dictionary = await OwnerDictionary.load(reopened.store);
           const actual: Array<string | undefined> = [];

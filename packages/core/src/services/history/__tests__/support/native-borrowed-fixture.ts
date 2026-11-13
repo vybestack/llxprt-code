@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalRecordingService } from '../../../../recording/journalRecordingService.js';
 import { journalSeams } from '../../../../recording/__tests__/support/recordedJournals.js';
@@ -12,6 +14,7 @@ import { exactTokenizer } from '../../chronology-rollback-test-helpers.js';
 import type { HistoryRowView } from '../../historyRowView.js';
 import { HistoryService } from '../../HistoryService.js';
 import type { IContent } from '../../IContent.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export class NativeBorrowedHistory extends HistoryService {
   readRows<T>(
@@ -63,19 +66,22 @@ export async function withNativeBorrowedFixture(
   ) => Promise<void>,
 ): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'native-borrowed-'));
-  const recording = JournalRecordingService.create({
-    sessionId: 'borrowed',
-    projectHash: 'borrowed',
-    chatsDir: root,
-    workspaceDirs: [root],
-    provider: 'test',
-    model: 'test',
-    journal: journalSeams(),
-  });
+  const recording = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: 'borrowed',
+      projectHash: 'borrowed',
+      chatsDir: root,
+      workspaceDirs: [root],
+      provider: 'test',
+      model: 'test',
+      journal: journalSeams(),
+    }),
+  );
   const owners = new BorrowedCensus();
   const counters = createRowCounters();
   let released = 0;
   const history = new NativeBorrowedHistory({
+    scratchRoots: historyScratchRoots,
     recording,
     attachmentCounters: {
       ...counters.counters,

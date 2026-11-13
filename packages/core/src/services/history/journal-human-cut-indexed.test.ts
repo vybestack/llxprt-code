@@ -1,3 +1,5 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
+import { testNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
@@ -42,17 +44,21 @@ describe('native prefix indexed human selection', () => {
     it(`selects a human cut from speaker subtree counts at ${size} rows`, async () => {
       const counter = { reads: 0 };
       const caches: BoundedIdNodeCache[] = [];
-      const store = await JournalStore.create(`${directory()}/source.llxj`, {
-        ...storeDeps({
-          seams: testJournalSeams({ readCounter: counter }),
-          createCache: () => {
-            const cache = new BoundedIdNodeCache();
-            caches.push(cache);
-            return cache;
-          },
-        }),
-        algebra: rowAlgebra,
-      });
+      const store = await JournalStore.create(
+        `${directory()}/source.llxj`,
+        {
+          ...storeDeps({
+            seams: testJournalSeams({ readCounter: counter }),
+            createCache: () => {
+              const cache = new BoundedIdNodeCache();
+              caches.push(cache);
+              return cache;
+            },
+          }),
+          algebra: rowAlgebra,
+        },
+        testNamedWriters,
+      );
       await store.commit([
         {
           kind: 'append',
@@ -94,7 +100,7 @@ describe('native prefix indexed human selection', () => {
 
   it('counts raw human speakers through ignored AI rows, insert, rewrite, pop, restore, copy and reopen', async () => {
     const path = `${directory()}/mutations.llxj`;
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     const rows: IContent[] = [
       { speaker: 'tool', blocks: [] },
       { speaker: 'ai', blocks: [] },
@@ -166,7 +172,7 @@ describe('native prefix indexed human selection', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path);
+    const reopened = await JournalSession.open(path, testJournalOptions());
     try {
       await assertCuts(reopened, [2, 4, 5]);
     } finally {

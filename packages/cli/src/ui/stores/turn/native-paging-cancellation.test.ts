@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, open, readdir, rm } from 'node:fs/promises';
@@ -32,7 +33,7 @@ async function fixture(
 ): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), 'native-page-cancel-'));
   const file = join(directory, 'journal.llxj');
-  const session = await JournalSession.create(file);
+  const session = await JournalSession.create(file, testJournalOptions());
   await session.append(
     [1, 2, 3].map((seq) => ({
       speaker: 'human',

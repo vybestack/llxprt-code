@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '../../../services/history/IContent.js';
 import { openJournalReadOnly } from '../../../journal/journalReader.js';
@@ -54,9 +55,9 @@ export async function readJournalSnapshot(
         kind: facts.start.kind,
         ...(facts.title === undefined ? {} : { title: facts.title }),
       },
-      checkpoints: await new JournalCheckpointService().listCheckpoints(
-        filePath,
-      ),
+      checkpoints: await new JournalCheckpointService(
+        testJournalOptions(),
+      ).listCheckpoints(filePath),
       ancestry: fork === undefined ? undefined : decodeSessionFact(fork),
       ...(facts.name === undefined ? {} : { sessionName: facts.name }),
       commitSeq: reader.trailer?.commitSeq ?? 0,

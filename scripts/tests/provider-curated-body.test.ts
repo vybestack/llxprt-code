@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '../../packages/core/src/storage/__tests__/support/scratch-owner.js';
 import { materializeHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
@@ -15,10 +16,11 @@ import {
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
 import { captureCuratedBody } from './provider-curated-body-gemini.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class CursorOnlyHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'eager provider send preparation',
@@ -28,7 +30,9 @@ class CursorOnlyHistory extends HistoryService {
 
 describe('journal materialization guard', () => {
   it('CursorOnlyHistory rejects journal eager materialization', async () => {
-    const history = new CursorOnlyHistory();
+    const history = new CursorOnlyHistory({
+      scratchRoots: historyScratchRoots,
+    });
 
     try {
       await expect(materializeHistoryForTest(history)).rejects.toThrow(

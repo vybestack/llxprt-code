@@ -7,20 +7,22 @@ import { randomBytes } from 'node:crypto';
  * once to an 8 character random id that is written on the rows it publishes.
  * The map is weak: it holds nothing that grows with context.
  */
-const ids = new WeakMap<object, string>();
+export class HistoryOriginIds {
+  private readonly ids = new WeakMap<object, string>();
 
-export function historyOriginId(origin: object): string {
-  const existing = ids.get(origin);
-  if (existing !== undefined) return existing;
-  const id = randomBytes(6).toString('base64url');
-  ids.set(origin, id);
-  return id;
+  get(origin: object): string {
+    const existing = this.ids.get(origin);
+    if (existing !== undefined) return existing;
+    const id = randomBytes(6).toString('base64url');
+    this.ids.set(origin, id);
+    return id;
+  }
 }
 
 /** The origin id a journal record's payload carries, if any. */
 export function payloadOrigin(payload: unknown): string | undefined {
   if (typeof payload !== 'object' || payload === null) return undefined;
-  const origin = (payload as { origin?: unknown }).origin;
+  const origin = 'origin' in payload ? payload.origin : undefined;
   return typeof origin === 'string' ? origin : undefined;
 }
 

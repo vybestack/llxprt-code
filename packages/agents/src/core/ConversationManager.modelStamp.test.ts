@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
@@ -49,6 +50,7 @@ import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -77,7 +79,7 @@ function buildConversationManager(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, config.scratchRoots);
 
   const provider: IProvider = {
     name: 'stub',
@@ -94,8 +96,11 @@ function buildConversationManager(
     model,
     sessionId: config.getSessionId(),
   });
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         {

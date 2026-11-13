@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalSession } from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core';
@@ -32,8 +33,8 @@ export async function writeNativeEdits(
   append = false,
 ): Promise<void> {
   const session = await (append
-    ? JournalSession.open(file)
-    : JournalSession.create(file));
+    ? JournalSession.open(file, testJournalOptions())
+    : JournalSession.create(file, testJournalOptions()));
   try {
     let pending: IContent[] = [];
     for (const edit of edits) {

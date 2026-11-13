@@ -21,6 +21,7 @@ import {
 import { ModelPromptEstimatorError } from './ModelPromptEstimatorError.js';
 import { countO200kBaseTokensChunked } from './o200k-chunked-source.js';
 import { getO200kBaseEncoder } from './o200kBaseCounter.js';
+import type { DiskAssets } from './o200k-disk-assets.js';
 import type {
   O200kDiskCountOptions,
   O200kDiskSource,
@@ -54,9 +55,10 @@ function failure(
 async function prepareSourceAssets(
   request: RuntimePromptEstimateRequest,
 ): Promise<DiskCounter> {
+  let assets: DiskAssets;
   try {
     const { diskAssets } = await import('./o200k-disk-assets.js');
-    diskAssets();
+    assets = diskAssets();
   } catch (error) {
     throw failure(request, 'asset-unavailable', error);
   }
@@ -67,7 +69,7 @@ async function prepareSourceAssets(
   try {
     const encoder = await getO200kBaseEncoder();
     return (source, options) =>
-      countO200kBaseTokensChunked(source, encoder, options);
+      countO200kBaseTokensChunked(source, encoder, { ...options, assets });
   } catch (error) {
     throw failure(request, 'asset-unavailable', error);
   }

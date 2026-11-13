@@ -1,9 +1,11 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { createUserMessage } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { executeFallbackTransaction } from '../providerFallbackTransaction.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function texts(history: HistoryService): Promise<string[]> {
   const values: string[] = [];
@@ -17,7 +19,7 @@ describe('rejected journal fallback compensation', () => {
   it.each(['reject', 'throw', 'abort'])(
     'keeps independent appends after %s',
     async (mode) => {
-      const history = new HistoryService();
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       try {
         await history.addBatch([createUserMessage('original')]);
         history.setCacheAnchorSeq(1);

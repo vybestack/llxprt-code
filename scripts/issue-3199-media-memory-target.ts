@@ -1,3 +1,7 @@
+import {
+  NamedWriterOwnership,
+  ScratchRootOwner,
+} from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -275,12 +279,16 @@ try {
     quotaBytes: storeQuotaBytes,
   });
   resources.store = store;
-  const history = new HistoryService();
-  await history.registerMediaOwner(new HistoryMediaOwnership(store));
+  const scratchRoots = new ScratchRootOwner();
+  const history = new HistoryService({ scratchRoots });
+  await history.registerMediaOwner(
+    new HistoryMediaOwnership(store, scratchRoots),
+  );
   resources.history = history;
   const admission = new MediaAdmissionService(store);
   const resolver = new RequestMediaResolver(store);
   resources.resolver = resolver;
+  const namedWriters = new NamedWriterOwnership();
   const recordingProbe = new NativeRecordingProbe();
   const recording = createSessionRecorder({
     sessionId: `media-probe-${runtimeName()}`,
@@ -290,13 +298,13 @@ try {
     provider: 'probe',
     model: 'probe',
     mediaStore: store,
-    journal: recordingProbe.options,
+    journal: { ...recordingProbe.options, namedWriters },
   });
   resources.recording = recording;
   const persistence = new NativeRecordingProbe();
   const persistedSession = await JournalSession.create(
     join(directory, 'persisted.llxj'),
-    persistence.options,
+    { ...persistence.options, namedWriters },
   );
   resources.persistence = persistence;
   resources.persistedSession = persistedSession;
@@ -326,6 +334,7 @@ try {
   });
   await retainedProviderFile.lease.release();
   const metrics = new MediaLifecycleMetrics({
+    scratchRoots,
     store,
     history,
     requestResolver: resolver,

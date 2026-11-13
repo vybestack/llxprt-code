@@ -1,3 +1,4 @@
+import { testNamedWriters } from './namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
 import type { VersionEdit } from '../../groupEdits.js';
@@ -127,7 +128,7 @@ export async function runModelSequence(
 ): Promise<SequenceResult> {
   const random = new SeededRandom(seed);
   const model = new StoreModel(random);
-  const store = await JournalStore.create(file, storeDeps());
+  const store = await JournalStore.create(file, storeDeps(), testNamedWriters);
   const saved: SavedVersion[] = [];
   const counts = new Map<string, number>();
   let checkpoints = 0;
@@ -156,7 +157,7 @@ export async function runModelSequence(
     await onStep?.(store, model, index);
   }
   await store.close();
-  const reopened = await JournalStore.open(file, storeDeps());
+  const reopened = await JournalStore.open(file, storeDeps(), testNamedWriters);
   await expectStoreMatchesModel(reopened, model);
   await reopened.close();
   expect(counts.size).toBeGreaterThan(0);

@@ -1,3 +1,4 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -20,9 +21,12 @@ describe('whole-row scan physical reads', () => {
   it('checks the body CRC when all row bytes arrive from one prefetched window', async () => {
     const file = join(directory(), 'corrupt.llxj');
     const seams = testJournalSeams();
-    const session = await JournalSession.create(file, {
-      journal: seams.dependencies,
-    });
+    const session = await JournalSession.create(
+      file,
+      testJournalOptions({
+        journal: seams.dependencies,
+      }),
+    );
     try {
       await session.append([row(0)]);
       const snapshot = await session.store.snapshot();
@@ -53,7 +57,7 @@ describe('whole-row scan physical reads', () => {
       const seams = testJournalSeams({ readCounter: counter }, 1, false);
       const session = await JournalSession.create(
         join(directory(), `${size}.llxj`),
-        { journal: seams.dependencies },
+        testJournalOptions({ journal: seams.dependencies }),
       );
       try {
         await session.append(

@@ -1,3 +1,6 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { afterAll as afterRequestTests } from 'bun:test';
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdirSync } from 'node:fs';
@@ -22,7 +25,9 @@ import { requestScopedContents } from '../utils/requestScopedBody.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+const tokenizerScratchRoots = createTestScratchOwner();
+
+const requestScratchRoots = new ScratchRootOwner();
 
 const context: ResponsesInputBuildContext = {
   includeReasoningInContext: true,
@@ -290,6 +295,8 @@ const media: IContent[] = [
 ];
 
 describe('Responses disk prompt-key serializer', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('matches the independent old oracle for empty input', async () => {
     expect(await compare([])).toBeGreaterThan(0);
   });
@@ -342,8 +349,10 @@ describe('Responses disk prompt-key serializer', () => {
 });
 
 describe('Responses source ownership', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('replays a one-shot source into two independent disk readers', async () => {
-    const owner = requestScopedContents(source(pair));
+    const owner = requestScopedContents(source(pair), requestScratchRoots);
     try {
       const a = owner.stream()[Symbol.asyncIterator]();
       const b = owner.stream()[Symbol.asyncIterator]();
@@ -368,7 +377,7 @@ describe('Responses source ownership', () => {
     await prompt.dispose();
   });
   it('preserves row-source failure and abort without scratch residue', async () => {
-    const before = new Set(readdirSync(getScratchRoot()));
+    const before = new Set(readdirSync(requestScratchRoots.getRoot()));
     const controller = new AbortController();
     const error = new Error('source failure');
     let closed = false;
@@ -394,7 +403,9 @@ describe('Responses source ownership', () => {
       }),
     ).rejects.toBe(error);
     expect(
-      readdirSync(getScratchRoot()).filter((name) => !before.has(name)),
+      readdirSync(requestScratchRoots.getRoot()).filter(
+        (name) => !before.has(name),
+      ),
     ).toStrictEqual([]);
   });
 });
@@ -432,7 +443,7 @@ async function statefulParity(
     const accounting = nativeResponsesAccounting(prompt);
     if (accounting === undefined) throw new Error('Missing native accounting');
     expect(accounting.statefulParentUsed).toBe(true);
-    const factory = createRuntimeTokenizerFactory();
+    const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
     const actual = {
       ...old,
       finalizedProjection: prompt.toEstimatorProjection(),
@@ -455,6 +466,8 @@ async function statefulParity(
 }
 
 describe('Responses native stateful prompt-key policy', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('uses input-only incremental keys with observed parent usage', async () => {
     expect(await statefulParity(123)).toMatchObject({
       statefulParentUsed: true,
@@ -489,6 +502,8 @@ describe('Responses native stateful prompt-key policy', () => {
 });
 
 describe('Responses serializer boundary semantics', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('preserves genuine reasoning IDs that look like local IDs', async () => {
     const rows: IContent[] = [
       {

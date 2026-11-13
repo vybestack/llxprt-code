@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -14,6 +15,7 @@ import {
   WIRE_ROUTES,
 } from '../__tests__/support/wireBodyCapture.js';
 import { normalizedRows } from '../__tests__/support/frozenWire/normalizedRows.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 async function estimate(
   selection: ProviderRequestSelection,
@@ -41,7 +43,7 @@ async function estimate(
     return await estimatePromptEnvelope(
       'openai-responses',
       projection,
-      createRuntimeTokenizerFactory(),
+      createRuntimeTokenizerFactory(tokenizerScratchRoots),
     );
   } finally {
     await projection.releaseIfUnsent?.();

@@ -142,7 +142,10 @@ it('resolves CommonJS object-exported service class identities', () => {
 });
 it('preserves existing JavaScript conditional implementations beside Bun sources and mapped types', () => {
   put('packages/demo/bun.ts', 'export {};');
-  put('packages/demo/node.mjs', 'export let active = 1;');
+  put(
+    'packages/demo/node.mjs',
+    'export let active = 1; export function increment() { active += 1; }',
+  );
   put(
     'packages/demo/package.json',
     JSON.stringify({
@@ -164,7 +167,7 @@ it('preserves existing JavaScript conditional implementations beside Bun sources
   expect(result.findings).toContainEqual(
     expect.objectContaining({
       file: 'packages/demo/node.mjs',
-      rule: 'mutable-state',
+      rule: 'module-mutation',
     }),
   );
 });
@@ -270,6 +273,7 @@ for (const extension of ['js', 'mjs', 'cjs']) {
       file,
       `${extension === 'cjs' ? "const { AsyncLocalStorage: Scope } = require('node:async_hooks');" : "import { AsyncLocalStorage as Scope } from 'node:async_hooks';"}
       let active = {};
+      function update() { active = {}; }
       const scope = new Scope();`,
     );
     const configured = { ...policy, entryManifest: { files: [file] } };
@@ -282,7 +286,7 @@ for (const extension of ['js', 'mjs', 'cjs']) {
       alsRoots: [file],
     });
     expect(result.findings).toContainEqual(
-      expect.objectContaining({ file, rule: 'mutable-state' }),
+      expect.objectContaining({ file, rule: 'module-mutation' }),
     );
     expect(result.findings).toContainEqual(
       expect.objectContaining({ file, rule: 'async-local-storage' }),

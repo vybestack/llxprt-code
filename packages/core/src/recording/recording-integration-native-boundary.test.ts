@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it } from 'bun:test';
@@ -13,6 +14,7 @@ import {
 import { withResumed } from './__tests__/support/native-resume-fixture.js';
 import { JournalResumeBoot, resumePointOf } from './journalResume.js';
 import { readJournalFileFacts } from './journalSessionListing.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function trailerCount(fixture: NativeIntegrationFixture): number {
   return fixture.seams.events.filter(
@@ -195,7 +197,9 @@ describe('native compression and replacement recording boundaries', () => {
   it('finishes detaching admitted writes before a replacement history attaches', async () => {
     const current = fixture();
     const { history, integration, histories, failures, seams, texts } = current;
-    const replacement = new HistoryService({});
+    const replacement = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     histories.push(replacement);
     await integration.subscribeToJournal(history);
     history.add(nativeText('baseline'));

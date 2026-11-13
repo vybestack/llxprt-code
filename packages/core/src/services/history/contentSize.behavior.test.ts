@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,13 +18,14 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { computeHistorySizeBreakdown } from './contentSize.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const services: HistoryService[] = [];
 async function disposeServices(): Promise<void> {
   for (const service of services.splice(0)) await service.dispose();
 }
 function createService(): HistoryService {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   services.push(service);
   return service;
 }

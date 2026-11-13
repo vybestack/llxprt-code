@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
@@ -18,6 +19,7 @@ import { withGpt56DiskSources } from '@vybestack/llxprt-code-providers/tokenizer
 import { ContextOverflowError } from '../contextOverflowError.js';
 import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
 import { buildHandlerHarness } from './support/handler-harness.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const createHistory = setupHistoryServices();
 
@@ -50,6 +52,7 @@ export function buildRuntimeContext(
     config: {} as never,
   };
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         {

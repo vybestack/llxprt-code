@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { recordedMessages as emittedCandidate } from './__tests__/wire-reference/support/recorded-wire-oracle.js';
 import { describe, expect, it } from 'bun:test';
@@ -188,7 +189,7 @@ describe('native Anthropic append lifetime and invalidation', () => {
     it(`${mutation === 'append-result' ? 'maintains' : 'invalidates'} ${mutation} without publishing a stale length and permits explicit refill`, async () => {
       const session = await JournalSession.create(
         `${directory()}/${mutation}.llxj`,
-        { journal: testJournalSeams().dependencies },
+        testJournalOptions({ journal: testJournalSeams().dependencies }),
       );
       try {
         const specialRows: Readonly<Record<string, IContent>> = {
@@ -351,7 +352,7 @@ describe('native Anthropic append lifetime and invalidation', () => {
     it(`invalidates ${scenario.name}, preserves old pins and refills exact repaired bytes`, async () => {
       const session = await JournalSession.create(
         `${directory()}/${scenario.name}.llxj`,
-        { journal: testJournalSeams().dependencies },
+        testJournalOptions({ journal: testJournalSeams().dependencies }),
       );
       try {
         await session.append(scenario.before);
@@ -379,12 +380,15 @@ describe('native Anthropic append lifetime and invalidation', () => {
   it('maintains real tool rounds on empty, reopened, forked and physically copied versions with held repair roots', async () => {
     const path = `${directory()}/tool-reopen.llxj`;
     const options = { journal: testJournalSeams().dependencies };
-    let session = await JournalSession.create(path, options);
+    let session = await JournalSession.create(
+      path,
+      testJournalOptions(options),
+    );
     await register(session);
     await session.append([call()]);
     await matchesOldEmitter(session, [call()]);
     await session.close();
-    session = await JournalSession.open(path, options);
+    session = await JournalSession.open(path, testJournalOptions(options));
     try {
       await register(session);
       for (let at = 0; at < 4; at++)
@@ -450,7 +454,7 @@ describe('native Anthropic append lifetime and invalidation', () => {
   it('keeps a pending response request-only and refuses stored tail planning', async () => {
     const session = await JournalSession.create(
       `${directory()}/tool-tail.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await register(session);
@@ -487,7 +491,10 @@ describe('native Anthropic append lifetime and invalidation', () => {
   it('preserves the published repair root after an actual holder measurement fails and poisons disk writes', async () => {
     const path = `${directory()}/tool-failure.llxj`;
     const options = { journal: testJournalSeams().dependencies };
-    const session = await JournalSession.create(path, options);
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions(options),
+    );
     await register(session);
     await session.append([call()]);
     const original = anthropicLengthRegistration(settings);
@@ -521,7 +528,10 @@ describe('native Anthropic append lifetime and invalidation', () => {
       await old.close();
       await session.close();
     }
-    const reopened = await JournalSession.open(path, options);
+    const reopened = await JournalSession.open(
+      path,
+      testJournalOptions(options),
+    );
     try {
       await register(reopened);
       await reopened.append([response()]);
@@ -532,15 +542,21 @@ describe('native Anthropic append lifetime and invalidation', () => {
   });
   it('reattaches matching factories after reopen and appends independently on a fork across slot reuse', async () => {
     const path = `${directory()}/reopen.llxj`;
-    let session = await JournalSession.create(path, {
-      journal: testJournalSeams().dependencies,
-    });
+    let session = await JournalSession.create(
+      path,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     await session.append([text('original')]);
     await register(session);
     await session.close();
-    session = await JournalSession.open(path, {
-      journal: testJournalSeams().dependencies,
-    });
+    session = await JournalSession.open(
+      path,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await register(session);
       for (let at = 0; at < 4; at++)
@@ -597,9 +613,12 @@ describe('native Anthropic append lifetime and invalidation', () => {
       await session.append([text('after physical copy')]);
       expect(await bytes(session, current)).toBeGreaterThan(0);
       await session.close();
-      session = await JournalSession.open(path, {
-        journal: testJournalSeams().dependencies,
-      });
+      session = await JournalSession.open(
+        path,
+        testJournalOptions({
+          journal: testJournalSeams().dependencies,
+        }),
+      );
       await register(session, current);
       const reopened = await session.store.snapshot();
       try {
@@ -658,9 +677,12 @@ describe('native Anthropic append lifetime and invalidation', () => {
     }
   });
   it('keeps warm empty registrations and clear/refill free of phantom units', async () => {
-    const session = await JournalSession.create(`${directory()}/empty.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/empty.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await register(session);
       await matchesOldEmitter(session, []);
@@ -702,9 +724,12 @@ describe('native Anthropic append lifetime and invalidation', () => {
   });
   it('preserves the acknowledged version and original append failure, then recovers on reopen', async () => {
     const path = `${directory()}/failure.llxj`;
-    const session = await JournalSession.create(path, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     await session.append([text('original')]);
     await register(session);
     const failure = new Error('append measurement failed');
@@ -727,9 +752,12 @@ describe('native Anthropic append lifetime and invalidation', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path, {
-      journal: testJournalSeams().dependencies,
-    });
+    const reopened = await JournalSession.open(
+      path,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await register(reopened);
       await reopened.append([text('recovered')]);

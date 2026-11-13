@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
@@ -36,11 +37,13 @@ async function expectReopenedMirrorsEqual(
   const primary = await JournalStore.open(
     path.join(directory, `primary-${seed}.llxj`),
     storeDeps(),
+    testNamedWriters,
   );
   for (const agent of AGENTS) {
     const mirror = await JournalStore.open(
       path.join(directory, `mirror-${seed}-${agent}.llxj`),
       storeDeps(),
+      testNamedWriters,
     );
     await expectMirrorEqualsFiltered(primary, mirror, agent);
     await mirror.close();
@@ -68,6 +71,7 @@ describe('mirrors against the mutation model (design 13.6)', () => {
               const mirror = await JournalStore.create(
                 path.join(directory(), `mirror-${seed}-${agent}.llxj`),
                 storeDeps(),
+                testNamedWriters,
               );
               mirrors.set(agent, mirror);
               await fanout.attach(mirror, agent);

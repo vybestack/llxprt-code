@@ -10,7 +10,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { createScratchDirSync } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const recordSchema = z.object({ key: z.string(), value: z.array(z.number()) });
 const bucketCount = 4096;
@@ -23,8 +23,8 @@ export class DensityDiskIndex {
   private reads = 0;
   private writes = 0;
 
-  constructor() {
-    this.root = createScratchDirSync('density-decision-index-');
+  constructor(scratchRoots: ScratchRootOwner) {
+    this.root = scratchRoots.createDirSync('density-decision-index-');
     let records: number | undefined;
     let buckets: number | undefined;
     try {

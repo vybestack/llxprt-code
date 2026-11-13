@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 /**
  * Limits: core/src/core/model-limits.json + composition/aliases/*.config give
@@ -69,6 +70,7 @@ import { nativeJournalSendFixture } from './support/journal-send-fixture.js';
 import { localWireHashSink } from './support/local-wire-hash-sink.js';
 import { providerStreamError } from './support/provider-stream-error.js';
 import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const routeIds = [
   'openai-chat-plain',
@@ -112,7 +114,7 @@ const shape: HistoryCase = {
   description: 'near-window text and budget-filling PNGs',
   rows: [],
 };
-const tokenizers = createRuntimeTokenizerFactory();
+const tokenizers = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 
 function contextLimit(route: WireRoute): number {
   const override = route.ephemerals['context-limit'];

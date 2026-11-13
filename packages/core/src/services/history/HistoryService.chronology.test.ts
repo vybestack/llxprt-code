@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /**
  * Copyright 2026 Vybestack LLC
@@ -25,6 +26,7 @@ import type {
   ChronologyMarker,
 } from './IContent.js';
 import type { DensityResult } from '../../core/compression/types.js';
+const historyScratchRoots = createTestScratchOwner();
 
 // ---------------------------------------------------------------------------
 // Test helpers (data builders — NOT mocks)
@@ -92,7 +94,7 @@ function captureSynchronousMarker(content: IContent): ChronologyMarker {
 describe('HistoryService chronology - AC1: seq starts at 1 and increments', () => {
   let service: HistoryService;
   beforeEach(() => {
-    service = new HistoryService();
+    service = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(() => service.dispose());
 
@@ -169,7 +171,7 @@ describe('HistoryService chronology - AC1: seq starts at 1 and increments', () =
 describe('HistoryService chronology - AC2: seq never reused after clear()', () => {
   let service: HistoryService;
   beforeEach(() => {
-    service = new HistoryService();
+    service = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(() => service.dispose());
 
@@ -218,7 +220,7 @@ describe('HistoryService chronology - AC2: seq never reused after clear()', () =
 describe('HistoryService chronology - AC3: userTurn increments on human only', () => {
   let service: HistoryService;
   beforeEach(() => {
-    service = new HistoryService();
+    service = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(() => service.dispose());
 
@@ -273,7 +275,7 @@ describe('HistoryService chronology - AC3: userTurn increments on human only', (
 describe('HistoryService chronology - AC4: step increments within turn, resets on human', () => {
   let service: HistoryService;
   beforeEach(() => {
-    service = new HistoryService();
+    service = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(() => service.dispose());
 
@@ -328,7 +330,7 @@ describe('HistoryService chronology - AC4: step increments within turn, resets o
 describe('HistoryService chronology - AC5: recordedAt populated', () => {
   let service: HistoryService;
   beforeEach(() => {
-    service = new HistoryService();
+    service = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(() => service.dispose());
 
@@ -414,7 +416,7 @@ describe('HistoryService chronology - AC5: recordedAt populated', () => {
 describe('HistoryService chronology - AC8: validateAndFix preserves INV-1', () => {
   let service: HistoryService;
   beforeEach(() => {
-    service = new HistoryService();
+    service = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(() => service.dispose());
 
@@ -467,7 +469,7 @@ describe('HistoryService chronology - AC8: validateAndFix preserves INV-1', () =
 describe('HistoryService chronology - AC9: applyDensityResult inherits marker', () => {
   let service: HistoryService;
   beforeEach(() => {
-    service = new HistoryService();
+    service = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(() => service.dispose());
 
@@ -548,7 +550,7 @@ describe('HistoryService chronology - AC9: applyDensityResult inherits marker', 
 describe('HistoryService chronology - AC11: a replaced row preserves its marker', () => {
   let service: HistoryService;
   beforeEach(() => {
-    service = new HistoryService();
+    service = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(() => service.dispose());
 
@@ -678,7 +680,7 @@ async function assertToolResponseChronology(
 describe('HistoryService chronology - AC25: getChronologyTrace', () => {
   let service: HistoryService;
   beforeEach(() => {
-    service = new HistoryService();
+    service = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(() => service.dispose());
 

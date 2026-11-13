@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   suffixRow,
@@ -16,6 +17,7 @@ import {
   type HistoryServiceJournalOptions,
 } from '../../HistoryService.js';
 import type { IContent } from '../../IContent.js';
+export const historyScratchRoots = new ScratchRootOwner();
 
 export interface CoreSuffixFixtureGraph {
   readonly service: HistoryService;
@@ -51,6 +53,7 @@ export function createCoreSuffixFixtureGraph(
   const ownership = new RowOwnership();
   const counters = createRowCounters();
   const service = createService({
+    scratchRoots: historyScratchRoots,
     recording,
     attachmentCounters: { ...counters.counters, ownership },
     mutationOwnership,

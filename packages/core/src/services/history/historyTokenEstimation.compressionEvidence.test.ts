@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -18,6 +19,7 @@ import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent, MediaBlock } from './IContent.js';
 import { parseImageDimensionsFromBase64 } from '@vybestack/llxprt-code-tools/utils/imageDimensions.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function buildPngBase64(width: number, height: number): string {
   const buf = Buffer.alloc(24);
@@ -49,7 +51,7 @@ function imageContent(caption?: string): IContent {
 
 describe('HistoryService.estimateTokensForContents — image token evidence', () => {
   it('returns materially more tokens for history containing an image', async () => {
-    const svc = new HistoryService();
+    const svc = new HistoryService({ scratchRoots: historyScratchRoots });
     svc.setActiveTokenizationTarget('claude-sonnet-4-20250514', 'anthropic');
 
     const caption = 'a screenshot of the failing build';
@@ -68,7 +70,7 @@ describe('HistoryService.estimateTokensForContents — image token evidence', ()
   });
 
   it('the delta matches the estimator for the configured provider', async () => {
-    const svc = new HistoryService();
+    const svc = new HistoryService({ scratchRoots: historyScratchRoots });
     svc.setActiveTokenizationTarget('claude-sonnet-4-20250514', 'anthropic');
 
     const content = [imageContent()];
@@ -94,7 +96,9 @@ describe('HistoryService.estimateTokensForContents — image token evidence', ()
       height: 1092,
     });
 
-    const svcAnthropic = new HistoryService();
+    const svcAnthropic = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     svcAnthropic.setActiveTokenizationTarget(
       'claude-sonnet-4-20250514',
       'anthropic',
@@ -103,7 +107,7 @@ describe('HistoryService.estimateTokensForContents — image token evidence', ()
       (await svcAnthropic.estimateTokensForContents(content)) -
       (await svcAnthropic.estimateTokensForContents([]));
 
-    const svcOpenai = new HistoryService();
+    const svcOpenai = new HistoryService({ scratchRoots: historyScratchRoots });
     svcOpenai.setActiveTokenizationTarget('gpt-4o', 'openai');
     const openaiDelta =
       (await svcOpenai.estimateTokensForContents(content)) -

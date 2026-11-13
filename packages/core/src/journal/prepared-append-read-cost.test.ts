@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -58,6 +59,7 @@ describe('prepared append descriptor read cost', () => {
         storeDeps({
           seams: testJournalSeams({ readCounter: counter }, 1, false),
         }),
+        testNamedWriters,
       );
       try {
         await store.commit([

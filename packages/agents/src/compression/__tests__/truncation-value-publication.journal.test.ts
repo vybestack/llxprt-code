@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { nativeTruncationSourceFailure } from './support/native-truncation-source.js';
@@ -50,6 +51,7 @@ import {
   reachesGate,
 } from './support/native-fallback-fixture.js';
 import { observeNativeTruncation } from './support/native-truncation-observers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function rejectedPublication(
   size: number,
@@ -238,7 +240,10 @@ describe('native truncation publication and source enforcement', () => {
       );
       await history.detachedValues.replace(summaryRows());
       await history.detachedValues.withCheckpoint(async (previous) => {
-        const candidate = await curatedCandidate(checkpointRows(previous));
+        const candidate = await curatedCandidate(
+          historyScratchRoots,
+          checkpointRows(previous),
+        );
         try {
           const summary = await publishCandidate(
             history,

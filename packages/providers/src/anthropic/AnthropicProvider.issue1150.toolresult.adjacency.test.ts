@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /// <reference lib="esnext.array" />
 /**
  * @license
@@ -42,6 +43,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
 }));
 
 import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const mockMessagesCreate = vi.fn();
 
@@ -658,7 +660,9 @@ async function facadeCallback7(): Promise<void> {
     content: [{ type: 'text', text: 'Response' }],
     usage: { input_tokens: 100, output_tokens: 50 },
   });
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const contents: IContent[] = [
     {
       speaker: 'human',

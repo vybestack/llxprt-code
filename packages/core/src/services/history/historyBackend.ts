@@ -7,11 +7,18 @@ import { requireJournalRecorder } from './recorderBackend.js';
 export function createHistoryStore(
   options: HistoryServiceJournalOptions,
 ): JournalHistoryStore {
-  return new JournalHistoryStore(() => JournalSession.createUnlinked(), {
-    recording:
-      options.recording === undefined
-        ? undefined
-        : requireJournalRecorder(options.recording),
-    counters: options.attachmentCounters,
-  });
+  return new JournalHistoryStore(
+    () =>
+      JournalSession.createUnlinked({
+        maintenanceScope: options.maintenanceScope,
+      }),
+    {
+      recording:
+        options.recording === undefined
+          ? undefined
+          : requireJournalRecorder(options.recording),
+      counters: options.attachmentCounters,
+      originIds: options.originIds,
+    },
+  );
 }

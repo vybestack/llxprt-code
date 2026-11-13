@@ -29,7 +29,6 @@ import {
   observeModelBody,
   type ModelBodyObserver,
 } from './streamprocessor-model-body-observer.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 function endpoint(mode: ModelHookMode): {
   server: Bun.Server<undefined>;
@@ -230,7 +229,7 @@ async function run(
       estimate: setup.processor.getPromptEnvelopeEstimate(),
       oracle: expected,
       owners: setup.history.owners,
-      activeBodies: activeRequestBodyCount(),
+      activeBodies: activeRequestBodyCount(setup.provider.requestBodyCensus),
       hooks: existsSync(path)
         ? readFileSync(path, 'utf8')
             .trim()
@@ -243,7 +242,7 @@ async function run(
       boundary: observer?.boundaryFacts(),
       directories: [
         ...readdirSync(root),
-        ...readdirSync(getScratchRoot()),
+        ...readdirSync(setup.config.scratchRoots.getRoot()),
       ].filter(
         (name) =>
           name.startsWith('boundary-snapshot-') ||

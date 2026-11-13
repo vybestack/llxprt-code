@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from '../../../../core/src/services/history/journalSession.js';
@@ -71,7 +72,7 @@ describe('native Mistral actual conversion', () => {
     for (const [index, fixture] of cases.entries()) {
       const session = await JournalSession.create(
         `${directory()}/${index}.llxj`,
-        { journal: testJournalSeams().dependencies },
+        testJournalOptions({ journal: testJournalSeams().dependencies }),
       );
       try {
         await session.store.commit([{ kind: 'mistral', slot: 0 }]);
@@ -104,9 +105,12 @@ describe('native Mistral actual conversion', () => {
     ];
     const oldUnits = await oldTailUnits(rows, []);
     const survivingUnits = await oldTailUnits(rows.slice(1), []);
-    const session = await JournalSession.create(`${directory()}/removed.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/removed.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.store.commit([{ kind: 'mistral', slot: 0 }]);
       await session.append(rows);
@@ -154,7 +158,7 @@ describe('native Mistral actual conversion', () => {
     ];
     const session = await JournalSession.create(
       `${directory()}/filtered.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await session.store.commit([{ kind: 'mistral', slot: 0 }]);

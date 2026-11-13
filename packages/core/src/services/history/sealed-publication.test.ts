@@ -1,11 +1,13 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { SealedHistoryRow } from './sealed-history-row.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('sealed response notifications', () => {
   it('publishes row identity and chronology without a response payload', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const receipts: SealedHistoryRow[] = [];
     history.on('contentSealed', (row: SealedHistoryRow) => receipts.push(row));
     try {
@@ -28,7 +30,7 @@ describe('sealed response notifications', () => {
   });
 
   it('rolls back publication when a scalar observer rejects it', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.on('contentSealed', () => {
       throw new Error('receipt rejected');
     });

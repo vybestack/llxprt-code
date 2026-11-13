@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { getToolIdStrategy } from '@vybestack/llxprt-code-tools';
@@ -54,7 +55,7 @@ describe('native Kimi emitted mapping corrections', () => {
   it('replaces both earlier call mappings with the last eligible name and ordinal while old pins stay stable', async () => {
     const session = await JournalSession.create(
       `${directory()}/last.llxj`,
-      options,
+      testJournalOptions(options),
     );
     const before: readonly IContent[] = [
       { speaker: 'ai', blocks: [call('x', 'first')] },
@@ -105,7 +106,7 @@ describe('native Kimi emitted mapping corrections', () => {
   it('keeps an ordinary unique history exception-free and crosses ordinal digit boundaries', async () => {
     const session = await JournalSession.create(
       `${directory()}/digits.llxj`,
-      options,
+      testJournalOptions(options),
     );
     try {
       await session.store.commit([{ kind: 'kimi' }]);
@@ -150,7 +151,7 @@ describe('native Kimi emitted mapping corrections', () => {
   it('matches the independent array mapper on reconstruction, default names, raw prefix collisions and frozen-source families', async () => {
     const session = await JournalSession.create(
       `${directory()}/oracle.llxj`,
-      options,
+      testJournalOptions(options),
     );
     const ids = ['x', 'call_x', 'hist_tool_x', 'toolu_x', 'call_'];
     const cases: ReadonlyArray<readonly IContent[]> = [
@@ -209,7 +210,7 @@ describe('native Kimi emitted mapping corrections', () => {
   it('counts a human eligible mapping but excludes its dropped output when the stream has AI calls', async () => {
     const session = await JournalSession.create(
       `${directory()}/human.llxj`,
-      options,
+      testJournalOptions(options),
     );
     try {
       await session.append([

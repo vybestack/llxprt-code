@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from './journalSession.js';
@@ -16,9 +17,12 @@ describe('tail source bounded preparation and ownership', () => {
   const directory = useTempDir('journal-tail-resources-');
 
   it('rejects cached tail facts after the native pin is released', async () => {
-    const session = await JournalSession.create(`${directory()}/closed.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/closed.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       const snapshot = await session.store.snapshot();
       const source = await JournalTailSource.create(snapshot, [
@@ -35,9 +39,13 @@ describe('tail source bounded preparation and ownership', () => {
 
   it('selects a pending response before visiting a 2000-row journal prefix', async () => {
     const reads = { reads: 0 };
-    const session = await JournalSession.create(`${directory()}/bounded.llxj`, {
-      journal: testJournalSeams({ readCounter: reads }, 1, false).dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/bounded.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({ readCounter: reads }, 1, false)
+          .dependencies,
+      }),
+    );
     try {
       await session.append([
         { speaker: 'ai', blocks: [call('pending')] },
@@ -73,9 +81,12 @@ describe('tail source bounded preparation and ownership', () => {
   }, 120000);
 
   it('owns pending payloads before yielding and reads the held pin after opener close', async () => {
-    const session = await JournalSession.create(`${directory()}/owned.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/owned.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     const rows: IContent[] = [{ speaker: 'ai', blocks: [call('a')] }];
     const payload = { text: 'original' };
     const tail: IContent[] = [

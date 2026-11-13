@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { RecordingIntegration } from '@vybestack/llxprt-code-core/recording/RecordingIntegration.js';
 import { RECORD_KIND } from '@vybestack/llxprt-code-core/journal/recordKinds.js';
@@ -7,7 +8,6 @@ import {
 } from '@vybestack/llxprt-code-core/recording/journalResume.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/historyOriginId.js';
 import { z } from 'zod';
 import {
   diskToolState,
@@ -26,11 +26,13 @@ import {
   toolId,
 } from './service-tool-runtime.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 const directory = z.string().min(1).parse(process.argv[2]);
 const role = z.enum(['primary', 'none']).parse(process.argv[3]);
 const exitMode = z.enum(['crash', 'clean']).parse(process.argv[4]);
 const primary = await observedRecording(directory, 'primary');
-const history = new HistoryService({});
+const history = new HistoryService({ scratchRoots: recordingScratchRoots });
 await history.adoptResumeBoot(
   primary.recording,
   new JournalResumeBoot(
@@ -39,7 +41,10 @@ await history.adoptResumeBoot(
   ),
 );
 const origin = {};
-const primaryIntegration = new RecordingIntegration(primary.recording);
+const primaryIntegration = new RecordingIntegration(
+  primary.recording,
+  recordingScratchRoots,
+);
 await primaryIntegration.subscribeToJournal(history, origin);
 const sessions = [await primary.recording.session()];
 const responseGate = toolGate();
@@ -118,7 +123,7 @@ try {
   report('ready', {
     ...facts(),
     files,
-    owner: historyOriginId(origin),
+    owner: history.originIds.get(origin),
     disk: await Promise.all(files.map(diskToolState)),
   });
   await nextGate.promise;

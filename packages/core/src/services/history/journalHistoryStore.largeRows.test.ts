@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
@@ -75,13 +76,17 @@ describe('rows of 17, 40 and 200 MiB through the journal history store (defect 5
       const file = path.join(directory(), `row-${mebibytes}.llxj`);
       const bytes = mebibytes * MIB;
       const baseline = await settledHeap();
-      const store = new JournalHistoryStore(await JournalSession.create(file));
+      const store = new JournalHistoryStore(
+        await JournalSession.create(file, testJournalOptions()),
+      );
 
       const written = await applyRow(store, bytes);
       const afterWrite = await settledHeap();
       await store.dispose();
 
-      const reopened = new JournalHistoryStore(await JournalSession.open(file));
+      const reopened = new JournalHistoryStore(
+        await JournalSession.open(file, testJournalOptions()),
+      );
       const read = await readDigest(reopened);
       const afterRead = await settledHeap();
       await reopened.dispose();
@@ -95,7 +100,10 @@ describe('rows of 17, 40 and 200 MiB through the journal history store (defect 5
 
   it('control: a caller that keeps the row it applied shows the row in the same measurement', async () => {
     const store = new JournalHistoryStore(
-      await JournalSession.create(path.join(directory(), 'control.llxj')),
+      await JournalSession.create(
+        path.join(directory(), 'control.llxj'),
+        testJournalOptions(),
+      ),
     );
     const bytes = 40 * MIB;
     const baseline = await settledHeap();

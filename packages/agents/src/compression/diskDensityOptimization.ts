@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { resolve } from 'node:path';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
@@ -70,7 +71,7 @@ function* inclusions(
 
 export class DiskDensityOptimization implements DiskDensityResult {
   private readonly ownership = new RowOwnership();
-  private readonly index = new DensityDiskIndex();
+  private readonly index: DensityDiskIndex;
   private readonly replacements: HistoryDensityRows;
   removalCount = 0;
   replacementCount = 0;
@@ -78,9 +79,10 @@ export class DiskDensityOptimization implements DiskDensityResult {
   private fileDeduplicationsPruned = 0;
   private recencyPruned = 0;
 
-  constructor() {
+  constructor(scratchRoots: ScratchRootOwner) {
+    this.index = new DensityDiskIndex(scratchRoots);
     try {
-      this.replacements = new HistoryDensityRows(this.ownership);
+      this.replacements = new HistoryDensityRows(scratchRoots, this.ownership);
     } catch (error) {
       this.index.close();
       throw error;
@@ -362,8 +364,9 @@ export class DiskDensityOptimization implements DiskDensityResult {
 export function optimizeDiskDensity(
   source: HistoryIndexedRows,
   config: DensityConfig,
+  scratchRoots: ScratchRootOwner,
 ): DiskDensityOptimization {
-  const result = new DiskDensityOptimization();
+  const result = new DiskDensityOptimization(scratchRoots);
   try {
     result.optimize(source, config);
     return result;

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../../../__tests__/support/named-writer-owner.js';
 import { captureSessionOwner } from '../../../../../../agents/src/api/__tests__/helpers/capture-session-owner.js';
 import { rawClientChatCommand } from '../../../../__tests__/raw-chat-command.fixture.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
@@ -67,15 +68,17 @@ export async function withChatMutationFixture<T>(
   bytes = 2048,
 ): Promise<T> {
   const root = await mkdtemp(join(tmpdir(), 'chat-mutation-'));
-  const recording = await createLockedSessionRecorder({
-    sessionId: crypto.randomUUID(),
-    projectHash: 'chat-stream',
-    chatsDir: root,
-    workspaceDirs: [root],
-    cwd: root,
-    provider: 'test',
-    model: 'test',
-  });
+  const recording = await createLockedSessionRecorder(
+    withTestNamedWriters({
+      sessionId: crypto.randomUUID(),
+      projectHash: 'chat-stream',
+      chatsDir: root,
+      workspaceDirs: [root],
+      cwd: root,
+      provider: 'test',
+      model: 'test',
+    }),
+  );
   try {
     return await withSuffixFixture(
       size,

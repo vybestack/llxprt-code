@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -16,6 +17,7 @@ describe('committed node read cost', () => {
       storeDeps({
         seams: testJournalSeams({ readCounter: counter }, 1, false),
       }),
+      testNamedWriters,
     );
     const pairs = 128;
     try {

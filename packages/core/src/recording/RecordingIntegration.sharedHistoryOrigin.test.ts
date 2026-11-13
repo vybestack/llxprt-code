@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -23,6 +26,8 @@ import { type IContent } from '../services/history/IContent.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 interface Subscriber {
   readonly owner: object;
   readonly recording: JournalRecordingService;
@@ -34,6 +39,8 @@ function humanText(text: string): IContent {
 }
 
 describe('RecordingIntegration shared history batch origin', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   let tempDir: string;
   let history: HistoryService;
   let first: Subscriber;
@@ -42,15 +49,20 @@ describe('RecordingIntegration shared history batch origin', () => {
   async function openSubscriber(name: string): Promise<Subscriber> {
     const chatsDir = path.join(tempDir, name);
     await fs.mkdir(chatsDir, { recursive: true });
-    const recording = JournalRecordingService.create({
-      sessionId: `recording-origin-${name}-0001`,
-      projectHash: 'project-hash-recording-origin',
-      chatsDir,
-      workspaceDirs: ['/workspace/project-a'],
-      provider: 'anthropic',
-      model: 'claude-4',
-    });
-    const integration = new RecordingIntegration(recording);
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: `recording-origin-${name}-0001`,
+        projectHash: 'project-hash-recording-origin',
+        chatsDir,
+        workspaceDirs: ['/workspace/project-a'],
+        provider: 'anthropic',
+        model: 'claude-4',
+      }),
+    );
+    const integration = new RecordingIntegration(
+      recording,
+      recordingScratchRoots,
+    );
     const owner = {};
     await integration.subscribeToJournal(history, owner);
     return { owner, recording, integration };
@@ -64,7 +76,7 @@ describe('RecordingIntegration shared history batch origin', () => {
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'recording-origin-'));
-    history = new HistoryService();
+    history = new HistoryService({ scratchRoots: recordingScratchRoots });
     first = await openSubscriber('first');
     second = await openSubscriber('second');
     // Content added with no origin reaches both subscribers and materializes

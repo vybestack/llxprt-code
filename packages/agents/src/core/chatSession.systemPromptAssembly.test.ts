@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
@@ -54,6 +55,7 @@ import type {
 import { ChatSession } from './chatSession.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -119,7 +121,7 @@ function buildFixture(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, config.scratchRoots);
   manager.registerProvider(provider);
 
   // Minimal hook stubs so sendMessage does not crash on hook lookups. A
@@ -149,9 +151,12 @@ function buildFixture(
     model: initialModel,
     sessionId: config.getSessionId(),
   });
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
 
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     state: {
       ...runtimeState,
       get model() {
@@ -423,7 +428,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
     };
     const manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
     manager.registerProvider(provider);
     Object.defineProperties(config, {
       getConversationLoggingEnabled: { value: () => false },
@@ -445,8 +450,9 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
       sessionId: config.getSessionId(),
     });
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       state: runtimeState,
-      history: new HistoryService(),
+      history: new HistoryService({ scratchRoots: historyScratchRoots }),
       settings: {
         compressionThreshold: 0.8,
         contextLimit: 128000,

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -60,14 +61,14 @@ describe('journal recorder crash after the acknowledgement', () => {
     expect(child.signalCode).toBe('SIGKILL');
 
     const recorder = await JournalRecordingService.open(
-      {
+      withTestNamedWriters({
         sessionId: SESSION,
         projectHash: 'project',
         chatsDir: path.join(directory(), 'chats'),
         workspaceDirs: ['/work/a'],
         provider: 'anthropic',
         model: 'model-1',
-      },
+      }),
       filePath,
     );
     try {

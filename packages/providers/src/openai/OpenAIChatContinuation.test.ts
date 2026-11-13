@@ -1,8 +1,8 @@
+import { registerScratchInspection } from '../__tests__/support/scratch-inspection.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import { readdirSync } from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import {
   createCorpus,
@@ -25,6 +25,7 @@ import {
   captureContinuation,
 } from '../__tests__/support/chatSendCapture.js';
 import { seededHistory } from './__tests__/support/chatBodyCorpus.js';
+const scratchEntries = registerScratchInspection();
 
 type StripPolicy = 'none' | 'all' | 'allButLast';
 
@@ -181,7 +182,7 @@ function firstDifference(
 }
 
 function scratchNames(): Set<string> {
-  return new Set(readdirSync(getScratchRoot()));
+  return new Set(scratchEntries());
 }
 
 describe('native chat continuation request', () => {

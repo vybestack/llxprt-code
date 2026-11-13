@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -28,27 +29,39 @@ describe('cold neutral fact resume', () => {
       const rows = Array.from({ length: size + 3 }, (_, index) =>
         draftRow({ text: `row ${index}` }),
       );
-      const original = await JournalStore.create(path, {
-        ...storeDeps(),
-        neutralRowFacts: registration,
-        eagerNeutralRowFacts: true,
-      });
+      const original = await JournalStore.create(
+        path,
+        {
+          ...storeDeps(),
+          neutralRowFacts: registration,
+          eagerNeutralRowFacts: true,
+        },
+        testNamedWriters,
+      );
       try {
         await original.commit([{ kind: 'append', rows: rows.slice(0, size) }]);
       } finally {
         await original.close();
       }
-      const resumed = await JournalStore.open(path, storeDeps());
+      const resumed = await JournalStore.open(
+        path,
+        storeDeps(),
+        testNamedWriters,
+      );
       try {
         await resumed.commit([{ kind: 'append', rows: rows.slice(size) }]);
       } finally {
         await resumed.close();
       }
-      const attached = await JournalStore.open(path, {
-        ...storeDeps(),
-        neutralRowFacts: registration,
-        eagerNeutralRowFacts: true,
-      });
+      const attached = await JournalStore.open(
+        path,
+        {
+          ...storeDeps(),
+          neutralRowFacts: registration,
+          eagerNeutralRowFacts: true,
+        },
+        testNamedWriters,
+      );
       try {
         reads = 0;
         await attached.commit([{ kind: 'append', rows: [] }]);

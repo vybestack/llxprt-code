@@ -1,7 +1,9 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -9,7 +11,7 @@ function row(text: string): IContent {
 
 describe('history mutation identity after compensation', () => {
   it('restores the prior identity without reusing an abandoned mutation identity', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.addBatch([row('original')]);
       const original = history.historyMutationGuard();

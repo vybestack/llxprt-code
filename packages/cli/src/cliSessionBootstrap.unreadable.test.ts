@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -84,7 +85,9 @@ async function writeHealthySession(
   sessionId: string,
   modified: string,
 ): Promise<void> {
-  const recording = createSessionRecorder(recordingConfig(chatsDir, sessionId));
+  const recording = createSessionRecorder(
+    withTestNamedWriters(recordingConfig(chatsDir, sessionId)),
+  );
   try {
     await recordRowsForTest(recording, [
       {
@@ -261,7 +264,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       mcp.workspacePaths,
       settingsOwner,
       createRuntimeContentGeneratorFactory(),
-      configureProviderTokenizer(manager),
+      configureProviderTokenizer(manager, config.scratchRoots),
     );
     workspaceClosers.push(() => sessionClient.dispose());
     sessionClient.bindMcpRuntime(mcp);

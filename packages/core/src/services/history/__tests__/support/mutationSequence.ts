@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
@@ -10,6 +11,7 @@ import {
 import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { HistoryService } from '../../HistoryService.js';
 import type { ContentBlock, IContent } from '../../IContent.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 /**
  * Step vocabulary of the frozen mutation-sequence fixture (#854 phase 4, S00).
@@ -254,7 +256,7 @@ export async function applyStep(
       await history.clear();
       return;
     case 'merge': {
-      const other = new HistoryService();
+      const other = new HistoryService({ scratchRoots: historyScratchRoots });
       other.addAll(step.rows.map(rowFromSpec));
       try {
         await history.merge(other);
@@ -285,7 +287,10 @@ export async function runMutationSequence(
     chatsDir: path.join(root, 'chats'),
     workspaceDirs: [],
   });
-  const history = new HistoryService({ recording });
+  const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
+    recording,
+  });
   const observed: StepObservation[] = [];
   try {
     for (const step of steps) {

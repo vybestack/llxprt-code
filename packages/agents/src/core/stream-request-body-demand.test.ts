@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
@@ -45,6 +46,7 @@ import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager
 import { CompressionHandler } from '../compression/CompressionHandler.js';
 import { ConversationManager } from './ConversationManager.js';
 import { StreamProcessor } from './StreamProcessor.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const rowCount = 64;
 const instructions = 'Inspect the supplied rows.';
@@ -178,7 +180,7 @@ function setupRuntime(
       ],
     },
   });
-  const tokenizer = createRuntimeTokenizerFactory();
+  const tokenizer = createRuntimeTokenizerFactory(config.scratchRoots);
   const provider = new OpenAIResponsesProvider('test-key', baseURL);
   const providerRuntime = {
     config,
@@ -223,6 +225,7 @@ function buildProcessor(
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.registerProvider(provider);
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         {
@@ -331,7 +334,10 @@ async function createFixture(): Promise<Fixture> {
     provider: 'openai-responses',
     model: 'o3-mini',
   });
-  const history = new ObservedDiskHistory({ recording });
+  const history = new ObservedDiskHistory({
+    scratchRoots: historyScratchRoots,
+    recording,
+  });
   for (let index = 0; index < rowCount; index += 1)
     history.add(historyRow(index));
   await history.waitForCommit();

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
@@ -46,6 +47,7 @@ import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { createChatObject } from './subagentRuntimeSetup.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -149,7 +151,7 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
     const manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
     manager.registerProvider(provider);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
     Object.defineProperties(config, {
       getModel: { value: () => SUBAGENT_MODEL },
       getConversationLoggingEnabled: { value: () => false },
@@ -165,6 +167,7 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
     });
     const settingsRoot = createSessionSettingsFixture(config, settings);
     const runtimeContext = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       prepareProviderInvocation: (name, parameters, signal) =>
         settingsRoot.settingsOwner.prepareProviderInvocation(
           'test.subagent.nonforeground',
@@ -181,7 +184,7 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
         sessionId: config.getSessionId(),
         subagentName: 'test-subagent',
       }),
-      history: new HistoryService(),
+      history: new HistoryService({ scratchRoots: historyScratchRoots }),
       settings: {
         compressionThreshold: 0.8,
         contextLimit: 128000,

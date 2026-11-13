@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -66,7 +67,9 @@ describe('resuming a session on the journal', () => {
     continueRef: string,
     overrides: Partial<JournalResumeRequest> = {},
   ): Promise<JournalResumeResult> {
-    const result = await resumeJournalSession(request(continueRef, overrides));
+    const result = await resumeJournalSession(
+      withTestNamedWriters(request(continueRef, overrides)),
+    );
     if (!result.ok) throw new Error(result.error);
     resumed.push(result);
     return result;
@@ -88,10 +91,12 @@ describe('resuming a session on the journal', () => {
     });
     const ownership = new RowOwnership();
     const counters = createRowCounters();
-    const result = await resumeSession({
-      ...request('counted'),
-      counters: { ...counters.counters, ownership },
-    });
+    const result = await resumeSession(
+      withTestNamedWriters({
+        ...request('counted'),
+        counters: { ...counters.counters, ownership },
+      }),
+    );
     if (!result.ok) throw new Error(result.error);
     const returned = result.boot.streamRows()[Symbol.asyncIterator]();
     const failed = result.boot.streamRows()[Symbol.asyncIterator]();
@@ -217,7 +222,9 @@ describe('resuming a session on the journal', () => {
     await fsp.writeFile(retired, '{"v":2,"seq":1,"type":"session_start"}\n');
     const before = await fsp.readFile(retired);
 
-    const result = await resumeJournalSession(request(name));
+    const result = await resumeJournalSession(
+      withTestNamedWriters(request(name)),
+    );
 
     expect(result).toMatchObject({
       ok: false,
@@ -235,7 +242,9 @@ describe('resuming a session on the journal', () => {
     const retired = path.join(chats, 'session-x.jsonl');
     await fsp.writeFile(retired, '{"v":2}\n');
 
-    const result = await resumeJournalSession(request(CONTINUE_LATEST));
+    const result = await resumeJournalSession(
+      withTestNamedWriters(request(CONTINUE_LATEST)),
+    );
 
     expect(result.ok).toBe(false);
     expect(!result.ok && result.error).toContain(
@@ -279,7 +288,7 @@ describe('resuming a session on the journal', () => {
     };
 
     const result = await resumeJournalSession(
-      request(CONTINUE_LATEST, { journal: failing }),
+      withTestNamedWriters(request(CONTINUE_LATEST, { journal: failing })),
     );
 
     expect(result).toMatchObject({
@@ -299,8 +308,12 @@ describe('resuming a session on the journal', () => {
     await recordJournal(chats, 'session-held', { rows: [userRow('x')] });
     const held = await SessionLockManager.acquire(chats, 'session-held');
 
-    const result = await resumeJournalSession(request(CONTINUE_LATEST));
-    const named = await resumeJournalSession(request('session-held'));
+    const result = await resumeJournalSession(
+      withTestNamedWriters(request(CONTINUE_LATEST)),
+    );
+    const named = await resumeJournalSession(
+      withTestNamedWriters(request('session-held')),
+    );
     await held.release();
 
     expect(result).toMatchObject({

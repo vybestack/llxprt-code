@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -8,11 +9,12 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { admitDeferredHistorySource } from './deferredHistorySource.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('deferred admission row ownership', () => {
   it('preserves cyclic tool payload sanitation without a serialization clone', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deferred-payload-'));
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const store = new LocalMediaStore({
       rootDirectory: root,
       quotaBytes: 1 << 24,
@@ -55,7 +57,10 @@ describe('deferred admission row ownership', () => {
   it('writes an admitted row without a second content serialization copy', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deferred-row-ownership-'));
     const ownership = new RowOwnership();
-    const history = new HistoryService({ mutationOwnership: ownership });
+    const history = new HistoryService({
+      scratchRoots: historyScratchRoots,
+      mutationOwnership: ownership,
+    });
     const store = new LocalMediaStore({
       rootDirectory: root,
       quotaBytes: 1 << 24,

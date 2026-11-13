@@ -8,7 +8,14 @@ import {
   type JournalSendFixture,
 } from '../__tests__/support/journal-send-fixture.js';
 import { acquireRequestRows } from '../utils/requestRowsLease.js';
-import { promptKeyWorkspaces } from './__tests__/support/projection-workspace-fixture.js';
+import { registerScratchInspection } from '../__tests__/support/scratch-inspection.js';
+
+const scratchEntries = registerScratchInspection();
+function promptKeyWorkspaces(): string[] {
+  return scratchEntries().filter((name) =>
+    name.startsWith('responses-prompt-keys-'),
+  );
+}
 import {
   projectSourcePrompt,
   sourcePromptText as promptText,

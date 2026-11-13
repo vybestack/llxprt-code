@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { getToolIdStrategy } from '@vybestack/llxprt-code-tools';
@@ -99,7 +100,7 @@ describe('native Kimi emitted eligible ordinals', () => {
     ];
     const session = await JournalSession.create(
       `${directory()}/emitted.llxj`,
-      options,
+      testJournalOptions(options),
     );
     try {
       await session.append(rows);
@@ -128,7 +129,7 @@ describe('native Kimi emitted eligible ordinals', () => {
   it('keeps an inactive pin explicit and preserves filled counts across append and pop past activation', async () => {
     const session = await JournalSession.create(
       `${directory()}/lifecycle.llxj`,
-      options,
+      testJournalOptions(options),
     );
     try {
       await session.append([{ speaker: 'ai', blocks: [call('a')] }]);
@@ -165,7 +166,7 @@ describe('native Kimi emitted eligible ordinals', () => {
   it('matches independent array normalization on 120 frozen-source cases after replacement and first-row removal', async () => {
     const session = await JournalSession.create(
       `${directory()}/differential.llxj`,
-      options,
+      testJournalOptions(options),
     );
     try {
       await session.store.commit([{ kind: 'kimi' }]);
@@ -200,7 +201,10 @@ describe('native Kimi emitted eligible ordinals', () => {
 
   it('ranks eligible calls across 9/10 and 99/100 after reopen, owner changes, fork and compaction', async () => {
     const path = `${directory()}/ranks.llxj`;
-    const session = await JournalSession.create(path, options);
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions(options),
+    );
     try {
       await session.store.commit([{ kind: 'kimi' }]);
       for (let index = 0; index < 101; index++)
@@ -213,7 +217,10 @@ describe('native Kimi emitted eligible ordinals', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path, options);
+    const reopened = await JournalSession.open(
+      path,
+      testJournalOptions(options),
+    );
     try {
       await reopened.store.commit([
         { kind: 'owner', changes: [{ label: 1048576n, owner: 2 }] },

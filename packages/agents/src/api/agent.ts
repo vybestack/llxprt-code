@@ -1,3 +1,4 @@
+import type { JournalWatermarks } from '@vybestack/llxprt-code-core/journal/journal-watermarks.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { BucketAuthConsentRequest } from './auth-consent-contract.js';
 export type { BucketAuthConsentRequest } from './auth-consent-contract.js';
@@ -772,6 +773,7 @@ export interface AgentSessionControl {
   importSession(packageDirectory: string): Promise<SessionInfo>;
   setRecording(state: SessionRecordingState): Promise<void>;
   getRecording(): SessionRecordingState;
+  getRecordingWatermarks(): Pick<JournalWatermarks, 'subscribe'> | undefined;
   /** Flushes the active recording and its pending history persistence. */
   flushRecording(): Promise<void>;
   /** Records and durably flushes a provider, directory, or session event. */

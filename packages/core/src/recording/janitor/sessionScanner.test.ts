@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -56,7 +57,7 @@ async function createSessionFile(
   overrides: Partial<SessionRecordingServiceConfig> = {},
 ): Promise<{ filePath: string; sessionId: string }> {
   const config = { ...makeConfig(chatsDir), ...overrides };
-  const svc = JournalRecordingService.create(config);
+  const svc = JournalRecordingService.create(withTestNamedWriters(config));
   try {
     await (
       await svc.session()

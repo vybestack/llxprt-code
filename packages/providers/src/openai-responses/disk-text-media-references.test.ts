@@ -86,7 +86,7 @@ describe('Responses source route stored media references', () => {
 
   it('sends an admitted reference image as the inline data URI and releases its reservation', async () => {
     const image = await admit(PNG_BYTES);
-    const before = promptDirs();
+    const before = promptDirs(harness.setup.config.scratchRoots);
     await sendProjected(
       [{ speaker: 'human', blocks: [{ type: 'text', text: 'see' }, image] }],
       image.normalizedBase64Length,
@@ -102,7 +102,11 @@ describe('Responses source route stored media references', () => {
       },
     ]);
     expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 2 });
-    expect([...promptDirs()].filter((e) => !before.has(e))).toHaveLength(0);
+    expect(
+      [...promptDirs(harness.setup.config.scratchRoots)].filter(
+        (e) => !before.has(e),
+      ),
+    ).toHaveLength(0);
   }, 60000);
 
   it('sends an enabled reference PDF as an input file', async () => {
@@ -156,7 +160,7 @@ describe('Responses source route stored media references', () => {
   it('enforces the aggregate media budget across rows and releases what it reserved', async () => {
     const first = await admit(PNG_BYTES);
     const second = await admit(OTHER_PNG_BYTES);
-    const before = promptDirs();
+    const before = promptDirs(harness.setup.config.scratchRoots);
     await expect(
       sendProjected(
         [
@@ -168,7 +172,11 @@ describe('Responses source route stored media references', () => {
     ).rejects.toThrow('aggregate budget');
     expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 1 });
     expect(harness.bodies).toHaveLength(0);
-    expect([...promptDirs()].filter((e) => !before.has(e))).toHaveLength(0);
+    expect(
+      [...promptDirs(harness.setup.config.scratchRoots)].filter(
+        (e) => !before.has(e),
+      ),
+    ).toHaveLength(0);
   }, 60000);
 
   it('verifies a delta blob once without reserving or materializing media when a projection is dropped unsent', async () => {

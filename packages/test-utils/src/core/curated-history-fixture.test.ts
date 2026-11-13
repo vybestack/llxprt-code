@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '../__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -11,6 +12,7 @@ import {
   forbidHistoryMaterializationForTest,
   materializeHistoryForTest,
 } from './history-materialization-test-guard.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('independent curated test observations', () => {
   for (const size of [512, 8192]) {
@@ -52,7 +54,7 @@ describe('independent curated test observations', () => {
 
 describe('public curated observation boundary', () => {
   it('curates and restores an eager guard through the raw-history contract', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     const history = service;
     const original = suffixRow(2, 32);
     try {

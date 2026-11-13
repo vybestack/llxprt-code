@@ -1,7 +1,9 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ResponseArrival } from '@vybestack/llxprt-code-core/services/history/history-response-arrival.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 class ArrivalTestHistory extends HistoryService {
   readonly arrivals: ResponseArrival[] = [];
@@ -23,7 +25,9 @@ export function arrivalHistoryFixture(): () => HistoryService {
     histories.length = 0;
   });
   return () => {
-    const history = new ArrivalTestHistory();
+    const history = new ArrivalTestHistory({
+      scratchRoots: historyScratchRoots,
+    });
     histories.push(history);
     return history;
   };

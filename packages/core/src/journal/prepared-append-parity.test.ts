@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -31,17 +32,21 @@ describe('prepared append durable parity', () => {
   it('releases digest readers before the store closes its descriptor', async () => {
     const deps = storeDeps();
     const handles: JournalFileHandle[] = [];
-    const store = await JournalStore.create(join(directory(), 'readers.llxj'), {
-      ...deps,
-      journal: {
-        ...deps.journal,
-        open: async (file, flags) => {
-          const handle = await deps.journal.open(file, flags);
-          handles.push(handle);
-          return handle;
+    const store = await JournalStore.create(
+      join(directory(), 'readers.llxj'),
+      {
+        ...deps,
+        journal: {
+          ...deps.journal,
+          open: async (file, flags) => {
+            const handle = await deps.journal.open(file, flags);
+            handles.push(handle);
+            return handle;
+          },
         },
       },
-    });
+      testNamedWriters,
+    );
     try {
       await store.commit([{ kind: 'append', rows: scenarioDrafts() }]);
       expect(await rowDigests(store)).toHaveLength(scenarioDrafts().length);
@@ -57,7 +62,9 @@ describe('prepared append durable parity', () => {
       join(directory(), `${name}.llxj`),
     );
     const stores = await Promise.all(
-      files.map((file) => JournalStore.create(file, storeDeps())),
+      files.map((file) =>
+        JournalStore.create(file, storeDeps(), testNamedWriters),
+      ),
     );
     const [batch, stream, mirror] = stores;
     const seed = draftRow({ calls: ['old'], speaker: 1 });
@@ -106,7 +113,9 @@ describe('prepared append durable parity', () => {
       for (const store of stores) await store.close();
     }
     const opened = await Promise.all(
-      files.map((file) => JournalStore.open(file, storeDeps())),
+      files.map((file) =>
+        JournalStore.open(file, storeDeps(), testNamedWriters),
+      ),
     );
     try {
       const expectedRows = await rowDigests(opened[0]);
@@ -134,7 +143,11 @@ describe('prepared append durable parity', () => {
 
   it('keeps the prior version readable when a streamed producer fails before its trailer', async () => {
     const file = join(directory(), 'failure.llxj');
-    const store = await JournalStore.create(file, storeDeps());
+    const store = await JournalStore.create(
+      file,
+      storeDeps(),
+      testNamedWriters,
+    );
     await store.commit([
       { kind: 'append', rows: [draftRow({ text: 'prior' })] },
     ]);
@@ -161,6 +174,7 @@ describe('prepared append durable parity', () => {
     const reopened = await JournalStore.open(
       file,
       storeDeps({ seams: testJournalSeams() }),
+      testNamedWriters,
     );
     try {
       expect(reopened.published?.rows).toBe(1);

@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { makeRuntimeContext } from './structural-history-fixture.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
@@ -46,6 +47,7 @@ import type {
   ChildAgentScope,
   SubagentOrchestrator,
 } from '../subagentOrchestrator.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const foregroundConfigs: Config[] = [];
 const histories: HistoryService[] = [];
@@ -187,7 +189,7 @@ export function extractRunConfig(
 
 export function createRuntimeBundle(
   label = 'bundle',
-  ownedHistory = new HistoryService(),
+  ownedHistory = new HistoryService({ scratchRoots: historyScratchRoots }),
 ) {
   histories.push(ownedHistory);
   vi.spyOn(ownedHistory, 'clear');

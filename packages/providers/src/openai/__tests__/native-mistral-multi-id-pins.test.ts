@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { VersionSnapshot } from '../../../../core/src/journal/versionSnapshot.js';
@@ -102,9 +103,12 @@ describe('Mistral multi-ID old and current pins', () => {
   const directory = useTempDir('mistral-multi-pins-');
   it('removes first holders in two collision groups while old pending mappings remain pinned', async () => {
     const input = multiIdCase(12, true);
-    const session = await JournalSession.create(`${directory()}/pins.llxj`, {
-      journal: testJournalSeams({}, 1, false).dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/pins.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({}, 1, false).dependencies,
+      }),
+    );
     try {
       await session.append(input.rows);
       await session.registerRowFormat(

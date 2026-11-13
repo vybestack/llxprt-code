@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type {
   JournalReadCounters,
+  JournalWatermarks,
   EmojiFilterMode,
   NativeJournalReadDependencies,
 } from '@vybestack/llxprt-code-core';
@@ -22,6 +23,8 @@ export interface ScrollbackPagerSettings {
 }
 export interface ScrollbackPagerOptions {
   readonly filePath: string;
+  /** Publishing owner for live updates; absent for a read-only file snapshot. */
+  readonly watermarks?: Pick<JournalWatermarks, 'subscribe'>;
   readonly emojiFilterMode?: EmojiFilterMode;
   readonly viewport: ScrollbackViewportReporter;
   readonly pageRows: number;

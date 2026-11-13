@@ -14,7 +14,7 @@ import { useQuotaReader } from './useQuotaReader.js';
 
 import { useBound } from './agentStream/useStreamOwnerCallbacks.js';
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { createDocsCommand } from '../commands/docsCommand.js';
 import { createHelpCommand } from '../commands/helpCommand.js';
 import { createQuitCommand } from '../commands/quitCommand.js';
@@ -61,6 +61,9 @@ export function useUtilityCommands(
     useBound(oauth, oauth.getAllCodexUsageInfo),
   );
   const { stats } = useSessionStats();
+  const statsRef = useRef(stats);
+  statsRef.current = stats;
+  const readStats = useCallback(() => statsRef.current, []);
   const startTime = stats.sessionStartTime;
   const readStartTime = useCallback(() => startTime, [startTime]);
   const statsCommand = useMemo(
@@ -83,7 +86,7 @@ export function useUtilityCommands(
   const debugCommand = useMemo(() => createDebugCommand(debug), [debug]);
   const docsCommand = useMemo(() => createDocsCommand(addItem), [addItem]);
   const helpCommand = useMemo(() => createHelpCommand(addItem), [addItem]);
-  const quitCommand = useMemo(() => createQuitCommand(() => stats), [stats]);
+  const quitCommand = useMemo(() => createQuitCommand(readStats), [readStats]);
   return useMemo(
     () => ({
       statsCommand,

@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
@@ -61,10 +62,16 @@ describe('controlled streaming cancellation', () => {
       }
     };
     try {
-      const iterator = streamHistoryItems(source, undefined, ownership, {
-        temporaryRoot: directory,
-        signal: controller.signal,
-      })[Symbol.asyncIterator]();
+      const iterator = streamHistoryItems(
+        scratchRoots,
+        source,
+        undefined,
+        ownership,
+        {
+          temporaryRoot: directory,
+          signal: controller.signal,
+        },
+      )[Symbol.asyncIterator]();
       const pending = iterator.next();
       await entered;
       expect((await readdir(directory)).length).toBe(1);
@@ -83,3 +90,5 @@ describe('controlled streaming cancellation', () => {
     }
   });
 });
+
+const scratchRoots = new ScratchRootOwner();

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -21,9 +22,10 @@ import { Gpt56SourceProjection } from './gpt56-source-projection.js';
 import { withGpt56DiskSources } from './gpt56-disk-tokenizer-factory.js';
 import { getO200kBaseEncoder } from './o200kBaseCounter.js';
 import { TiktokenRuntime } from './official/tiktokenRuntime.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const scratch = mkdtempSync(join(tmpdir(), 'source-family-bounded-'));
-const baseFactory = createRuntimeTokenizerFactory();
+const baseFactory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 const TOOLS_TEXT = '[{"type":"function"}]';
 let sequence = 0;
 

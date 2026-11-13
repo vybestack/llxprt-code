@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { mkdtempSync, rmSync, appendFileSync } from 'node:fs';
@@ -11,6 +12,7 @@ import {
 } from './__tests__/support/addbatch-stream-test-helpers.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export type RemovalFixture = Parameters<
   Parameters<typeof withBatchFixture>[0]
@@ -24,7 +26,7 @@ export async function withRemovalFixture(
   try {
     await withBatchFixture(async (fixture) => {
       await fixture.history.registerMediaOwner(
-        new HistoryMediaOwnership(store),
+        new HistoryMediaOwnership(store, historyScratchRoots),
       );
       try {
         await action(fixture, store);

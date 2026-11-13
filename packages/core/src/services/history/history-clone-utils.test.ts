@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -21,6 +22,7 @@ import type { IContent, MediaBlock, MediaReferenceBlock } from './IContent.js';
 import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
 import { buildProviderContent } from './historyProviderPipeline.js';
 import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const ORIGINAL_CONTENT_ID =
   'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
@@ -302,7 +304,7 @@ function testBody3(): void {
 
 async function testBody4(): Promise<void> {
   const observedAt = new Date('2026-08-22T00:00:00.000Z');
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   history.add({
     speaker: 'human',
     blocks: [

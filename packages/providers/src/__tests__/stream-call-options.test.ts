@@ -34,7 +34,6 @@ import type {
 } from '../IProvider.js';
 import type { ConversationDataRedactor } from '../logging/ConfigBasedRedactor.js';
 import { readFile } from 'node:fs/promises';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 async function textRows(contents: AsyncIterable<IContent>): Promise<string[]> {
   const values: string[] = [];
@@ -195,7 +194,7 @@ async function withIngressFixture<T>(
     return await action(root, config, settings, snapshot, settingsOwner);
   } finally {
     await snapshot.close();
-    resetConversationFileWriterForTesting();
+
     rmSync(root, { recursive: true, force: true });
   }
 }

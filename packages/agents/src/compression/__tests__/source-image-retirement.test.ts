@@ -1,9 +1,11 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { retireSourceImages } from '../source-image-retirement.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function image(id: string): IContent {
   return {
@@ -22,7 +24,7 @@ function image(id: string): IContent {
 
 describe('journal source image retirement', () => {
   it('discovers retirement without reading unrelated text rows or opening a whole-history reader', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     await history.addBatch([
       {
         speaker: 'human',
@@ -56,7 +58,7 @@ describe('journal source image retirement', () => {
     }
   });
   it('retires oldest images to the low water mark and protects a durably submitted user image', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const pending = image('pending');
     await history.addBatch([image('old1'), image('old2'), pending]);
     const original = await history.prepareCuratedForProviderSnapshot();
@@ -73,7 +75,7 @@ describe('journal source image retirement', () => {
   });
 
   it('keeps retirement disabled for an explicit zero budget', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     await history.addBatch([image('old'), image('new')]);
     const source = await history.prepareCuratedForProviderSnapshot();
     try {
@@ -84,7 +86,7 @@ describe('journal source image retirement', () => {
   });
 
   it('relieves every historical image without retiring a repeated pending attachment', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const pending = image('new');
     await history.addBatch([image('old'), pending]);
     const source = await history.prepareCuratedForProviderSnapshot();
@@ -97,7 +99,7 @@ describe('journal source image retirement', () => {
     }
   });
   it('does not protect an older unlabeled copy beyond the pending occurrence count', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const older = { ...image('older'), metadata: undefined };
     const first = image('now');
     const last = image('now');
@@ -115,7 +117,7 @@ describe('journal source image retirement', () => {
   });
 
   it('stops provenance extension at an unrelated text row', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const fragment = image('now');
     const note: IContent = {
       speaker: 'human',

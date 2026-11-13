@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '../storage/scratch-root.js';
+import { NamedWriterOwnership } from '../journal/named-writer-ownership.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -9,6 +11,8 @@ import path from 'node:path';
 
 import * as configConstructor from './configConstructor.js';
 import { ConfigBase } from './configBase.js';
+import type { IGitStatsService } from '../services/git-stats-service.js';
+import { ConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 
 import type {
   MemorySettings,
@@ -62,12 +66,18 @@ export {
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 
 export class Config extends ConfigBase {
+  readonly namedWriters: NamedWriterOwnership;
+  readonly scratchRoots: ScratchRootOwner;
+  private gitStatsService: IGitStatsService | null = null;
+  private conversationFileWriter: ConversationFileWriter | undefined;
   readonly profileDirectory: string | undefined;
   readonly subagentDirectory: string | undefined;
   readonly initialWorkspaceTrust: boolean | undefined;
 
   constructor(params: ConfigParameters) {
     super();
+    this.namedWriters = params.namedWriters ?? new NamedWriterOwnership();
+    this.scratchRoots = params.scratchRoots ?? new ScratchRootOwner();
     this.initialWorkspaceTrust = params.trustedFolder;
     this.profileDirectory = params.profileDirectory;
     this.subagentDirectory = params.subagentDirectory;
@@ -149,6 +159,21 @@ export class Config extends ConfigBase {
 
     // Check settings file
     return this.telemetrySettings.logConversations ?? false;
+  }
+
+  getConversationFileWriter(): ConversationFileWriter {
+    this.conversationFileWriter ??= new ConversationFileWriter(
+      this.getConversationLogPath(),
+    );
+    return this.conversationFileWriter;
+  }
+
+  setGitStatsService(service: IGitStatsService | null): void {
+    this.gitStatsService = service;
+  }
+
+  getGitStatsService(): IGitStatsService | null {
+    return this.gitStatsService;
   }
 
   getConversationLogPath(): string {

@@ -190,7 +190,7 @@ async function openRoot(
     release,
     undefined,
   );
-  const tokenizer = configureProviderTokenizer(manager);
+  const tokenizer = configureProviderTokenizer(manager, config.scratchRoots);
   const media = new SessionMediaOwner(
     config.projectTempDir,
     1024 * 1024 * 1024,

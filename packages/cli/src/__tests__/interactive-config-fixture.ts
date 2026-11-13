@@ -42,7 +42,7 @@ export function createInteractiveConfigFactory(configs: Config[]) {
     };
     manager.registerProvider(provider);
     manager.setActiveProvider('fake');
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
     configs.push(config);
     return { config, manager };
   };

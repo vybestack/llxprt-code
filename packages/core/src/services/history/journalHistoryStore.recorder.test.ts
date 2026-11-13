@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
@@ -84,14 +88,17 @@ describe('journal history store over a journal recorder', () => {
     overrides: Partial<JournalRecordingConfig> = {},
   ): JournalRecordingService {
     const created = JournalRecordingService.create(
-      config(sessionId, overrides),
+      withTestNamedWriters(config(sessionId, overrides)),
     );
     recorders.push(created);
     return created;
   }
 
   async function newStore(name = 'primary.llxj'): Promise<JournalHistoryStore> {
-    const primary = await JournalSession.create(path.join(directory(), name));
+    const primary = await JournalSession.create(
+      path.join(directory(), name),
+      testJournalOptions(),
+    );
     sessions.push(primary);
     const store = new JournalHistoryStore(primary);
     stores.push(store);
@@ -231,7 +238,7 @@ describe('journal history store over a journal recorder', () => {
       if (filePath === null) throw new Error('the recorder wrote no file');
 
       const reopened = await JournalRecordingService.open(
-        config(FIRST_SESSION),
+        withTestNamedWriters(config(FIRST_SESSION)),
         filePath,
       );
       recorders.push(reopened);
@@ -360,7 +367,7 @@ describe('journal history store over a journal recorder', () => {
       await rec.dispose();
 
       const reopened = await JournalRecordingService.open(
-        config(FIRST_SESSION),
+        withTestNamedWriters(config(FIRST_SESSION)),
         filePath,
       );
       recorders.push(reopened);

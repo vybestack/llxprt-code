@@ -19,7 +19,6 @@ import {
 } from './truncation-value-helpers.js';
 
 import { highdensitySetup } from './highdensity-disk-helpers.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 async function fault(
   size: number,
@@ -33,7 +32,7 @@ async function fault(
         probedTransformInput(size, truncationValueRow, owners, probes),
       );
       const expected = await detachedDigest(truncationValues(size));
-      const scratch = fs.readdirSync(getScratchRoot());
+      const scratch = fs.readdirSync(history.scratchRoots.getRoot());
       const failure =
         kind === 'cancel'
           ? new DOMException('cancelled checkpoint source', 'AbortError')
@@ -75,7 +74,7 @@ async function fault(
       ).toBe(true);
       expect(
         fs
-          .readdirSync(getScratchRoot())
+          .readdirSync(history.scratchRoots.getRoot())
           .filter(
             (name) =>
               /^(history-detached-|history-density-)/.test(name) &&

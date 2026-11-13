@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from './IContent.js';
@@ -8,11 +9,15 @@ import {
   exactTokenizer,
 } from './chronology-rollback-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('addBatch tool payload serialization', () => {
   it('preserves valid cyclic tool parameters through the established serialization boundary without mutating callers', async () => {
     await withDetachedFixture(async ({ recorder }) => {
-      const history = new HistoryService({ recording: recorder });
+      const history = new HistoryService({
+        scratchRoots: historyScratchRoots,
+        recording: recorder,
+      });
       history.setTokenizerFactory(exactTokenizer());
       try {
         const parameters: { name: string; self?: object } = { name: 'loop' };

@@ -62,7 +62,10 @@ export async function adoptSessionResume(
   options?: Parameters<AgentSessionControl['resume']>[1],
 ): Promise<void> {
   const client = deps.nativeHistory;
-  const integration = new RecordingIntegration(result.recording);
+  const integration = new RecordingIntegration(
+    result.recording,
+    deps.paths.scratchRoots,
+  );
   let adoptionAttempted = false;
   const replacement = { attempted: false, completed: false };
   let restorePublication: (() => void) | undefined;
@@ -135,6 +138,7 @@ export async function openSessionResume(
     currentModel: deps.getModel(),
     workspaceDirs: [...deps.directories()],
     mediaStore: deps.mediaStore,
+    journal: { namedWriters: deps.paths.namedWriters },
     maxQueueBytes: deps.readRecordingQueueLimit(),
   });
   warnSkippedRecordings(logger, result.skippedRecordings ?? []);

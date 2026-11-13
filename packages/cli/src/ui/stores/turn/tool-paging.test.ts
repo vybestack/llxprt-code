@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
@@ -111,7 +113,7 @@ async function initialJournalProjection(): Promise<{
 }> {
   const source = fixture();
   const filePath = join(directory, 'journal.llxj');
-  const session = await JournalSession.create(filePath);
+  const session = await JournalSession.create(filePath, testJournalOptions());
   const offsets: number[] = [];
   try {
     await session.append(source);
@@ -125,6 +127,7 @@ async function initialJournalProjection(): Promise<{
     yield* source;
   }
   for await (const item of streamHistoryItems(
+    scratchRoots,
     fixtureRows(),
     undefined,
     undefined,
@@ -204,3 +207,5 @@ async function verifyToolPageReplay(): Promise<void> {
     }
   }
 }
+
+const scratchRoots = new ScratchRootOwner();

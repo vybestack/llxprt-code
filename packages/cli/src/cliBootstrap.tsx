@@ -24,8 +24,8 @@ import {
   writeToStdout,
 } from '@vybestack/llxprt-code-core';
 import {
+  ConfigurationManager,
   debugLogger,
-  type ConfigurationManager,
   DebugLogger,
 } from '@vybestack/llxprt-code-telemetry';
 import { runExitCleanup } from './utils/cleanup.js';
@@ -66,6 +66,12 @@ export function configureEarlyDebugLogging(
       .map((ns) => ns.trim())
       .filter((ns) => ns.length > 0),
   });
+}
+
+export function configureCliDebugLogging(): ConfigurationManager {
+  const configuration = ConfigurationManager.getInstance();
+  configureEarlyDebugLogging(configuration);
+  return configuration;
 }
 
 export async function handleVersionAndHelpFlags(

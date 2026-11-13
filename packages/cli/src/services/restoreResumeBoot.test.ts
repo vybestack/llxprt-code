@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readRecordedRows } from '../__tests__/journal-recording.js';
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
@@ -19,6 +21,7 @@ import { buildAgent } from '../../../agents/src/api/__tests__/helpers/agentHarne
 import { captureSessionOwner } from '../../../agents/src/api/__tests__/helpers/capture-session-owner.js';
 import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { restoreResumeBoot } from './restoreResumeBoot.js';
+const historyScratchRoots = createTestScratchOwner();
 
 let root: string;
 
@@ -29,14 +32,16 @@ let history: HistoryService;
 describe('startup journal restoration', () => {
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'caller-boot-'));
-    const recording = createSessionRecorder({
-      chatsDir: root,
-      sessionId: 'source',
-      projectHash: 'project',
-      provider: 'test',
-      model: 'test',
-      workspaceDirs: [],
-    });
+    const recording = createSessionRecorder(
+      withTestNamedWriters({
+        chatsDir: root,
+        sessionId: 'source',
+        projectHash: 'project',
+        provider: 'test',
+        model: 'test',
+        workspaceDirs: [],
+      }),
+    );
     await recordRowsForTest(recording, [
       {
         speaker: 'human',
@@ -44,17 +49,19 @@ describe('startup journal restoration', () => {
       },
     ]);
     await recording.dispose();
-    const result = await resumeSession({
-      continueRef: 'source',
-      chatsDir: root,
-      projectHash: 'project',
-      currentProvider: 'test',
-      currentModel: 'test',
-      workspaceDirs: [],
-    });
+    const result = await resumeSession(
+      withTestNamedWriters({
+        continueRef: 'source',
+        chatsDir: root,
+        projectHash: 'project',
+        currentProvider: 'test',
+        currentModel: 'test',
+        workspaceDirs: [],
+      }),
+    );
     if (!result.ok) throw new Error(result.error);
     resumed = result;
-    history = new HistoryService({});
+    history = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(async () => {
     await history.dispose();

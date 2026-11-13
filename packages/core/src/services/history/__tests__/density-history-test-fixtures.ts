@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
@@ -15,11 +16,12 @@ import type {
   DensityResultMetadata,
 } from '../../../core/compression/types.js';
 import { CompressionStrategyError } from '../../../core/compression/types.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const densityServices: HistoryService[] = [];
 
 function createDensityService(): HistoryService {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   densityServices.push(service);
   return service;
 }

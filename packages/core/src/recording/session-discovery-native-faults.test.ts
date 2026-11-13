@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { chmod, readFile, readdir, stat, writeFile } from 'node:fs/promises';
@@ -73,7 +74,9 @@ describe('native discovery and resume fault boundaries', () => {
       { filePath: retired, reason: retiredMessage(retired) },
     ];
     for (const ref of [CONTINUE_LATEST, 'healthy']) {
-      const result = await resumeSession(request(chats, ref));
+      const result = await resumeSession(
+        withTestNamedWriters(request(chats, ref)),
+      );
       if (!result.ok) throw new Error(result.error);
       try {
         expect(result.skippedRecordings).toStrictEqual(expectedSkipped);
@@ -85,7 +88,9 @@ describe('native discovery and resume fault boundaries', () => {
         await result.recording.dispose();
       }
     }
-    const refused = await resumeSession(request(chats, basename(retired)));
+    const refused = await resumeSession(
+      withTestNamedWriters(request(chats, basename(retired))),
+    );
     expect(refused).toMatchObject({
       ok: false,
       error: retiredMessage(retired),
@@ -208,7 +213,7 @@ describe('native discovery and resume fault boundaries', () => {
         },
       ]);
       const refused = await resumeSession(
-        request(chats, basename(broken.filePath)),
+        withTestNamedWriters(request(chats, basename(broken.filePath))),
       );
       expect(refused).toMatchObject({
         ok: false,
@@ -359,7 +364,9 @@ describe('native discovery and resume fault boundaries', () => {
         session.messageCount,
       ]),
     ).toStrictEqual([['body', 2]]);
-    const resumed = await resumeSession(request(chats, 'body'));
+    const resumed = await resumeSession(
+      withTestNamedWriters(request(chats, 'body')),
+    );
     if (!resumed.ok) throw new Error(resumed.error);
     try {
       await expect(bootRows(resumed.boot)).rejects.toBeInstanceOf(

@@ -1,7 +1,7 @@
+import { registerScratchInspection } from '../__tests__/support/scratch-inspection.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import { readdirSync } from 'node:fs';
 import { projectOpenAIResponsesPromptEnvelope } from './promptEnvelopeProjections.js';
 import {
   nativePrompt,
@@ -10,7 +10,7 @@ import {
   nativeImages,
 } from './__tests__/native-responses-fixture.js';
 import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+const scratchEntries = registerScratchInspection();
 
 const context = {
   includeReasoningInContext: false,
@@ -88,7 +88,7 @@ describe('Responses source recursive canonicalization', () => {
     ).toBe(3);
   });
   it('rejects unsupported bigint JSON without leaving an owner or partial segment', async () => {
-    const before = new Set(readdirSync(getScratchRoot()));
+    const before = new Set(scratchEntries());
     await expect(
       nativePrompt(nativeRows([]), {
         model: 'gpt-5.6',
@@ -96,9 +96,7 @@ describe('Responses source recursive canonicalization', () => {
         tools: [{ size: BigInt(1) }],
       }),
     ).rejects.toThrow('BigInt');
-    const leaked = readdirSync(getScratchRoot()).filter(
-      (name) => !before.has(name),
-    );
+    const leaked = scratchEntries().filter((name) => !before.has(name));
     expect(leaked).toStrictEqual([]);
   });
   it('counts tool image costs through native input conversion', async () => {

@@ -15,10 +15,9 @@ import {
   digestRows,
   expectedToolDigest,
 } from './tool-truncation-stream-helpers.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
-function scratch(): string[] {
-  return readdirSync(getScratchRoot())
+function scratch(history: HistoryService): string[] {
+  return readdirSync(history.scratchRoots.getRoot())
     .filter((name) => name.startsWith('tool-response-ranking-'))
     .sort();
 }
@@ -131,10 +130,10 @@ describe('tool ranking abort and oversized rows', () => {
   it.each([65])(
     'unwinds a pinned %i-row source on estimator abort without publication or scratch leaks',
     async (size) => {
-      const before = scratch();
       await withSuffixFixture(
         size,
         async (history, ownership) => {
+          const before = scratch(history);
           const controller = new AbortController();
           const deps = {
             ...toolDeps(history, async () => 0),
@@ -151,17 +150,17 @@ describe('tool ranking abort and oversized rows', () => {
             expectedToolDigest(size, 0),
           );
           expect(ownership.snapshot().liveRows).toBe(0);
+          const after = scratch(history);
+          expect({
+            added: after.filter((name) => !before.includes(name)).length,
+            removed: before.filter((name) => !after.includes(name)).length,
+          }).toStrictEqual({ added: 0, removed: 0 });
         },
         2048,
         toolRankingRow,
         undefined,
         (options) => new HistoryService(options),
       );
-      const after = scratch();
-      expect({
-        added: after.filter((name) => !before.includes(name)).length,
-        removed: before.filter((name) => !after.includes(name)).length,
-      }).toStrictEqual({ added: 0, removed: 0 });
     },
     120000,
   );

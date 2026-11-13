@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -48,7 +49,11 @@ describe('bounded text delta admission', () => {
   const directory = useTempDir('arrival-text-buffer-');
   it('publishes valid empty text before the first buffered delta reaches disk', async () => {
     const path = join(directory(), 'initial-text.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     try {
       const block = await begin(recorder);
@@ -69,7 +74,11 @@ describe('bounded text delta admission', () => {
   });
   it('admits 1000 deltas without per-chunk suspension and writes byte-sized pieces', async () => {
     const path = join(directory(), 'buffer.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     try {
       const block = await begin(recorder);
@@ -102,6 +111,7 @@ describe('bounded text delta admission', () => {
     const store = await JournalStore.create(
       join(directory(), 'slow.llxj'),
       storeDeps({ seams }),
+      testNamedWriters,
     );
     const recorder = new JournalArrivalRecorder(store);
     try {

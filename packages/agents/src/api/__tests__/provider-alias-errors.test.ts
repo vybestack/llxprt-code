@@ -112,7 +112,7 @@ describe('provider alias file errors reach provider operations', () => {
     const result = await providerSwitch()('openai');
 
     expect(result.nextProvider).toBe('openai');
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
     expect(settingsOwner.readSelectedProvider()).toBe('openai');
   });
 

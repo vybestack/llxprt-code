@@ -7,6 +7,11 @@ export class OAuthForegroundLifetime {
   private readonly controller = new AbortController();
   private readonly pending = new Set<Promise<unknown>>();
 
+  assertOpen(): void {
+    if (this.controller.signal.aborted)
+      throw new Error('OAuth manager is disposed');
+  }
+
   accept<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
     if (this.controller.signal.aborted)
       return Promise.reject(new Error('OAuth manager is disposed'));

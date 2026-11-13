@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { open } from 'node:fs/promises';
@@ -23,9 +24,12 @@ async function integrityRow(
     session: JournalSession,
   ) => Promise<void>,
 ): Promise<void> {
-  const session = await JournalSession.create(path, {
-    journal: testJournalSeams({}, 1, false).dependencies,
-  });
+  const session = await JournalSession.create(
+    path,
+    testJournalOptions({
+      journal: testJournalSeams({}, 1, false).dependencies,
+    }),
+  );
   try {
     await session.append([
       {
@@ -119,9 +123,12 @@ describe('native selected range integrity', () => {
 
   it('does not claim to validate an unread block, but detects it when reached and on full read', async () => {
     const path = `${directory()}/unselected.llxj`;
-    const session = await JournalSession.create(path, {
-      journal: testJournalSeams({}, 1, false).dependencies,
-    });
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions({
+        journal: testJournalSeams({}, 1, false).dependencies,
+      }),
+    );
     try {
       await session.append([
         {

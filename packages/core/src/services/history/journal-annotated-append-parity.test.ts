@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 import { openIndependentJournal } from './__tests__/support/independent-journal.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
@@ -9,11 +11,11 @@ import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import { SPAN_WINDOW_CAPACITY } from './historySpanWindow.js';
 import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
-import { historyOriginId } from './historyOriginId.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { openOwnedJournal } from './journalOwnedFixture.js';
 import { decodeStoredRow } from './journalRowCodec.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function assertCopiedOwners(
   current: VersionSnapshot,
@@ -65,17 +67,19 @@ async function durable(recorder: SessionRecordingPort): Promise<IContent[]> {
 }
 
 async function capture(root: string, size: number): Promise<unknown> {
-  const history = new HistoryService({});
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   history.setTokenizerFactory(exactTokenizer());
   const mirrors = [0, 1].map((index) =>
-    createSessionRecorder({
-      sessionId: `journal-${size}-${index}`,
-      projectHash: 'annotated-append',
-      chatsDir: root,
-      workspaceDirs: [root],
-      provider: 'test',
-      model: 'test',
-    }),
+    createSessionRecorder(
+      withTestNamedWriters({
+        sessionId: `journal-${size}-${index}`,
+        projectHash: 'annotated-append',
+        chatsDir: root,
+        workspaceDirs: [root],
+        provider: 'test',
+        model: 'test',
+      }),
+    ),
   );
   try {
     await history.detachedValues.append(
@@ -253,7 +257,7 @@ describe('annotated append independent values, tokens, mirrors and owners', () =
                 { length: size },
                 (_, index) => owners[index % owners.length],
               ),
-              historyOriginId(origin),
+              journal.store.originIds.get(origin),
               ...Array.from(
                 { length: size },
                 (_, index) => owners[index % owners.length],

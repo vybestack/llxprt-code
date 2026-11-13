@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /// <reference lib="esnext.array" />
@@ -10,6 +11,8 @@ import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/cor
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { ToolCallBlock, ToolResponseBlock } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
+
 let historyService: HistoryService;
 
 describe('Orphaned Tool Calls - Comprehensive Tests', () => {
@@ -42,7 +45,7 @@ describe('Orphaned Tool Calls - Comprehensive Tests', () => {
 });
 
 function facadeCallback0(): void {
-  historyService = new HistoryService();
+  historyService = new HistoryService({ scratchRoots: historyScratchRoots });
 }
 
 async function facadeCallback1(): Promise<void> {

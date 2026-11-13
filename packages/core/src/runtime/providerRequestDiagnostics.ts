@@ -6,6 +6,7 @@ import type { SessionSettingsOwner } from '../session/session-settings-owner.js'
  */
 
 import type { Config, RedactionConfig } from '../config/config.js';
+import type { ConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import type {
   ApiErrorEvent,
   ApiRequestEvent,
@@ -44,6 +45,7 @@ export interface ProviderRequestDiagnostics {
    * (console) is never asked to, so the request is logged without a body.
    */
   readonly requestBodyLoggingEnabled: boolean;
+  readonly conversationFileWriter: ConversationFileWriter;
   readonly redaction: RedactionConfig;
   /** Throws when this session's telemetry cannot export request artifacts. */
   assertRequestArtifactExporter(): void;
@@ -106,6 +108,7 @@ export function captureProviderRequestDiagnostics(
       assertRequestArtifactExporter(settings.telemetry),
     acknowledgeTerminalTelemetry: (build, signal) =>
       acknowledgeTerminalTelemetry(settings.telemetry, build, signal),
+    conversationFileWriter: owner.getConversationFileWriter(),
     redaction: deepFreeze(structuredClone(redaction)),
     recordApiError: (event) => logApiError(owner, event, settings.telemetry),
     recordApiRequest: (event, options) =>

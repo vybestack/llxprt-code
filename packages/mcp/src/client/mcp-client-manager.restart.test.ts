@@ -109,13 +109,15 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
   ): void => {
     (
       McpClient as unknown as Mock<(...args: never[]) => unknown>
-    ).mockImplementation((_oauth, _approvalPolicy, serverName) => {
-      const client = clientsByServer[serverName].shift();
-      if (client === undefined) {
-        throw new Error(`No queued MCP client for '${serverName}'`);
-      }
-      return client as unknown as McpClient;
-    });
+    ).mockImplementation(
+      (_requestFetch, _oauth, _approvalPolicy, serverName) => {
+        const client = clientsByServer[serverName].shift();
+        if (client === undefined) {
+          throw new Error(`No queued MCP client for '${serverName}'`);
+        }
+        return client as unknown as McpClient;
+      },
+    );
   };
 
   it('restartServer does not leave a stale dead client when existing.disconnect throws (reconnects with a fresh client)', async () => {
@@ -127,6 +129,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const registries = createRegistries();
     const config = createConfig({ 'my-server': {} });
     const manager = new McpClientManager(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       '0.0.1',
@@ -185,6 +188,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const registries = createRegistries();
     const config = createConfig({ 'my-server': {} });
     const manager = new McpClientManager(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       '0.0.1',
@@ -228,6 +232,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const registries = createRegistries();
     const config = createConfig({ 'server-a': {}, 'server-b': {} });
     const manager = new McpClientManager(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       '0.0.1',
@@ -277,6 +282,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const config = createConfig({ 'my-server': {} });
     const eventEmitter = new EventEmitter();
     const manager = new McpClientManager(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       '0.0.1',
@@ -315,6 +321,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const registries = createRegistries();
     const config = createConfig({ 'my-server': {} });
     const manager = new McpClientManager(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       '0.0.1',
@@ -350,6 +357,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const config = createConfig({ 'my-server': {} });
     const eventEmitter = new EventEmitter();
     const manager = new McpClientManager(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       '0.0.1',
@@ -409,6 +417,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       },
     );
     const manager = new McpClientManager(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       '0.0.1',
@@ -463,6 +472,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       },
     );
     const manager = new McpClientManager(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       '0.0.1',
@@ -500,6 +510,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       },
     );
     const manager = new McpClientManager(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       '0.0.1',
@@ -535,6 +546,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       },
     );
     const manager = new McpClientManager(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       '0.0.1',
@@ -582,6 +594,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       },
     );
     const manager = new McpClientManager(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       '0.0.1',
@@ -627,6 +640,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       },
     );
     const manager = new McpClientManager(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       '0.0.1',
@@ -673,6 +687,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       mcpServerCommand: 'some-command',
     });
     const manager = new McpClientManager(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       '0.0.1',

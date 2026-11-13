@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp } from 'node:fs/promises';
@@ -19,6 +21,8 @@ import type { ContentMetadata, IContent } from '../../IContent.js';
 import { decodeStoredRow } from '../../journalRowCodec.js';
 import { accountingFactory } from './token-accounting-stream-test-helpers.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 export const MIB = 1024 * 1024;
 export const LARGE_METADATA: ContentMetadata = {
   id: 'large-row',
@@ -34,8 +38,13 @@ export interface RowDigest {
   readonly blocks: number;
 }
 
-export function largeHistory(): HistoryService {
-  const history = new HistoryService({});
+export function largeHistory(
+  originIds?: HistoryService['originIds'],
+): HistoryService {
+  const history = new HistoryService({
+    scratchRoots: recordingScratchRoots,
+    originIds,
+  });
   history.setTokenizerFactory(accountingFactory((text) => text.length));
   return history;
 }
@@ -55,15 +64,20 @@ export async function largeRig(): Promise<{
   await mkdir(root, { recursive: true });
   const directory = await mkdtemp(join(root, 'case-'));
   const history = largeHistory();
-  const recording = JournalRecordingService.create({
-    sessionId: 'service-large-row',
-    projectHash: 'service-large-row-project',
-    chatsDir: directory,
-    workspaceDirs: ['/work'],
-    provider: 'anthropic',
-    model: 'large-row-model',
-  });
-  const integration = new RecordingIntegration(recording);
+  const recording = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: 'service-large-row',
+      projectHash: 'service-large-row-project',
+      chatsDir: directory,
+      workspaceDirs: ['/work'],
+      provider: 'anthropic',
+      model: 'large-row-model',
+    }),
+  );
+  const integration = new RecordingIntegration(
+    recording,
+    recordingScratchRoots,
+  );
   const origin = {};
   await integration.subscribeToJournal(history, origin);
   await history.waitForCommit();

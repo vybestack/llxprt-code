@@ -162,7 +162,9 @@ export class TurnProcessor {
     ) => string | undefined,
   ) {}
 
-  private readonly turnAdmission = new TurnAdmission();
+  private readonly turnAdmission = new TurnAdmission(
+    () => this.historyService.maintenanceScope,
+  );
 
   async sendMessage(
     params: SendMessageParams,

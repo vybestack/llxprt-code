@@ -1,3 +1,7 @@
+import {
+  testJournalOptions,
+  withTestNamedWriters,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
@@ -29,7 +33,9 @@ describe('journal fork ancestry', () => {
     const target = targets.find((candidate) => candidate.kind === 'checkpoint');
     if (target?.kind !== 'checkpoint')
       throw new Error('Missing checkpoint target');
-    await new JournalCheckpointService(journalSeams()).renameCheckpointClosed(
+    await new JournalCheckpointService(
+      testJournalOptions(journalSeams()),
+    ).renameCheckpointClosed(
       source.filePath,
       PROJECT,
       directory(),
@@ -37,9 +43,11 @@ describe('journal fork ancestry', () => {
       target.checkpointId,
       'renamed',
     );
-    const result = await new SessionTransitionService({
-      journal: journalSeams(),
-    }).forkFromCheckpoint(
+    const result = await new SessionTransitionService(
+      withTestNamedWriters({
+        journal: journalSeams(),
+      }),
+    ).forkFromCheckpoint(
       { ...target, sequence: target.sequence + 100 },
       directory(),
       PROJECT,

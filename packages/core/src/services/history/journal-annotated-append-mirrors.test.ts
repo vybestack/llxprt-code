@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 import { openIndependentJournal } from './__tests__/support/independent-journal.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
@@ -10,6 +12,7 @@ import {
   JOURNAL_SPAN_WINDOW,
   encodeJournalSpanWindow,
 } from './journalSpanWindow.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(index: number): IContent {
   return {
@@ -81,7 +84,7 @@ async function assertDurableMirror(
 }
 
 async function seeded(size: number): Promise<HistoryService> {
-  const history = new HistoryService({});
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   history.setTokenizerFactory(exactTokenizer());
   await history.detachedValues.append(
     Array.from({ length: size }, (_, index) => row(index)),
@@ -93,14 +96,16 @@ describe('annotated append final metadata follows the native mirror FIFO', () =>
   it('keeps two unfiltered recorders attached through an annotated append', async () => {
     const history = await seeded(4);
     const mirrors = [0, 1].map((index) =>
-      createSessionRecorder({
-        sessionId: `unfiltered-${index}`,
-        projectHash: 'annotated-fifo',
-        chatsDir: directory(),
-        workspaceDirs: [directory()],
-        provider: 'test',
-        model: 'test',
-      }),
+      createSessionRecorder(
+        withTestNamedWriters({
+          sessionId: `unfiltered-${index}`,
+          projectHash: 'annotated-fifo',
+          chatsDir: directory(),
+          workspaceDirs: [directory()],
+          provider: 'test',
+          model: 'test',
+        }),
+      ),
     );
     try {
       for (const mirror of mirrors) await history.attachJournal(mirror, true);
@@ -130,14 +135,16 @@ describe('annotated append final metadata follows the native mirror FIFO', () =>
       const history = await seeded(size);
       const old = await seeded(size);
       const mirrors = [0, 1].map((index) =>
-        createSessionRecorder({
-          sessionId: `annotations-${size}-${index}`,
-          projectHash: 'annotated-fifo',
-          chatsDir: directory(),
-          workspaceDirs: [directory()],
-          provider: 'test',
-          model: 'test',
-        }),
+        createSessionRecorder(
+          withTestNamedWriters({
+            sessionId: `annotations-${size}-${index}`,
+            projectHash: 'annotated-fifo',
+            chatsDir: directory(),
+            workspaceDirs: [directory()],
+            provider: 'test',
+            model: 'test',
+          }),
+        ),
       );
       try {
         for (const mirror of mirrors) await history.attachJournal(mirror, true);

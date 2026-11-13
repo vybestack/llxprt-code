@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -11,6 +12,7 @@ import {
   tagOf,
   type MutationSequenceFixture,
 } from './mutationSequence.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const FIXTURE_DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -71,7 +73,7 @@ export async function replayOntoJournal<T>(
   store: JournalHistoryStore,
   observe: () => T | Promise<T>,
 ): Promise<Array<ReplayedStep<T>>> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const results: Array<ReplayedStep<T>> = [];
   let previous: IContent[] = [];
   try {

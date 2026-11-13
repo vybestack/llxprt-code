@@ -1,3 +1,7 @@
+import {
+  NamedWriterOwnership,
+  ScratchRootOwner,
+} from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -186,6 +190,8 @@ export async function createApp(dependencies: CreateAppDependencies = {}) {
 }
 
 async function createStartupContext(): Promise<AppContext & TaskStores> {
+  const namedWriters = new NamedWriterOwnership();
+  const scratchRoots = new ScratchRootOwner();
   const workspaceRoot = setTargetDir(undefined);
   loadEnvironment();
   const settings = loadSettings(workspaceRoot);
@@ -197,9 +203,11 @@ async function createStartupContext(): Promise<AppContext & TaskStores> {
   // model) has been read (#3221). Disposal must run even if the read fails:
   // dispose() tears down MCP connections and bus listeners the host would
   // otherwise leak for its lifetime.
-  const agent = await createAgent(
-    createTaskAgentConfig(settings, extensions, 'a2a-server'),
-  );
+  const agent = await createAgent({
+    ...createTaskAgentConfig(settings, extensions, 'a2a-server'),
+    namedWriters,
+    scratchRoots,
+  });
   let model: string;
   try {
     model = agent.getModel();
@@ -207,7 +215,12 @@ async function createStartupContext(): Promise<AppContext & TaskStores> {
     await agent.dispose();
   }
   const { taskStoreForExecutor, taskStoreForHandler } = createTaskStores();
-  const agentExecutor = new CoderAgentExecutor(taskStoreForExecutor);
+  const agentExecutor = new CoderAgentExecutor(
+    scratchRoots,
+    taskStoreForExecutor,
+    undefined,
+    namedWriters,
+  );
   const storage = new Storage(workspaceRoot);
   return {
     extensions,

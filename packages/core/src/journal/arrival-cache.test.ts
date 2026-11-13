@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -17,6 +18,7 @@ async function record(reuse: boolean): Promise<number> {
       seams: testJournalSeams({ readCounter }, 1, false),
       compactionDue: () => false,
     }),
+    testNamedWriters,
   );
   let recorder = new JournalArrivalRecorder(store);
   try {

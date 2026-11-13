@@ -104,7 +104,7 @@ function switchActivationOperations(
     resetFailover: () => oauth?.clearRetryHandlers(),
     activate: async (name) => {
       await manager.setActiveProvider(name);
-      configureProviderTokenizer(manager);
+      configureProviderTokenizer(manager, config.scratchRoots);
       return manager.getActiveProvider()?.getDefaultModel?.();
     },
     setModel: owner.chooseModel.bind(owner),

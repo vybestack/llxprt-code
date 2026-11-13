@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -11,6 +12,7 @@ import type {
   IContent,
   MediaReferenceBlock,
 } from '../services/history/IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class ReserveFailureStore extends LocalMediaStore {
   rejectedId: string | undefined;
@@ -57,7 +59,7 @@ describe('bounded media ownership', () => {
       rootDirectory: directory,
       quotaBytes: 1024,
     });
-    owner = new HistoryMediaOwnership(store);
+    owner = new HistoryMediaOwnership(store, historyScratchRoots);
   });
   afterEach(async () => {
     await owner.releaseAll();

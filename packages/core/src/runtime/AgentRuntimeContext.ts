@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '../storage/scratch-root.js';
 import type { ProviderRequestDiagnostics } from './providerRequestDiagnostics.js';
 import type { RuntimeTokenizerFactory } from './contracts/RuntimeTokenizerFactory.js';
 import type { ProfileDefinitionReads } from '../services/workspace-definition-owner.js';
@@ -218,6 +219,7 @@ export type PrepareProviderInvocation = (
 ) => RuntimeInvocationContext;
 
 export interface AgentRuntimeContext {
+  readonly scratchRoots: ScratchRootOwner;
   readonly promptEstimator?: Pick<
     RuntimeTokenizerFactory,
     'estimatePrompt' | 'claimsModel' | 'getEstimatorFamily'
@@ -326,6 +328,7 @@ export interface AgentRuntimeContext {
  * Supports both foreground (Config-backed) and subagent (isolated) modes.
  */
 export interface AgentRuntimeContextFactoryOptions {
+  readonly scratchRoots: ScratchRootOwner;
   readonly promptEstimator?: Pick<
     RuntimeTokenizerFactory,
     'estimatePrompt' | 'claimsModel' | 'getEstimatorFamily'

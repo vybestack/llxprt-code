@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import {
-  getScratchRoot,
+  type ScratchRootOwner,
   type IContent,
   type RowOwnership,
 } from '@vybestack/llxprt-code-core';
@@ -21,7 +21,8 @@ export class ToolResponseIndex {
   private readonly directory: string;
 
   constructor(
-    root = getScratchRoot(),
+    scratchRoots: ScratchRootOwner,
+    root = scratchRoots.getRoot(),
     private readonly ownership?: RowOwnership,
   ) {
     this.directory = mkdtempSync(join(root, 'llxprt-tool-responses-'));

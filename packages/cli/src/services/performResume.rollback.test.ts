@@ -1,3 +1,13 @@
+import {
+  afterAll as afterRecordingTests,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import { ScratchRootOwner } from '../../../core/src/storage/scratch-root.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readRecordedRows } from '../__tests__/journal-recording.js';
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
@@ -20,11 +30,12 @@ import {
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performResume, type ResumeContext } from './performResume.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 const PROJECT_HASH = 'perform-resume-rollback';
 const CURRENT_SESSION = 'current-session-0001';
@@ -66,6 +77,8 @@ function text(value: string): IContent {
 }
 
 describe('performResume rollback after the new recording was published', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   let root: string;
   let chatsDir: string;
   let previous: CliRecordingState;
@@ -80,20 +93,20 @@ describe('performResume rollback after the new recording was published', () => {
     await mkdir(chatsDir, { recursive: true });
 
     const target = createSessionRecorder(
-      recordingConfig(chatsDir, TARGET_SESSION),
+      withTestNamedWriters(recordingConfig(chatsDir, TARGET_SESSION)),
     );
     await recordRowsForTest(target, [text('target row')]);
     await target.flush();
     await target.dispose();
 
     const recording = await createLockedSessionRecorder(
-      recordingConfig(chatsDir, CURRENT_SESSION),
+      withTestNamedWriters(recordingConfig(chatsDir, CURRENT_SESSION)),
     );
     await recordRowsForTest(recording, [text('current row')]);
     await recording.flush();
     previous = {
       recording,
-      integration: new RecordingIntegration(recording),
+      integration: new RecordingIntegration(recording, recordingScratchRoots),
       lock: await SessionLockManager.acquire(chatsDir, 'other-holder-0001'),
       metadata: {
         sessionId: CURRENT_SESSION,
@@ -107,7 +120,9 @@ describe('performResume rollback after the new recording was published', () => {
     };
     state = { ...previous };
     published = [];
-    history = new PublishThenFailHistory();
+    history = new PublishThenFailHistory({
+      scratchRoots: recordingScratchRoots,
+    });
     restoreFailure = undefined;
   });
 
@@ -121,6 +136,7 @@ describe('performResume rollback after the new recording was published', () => {
 
   function context(): ResumeContext {
     return {
+      scratchRoots: recordingScratchRoots,
       chatsDir,
       projectHash: PROJECT_HASH,
       currentSessionId: CURRENT_SESSION,
@@ -150,7 +166,10 @@ describe('performResume rollback after the new recording was published', () => {
   }
 
   it('restores the previous recording, integration, lock and metadata', async () => {
-    const result = await performResume(TARGET_SESSION, context());
+    const result = await performResume(
+      TARGET_SESSION,
+      withTestNamedWriters(context()),
+    );
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -173,7 +192,10 @@ describe('performResume rollback after the new recording was published', () => {
   it('reports a restore that itself fails instead of swallowing it', async () => {
     restoreFailure = new Error('restore callback rejected');
 
-    const result = await performResume(TARGET_SESSION, context());
+    const result = await performResume(
+      TARGET_SESSION,
+      withTestNamedWriters(context()),
+    );
 
     expect(result.ok).toBe(false);
     if (result.ok) return;

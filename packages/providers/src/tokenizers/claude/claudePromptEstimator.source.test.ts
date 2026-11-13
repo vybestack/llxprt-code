@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 
 /**
@@ -22,10 +23,11 @@ import {
 import { projectBodyFromSegments } from '../../runtime/__tests__/support/promptBodySegments.js';
 import { withGpt56DiskSources } from '../gpt56-disk-tokenizer-factory.js';
 import { SourceFamilyInput } from '../source-family-input.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const MODEL = 'claude-opus-5';
 const scratch = mkdtempSync(join(tmpdir(), 'claude-source-'));
-const baseFactory = createRuntimeTokenizerFactory();
+const baseFactory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 
 function png(width: number, height: number): string {
   const bytes = Buffer.alloc(24);

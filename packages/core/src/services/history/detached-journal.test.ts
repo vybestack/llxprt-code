@@ -1,13 +1,15 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { detachedRow } from './detached-rollback-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('ordinal detached value journal', () => {
   it('preserves original markers by ordinal after candidate updates and releases returned cursors', () => {
     const owners = new RowOwnership();
-    const journal = new DetachedHistoryJournal(owners);
+    const journal = new DetachedHistoryJournal(historyScratchRoots, owners);
     try {
       const alias = detachedRow(0);
       journal.append(alias);
@@ -31,7 +33,7 @@ describe('ordinal detached value journal', () => {
   });
 
   it('records the history ordinal a row was derived from and reports none for a row appended without one', () => {
-    const journal = new DetachedHistoryJournal();
+    const journal = new DetachedHistoryJournal(historyScratchRoots);
     try {
       journal.append(detachedRow(0), 7);
       journal.append(detachedRow(1), 0);

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 /// <reference lib="esnext.array" />
 /**
@@ -50,6 +51,7 @@ import {
   seedFallbackCooldown,
   installProviderDiskFixture,
 } from './compression-provider-fallback-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const original = { ...(await import('@vybestack/llxprt-code-settings')) };
 void vi.mock('@vybestack/llxprt-code-settings', () => ({
@@ -125,7 +127,9 @@ function enforceSuite1(
 describe('Finding 1: provider fallback failure propagation through real CompressionHandler (Issue #2588)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    suite0HistoryService = new HistoryService();
+    suite0HistoryService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     suite0RuntimeContext = buildRuntimeContext(suite0HistoryService, {
       contextLimit: 200_000,
       compressionThreshold: 0.8,
@@ -218,7 +222,9 @@ describe('Finding 1: provider fallback failure propagation through real Compress
 describe('Finding 2: stage-aware projection errors in the CompressionHandler source ladder (Issue #2588)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    suite1HistoryService = new HistoryService();
+    suite1HistoryService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
   });
 
   afterEach(() => {

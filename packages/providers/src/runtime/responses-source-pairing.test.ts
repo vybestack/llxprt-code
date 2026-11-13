@@ -1,13 +1,14 @@
+import { registerScratchInspection } from '../__tests__/support/scratch-inspection.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import * as fs from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import {
   nativePrompt,
   nativeRows,
 } from './__tests__/native-responses-fixture.js';
+const scratchEntries = registerScratchInspection();
 
 const context = {
   includeReasoningInContext: false,
@@ -123,10 +124,10 @@ describe('Responses source tool-pair membership', () => {
   });
 
   it('removes the pairing index scratch directory after the write', async () => {
-    const before = new Set(fs.readdirSync(getScratchRoot()));
+    const before = new Set(scratchEntries());
     await write(Array.from({ length: 4 }, (_, i) => exchange(i, true)).flat());
-    expect(
-      fs.readdirSync(getScratchRoot()).filter((name) => !before.has(name)),
-    ).toStrictEqual([]);
+    expect(scratchEntries().filter((name) => !before.has(name))).toStrictEqual(
+      [],
+    );
   });
 });

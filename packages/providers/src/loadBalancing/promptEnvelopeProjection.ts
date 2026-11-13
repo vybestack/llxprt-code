@@ -136,7 +136,9 @@ function selectEligibleFailoverMember(
  * token off its incoming options and discharges the lease through
  * {@link releaseEstimateOnlyPromptEnvelope}.
  */
-const peekLeasesByToken = new WeakMap<object, () => Promise<void>>();
+class EstimateOnlyTransportToken {
+  constructor(readonly release: () => Promise<void>) {}
+}
 
 /**
  * Wrap a delegate projection as an estimate-only projection (issue #3507).
@@ -155,7 +157,6 @@ const peekLeasesByToken = new WeakMap<object, () => Promise<void>>();
 export function toEstimateOnlyPromptEnvelopeProjection(
   delegateProjection: PromptEnvelopeProjection,
 ): PromptEnvelopeProjection {
-  const transportToken = Object.freeze({});
   let release: Promise<void> | undefined;
   const releaseOnce = (): Promise<void> => {
     release ??= Promise.resolve().then(() =>
@@ -163,7 +164,9 @@ export function toEstimateOnlyPromptEnvelopeProjection(
     );
     return release;
   };
-  peekLeasesByToken.set(transportToken, releaseOnce);
+  const transportToken = Object.freeze(
+    new EstimateOnlyTransportToken(releaseOnce),
+  );
   return Object.freeze({
     model: delegateProjection.model,
     protocol: delegateProjection.protocol,
@@ -192,8 +195,8 @@ export function toEstimateOnlyPromptEnvelopeProjection(
 export async function releaseEstimateOnlyPromptEnvelope(
   transportToken: object | undefined,
 ): Promise<void> {
-  if (transportToken === undefined) return;
-  await peekLeasesByToken.get(transportToken)?.();
+  if (transportToken instanceof EstimateOnlyTransportToken)
+    await transportToken.release();
 }
 
 /**

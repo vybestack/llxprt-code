@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
@@ -11,6 +12,7 @@ import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test
 import { middleoutSetup } from './middleout-disk-helpers.js';
 import { oneshotSetup } from './oneshot-disk-helpers.js';
 import { buildCompressionSystemInstruction } from '../compressionSystemPrompt.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class RejectingMediaOwner extends HistoryMediaOwnership {
   failure: Error | undefined;
@@ -58,7 +60,7 @@ describe('native summary publication media lifetime', () => {
               mimeType: 'application/octet-stream',
               semanticMetadata: {},
             });
-            const owner = new RejectingMediaOwner(media);
+            const owner = new RejectingMediaOwner(media, historyScratchRoots);
             await history.registerMediaOwner(owner);
             await history.detachedValues.replace(
               (function* () {

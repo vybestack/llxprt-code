@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -12,6 +14,7 @@ import type { HistoryStorePort } from './historyStorePort.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
 import { JournalSession } from './journalSession.js';
+const historyScratchRoots = createTestScratchOwner();
 
 type ReconcileStore = Pick<
   HistoryStorePort,
@@ -51,7 +54,7 @@ describe('HistoryStorePort.reconcileMedia (journal store)', () => {
       rootDirectory: mediaRoot,
       quotaBytes: 4096,
     });
-    owner = new HistoryMediaOwnership(media);
+    owner = new HistoryMediaOwnership(media, historyScratchRoots);
     a = await admit(1);
     b = await admit(2);
   });
@@ -65,9 +68,12 @@ describe('HistoryStorePort.reconcileMedia (journal store)', () => {
 
   async function opened(): Promise<ReconcileStore> {
     const store: ReconcileStore = new JournalHistoryStore(
-      await JournalSession.create(path.join(directory(), 'reconcile.llxj'), {
-        journal: testJournalSeams({}).dependencies,
-      }),
+      await JournalSession.create(
+        path.join(directory(), 'reconcile.llxj'),
+        testJournalOptions({
+          journal: testJournalSeams({}).dependencies,
+        }),
+      ),
     );
     open.push(store);
     return store;

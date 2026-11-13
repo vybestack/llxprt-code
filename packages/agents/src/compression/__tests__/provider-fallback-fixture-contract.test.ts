@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -14,6 +15,7 @@ import {
   installProviderDiskFixture,
   makeStoredAi,
 } from './compression-provider-fallback-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function publishFixture(
   history: HistoryService,
@@ -40,7 +42,7 @@ async function publishFixture(
 }
 
 async function seededHistory(): Promise<HistoryService> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   history.add(makeUserMessage('original history'));
   await history.waitForTokenUpdates();
   return history;

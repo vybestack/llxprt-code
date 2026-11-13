@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
@@ -61,7 +62,7 @@ export async function seedRecording(
 }> {
   const { name, checkpointAfter, ...config } = options;
   const recording = JournalRecordingService.create(
-    recordingConfig(chatsDir, config),
+    withTestNamedWriters(recordingConfig(chatsDir, config)),
   );
   try {
     const session = await recording.session();

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { basename } from 'node:path';
@@ -131,15 +132,17 @@ describe('native discovery validates external session facts', () => {
       expect(
         await SessionDiscovery.readSessionHeader(broken.filePath),
       ).toBeNull();
-      const refused = await resumeSession({
-        continueRef: basename(broken.filePath),
-        projectHash: PROJECT,
-        chatsDir: chats,
-        currentProvider: 'anthropic',
-        currentModel: 'model-1',
-        workspaceDirs: ['/fallback'],
-        journal: journalSeams(),
-      });
+      const refused = await resumeSession(
+        withTestNamedWriters({
+          continueRef: basename(broken.filePath),
+          projectHash: PROJECT,
+          chatsDir: chats,
+          currentProvider: 'anthropic',
+          currentModel: 'model-1',
+          workspaceDirs: ['/fallback'],
+          journal: journalSeams(),
+        }),
+      );
       expect(refused).toMatchObject({
         ok: false,
         error: `Session fact ${key} is not in the expected form`,
@@ -175,15 +178,17 @@ describe('native discovery validates external session facts', () => {
       model: '',
       startTime: START_FACT.startTime,
     });
-    const result = await resumeSession({
-      continueRef: 'valid',
-      projectHash: PROJECT,
-      chatsDir: chats,
-      currentProvider: 'unknown',
-      currentModel: '',
-      workspaceDirs: ['/fallback'],
-      journal: journalSeams(),
-    });
+    const result = await resumeSession(
+      withTestNamedWriters({
+        continueRef: 'valid',
+        projectHash: PROJECT,
+        chatsDir: chats,
+        currentProvider: 'unknown',
+        currentModel: '',
+        workspaceDirs: ['/fallback'],
+        journal: journalSeams(),
+      }),
+    );
     if (!result.ok) throw new Error(result.error);
     try {
       expect(result.metadata).toMatchObject({

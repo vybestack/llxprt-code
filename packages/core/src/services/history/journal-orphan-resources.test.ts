@@ -1,3 +1,4 @@
+import { testNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
@@ -71,16 +72,20 @@ describe('indexed orphan unit resources', () => {
   it('streams indexed real responses and media without operation files or an unbounded query cache', async () => {
     const caches: BoundedIdNodeCache[] = [];
     const deps = storeDeps();
-    const store = await JournalStore.create(`${directory()}/responses.llxj`, {
-      ...deps,
-      idDeps: { ...deps.idDeps, occurrenceSpace: 'source' },
-      planOccurrences: planSourceRowOccurrences,
-      createCache: () => {
-        const cache = new BoundedIdNodeCache();
-        caches.push(cache);
-        return cache;
+    const store = await JournalStore.create(
+      `${directory()}/responses.llxj`,
+      {
+        ...deps,
+        idDeps: { ...deps.idDeps, occurrenceSpace: 'source' },
+        planOccurrences: planSourceRowOccurrences,
+        createCache: () => {
+          const cache = new BoundedIdNodeCache();
+          caches.push(cache);
+          return cache;
+        },
       },
-    });
+      testNamedWriters,
+    );
     function* rows(): Generator<RowDraft> {
       for (let index = 0; index < 2000; index++) {
         const id = `response-${index}`;
@@ -139,16 +144,20 @@ describe('indexed orphan unit resources', () => {
   it('streams 4000 native ids with bounded query caches and no operation files', async () => {
     const caches: BoundedIdNodeCache[] = [];
     const deps = storeDeps();
-    const store = await JournalStore.create(`${directory()}/native.llxj`, {
-      ...deps,
-      idDeps: { ...deps.idDeps, occurrenceSpace: 'source' },
-      planOccurrences: planSourceRowOccurrences,
-      createCache: () => {
-        const cache = new BoundedIdNodeCache();
-        caches.push(cache);
-        return cache;
+    const store = await JournalStore.create(
+      `${directory()}/native.llxj`,
+      {
+        ...deps,
+        idDeps: { ...deps.idDeps, occurrenceSpace: 'source' },
+        planOccurrences: planSourceRowOccurrences,
+        createCache: () => {
+          const cache = new BoundedIdNodeCache();
+          caches.push(cache);
+          return cache;
+        },
       },
-    });
+      testNamedWriters,
+    );
     function* rows(): Generator<RowDraft> {
       for (let index = 0; index < 4000; index++)
         yield encodeContentRow(

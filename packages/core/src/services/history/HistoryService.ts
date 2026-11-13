@@ -17,7 +17,6 @@
 import { withArrivalPublication } from './history-arrival-publication.js';
 import { publishArrivalMedia } from './history-arrival-media.js';
 import { stampAiTurnModel } from './IContent.js';
-import { historyOriginId } from './historyOriginId.js';
 import { firstEntryContextRange } from './contextRange.js';
 import type { ArrivalAttempt } from '../../journal/arrival-group.js';
 import type { ResponseArrival } from './history-response-arrival.js';
@@ -101,7 +100,8 @@ export class HistoryService extends HistoryServiceReads {
   ): Promise<ResponseArrival> {
     const content: IContent = { speaker: 'ai', blocks: [], metadata };
     this.chronology.stamp(content);
-    const originId = origin === undefined ? undefined : historyOriginId(origin);
+    const originId =
+      origin === undefined ? undefined : this.journal.originIds.get(origin);
     const arrival = await this.journal.openResponseArrival(
       content,
       attempt,
@@ -164,7 +164,7 @@ export class HistoryService extends HistoryServiceReads {
     store: LocalMediaStore,
   ): Promise<HistoryMediaOwnership> {
     if (this.runtimeMediaOwner === undefined) {
-      const owner = new HistoryMediaOwnership(store);
+      const owner = new HistoryMediaOwnership(store, this.scratchRoots);
       this.runtimeMediaOwner = {
         store,
         owner,
@@ -186,7 +186,7 @@ export class HistoryService extends HistoryServiceReads {
    *
    * @plan PLAN-20260917-ISSUE854.P05b3
    */
-  constructor(options: HistoryServiceJournalOptions = {}) {
+  constructor(options: HistoryServiceJournalOptions) {
     super(options);
     this.providerReadCounters = options.attachmentCounters;
   }
@@ -868,8 +868,11 @@ export class HistoryService extends HistoryServiceReads {
   }
 
   /** Import history from JSON. */
-  static fromJSON(json: string): HistoryService {
-    const service = new HistoryService();
+  static fromJSON(
+    json: string,
+    options: HistoryServiceJournalOptions,
+  ): HistoryService {
+    const service = new HistoryService(options);
     const history = JSON.parse(json);
     service.addAll(history);
     return service;

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -126,6 +127,8 @@ describe('internal session media package', () => {
       join(destinationRoot, 'chats'),
       PROJECT_HASH,
       destinationStore,
+      undefined,
+      testJournalOptions(),
     );
     const rows = await readPackageRows(imported.recordingPath, PROJECT_HASH);
     expect(rows.map((row) => row.blocks)).toStrictEqual([[reference]]);
@@ -186,6 +189,8 @@ describe('internal session media package', () => {
       join(tempDirectory, 'derived-destination-chats'),
       PROJECT_HASH,
       destinationStore,
+      undefined,
+      testJournalOptions(),
     );
 
     expect(packagedObjects).toHaveLength(2);
@@ -246,6 +251,8 @@ describe('internal session media package', () => {
         join(destinationRoot, 'chats'),
         PROJECT_HASH,
         destinationStore,
+        undefined,
+        testJournalOptions(),
       ),
     ).rejects.toThrow(reference.contentId);
     expect(await destinationStore.getStoredByteLength()).toBe(0);
@@ -307,6 +314,7 @@ describe('internal session media package', () => {
           async () => {
             await writeFile(activationMarker, 'activated');
           },
+          testJournalOptions(),
         ),
       ).rejects.toThrow(/owner release/);
       await expect(stat(activationMarker)).rejects.toMatchObject({
@@ -527,6 +535,7 @@ describe('internal session media package', () => {
         async () => {
           throw new Error('resume rejected imported session');
         },
+        testJournalOptions(),
       ),
     ).rejects.toThrow('resume rejected imported session');
 
@@ -615,6 +624,8 @@ describe('internal session media package', () => {
       join(tempDirectory, 'native-destination-chats'),
       PROJECT_HASH,
       destination,
+      undefined,
+      testJournalOptions(),
     );
     expect(await destination.readVerified(first)).toStrictEqual(
       new Uint8Array([1, 3, 5]),
@@ -678,6 +689,8 @@ describe('internal session media package', () => {
         destinationChats,
         PROJECT_HASH,
         destinationStore,
+        undefined,
+        testJournalOptions(),
       ),
     ).rejects.toThrow(/version/i);
     expect(await destinationStore.getStoredByteLength()).toBe(0);
@@ -739,6 +752,8 @@ describe('internal session media package', () => {
         destinationChats,
         PROJECT_HASH,
         destinationStore,
+        undefined,
+        testJournalOptions(),
       ),
     ).rejects.toThrow(retiredJournalMessage(packagedRecordingPath));
     expect(await destinationStore.getStoredByteLength()).toBe(0);

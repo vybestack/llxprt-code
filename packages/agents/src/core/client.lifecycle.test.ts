@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -37,6 +38,7 @@ import {
   setupAgentClient,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 // Mock prompts module before imports
 const realConfigModule = {
@@ -323,7 +325,9 @@ describe('AgentClient (client.ts)', () => {
 
 async function registerLifecycleCase0(): Promise<void> {
   let retainedHistory: readonly IContent[] = [];
-  const fixtureHistory = new HistoryService();
+  const fixtureHistory = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const mockChat = {
     async setHistory(history: readonly IContent[]): Promise<void> {
       retainedHistory = history;
@@ -385,7 +389,9 @@ async function registerLifecycleCase0(): Promise<void> {
 
 async function registerLifecycleCase1(): Promise<void> {
   let retainedHistory: readonly IContent[] = [];
-  const fixtureHistory = new HistoryService();
+  const fixtureHistory = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const mockChat = {
     async setHistory(history: readonly IContent[]): Promise<void> {
       retainedHistory = history;
@@ -441,7 +447,9 @@ async function registerLifecycleCase2(): Promise<void> {
       blocks: [{ type: 'text', text: 'we are preserving history' }],
     },
   ];
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   for (const content of history) {
     historyService.add(content, 'test-model');
   }
@@ -463,7 +471,9 @@ async function registerLifecycleCase2(): Promise<void> {
 async function registerLifecycleCase3(): Promise<void> {
   // Arrange
   let retainedHistory: readonly IContent[] = [];
-  const fixtureHistory = new HistoryService();
+  const fixtureHistory = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const mockChat = {
     async setHistory(history: readonly IContent[]): Promise<void> {
       retainedHistory = history;
@@ -499,7 +509,9 @@ async function registerLifecycleCase3(): Promise<void> {
 async function registerLifecycleCase4(): Promise<void> {
   // Arrange
   let retainedHistory: readonly IContent[] = [];
-  const fixtureHistory = new HistoryService();
+  const fixtureHistory = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const mockChat = {
     async setHistory(history: readonly IContent[]): Promise<void> {
       retainedHistory = history;
@@ -541,7 +553,9 @@ async function registerLifecycleCase5(): Promise<void> {
     const store = client.mediaStore;
     const initializedChat = client['chat'];
     assertDefined(initializedChat, 'Expected chat');
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     historyService.detachedValues.replace = async () => {
       throw new Error('history add failed');
     };
@@ -585,7 +599,9 @@ async function registerLifecycleCase5(): Promise<void> {
 
 async function registerLifecycleCase6(): Promise<void> {
   const setSystemInstruction = vi.fn();
-  const fixtureHistory = new HistoryService();
+  const fixtureHistory = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const mockChat = {
     setSystemInstruction,
     getHistoryService: () => fixtureHistory,
@@ -625,7 +641,9 @@ async function registerLifecycleCase6(): Promise<void> {
 
 async function registerLifecycleCase7(): Promise<void> {
   const setSystemInstruction = vi.fn();
-  const fixtureHistory = new HistoryService();
+  const fixtureHistory = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const mockChat = {
     setSystemInstruction,
     getHistoryService: () => fixtureHistory,

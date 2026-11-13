@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { recordedMessages as emittedCandidate } from './__tests__/wire-reference/support/recorded-wire-oracle.js';
 import { describe, expect, it } from 'bun:test';
@@ -84,10 +85,13 @@ describe('persisted native Anthropic repair facts', () => {
   const directory = useTempDir('anthropic-repair-lifecycle-');
   it('reuses an explicit fill without rewriting facts or changing the pinned version', async () => {
     const counter = { reads: 0 };
-    const session = await JournalSession.create(`${directory()}/warm.llxj`, {
-      journal: testJournalSeams({ readCounter: counter }, 1, false)
-        .dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/warm.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({ readCounter: counter }, 1, false)
+          .dependencies,
+      }),
+    );
     try {
       const rows = [text('q'), call('x'), text('next')];
       await session.append(rows);
@@ -115,6 +119,7 @@ describe('persisted native Anthropic repair facts', () => {
     async (id) => {
       const session = await JournalSession.create(
         `${directory()}/stream-${id}.llxj`,
+        testJournalOptions(),
       );
       const rows = [text('q'), call('x')];
       const added = result(id, 'streamed value');
@@ -164,9 +169,12 @@ describe('persisted native Anthropic repair facts', () => {
       call('toolu_empty'),
       result('toolu_empty', 'TWO'),
     ];
-    const session = await JournalSession.create(`${directory()}/native.llxj`, {
-      journal: testJournalSeams({}, 1, false).dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/native.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({}, 1, false).dependencies,
+      }),
+    );
     try {
       await session.store.commit([
         {
@@ -250,17 +258,23 @@ describe('persisted native Anthropic repair facts', () => {
   it('reads persisted facts after reopen and refuses to change history without its native writer', async () => {
     const path = `${directory()}/reopen.llxj`;
     const rows = [text('q'), call('x'), result('x', 'value')];
-    const session = await JournalSession.create(path, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     await session.append(rows);
     await session.store.commit([
       { kind: 'factIndex', registration: anthropicRepairFactIndex(settings) },
     ]);
     await session.close();
-    const reopened = await JournalSession.open(path, {
-      journal: testJournalSeams().dependencies,
-    });
+    const reopened = await JournalSession.open(
+      path,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await matches(reopened, rows);
       await expect(reopened.append([text('must register')])).rejects.toThrow(
@@ -284,9 +298,12 @@ describe('persisted native Anthropic repair facts', () => {
     }
   });
   it('throws on inconsistent native message facts without falling back to old normalization', async () => {
-    const session = await JournalSession.create(`${directory()}/broken.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/broken.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.store.commit([
         {
@@ -314,9 +331,12 @@ describe('persisted native Anthropic repair facts', () => {
     }
   });
   it('preserves a native fact writer failure as the original error', async () => {
-    const session = await JournalSession.create(`${directory()}/failure.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/failure.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     const error = new Error('native scalar writer failure');
     try {
       await expect(

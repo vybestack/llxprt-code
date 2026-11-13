@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -18,7 +19,7 @@ async function withStore(
   const root = await mkdtemp(join(tmpdir(), 'journal-token-row-batch-'));
   const session = await JournalSession.create(
     join(root, 'primary.llxj'),
-    options,
+    testJournalOptions(options),
   );
   const store = new JournalHistoryStore(session);
   try {

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { join } from 'node:path';
@@ -55,6 +56,7 @@ describe('sealed token block fallback', () => {
   ): Promise<readonly [number, number]> {
     const session = await JournalSession.create(
       join(directory(), 'session.llxj'),
+      testJournalOptions(),
     );
     const provider = { getTokenizerForModel: () => tokenizer };
     try {
@@ -129,6 +131,7 @@ describe('sealed token block fallback', () => {
   it('propagates cancellation during streaming even when tokenizer fallback is allowed', async () => {
     const session = await JournalSession.create(
       join(directory(), 'abort.llxj'),
+      testJournalOptions(),
     );
     const controller = new AbortController();
     const reason = new Error('stop counting');
@@ -191,7 +194,10 @@ describe('sealed token block fallback', () => {
   });
 
   it('normalizes named raw tool JSON exactly with a one-block fallback', async () => {
-    const session = await JournalSession.create(join(directory(), 'raw.llxj'));
+    const session = await JournalSession.create(
+      join(directory(), 'raw.llxj'),
+      testJournalOptions(),
+    );
     const recorder = new JournalArrivalRecorder(session.store);
     const provider = {
       getTokenizerForModel: () => ({

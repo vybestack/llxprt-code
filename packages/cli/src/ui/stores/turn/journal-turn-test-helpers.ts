@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -56,7 +57,7 @@ export function registerJournalPagerFixture(): (
   return async (rows) => {
     const directory = await mkdtemp(join(tmpdir(), 'journal-ui-test-'));
     const filePath = join(directory, 'session.llxj');
-    const session = await JournalSession.create(filePath);
+    const session = await JournalSession.create(filePath, testJournalOptions());
     try {
       await session.append(rows);
     } finally {
@@ -72,7 +73,10 @@ export function registerJournalPagerFixture(): (
     await pager.resumeFromJournal();
     return Object.assign(pager, {
       appendItem: async (item: HistoryItemWithoutId): Promise<void> => {
-        const writer = await JournalSession.open(filePath);
+        const writer = await JournalSession.open(
+          filePath,
+          testJournalOptions(),
+        );
         try {
           await new JournalDisplayWriter(writer.store).append(
             { type: 'ui-item' },

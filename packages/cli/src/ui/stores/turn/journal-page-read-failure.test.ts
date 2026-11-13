@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, open, readdir, rm, stat } from 'node:fs/promises';
@@ -33,7 +34,7 @@ async function withCursor(
 ): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), 'journal-page-failure-'));
   const file = join(directory, 'journal.llxj');
-  const session = await JournalSession.create(file);
+  const session = await JournalSession.create(file, testJournalOptions());
   const offsets: number[] = [];
   try {
     await session.append([human(1), human(2), human(3)]);

@@ -2,7 +2,6 @@ import { capturedAgentClient } from './helpers/agent-client-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/historyOriginId.js';
 import { describe, expect, it } from 'bun:test';
 import { useTempDir } from './helpers/journal-fixture-support.js';
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
@@ -55,15 +54,15 @@ describe('native public prefix current source owners', () => {
               owners.push(await view.originAt(index));
             expect(owners).toStrictEqual(
               Array.from({ length: cut }, (_, index) =>
-                historyOriginId(index % 2 === 0 ? a : b),
+                history.originIds.get(index % 2 === 0 ? a : b),
               ),
             );
           });
           await agent.resetChat();
           await history.detachedValues.host().journal.readRows(async (view) => {
             expect(view.length).toBe(2);
-            expect(await view.originAt(0)).toBe(historyOriginId(a));
-            expect(await view.originAt(1)).toBe(historyOriginId(b));
+            expect(await view.originAt(0)).toBe(history.originIds.get(a));
+            expect(await view.originAt(1)).toBe(history.originIds.get(b));
           });
         }, true);
         expect(receipt).toStrictEqual({ directories: [], files: [] });

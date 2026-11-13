@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { annotateCompressionSpan } from './historyChronology.js';
@@ -9,6 +10,7 @@ import {
 import { accountingRow } from './__tests__/support/token-accounting-stream-test-helpers.js';
 import type { IContent } from './IContent.js';
 import { isSpeakerContent } from './historyJournalGuards.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function summary(): IContent {
   return {
@@ -47,6 +49,7 @@ describe('raw compression span byte parity', () => {
           const actual = await annotateCompressionSpanStream(
             history.streamRawHistory(),
             candidate,
+            { scratchRoots: historyScratchRoots },
           );
           expect(JSON.stringify(actual)).toBe(JSON.stringify(expected));
           expect(ownership.snapshot().peakRows).toBe(1);
@@ -68,6 +71,7 @@ describe('raw compression span byte parity', () => {
         const actual = await annotateCompressionSpanStream(
           history.streamRawHistory(),
           candidate,
+          { scratchRoots: historyScratchRoots },
         );
         expect(JSON.stringify(actual)).toBe(
           JSON.stringify(
@@ -105,6 +109,7 @@ describe('raw compression span metadata cases', () => {
     const result = await annotateCompressionSpanStream(
       [first, later],
       candidate,
+      { scratchRoots: historyScratchRoots },
     );
     expect(JSON.stringify(result)).toBe(
       JSON.stringify(annotateCompressionSpan([first, later], candidate)),
@@ -131,7 +136,9 @@ describe('raw compression span metadata cases', () => {
       },
     ];
     expect(
-      await annotateCompressionSpanStream(previous, candidate),
+      await annotateCompressionSpanStream(previous, candidate, {
+        scratchRoots: historyScratchRoots,
+      }),
     ).toStrictEqual(annotateCompressionSpan(previous, candidate));
     expect(candidate[1].metadata?.chronologyReplaced).toBeUndefined();
   });
@@ -145,7 +152,9 @@ describe('raw compression span metadata cases', () => {
     async ({ candidate }) => {
       const previous = [suffixRow(0)];
       expect(
-        await annotateCompressionSpanStream(previous, candidate),
+        await annotateCompressionSpanStream(previous, candidate, {
+          scratchRoots: historyScratchRoots,
+        }),
       ).toStrictEqual(annotateCompressionSpan(previous, candidate));
     },
   );

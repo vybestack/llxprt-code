@@ -3,7 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, spyOn } from 'bun:test';
+import { installMcpNetwork } from './helpers/mcp-network.js';
+import { describe, expect, it } from 'bun:test';
 import {
   MCP_CLIENT_UPDATE_EVENT,
   type HostFeedbackSink,
@@ -29,21 +30,13 @@ describe('manual MCP authentication lifetime', () => {
     const released = gate();
     let signal: AbortSignal | null | undefined;
     let requests = 0;
-    const network = spyOn(globalThis, 'fetch').mockImplementation(
-      Object.assign(
-        async (
-          _input: Parameters<typeof fetch>[0],
-          init?: Parameters<typeof fetch>[1],
-        ): Promise<Response> => {
-          requests++;
-          signal = init?.signal;
-          entered.release();
-          await released.promise;
-          return new Response(null, { status: 401 });
-        },
-        { preconnect: globalThis.fetch.preconnect },
-      ),
-    );
+    const restoreNetwork = installMcpNetwork(async (_input, init) => {
+      requests++;
+      signal = init?.signal;
+      entered.release();
+      await released.promise;
+      return new Response(null, { status: 401 });
+    });
     const built = await buildAgent('multi-turn-text.jsonl', {
       folderTrust: false,
       mcpServers: { shared: { httpUrl: 'https://mcp-owner.test/mcp' } },
@@ -82,7 +75,7 @@ describe('manual MCP authentication lifetime', () => {
       await auth;
       await disposal;
       await built.cleanup();
-      network.mockRestore();
+      restoreNetwork();
     }
   }, 30000);
 

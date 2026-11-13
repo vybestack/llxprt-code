@@ -5,6 +5,7 @@
  */
 import { mkdtemp, open, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { diskAssets, type DiskAssets } from './o200k-disk-assets.js';
 import { countPiece } from './o200k-disk-bpe.js';
 import { countPieceInMemory, MAX_HEAP_PIECE_BYTES } from './o200k-heap-bpe.js';
 import { checkpoint } from './o200k-disk-io.js';
@@ -87,6 +88,10 @@ class PendingOverflow extends Error {}
 
 class ChunkedCounter {
   count = 0;
+  #assets: DiskAssets | undefined;
+  private assets(): DiskAssets {
+    return (this.#assets ??= this.options.assets ?? diskAssets(this.encoder));
+  }
   #chunk: string[] = [];
   #chunkChars = 0;
   #fallbackDirectory: string | undefined;
@@ -172,7 +177,7 @@ class ChunkedCounter {
     if (!this.diskAllowed || bytes.length <= this.tuning.heapPieceBytes) {
       this.count +=
         bytes.length <= MAX_HEAP_PIECE_BYTES
-          ? countPieceInMemory(bytes)
+          ? countPieceInMemory(bytes, this.assets().ranks)
           : countO200kBaseTokens(this.encoder, piece);
       await checkpoint(this.options.signal);
       return;
@@ -195,6 +200,7 @@ class ChunkedCounter {
       0,
       bytes.length,
       this.options.signal,
+      this.assets(),
     );
     await rm(path, { force: true });
   }

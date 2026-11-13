@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -28,6 +29,7 @@ import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
 import type OpenAI from 'openai';
 import type { IProviderConfig } from '../../types/IProviderConfig.js';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 void vi.mock('openai', () => {
   class FakeOpenAI {
@@ -121,7 +123,7 @@ describe('OpenAI Chat projection credential parity (issue #2817)', () => {
     const estimate = await estimatePromptEnvelope(
       provider.name,
       projection,
-      createRuntimeTokenizerFactory(),
+      createRuntimeTokenizerFactory(tokenizerScratchRoots),
     );
     expect(estimate.estimatedPromptTokens).toBeGreaterThan(0);
     expect(projection.transportToken).toBeDefined();

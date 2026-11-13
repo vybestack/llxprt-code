@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
@@ -13,6 +14,7 @@ import {
   enforceFallback,
 } from './provider-fallback-disk-helpers.js';
 import { withNativeFallbackFixture } from './support/native-fallback-fixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function partialSourceFailure(size: number): Promise<void> {
   await withNativeFallbackFixture(async (fixture) => {
@@ -21,7 +23,7 @@ async function partialSourceFailure(size: number): Promise<void> {
     const before = await compressionValueDigest(transformFixtureRows(size));
     history.setBaseTokenOffset(37);
     history.setCacheAnchorSeq(1);
-    const rows = new DetachedHistoryJournal(owners);
+    const rows = new DetachedHistoryJournal(historyScratchRoots, owners);
     rows.append(suffixRow(size));
     rows.append(suffixRow(size + 1));
     const projectionFailure = new Error(

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -6,6 +7,7 @@ import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core
 import { describe, expect, it, spyOn } from 'bun:test';
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(index: number): IContent {
   if (index === 1)
@@ -48,7 +50,7 @@ async function continueWriter(
 describe('native semantic purge failures', () => {
   for (const stage of ['producer', 'query', 'abort']) {
     it(`preserves prior roots and original error identity for ${stage} failure at row 65`, async () => {
-      const history = new HistoryService({});
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       history.setTokenizerFactory(exactTokenizer());
       try {
         await history.detachedValues.replace(

@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -15,6 +16,7 @@ describe('journal commit settlement', () => {
     const store = await JournalStore.create(
       join(directory(), 'queued.llxj'),
       storeDeps({ seams }),
+      testNamedWriters,
     );
     try {
       const commit = store.commit([{ kind: 'append', rows: [draftRow()] }]);
@@ -43,6 +45,7 @@ describe('journal commit settlement', () => {
     const store = await JournalStore.create(
       join(directory(), 'failed.llxj'),
       storeDeps({ seams }),
+      testNamedWriters,
     );
     try {
       await store.commit([{ kind: 'append', rows: [draftRow()] }]);

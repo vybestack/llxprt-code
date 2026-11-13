@@ -10,7 +10,7 @@ import { NativeAnthropicEstimateProjection } from '../anthropic/native-anthropic
 
 export function withGpt56DiskSources(
   factory: RuntimeTokenizerFactory,
-  workspaceDirectory: string,
+  workspaceDirectory: string | (() => string),
   signal?: AbortSignal,
 ): RuntimeTokenizerFactory {
   return {
@@ -28,6 +28,10 @@ export function withGpt56DiskSources(
         return request.finalizedProjection.estimate(request, factory);
       if (!(request.finalizedProjection instanceof Gpt56SourceProjection))
         return factory.estimatePrompt(request);
+      const directory =
+        typeof workspaceDirectory === 'string'
+          ? workspaceDirectory
+          : workspaceDirectory();
       const signals = [signal, request.finalizedProjection.signal].filter(
         (value): value is AbortSignal => value !== undefined,
       );
@@ -40,11 +44,11 @@ export function withGpt56DiskSources(
           request,
           request.finalizedProjection,
           factory,
-          workspaceDirectory,
+          directory,
           combined,
         );
       return estimateGpt56PromptFromSources(request, {
-        workspaceDirectory,
+        workspaceDirectory: directory,
         signal: combined,
       });
     },

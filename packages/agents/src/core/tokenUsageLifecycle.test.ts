@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -30,6 +31,7 @@ import {
   SummaryTransport,
 } from '../compression/__tests__/middleout-disk-helpers.js';
 import { collectRows } from '../compression/__tests__/truncation-stream-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 // ---------------------------------------------------------------------------
 // Temp file helpers
@@ -93,7 +95,9 @@ async function buildCompressionHandler(
   logger: TokenUsageLogger;
   historyService: HistoryService;
 }> {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   if (rows.length > 0) {
     historyService.addAll(rows);
     await historyService.waitForCommit();

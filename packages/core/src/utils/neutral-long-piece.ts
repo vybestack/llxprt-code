@@ -162,40 +162,58 @@ function parseRanks(bpeRanks: string): ReadonlyMap<string, number> {
   return result;
 }
 
-const encodingRanks = new Map<string, ReadonlyMap<string, number>>();
-export function encodingBpeRanks(
-  encoding: string,
-): ReadonlyMap<string, number> {
-  const cached = encodingRanks.get(encoding);
-  if (cached !== undefined) return cached;
-  const path = createRequire(import.meta.url).resolve(
-    `@dqbd/tiktoken/encoders/${encoding}.json`,
-  );
-  const vocabulary = z
-    .object({ bpe_ranks: z.string() })
-    .parse(JSON.parse(readFileSync(path, 'utf8')));
-  const ranks = parseRanks(vocabulary.bpe_ranks);
-  encodingRanks.set(encoding, ranks);
-  return ranks;
+export class EncodingCache {
+  private readonly encodingRanks = new Map<
+    string,
+    ReadonlyMap<string, number>
+  >();
+  private readonly encodings = new Map<string, LongTextCounter>();
+
+  ranks(encoding: string): ReadonlyMap<string, number> {
+    const cached = this.encodingRanks.get(encoding);
+    if (cached !== undefined) return cached;
+    const path = createRequire(import.meta.url).resolve(
+      `@dqbd/tiktoken/encoders/${encoding}.json`,
+    );
+    const vocabulary = z
+      .object({ bpe_ranks: z.string() })
+      .parse(JSON.parse(readFileSync(path, 'utf8')));
+    const ranks = parseRanks(vocabulary.bpe_ranks);
+    this.encodingRanks.set(encoding, ranks);
+    return ranks;
+  }
+
+  longTextCounter(encoding: string): LongTextCounter {
+    const cached = this.encodings.get(encoding);
+    if (cached !== undefined) return cached;
+    const path = createRequire(import.meta.url).resolve(
+      `@dqbd/tiktoken/encoders/${encoding}.json`,
+    );
+    const vocabulary = z
+      .object({ bpe_ranks: z.string(), pat_str: z.string() })
+      .parse(JSON.parse(readFileSync(path, 'utf8')));
+    const counter = createLongTextCounter(
+      vocabulary.bpe_ranks,
+      vocabulary.pat_str,
+      () => this.ranks(encoding),
+    );
+    this.encodings.set(encoding, counter);
+    return counter;
+  }
 }
 
-const encodings = new Map<string, LongTextCounter>();
-export function encodingLongTextCounter(encoding: string): LongTextCounter {
-  const cached = encodings.get(encoding);
-  if (cached !== undefined) return cached;
-  const path = createRequire(import.meta.url).resolve(
-    `@dqbd/tiktoken/encoders/${encoding}.json`,
-  );
-  const vocabulary = z
-    .object({ bpe_ranks: z.string(), pat_str: z.string() })
-    .parse(JSON.parse(readFileSync(path, 'utf8')));
-  const counter = createLongTextCounter(
-    vocabulary.bpe_ranks,
-    vocabulary.pat_str,
-    () => encodingBpeRanks(encoding),
-  );
-  encodings.set(encoding, counter);
-  return counter;
+export function encodingBpeRanks(
+  encoding: string,
+  cache: EncodingCache,
+): ReadonlyMap<string, number> {
+  return cache.ranks(encoding);
+}
+
+export function encodingLongTextCounter(
+  encoding: string,
+  cache: EncodingCache,
+): LongTextCounter {
+  return cache.longTextCounter(encoding);
 }
 
 export function countBpePiece(
@@ -259,6 +277,7 @@ export function countBpePiece(
 export function countLongNeutralText(
   text: string,
   countShort: (text: string) => number,
+  cache: EncodingCache,
 ): number {
-  return encodingLongTextCounter('o200k_base')(text, countShort);
+  return encodingLongTextCounter('o200k_base', cache)(text, countShort);
 }

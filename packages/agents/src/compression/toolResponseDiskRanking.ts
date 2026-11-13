@@ -11,7 +11,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
 import { isAlreadyStubbed } from './toolResultTruncator.js';
-import { createScratchDirSync } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 export interface DiskRankedCandidate {
   readonly historyLength: number;
@@ -55,18 +55,23 @@ function isEmptyAiRow(row: IContent): boolean {
 }
 
 export class ToolResponseDiskRanking implements Iterable<DiskRankedCandidate> {
-  private readonly directory = createScratchDirSync('tool-response-ranking-');
-  private readonly scores = openSync(join(this.directory, 'scores'), 'w+');
-  private readonly rows = new HistoryDensityRows();
+  private readonly directory: string;
+  private readonly scores: number;
+  private readonly rows: HistoryDensityRows;
   private readonly chunk = Buffer.alloc(RECORD_BYTES * RECORDS_PER_CHUNK);
   private count = 0;
   private positiveSaving = 0;
   private closed = false;
 
   constructor(
+    scratchRoots: ScratchRootOwner,
     private readonly pending: readonly IContent[],
     private readonly signal?: AbortSignal,
-  ) {}
+  ) {
+    this.directory = scratchRoots.createDirSync('tool-response-ranking-');
+    this.scores = openSync(join(this.directory, 'scores'), 'w+');
+    this.rows = new HistoryDensityRows(scratchRoots);
+  }
 
   get length(): number {
     return this.count;
@@ -301,7 +306,11 @@ export async function withToolResponseRanking<T>(
   saving?: StubSaving,
 ): Promise<T> {
   signal?.throwIfAborted();
-  const ranked = new ToolResponseDiskRanking(pending, signal);
+  const ranked = new ToolResponseDiskRanking(
+    history.scratchRoots,
+    pending,
+    signal,
+  );
   try {
     await ranked.capture(history, estimate, saving);
     return await action(

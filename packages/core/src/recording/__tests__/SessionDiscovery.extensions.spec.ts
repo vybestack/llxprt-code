@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -155,10 +156,12 @@ describe('SessionDiscovery extensions', () => {
     const header = lines[0];
     if (header.type !== 'session_start')
       throw new Error('Missing fixture header');
-    const recorder = JournalRecordingService.create({
-      ...header.payload,
-      chatsDir: tempDir,
-    });
+    const recorder = JournalRecordingService.create(
+      withTestNamedWriters({
+        ...header.payload,
+        chatsDir: tempDir,
+      }),
+    );
     let recordedPath: string;
     try {
       const session = await recorder.session();

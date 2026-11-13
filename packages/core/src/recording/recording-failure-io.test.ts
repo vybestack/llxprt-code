@@ -1,3 +1,5 @@
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { ScratchRootOwner } from '../storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
@@ -14,6 +16,8 @@ import {
   RecordingFailureStorageError,
 } from './recording-failure-report.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 function thrown(operation: () => void): unknown {
   try {
     operation();
@@ -24,13 +28,18 @@ function thrown(operation: () => void): unknown {
 }
 
 describe('recording failure I/O ownership', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   it('orders original persistence, storage, and failed scratch cleanup causes', () => {
     const root = mkdtempSync(join(tmpdir(), 'recording-report-io-order-'));
     mkdirSync(join(root, '1.jsonl.tmp'));
     const original = new Error('original persistence failure');
     try {
       const error = thrown(() =>
-        new RecordingFailureStore(root).record(1, original),
+        new RecordingFailureStore(recordingScratchRoots, root).record(
+          1,
+          original,
+        ),
       );
       if (!(error instanceof RecordingFailureStorageError)) throw error;
       expect(error.cause).toBe(original);
@@ -47,7 +56,10 @@ describe('recording failure I/O ownership', () => {
     const original = new Error('save already failed');
     try {
       const error = thrown(() =>
-        new RecordingFailureStore(file).record(1, original),
+        new RecordingFailureStore(recordingScratchRoots, file).record(
+          1,
+          original,
+        ),
       );
       if (!(error instanceof RecordingFailureStorageError)) throw error;
       expect(error.cause).toBe(original);
@@ -59,9 +71,11 @@ describe('recording failure I/O ownership', () => {
   });
 });
 describe('recording report cleanup', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   it('makes failed cleanup retryable without losing the next generation', async () => {
     const root = mkdtempSync(join(tmpdir(), 'recording-report-cleanup-'));
-    const store = new RecordingFailureStore(root);
+    const store = new RecordingFailureStore(recordingScratchRoots, root);
     try {
       store.record(1, new Error('earlier'));
       store.record(2, new Error('later'));

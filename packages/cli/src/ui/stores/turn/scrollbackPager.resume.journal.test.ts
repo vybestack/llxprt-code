@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -102,13 +103,13 @@ function contentOf(
 async function useResumeJournalFixture(): Promise<Fixture> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'scrollback-resume-'));
   const filePath = path.join(dir, 'session-under-resume.llxj');
-  const created = await JournalSession.create(filePath);
+  const created = await JournalSession.create(filePath, testJournalOptions());
   await created.close();
   async function append(
     speaker: IContent['speaker'],
     seq: number,
   ): Promise<number> {
-    const session = await JournalSession.open(filePath);
+    const session = await JournalSession.open(filePath, testJournalOptions());
     try {
       await session.append([
         contentOf(speaker, 'r-' + seq + 'x'.repeat(ROW_PAD_CHARS), seq),
@@ -125,7 +126,7 @@ async function useResumeJournalFixture(): Promise<Fixture> {
   return {
     filePath,
     async addSessionStart(): Promise<number> {
-      const session = await JournalSession.open(filePath);
+      const session = await JournalSession.open(filePath, testJournalOptions());
       try {
         const ack = await session.store.commit([
           {
@@ -144,7 +145,7 @@ async function useResumeJournalFixture(): Promise<Fixture> {
     addUser: (seq) => append('human', seq),
     addAi: (seq) => append('ai', seq),
     async popRows(itemsRemoved: number): Promise<void> {
-      const session = await JournalSession.open(filePath);
+      const session = await JournalSession.open(filePath, testJournalOptions());
       try {
         const remaining = (session.store.published?.rows ?? 0) - itemsRemoved;
         if (remaining === 0) await session.store.commit([{ kind: 'clear' }]);
@@ -173,7 +174,7 @@ interface RowLabel {
 }
 
 async function nativeReference(filePath: string): Promise<RowLabel[]> {
-  const session = await JournalSession.open(filePath);
+  const session = await JournalSession.open(filePath, testJournalOptions());
   try {
     const labels: RowLabel[] = [];
     for await (const { content } of session.rows()) {

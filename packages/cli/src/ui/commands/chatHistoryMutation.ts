@@ -247,12 +247,15 @@ async function mutateOldChatHistory(
   recording: SessionRecordingPort,
   turns?: number,
 ): Promise<MessageActionReturn | void> {
+  const history = client.getHistoryService();
+  if (history == null)
+    throw new Error('History service is required for mutation');
   const media: SnapshotMedia = {
-    references: new HistoryMediaIndex(),
+    references: new HistoryMediaIndex(history.scratchRoots),
     store: clientMediaStore(client),
     owner: `chat-mutation:${randomUUID()}`,
   };
-  const rows = new HistoryDensityRows();
+  const rows = new HistoryDensityRows(history.scratchRoots);
   const operation = turns === undefined ? 'clear' : 'restore';
   try {
     await captureRows(

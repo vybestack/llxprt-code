@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -88,10 +89,12 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = JournalRecordingService.create({
-    ...config,
-    journal: journalSeams(),
-  });
+  const svc = JournalRecordingService.create(
+    withTestNamedWriters({
+      ...config,
+      journal: journalSeams(),
+    }),
+  );
 
   const contents = opts.contents ?? [makeContent('hello')];
   await (await svc.session()).append(contents);

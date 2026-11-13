@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { getToolIdStrategy } from '@vybestack/llxprt-code-tools';
@@ -31,9 +32,12 @@ async function assertVersion(
 describe('request Mistral native lineage', () => {
   const directory = useTempDir('mistral-tail-lineage-');
   it('continues the selected activated version after append, removal, pop, clone and compaction', async () => {
-    const session = await JournalSession.create(`${directory()}/lineage.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/lineage.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     const rows: readonly IContent[] = [
       { speaker: 'ai', blocks: [call('4SftZvDMX')] },
       { speaker: 'ai', blocks: [call('toolu_alpha-1')] },
@@ -100,7 +104,7 @@ describe('request Mistral native lineage', () => {
   it('binds mappings to the complete request instead of reusing them for a filtered converter', async () => {
     const session = await JournalSession.create(
       `${directory()}/selection.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     const rows: readonly IContent[] = [
       { speaker: 'ai', blocks: [call('4SftZvDMX')] },

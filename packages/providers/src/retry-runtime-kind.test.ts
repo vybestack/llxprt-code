@@ -86,7 +86,7 @@ describe('retry runtime kind', () => {
         credentials().authority,
         release,
       );
-      configureProviderTokenizer(manager);
+      configureProviderTokenizer(manager, selected.scratchRoots);
       manager.setRuntimeContext(
         createProviderRuntimeContext({
           runtimeId,

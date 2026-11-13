@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -112,7 +116,9 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: child initi
   afterEach(tmp.teardown);
   describe('A1: fork from checkpoint produces child with history up to checkpoint', () => {
     it('child initially replays A-C before F/G are added', async () => {
-      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      const parent = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(parent, [makeContent('A', 'human')]); // seq 2
       await recordRowsForTest(parent, [makeContent('B', 'ai')]); // seq 3
       await recordRowsForTest(parent, [makeContent('C', 'human')]); // seq 4
@@ -122,7 +128,7 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: child initi
       await parent.flush();
       await parent.dispose();
 
-      const transition = new SessionTransitionService();
+      const transition = new SessionTransitionService(withTestNamedWriters({}));
       const target: ContinueTarget = {
         kind: 'checkpoint',
         source: {
@@ -185,12 +191,16 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: uses checkp
   afterEach(tmp.teardown);
   describe('A1: fork from checkpoint produces child with history up to checkpoint', () => {
     it('uses checkpoint metadata refreshed under the source lock for ancestry', async () => {
-      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      const parent = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(parent, [makeContent('A', 'human')]);
       const checkpoint = await parent.createCheckpoint('authoritative-name');
       await parent.dispose();
 
-      const result = await new SessionTransitionService().forkFromCheckpoint(
+      const result = await new SessionTransitionService(
+        withTestNamedWriters({}),
+      ).forkFromCheckpoint(
         {
           kind: 'checkpoint',
           source: {
@@ -233,7 +243,9 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: source repl
   afterEach(tmp.teardown);
   describe('A2: source and child remain independent', () => {
     it('source replay excludes child F/G; child replay excludes source D/E', async () => {
-      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      const parent = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(parent, [makeContent('A', 'human')]);
       await recordRowsForTest(parent, [makeContent('B', 'ai')]);
       await recordRowsForTest(parent, [makeContent('C', 'human')]);
@@ -243,7 +255,7 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: source repl
       await parent.flush();
       await parent.dispose();
 
-      const transition = new SessionTransitionService();
+      const transition = new SessionTransitionService(withTestNamedWriters({}));
       const result = await transition.forkFromCheckpoint(
         {
           kind: 'checkpoint',
@@ -303,12 +315,14 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: two forks h
   afterEach(tmp.teardown);
   describe('A3: repeated checkpoint forks create siblings', () => {
     it('two forks have distinct IDs and identical initial state', async () => {
-      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      const parent = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordSiblingHistory(parent);
       const cp = await parent.createCheckpoint('atC');
       await finishSiblingParent(parent);
 
-      const transition = new SessionTransitionService();
+      const transition = new SessionTransitionService(withTestNamedWriters({}));
 
       const fork1 = await transition.forkFromCheckpoint(
         {
@@ -391,7 +405,9 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: child resum
   afterEach(tmp.teardown);
   describe('A4: children are self-contained', () => {
     it('child resumes after checkpoint deletion and parent deletion', async () => {
-      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      const parent = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(parent, [makeContent('A', 'human')]);
       await recordRowsForTest(parent, [makeContent('B', 'ai')]);
       await recordRowsForTest(parent, [makeContent('C', 'human')]);
@@ -399,7 +415,7 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: child resum
       await parent.flush();
       await parent.dispose();
 
-      const transition = new SessionTransitionService();
+      const transition = new SessionTransitionService(withTestNamedWriters({}));
       const fork = await transition.forkFromCheckpoint(
         {
           kind: 'checkpoint',
@@ -434,7 +450,7 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: child resum
       }
 
       // Delete checkpoint via CheckpointService on the parent (closed)
-      const cpService = new JournalCheckpointService();
+      const cpService = new JournalCheckpointService(testJournalOptions());
       await cpService.deleteCheckpointClosed(
         parent.getFilePath()!,
         PROJECT_HASH,
@@ -464,14 +480,16 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: lists live 
   afterEach(tmp.teardown);
   describe('A5: source deletion blocker enumeration', () => {
     it('lists live checkpoint names as deletion blockers', async () => {
-      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      const parent = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(parent, [makeContent('A', 'human')]);
       await recordRowsForTest(parent, [makeContent('B', 'ai')]);
       await parent.createCheckpoint('foo');
       await parent.flush();
       await parent.dispose();
 
-      const cpService = new JournalCheckpointService();
+      const cpService = new JournalCheckpointService(testJournalOptions());
       const blockers = await cpService.getDeletionBlockers(
         parent.getFilePath()!,
       );
@@ -486,13 +504,15 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: returns no 
   afterEach(tmp.teardown);
   describe('A5: source deletion blocker enumeration', () => {
     it('returns no blockers after checkpoint tombstones', async () => {
-      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      const parent = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(parent, [makeContent('A', 'human')]);
       const cp = await parent.createCheckpoint('foo');
       await parent.flush();
       await parent.dispose();
 
-      const cpService = new JournalCheckpointService();
+      const cpService = new JournalCheckpointService(testJournalOptions());
       await cpService.deleteCheckpointClosed(
         parent.getFilePath()!,
         PROJECT_HASH,
@@ -514,7 +534,9 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: does not re
   afterEach(tmp.teardown);
   describe('source locking and failed-child cleanup', () => {
     it('does not read or fork a closed source while another owner holds its lock', async () => {
-      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      const parent = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(parent, [makeContent('A')]);
       const cp = await parent.createCheckpoint('locked-source');
       await parent.dispose();
@@ -524,7 +546,9 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: does not re
       );
 
       try {
-        const result = await new SessionTransitionService().forkFromCheckpoint(
+        const result = await new SessionTransitionService(
+          withTestNamedWriters({}),
+        ).forkFromCheckpoint(
           {
             kind: 'checkpoint',
             source: {
@@ -561,14 +585,16 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: forked sess
   afterEach(tmp.teardown);
   describe('A11: forked sessions hold locks', () => {
     it('forked session rejects second lock acquisition', async () => {
-      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      const parent = JournalRecordingService.create(
+        withTestNamedWriters(makeConfig(chatsDir())),
+      );
       await recordRowsForTest(parent, [makeContent('A', 'human')]);
       await recordRowsForTest(parent, [makeContent('B', 'ai')]);
       const cp = await parent.createCheckpoint('atB');
       await parent.flush();
       await parent.dispose();
 
-      const transition = new SessionTransitionService();
+      const transition = new SessionTransitionService(withTestNamedWriters({}));
       const fork = await transition.forkFromCheckpoint(
         {
           kind: 'checkpoint',
@@ -594,7 +620,9 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: forked sess
       );
       requireForkSuccess(fork);
 
-      const checkpointService = new JournalCheckpointService();
+      const checkpointService = new JournalCheckpointService(
+        testJournalOptions(),
+      );
       await checkpointService.setSessionName(
         fork.recording,
         PROJECT_HASH,
@@ -645,7 +673,9 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: checkpoint 
   describe('A9: checkpoint replay fidelity', () => {
     it('checkpoint after provider switch replays with correct provider', async () => {
       const parent = JournalRecordingService.create(
-        makeConfig(chatsDir(), { provider: 'openai', model: 'gpt-4' }),
+        withTestNamedWriters(
+          makeConfig(chatsDir(), { provider: 'openai', model: 'gpt-4' }),
+        ),
       );
       await recordRowsForTest(parent, [makeContent('A', 'human')]);
       await recordRowsForTest(parent, [makeContent('B', 'ai')]);
@@ -655,7 +685,7 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: checkpoint 
       await parent.flush();
       await parent.dispose();
 
-      const transition = new SessionTransitionService();
+      const transition = new SessionTransitionService(withTestNamedWriters({}));
       const fork = await transition.forkFromCheckpoint(
         {
           kind: 'checkpoint',

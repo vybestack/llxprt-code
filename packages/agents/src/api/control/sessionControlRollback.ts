@@ -1,3 +1,4 @@
+import type { SessionRecordingState } from '../agent-control-info-types.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -126,6 +127,15 @@ export function rethrowSessionTransitionFailure(
 }
 
 export class SessionRecordingLifetime {
+  readState(): SessionRecordingState {
+    const path = this.recording?.getFilePath() ?? null;
+    return {
+      enabled: this.recording?.isActive() ?? false,
+      format: 'journal',
+      ...(path !== null ? { path } : {}),
+    };
+  }
+
   recordingHistoryVersion = -1;
   constructor(
     private readonly nativeHistory: SessionNativeHistory,

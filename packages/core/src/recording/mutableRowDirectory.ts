@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getScratchRoot } from '../storage/scratch-root.js';
 
 export type RowSource = 'durable' | 'projection' | 'pending';
 
@@ -130,7 +129,10 @@ export class MutableRowDirectory {
   private size = 0;
   private closed = false;
 
-  constructor(root = getScratchRoot(), prefix = 'llxprt-row-directory-') {
+  constructor(
+    private readonly root: string,
+    prefix = 'llxprt-row-directory-',
+  ) {
     this.directory = fs.mkdtempSync(path.join(root, prefix));
     this.file = path.join(this.directory, 'rows');
     try {
@@ -272,7 +274,7 @@ export class MutableRowDirectory {
   }
 
   /** Independent copy of the current rows, copied in bounded chunks. */
-  clone(root?: string, prefix?: string): MutableRowDirectory {
+  clone(root = this.root, prefix?: string): MutableRowDirectory {
     this.assertOpen();
     const copy = new MutableRowDirectory(root, prefix);
     try {

@@ -20,7 +20,10 @@ import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/servi
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { GenerateChatOptions, ProviderToolset } from '../IProvider.js';
-import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
+import {
+  activeRequestBodyCount,
+  type RequestBodyCensus,
+} from '../utils/requestScopedBody.js';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 
 const originalFetch = globalThis.fetch;
@@ -89,11 +92,11 @@ function sse(streaming: boolean): Response {
   );
 }
 
-function installFetch(streaming: boolean): void {
+function installFetch(streaming: boolean, census: RequestBodyCensus): void {
   globalThis.fetch = Object.assign(
     async (_input: RequestInfo | URL, init?: RequestInit) => {
       network.bodies.push(await new Response(init?.body).text());
-      network.leasesDuringSend.push(activeRequestBodyCount());
+      network.leasesDuringSend.push(activeRequestBodyCount(census));
       network.onSend?.();
       if (network.failure !== undefined) throw network.failure;
       return sse(streaming);
@@ -225,7 +228,7 @@ async function drain(
 async function sendArray(scenario: Scenario): Promise<string[]> {
   resetNetwork();
   const harness = makeHarness(scenario);
-  installFetch(harness.streaming);
+  installFetch(harness.streaming, harness.provider.requestBodyCensus);
   await drain(
     harness.provider.generateChatCompletion(arrayOptions(harness, scenario)),
   );
@@ -235,7 +238,7 @@ async function sendArray(scenario: Scenario): Promise<string[]> {
 async function sendRows(scenario: Scenario): Promise<string[]> {
   resetNetwork();
   const harness = makeHarness(scenario);
-  installFetch(harness.streaming);
+  installFetch(harness.streaming, harness.provider.requestBodyCensus);
   const probe = probeRows(scenario.rows);
   const chunks = await drain(
     harness.provider.generateChatCompletion(
@@ -386,16 +389,18 @@ describe('Vercel transport-owned request rows body (WP10)', () => {
       rows: [text('human', 'a'), text('human', 'b')],
     };
     const harness = makeHarness(scenario);
-    installFetch(false);
+    installFetch(false, harness.provider.requestBodyCensus);
     const probe = probeRows(scenario.rows);
     const options = rowsOptions(harness, scenario, probe);
     const wrong = { ...options, requestRows: { ...probe.selection, count: 3 } };
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(harness.provider.requestBodyCensus);
     await expect(
       drain(harness.provider.generateChatCompletion(wrong)),
     ).rejects.toThrow('Provider request rows count changed');
     expect(network.bodies).toHaveLength(0);
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(harness.provider.requestBodyCensus)).toBe(
+      before,
+    );
   });
 });
 
@@ -409,24 +414,26 @@ describe('Vercel request rows preparation lifecycle (WP10)', () => {
 
   it('holds exactly one request body lease during send and releases it afterwards', async () => {
     const harness = makeHarness(scenario);
-    installFetch(false);
+    installFetch(false, harness.provider.requestBodyCensus);
     const probe = probeRows(scenario.rows);
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(harness.provider.requestBodyCensus);
     await drain(
       harness.provider.generateChatCompletion(
         rowsOptions(harness, scenario, probe),
       ),
     );
     expect(network.leasesDuringSend).toStrictEqual([before + 1]);
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(harness.provider.requestBodyCensus)).toBe(
+      before,
+    );
     expect(probe.opened()).toBe(1);
   });
 
   it('reads the rows again for a retried call and sends the same request', async () => {
     const harness = makeHarness(scenario);
-    installFetch(false);
+    installFetch(false, harness.provider.requestBodyCensus);
     const probe = probeRows(scenario.rows);
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(harness.provider.requestBodyCensus);
     network.failure = new Error('transient transport failure');
     await expect(
       drain(
@@ -435,7 +442,9 @@ describe('Vercel request rows preparation lifecycle (WP10)', () => {
         ),
       ),
     ).rejects.toThrow('transient transport failure');
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(harness.provider.requestBodyCensus)).toBe(
+      before,
+    );
     network.failure = undefined;
     await drain(
       harness.provider.generateChatCompletion(
@@ -446,13 +455,15 @@ describe('Vercel request rows preparation lifecycle (WP10)', () => {
     expect(probe.returned()).toBe(2);
     expect(network.bodies).toHaveLength(2);
     expect(network.bodies[1]).toBe(network.bodies[0]);
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(harness.provider.requestBodyCensus)).toBe(
+      before,
+    );
   });
 
   it('releases the body when the send fails', async () => {
     const harness = makeHarness(scenario);
-    installFetch(false);
-    const before = activeRequestBodyCount();
+    installFetch(false, harness.provider.requestBodyCensus);
+    const before = activeRequestBodyCount(harness.provider.requestBodyCensus);
     network.failure = new Error('transport exploded');
     await expect(
       drain(
@@ -461,29 +472,35 @@ describe('Vercel request rows preparation lifecycle (WP10)', () => {
         ),
       ),
     ).rejects.toThrow('transport exploded');
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(harness.provider.requestBodyCensus)).toBe(
+      before,
+    );
   });
 
   it('releases the body when the consumer returns mid-stream', async () => {
     const streaming: Scenario = { rows: toolTurns, streaming: true };
     const harness = makeHarness(streaming);
-    installFetch(true);
-    const before = activeRequestBodyCount();
+    installFetch(true, harness.provider.requestBodyCensus);
+    const before = activeRequestBodyCount(harness.provider.requestBodyCensus);
     const iterator = harness.provider.generateChatCompletion(
       rowsOptions(harness, streaming, probeRows(streaming.rows)),
     );
     const first = await iterator.next();
     expect(first.done).toBe(false);
-    expect(activeRequestBodyCount()).toBe(before + 1);
+    expect(activeRequestBodyCount(harness.provider.requestBodyCensus)).toBe(
+      before + 1,
+    );
     await iterator.return?.();
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(harness.provider.requestBodyCensus)).toBe(
+      before,
+    );
   });
 
   it('releases the body when the request is aborted during the call', async () => {
     const harness = makeHarness(scenario);
-    installFetch(false);
+    installFetch(false, harness.provider.requestBodyCensus);
     const controller = new AbortController();
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(harness.provider.requestBodyCensus);
     network.failure = new Error('aborted mid call');
     network.onSend = () => controller.abort(network.failure);
     await expect(
@@ -498,16 +515,18 @@ describe('Vercel request rows preparation lifecycle (WP10)', () => {
         ),
       ),
     ).rejects.toThrow('aborted mid call');
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(harness.provider.requestBodyCensus)).toBe(
+      before,
+    );
   });
 
   it('never opens the rows when cancelled before the first pull', async () => {
     const harness = makeHarness(scenario);
-    installFetch(false);
+    installFetch(false, harness.provider.requestBodyCensus);
     const controller = new AbortController();
     controller.abort(new Error('cancelled early'));
     const probe = probeRows(scenario.rows);
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(harness.provider.requestBodyCensus);
     await expect(
       drain(
         harness.provider.generateChatCompletion(
@@ -517,17 +536,19 @@ describe('Vercel request rows preparation lifecycle (WP10)', () => {
     ).rejects.toThrow('cancelled early');
     expect(probe.pulled()).toBe(0);
     expect(network.bodies).toHaveLength(0);
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(harness.provider.requestBodyCensus)).toBe(
+      before,
+    );
   });
 
   it('closes the reader and sends nothing when cancelled after the first chunk', async () => {
     const harness = makeHarness(scenario);
-    installFetch(false);
+    installFetch(false, harness.provider.requestBodyCensus);
     const controller = new AbortController();
     const probe = probeRows(scenario.rows, () => {
       controller.abort(new Error('cancelled after first chunk'));
     });
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(harness.provider.requestBodyCensus);
     await expect(
       drain(
         harness.provider.generateChatCompletion(
@@ -538,15 +559,17 @@ describe('Vercel request rows preparation lifecycle (WP10)', () => {
     expect(probe.pulled()).toBe(1);
     expect(probe.returned()).toBe(1);
     expect(network.bodies).toHaveLength(0);
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(harness.provider.requestBodyCensus)).toBe(
+      before,
+    );
   });
 
   it('releases an unsent preparation when the model cannot be created', async () => {
     const unauthenticated = makeHarness({ ...scenario });
     const failing = new OpenAIVercelProvider(undefined);
-    installFetch(false);
+    installFetch(false, failing.requestBodyCensus);
     const probe = probeRows(scenario.rows);
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(failing.requestBodyCensus);
     const originalKey = process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_API_KEY;
     await expect(
@@ -560,6 +583,6 @@ describe('Vercel request rows preparation lifecycle (WP10)', () => {
     expect(probe.opened()).toBe(0);
     expect(probe.returned()).toBe(0);
     expect(network.bodies).toHaveLength(0);
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(failing.requestBodyCensus)).toBe(before);
   });
 });

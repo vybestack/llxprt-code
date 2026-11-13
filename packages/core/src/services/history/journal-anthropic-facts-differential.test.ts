@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-tools';
@@ -131,9 +132,12 @@ describe('native Anthropic occurrence facts against independently normalized uni
   let matched = 0;
   for (let first = 0; first < UNIT_CASE_COUNT; first += 500)
     it(`matches normalization source seeds ${first}..${first + 499} including pending overlays`, async () => {
-      const session = await JournalSession.create(`${directory()}/facts.llxj`, {
-        journal: testJournalSeams().dependencies,
-      });
+      const session = await JournalSession.create(
+        `${directory()}/facts.llxj`,
+        testJournalOptions({
+          journal: testJournalSeams().dependencies,
+        }),
+      );
       try {
         for (let seed = first; seed < first + 500; seed++) {
           await verifyCase(session, seed);

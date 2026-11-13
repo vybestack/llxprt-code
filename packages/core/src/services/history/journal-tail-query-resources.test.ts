@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { appendFile } from 'node:fs/promises';
@@ -47,7 +48,9 @@ describe('normalized request-tail read bounds', () => {
     it(`projects a fixed tail over ${size} rows without scanning or decoding bodies`, async () => {
       const session = await JournalSession.create(
         `${directory()}/${size}.llxj`,
-        { journal: testJournalSeams({}, size, false).dependencies },
+        testJournalOptions({
+          journal: testJournalSeams({}, size, false).dependencies,
+        }),
       );
       try {
         function* rows(): Generator<RowDraft> {

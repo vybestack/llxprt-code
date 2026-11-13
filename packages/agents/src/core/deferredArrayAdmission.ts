@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
@@ -19,12 +20,14 @@ export interface DeferredArrayAdmission {
 export function prepareDeferredArrayAdmission(
   rows: readonly IContent[],
   store: LocalMediaStore,
+  scratchRoots: ScratchRootOwner,
   scope: string,
   options: DeferredHistorySourceOptions,
 ): DeferredArrayAdmission {
   return createDeferredArrayAdmission(
     { rows, release: trackMutationOwners(rows, options.ownership) },
     store,
+    scratchRoots,
     scope,
     options,
   );
@@ -33,6 +36,7 @@ export function prepareDeferredArrayAdmission(
 function createDeferredArrayAdmission(
   input: { rows: readonly IContent[] | undefined; release: () => void },
   store: LocalMediaStore,
+  scratchRoots: ScratchRootOwner,
   scope: string,
   options: DeferredHistorySourceOptions,
 ): DeferredArrayAdmission {
@@ -41,7 +45,7 @@ function createDeferredArrayAdmission(
     input.rows = undefined;
     input.release = (): void => {};
   };
-  const references = new HistoryMediaIndex();
+  const references = new HistoryMediaIndex(scratchRoots);
   const admission = new MediaAdmissionService(store);
   const context = {
     turnId: scope,

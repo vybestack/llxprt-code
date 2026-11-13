@@ -51,6 +51,7 @@ function manager(
     isTrusted: () => true,
   });
   return new McpClientManager(
+    (input, init) => globalThis.fetch(input, init),
     {
       tokenStorage,
       openBrowser: async () => {

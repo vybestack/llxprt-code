@@ -1,3 +1,5 @@
+import { testJournalOptions } from '../journal/__tests__/support/namedWriterOwner.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
@@ -53,14 +55,16 @@ describe('native session package validation and import', () => {
       mimeType: 'image/png',
       semanticMetadata: {},
     });
-    const recorder = JournalRecordingService.create({
-      sessionId: 'source',
-      projectHash: PROJECT,
-      chatsDir: join(root, 'source-chats'),
-      workspaceDirs: ['/source'],
-      provider: 'test',
-      model: 'test',
-    });
+    const recorder = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'source',
+        projectHash: PROJECT,
+        chatsDir: join(root, 'source-chats'),
+        workspaceDirs: ['/source'],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
     const session = await recorder.session();
     await session.append([{ speaker: 'human', blocks: [reference] }]);
     await session.store.commit([
@@ -129,6 +133,8 @@ describe('native session package validation and import', () => {
       chats,
       'moved-project',
       media,
+      undefined,
+      testJournalOptions(),
     );
     expect(imported.recordingPath.endsWith('.llxj')).toBe(true);
     const facts = await readJournalFileFacts(imported.recordingPath);
@@ -158,15 +164,17 @@ describe('native session package validation and import', () => {
     } finally {
       await reader.close();
     }
-    const result = await resumeSession({
-      chatsDir: chats,
-      projectHash: 'moved-project',
-      mediaStore: media,
-      continueRef: imported.sessionId,
-      currentProvider: 'test',
-      currentModel: 'test',
-      workspaceDirs: [],
-    });
+    const result = await resumeSession(
+      withTestNamedWriters({
+        chatsDir: chats,
+        projectHash: 'moved-project',
+        mediaStore: media,
+        continueRef: imported.sessionId,
+        currentProvider: 'test',
+        currentModel: 'test',
+        workspaceDirs: [],
+      }),
+    );
     if (!result.ok) throw new Error(result.error);
     try {
       const rows = [];
@@ -207,6 +215,8 @@ describe('native session package validation and import', () => {
         join(root, 'destination-chats'),
         PROJECT,
         destination(),
+        undefined,
+        testJournalOptions(),
       ),
     ).rejects.toThrow(retiredJournalMessage(join(directory, 'session.jsonl')));
     await expect(
@@ -272,6 +282,8 @@ describe('native session package validation and import', () => {
         join(root, 'destination-chats'),
         PROJECT,
         media,
+        undefined,
+        testJournalOptions(),
       ),
     ).rejects.toThrow('changed after validation');
     expect(await media.getStoredByteLength()).toBe(0);
@@ -292,6 +304,7 @@ describe('native session package validation and import', () => {
         async () => {
           throw new Error('activation failed');
         },
+        testJournalOptions(),
       ),
     ).rejects.toThrow('activation failed');
     expect(await media.getStoredByteLength()).toBe(0);
@@ -307,6 +320,8 @@ describe('native session package validation and import', () => {
       join(root, 'destination-chats'),
       PROJECT,
       destination(),
+      undefined,
+      testJournalOptions(),
     );
     expect(imported.recordingPath.endsWith('.llxj')).toBe(true);
     const facts = await readJournalFileFacts(imported.recordingPath);
@@ -341,6 +356,8 @@ describe('native session package validation and import', () => {
         join(root, 'destination-chats'),
         PROJECT,
         media,
+        undefined,
+        testJournalOptions(),
       ),
     ).rejects.toThrow('corrupt');
     expect(await media.getStoredByteLength()).toBe(0);

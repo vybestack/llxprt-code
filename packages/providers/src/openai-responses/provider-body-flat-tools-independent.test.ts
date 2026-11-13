@@ -1,3 +1,4 @@
+import { registerScratchInspection } from '../__tests__/support/scratch-inspection.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { diskAdmittedSource } from '../__tests__/support/disk-admitted-source.js';
@@ -7,8 +8,7 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
-import { readdirSync } from 'node:fs';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+const scratchEntries = registerScratchInspection();
 
 const toolSchema = {
   type: 'object',
@@ -30,7 +30,7 @@ const toolSchema = {
 
 /** Scratch entries a request creates: staged rows and prompt-key files. */
 function requestScratchEntries(): string[] {
-  return readdirSync(getScratchRoot())
+  return scratchEntries()
     .filter(
       (name) =>
         name.startsWith('provider-normalization-') ||

@@ -1,3 +1,6 @@
+import type { ScratchRootOwner } from '../../storage/scratch-root.js';
+import type { JournalMaintenanceScope } from '../../journal/deferred-maintenance.js';
+import type { HistoryOriginIds } from './historyOriginId.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -233,6 +236,7 @@ export interface HistoryMergeRequest {
  * (the old store) runs `mutate` over its snapshot.
  */
 export interface HistoryDensityRequest {
+  readonly scratchRoots: ScratchRootOwner;
   readonly optimize: DiskDensityOptimizer;
   readonly nativePolicy?: () => NativeDensityPolicy;
   readonly ownership?: RowOwnership;
@@ -274,6 +278,8 @@ export interface HistoryCompensationMark {
  * the only implementation until the journal-backed store lands (#854 phase 4).
  */
 export interface HistoryStorePort {
+  readonly maintenanceScope: JournalMaintenanceScope;
+  readonly originIds: HistoryOriginIds;
   observeSealedRow(
     observe: Parameters<typeof observeSealedRow>[1],
   ): ReturnType<typeof observeSealedRow>;

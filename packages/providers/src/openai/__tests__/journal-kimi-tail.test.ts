@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
@@ -17,6 +19,7 @@ import {
 import { oldTailUnits } from '../../../../core/src/services/history/__tests__/support/tail-query-oracle.js';
 import { encodeContentRow } from '../../../../core/src/services/history/journalRowCodec.js';
 import { streamChatMessages } from '../OpenAIChatBodyBuilder.js';
+const testScratchRoots = createTestScratchOwner();
 
 async function requestMappings(
   indexed: IndexedJournalRequestSnapshot,
@@ -46,6 +49,7 @@ async function convert(
   for await (const message of streamChatMessages(
     { rows },
     {
+      scratchRoots: testScratchRoots,
       toolFormat: 'kimi',
       toolIdStore,
       reasoning: { invocation: { ephemerals: {} } },
@@ -62,9 +66,12 @@ async function convert(
 describe('request Kimi mappings against actual chat conversion', () => {
   const directory = useTempDir('kimi-tail-wire-');
   it('matches all emitted messages including fallback consumption and dropped non-AI outputs', async () => {
-    const session = await JournalSession.create(`${directory()}/wire.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/wire.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     const cases: ReadonlyArray<{
       readonly rows: readonly IContent[];
       readonly tail: readonly IContent[];

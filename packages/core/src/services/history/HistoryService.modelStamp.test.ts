@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /**
  * Copyright 2025 Vybestack LLC
@@ -18,6 +19,7 @@ import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { stampAiTurnModel, type IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 /**
  * Issue #2335: model-origin stamping lives at the generation-recording
@@ -29,7 +31,7 @@ describe('HistoryService does NOT stamp metadata.model (issue #2335 import-safet
   let service: HistoryService;
 
   beforeEach(() => {
-    service = new HistoryService();
+    service = new HistoryService({ scratchRoots: historyScratchRoots });
   });
 
   it('does NOT inject metadata.model on an AI turn added with a modelName', async () => {

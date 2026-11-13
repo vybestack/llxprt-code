@@ -1,3 +1,4 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -64,7 +65,7 @@ describe('native density file facts', () => {
   const directory = useTempDir('density-file-facts-');
   it('maintains only appended keys and preserves old pins through rewrite, pop, clone, compaction and ready reopen', async () => {
     const path = join(directory(), 'files.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     let measured = 0;
     const registration = policy('files:1', () => {
       measured++;
@@ -122,7 +123,7 @@ describe('native density file facts', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path);
+    const reopened = await JournalSession.open(path, testJournalOptions());
     try {
       const bytes = (await stat(path)).size;
       const calls = measured;
@@ -143,6 +144,7 @@ describe('native density file facts', () => {
   it('preserves producer error identity at row 65 and the prior policy before same-writer continuation', async () => {
     const session = await JournalSession.create(
       join(directory(), 'failure.llxj'),
+      testJournalOptions(),
     );
     const failure = new Error('file fact producer stopped at 65');
     const good = policy('good:1');
@@ -182,7 +184,7 @@ describe('native density file facts', () => {
   }, 180_000);
   it('changes semantic generations, preserves abort identity and refills after an unregistered reopened append', async () => {
     const path = join(directory(), 'revision.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     const first = policy('revision:1');
     const changed: DensityFilePolicy = {
       revision: 'revision:2',
@@ -227,7 +229,7 @@ describe('native density file facts', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path);
+    const reopened = await JournalSession.open(path, testJournalOptions());
     try {
       await reopened.append([row('a')]);
       const missing = await reopened.store.snapshot();

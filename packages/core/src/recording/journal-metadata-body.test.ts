@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdir } from 'node:fs/promises';
@@ -38,14 +42,19 @@ describe('session metadata VALUE bodies', () => {
         model: 'test',
         journal: { journal: testJournalSeams().dependencies },
       };
-      const recording = JournalRecordingService.create(config);
+      const recording = JournalRecordingService.create(
+        withTestNamedWriters(config),
+      );
       const session = await recording.session();
       const file = session.path;
       recording.recordDirectoriesChanged([...directories].reverse());
       await recording.flush();
       expect(await session.store.compact()).toBe('swapped');
       await recording.dispose();
-      const resumed = await JournalRecordingService.open(config, file);
+      const resumed = await JournalRecordingService.open(
+        withTestNamedWriters(config),
+        file,
+      );
       try {
         const stored = await (
           await resumed.session()
@@ -72,9 +81,12 @@ describe('session metadata VALUE bodies', () => {
 
   it('publishes a large session fact alongside a prepared group', async () => {
     const file = join(directory(), 'prepared.llxj');
-    const session = await JournalSession.create(file, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      file,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     const title = 'session title '.repeat(16 * 1024);
     try {
       await session.store.commit([
@@ -97,7 +109,10 @@ describe('session metadata VALUE bodies', () => {
     const root = directory();
     const file = join(root, 'previous.llxj');
     const journal = { journal: testJournalSeams().dependencies };
-    const session = await JournalSession.create(file, journal);
+    const session = await JournalSession.create(
+      file,
+      testJournalOptions(journal),
+    );
     const values: ReadonlyArray<readonly [string, unknown]> = [
       [SESSION_KEYS.id, 'previous'],
       [
@@ -121,7 +136,7 @@ describe('session metadata VALUE bodies', () => {
     );
     await session.close();
     const resumed = await JournalRecordingService.open(
-      {
+      withTestNamedWriters({
         sessionId: 'previous',
         projectHash: 'project',
         chatsDir: root,
@@ -129,7 +144,7 @@ describe('session metadata VALUE bodies', () => {
         provider: 'unused',
         model: 'unused',
         journal,
-      },
+      }),
       file,
     );
     try {

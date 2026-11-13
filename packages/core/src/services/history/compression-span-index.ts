@@ -2,12 +2,11 @@
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getScratchRoot } from '../../storage/scratch-root.js';
 
 export class CompressionSpanIndex {
   private readonly directory: string;
 
-  constructor(root = getScratchRoot()) {
+  constructor(root: string) {
     this.directory = mkdtempSync(join(root, 'compression-span-'));
   }
 

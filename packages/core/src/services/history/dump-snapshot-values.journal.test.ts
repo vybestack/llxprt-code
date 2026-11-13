@@ -1,8 +1,10 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { HistoryService } from './HistoryService.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 /**
  * The journal twin of "captures pending values before returning control to
@@ -22,7 +24,7 @@ function row(index: number): IContent {
 describe('dump snapshot values on the journal store', () => {
   let history: HistoryService;
   beforeEach(() => {
-    history = new HistoryService();
+    history = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(async () => {
     await history.dispose();

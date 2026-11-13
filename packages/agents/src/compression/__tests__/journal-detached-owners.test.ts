@@ -1,10 +1,10 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { detachedRow } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
-import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/historyOriginId.js';
 import { checkpointRows } from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
 import type {
   IContent,
@@ -41,6 +41,7 @@ import {
 } from './support/journal-detached-history.js';
 import { highdensitySetup } from './highdensity-disk-helpers.js';
 import { middleoutSetup } from './middleout-disk-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function persistedOrigins(
   owned: OwnedJournal,
@@ -161,7 +162,10 @@ describe('compression modules on the journal store keep the owner of every row t
       const owned = await ownedHistory(count, 'fallback');
       const history = journalBackedHistory(owned);
       await history.detachedValues.withCheckpoint(async (checkpoint) => {
-        const rows = await curatedCandidate(checkpointRows(checkpoint));
+        const rows = await curatedCandidate(
+          historyScratchRoots,
+          checkpointRows(checkpoint),
+        );
         try {
           await publishProviderFallbackCandidate(
             history,
@@ -186,7 +190,10 @@ describe('compression modules on the journal store keep the owner of every row t
     const owned = await ownedHistory(4, 'summary');
     const history = journalBackedHistory(owned);
     await history.detachedValues.withCheckpoint(async (checkpoint) => {
-      const rows = await curatedCandidate(checkpointRows(checkpoint));
+      const rows = await curatedCandidate(
+        historyScratchRoots,
+        checkpointRows(checkpoint),
+      );
       try {
         rows.append({
           speaker: 'ai',
@@ -215,7 +222,10 @@ describe('compression modules on the journal store keep the owner of every row t
       const owned = await ownedHistory(count, 'truncation');
       const history = journalBackedHistory(owned);
       await history.detachedValues.withCheckpoint(async (checkpoint) => {
-        const curated = await curatedCandidate(checkpointRows(checkpoint));
+        const curated = await curatedCandidate(
+          historyScratchRoots,
+          checkpointRows(checkpoint),
+        );
         try {
           await publishCandidate(
             history,
@@ -242,7 +252,10 @@ describe('compression modules on the journal store keep the owner of every row t
       const origin = {};
       const history = journalBackedHistory(owned);
       await history.detachedValues.withCheckpoint(async (checkpoint) => {
-        const curated = await curatedCandidate(checkpointRows(checkpoint));
+        const curated = await curatedCandidate(
+          historyScratchRoots,
+          checkpointRows(checkpoint),
+        );
         try {
           curated.append({
             speaker: 'ai',
@@ -266,7 +279,7 @@ describe('compression modules on the journal store keep the owner of every row t
       });
       expect(await persistedOrigins(owned)).toStrictEqual([
         ...ownersFrom(count - 2, count),
-        historyOriginId(origin),
+        owned.store.originIds.get(origin),
       ]);
     },
   );
@@ -281,7 +294,10 @@ describe('compression modules on the journal store keep the owner of every row t
     opened.push(owned);
     const history = journalBackedHistory(owned);
     await history.detachedValues.withCheckpoint(async (checkpoint) => {
-      const rows = await curatedCandidate(checkpointRows(checkpoint));
+      const rows = await curatedCandidate(
+        historyScratchRoots,
+        checkpointRows(checkpoint),
+      );
       try {
         // The empty ai row is not curated, so candidate row 1 is history row 2.
         expect(rows.length).toBe(3);
@@ -320,7 +336,7 @@ describe('compression modules on the journal store keep the owner of every row t
       );
       opened.push(owned);
       const history = journalBackedHistory(owned);
-      const ranking = new ToolResponseDiskRanking([]);
+      const ranking = new ToolResponseDiskRanking(historyScratchRoots, []);
       try {
         await ranking.capture(
           { streamRawHistory: () => owned.store.streamRows() },
@@ -388,7 +404,10 @@ describe('compression modules on the journal store keep the owner of every row t
       const origin = {};
       const history = journalBackedHistory(owned);
       const previous = { rows: () => owned.store.streamRows() };
-      const candidate = await curatedDensityRows(owned.store.streamRows());
+      const candidate = await curatedDensityRows(
+        historyScratchRoots,
+        owned.store.streamRows(),
+      );
       try {
         candidate.append({
           speaker: 'ai',
@@ -409,7 +428,7 @@ describe('compression modules on the journal store keep the owner of every row t
       }
       expect(await persistedOrigins(owned)).toStrictEqual([
         ...ownersFrom(1, count),
-        historyOriginId(origin),
+        owned.store.originIds.get(origin),
       ]);
     },
   );
@@ -482,7 +501,7 @@ describe('compression modules on the journal store keep the owner of every row t
           ...routeArguments(history, middleoutSetup(history), origin),
         );
         expect(outcome.outcome).toBe('applied');
-        const label = historyOriginId(origin);
+        const label = owned.store.originIds.get(origin);
         const actual = await persistedOrigins(owned);
         const head = actual.indexOf(label);
         const summary = actual.filter((entry) => entry === label).length;

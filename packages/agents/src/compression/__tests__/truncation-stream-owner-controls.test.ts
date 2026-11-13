@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
@@ -14,6 +15,7 @@ import {
   truncationHandler,
   truncationRow,
 } from './truncation-stream-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class RetainingHistory extends TruncationStreamHistory {
   readonly retained: IContent[] = [];
@@ -22,7 +24,7 @@ class RetainingHistory extends TruncationStreamHistory {
   readonly copyOwners = new RowOwnership();
 
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     // Truncation reads its previous rows through the detached checkpoint, so the
     // control wraps the checkpoint iterator and keeps every row of the first pass.
     const detached = this.detachedValues;

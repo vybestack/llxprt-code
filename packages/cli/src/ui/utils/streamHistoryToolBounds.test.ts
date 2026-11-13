@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core';
@@ -83,7 +84,7 @@ async function verifyPreservesOneChronologySpanAndDistinctPageIdentitiesAlongsid
         ],
       };
   }
-  for await (const item of streamHistoryItems(rows())) {
+  for await (const item of streamHistoryItems(scratchRoots, rows())) {
     expect(item.seqSpan).toStrictEqual([10, 43]);
     items.push(item);
   }
@@ -128,7 +129,12 @@ async function verifyCapsWideResponsePayloadsBeforeRetainingADisplayPage(): Prom
     }
   }
   let calls = 0;
-  for await (const item of streamHistoryItems(rows(), 'allowed', ownership)) {
+  for await (const item of streamHistoryItems(
+    scratchRoots,
+    rows(),
+    'allowed',
+    ownership,
+  )) {
     if (item.type !== 'tool_group') throw new Error('Expected tool group');
     calls += item.tools.length;
     for (const tool of item.tools) expect(tool.retention?.capped).toBe(true);
@@ -174,7 +180,12 @@ async function verifyBoundsCountResponsesWhilePreservingTheFinalMatchedResponse(
     }
   }
   let groups = 0;
-  for await (const item of streamHistoryItems(rows(), 'allowed', ownership)) {
+  for await (const item of streamHistoryItems(
+    scratchRoots,
+    rows(),
+    'allowed',
+    ownership,
+  )) {
     if (item.type !== 'tool_group') throw new Error('Expected tool group');
     groups += 1;
     expect(
@@ -224,7 +235,12 @@ async function verifyPagesCountCallsWithoutRetainingTheirResponseContextInUIRows
   }
   let calls = 0;
   const identities = new Set<string>();
-  for await (const item of streamHistoryItems(rows(), 'allowed', ownership)) {
+  for await (const item of streamHistoryItems(
+    scratchRoots,
+    rows(),
+    'allowed',
+    ownership,
+  )) {
     if (item.type !== 'tool_group') throw new Error('Expected tool group');
     expect(item.tools.length).toBeLessThanOrEqual(16);
     expect(item.toolPage).toStrictEqual({
@@ -244,3 +260,5 @@ async function verifyPagesCountCallsWithoutRetainingTheirResponseContextInUIRows
   expect(ownership.snapshot().liveRows).toBe(0);
   expect(ownership.within(bound)).toBe(true);
 }
+
+const scratchRoots = new ScratchRootOwner();

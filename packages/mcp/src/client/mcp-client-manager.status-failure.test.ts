@@ -84,6 +84,7 @@ function createHarness(): {
   const removeTools = vi.spyOn(toolRegistry, 'removeMcpToolsByServer');
   return {
     manager: new McpClientManager(
+      (input, init) => globalThis.fetch(input, init),
       createTestOAuthBinding(),
       unsupportedApprovalPolicy(),
       '0.0.1',

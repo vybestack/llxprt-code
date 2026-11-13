@@ -1,3 +1,4 @@
+import { registerScratchInspection } from '../__tests__/support/scratch-inspection.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { diskAdmittedSource } from '../__tests__/support/disk-admitted-source.js';
@@ -9,13 +10,11 @@ import {
   median,
   settledHeap,
 } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
-import {
-  getScratchRoot,
-  removeScratchRoot,
-} from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
+const scratchEntries = registerScratchInspection();
 
 function history(rows = 512, padding = 70_000) {
   let opened = 0;
@@ -184,14 +183,14 @@ function diskReplayHistory() {
 
 /** Staged-rows workspaces currently present in the process scratch root. */
 function stagedRowWorkspaces(): string[] {
-  return readdirSync(getScratchRoot()).filter((name) =>
+  return scratchEntries().filter((name) =>
     name.startsWith('provider-normalization-'),
   );
 }
 
 /** Scratch entries a request creates: staged rows and prompt-key files. */
 function requestScratchEntries(): string[] {
-  return readdirSync(getScratchRoot())
+  return scratchEntries()
     .filter(
       (name) =>
         name.startsWith('provider-normalization-') ||
@@ -276,7 +275,6 @@ async function replayScenario(): Promise<number[]> {
   const previousTmpdir = process.env.TMPDIR;
   process.env.TMPDIR = root;
   // Snapshots live in the process scratch root; use a fresh one under root.
-  removeScratchRoot();
   const endpoint = retryEndpoint(source, await settledHeap());
   try {
     const options = streamCallOptions({
@@ -313,7 +311,6 @@ async function replayScenario(): Promise<number[]> {
   } finally {
     await endpoint.server.stop(true);
     await source.close();
-    removeScratchRoot();
     if (previousTmpdir === undefined) delete process.env.TMPDIR;
     else process.env.TMPDIR = previousTmpdir;
     rmSync(root, { recursive: true, force: true });

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -65,7 +66,7 @@ describe('Two-phase swap #1', () => {
       sessionId: 'old-current-session',
       projectHash: PROJECT_HASH,
     });
-    const oldRecording = createSessionRecorder(oldConfig);
+    const oldRecording = createSessionRecorder(withTestNamedWriters(oldConfig));
     await recordRowsForTest(oldRecording, [makeContent('old message')]);
     await oldRecording.flush();
     state.recordingsToDispose.push(oldRecording);
@@ -85,7 +86,7 @@ describe('Two-phase swap #1', () => {
     // Before resume, old recording should be active
     expect(oldRecording.isActive()).toBe(true);
 
-    const result = await performResume(targetId, context);
+    const result = await performResume(targetId, withTestNamedWriters(context));
 
     expect(result.ok).toBe(true);
     assertTruthy(result.ok);

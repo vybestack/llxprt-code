@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, open, rm } from 'node:fs/promises';
@@ -25,7 +26,7 @@ describe('transcript bootstrap and residency', () => {
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'transcript-bootstrap-'));
     path = join(directory, 'session.llxj');
-    session = await JournalSession.create(path);
+    session = await JournalSession.create(path, testJournalOptions());
   });
   afterEach(async () => {
     await session.close();
@@ -42,6 +43,7 @@ describe('transcript bootstrap and residency', () => {
     let injected = false;
     const pager = createScrollbackPagerStore({
       filePath: path,
+      watermarks: session.store.watermarks,
       pageRows: 4,
       viewport: { visibleKeys: [], viewportLines: 4, rowHeightLines: () => 1 },
       settings: {

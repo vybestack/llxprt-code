@@ -158,6 +158,7 @@ export class JournalMirrors {
     origin: string | undefined,
   ): Promise<void> {
     this.queue.assertUsable();
+    await this.primary.maintenanceScope.join(recorder.maintenanceScope);
     if (this.recorders.has(recorder)) {
       onAttached?.();
       return;
@@ -247,6 +248,7 @@ export class JournalMirrors {
     origin: string | undefined,
     replace: boolean,
   ): Promise<JournalSession | undefined> {
+    await this.primary.maintenanceScope.join(recorder.maintenanceScope);
     if (
       recorder.getFilePath() === null &&
       (this.primary.published?.rows ?? 0) === 0

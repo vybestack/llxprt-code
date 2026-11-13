@@ -215,6 +215,17 @@ async function expectHistoryContains(
   ).toContain(text);
 }
 
+async function waitForShellCleanup(
+  agent: Agent,
+  outcome: string,
+): Promise<void> {
+  if (!outcome.startsWith('shell')) return;
+  const job = agent.tasks.list().find((item) => item.kind === 'shell');
+  if (!job) throw new Error('Missing completed public shell job');
+  if (await agent.tasks.cancel(job.id))
+    throw new Error('Expected completed shell job cancellation to be a no-op');
+}
+
 /**
  * Admission is rejected while any notice is pending, delivery is in flight or
  * shell groups are draining. The owner acknowledges a delivery on the turns
@@ -652,6 +663,7 @@ describe('background notification queue ownership', () => {
         });
         await notices.delivered(1);
         expect(delivered).toHaveLength(1);
+        await waitForShellCleanup(agent, outcome);
         await admitNewSession(agent);
         expect(delivered).toHaveLength(1);
         expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);

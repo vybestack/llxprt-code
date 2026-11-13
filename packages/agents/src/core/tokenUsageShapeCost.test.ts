@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 /// <reference lib="esnext.array" />
 /**
@@ -23,10 +24,12 @@ import { describe, it, expect } from 'bun:test';
 import {
   computeRequestShape,
   RequestShapeTracker,
+  StaticTokenCountCache,
   FINGERPRINT_PREFIX_CHAR_BUDGET,
 } from './tokenUsageRequestShape.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { stampTurnIdentityOnInput } from './turnIdentity.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const BIG_BODY = 'x'.repeat(FINGERPRINT_PREFIX_CHAR_BUDGET * 4);
 
@@ -101,11 +104,12 @@ describe('request-shape measurement cost guards (issue #3130)', () => {
       tools,
       countTokens: tokenizer.count,
     };
-    const first = new RequestShapeTracker().recordRequestShape(input);
+    const cache = new StaticTokenCountCache();
+    const first = new RequestShapeTracker(cache).recordRequestShape(input);
     const expectedCost = instructionsText.length + JSON.stringify(tools).length;
     expect(tokenizer.totalChars).toBe(expectedCost);
     for (let index = 0; index < 100; index++) {
-      const next = new RequestShapeTracker().recordRequestShape(input);
+      const next = new RequestShapeTracker(cache).recordRequestShape(input);
       expect(next.instructionsTokens).toBe(first.instructionsTokens);
       expect(next.toolsSchemaTokens).toBe(first.toolsSchemaTokens);
     }
@@ -375,7 +379,7 @@ async function createShapeHistory(): Promise<HistoryService> {
   const { HistoryService } = await import(
     '@vybestack/llxprt-code-core/services/history/HistoryService.js'
   );
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const turnKey = history.generateTurnKey();
   const nextId = history.getIdGeneratorCallback(turnKey);
   history.add(

@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '../../../../core/src/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -24,6 +26,8 @@ import {
   type RecordingSwapCallbacks,
   type PerformResumeResult,
 } from '../performResume.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 export { performResume, createSessionRecorder, SessionLockManager };
 export type {
@@ -90,7 +94,7 @@ export async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = createSessionRecorder(config);
+  const svc = createSessionRecorder(withTestNamedWriters(config));
 
   const contents = opts.contents ?? [makeContent('hello')];
   for (const content of contents) {
@@ -136,6 +140,7 @@ export function makeResumeContext(
   };
 
   return {
+    scratchRoots: recordingScratchRoots,
     chatsDir,
     projectHash: PROJECT_HASH,
     currentSessionId: opts.currentSessionId ?? 'current-session',

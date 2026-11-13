@@ -246,12 +246,14 @@ export class AgentOperations {
     const turns = this.#turns;
     if (!turns.providers.isProviderReady())
       throw new Error(UNCONFIGURED_AGENT_MESSAGE);
-    // Ensure the chat is initialized before accessing it: setHistory can run
-    // before the first turn (startChat is otherwise lazy on first turn).
-    return turns.session.compressHistory(
-      opts?.promptId ?? `compress-${Date.now()}`,
-      turns.recording,
-      turns.session.hookOperations,
+    // Manual history rewrites follow profile changes: reject while a turn or
+    // another safe-boundary operation owns the conversation.
+    return turns.coordinator.withIdleBoundary(() =>
+      turns.session.compressHistory(
+        opts?.promptId ?? `compress-${Date.now()}`,
+        turns.recording,
+        turns.session.hookOperations,
+      ),
     );
   }
 

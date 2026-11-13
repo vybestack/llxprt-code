@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 /**
  * @license
@@ -27,6 +28,7 @@ import {
 } from '../../core/__tests__/chatSession-density-helpers.js';
 import { CompressionHandler } from '../CompressionHandler.js';
 import { OneShotStrategy } from '../OneShotStrategy.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const original = { ...(await import('@vybestack/llxprt-code-settings')) };
 void vi.mock('@vybestack/llxprt-code-settings', () => ({
@@ -167,7 +169,9 @@ describe('CompressionHandler chronology survival (#1721 C2)', () => {
   let compress: ReturnType<typeof fourTurnCompression>;
   beforeEach(() => {
     vi.clearAllMocks();
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     compress = fourTurnCompression(
       historyService,
       makeChronologyHandler(historyService),

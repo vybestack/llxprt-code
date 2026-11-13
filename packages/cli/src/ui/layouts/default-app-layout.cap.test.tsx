@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -84,24 +85,22 @@ void vi.mock('is-in-ci', () => ({ default: false }));
 const realInk: typeof import('ink') = await import(import.meta.resolve('ink'));
 void vi.mock('ink', () => realInk);
 const runtimeContext = await import('../contexts/RuntimeContext.js');
-const selectedRuntimeMock1 = (() =>
-  (() => {
-    const useSelectedTestRuntime = () => ({
-      getEphemeralSetting: () => undefined,
-      getWorkspaceDirectories: () => [],
-    });
-    return {
-      ...runtimeContext,
+const selectedRuntimeMock1 = (() => {
+  const useSelectedTestRuntime = () => ({
+    getEphemeralSetting: () => undefined,
+    getWorkspaceDirectories: () => [],
+  });
+  return {
+    ...runtimeContext,
 
-      useGetEphemeralSetting: () =>
-        useSelectedTestRuntime().getEphemeralSetting,
+    useGetEphemeralSetting: () => useSelectedTestRuntime().getEphemeralSetting,
 
-      useGetWorkspaceDirectories: () =>
-        useSelectedTestRuntime().getWorkspaceDirectories,
+    useGetWorkspaceDirectories: () =>
+      useSelectedTestRuntime().getWorkspaceDirectories,
 
-      useRuntimeApi: useSelectedTestRuntime,
-    };
-  })())();
+    useRuntimeApi: useSelectedTestRuntime,
+  };
+})();
 void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
 void vi.mock(
   '../../__tests__/runtime-context-fixture.js',
@@ -219,7 +218,7 @@ async function withLayout(
   const turn = createTurnStore();
   const directory = await mkdtemp(resolve(evidenceDirectory, 'journal-'));
   const filePath = resolve(directory, 'session.llxj');
-  const session = await JournalSession.create(filePath);
+  const session = await JournalSession.create(filePath, testJournalOptions());
   const writer = new JournalDisplayWriter(session.store);
   for (const item of history)
     await writer.append({ type: 'ui-item' }, encodeJournalUiItem(item));
@@ -230,6 +229,7 @@ async function withLayout(
   };
   const pager = createScrollbackPagerStore({
     filePath,
+    watermarks: session.store.watermarks,
     viewport,
     pageRows: maxItems,
     settings: { marginViewports: 0, byteFloorBytes: 256, purgeDebounceMs: 0 },

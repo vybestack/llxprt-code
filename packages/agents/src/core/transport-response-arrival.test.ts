@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
@@ -10,6 +12,7 @@ import { processorFixture } from './__tests__/support/streamprocessor-source-fix
 import { TurnProcessor } from './TurnProcessor.js';
 import { responseTransportAttempts } from './response-transport-source.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const raw =
   'data: {"type":"response.output_item.added","item":{"type":"function_call","id":"reused","call_id":"abandoned","name":"lookup","arguments":"{\\"lost\\":"}}\n\n';
@@ -28,14 +31,16 @@ describe('agent transport recording wiring', () => {
         0,
       );
       setup.settings.set('retries', 2);
-      const recording = createSessionRecorder({
-        sessionId: 'attempt',
-        projectHash: 'attempt',
-        chatsDir: root(),
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'test',
-      });
+      const recording = createSessionRecorder(
+        withTestNamedWriters({
+          sessionId: 'attempt',
+          projectHash: 'attempt',
+          chatsDir: root(),
+          workspaceDirs: [],
+          provider: 'test',
+          model: 'test',
+        }),
+      );
       await setup.history.attachJournal(recording);
       const saved = globalThis.fetch;
       let sends = 0;
@@ -127,7 +132,7 @@ describe('agent transport recording wiring', () => {
     },
   );
   it('uses the durable first identity and supersedes empty attempts before new output', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const arrival = await history.openResponseArrival({
       id: 'first',
       submissionId: 'prompt',

@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
@@ -28,7 +29,11 @@ describe('owner dictionary (design 5.1)', () => {
   }
 
   it('hands out ids from 1 in order, finds a known origin again, and is read back from the file', async () => {
-    const store = await JournalStore.create(file('a.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('a.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     const dictionary = await OwnerDictionary.load(store);
     expect(dictionary.idOf('main')).toBeUndefined();
 
@@ -42,7 +47,11 @@ describe('owner dictionary (design 5.1)', () => {
     });
     await store.close();
 
-    const reopened = await JournalStore.open(file('a.llxj'), storeDeps());
+    const reopened = await JournalStore.open(
+      file('a.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     const loaded = await OwnerDictionary.load(reopened);
     expect([
       loaded.originOf(1),
@@ -56,6 +65,7 @@ describe('owner dictionary (design 5.1)', () => {
     const store = await JournalStore.create(
       file('handoff-collision.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     try {
       const dictionary = await OwnerDictionary.load(store);
@@ -84,7 +94,11 @@ describe('owner dictionary (design 5.1)', () => {
   });
 
   it('hands off the sole live owner without reusing an inactive owner id', async () => {
-    const store = await JournalStore.create(file('handoff.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('handoff.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     try {
       const dictionary = await OwnerDictionary.load(store);
       await appendOwned(store, dictionary, 'inactive-runtime');
@@ -116,7 +130,11 @@ describe('owner dictionary (design 5.1)', () => {
   });
 
   it('survives a pop below the group that registered an origin, and never reuses its id', async () => {
-    const store = await JournalStore.create(file('b.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('b.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     const dictionary = await OwnerDictionary.load(store);
     await appendOwned(store, dictionary, 'main');
     const cut = store.published?.nextLabel;
@@ -134,7 +152,11 @@ describe('owner dictionary (design 5.1)', () => {
   });
 
   it('refuses a registration that is not the next one, and a file whose entry is missing', async () => {
-    const store = await JournalStore.create(file('c.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('c.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     const dictionary = await OwnerDictionary.load(store);
     const stale = dictionary.prepare('a');
     await appendOwned(store, dictionary, 'b');
@@ -154,12 +176,20 @@ describe('owner dictionary (design 5.1)', () => {
   });
 
   it('gives another journal the whole dictionary through its state edits', async () => {
-    const source = await JournalStore.create(file('d.llxj'), storeDeps());
+    const source = await JournalStore.create(
+      file('d.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     const dictionary = await OwnerDictionary.load(source);
     await appendOwned(source, dictionary, 'main');
     await appendOwned(source, dictionary, 'subagent:one');
 
-    const target = await JournalStore.create(file('e.llxj'), storeDeps());
+    const target = await JournalStore.create(
+      file('e.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     await target.commit([...dictionary.stateEdits()]);
     const copy = await OwnerDictionary.load(target);
     expect([copy.originOf(1), copy.originOf(2)]).toStrictEqual([

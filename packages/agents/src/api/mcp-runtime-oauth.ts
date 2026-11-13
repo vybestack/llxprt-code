@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import {
   MCPOAuthProvider,
   type McpOAuthBinding,
@@ -29,12 +30,14 @@ export function assembleRuntimeOAuth(oauth: McpOAuthBinding): {
 }
 
 export function assembleMcpOAuthOperation(
+  readFetch: () => NetworkFetch,
   oauth: () => McpOAuthBinding,
   assertOpen: () => void,
 ): NonNullable<McpControlDeps['performOAuth']> {
   return async (server, config, url, signal, onDisplayMessage) => {
     assertOpen();
     await MCPOAuthProvider.authenticate(
+      readFetch(),
       oauth(),
       server,
       config,

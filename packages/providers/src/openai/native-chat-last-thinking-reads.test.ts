@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { testJournalSeams } from '@vybestack/llxprt-code-core/journal/__tests__/support/journalFixtures.js';
@@ -16,6 +18,9 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { projectOpenAIChatPromptEnvelopeFromSource } from '../runtime/promptEnvelopeProjections.js';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
+const tokenizerScratchRoots = createTestScratchOwner();
+
+const historyScratchRoots = createTestScratchOwner();
 
 interface PhysicalRead {
   readonly path: string;
@@ -97,7 +102,7 @@ async function prepareAndEstimate(
     const estimate = await estimatePromptEnvelope(
       'openai',
       projection,
-      createRuntimeTokenizerFactory(),
+      createRuntimeTokenizerFactory(tokenizerScratchRoots),
     );
     return {
       bytes: prepared.spool.byteLength,
@@ -117,43 +122,48 @@ describe('stored last-thinking physical descriptor reads', () => {
       const reads: PhysicalRead[] = [];
       let observe = false;
       const seams = testJournalSeams({}, 1, false);
-      const recording = JournalRecordingService.create({
-        sessionId: `last-thinking-${size}`,
-        projectHash: 'last-thinking',
-        chatsDir: directory(),
-        workspaceDirs: [],
-        provider: 'openai',
-        model: 'gpt-4o',
-        journal: {
+      const recording = JournalRecordingService.create(
+        withTestNamedWriters({
+          sessionId: `last-thinking-${size}`,
+          projectHash: 'last-thinking',
+          chatsDir: directory(),
+          workspaceDirs: [],
+          provider: 'openai',
+          model: 'gpt-4o',
           journal: {
-            ...seams.dependencies,
-            async open(path, flags) {
-              const handle = await seams.dependencies.open(path, flags);
-              return {
-                ...handle,
-                async read(buffer, offset, length, position) {
-                  const result = await handle.read(
-                    buffer,
-                    offset,
-                    length,
-                    position,
-                  );
-                  if (observe)
-                    reads.push({
-                      path,
-                      fd: handle.fd,
+            journal: {
+              ...seams.dependencies,
+              async open(path, flags) {
+                const handle = await seams.dependencies.open(path, flags);
+                return {
+                  ...handle,
+                  async read(buffer, offset, length, position) {
+                    const result = await handle.read(
+                      buffer,
+                      offset,
+                      length,
                       position,
-                      requested: length,
-                      returned: result.bytesRead,
-                    });
-                  return result;
-                },
-              };
+                    );
+                    if (observe)
+                      reads.push({
+                        path,
+                        fd: handle.fd,
+                        position,
+                        requested: length,
+                        returned: result.bytesRead,
+                      });
+                    return result;
+                  },
+                };
+              },
             },
           },
-        },
+        }),
+      );
+      const history = new HistoryService({
+        scratchRoots: historyScratchRoots,
+        recording,
       });
-      const history = new HistoryService({ recording });
       try {
         const rows: IContent[] = Array.from({ length: size }, (_, index) =>
           index === 0 || index === Math.floor(size / 2)

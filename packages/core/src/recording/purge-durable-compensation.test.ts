@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { describe, expect, it } from 'bun:test';
@@ -13,17 +15,20 @@ import type { JournalSession } from '../services/history/journalSession.js';
 import { readOnlyJournalRows } from './__tests__/support/read-only-journal-rows.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { recordingConfig } from './__tests__/support/journalRecordingFixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class StreamOnlyHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(this, 'materialize trap');
   }
 }
 
 describe('journal materialization guard', () => {
   it('StreamOnlyHistory rejects native eager materialization', async () => {
-    const history = new StreamOnlyHistory();
+    const history = new StreamOnlyHistory({
+      scratchRoots: historyScratchRoots,
+    });
     try {
       const journal: unknown = Reflect.get(history, 'journal');
       if (typeof journal !== 'object' || journal === null)
@@ -111,7 +116,7 @@ describe('journal purge durable compensation after acknowledged persistence', ()
     it(`restores all ${size} rows in live and reopened membership after cancellation without eager access`, async () => {
       const owners = new RowOwnership();
       const recording = JournalRecordingService.create(
-        recordingConfig(directory()),
+        withTestNamedWriters(recordingConfig(directory())),
       );
       try {
         const durable = await recording.session();

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -117,15 +118,17 @@ describe('SessionJanitor media reclamation', () => {
     });
     await store.reserve(reserved, 'in-flight-request');
 
-    const recording = JournalRecordingService.create({
-      sessionId: 'janitor-media-session',
-      projectHash: PROJECT_HASH,
-      chatsDir: join(projectDir, 'chats'),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-      mediaStore: store,
-    });
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'janitor-media-session',
+        projectHash: PROJECT_HASH,
+        chatsDir: join(projectDir, 'chats'),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+        mediaStore: store,
+      }),
+    );
     await (
       await recording.session()
     ).append([referenceContent(kept), referenceContent(kept)]);
@@ -196,14 +199,16 @@ describe('SessionJanitor media reclamation', () => {
       mimeType: 'application/octet-stream',
       semanticMetadata: {},
     });
-    const recording = JournalRecordingService.create({
-      sessionId: 'janitor-failure-session',
-      projectHash: PROJECT_HASH,
-      chatsDir: join(projectDir, 'chats'),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'janitor-failure-session',
+        projectHash: PROJECT_HASH,
+        chatsDir: join(projectDir, 'chats'),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
 
     try {
       await (await recording.session()).append([referenceContent(reference)]);

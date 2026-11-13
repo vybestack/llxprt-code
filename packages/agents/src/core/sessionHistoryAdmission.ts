@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -39,8 +40,9 @@ export function admitSessionHistory(
   history: readonly IContent[],
   admission: MediaAdmissionService,
   scope: string,
+  scratchRoots: ScratchRootOwner,
 ): SessionHistoryAdmission {
-  const references = new HistoryMediaIndex();
+  const references = new HistoryMediaIndex(scratchRoots);
   const ownerScope = `${scope}:${randomUUID()}`;
   return {
     rows: admitRowsOneAtATime(history, admission, ownerScope, references),

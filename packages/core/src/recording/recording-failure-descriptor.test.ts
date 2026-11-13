@@ -1,10 +1,16 @@
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { ScratchRootOwner } from '../storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { RecordingFailureStore } from './recording-failure-report.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 describe('failure diagnostic projections', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   it('describes aggregate causes, Map entries and Set values instead of replacing them with empty objects', async () => {
-    const store = new RecordingFailureStore();
+    const store = new RecordingFailureStore(recordingScratchRoots);
     const payload = { detail: 'unique-map-payload' };
     const cause = new AggregateError(
       [new Map([['row', payload]]), new Set([42n, undefined])],
@@ -36,8 +42,10 @@ describe('failure diagnostic projections', () => {
   });
 });
 describe('failure diagnostic record bounds', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   it('streams deeply nested control-character property names within the reader record limit', async () => {
-    const store = new RecordingFailureStore();
+    const store = new RecordingFailureStore(recordingScratchRoots);
     const key = String.fromCharCode(0).repeat(128);
     let cause: object = { final: 'diagnostic leaf' };
     for (let index = 0; index < 30; index += 1) cause = { [key]: cause };
@@ -57,7 +65,7 @@ describe('failure diagnostic record bounds', () => {
     expect(largestRecord).toBeLessThan(32768);
   });
   it('marks inaccessible getters and cycles while retaining a live original cause', async () => {
-    const store = new RecordingFailureStore();
+    const store = new RecordingFailureStore(recordingScratchRoots);
     const cause: { self?: object; secret?: string } = {};
     cause.self = cause;
     Object.defineProperty(cause, 'secret', {

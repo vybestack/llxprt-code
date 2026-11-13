@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 import { buildCapturedAgent } from '../../../__tests__/captured-agent-fixture.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
@@ -15,6 +16,7 @@ describe('journal tool continuation', () => {
   it('leaves an unopened text payload unprinted and projects the completed answer', async () => {
     const session = await JournalSession.create(
       join(directory(), 'final.llxj'),
+      testJournalOptions(),
     );
     const recorder = new JournalArrivalRecorder(session.store);
     try {

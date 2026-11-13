@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
 import { assembleSchedulerOwner } from '../session/assembleSchedulerOwner.js';
 import { persistApprovalLifecycle } from './agenticLoop/approvalLifecycleRecording.js';
@@ -25,6 +27,7 @@ import {
   createTestConfig,
   createToolRegistryForTest,
 } from './agenticLoop/__tests__/agenticLoop-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function approvalStatuses(history: HistoryService): Promise<string[]> {
   const path = history.journalPath();
@@ -59,15 +62,17 @@ async function approvalStatuses(history: HistoryService): Promise<string[]> {
 describe('non-interactive child dispatcher approval ownership', () => {
   const directory = useTempDir('child-dispatch-approval-');
   it('retains the response identity and persists both approval stages before execution', async () => {
-    const history = new HistoryService();
-    const recorder = createSessionRecorder({
-      sessionId: 'child',
-      projectHash: 'child',
-      chatsDir: directory(),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
+    const recorder = createSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'child',
+        projectHash: 'child',
+        chatsDir: directory(),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
     await history.attachJournal(recorder, true);
     const policy = createAskPolicyEngine();
     const bus = new MessageBus(policy, false);

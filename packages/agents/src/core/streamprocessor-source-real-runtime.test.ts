@@ -50,9 +50,10 @@ function realRuntimeFixture(root: string, baseURL: string, model: string) {
       undefined,
       undefined,
     ),
+    config.scratchRoots,
   );
   const provider = new ObservedResponsesProvider('test-key', baseURL);
-  const history = new ObservedHistory();
+  const history = new ObservedHistory({ scratchRoots: config.scratchRoots });
   for (let index = 0; index < 8; index++)
     history.add(diskTextRow(index, false));
   return assembleProcessorFixture(

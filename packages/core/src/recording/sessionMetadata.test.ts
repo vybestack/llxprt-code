@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. SPDX-License-Identifier: Apache-2.0 */
 import { afterEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
@@ -18,14 +19,16 @@ describe('journal session metadata (issue #1611)', () => {
   });
 
   function create(): JournalRecordingService {
-    const recording = JournalRecordingService.create({
-      sessionId: crypto.randomUUID(),
-      projectHash: PROJECT_HASH,
-      chatsDir: directory(),
-      workspaceDirs: ['/test'],
-      provider: 'test',
-      model: 'test-model',
-    });
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: crypto.randomUUID(),
+        projectHash: PROJECT_HASH,
+        chatsDir: directory(),
+        workspaceDirs: ['/test'],
+        provider: 'test',
+        model: 'test-model',
+      }),
+    );
     recordings.push(recording);
     return recording;
   }

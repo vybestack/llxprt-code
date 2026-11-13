@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -49,6 +50,7 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function createContentGeneratorStub(): ContentGenerator {
   return {
@@ -122,7 +124,10 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      const promptEstimator = configureProviderTokenizer(localManager);
+      const promptEstimator = configureProviderTokenizer(
+        localManager,
+        localConfig.scratchRoots,
+      );
 
       const provider: IProvider = {
         name: 'stub',
@@ -140,6 +145,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       const chat = new ChatSession(
         chatSessionPorts(
           createAgentRuntimeContext({
+            scratchRoots: historyScratchRoots,
             promptEstimator,
             readRuntimeSettings: fixtureRuntimePolicyReader(
               localConfig,
@@ -199,7 +205,10 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      const promptEstimator = configureProviderTokenizer(localManager);
+      const promptEstimator = configureProviderTokenizer(
+        localManager,
+        localConfig.scratchRoots,
+      );
 
       const provider: IProvider = {
         name: 'stub',
@@ -217,6 +226,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       const chat = new ChatSession(
         chatSessionPorts(
           createAgentRuntimeContext({
+            scratchRoots: historyScratchRoots,
             promptEstimator,
             readRuntimeSettings: fixtureRuntimePolicyReader(
               localConfig,
@@ -274,19 +284,23 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       });
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      const promptEstimator = configureProviderTokenizer(localManager, {
-        getTokenizer: () => undefined,
-        async estimatePrompt(request) {
-          return {
-            count: await request.legacyEstimate(),
-            method: 'calibrated',
-            family: 'legacy-unregistered',
-            estimatorVersion: 'core-estimate-tokens-v1',
-            assetRevision: 'none',
-            projectionRevision: request.projectionRevision,
-          };
+      const promptEstimator = configureProviderTokenizer(
+        localManager,
+        localConfig.scratchRoots,
+        {
+          getTokenizer: () => undefined,
+          async estimatePrompt(request) {
+            return {
+              count: await request.legacyEstimate(),
+              method: 'calibrated',
+              family: 'legacy-unregistered',
+              estimatorVersion: 'core-estimate-tokens-v1',
+              assetRevision: 'none',
+              projectionRevision: request.projectionRevision,
+            };
+          },
         },
-      });
+      );
       const firstRead = Promise.withResolvers<void>();
       let transports = 0;
       let pendingReads = 0;
@@ -358,6 +372,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       const chat = new ChatSession(
         chatSessionPorts(
           createAgentRuntimeContext({
+            scratchRoots: historyScratchRoots,
             promptEstimator,
             readRuntimeSettings: fixtureRuntimePolicyReader(
               localConfig,
@@ -383,7 +398,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
               model: 'stub-model',
               sessionId: localConfig.getSessionId(),
             }),
-            history: new HistoryService(),
+            history: new HistoryService({ scratchRoots: historyScratchRoots }),
             settings: { compressionThreshold: 0.8 },
             provider: createProviderAdapterFromManager(localManager),
             telemetry: createTelemetryAdapter(
@@ -466,19 +481,23 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       });
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      const promptEstimator = configureProviderTokenizer(localManager, {
-        getTokenizer: () => undefined,
-        async estimatePrompt(request) {
-          return {
-            count: await request.legacyEstimate(),
-            method: 'calibrated',
-            family: 'legacy-unregistered',
-            estimatorVersion: 'core-estimate-tokens-v1',
-            assetRevision: 'none',
-            projectionRevision: request.projectionRevision,
-          };
+      const promptEstimator = configureProviderTokenizer(
+        localManager,
+        localConfig.scratchRoots,
+        {
+          getTokenizer: () => undefined,
+          async estimatePrompt(request) {
+            return {
+              count: await request.legacyEstimate(),
+              method: 'calibrated',
+              family: 'legacy-unregistered',
+              estimatorVersion: 'core-estimate-tokens-v1',
+              assetRevision: 'none',
+              projectionRevision: request.projectionRevision,
+            };
+          },
         },
-      });
+      );
 
       const bothReads = Promise.withResolvers<void>();
       let pendingReads = 0;
@@ -528,6 +547,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         new ChatSession(
           chatSessionPorts(
             createAgentRuntimeContext({
+              scratchRoots: historyScratchRoots,
               promptEstimator,
               readRuntimeSettings: fixtureRuntimePolicyReader(
                 localConfig,
@@ -552,7 +572,9 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
                 model: 'stub-model',
                 sessionId: localConfig.getSessionId(),
               }),
-              history: new HistoryService(),
+              history: new HistoryService({
+                scratchRoots: historyScratchRoots,
+              }),
               settings: { compressionThreshold: 0.8 },
               provider: createProviderAdapterFromManager(localManager),
               telemetry: createTelemetryAdapter(

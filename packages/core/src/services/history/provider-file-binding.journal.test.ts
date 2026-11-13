@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -8,6 +9,7 @@ import type {
   ProviderFileReferenceMetadata,
 } from './IContent.js';
 import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const CONTENT_ID =
   'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -64,7 +66,7 @@ const PROVIDER_FILE: ProviderFileReferenceMetadata = {
 describe('HistoryService provider file binding on the journal store', () => {
   let history: HistoryService;
   beforeEach(() => {
-    history = new HistoryService();
+    history = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(async () => {
     await history.dispose();

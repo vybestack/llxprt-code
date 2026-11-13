@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { readdirSync } from 'node:fs';
@@ -5,7 +6,7 @@ import type {
   IContent,
   ContentBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
@@ -25,6 +26,7 @@ import {
   blocklessRow,
   seededHistory,
 } from './__tests__/support/chatBodyCorpus.js';
+const testScratchRoots = createTestScratchOwner();
 
 type StripPolicy = 'none' | 'all' | 'allButLast';
 
@@ -90,6 +92,7 @@ async function builderBytes(
   const count = await writeChatMessages(
     sourceOf(rows),
     {
+      scratchRoots: testScratchRoots,
       reasoning: reasoningOptions(settings),
       toolFormat: settings.toolFormat,
       config: settings.config,
@@ -128,7 +131,7 @@ async function firstDifference(
 }
 
 function scratchNames(): Set<string> {
-  return new Set(readdirSync(getScratchRoot()));
+  return new Set(readdirSync(testScratchRoots.getRoot()));
 }
 
 describe('chat body builder against buildMessagesWithReasoning', () => {
@@ -295,6 +298,7 @@ describe('chat body builder against buildMessagesWithReasoning', () => {
     await writeChatMessages(
       sourceOf(rows),
       {
+        scratchRoots: testScratchRoots,
         reasoning: reasoningOptions({
           toolFormat: 'openai',
           strip: 'none',
@@ -447,6 +451,7 @@ describe('chat body builder contract', () => {
   it('requires an id store for Kimi and Mistral and none for other formats', async () => {
     for (const toolFormat of ['kimi', 'mistral'] as const) {
       const failing = streamChatMessages(sourceOf(rows), {
+        scratchRoots: testScratchRoots,
         reasoning: reasoningOptions({ ...settings, toolFormat }),
         toolFormat,
       });
@@ -455,6 +460,7 @@ describe('chat body builder contract', () => {
       );
     }
     const openai = streamChatMessages(sourceOf(rows), {
+      scratchRoots: testScratchRoots,
       reasoning: reasoningOptions(settings),
       toolFormat: 'openai',
     });
@@ -499,6 +505,7 @@ describe('chat body builder contract', () => {
       writeChatMessages(
         unstable,
         {
+          scratchRoots: testScratchRoots,
           reasoning: reasoningOptions({ ...settings, toolFormat: 'openai' }),
           toolFormat: 'openai',
         },
@@ -533,6 +540,7 @@ describe('chat body builder contract', () => {
       writeChatMessages(
         sourceOf(withMedia),
         {
+          scratchRoots: testScratchRoots,
           reasoning: reasoningOptions({ ...settings, toolFormat: 'openai' }),
           toolFormat: 'openai',
         },
@@ -549,6 +557,7 @@ describe('chat body builder contract', () => {
   it('removes its scratch files when the consumer stops early and when it finishes', async () => {
     const before = scratchNames();
     const stream = streamChatMessages(sourceOf(seededHistory(9)), {
+      scratchRoots: testScratchRoots,
       reasoning: reasoningOptions({ ...settings, toolFormat: 'openai' }),
       toolFormat: 'openai',
     });

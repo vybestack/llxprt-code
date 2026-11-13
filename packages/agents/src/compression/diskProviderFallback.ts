@@ -50,7 +50,10 @@ export async function runDiskProviderFallback(
       snapshot.compressionInput !== undefined
     )
       return compress(snapshot.compressionInput.rows);
-    const rows = await curatedCandidate(checkpointRows(snapshot));
+    const rows = await curatedCandidate(
+      args[3].scratchRoots,
+      checkpointRows(snapshot),
+    );
     try {
       return await compress(rows);
     } finally {

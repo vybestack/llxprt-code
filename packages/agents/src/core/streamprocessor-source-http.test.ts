@@ -110,7 +110,7 @@ async function acceptance(large: boolean) {
       requests: setup.requests,
       bodies: http.bodies,
       expected: sourceWireOracle(large),
-      activeBodies: activeRequestBodyCount(),
+      activeBodies: activeRequestBodyCount(setup.provider.requestBodyCensus),
     };
     return facts;
   } finally {
@@ -212,7 +212,7 @@ describe('actual StreamProcessor disk history HTTP ownership', () => {
           sourcePending,
         ),
       ).rejects.toThrow('safety-adjusted context limit');
-      expect(activeRequestBodyCount()).toBe(0);
+      expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
       expect(setup.history.owners.every((owner) => owner.closed)).toBe(true);
     } finally {
       await setup.history.dispose();

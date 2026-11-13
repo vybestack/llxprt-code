@@ -1,9 +1,11 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(speaker: 'human' | 'ai', text: string): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
@@ -13,7 +15,7 @@ function row(speaker: 'human' | 'ai', text: string): IContent {
 describe('detached history API publishes through the journal store port', () => {
   let history: HistoryService;
   beforeEach(() => {
-    history = new HistoryService();
+    history = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(async () => {
     await history.dispose();

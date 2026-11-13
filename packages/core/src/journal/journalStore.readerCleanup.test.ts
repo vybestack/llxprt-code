@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { fstatSync } from 'node:fs';
@@ -35,27 +36,31 @@ describe('retired reader cross-cleanup error identity', () => {
     const deps = storeDeps();
     let fd = -1;
     let readFailure: Error | undefined;
-    const store = await JournalStore.create(join(directory(), 'history.llxj'), {
-      ...deps,
-      journal: {
-        ...deps.journal,
-        open: async (file, flags) => {
-          const handle = await deps.journal.open(file, flags);
-          fd = handle.fd;
-          return {
-            ...handle,
-            read: async (buffer, offset, length, position) => {
-              if (readFailure !== undefined) throw readFailure;
-              return handle.read(buffer, offset, length, position);
-            },
-            close: async () => {
-              await handle.close();
-              throw cleanup;
-            },
-          };
+    const store = await JournalStore.create(
+      join(directory(), 'history.llxj'),
+      {
+        ...deps,
+        journal: {
+          ...deps.journal,
+          open: async (file, flags) => {
+            const handle = await deps.journal.open(file, flags);
+            fd = handle.fd;
+            return {
+              ...handle,
+              read: async (buffer, offset, length, position) => {
+                if (readFailure !== undefined) throw readFailure;
+                return handle.read(buffer, offset, length, position);
+              },
+              close: async () => {
+                await handle.close();
+                throw cleanup;
+              },
+            };
+          },
         },
       },
-    });
+      testNamedWriters,
+    );
     await store.commit([
       {
         kind: 'append',

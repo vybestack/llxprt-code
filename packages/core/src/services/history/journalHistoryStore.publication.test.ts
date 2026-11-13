@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import { journalPathOf } from './__tests__/support/journalPathOf.js';
@@ -72,9 +73,12 @@ describe('journal history store publication and compensation', () => {
     seams: ReturnType<typeof testJournalSeams>;
   }> {
     const seams = testJournalSeams(failures);
-    const session = await JournalSession.create(path.join(directory(), name), {
-      journal: seams.dependencies,
-    });
+    const session = await JournalSession.create(
+      path.join(directory(), name),
+      testJournalOptions({
+        journal: seams.dependencies,
+      }),
+    );
     const store = new JournalHistoryStore(session);
     open.push(store);
     return { store, seams };

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -6,6 +7,7 @@ import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { runGuardedCompression } from '../guardedCompression.js';
 import type { GuardedCompressionDeps } from '../guardedCompression.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function texts(history: HistoryService): Promise<string[]> {
   const result: string[] = [];
@@ -33,7 +35,7 @@ function dependencies(
 
 describe('journal guarded compression', () => {
   it('keeps an accepted trailer when a lock-release observer fails before compressionEnded', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.addBatch([createUserMessage('original')]);
       history.on('compressionLockReleased', () => {
@@ -55,7 +57,7 @@ describe('journal guarded compression', () => {
   });
 
   it('compensates an incomplete rewrite while preserving an independent append and scalar state', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.addBatch([createUserMessage('original')]);
       history.setCacheAnchorSeq(1);
@@ -78,7 +80,7 @@ describe('journal guarded compression', () => {
   });
 
   it('keeps a committed rewrite when a later compression observer throws', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.addBatch([createUserMessage('original')]);
       history.on('compressionEnded', () => {
@@ -99,7 +101,7 @@ describe('journal guarded compression', () => {
   });
 
   it('restores the saved journal version before propagating cancellation', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.addBatch([createUserMessage('original')]);
       const abort = new DOMException('cancelled', 'AbortError');

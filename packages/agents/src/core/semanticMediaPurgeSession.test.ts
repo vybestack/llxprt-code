@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,6 +15,7 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function collect(source: SemanticPurgeRowSource): Promise<IContent[]> {
   const rows: IContent[] = [];
@@ -22,7 +24,7 @@ async function collect(source: SemanticPurgeRowSource): Promise<IContent[]> {
 }
 
 function historyWithImage(): HistoryService {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   history.add({
     speaker: 'human',
     blocks: [
@@ -105,7 +107,7 @@ describe('SemanticMediaPurgeSession: keeps the selected image in an explicit-cac
 
 describe('SemanticMediaPurgeSession: does not start an explicit-cache purge when the oldest image has no stable prefix', () => {
   it('does not start an explicit-cache purge when the oldest image has no stable prefix', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.add({
       speaker: 'human',
       blocks: [

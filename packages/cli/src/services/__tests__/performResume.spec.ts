@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -96,7 +97,7 @@ async function testResolutionById(): Promise<void> {
     currentSessionId: 'other-session',
   });
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
 
   expect(result.ok).toBe(true);
   assertResumeOk(result);
@@ -125,7 +126,7 @@ async function testResolutionLatest(): Promise<void> {
     currentSessionId: 'completely-different-session',
   });
 
-  const result = await performResume('latest', context);
+  const result = await performResume('latest', withTestNamedWriters(context));
 
   expect(result.ok).toBe(true);
   assertResumeOk(result);
@@ -154,7 +155,7 @@ async function testResolutionIndex(): Promise<void> {
     currentSessionId: 'different-session',
   });
 
-  const result = await performResume('1', context);
+  const result = await performResume('1', withTestNamedWriters(context));
 
   expect(result.ok).toBe(true);
   assertResumeOk(result);
@@ -180,7 +181,10 @@ async function testResolutionPrefix(): Promise<void> {
     currentSessionId: 'other-session',
   });
 
-  const result = await performResume('unique-prefix', context);
+  const result = await performResume(
+    'unique-prefix',
+    withTestNamedWriters(context),
+  );
 
   expect(result.ok).toBe(true);
   assertResumeOk(result);
@@ -201,7 +205,7 @@ async function testErrorsSameSession(): Promise<void> {
     currentSessionId: sessionId,
   });
 
-  const result = await performResume(sessionId, context);
+  const result = await performResume(sessionId, withTestNamedWriters(context));
 
   expect(result.ok).toBe(false);
   assertResumeError(result);
@@ -222,7 +226,7 @@ async function testErrorsLocked(): Promise<void> {
     currentSessionId: 'other-session',
   });
 
-  const result = await performResume(sessionId, context);
+  const result = await performResume(sessionId, withTestNamedWriters(context));
 
   expect(result.ok).toBe(false);
   assertResumeError(result);
@@ -238,7 +242,10 @@ async function testErrorsMissing(): Promise<void> {
     currentSessionId: 'other-session',
   });
 
-  const result = await performResume('nonexistent-session-id', context);
+  const result = await performResume(
+    'nonexistent-session-id',
+    withTestNamedWriters(context),
+  );
 
   expect(result.ok).toBe(false);
   assertResumeError(result);
@@ -259,7 +266,7 @@ async function testErrorsAmbiguous(): Promise<void> {
     currentSessionId: 'other-session',
   });
 
-  const result = await performResume('ambig-', context);
+  const result = await performResume('ambig-', withTestNamedWriters(context));
 
   expect(result.ok).toBe(false);
   assertResumeError(result);
@@ -280,7 +287,7 @@ async function testErrorsOutOfRange(): Promise<void> {
     currentSessionId: 'other-session',
   });
 
-  const result = await performResume('999', context);
+  const result = await performResume('999', withTestNamedWriters(context));
 
   expect(result.ok).toBe(false);
   assertResumeError(result);

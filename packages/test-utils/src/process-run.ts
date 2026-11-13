@@ -278,13 +278,16 @@ function buildTimeoutError(
   timeoutMs: number,
   accumulator: StreamAccumulator,
 ): Error {
+  const output = [
+    `stdout (last 4000 characters):\n${accumulator.stdout.slice(-4000)}`,
+    `stderr (last 4000 characters):\n${accumulator.stderr.slice(-4000)}`,
+  ].join('\n');
+  const message = `TestRig.run() timed out after ${timeoutMs}ms\n${output}`;
   const reason = detectAndTripQuota(ctx, accumulator);
   if (reason !== null) {
-    return new Error(
-      formatQuotaError(reason, `TestRig.run() timed out after ${timeoutMs}ms`),
-    );
+    return new Error(formatQuotaError(reason, message));
   }
-  return new Error(`TestRig.run() timed out after ${timeoutMs}ms`);
+  return new Error(message);
 }
 
 /**

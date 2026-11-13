@@ -107,6 +107,8 @@ describe('bootstrap captured operation ownership', () => {
               length: () => owner.session.getJournalLength(),
             }),
             readRecordingPath,
+            readRecordingWatermarks: () =>
+              owner.session.getRecordingWatermarks(),
             readIdeMode: owner.ide.getIdeMode.bind(owner.ide),
             subscribeHistoryTokens: owner.session.subscribeHistoryTokens.bind(
               owner.session,
@@ -189,6 +191,14 @@ describe('bootstrap captured operation ownership', () => {
         expect(await readFile(ownerPath, 'utf8')).toContain(
           'captured bootstrap feedback',
         ),
+      );
+      await waitFor(() =>
+        expect(
+          hook.result.current.bootstrap.scrollbackPager?.store
+            .getState()
+            .rows.map((row) => row.item.text)
+            .join('\n'),
+        ).toContain('captured bootstrap feedback'),
       );
       expect(await readFile(peerPath, 'utf8')).not.toContain(
         'captured bootstrap feedback',

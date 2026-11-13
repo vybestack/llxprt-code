@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -195,6 +196,8 @@ describe('streamed portable session import', () => {
       chats,
       PROJECT_HASH,
       store,
+      undefined,
+      testJournalOptions(),
     );
 
     const assertIdentity = assertNativeIdentity;
@@ -228,7 +231,14 @@ describe('streamed portable session import', () => {
     const chats = join(tempDirectory, 'chats');
 
     await expect(
-      importSessionMediaPackage(validated, chats, PROJECT_HASH, store),
+      importSessionMediaPackage(
+        validated,
+        chats,
+        PROJECT_HASH,
+        store,
+        undefined,
+        testJournalOptions(),
+      ),
     ).rejects.toThrow(/changed after validation/);
 
     await expect(readdir(chats)).rejects.toMatchObject({ code: 'ENOENT' });
@@ -249,6 +259,7 @@ describe('streamed portable session import', () => {
         async () => {
           throw new Error('activation refused');
         },
+        testJournalOptions(),
       ),
     ).rejects.toThrow('activation refused');
 
@@ -270,7 +281,7 @@ describe('streamed portable session import', () => {
       blocks: [{ type: 'text', text: `${index}:${'z'.repeat(size)}` }],
     }));
     const path = await writePackageRecording(directory, [rows], PROJECT_HASH);
-    const session = await JournalSession.open(path);
+    const session = await JournalSession.open(path, testJournalOptions());
     try {
       await session.store.commit([
         { kind: 'setState', key: 'abcd', value: Buffer.from('four') },
@@ -300,6 +311,8 @@ describe('streamed portable session import', () => {
       join(tempDirectory, 'chats'),
       PROJECT_HASH,
       store,
+      undefined,
+      testJournalOptions(),
     );
     expect(
       (await readPackageRows(imported.recordingPath, PROJECT_HASH)).map(
@@ -328,6 +341,8 @@ describe('streamed portable session import', () => {
         join(tempDirectory, 'chats'),
         PROJECT_HASH,
         store,
+        undefined,
+        testJournalOptions(),
       ),
     ).rejects.toThrow(
       'Packaged journal is truncated or has an uncommitted tail',
@@ -356,7 +371,14 @@ describe('streamed portable session import', () => {
 
     const streamed = await peakExternalBuffers(async () => {
       const validated = await validateSessionMediaPackage(packageDirectory);
-      await importSessionMediaPackage(validated, chats, PROJECT_HASH, store);
+      await importSessionMediaPackage(
+        validated,
+        chats,
+        PROJECT_HASH,
+        store,
+        undefined,
+        testJournalOptions(),
+      );
     });
     expect(streamed).toBeLessThan(bytes / 4);
   });
@@ -392,7 +414,14 @@ describe('streamed portable session import', () => {
     const chats = join(tempDirectory, 'chats');
     const streamed = await countFileHandleReads(async () => {
       const validated = await validateSessionMediaPackage(packageDirectory);
-      await importSessionMediaPackage(validated, chats, PROJECT_HASH, store);
+      await importSessionMediaPackage(
+        validated,
+        chats,
+        PROJECT_HASH,
+        store,
+        undefined,
+        testJournalOptions(),
+      );
     });
     expect(bounded(streamed)).toBe(true);
     // Validation and import each stream the whole recording once.

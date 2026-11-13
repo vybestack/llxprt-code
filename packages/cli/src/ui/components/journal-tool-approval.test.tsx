@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
@@ -25,7 +27,7 @@ const { installWorkspaceRuntimeFixture } = await import(
   '../../__tests__/workspace-runtime-fixture.js'
 );
 const runtimeFixture = installWorkspaceRuntimeFixture();
-const { Config, ToolConfirmationOutcome } = await import(
+const { Config, JournalWatermarks, ToolConfirmationOutcome } = await import(
   '@vybestack/llxprt-code-core'
 );
 const { HistoryService } = await import(
@@ -42,6 +44,7 @@ const { createScrollbackPagerStore } = await import(
 );
 const { ScrollbackViewport } = await import('./ScrollbackViewport.js');
 import { ToolCallStatus, type HistoryItemWithoutId } from '../types.js';
+const historyScratchRoots = createTestScratchOwner();
 
 type Identity = NonNullable<ToolCallRequestInfo['journalIdentity']>;
 async function request(
@@ -87,15 +90,19 @@ function control(
   };
 }
 async function fixture(root: string) {
-  const recording = createSessionRecorder({
-    sessionId: 'approval',
-    projectHash: 'approval',
-    chatsDir: root,
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
-  });
-  const history = new HistoryService();
+  const watermarks = new JournalWatermarks();
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'approval',
+      projectHash: 'approval',
+      chatsDir: root,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+      journal: { journal: { watermarks } },
+    }),
+  );
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   await history.attachJournal(recording, true);
   const identity = await request(history, 'approval-call');
   const path = history.journalPath();
@@ -107,6 +114,7 @@ async function fixture(root: string) {
   };
   const pager = createScrollbackPagerStore({
     filePath: path,
+    watermarks,
     viewport,
     pageRows: 4,
     settings: { marginViewports: 1, byteFloorBytes: 65536, purgeDebounceMs: 0 },

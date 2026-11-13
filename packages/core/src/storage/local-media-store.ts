@@ -5,7 +5,7 @@
  */
 
 import { isMediaReferenceBlock } from '../services/history/IContent.js';
-import { closeAdmissionReservation } from './admitted-media-source.js';
+import { AdmissionSourceReservations } from './admitted-media-source.js';
 import type {
   MediaReferenceBlock,
   MediaSemanticMetadata,
@@ -79,6 +79,7 @@ function storedObjectMetadataMatches(
 }
 
 export class LocalMediaStore {
+  readonly admissionSources = new AdmissionSourceReservations();
   readonly rootDirectory: string;
   readonly quotaBytes: number;
   readonly recordingArchive: LocalMediaStore | undefined;
@@ -386,7 +387,7 @@ export class LocalMediaStore {
   }
 
   async release(contentId: string, ownerId: string): Promise<void> {
-    await closeAdmissionReservation(this, contentId, ownerId);
+    await this.admissionSources.close(contentId, ownerId);
     await this.persistence.release(contentId, ownerId);
   }
 
@@ -396,7 +397,7 @@ export class LocalMediaStore {
     ownerId: string,
   ): Promise<void> {
     for (const contentId of contentIds)
-      await closeAdmissionReservation(this, contentId, ownerId);
+      await this.admissionSources.close(contentId, ownerId);
     await this.persistence.releaseAll(contentIds, ownerId);
   }
 

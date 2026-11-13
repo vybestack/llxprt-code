@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
@@ -12,7 +13,7 @@ describe('request Mistral pin and pending isolation', () => {
   it('retires a borrowed measured mapping when its request closes while the underlying pin stays open', async () => {
     const session = await JournalSession.create(
       `${directory()}/borrowed.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await session.store.commit([{ kind: 'mistral', slot: 0 }]);
@@ -43,7 +44,7 @@ describe('request Mistral pin and pending isolation', () => {
   it('holds callback ownership across closed openers and isolates concurrent pending views', async () => {
     const session = await JournalSession.create(
       `${directory()}/isolation.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await session.store.commit([{ kind: 'mistral', slot: 0 }]);
@@ -80,7 +81,7 @@ describe('request Mistral pin and pending isolation', () => {
     it(`preserves the primary ${abort ? 'abort' : 'callback'} failure over final release`, async () => {
       const session = await JournalSession.create(
         `${directory()}/failure-${abort}.llxj`,
-        { journal: testJournalSeams().dependencies },
+        testJournalOptions({ journal: testJournalSeams().dependencies }),
       );
       try {
         await session.store.commit([{ kind: 'mistral', slot: 0 }]);
@@ -116,9 +117,12 @@ describe('request Mistral pin and pending isolation', () => {
     });
 
   it('preserves a preparation read failure over final release', async () => {
-    const session = await JournalSession.create(`${directory()}/read.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/read.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.store.commit([{ kind: 'mistral', slot: 0 }]);
       const primary = new Error('Mistral preparation read');

@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -32,7 +33,11 @@ describe('transcript occurrence membership', () => {
   const dir = useTempDir('transcript-members-');
   it('shares a self-adopted body and removes only the replaced occurrence', async () => {
     const path = join(dir(), 'self.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     try {
       await store.commit([
         { kind: 'append', rows: [draftRow({ text: 'original' })] },
@@ -83,7 +88,11 @@ describe('transcript occurrence membership', () => {
 
   it('retains removal-only density edits as display-only operation markers', async () => {
     const path = join(dir(), 'remove.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     try {
       await store.commit([
         {

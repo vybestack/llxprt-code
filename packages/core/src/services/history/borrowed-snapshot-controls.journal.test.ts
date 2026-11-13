@@ -7,7 +7,6 @@ import { RowOwnership } from '../../recording/rowOwnership.js';
 import { withNativeBorrowedFixture } from './__tests__/support/native-borrowed-fixture.js';
 import type { HistoryRowView } from './historyRowView.js';
 import type { IContent } from './IContent.js';
-import { historyOriginId } from './historyOriginId.js';
 import { borrowedRow } from './borrowed-snapshot-test-helpers.js';
 
 const bounds = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
@@ -39,8 +38,8 @@ describe('native borrowed snapshot controls', () => {
         expect(history.length()).toBe(0);
         expect(view.length).toBe(514);
         expect(await view.originAt(0)).toBeUndefined();
-        expect(await view.originAt(512)).toBe(historyOriginId(left));
-        expect(await view.originAt(513)).toBe(historyOriginId(right));
+        expect(await view.originAt(512)).toBe(history.originIds.get(left));
+        expect(await view.originAt(513)).toBe(history.originIds.get(right));
         expect(await view.chronologySeqAt(511)).toBe(512);
         expect(owners.snapshot().acquisitions).toBe(acquired);
         let count = 0;

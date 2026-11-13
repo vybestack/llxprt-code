@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type {
   IContent,
@@ -80,10 +81,11 @@ async function tailBoundary(
 }
 
 async function oldDensityCalls(
+  scratchRoots: ScratchRootOwner,
   rows: CompressionInputRows,
   owner: RowOwnership,
 ): Promise<DensityCallLookup & { close(): void }> {
-  const index = new DensityDiskIndex();
+  const index = new DensityDiskIndex(scratchRoots);
   try {
     await indexCalls(rows, index, owner);
     return {
@@ -221,7 +223,8 @@ export async function prepareHighDensityDisk(
   const rows = context.history;
   if (rows.length === 0) return { kind: 'noop' };
   const lookup: DensityCallLookup & { close?: () => void } =
-    rows.densityCalls ?? (await oldDensityCalls(rows, owner));
+    rows.densityCalls ??
+    (await oldDensityCalls(context.runtimeContext.scratchRoots, rows, owner));
   let closed = false;
   const close = (): void => {
     if (closed) return;

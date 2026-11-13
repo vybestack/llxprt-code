@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getScratchRoot } from '../storage/scratch-root.js';
 
 const BUCKETS = 4096;
 const WIDTH = 40;
@@ -28,7 +27,7 @@ export class DurableDensityIndex {
   private peakDiskBytes = 0;
   private closed = false;
 
-  constructor(root = getScratchRoot()) {
+  constructor(root: string) {
     this.directory = fs.mkdtempSync(path.join(root, 'llxprt-density-index-'));
     const opened: number[] = [];
     try {

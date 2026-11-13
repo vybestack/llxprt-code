@@ -1,3 +1,4 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from '../services/history/journalSession.js';
@@ -8,9 +9,12 @@ describe('journal-owned ordinal sorting', () => {
   const directory = useTempDir('journal-ordinal-sort-');
 
   it('sorts and deduplicates spill chunks without replacing history roots or charging scratch as live history', async () => {
-    const session = await JournalSession.create(`${directory()}/sort.llxj`, {
-      journal: testJournalSeams({}, 1, false).dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/sort.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({}, 1, false).dependencies,
+      }),
+    );
     try {
       await session.append([
         { speaker: 'human', blocks: [{ type: 'text', text: 'preserved' }] },
@@ -54,21 +58,24 @@ describe('journal-owned ordinal sorting', () => {
       let closed = 0;
       let inputClosed = false;
       const seams = testJournalSeams({}, 1, false);
-      const session = await JournalSession.create(`${directory()}/close.llxj`, {
-        journal: {
-          ...seams.dependencies,
-          open: async (path, flags) => {
-            const file = await seams.dependencies.open(path, flags);
-            return {
-              ...file,
-              close: async () => {
-                closed++;
-                await file.close();
-              },
-            };
+      const session = await JournalSession.create(
+        `${directory()}/close.llxj`,
+        testJournalOptions({
+          journal: {
+            ...seams.dependencies,
+            open: async (path, flags) => {
+              const file = await seams.dependencies.open(path, flags);
+              return {
+                ...file,
+                close: async () => {
+                  closed++;
+                  await file.close();
+                },
+              };
+            },
           },
-        },
-      });
+        }),
+      );
       await session.append([
         { speaker: 'human', blocks: [{ type: 'text', text: 'pinned' }] },
       ]);

@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { assertRowIndex } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -206,15 +207,17 @@ export function projectionWireOracle(large: boolean): {
 export async function projectionRuntime(
   baseURL: string,
   root: string,
+  scratchRoots?: ScratchRootOwner,
 ): Promise<ProjectionRuntime> {
   const config = new Config({
+    scratchRoots,
     cwd: root,
     targetDir: root,
     sessionId: randomUUID(),
     model: projectionModel,
     debugMode: false,
   });
-  const factory = createRuntimeTokenizerFactory();
+  const factory = createRuntimeTokenizerFactory(config.scratchRoots);
   await factory.prepareTokenizer?.('openai-responses', projectionModel);
   const provider = new OpenAIResponsesProvider('test-key', baseURL);
   const runtimeId = randomUUID();

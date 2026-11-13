@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 
@@ -37,6 +38,7 @@ import {
   type SerializedTokenUsageRecord,
 } from './TokenUsageLogger.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -159,6 +161,7 @@ function buildTokenSyncView(
   );
   retainedInvocationOwners.push(invocationOwner);
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       invocationOwner.prepareProviderInvocation(
         runtimeState.runtimeId,

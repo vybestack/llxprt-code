@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
@@ -32,6 +33,7 @@ import {
   TokenUsageLogger,
   type SerializedTokenUsageRecord,
 } from './TokenUsageLogger.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function makeTempLogPath(): string {
   return path.join(
@@ -124,6 +126,7 @@ function buildTokenSyncView(
     },
   };
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     ...createSessionPolicyFixture(
       fixture.runtimeSetup.settingsService,
       providerRuntimeSnapshot.runtimeId,

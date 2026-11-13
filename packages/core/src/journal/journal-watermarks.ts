@@ -9,53 +9,68 @@ export interface JournalCommitWatermark extends CommitAck {
 interface Subscription {
   deliver(watermark: JournalCommitWatermark): void;
 }
-const subscriptions = new Map<string, Set<Subscription>>();
-let generation = 0;
+export class JournalWatermarks {
+  private readonly subscriptions = new Map<string, Set<Subscription>>();
+  private generation = 0;
 
-/** Coalesces a slow subscriber to one scalar watermark, never a payload queue. */
+  /** Coalesces a slow subscriber to one scalar watermark, never a payload queue. */
+  subscribe(
+    path: string,
+    listener: (watermark: JournalCommitWatermark) => void,
+  ): () => void {
+    const key = resolve(path);
+    let active = true;
+    let scheduled = false;
+    let latest: JournalCommitWatermark | undefined;
+    const subscription: Subscription = {
+      deliver(watermark) {
+        latest = watermark;
+        if (scheduled) return;
+        scheduled = true;
+        queueMicrotask(() => {
+          scheduled = false;
+          if (active && latest !== undefined) listener(latest);
+        });
+      },
+    };
+    const listeners = this.subscriptions.get(key) ?? new Set<Subscription>();
+    listeners.add(subscription);
+    this.subscriptions.set(key, listeners);
+    return () => {
+      active = false;
+      latest = undefined;
+      listeners.delete(subscription);
+      if (listeners.size === 0) this.subscriptions.delete(key);
+    };
+  }
+
+  publisher(path: string): (ack: CommitAck, swapped?: boolean) => void {
+    const key = resolve(path);
+    let sessionGeneration = ++this.generation;
+    return (ack, swapped = false) => {
+      if (swapped) sessionGeneration = ++this.generation;
+      const watermark: JournalCommitWatermark = {
+        ...ack,
+        sessionGeneration,
+        invalidate: true,
+      };
+      for (const listener of this.subscriptions.get(key) ?? [])
+        listener.deliver(watermark);
+    };
+  }
+}
+
 export function subscribeJournalCommits(
   path: string,
   listener: (watermark: JournalCommitWatermark) => void,
+  watermarks: Pick<JournalWatermarks, 'subscribe'>,
 ): () => void {
-  const key = resolve(path);
-  let active = true;
-  let scheduled = false;
-  let latest: JournalCommitWatermark | undefined;
-  const subscription: Subscription = {
-    deliver(watermark) {
-      latest = watermark;
-      if (scheduled) return;
-      scheduled = true;
-      queueMicrotask(() => {
-        scheduled = false;
-        if (active && latest !== undefined) listener(latest);
-      });
-    },
-  };
-  const listeners = subscriptions.get(key) ?? new Set<Subscription>();
-  listeners.add(subscription);
-  subscriptions.set(key, listeners);
-  return () => {
-    active = false;
-    latest = undefined;
-    listeners.delete(subscription);
-    if (listeners.size === 0) subscriptions.delete(key);
-  };
+  return watermarks.subscribe(path, listener);
 }
 
 export function journalCommitPublisher(
   path: string,
+  watermarks: JournalWatermarks,
 ): (ack: CommitAck, swapped?: boolean) => void {
-  const key = resolve(path);
-  let sessionGeneration = ++generation;
-  return (ack, swapped = false) => {
-    if (swapped) sessionGeneration = ++generation;
-    const watermark: JournalCommitWatermark = {
-      ...ack,
-      sessionGeneration,
-      invalidate: true,
-    };
-    for (const listener of subscriptions.get(key) ?? [])
-      listener.deliver(watermark);
-  };
+  return watermarks.publisher(path);
 }

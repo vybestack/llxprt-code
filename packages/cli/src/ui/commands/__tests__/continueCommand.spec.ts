@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -51,6 +53,7 @@ import type {
   PerformResumeActionReturn,
   SlashCommandActionReturn,
 } from '../types.js';
+const historyScratchRoots = createTestScratchOwner();
 
 /**
  * Helper to narrow a command argument to the ValueArgument variant.
@@ -415,15 +418,20 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const root = await mkdtemp(join(tmpdir(), 'continue-completion-'));
       const projectTempDir = join(root, 'completion-project');
       const chatsDir = join(projectTempDir, 'chats');
-      const recording = createSessionRecorder({
-        sessionId: randomUUID(),
-        projectHash: 'completion-project',
-        chatsDir,
-        workspaceDirs: [root],
-        provider: 'test-provider',
-        model: 'test-model',
+      const recording = createSessionRecorder(
+        withTestNamedWriters({
+          sessionId: randomUUID(),
+          projectHash: 'completion-project',
+          chatsDir,
+          workspaceDirs: [root],
+          provider: 'test-provider',
+          model: 'test-model',
+        }),
+      );
+      const history = new HistoryService({
+        scratchRoots: historyScratchRoots,
+        recording,
       });
-      const history = new HistoryService({ recording });
 
       try {
         history.add({
@@ -473,15 +481,20 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const root = await mkdtemp(join(tmpdir(), 'continue-completion-bad-'));
       const projectTempDir = join(root, 'completion-project');
       const chatsDir = join(projectTempDir, 'chats');
-      const recording = createSessionRecorder({
-        sessionId: randomUUID(),
-        projectHash: 'completion-project',
-        chatsDir,
-        workspaceDirs: [root],
-        provider: 'test-provider',
-        model: 'test-model',
+      const recording = createSessionRecorder(
+        withTestNamedWriters({
+          sessionId: randomUUID(),
+          projectHash: 'completion-project',
+          chatsDir,
+          workspaceDirs: [root],
+          provider: 'test-provider',
+          model: 'test-model',
+        }),
+      );
+      const history = new HistoryService({
+        scratchRoots: historyScratchRoots,
+        recording,
       });
-      const history = new HistoryService({ recording });
       const warnings: string[] = [];
       const warn = vi
         .spyOn(debugLogger, 'warn')

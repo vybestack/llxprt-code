@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { testJournalOptions } from './named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
@@ -16,6 +18,7 @@ import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { mkdirSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
+const historyScratchRoots = new ScratchRootOwner();
 
 export interface JournalSendFixture {
   readonly selection: ProviderRequestSnapshot;
@@ -32,7 +35,10 @@ export async function nativeJournalSendFixture(
   );
   mkdirSync(parent, { recursive: true });
   const root = mkdtempSync(join(parent, 'native-journal-send-'));
-  const session = await JournalSession.create(join(root, 'session.llxj'));
+  const session = await JournalSession.create(
+    join(root, 'session.llxj'),
+    testJournalOptions(),
+  );
   try {
     // Provider envelope tests need a real journal selection, not unrelated
     // HistoryService admission and token estimation of their oversized rows.
@@ -119,7 +125,7 @@ export async function journalSendFixture(
     await graph.recording.setSessionName('Journal send fixture');
     if (options.mediaStore !== undefined)
       await graph.service.registerMediaOwner(
-        new HistoryMediaOwnership(options.mediaStore),
+        new HistoryMediaOwnership(options.mediaStore, historyScratchRoots),
       );
     const selection = await graph.service.prepareCuratedForProviderSnapshot(
       pending,

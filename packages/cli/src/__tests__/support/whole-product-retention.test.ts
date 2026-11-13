@@ -1,11 +1,13 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { observeWholeProductRetention } from './whole-product-retention.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('whole-product retention observer', () => {
   it('observes native decoded rows without replacing the request capability', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const observer = observeWholeProductRetention(true, true);
     observer.start();
     try {

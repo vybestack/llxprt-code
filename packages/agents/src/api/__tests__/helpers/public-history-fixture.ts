@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -8,6 +9,7 @@ import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__te
 import { buildAgent, type Agent } from './agentHarness.js';
 import { spyOn } from 'bun:test';
 import { SessionClientOwner } from '../../../session/session-client-owner.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 async function buildHistoryAgent(): Promise<{
   agent: Agent;
@@ -37,7 +39,7 @@ async function buildHistoryAgent(): Promise<{
 export class StreamOnlyHistory extends HistoryService {
   failAfter: number | undefined;
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(this, 'history array forbidden');
   }
 

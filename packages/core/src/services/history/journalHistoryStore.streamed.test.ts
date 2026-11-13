@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { journalPathOf } from './__tests__/support/journalPathOf.js';
@@ -33,7 +34,10 @@ describe('a transform streamed into one replace group', () => {
 
   async function withOld(name: string): Promise<JournalHistoryStore> {
     const store = new JournalHistoryStore(
-      await JournalSession.create(path.join(directory(), name)),
+      await JournalSession.create(
+        path.join(directory(), name),
+        testJournalOptions(),
+      ),
     );
     for (const content of OLD) store.apply({ kind: 'content', content });
     await store.waitForDurable();
@@ -151,6 +155,7 @@ describe('the transform cannot run ahead of the writer', () => {
           directory(),
           `${retain ? 'control' : 'bounded'}-${size}.llxj`,
         ),
+        testJournalOptions(),
       ),
     );
     try {

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { getToolIdStrategy } from '@vybestack/llxprt-code-tools';
@@ -89,7 +90,7 @@ describe('native Mistral mapping bookkeeping', () => {
     ];
     const session = await JournalSession.create(
       `${directory()}/order.llxj`,
-      options,
+      testJournalOptions(options),
     );
     try {
       await session.store.commit([{ kind: 'mistral', slot: 0 }]);
@@ -125,7 +126,7 @@ describe('native Mistral mapping bookkeeping', () => {
     ];
     const session = await JournalSession.create(
       `${directory()}/collision.llxj`,
-      options,
+      testJournalOptions(options),
     );
     try {
       await session.store.commit([{ kind: 'mistral', slot: 0 }]);
@@ -166,7 +167,7 @@ describe('native Mistral mapping bookkeeping', () => {
   it('restores mappings on pop and rebuilds a middle insertion rather than keeping stale salts', async () => {
     const session = await JournalSession.create(
       `${directory()}/pop.llxj`,
-      options,
+      testJournalOptions(options),
     );
     const row: IContent = { speaker: 'ai', blocks: [call('toolu_alpha-1')] };
     try {
@@ -203,7 +204,7 @@ describe('native Mistral mapping bookkeeping', () => {
   it('copies raw-bound mapping values through fork and compaction and keeps them after owner changes', async () => {
     const session = await JournalSession.create(
       `${directory()}/copy.llxj`,
-      options,
+      testJournalOptions(options),
     );
     const rows: readonly IContent[] = [
       { speaker: 'ai', blocks: [call('4SftZvDMX'), call('toolu_alpha-1')] },
@@ -241,7 +242,7 @@ describe('native Mistral mapping bookkeeping', () => {
     ];
     const session = await JournalSession.create(
       `${directory()}/passthrough.llxj`,
-      options,
+      testJournalOptions(options),
     );
     try {
       await session.store.commit([{ kind: 'mistral', slot: 0 }]);

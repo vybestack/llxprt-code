@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { stat, writeFile } from 'node:fs/promises';
@@ -21,15 +22,17 @@ describe('native discovery reads bounded metadata instead of history', () => {
     it(`lists and counts ${count} rows with a multi-MiB body under the metadata byte budget`, async () => {
       const directory = await discoveryDirectory(`bounded-${count}`);
       const chats = chatsDirIn(directory);
-      const recorder = JournalRecordingService.create({
-        sessionId: 'bounded',
-        projectHash: PROJECT,
-        chatsDir: chats,
-        workspaceDirs: ['/work/雪'],
-        provider: 'anthropic',
-        model: 'model-1',
-        journal: journalSeams(),
-      });
+      const recorder = JournalRecordingService.create(
+        withTestNamedWriters({
+          sessionId: 'bounded',
+          projectHash: PROJECT,
+          chatsDir: chats,
+          workspaceDirs: ['/work/雪'],
+          provider: 'anthropic',
+          model: 'model-1',
+          journal: journalSeams(),
+        }),
+      );
       let filePath: string;
       try {
         const session = await recorder.session();

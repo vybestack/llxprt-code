@@ -21,10 +21,6 @@ import {
   ConversationFileWriter,
   getConversationFileWriter,
 } from './ConversationFileWriter.js';
-// NOTE: Ideally imported from '@vybestack/llxprt-code-storage/testing' (Tier 3 deep export),
-// but package self-import does not resolve at vitest runtime without a built dist/ or vite alias.
-// Using source-relative import instead. The testing.ts barrel is verified separately.
-import { resetConversationFileWriterForTesting } from '../testing.js';
 import type { StorageLogger } from '../types/logger.js';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
@@ -241,49 +237,26 @@ describe('ConversationFileWriter — Tool Call Write', () => {
   });
 });
 
-// ─── Singleton Reuse (Scenario 4) ───────────────────────────────────────────
+// ─── Root Isolation (Scenario 4) ────────────────────────────────────────────
 
-describe('ConversationFileWriter — Singleton Reuse', () => {
-  afterEach(() => {
-    resetConversationFileWriterForTesting();
-  });
+describe('ConversationFileWriter — Root Isolation', () => {
+  it('writes for each caller to the directory it supplies', async () => {
+    const dirA = await createTempDir('cfw-root-A-');
+    const dirB = await createTempDir('cfw-root-B-');
+    const rootAWriter = getConversationFileWriter(dirA);
+    const rootBWriter = getConversationFileWriter(dirB);
 
-  it('getConversationFileWriter returns the same instance on repeated calls', () => {
-    const tmpDir = path.join(os.tmpdir(), 'cfw-singleton-test');
-    const first = getConversationFileWriter(tmpDir);
-    const second = getConversationFileWriter(tmpDir);
-    expect(first).toBe(second);
-  });
+    await rootAWriter.writeEntry({ type: 'root-a' });
+    await rootBWriter.writeEntry({ type: 'root-b' });
+    await rootBWriter.writeEntry({ type: 'root-b-after-close' });
 
-  it('resetConversationFileWriterForTesting clears the singleton', () => {
-    const tmpDir = path.join(os.tmpdir(), 'cfw-reset-test');
-    const first = getConversationFileWriter(tmpDir);
-    resetConversationFileWriterForTesting();
-    const second = getConversationFileWriter(tmpDir);
-    expect(first).not.toBe(second);
-  });
-
-  it('first-call logPath wins: later calls reuse the original path', async () => {
-    const dirA = await createTempDir('cfw-firstwins-A-');
-    const dirB = await createTempDir('cfw-firstwins-B-');
-
-    const first = getConversationFileWriter(dirA);
-    // Subsequent call with a DIFFERENT path must return the same instance and
-    // ignore dirB entirely.
-    const second = getConversationFileWriter(dirB);
-    expect(second).toBe(first);
-
-    // Prove dirA wins by observing where output is actually written.
-    await second.writeEntry({ type: 'probe' });
-
-    const today = new Date().toISOString().split('T')[0];
-    const expectedFile = path.join(dirA, `conversation-${today}.jsonl`);
-    const content = await fsp.readFile(expectedFile, 'utf-8');
-    expect(content).toContain('"type":"probe"');
-
-    // dirB must remain empty — its path was ignored.
-    const dirBEntries = await fsp.readdir(dirB);
-    expect(dirBEntries).toHaveLength(0);
+    const linesA = await readJsonlLines(dirA);
+    const linesB = await readJsonlLines(dirB);
+    expect(linesA.map((entry) => entry.type)).toStrictEqual(['root-a']);
+    expect(linesB.map((entry) => entry.type)).toStrictEqual([
+      'root-b',
+      'root-b-after-close',
+    ]);
   });
 });
 

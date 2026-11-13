@@ -1,9 +1,11 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { vi } from 'bun:test';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import type { DeferredHistorySourceOptions } from '../core/clientContract.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export const configHistoryJournals = new Set<HistoryService>();
 export function configHistoryRows(...rows: IContent[]): IContent[] {
@@ -51,7 +53,7 @@ export function captureConfigHistory(): {
   >;
   initializedHistoryCount: () => number;
 } {
-  const journal = new HistoryService();
+  const journal = new HistoryService({ scratchRoots: historyScratchRoots });
   configHistoryJournals.add(journal);
   let countAtInitialize = 0;
   return {

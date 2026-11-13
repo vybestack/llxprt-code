@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createServer } from 'node:http';
@@ -18,6 +19,7 @@ import {
   WIRE_ROUTES,
   type WireRoute,
 } from './support/wireBodyCapture.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const rows: readonly IContent[] = [
   { speaker: 'human', blocks: [{ type: 'text', text: 'question 雪 🐈' }] },
@@ -179,7 +181,7 @@ async function send(
         : await estimatePromptEnvelope(
             provider.name,
             projection,
-            createRuntimeTokenizerFactory(),
+            createRuntimeTokenizerFactory(tokenizerScratchRoots),
           );
     for await (const chunk of provider.generateChatCompletion({
       ...options,

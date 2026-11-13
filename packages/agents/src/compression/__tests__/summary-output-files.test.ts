@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
@@ -5,7 +6,7 @@ import * as promises from 'node:fs/promises';
 import { join } from 'node:path';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { getScratchRoot } from '../../../../core/src/storage/scratch-root.js';
+
 import { withNativeFallbackFixture } from './support/native-fallback-fixture.js';
 import { middleoutRow, middleoutSetup } from './middleout-disk-helpers.js';
 import { oneshotSetup } from './oneshot-disk-helpers.js';
@@ -23,6 +24,7 @@ import {
 } from '../summaryOutput.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function assertOutputCopy(
   candidate: CompressionOutputRows,
@@ -64,7 +66,7 @@ async function seededSummary(
       })(),
     );
     const setup = strategy === 'middle-out' ? middleoutSetup : oneshotSetup;
-    getScratchRoot();
+    historyScratchRoots.getRoot();
     await buildCompressionSystemInstruction('test-model', {
       provider: 'summary-transport',
       interactionMode: 'non-interactive',
@@ -268,7 +270,10 @@ describe('summary output candidate allocation', () => {
     it(`${strategy} prepares and emits its actual output without any file creation`, async () => {
       await seededSummary(strategy, async ({ history }, setup) => {
         const previous = await history.openDumpSnapshot();
-        const source = await curatedDensityRows(previous.rows());
+        const source = await curatedDensityRows(
+          historyScratchRoots,
+          previous.rows(),
+        );
         try {
           const metadata = await buildCompressionMetadata(
             'output-producer',

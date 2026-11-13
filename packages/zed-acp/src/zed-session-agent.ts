@@ -287,6 +287,8 @@ export async function buildZedSessionAgent(
   return createAgentFromSettingsSnapshot(
     {
       ...captureZedAgentDeclaration(params),
+      namedWriters: hostConfig.namedWriters,
+      scratchRoots: hostConfig.scratchRoots,
       credentialAuthority: providerInputs.credentialAuthority,
       providerContributions: providerInputs.providerContributions,
       oauthSettings: providerInputs.oauthSettings,

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from './journalSession.js';
@@ -62,9 +63,12 @@ describe('indexed orphan-only unit stream', () => {
   for (const input of inputs) {
     it(`matches frozen units for ${input.id}`, async () => {
       const expected = frozenUnits(input);
-      const session = await JournalSession.create(`${directory()}/units.llxj`, {
-        journal: testJournalSeams().dependencies,
-      });
+      const session = await JournalSession.create(
+        `${directory()}/units.llxj`,
+        testJournalOptions({
+          journal: testJournalSeams().dependencies,
+        }),
+      );
       try {
         await session.append(input.rows);
         const snapshot = await session.store.snapshot();
@@ -84,9 +88,12 @@ describe('indexed orphan-only unit stream', () => {
   }
 
   it('reads source facts from the same pinned version after a later response arrives', async () => {
-    const session = await JournalSession.create(`${directory()}/pinned.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/pinned.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([{ speaker: 'ai', blocks: [call('a')] }]);
       const snapshot = await session.store.snapshot();
@@ -141,7 +148,7 @@ describe('indexed orphan-only unit stream', () => {
   it('rejects real responses rather than silently using an unimplemented rule or the old normalizer', async () => {
     const session = await JournalSession.create(
       `${directory()}/unsupported.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await session.append([{ speaker: 'tool', blocks: [response('a')] }]);

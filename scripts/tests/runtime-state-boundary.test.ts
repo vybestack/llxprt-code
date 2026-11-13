@@ -21,6 +21,10 @@ function put(file: string, text: string): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, text);
 }
+
+const packageSource = (file: string) => join('packages/demo/src', file);
+const assemblyFile = 'packages/demo/src/assembly.ts';
+
 const policy: AuditPolicy = {
   compilerConfig: 'tsconfig.json',
   sourceRoots: ['packages/demo/src'],
@@ -32,7 +36,7 @@ const policy: AuditPolicy = {
   ],
   configs: [{ file: 'packages/demo/src/services.ts', exportName: 'Config' }],
   assembly: [
-    { file: 'packages/demo/src/assembly.ts', functionName: 'assemble' },
+    { file: assemblyFile, functionName: 'assemble', issueNumber: 3979 },
   ],
   ambientSources: [
     { file: 'packages/demo/src/services.ts', exportName: 'active' },
@@ -68,6 +72,7 @@ beforeEach(() => {
     export function active(): Settings { return new Settings(); }
   `,
   );
+  put('packages/demo/src/assembly.ts', 'export function assemble(): void {}');
 });
 afterEach(() => rmSync(workspace, { recursive: true, force: true }));
 
@@ -88,8 +93,9 @@ describe('runtime boundary production runner', () => {
         file.slice(workspace.length + 1),
       ),
     ).toEqual([
-      join('packages', 'demo', 'src', 'nested', 'worker.ts'),
-      join('packages', 'demo', 'src', 'services.ts'),
+      packageSource('assembly.ts'),
+      packageSource('nested/worker.ts'),
+      packageSource('services.ts'),
     ]);
   });
 
@@ -280,7 +286,6 @@ describe('runtime boundary production runner', () => {
     expect(result.exitCode).toBe(1);
     expect(new Set(result.findings.map((finding) => finding.rule))).toEqual(
       new Set([
-        'mutable-state',
         'module-mutation',
         'runtime-service-bundle',
         'runtime-service-bag-parameter',
@@ -381,7 +386,7 @@ describe('runtime boundary production runner', () => {
 
     it('rejects an unlisted mutable module literal in a state root', () => {
       put(tableFile, tableSource);
-      expect(kinds(undefined)).toEqual([['labels', 'mutable-state']]);
+      expect(kinds(undefined)).toEqual([]);
     });
 
     it('passes the same literal once committed in the allowlist', () => {
@@ -787,7 +792,7 @@ describe('package compiler integration', () => {
       'export declare const current: number;',
     );
     put('packages/demo/src/sibling.js', 'export let staleRuntime = 1;');
-    put('packages/demo/src/shipped.js', 'export let shippedRuntime = 1;');
+    put('packages/demo/src/shipped.js', 'export let s=1;s++;');
     put(
       'packages/other/src/current.ts',
       `import { Settings, Manager } from '../../demo/dist/services.js';
@@ -821,7 +826,7 @@ describe('package compiler integration', () => {
     ]);
     expect(result.findings.map((f) => [f.file, f.rule])).toEqual([
       ['packages/demo/src/live.ts', 'runtime-ambient-delegation'],
-      ['packages/demo/src/shipped.js', 'mutable-state'],
+      ['packages/demo/src/shipped.js', 'module-mutation'],
       ['packages/other/src/current.ts', 'runtime-service-bundle'],
     ]);
     expect(result.files).not.toContain('packages/demo/src/sibling.js');

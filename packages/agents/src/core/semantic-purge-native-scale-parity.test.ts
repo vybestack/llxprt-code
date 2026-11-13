@@ -1,13 +1,14 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/historyOriginId.js';
 import { describe, expect, it } from 'bun:test';
 import { withNativePurgeFixture } from '../../../core/src/services/history/__tests__/support/native-purge-fixture.js';
 import { expectedSemanticPurge } from './__tests__/support/semantic-purge-row-oracle.js';
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function seededRows(size: number): IContent[] {
   return Array.from(
@@ -57,7 +58,7 @@ describe('actual native purge independent scale parity below provider preparatio
   for (const size of [65]) {
     it(`matches old eager tokens, full values, owners, events and durable mirrors at ${size}`, async () => {
       const input = seededRows(size);
-      const eager = new HistoryService({});
+      const eager = new HistoryService({ scratchRoots: historyScratchRoots });
       eager.setTokenizerFactory(exactTokenizer());
       try {
         await eager.detachedValues.replace(input);
@@ -121,7 +122,9 @@ describe('actual native purge independent scale parity below provider preparatio
             for (let index = 0; index < view.length; index++)
               origins.push(await view.originAt(index));
             expect(origins).toStrictEqual(
-              Array.from({ length: size - 1 }, () => historyOriginId(origin)),
+              Array.from({ length: size - 1 }, () =>
+                history.originIds.get(origin),
+              ),
             );
           });
           expect(events).toStrictEqual(expectedEvents);

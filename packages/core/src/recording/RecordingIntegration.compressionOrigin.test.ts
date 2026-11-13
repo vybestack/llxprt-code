@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -24,6 +27,8 @@ import type { IContent } from '../services/history/IContent.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 interface OwnedRecording {
   readonly owner: object;
   readonly service: JournalRecordingService;
@@ -43,15 +48,17 @@ async function openOwnedRecording(
   history: HistoryService,
 ): Promise<OwnedRecording> {
   const chatsDir = path.join(tempDir, name);
-  const service = JournalRecordingService.create({
-    sessionId: `compression-origin-${name}-0001`,
-    projectHash: 'project-hash-compression-origin',
-    chatsDir,
-    workspaceDirs: ['/workspace/project'],
-    provider: 'anthropic',
-    model: 'claude-4',
-  });
-  const integration = new RecordingIntegration(service);
+  const service = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: `compression-origin-${name}-0001`,
+      projectHash: 'project-hash-compression-origin',
+      chatsDir,
+      workspaceDirs: ['/workspace/project'],
+      provider: 'anthropic',
+      model: 'claude-4',
+    }),
+  );
+  const integration = new RecordingIntegration(service, recordingScratchRoots);
   const owner = { name };
   await integration.subscribeToJournal(history, owner);
   return { owner, service, integration };
@@ -75,6 +82,8 @@ async function compressedSummaryTexts(
 }
 
 describe('RecordingIntegration compression summary origin', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   let tempDir: string;
   let history: HistoryService;
   let first: OwnedRecording;
@@ -84,7 +93,7 @@ describe('RecordingIntegration compression summary origin', () => {
     tempDir = await fs.mkdtemp(
       path.join(os.tmpdir(), 'recording-compression-origin-'),
     );
-    history = new HistoryService();
+    history = new HistoryService({ scratchRoots: recordingScratchRoots });
     first = await openOwnedRecording(tempDir, 'first', history);
     second = await openOwnedRecording(tempDir, 'second', history);
   });

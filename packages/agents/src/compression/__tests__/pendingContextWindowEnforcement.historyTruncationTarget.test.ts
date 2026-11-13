@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { createHistoryRuntimeFixture } from '../../core/__tests__/history-runtime-fixture.js';
 /**
  * @license
@@ -33,6 +34,7 @@ import {
 } from '../pendingContextWindowEnforcement.js';
 import { runDiskProviderFallback } from '../diskProviderFallback.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const MODEL = 'test-model';
 const COMPRESSION_THRESHOLD = 0.8;
@@ -83,7 +85,9 @@ interface Harness {
 }
 
 async function buildHarness(): Promise<Harness> {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const runtimeContext = buildRuntimeContext(historyService);
   const logger = makeLogger();
   const marginAdjustedLimit = computeMarginAdjustedLimit(CONTEXT_LIMIT);

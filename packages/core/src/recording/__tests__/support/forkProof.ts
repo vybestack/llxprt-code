@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach } from 'bun:test';
 import { OwnerDictionary } from '../../../journal/ownerDictionary.js';
@@ -12,6 +14,7 @@ import {
 } from '../../SessionTransitionService.js';
 import type { ContinueTarget } from '../../types.js';
 import { PROJECT, journalSeams } from './recordedJournals.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export interface OwnedContent {
   readonly content: IContent;
@@ -33,18 +36,21 @@ export function useForkProof(): {
   });
   return {
     keep,
-    history: () => keep(new HistoryService({})),
+    history: () =>
+      keep(new HistoryService({ scratchRoots: historyScratchRoots })),
     recorder: (chatsDir, sessionId) =>
       keep(
-        JournalRecordingService.create({
-          sessionId,
-          chatsDir,
-          projectHash: PROJECT,
-          workspaceDirs: ['/work'],
-          provider: 'mistral',
-          model: 'model',
-          journal: journalSeams(),
-        }),
+        JournalRecordingService.create(
+          withTestNamedWriters({
+            sessionId,
+            chatsDir,
+            projectHash: PROJECT,
+            workspaceDirs: ['/work'],
+            provider: 'mistral',
+            model: 'model',
+            journal: journalSeams(),
+          }),
+        ),
       ),
   };
 }
@@ -89,9 +95,11 @@ export async function forkCheckpoint(
       candidate.kind === 'checkpoint' && candidate.checkpointName === name,
   );
   if (target === undefined) throw new Error(`No checkpoint ${name}`);
-  const result = await new SessionTransitionService({
-    journal: journalSeams(),
-  }).forkFromCheckpoint(target, chats, PROJECT, 'mistral', 'child', ['/child']);
+  const result = await new SessionTransitionService(
+    withTestNamedWriters({
+      journal: journalSeams(),
+    }),
+  ).forkFromCheckpoint(target, chats, PROJECT, 'mistral', 'child', ['/child']);
   if (!result.ok) throw new Error(result.error);
   if (!(result.recording instanceof JournalRecordingService)) {
     throw new Error('Expected journal fork');

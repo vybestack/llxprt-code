@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -40,6 +41,8 @@ import {
 } from './retirement-source-fixture.js';
 import { DEFAULT_REQUEST_MEDIA_BUDGET_BYTES } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { createSourcePromptEnvelopePreparer } from '../../core/promptEnvelopeSendSeam.js';
+const historyScratchRoots = new ScratchRootOwner();
+
 export const MODEL = 'claude-sonnet-4-20250514';
 export const BASE_URL = 'https://api.anthropic.com';
 export const FIFTEEN_MIB = 15 * 1024 * 1024;
@@ -179,7 +182,7 @@ export interface SentRequest {
 export class RetirementSession {
   readonly store: LocalMediaStore;
   readonly resolver: RequestMediaResolver;
-  readonly history = new HistoryService();
+  readonly history = new HistoryService({ scratchRoots: historyScratchRoots });
   readonly sent: SentRequest[] = [];
   compressionRuns = 0;
   /** When set, the HTTP boundary fails every request with this error. */

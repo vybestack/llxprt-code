@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
@@ -36,7 +37,7 @@ describe('disk paging ownership', () => {
           parameters: {},
         })),
       };
-      const session = await JournalSession.create(file);
+      const session = await JournalSession.create(file, testJournalOptions());
       try {
         await session.append([opener]);
       } finally {

@@ -60,7 +60,7 @@ export async function nativeTruncationSourceFailure(
   await withNativeFallbackFixture(async ({ history, owners, durable }) => {
     await history.detachedValues.replace(truncationValues(size, 0, 64));
     const before = await compressionValueDigest(truncationValues(size, 0, 64));
-    const scratch = checkpointScratch();
+    const scratch = checkpointScratch(history);
     const failure = new Error('injected native curated producer failure');
     const capture = history.detachedValues.withCheckpoint.bind(
       history.detachedValues,
@@ -87,7 +87,7 @@ export async function nativeTruncationSourceFailure(
     await expect(escaped.next()).rejects.toThrow(
       'A journal read was used after its pin was released',
     );
-    expect(checkpointScratch()).toStrictEqual(scratch);
+    expect(checkpointScratch(history)).toStrictEqual(scratch);
     expect(
       await compressionValueDigest(history.streamRawHistory()),
     ).toStrictEqual(before);
@@ -107,7 +107,7 @@ export async function nativeTruncationSourceFailure(
     expect(owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 })).toBe(
       true,
     );
-    expect(checkpointScratch()).toStrictEqual(scratch);
+    expect(checkpointScratch(history)).toStrictEqual(scratch);
   });
   return size;
 }

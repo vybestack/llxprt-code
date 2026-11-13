@@ -25,6 +25,7 @@
 import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { describe, expect, it } from 'bun:test';
 import {
+  RequestBodyCensus,
   acquireRequestScopedBody,
   activeRequestBodyCount,
   withRequestScopedBody,
@@ -42,10 +43,12 @@ function buildBody(rows: readonly BodyRow[]): { rows: BodyRow[] } {
 
 describe('P05b4 request-scoped transport body lease @plan:PLAN-20260917-ISSUE854.P05b4', () => {
   it('reports zero in-flight bodies outside a request', () => {
-    expect(activeRequestBodyCount()).toBe(0);
+    const census = new RequestBodyCensus();
+    expect(activeRequestBodyCount(census)).toBe(0);
   });
 
   it('bounds the in-flight body to exactly one during the transport call', async () => {
+    const census = new RequestBodyCensus();
     const rows: readonly BodyRow[] = [
       { payload: 'row-1', blob: 'x'.repeat(64) },
       { payload: 'row-2', blob: 'y'.repeat(64) },
@@ -55,17 +58,19 @@ describe('P05b4 request-scoped transport body lease @plan:PLAN-20260917-ISSUE854
       'anthropic',
       () => buildBody(rows),
       async (body: RequestScopedBody<{ rows: BodyRow[] }>) => {
-        observedInFlight = activeRequestBodyCount();
+        observedInFlight = activeRequestBodyCount(census);
         expect(body.value.rows.length).toBe(2);
         return 'sent';
       },
+      census,
     );
     expect(result).toBe('sent');
     expect(observedInFlight).toBe(1);
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(census)).toBe(0);
   });
 
   it('releases the body after the call: arrays are spliced and the payload graph is collectible', async () => {
+    const census = new RequestBodyCensus();
     const unique = 'release-probe-p05b4';
     let observed: { rows: BodyRow[] } | undefined;
     await withRequestScopedBody(
@@ -75,6 +80,7 @@ describe('P05b4 request-scoped transport body lease @plan:PLAN-20260917-ISSUE854
         observed = body.value;
         return 'sent';
       },
+      census,
     );
     // Release must have spliced the wire array even though the consumer's
     // reference to the body object is still in scope here.
@@ -93,6 +99,7 @@ describe('P05b4 request-scoped transport body lease @plan:PLAN-20260917-ISSUE854
       const lease = acquireRequestScopedBody(
         'openai-responses',
         buildBody(rows),
+        census,
       );
       probe = new WeakRef<object>(lease.value.rows[0] as object);
       return lease.release();
@@ -105,6 +112,7 @@ describe('P05b4 request-scoped transport body lease @plan:PLAN-20260917-ISSUE854
 
 describe('P05b4 request-scoped transport release and reuse @plan:PLAN-20260917-ISSUE854.P05b4', () => {
   it('releases the body when the consumer throws, and propagates the error', async () => {
+    const census = new RequestBodyCensus();
     const rows: readonly BodyRow[] = [
       { payload: 'boom-row', blob: 'w'.repeat(64) },
     ];
@@ -115,12 +123,14 @@ describe('P05b4 request-scoped transport release and reuse @plan:PLAN-20260917-I
         async () => {
           throw new Error('transport failed mid-flight');
         },
+        census,
       ),
     ).rejects.toThrow('transport failed mid-flight');
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(census)).toBe(0);
   });
 
   it('fails fast on consume-after-release and keeps double release idempotent', async () => {
+    const census = new RequestBodyCensus();
     const rows: readonly BodyRow[] = [
       { payload: 'late-row', blob: 'v'.repeat(64) },
     ];
@@ -137,12 +147,14 @@ describe('P05b4 request-scoped transport release and reuse @plan:PLAN-20260917-I
         await expect(body.release()).resolves.toBeUndefined();
         return 'sent';
       },
+      census,
     );
     expect(held).toBeDefined();
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(census)).toBe(0);
   });
 
   it('sequential requests never stack in-flight bodies', async () => {
+    const census = new RequestBodyCensus();
     const rows: readonly BodyRow[] = [
       { payload: 'seq-row', blob: 'u'.repeat(64) },
     ];
@@ -152,13 +164,14 @@ describe('P05b4 request-scoped transport release and reuse @plan:PLAN-20260917-I
         'openai',
         () => buildBody(rows),
         async (body: RequestScopedBody<{ rows: BodyRow[] }>) => {
-          peaks.push(activeRequestBodyCount());
+          peaks.push(activeRequestBodyCount(census));
           expect(body.value.rows.length).toBe(1);
           return 'sent';
         },
+        census,
       );
     }
     expect(peaks).toStrictEqual([1, 1, 1]);
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(census)).toBe(0);
   });
 });

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
@@ -15,10 +16,11 @@ import {
 } from './__tests__/support/semantic-purge-fault-test-helpers.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class StreamOnlyHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'production materializer array seam',
@@ -28,7 +30,9 @@ class StreamOnlyHistory extends HistoryService {
 
 describe('journal materialization guard', () => {
   it('rejects native eager materialization through the guarded journal', async () => {
-    const history = new StreamOnlyHistory({});
+    const history = new StreamOnlyHistory({
+      scratchRoots: historyScratchRoots,
+    });
     try {
       await expect(observeNativeMaterializationGuard(history)).rejects.toThrow(
         'production materializer array seam',

@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -43,6 +44,7 @@ describe('stored version restoration', () => {
           eagerNeutralRowFacts: true,
           neutralRowFacts: registration,
         },
+        testNamedWriters,
       );
       try {
         await store.commit([
@@ -97,15 +99,19 @@ describe('stored version restoration', () => {
 
   it('refills restored facts when the measurement revision has changed', async () => {
     const file = join(directory(), 'revised-neutral.llxj');
-    const original = await JournalStore.create(file, {
-      ...storeDeps(),
-      eagerNeutralRowFacts: true,
-      neutralRowFacts: {
-        kind: 'token-usage',
-        revision: 'old',
-        measure: async () => Uint8Array.of(1),
+    const original = await JournalStore.create(
+      file,
+      {
+        ...storeDeps(),
+        eagerNeutralRowFacts: true,
+        neutralRowFacts: {
+          kind: 'token-usage',
+          revision: 'old',
+          measure: async () => Uint8Array.of(1),
+        },
       },
-    });
+      testNamedWriters,
+    );
     const saved = await (async () => {
       try {
         await original.commit([
@@ -127,11 +133,15 @@ describe('stored version restoration', () => {
         return Uint8Array.of(2);
       },
     };
-    const store = await JournalStore.open(file, {
-      ...storeDeps(),
-      eagerNeutralRowFacts: true,
-      neutralRowFacts: registration,
-    });
+    const store = await JournalStore.open(
+      file,
+      {
+        ...storeDeps(),
+        eagerNeutralRowFacts: true,
+        neutralRowFacts: registration,
+      },
+      testNamedWriters,
+    );
     try {
       await store.commit([
         { kind: 'replace', rows: [draftRow({ text: 'candidate' })] },
@@ -160,7 +170,11 @@ describe('stored version restoration', () => {
     'restores %i rows without deriving a newly configured fact index',
     async (size) => {
       const file = join(directory(), `restore-${size}.llxj`);
-      const initial = await JournalStore.create(file, storeDeps());
+      const initial = await JournalStore.create(
+        file,
+        storeDeps(),
+        testNamedWriters,
+      );
       const saved = await (async () => {
         try {
           await initial.commit([
@@ -185,15 +199,19 @@ describe('stored version restoration', () => {
         }
       })();
       const counter = { reads: 0 };
-      const store = await JournalStore.open(file, {
-        ...storeDeps({
-          seams: testJournalSeams({ readCounter: counter }, 1, false),
-        }),
-        recencyFactPolicy: {
-          revision: 'new-recency-policy',
-          bucket: () => undefined,
+      const store = await JournalStore.open(
+        file,
+        {
+          ...storeDeps({
+            seams: testJournalSeams({ readCounter: counter }, 1, false),
+          }),
+          recencyFactPolicy: {
+            revision: 'new-recency-policy',
+            bucket: () => undefined,
+          },
         },
-      });
+        testNamedWriters,
+      );
       try {
         const currentStateRoot = store.published?.roots.stateRoot;
         if (currentStateRoot === undefined)

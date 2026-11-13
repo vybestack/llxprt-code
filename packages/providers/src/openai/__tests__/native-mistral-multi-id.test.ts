@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from '../../../../core/src/services/history/journalSession.js';
@@ -35,9 +36,12 @@ describe('Mistral multi-ID pending replay', () => {
     'matches independent old units, mapper and mandatory token oracle under $groups groups/$strip',
     async ({ groups, strip }) => {
       const input = multiIdCase(Math.max(12, groups * 2), true, groups);
-      const session = await JournalSession.create(`${directory()}/case.llxj`, {
-        journal: testJournalSeams({}, 1, false).dependencies,
-      });
+      const session = await JournalSession.create(
+        `${directory()}/case.llxj`,
+        testJournalOptions({
+          journal: testJournalSeams({}, 1, false).dependencies,
+        }),
+      );
       try {
         await session.append(input.rows);
         await session.registerRowFormat(
@@ -128,9 +132,12 @@ describe('Mistral multi-ID pending replay', () => {
     'walks affected holder ordinals once over %s dense rows',
     async (size) => {
       const input = multiIdCase(size, true);
-      const session = await JournalSession.create(`${directory()}/cost.llxj`, {
-        journal: testJournalSeams({}, 1, false).dependencies,
-      });
+      const session = await JournalSession.create(
+        `${directory()}/cost.llxj`,
+        testJournalOptions({
+          journal: testJournalSeams({}, 1, false).dependencies,
+        }),
+      );
       try {
         await session.append(input.rows);
         await session.registerRowFormat(

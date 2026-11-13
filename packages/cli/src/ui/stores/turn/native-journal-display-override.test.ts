@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -10,6 +11,7 @@ describe('journal file prompt display', () => {
   it('renders a file prompt display override once instead of repeating it for every text slice', async () => {
     const session = await JournalSession.create(
       join(directory(), 'display.llxj'),
+      testJournalOptions(),
     );
     try {
       await session.append([

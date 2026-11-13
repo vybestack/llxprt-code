@@ -1,3 +1,7 @@
+import {
+  testJournalOptions,
+  withTestNamedWriters,
+} from '../../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -6,6 +10,7 @@ import {
   NativeJournalPageReader,
 } from '@vybestack/llxprt-code-core';
 import { JournalDisplayWriter } from '@vybestack/llxprt-code-core/journal/display-recording.js';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { ToolCallStatus } from '../../../types.js';
 import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
 import { renderHook, waitFor } from '../../../../__tests__/render.js';
@@ -27,7 +32,7 @@ function settings(ui: Record<string, unknown> = {}): LoadedSettings {
 }
 
 async function journal(path: string, text: string): Promise<void> {
-  const session = await JournalSession.create(path);
+  const session = await JournalSession.create(path, testJournalOptions());
   try {
     await session.append([
       { speaker: 'human', blocks: [{ type: 'text', text }] },
@@ -142,7 +147,7 @@ describe('journal transcript bootstrap', () => {
         recordingSwapCallbacks: journalSource,
       }),
     );
-    const session = await JournalSession.create(file);
+    const session = await JournalSession.create(file, testJournalOptions());
     try {
       await session.append([
         {
@@ -185,6 +190,56 @@ describe('journal transcript bootstrap', () => {
     } finally {
       mounted.unmount();
       await session.close();
+    }
+  });
+
+  it('follows live commits from the recording publisher without polling rows', async () => {
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'publisher',
+        projectHash: 'bootstrap-test',
+        chatsDir: directory(),
+        workspaceDirs: [directory()],
+        provider: 'test',
+        model: 'test-model',
+      }),
+    );
+    const session = await recording.session();
+    await session.append([
+      { speaker: 'human', blocks: [{ type: 'text', text: 'initial' }] },
+    ]);
+    const loaded = settings();
+    const journalSource: JournalPathSource = {
+      getCurrentRecording: () => recording,
+    };
+    const mounted = renderHook(() =>
+      useScrollbackBootstrap({
+        settings: loaded,
+        recordingSwapCallbacks: journalSource,
+      }),
+    );
+    try {
+      await waitFor(() =>
+        expect(
+          mounted.result.current.pager?.store.getState().rows,
+        ).toHaveLength(1),
+      );
+      await session.append([
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'published after bootstrap' }],
+        },
+      ]);
+      await waitFor(() =>
+        expect(
+          mounted.result.current.pager?.store
+            .getState()
+            .rows.map((row) => row.item.text),
+        ).toStrictEqual(['initial', 'published after bootstrap']),
+      );
+    } finally {
+      mounted.unmount();
+      await recording.dispose();
     }
   });
 

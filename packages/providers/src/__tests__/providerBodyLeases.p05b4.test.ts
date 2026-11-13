@@ -25,7 +25,10 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../IProvider.js';
-import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
+import {
+  activeRequestBodyCount,
+  RequestBodyCensus,
+} from '../utils/requestScopedBody.js';
 import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
 import { readRawPostTestBody } from './rawPostTestAdapters.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
@@ -40,6 +43,7 @@ function singleUserTurn(): IContent[] {
 }
 
 interface Harness {
+  readonly requestBodyCensus: RequestBodyCensus;
   readonly settings: SettingsService;
   readonly runtime: ReturnType<typeof createProviderRuntimeContext>;
   readonly config: ReturnType<typeof createRuntimeConfigStub>;
@@ -55,7 +59,12 @@ function makeHarness(
   const runtime = createProviderRuntimeContext({
     runtimeId,
   });
-  return { settings, runtime, config };
+  return {
+    settings,
+    runtime,
+    config,
+    requestBodyCensus: new RequestBodyCensus(),
+  };
 }
 
 function makeOptions(
@@ -135,7 +144,9 @@ async function runOpenAIRequest(
       'getClient',
     )
     .mockResolvedValue({ post, apiKey: 'test-key' });
-  const provider = new OpenAIProvider('test-key', undefined, undefined);
+  const provider = new OpenAIProvider('test-key', undefined, {
+    requestBodyCensus: harness.requestBodyCensus,
+  });
   const options = makeOptions('openai', harness, contents, {
     'prompt-caching': 'off',
     streaming: 'disabled',
@@ -209,6 +220,7 @@ async function captureVercelBodies(
   const provider = new OpenAIVercelProvider(
     'test-key',
     'https://api.openai.com/v1',
+    { requestBodyCensus: harness.requestBodyCensus },
   );
   const options = makeOptions('openai-vercel', harness, contents, {
     'prompt-caching': 'off',
@@ -253,7 +265,7 @@ describe('P05b4 transport body leases @plan:PLAN-20260917-ISSUE854.P05b4', () =>
         stream: false,
       }),
     );
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(harness.requestBodyCensus)).toBe(0);
   });
 
   it('openai: releases the body when the transport errors', async () => {
@@ -263,7 +275,7 @@ describe('P05b4 transport body leases @plan:PLAN-20260917-ISSUE854.P05b4', () =>
         throw new Error('openai lease transport failure');
       }),
     ).rejects.toThrow('openai lease transport failure');
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(harness.requestBodyCensus)).toBe(0);
   });
 
   it('openai-vercel: active body count returns to 0 after a successful call, and sent bytes equal the expected JSON', async () => {
@@ -285,7 +297,7 @@ describe('P05b4 transport body leases @plan:PLAN-20260917-ISSUE854.P05b4', () =>
         stream_options: { include_usage: true },
       }),
     );
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(harness.requestBodyCensus)).toBe(0);
   });
 
   it('openai-vercel: releases the body when the transport errors', async () => {
@@ -295,40 +307,50 @@ describe('P05b4 transport body leases @plan:PLAN-20260917-ISSUE854.P05b4', () =>
         throw new Error('vercel lease transport failure');
       }),
     ).rejects.toThrow('vercel lease transport failure');
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(harness.requestBodyCensus)).toBe(0);
   });
 
   it('consuming a released transport body fails fast, and double release stays idempotent', async () => {
+    const census = new RequestBodyCensus();
     interface LeaseProbe {
       readonly rows: string[];
     }
-    const lease = acquireRequestScopedBody<LeaseProbe>('openai', {
-      rows: ['wire-row'],
-    });
+    const lease = acquireRequestScopedBody<LeaseProbe>(
+      'openai',
+      {
+        rows: ['wire-row'],
+      },
+      census,
+    );
     await lease.release();
     expect(() => lease.value).toThrow(
       'Request-scoped body consumed after release (issue #854 P05b4)',
     );
     await expect(lease.release()).resolves.toBeUndefined();
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(census)).toBe(0);
   });
 
   it('releases a body that carries a caller-owned frozen array and leaves that array intact', async () => {
+    const census = new RequestBodyCensus();
     interface AdmittedParamBody {
       readonly rows: string[];
       readonly stop: readonly string[];
     }
     const admittedStop: readonly string[] = Object.freeze(['stop-here']);
-    const lease = acquireRequestScopedBody<AdmittedParamBody>('openai', {
-      rows: ['wire-row'],
-      stop: admittedStop,
-    });
+    const lease = acquireRequestScopedBody<AdmittedParamBody>(
+      'openai',
+      {
+        rows: ['wire-row'],
+        stop: admittedStop,
+      },
+      census,
+    );
     const body = lease.value;
 
     await expect(lease.release()).resolves.toBeUndefined();
 
     expect(body.rows).toStrictEqual([]);
     expect(admittedStop).toStrictEqual(['stop-here']);
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(census)).toBe(0);
   });
 });

@@ -67,7 +67,12 @@ export class ArrivalRecordCache {
         bytes.slice(position - head.offset, position - head.offset + length),
     });
     return {
-      ...source,
+      get rowTreePath() {
+        return source.rowTreePath;
+      },
+      sourceIdentity: source.sourceIdentity,
+      rowWindowStats: source.rowWindowStats,
+      recordError: source.recordError,
       readRecordHead: async (offset, ...args) => {
         const bytes = frame(offset);
         return bytes === undefined

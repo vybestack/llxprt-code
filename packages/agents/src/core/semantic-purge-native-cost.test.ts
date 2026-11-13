@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -6,6 +7,7 @@ import { JournalDumpSnapshot } from '@vybestack/llxprt-code-core/services/histor
 import { describe, expect, it, spyOn } from 'bun:test';
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(index: number): IContent {
   if (index === 0)
@@ -30,7 +32,7 @@ function row(index: number): IContent {
 describe('native semantic purge one-pass mutation reads', () => {
   for (const size of [40, 4000]) {
     it(`decodes each retained source row once during publication at ${size} rows`, async () => {
-      const history = new HistoryService({});
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       history.setTokenizerFactory(exactTokenizer());
       try {
         await history.detachedValues.replace(

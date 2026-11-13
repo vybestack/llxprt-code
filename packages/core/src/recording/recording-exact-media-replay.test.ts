@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -24,6 +27,8 @@ import {
 import { JournalRecordingService } from './journalRecordingService.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
 import { resumeSession, type ResumeResult } from './resumeSession.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 class FailableMediaStore extends LocalMediaStore {
   rejectedId: string | undefined;
@@ -60,24 +65,26 @@ async function openResume(
 ): Promise<ResumeResult> {
   const seams = testJournalSeams(failures);
   const flush = await loadFlushRecords();
-  const result = await resumeSession({
-    continueRef: fixture.sessionId,
-    projectHash: PROJECT,
-    chatsDir: fixture.chats,
-    currentProvider: 'test',
-    currentModel: 'model-1',
-    workspaceDirs: [],
-    mediaStore,
-    journal: {
+  const result = await resumeSession(
+    withTestNamedWriters({
+      continueRef: fixture.sessionId,
+      projectHash: PROJECT,
+      chatsDir: fixture.chats,
+      currentProvider: 'test',
+      currentModel: 'model-1',
+      workspaceDirs: [],
+      mediaStore,
       journal: {
-        ...seams.dependencies,
-        flush: (fd) => {
-          seams.dependencies.flush(fd);
-          flush(fd);
+        journal: {
+          ...seams.dependencies,
+          flush: (fd) => {
+            seams.dependencies.flush(fd);
+            flush(fd);
+          },
         },
       },
-    },
-  });
+    }),
+  );
   if (!result.ok) throw new Error(result.error);
   return result;
 }
@@ -114,6 +121,8 @@ async function checkPending(
 }
 
 describe('public native reference-media resume and adoption', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   it('verifies real referenced bytes without a replay reservation and transfers ownership only on adoption', async () => {
     const fixture = new ExactReplayFixture(
       await fixtureDirectory('reference-media'),
@@ -129,13 +138,20 @@ describe('public native reference-media resume and adoption', () => {
       await seed(fixture, structuredClone(expected));
       for (let round = 0; round < 2; round++) {
         const resumed = await openResume(fixture, media);
-        const history = new HistoryService({});
-        const integration = new RecordingIntegration(resumed.recording);
+        const history = new HistoryService({
+          scratchRoots: recordingScratchRoots,
+        });
+        const integration = new RecordingIntegration(
+          resumed.recording,
+          recordingScratchRoots,
+        );
         try {
           expectWireRows(await bootRows(resumed.boot), expected);
           expect(await media.readVerified(ref)).toStrictEqual(expectedBytes);
           expect(await media.hasReservations(ref.contentId)).toBe(false);
-          await history.registerMediaOwner(new HistoryMediaOwnership(media));
+          await history.registerMediaOwner(
+            new HistoryMediaOwnership(media, recordingScratchRoots),
+          );
           await history.adoptResumeBoot(resumed.recording, resumed.boot);
           await integration.subscribeToJournal(history);
           expect(await media.hasReservations(ref.contentId)).toBe(true);
@@ -183,22 +199,31 @@ describe('public native reference-media resume and adoption', () => {
       const failures: Failures = {};
       await seed(fixture, [mediaRow([first, second])]);
       const resumed = await openResume(fixture, media, failures);
-      const history = new HistoryService({});
-      const recorder = JournalRecordingService.create({
-        sessionId: 'prior-session',
-        projectHash: PROJECT,
-        chatsDir: join(fixture.directory, 'prior'),
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'model-1',
+      const history = new HistoryService({
+        scratchRoots: recordingScratchRoots,
       });
-      const integration = new RecordingIntegration(recorder);
+      const recorder = JournalRecordingService.create(
+        withTestNamedWriters({
+          sessionId: 'prior-session',
+          projectHash: PROJECT,
+          chatsDir: join(fixture.directory, 'prior'),
+          workspaceDirs: [],
+          provider: 'test',
+          model: 'model-1',
+        }),
+      );
+      const integration = new RecordingIntegration(
+        recorder,
+        recordingScratchRoots,
+      );
       let release: () => void = () => undefined;
       const held = new Promise<void>((resolve) => {
         release = resolve;
       });
       try {
-        await history.registerMediaOwner(new HistoryMediaOwnership(media));
+        await history.registerMediaOwner(
+          new HistoryMediaOwnership(media, recordingScratchRoots),
+        );
         await integration.subscribeToJournal(history);
         await history.addBatch([mediaRow([previous])]);
         await integration.flushAtTurnBoundary();

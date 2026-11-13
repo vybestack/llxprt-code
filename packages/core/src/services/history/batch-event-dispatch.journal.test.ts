@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
@@ -12,10 +13,11 @@ import {
   rejectedValue,
   rowsOf,
 } from './chronology-rollback-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('journal batch observer publication barrier', () => {
   it('finishes active batch readers before publishing tokens or returning', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.setTokenizerFactory(exactTokenizer());
     const ready = batchGate();
     const gate = batchGate();

@@ -5,7 +5,6 @@ import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { detachedRow } from './detached-rollback-test-helpers.js';
 import type { DetachedHistoryTransform } from './detachedHistoryMutation.js';
 import type { IContent } from './IContent.js';
-import { historyOriginId } from './historyOriginId.js';
 import { openOwnedJournal, type SeedRow } from './journalOwnedFixture.js';
 
 /** Rows 0..n-1 owned by the origins in `owners`, repeating. */
@@ -202,7 +201,7 @@ describe('detached publication keeps the owner of every row', () => {
         { origin },
       );
       expect(await owned.originsOfRows()).toStrictEqual([
-        historyOriginId(origin),
+        owned.store.originIds.get(origin),
         'b',
         undefined,
       ]);
@@ -236,7 +235,7 @@ describe('detached publication keeps the owner of every row', () => {
         { origin },
       );
       expect(await owned.originsOfRows()).toStrictEqual([
-        historyOriginId(origin),
+        owned.store.originIds.get(origin),
       ]);
     } finally {
       await owned.dispose();
@@ -264,7 +263,7 @@ describe('detached publication keeps the owner of every row', () => {
       expect(await owned.originsOfRows()).toStrictEqual([
         'a',
         'b',
-        historyOriginId(origin),
+        owned.store.originIds.get(origin),
       ]);
     } finally {
       await owned.dispose();

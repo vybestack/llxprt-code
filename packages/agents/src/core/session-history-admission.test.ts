@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 /**
  * @license
@@ -36,6 +37,7 @@ import { ChatSession } from './chatSession.js';
 import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 import { RetainedHistoryAdmissions } from './retainedHistoryAdmissions.js';
 import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const {
   gcAndSweep,
@@ -122,6 +124,7 @@ async function createSession(): Promise<ChatSession> {
   });
   admission = new SpyAdmission(store);
   const runtime = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     ...createSessionPolicyFixture(
       setup.settingsService,
       'session-admission-runtime',
@@ -132,7 +135,7 @@ async function createSession(): Promise<ChatSession> {
       model: 'test-model',
       sessionId: 'session-admission-session',
     }),
-    history: new HistoryService(),
+    history: new HistoryService({ scratchRoots: historyScratchRoots }),
     settings: {
       compressionThreshold: 0.8,
       contextLimit: 100_000,
@@ -392,7 +395,10 @@ describe('deferred array admission ownership handle', () => {
       rootDirectory: join(directory, 'deferred-media'),
       quotaBytes: 1024 * 1024,
     });
-    const admissions = new RetainedHistoryAdmissions(localStore);
+    const admissions = new RetainedHistoryAdmissions(
+      localStore,
+      historyScratchRoots,
+    );
     const { weak, prepared } = await consumeDeferredCohort(admissions);
     expect(weak).toHaveLength(DEFERRED_ADMISSION_COHORT_SIZE * 2);
     expectBoundedDeferredRows(await countLiveDeferredRows(weak));
@@ -405,7 +411,10 @@ describe('deferred array admission ownership handle', () => {
       rootDirectory: join(directory, 'deferred-media'),
       quotaBytes: 1024 * 1024,
     });
-    const admissions = new RetainedHistoryAdmissions(localStore);
+    const admissions = new RetainedHistoryAdmissions(
+      localStore,
+      historyScratchRoots,
+    );
     const retained: IContent[][] = [];
     const { weak, prepared } = await consumeDeferredCohort(
       admissions,

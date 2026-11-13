@@ -6,7 +6,10 @@ import { createJournalHeader, encodeJournalHeader } from './fileHeader.js';
 import { JOURNAL_HEADER_BYTES } from './fileHeader.js';
 import { loadFlushRecords, type FlushRecords } from './flushRecords.js';
 import { JournalGroupWriter } from './groupWriter.js';
-import { journalCommitPublisher } from './journal-watermarks.js';
+import {
+  journalCommitPublisher,
+  JournalWatermarks,
+} from './journal-watermarks.js';
 import {
   createFileHandleReader,
   createFileHandleSink,
@@ -18,6 +21,7 @@ import { locateCommittedState } from './trailerSearch.js';
 export type JournalOpenFlags = 'wx+' | 'r+' | 'r';
 
 export interface JournalOpenDependencies {
+  readonly watermarks: JournalWatermarks;
   readonly open: (
     path: string,
     flags: JournalOpenFlags,
@@ -32,6 +36,7 @@ export async function resolveJournalDependencies(
   overrides: Partial<JournalOpenDependencies> = {},
 ): Promise<JournalOpenDependencies> {
   return {
+    watermarks: overrides.watermarks ?? new JournalWatermarks(),
     open: overrides.open ?? ((path, flags) => fsp.open(path, flags)),
     flush: overrides.flush ?? (await loadFlushRecords()),
     nowMs: overrides.nowMs ?? Date.now,
@@ -59,7 +64,10 @@ export async function createJournal(
       writeOffset: JOURNAL_HEADER_BYTES,
       published: undefined,
     },
-    { ...dependencies, notifyCommit: journalCommitPublisher(path) },
+    {
+      ...dependencies,
+      notifyCommit: journalCommitPublisher(path, dependencies.watermarks),
+    },
   );
 }
 
@@ -137,7 +145,10 @@ export async function openJournalForOwner(
         writeOffset: recovery.truncated ? durableEnd : size,
         published: trailer,
       },
-      { ...dependencies, notifyCommit: journalCommitPublisher(path) },
+      {
+        ...dependencies,
+        notifyCommit: journalCommitPublisher(path, dependencies.watermarks),
+      },
     );
     return { writer, recovery };
   } catch (error) {

@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '../../storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { setImmediate } from 'node:timers/promises';
 import { CompressionSpanIndex } from './compression-span-index.js';
@@ -58,11 +59,17 @@ function annotateOutput(
 export async function annotateCompressionSpanStream(
   previousHistory: AsyncIterable<IContent> | Iterable<IContent>,
   newHistory: readonly IContent[],
-  options: { readonly signal?: AbortSignal; readonly root?: string } = {},
+  options: {
+    readonly scratchRoots: ScratchRootOwner;
+    readonly signal?: AbortSignal;
+    readonly root?: string;
+  },
 ): Promise<IContent[]> {
   const signal = options.signal;
   signal?.throwIfAborted();
-  const index = new CompressionSpanIndex(options.root);
+  const index = new CompressionSpanIndex(
+    options.root ?? options.scratchRoots.getRoot(),
+  );
   try {
     for (const entry of newHistory) {
       signal?.throwIfAborted();

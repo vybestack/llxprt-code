@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { MapLookupCache } from '../../map-lookup-cache.js';
 import {
   ID_NODE_CACHE_ENTRY_OVERHEAD,
   type IdNodeCache,
@@ -9,6 +10,7 @@ import {
  * a cache that grows with the history does. The cap checks must fail on it.
  */
 export class UnboundedIdNodeCache implements IdNodeCache {
+  readonly mapLookupCache = new MapLookupCache();
   private readonly nodes = new Map<number, Uint8Array>();
   bytes = 0;
   readonly capBytes = Number.POSITIVE_INFINITY;

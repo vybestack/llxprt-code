@@ -19,7 +19,6 @@ import {
 } from './historyMutationEffects.js';
 import { finalizeMutationEffects } from './historyMutationFailure.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
-import { historyOriginId } from './historyOriginId.js';
 import { JournalCandidate } from './journalDetachedCandidate.js';
 import { snapshotRows } from './journalDetachedCapture.js';
 import { JournalDetachedPublication } from './journalDetachedPublication.js';
@@ -225,7 +224,9 @@ async function createCandidate(
   const appendOnly = task.append === true;
   let densitySpans: JournalDensitySpans | undefined;
   const origin =
-    options.origin === undefined ? undefined : historyOriginId(options.origin);
+    options.origin === undefined
+      ? undefined
+      : store.originIds.get(options.origin);
   const owner = await store.resolveOwner(appendOnly ? undefined : origin);
   const media = mediaFeed(host, appendOnly, effects);
   const candidate = new JournalCandidate({

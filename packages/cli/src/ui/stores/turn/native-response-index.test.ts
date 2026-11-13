@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -36,6 +37,7 @@ describe('native scrollback response selection', () => {
     const directory = await mkdtemp(join(tmpdir(), 'native-response-index-'));
     const session = await JournalSession.create(
       join(directory, 'session.llxj'),
+      testJournalOptions(),
     );
     try {
       await session.append([

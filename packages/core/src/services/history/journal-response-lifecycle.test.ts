@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '../../recording/rowOwnership.js';
@@ -41,9 +42,12 @@ describe('indexed response lifetime and native mutation boundaries', () => {
   const directory = useTempDir('response-lifecycle-');
 
   it('charges response JSON and media for the full asynchronous yield, then releases on cancellation', async () => {
-    const session = await JournalSession.create(`${directory()}/charged.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/charged.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     const ownership = new RowOwnership();
     const meter = createRowCounters();
     const counters = { ...meter.counters, ownership };
@@ -108,10 +112,10 @@ describe('indexed response lifetime and native mutation boundaries', () => {
       const reads = { reads: 0 };
       const session = await JournalSession.create(
         `${directory()}/chain-${length}.llxj`,
-        {
+        testJournalOptions({
           journal: testJournalSeams({ readCounter: reads }, 1, false)
             .dependencies,
-        },
+        }),
       );
       try {
         const rows: IContent[] = [
@@ -158,7 +162,10 @@ describe('indexed response lifetime and native mutation boundaries', () => {
   it('keeps label and split-block references correct after owner reuse, rebuild and reopen', async () => {
     const path = `${directory()}/mutated.llxj`;
     const options = { journal: testJournalSeams().dependencies };
-    const session = await JournalSession.create(path, options);
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions(options),
+    );
     const human: IContent = {
       speaker: 'human',
       blocks: [call('a'), { type: 'text', text: 'question' }],
@@ -203,7 +210,10 @@ describe('indexed response lifetime and native mutation boundaries', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path, options);
+    const reopened = await JournalSession.open(
+      path,
+      testJournalOptions(options),
+    );
     try {
       await checkNative(reopened, [human, split]);
       const owners: number[] = [];

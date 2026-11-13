@@ -1,3 +1,6 @@
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { ScratchRootOwner } from '../../../../storage/scratch-root.js';
+import { withTestNamedWriters } from '../../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterAll, beforeAll, expect } from 'bun:test';
 import {
@@ -6,7 +9,6 @@ import {
 } from '../../../../journal/__tests__/support/compactionMemory.js';
 import { RecordingIntegration } from '../../../../recording/RecordingIntegration.js';
 import { resumeSession } from '../../../../recording/resumeSession.js';
-import { historyOriginId } from '../../historyOriginId.js';
 import type { IContent } from '../../IContent.js';
 import {
   admitLargeRow,
@@ -18,6 +20,8 @@ import {
   publicDigest,
   type RowDigest,
 } from './service-large-row.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 type Rig = Awaited<ReturnType<typeof largeRig>>;
 type Persisted = Awaited<ReturnType<typeof diskDigest>>;
@@ -73,6 +77,8 @@ async function recordMeasurement(
 export function useLargeRowProof(
   size: number,
 ): (trap?: boolean) => Promise<LargeRoundTrip> {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   let prepared: { rig: Rig; baseline: number } | undefined;
   beforeAll(async () => {
     const forcedCodeAging =
@@ -123,7 +129,9 @@ async function roundTrip(
     );
     const persisted = await diskDigest(rig.recording);
     expect(persisted.rows).toStrictEqual(expected);
-    expect(persisted.owners).toStrictEqual([historyOriginId(rig.origin)]);
+    expect(persisted.owners).toStrictEqual([
+      rig.history.originIds.get(rig.origin),
+    ]);
     expect(persisted.offsets).toHaveLength(1);
     expect(persisted.offsets[0]).toBeGreaterThan(0);
     expect(persisted.bodyBytes[0]).toBeGreaterThan(bytes);
@@ -162,17 +170,22 @@ async function resumeAndContinue(
   const projectHash = rig.recording.getProjectHash();
   const originalPath = rig.recording.getFilePath();
   await rig.close();
-  const resumed = await resumeSession({
-    continueRef: sessionId,
-    projectHash,
-    chatsDir: rig.directory,
-    currentProvider: 'anthropic',
-    currentModel: 'large-row-model',
-    workspaceDirs: ['/work'],
-  });
+  const resumed = await resumeSession(
+    withTestNamedWriters({
+      continueRef: sessionId,
+      projectHash,
+      chatsDir: rig.directory,
+      currentProvider: 'anthropic',
+      currentModel: 'large-row-model',
+      workspaceDirs: ['/work'],
+    }),
+  );
   if (!resumed.ok) throw new Error(resumed.error);
-  const restored = largeHistory();
-  const integration = new RecordingIntegration(resumed.recording);
+  const restored = largeHistory(rig.history.originIds);
+  const integration = new RecordingIntegration(
+    resumed.recording,
+    recordingScratchRoots,
+  );
   try {
     await restored.adoptResumeBoot(resumed.recording, resumed.boot);
     await integration.subscribeToJournal(restored, rig.origin);
@@ -195,8 +208,8 @@ async function resumeAndContinue(
     expect(continued[0]).toStrictEqual(expected[0]);
     expect(disk.rows).toStrictEqual(continued);
     expect(disk.owners).toStrictEqual([
-      historyOriginId(rig.origin),
-      historyOriginId(rig.origin),
+      rig.history.originIds.get(rig.origin),
+      rig.history.originIds.get(rig.origin),
     ]);
     expect(disk.offsets[0]).toBe(persisted.offsets[0]);
     expect(disk.offsets[1]).toBe(persisted.durableEnd);

@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { useOwnedCredentials as installOwnedCredentialFixture } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import * as acp from '@agentclientprotocol/sdk';
@@ -16,6 +17,7 @@ import { deliverHistoryUpdates } from '../../zed-session-replay.js';
 import { SessionTitleTracker } from '../../zed-session-info.js';
 import { ZedAgent } from '../../zedIntegration.js';
 import { unusedProfileApplication } from '../../test-profile-application.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export function serializeUpdate(update: acp.SessionUpdate): string {
   return JSON.stringify(update, (_key, value: unknown): unknown => {
@@ -32,7 +34,7 @@ export function serializeUpdate(update: acp.SessionUpdate): string {
 
 export class NoArrayHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(this, 'raw arrays forbidden');
   }
 }

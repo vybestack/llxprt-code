@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '../../../../core/src/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
 import {
   performResume,
@@ -5,7 +7,13 @@ import {
 } from '../../services/performResume.js';
 import type { SlashCommandHandlerDeps } from './slashCommandHandlers.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, vi } from 'bun:test';
+import {
+  afterAll as afterRecordingTests,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'bun:test';
 import { dirname } from 'node:path';
 import { readdir } from 'node:fs/promises';
 import {
@@ -29,6 +37,8 @@ import {
 import { processSlashCommand } from './slashCommandHandlers.js';
 import type { Message } from '../types.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 interface SwapState {
   recording: SessionRecordingPort | null;
   integration: RecordingIntegration | null;
@@ -37,6 +47,8 @@ interface SwapState {
 }
 
 describe('native CLI recording swap callbacks', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   for (const stage of ['swap', 'restore-callback', 'prior-cleanup'] as const) {
     it(`preserves the CLI swap contract through ${stage} with an actual Agent history`, async () => {
       const fixture = await nativeCommandFixture();
@@ -52,19 +64,24 @@ describe('native CLI recording swap callbacks', () => {
         const mediaStore = fixture.clientFor(fixture.live).mediaStore;
         if (mediaStore === undefined)
           throw new Error('Missing actual media owner');
-        const original = await createLockedSessionRecorder({
-          sessionId: 'raw-current',
-          projectHash: getProjectHash(fixture.root),
-          chatsDir,
-          workspaceDirs: [fixture.root],
-          provider: 'fake',
-          model: 'fake-model',
-          mediaStore,
-        });
+        const original = await createLockedSessionRecorder(
+          withTestNamedWriters({
+            sessionId: 'raw-current',
+            projectHash: getProjectHash(fixture.root),
+            chatsDir,
+            workspaceDirs: [fixture.root],
+            provider: 'fake',
+            model: 'fake-model',
+            mediaStore,
+          }),
+        );
         const history = fixture.clientFor(fixture.live).getHistoryService();
         if (history === null)
           throw new Error('Missing actual CLI Agent history');
-        const integration = new RecordingIntegration(original);
+        const integration = new RecordingIntegration(
+          original,
+          recordingScratchRoots,
+        );
         await integration.subscribeToJournal(history, fixture.live.session);
         await turn(fixture.live, 'previous raw recording');
         await integration.flushAtTurnBoundary();
@@ -137,24 +154,28 @@ describe('native CLI recording swap callbacks', () => {
           resumeRawSession: (action) => {
             if (action.sessionRef === undefined)
               throw new Error('Missing raw resume target');
-            return performResume(action.sessionRef, {
-              chatsDir,
-              projectHash: getProjectHash(fixture.root),
-              currentSessionId: id,
-              currentProvider: 'fake',
-              currentModel: 'fake-model',
-              workspaceDirs: [fixture.root],
-              mediaStore,
-              recordingCallbacks: callbacks,
-              history: {
-                adoptResumeBoot: history.adoptResumeBoot.bind(history),
-                attachRecording: (next) =>
-                  next.subscribeToJournal(history, fixture.live.session),
-              },
-              adoptSessionId: (next) => {
-                id = next;
-              },
-            });
+            return performResume(
+              action.sessionRef,
+              withTestNamedWriters({
+                scratchRoots: recordingScratchRoots,
+                chatsDir,
+                projectHash: getProjectHash(fixture.root),
+                currentSessionId: id,
+                currentProvider: 'fake',
+                currentModel: 'fake-model',
+                workspaceDirs: [fixture.root],
+                mediaStore,
+                recordingCallbacks: callbacks,
+                history: {
+                  adoptResumeBoot: history.adoptResumeBoot.bind(history),
+                  attachRecording: (next) =>
+                    next.subscribeToJournal(history, fixture.live.session),
+                },
+                adoptSessionId: (next) => {
+                  id = next;
+                },
+              }),
+            );
           },
         };
         const before = {

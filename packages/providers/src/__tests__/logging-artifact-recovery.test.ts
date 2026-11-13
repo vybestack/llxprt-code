@@ -13,7 +13,6 @@ import {
   flushTelemetry,
   shutdownTelemetry,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import { ConfigBasedRedactor } from '../logging/ConfigBasedRedactor.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
@@ -265,7 +264,7 @@ describe('complete bounded request logging', () => {
       await shutdownTelemetry(activeConfig.settingsOwner.telemetry);
       await activeConfig.settingsOwner.dispose();
     }
-    resetConversationFileWriterForTesting();
+
     for (const directory of directories.splice(0))
       await rm(directory, { recursive: true, force: true });
   });

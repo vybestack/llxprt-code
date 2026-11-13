@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { rawHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import {
   collectRowsForAssertions,
@@ -30,6 +31,7 @@ import {
   createToolResponse as createToolResponseFromIContent,
 } from './IContent.js';
 import { ContentConverters } from './ContentConverters.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const createUserMessage = createUserMessageFromIContent;
 const createToolResponse = createToolResponseFromIContent;
@@ -188,7 +190,9 @@ async function managementCase3(
     expect(hash.digest('hex')).toBe(
       createHash('sha256').update(oracle).digest('hex'),
     );
-    const newService = HistoryService.fromJSON(oracle);
+    const newService = HistoryService.fromJSON(oracle, {
+      scratchRoots: historyScratchRoots,
+    });
     try {
       await collectRowsForAssertions(
         newService.streamRawHistory(),
@@ -469,7 +473,7 @@ async function managementCase12(service: HistoryService): Promise<{
 describe('HistoryService - Behavioral Tests', () => {
   let service: HistoryService;
   beforeEach(() => {
-    service = new HistoryService();
+    service = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(async () => {
     await service.dispose();

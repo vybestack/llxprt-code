@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -8,6 +9,7 @@ import { nativeRecencyPolicy } from '../nativeRecencyPolicy.js';
 import { HighDensityStrategy } from '../HighDensityStrategy.js';
 import { densityConfig } from './density-disk-helpers.js';
 import { compressionValueDigest } from './compression-value-fixture.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 function row(index: number): IContent {
   return {
@@ -37,6 +39,7 @@ describe('continuous file deduplication current source ownership', () => {
       );
       try {
         await owned.store.optimizeDensity({
+          scratchRoots: historyScratchRoots,
           nativePolicy: () => nativeRecencyPolicy(densityConfig(2)),
           optimize: () => {
             throw new Error('Native operation selected disk optimizer');

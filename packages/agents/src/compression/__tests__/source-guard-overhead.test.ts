@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -5,9 +6,10 @@ import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.
 import { SourceCandidate } from '../source-candidate.js';
 import { createSourceCompressionCallback } from '../source-compression-callback.js';
 import { ContextOverflowError } from '../contextOverflowError.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function callbackAtLimit(contextLimit: number): Promise<unknown> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const source = await history.prepareCuratedForProviderSnapshot([
     { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
   ]);

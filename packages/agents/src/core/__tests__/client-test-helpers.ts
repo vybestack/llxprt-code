@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import type { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
@@ -53,6 +54,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+const historyScratchRoots = new ScratchRootOwner();
 
 const fixtureHistories = new Set<HistoryService>();
 afterAll(async () => {
@@ -63,7 +65,7 @@ export function createClientHistoryFixture(): Pick<
   ChatSession,
   'getHistoryService' | 'clearHistoryForDisposal'
 > {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   return {
     getHistoryService: () => history,
     clearHistoryForDisposal: async (): Promise<void> => {
@@ -255,6 +257,12 @@ function setupConfigMock(
   return { contentGeneratorConfig, config };
 }
 
+function fixtureHistory(config: Config): HistoryService {
+  const history = new HistoryService({ scratchRoots: config.scratchRoots });
+  fixtureHistories.add(history);
+  return history;
+}
+
 /** Instantiate the AgentClient and wire its chat mock. */
 async function createAndInitClient(
   contentGeneratorConfig: ContentGeneratorConfig,
@@ -315,8 +323,7 @@ async function createAndInitClient(
     yield* await stubbedHistory();
   });
 
-  const historyService = new HistoryService();
-  fixtureHistories.add(historyService);
+  const historyService = fixtureHistory(mockConfig);
   const mockChat = {
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),

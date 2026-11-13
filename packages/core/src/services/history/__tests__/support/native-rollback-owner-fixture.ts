@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { expect } from 'bun:test';
@@ -16,6 +17,7 @@ import type { HistoryMediaOwner } from '../../historyBatchContracts.js';
 import type { IContent, MediaReferenceBlock } from '../../IContent.js';
 import { batchGate } from './addbatch-stream-test-helpers.js';
 import { createCoreSuffixFixtureGraph } from './core-suffix-fixture-test-helpers.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 type ReferenceInput = Parameters<
   NonNullable<HistoryMediaOwner['prepareReferenceReplacement']>
@@ -99,7 +101,7 @@ async function runRollback(
       blocks: [...row.blocks, references[index === 0 ? 0 : 1]],
     };
   };
-  const owner = new PausedMediaOwner(store);
+  const owner = new PausedMediaOwner(store, historyScratchRoots);
   try {
     await graph.seed(
       (function* (): Generator<IContent> {

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { describe, expect, it } from 'bun:test';
@@ -61,7 +62,7 @@ describe('integration: committed journal lifecycle', () => {
     rows: readonly IContent[],
   ): Promise<JournalRecordingService> {
     const recorder = JournalRecordingService.create(
-      config(crypto.randomUUID()),
+      withTestNamedWriters(config(crypto.randomUUID())),
     );
     await recordRowsForTest(recorder, rows);
     await recorder.flush();
@@ -104,7 +105,7 @@ describe('integration: committed journal lifecycle', () => {
       'ai',
     ]);
     const resumed = await JournalRecordingService.open(
-      config(recording.getSessionId()),
+      withTestNamedWriters(config(recording.getSessionId())),
       file,
     );
     try {
@@ -140,7 +141,7 @@ describe('integration: committed journal lifecycle', () => {
     expect(initial.history).toStrictEqual(before);
     expect(initial.history).toHaveLength(4);
     const resumed = await JournalRecordingService.open(
-      config(recording.getSessionId()),
+      withTestNamedWriters(config(recording.getSessionId())),
       file,
     );
     try {
@@ -169,19 +170,21 @@ describe('integration: committed journal lifecycle', () => {
       recording.getSessionId(),
     );
     try {
-      const result = await resumeSession({
-        continueRef: recording.getSessionId(),
-        projectHash: PROJECT_HASH,
-        chatsDir: directory(),
-        currentProvider: 'anthropic',
-        currentModel: 'claude-4',
-        workspaceDirs: ['/test/workspace'],
-      });
+      const result = await resumeSession(
+        withTestNamedWriters({
+          continueRef: recording.getSessionId(),
+          projectHash: PROJECT_HASH,
+          chatsDir: directory(),
+          currentProvider: 'anthropic',
+          currentModel: 'claude-4',
+          workspaceDirs: ['/test/workspace'],
+        }),
+      );
       expect(result.ok).toBe(false);
       if (result.ok) throw new Error('Concurrent resume acquired a held lock');
       expect(result.error).toContain('in use');
       const owner = await JournalRecordingService.open(
-        config(recording.getSessionId()),
+        withTestNamedWriters(config(recording.getSessionId())),
         file,
       );
       try {

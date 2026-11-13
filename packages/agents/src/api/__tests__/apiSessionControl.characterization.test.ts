@@ -1,3 +1,5 @@
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { ScratchRootOwner } from '../../../../core/src/storage/scratch-root.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -21,6 +23,8 @@ import type {
   IContent,
   TextBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 /**
  * @plan PLAN-20260707-AGENTNEUTRAL.P26
@@ -67,6 +71,7 @@ function makeMockClient(history: IContent[]): AgentClientContract {
 
 function makeRecordingPaths(): SessionRecordingPaths {
   return {
+    scratchRoots: recordingScratchRoots,
     projectRoot: '/tmp/test-session-control',
     storageRoot: '/tmp/test-session-control/data',
     projectTempDir: '/tmp/test-session-control/tmp',
@@ -93,6 +98,7 @@ function createSessionControl(
   let ownedSessionId = id;
   let closed = false;
   const conversation = new SessionConversationBinding({
+    scratchRoots: recordingScratchRoots,
     readClient: () => client,
     assertOpen: () => {
       if (closed) throw new Error('Characterization session is closed');
@@ -133,6 +139,8 @@ function createSessionControl(
 }
 
 describe('SessionControl (characterization)', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   registerSessionCharacterizationGroup0();
 
   registerSessionCharacterizationGroup1();
@@ -144,6 +152,8 @@ describe('SessionControl (characterization)', () => {
 
 function registerSessionCharacterizationGroup0(): void {
   describe('constructor and interface', () => {
+    afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
     it('creates a SessionControl instance', () => {
       const client = makeMockClient([]);
       const sc = createSessionControl(client);
@@ -162,6 +172,8 @@ function registerSessionCharacterizationGroup0(): void {
 
 function registerSessionCharacterizationGroup1(): void {
   describe('client interaction', () => {
+    afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
     it('client.getHistory returns the expected content', async () => {
       const history: IContent[] = [
         textContent('Hello', 'human'),
@@ -202,6 +214,8 @@ function registerSessionCharacterizationGroup1(): void {
 
 function registerSessionCharacterizationGroup2(): void {
   describe('dispose', () => {
+    afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
     it('completes without error on fresh instance', async () => {
       const client = makeMockClient([]);
       const sc = createSessionControl(client);
@@ -212,6 +226,8 @@ function registerSessionCharacterizationGroup2(): void {
 
 function registerSessionCharacterizationGroup3(): void {
   describe('property-based: history content shapes', () => {
+    afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
     it('getHistory preserves arbitrary content lengths', async () => {
       const { getHistoryPreservesArbitraryContentLengthsProperty } =
         await observeGetHistoryPreservesArbitraryContentLengths();

@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, expect, it } from 'bun:test';
@@ -21,6 +23,7 @@ import {
 } from './detached-rollback-test-helpers.js';
 import type { DetachedHistoryOptions } from './detachedHistoryAPI.js';
 import type { HistoryBatchEvent } from './history-batch-values.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const cases = [
   'noop',
@@ -299,16 +302,18 @@ describe('native mixed marked persisted input', () => {
     const recorded = await recordJournal(directory(), crypto.randomUUID(), {
       rows,
     });
-    const resumed = await resumeSession({
-      continueRef: recorded.sessionId,
-      chatsDir: directory(),
-      projectHash: 'project-hash',
-      currentProvider: 'test',
-      currentModel: 'test',
-      workspaceDirs: [],
-    });
+    const resumed = await resumeSession(
+      withTestNamedWriters({
+        continueRef: recorded.sessionId,
+        chatsDir: directory(),
+        projectHash: 'project-hash',
+        currentProvider: 'test',
+        currentModel: 'test',
+        workspaceDirs: [],
+      }),
+    );
     if (!resumed.ok) throw new Error(resumed.error);
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.setTokenizerFactory(exactTokenizer());
     try {
       await history.adoptResumeBoot(resumed.recording, resumed.boot);

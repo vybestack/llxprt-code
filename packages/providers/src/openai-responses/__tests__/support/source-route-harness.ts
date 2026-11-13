@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readAtOf } from '../../../__tests__/requestRowsTestSupport.js';
 import { readdirSync } from 'node:fs';
@@ -6,7 +7,7 @@ import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/h
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import type { GenerateChatOptions } from '../../../IProvider.js';
 import { requestSelection } from './request-selection.js';
 import {
@@ -54,9 +55,9 @@ export function rowsOf(list: readonly IContent[]): ProviderRequestRows {
   };
 }
 
-export function promptDirs(): Set<string> {
+export function promptDirs(scratchRoots: ScratchRootOwner): Set<string> {
   return new Set(
-    readdirSync(getScratchRoot()).filter((name) =>
+    readdirSync(scratchRoots.getRoot()).filter((name) =>
       name.startsWith('responses-prompt-keys-'),
     ),
   );

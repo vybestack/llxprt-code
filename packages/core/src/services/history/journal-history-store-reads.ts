@@ -35,6 +35,10 @@ import {
 } from './journalScalars.js';
 
 export abstract class JournalHistoryStoreReads {
+  get maintenanceScope(): OpenJournal['session']['store']['maintenanceScope'] {
+    return this.requireOpen().session.store.maintenanceScope;
+  }
+
   protected abstract readonly display: JournalDisplayCommands;
 
   appendDisplay(
@@ -214,7 +218,9 @@ export abstract class JournalHistoryStoreReads {
   async openDumpSnapshot(): Promise<JournalDumpSnapshot> {
     this.assertUsable();
     await this.waitForDurable();
-    const resumeMaintenance = await suspendJournalMaintenance();
+    const resumeMaintenance = await suspendJournalMaintenance(
+      this.maintenanceScope,
+    );
     try {
       const dump: JournalDumpSnapshot = new JournalDumpSnapshot(
         await this.requireOpen().session.store.snapshot(),

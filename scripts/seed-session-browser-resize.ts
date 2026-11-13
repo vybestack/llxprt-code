@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '../packages/core/src/storage/scratch-root.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,6 +6,7 @@
  */
 
 import {
+  NamedWriterOwnership,
   getProjectHash,
   RecordingIntegration,
   type IContent,
@@ -17,6 +19,8 @@ const SESSION_BROWSER_RESIZE_SESSION_ID =
   '00000000-0000-4000-8000-000000002017';
 
 export interface SessionBrowserResizeSeedOptions {
+  readonly scratchRoots: ScratchRootOwner;
+  readonly namedWriters: NamedWriterOwnership;
   readonly chatsDir: string;
   readonly projectRoot: string;
 }
@@ -38,6 +42,7 @@ export async function seedSessionBrowserResize(
   options: SessionBrowserResizeSeedOptions,
 ): Promise<void> {
   const recording = await JournalRecordingService.createLocked({
+    journal: { namedWriters: options.namedWriters },
     sessionId: SESSION_BROWSER_RESIZE_SESSION_ID,
     projectHash: getProjectHash(options.projectRoot),
     chatsDir: options.chatsDir,
@@ -47,8 +52,8 @@ export async function seedSessionBrowserResize(
     model: 'fake-model',
   });
 
-  const history = new HistoryService();
-  const integration = new RecordingIntegration(recording);
+  const history = new HistoryService({ scratchRoots: options.scratchRoots });
+  const integration = new RecordingIntegration(recording, options.scratchRoots);
   try {
     await integration.subscribeToJournal(history);
     await history.addBatch([
@@ -72,7 +77,11 @@ export async function seedSessionBrowserResize(
 async function main(): Promise<void> {
   const projectRoot = process.cwd();
   const storage = new Storage(projectRoot);
+  const scratchRoots = new ScratchRootOwner();
+  const namedWriters = new NamedWriterOwnership();
   await seedSessionBrowserResize({
+    scratchRoots,
+    namedWriters,
     chatsDir: storage.getProjectChatsDir(),
     projectRoot,
   });

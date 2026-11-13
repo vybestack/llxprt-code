@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -78,7 +79,7 @@ describe('Error handling #2', () => {
       currentSessionId: 'different-session',
     });
 
-    const result = await performResume('latest', context);
+    const result = await performResume('latest', withTestNamedWriters(context));
 
     expect(result.ok).toBe(true);
     assertTruthy(result.ok);

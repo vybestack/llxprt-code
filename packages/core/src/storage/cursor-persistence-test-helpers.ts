@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { dirname, join } from 'node:path';
 import type { IContent } from '../services/history/IContent.js';
@@ -15,7 +16,7 @@ export async function createCursorJournal(
   const probe = new NativeRecordingProbe();
   const session = await JournalSession.create(
     join(dirname(path), `${sessionId}.llxj`),
-    probe.options,
+    testJournalOptions(probe.options),
   );
   return { session, probe };
 }

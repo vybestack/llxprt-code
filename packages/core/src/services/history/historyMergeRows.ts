@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '../../storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
@@ -40,13 +41,14 @@ function appendSnapshot(
 }
 
 export async function withMergedHistoryRows(
+  scratchRoots: ScratchRootOwner,
   previous: HistoryMutationSnapshot,
   incoming: HistoryMutationSnapshot,
   publish: (candidate: HistoryDensityRows) => Promise<void>,
   ownership?: RowOwnership,
 ): Promise<void> {
   if (incoming.length === 0) return;
-  const candidate = new HistoryDensityRows(ownership);
+  const candidate = new HistoryDensityRows(scratchRoots, ownership);
   try {
     appendSnapshot(candidate, previous);
     appendSnapshot(candidate, incoming, true);

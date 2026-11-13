@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
@@ -14,14 +18,16 @@ export function createPackageRecorder(
   config: Partial<SessionRecordingServiceConfig> &
     Pick<SessionRecordingServiceConfig, 'chatsDir'>,
 ): SessionRecordingPort {
-  return createSessionRecorder({
-    sessionId: 'package-source',
-    projectHash: 'package-project',
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
-    ...config,
-  });
+  return createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'package-source',
+      projectHash: 'package-project',
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+      ...config,
+    }),
+  );
 }
 
 export function packageRecordingName(): 'session.llxj' {
@@ -64,7 +70,7 @@ export async function readPackageRows(
   const found = await readJournalFileFacts(path);
   if (found === undefined || found.facts.start.projectHash !== projectHash)
     throw new Error('Missing package recording or mismatched project');
-  const session = await JournalSession.open(path);
+  const session = await JournalSession.open(path, testJournalOptions());
   try {
     const rows: IContent[] = [];
     for await (const row of session.rows()) rows.push(row.content);

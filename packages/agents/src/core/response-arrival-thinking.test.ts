@@ -1,9 +1,11 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
 import { consolidateTextBlocks } from './streamResponseHelpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const corpora: ReadonlyArray<{ name: string; blocks: ContentBlock[] }> =
   Object.freeze([
@@ -51,7 +53,7 @@ const corpora: ReadonlyArray<{ name: string; blocks: ContentBlock[] }> =
 describe('thinking arrival parity', () => {
   for (const corpus of corpora) {
     it(`seals the same blocks as the old finalizer for ${corpus.name}`, async () => {
-      const history = new HistoryService();
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       try {
         const arrival = await history.openResponseArrival({
           id: 'attempt',

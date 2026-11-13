@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -8,6 +9,7 @@ import { RowOwnership } from '../../recording/rowOwnership.js';
 import { createRowCounters } from '../../recording/journalCounters.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe.each([0, 1, 3])(
   'detached producer fails after %i candidate rows',
@@ -18,7 +20,7 @@ describe.each([0, 1, 3])(
         rootDirectory: join(directory(), 'media'),
         quotaBytes: 4096,
       });
-      const owner = new HistoryMediaOwnership(media);
+      const owner = new HistoryMediaOwnership(media, historyScratchRoots);
       const candidate = await media.admit({
         bytes: new Uint8Array([1]),
         mimeType: 'application/octet-stream',
@@ -32,6 +34,7 @@ describe.each([0, 1, 3])(
       const values = new RowOwnership();
       const reader = new RowOwnership();
       const history = new HistoryService({
+        scratchRoots: historyScratchRoots,
         mutationOwnership: values,
         attachmentCounters: {
           ...createRowCounters().counters,

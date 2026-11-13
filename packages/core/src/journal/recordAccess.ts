@@ -17,6 +17,7 @@ import {
 import type { TrailerHeader } from './trailerRecord.js';
 import { rowReadWindow, type RowReadWindowStats } from './row-read-window.js';
 import { RECORD_KIND } from './recordKinds.js';
+import type { RowTreeReadPath } from './rowTreeReader.js';
 
 /** What a record is called in an error when the caller does not name it. */
 const DEFAULT_WHAT = 'record';
@@ -29,6 +30,7 @@ const DEFAULT_WHAT = 'record';
  * offset and the trailer that led to it.
  */
 export interface RecordAccess {
+  readonly rowTreePath: RowTreeReadPath;
   readonly sourceIdentity?: object;
   readonly rowWindowStats?: RowReadWindowStats;
   recordError(head: FrameHead, error: Error): JournalCorruptionError;
@@ -154,10 +156,11 @@ export function createRecordAccess(
     ? rowReadWindow(reader, trailer.durableEnd)
     : undefined;
   const nodeWindow = rowReadWindow(reader, trailer.durableEnd);
+  let rowTreePath: RowTreeReadPath | undefined;
   const corruption = recordCorruption(path, trailer);
   const readStart = async (
     offset: number,
-    what: string,
+    what = DEFAULT_WHAT,
     prefetchBytes?: number,
     readAhead = true,
   ): Promise<FrameStart> => {
@@ -175,24 +178,20 @@ export function createRecordAccess(
       if (
         error instanceof JournalFrameError ||
         error instanceof JournalShortReadError
-      ) {
+      )
         throw corruption(what, offset, error);
-      }
       throw error;
     }
   };
   return {
+    get rowTreePath() {
+      return (rowTreePath ??= new Map());
+    },
     sourceIdentity: reader,
     rowWindowStats: window?.stats,
     recordError: (head, error) => corruption('ROW', head.offset, error),
-    async readRecordHead(
-      offset,
-      what = DEFAULT_WHAT,
-      prefetchBytes,
-      readAhead,
-    ) {
-      return (await readStart(offset, what, prefetchBytes, readAhead)).head;
-    },
+    readRecordHead: async (offset, what, prefetchBytes, readAhead) =>
+      (await readStart(offset, what, prefetchBytes, readAhead)).head,
     readRecordStart: (offset, what, prefetchBytes) =>
       readStart(offset, what, prefetchBytes),
     async readRecordRange(head, offset, length) {

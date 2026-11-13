@@ -112,23 +112,6 @@ function resolveAbortSignal(
   return isAbortSignal(signal) ? signal : undefined;
 }
 
-/**
- * Issue #854 P05b4: the wire body is owned by a request-scoped lease and the
- * media request's finish releases it, so the message arrays are spliced once
- * the transport call settles (any outcome) instead of outliving it.
- */
-function registerVercelRequestBodyLease(
-  mediaRequest: ResolvedMediaRequest,
-  materializedMessages: ModelMessage[],
-): void {
-  const requestBodyLease = acquireRequestScopedBody('openai-vercel', {
-    messages: materializedMessages,
-  });
-  mediaRequest.registerCleanup(() => {
-    void requestBodyLease.release();
-  });
-}
-
 export class OpenAIVercelProvider extends BaseProvider implements IProvider {
   private getLogger(): DebugLogger {
     return new DebugLogger('llxprt:provider:openaivercel');
@@ -169,6 +152,25 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
   /** The transport reads `requestRows` itself (issue #854 WP10). */
   protected override ownsRequestRowsTransport(): boolean {
     return true;
+  }
+
+  /**
+   * Issue #854 P05b4: the wire body is owned by a request-scoped lease and the
+   * media request's finish releases it, so the message arrays are spliced once
+   * the transport call settles (any outcome) instead of outliving it.
+   */
+  private registerRequestBodyLease(
+    mediaRequest: ResolvedMediaRequest,
+    materializedMessages: ModelMessage[],
+  ): void {
+    const requestBodyLease = acquireRequestScopedBody(
+      'openai-vercel',
+      { messages: materializedMessages },
+      this.requestBodyCensus,
+    );
+    mediaRequest.registerCleanup(() => {
+      void requestBodyLease.release();
+    });
   }
 
   private async resolveMediaPreparation(
@@ -246,7 +248,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
     const { mediaRequest, effectiveOptions } =
       await this.resolveMediaPreparation(options);
-    registerVercelRequestBodyLease(mediaRequest, materializedMessages);
+    this.registerRequestBodyLease(mediaRequest, materializedMessages);
     let outcome: MediaRequestOutcome = { status: 'succeeded' };
     try {
       const { tools, metadata } = effectiveOptions;

@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -24,13 +25,14 @@ import type { ChatSession } from '../../../agents/src/core/chatSession.js';
 import { accountingRow } from '../../../core/src/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { createMockCommandContext } from './mockCommandContext.js';
 import type { CommandContext } from '../ui/commands/types.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export class PublicCursorHistory extends HistoryService {
   readonly borrowed = new RowOwnership();
   readonly copies = new RowOwnership();
   beforeYield: (index: number) => Promise<void> = async () => {};
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'public raw array read forbidden',
@@ -65,6 +67,7 @@ export function publicChat(history: HistoryService): ChatSession {
   });
   const settings = createSessionSettingsFixture(config, settingsService);
   const context = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         invocationData(runtime, name, settingsService),

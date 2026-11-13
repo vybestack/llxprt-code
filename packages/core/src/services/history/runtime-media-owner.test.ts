@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -5,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
 import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('history-owned runtime media registration', () => {
   it('shares concurrent registration within one history and rejects a different store', async () => {
@@ -17,8 +19,8 @@ describe('history-owned runtime media registration', () => {
       rootDirectory: join(root, 'other'),
       quotaBytes: 1024 * 1024,
     });
-    const history = new HistoryService();
-    const sibling = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
+    const sibling = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       const [first, repeated] = await Promise.all([
         history.registerRuntimeMediaOwner(store),

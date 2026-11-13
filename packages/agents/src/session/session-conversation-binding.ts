@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -29,6 +30,7 @@ export class SessionConversationBinding {
   constructor(
     private readonly access: {
       readonly readClient: () => AgentClientContract;
+      readonly scratchRoots: ScratchRootOwner;
       readonly assertOpen: () => void;
     },
   ) {}
@@ -39,7 +41,8 @@ export class SessionConversationBinding {
   initializeConversation(): void {
     this.access.assertOpen();
     this.initialHistory =
-      this.client.getHistoryService() ?? new HistoryService();
+      this.client.getHistoryService() ??
+      new HistoryService({ scratchRoots: this.access.scratchRoots });
     this.client.storeHistoryServiceForReuse(this.initialHistory);
   }
   private observedHistory: HistoryService | null = null;

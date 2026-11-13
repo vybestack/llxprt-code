@@ -1,5 +1,9 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
+import { EncodingCache } from '../../utils/neutral-long-piece.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
+
+const encodings = new EncodingCache();
 import { metricReference } from '../../storage/media-metrics-test-helpers.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -18,7 +22,7 @@ import { estimateTokenRange } from './estimate-token-range.js';
 export async function countStream(
   parts: AsyncIterable<Uint8Array>,
 ): Promise<number> {
-  const counter = new NeutralTextStream();
+  const counter = new NeutralTextStream(encodings);
   for await (const part of parts) counter.append(part);
   return counter.finish();
 }
@@ -100,7 +104,10 @@ const contents: readonly IContent[] = [
 describe('sealed row token estimates', () => {
   it('matches whole-row estimates for text, thinking, code and tool JSON', async () => {
     const root = await mkdtemp(join(tmpdir(), 'sealed-token-estimation-'));
-    const session = await JournalSession.create(join(root, 'primary.llxj'));
+    const session = await JournalSession.create(
+      join(root, 'primary.llxj'),
+      testJournalOptions(),
+    );
     const store = new JournalHistoryStore(session);
     try {
       for (const content of contents) store.apply({ kind: 'content', content });

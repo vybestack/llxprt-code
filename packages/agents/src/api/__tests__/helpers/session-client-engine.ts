@@ -178,7 +178,7 @@ async function acquireProviderStack(
     release,
     manager,
     oauth,
-    tokenizer: configureProviderTokenizer(manager),
+    tokenizer: configureProviderTokenizer(manager, config.scratchRoots),
   };
 }
 

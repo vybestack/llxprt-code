@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { ConfigurationManager } from '@vybestack/llxprt-code-telemetry/debug/ConfigurationManager.js';
@@ -14,6 +15,7 @@ import {
   providerDigest,
   useDiagnosticSink,
 } from './__tests__/support/provider-diagnostics-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function reconstructedRow(): IContent {
   return {
@@ -32,8 +34,10 @@ describe('bounded diagnostic payloads', () => {
   it.each(['eager', 'stream'])(
     'caps AI analysis details without retaining row payloads in %s logs',
     async (route) => {
-      const history = new DiagnosticsCursorHistory();
-      const eager = new HistoryService();
+      const history = new DiagnosticsCursorHistory({
+        scratchRoots: historyScratchRoots,
+      });
+      const eager = new HistoryService({ scratchRoots: historyScratchRoots });
       const input = [manyBlocksRow()];
       try {
         await providerDigest(
@@ -77,8 +81,10 @@ describe('bounded reconstruction diagnostics', () => {
   it.each(['eager', 'stream'])(
     'caps reconstructed call details with exact total in %s logs',
     async (route) => {
-      const history = new DiagnosticsCursorHistory();
-      const eager = new HistoryService();
+      const history = new DiagnosticsCursorHistory({
+        scratchRoots: historyScratchRoots,
+      });
+      const eager = new HistoryService({ scratchRoots: historyScratchRoots });
       try {
         const input = [reconstructedRow()];
         await providerDigest(
@@ -117,7 +123,9 @@ describe('bounded reconstruction diagnostics', () => {
 describe('diagnostic publication lifecycle', () => {
   const take = useDiagnosticSink();
   it('keeps diagnostics cold and suppresses events when logging is disabled', async () => {
-    const history = new DiagnosticsCursorHistory();
+    const history = new DiagnosticsCursorHistory({
+      scratchRoots: historyScratchRoots,
+    });
     try {
       const stream = history.getCuratedForProviderStream([], undefined, [
         manyBlocksRow(),
@@ -135,7 +143,9 @@ describe('diagnostic publication lifecycle', () => {
   });
 
   it('keeps the original small-anchor details and detects surviving anchors', async () => {
-    const history = new DiagnosticsCursorHistory();
+    const history = new DiagnosticsCursorHistory({
+      scratchRoots: historyScratchRoots,
+    });
     const call: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'tool_call', id: 'a', name: 't', parameters: {} }],
@@ -184,8 +194,10 @@ describe('bounded tool identifiers', () => {
   it.each(speakers)(
     'caps oversized %s response identifiers in both routes',
     async (speaker) => {
-      const eager = new HistoryService();
-      const history = new DiagnosticsCursorHistory();
+      const eager = new HistoryService({ scratchRoots: historyScratchRoots });
+      const history = new DiagnosticsCursorHistory({
+        scratchRoots: historyScratchRoots,
+      });
       const input: IContent[] = [
         {
           speaker,

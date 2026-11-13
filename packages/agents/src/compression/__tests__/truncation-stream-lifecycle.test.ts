@@ -110,14 +110,14 @@ async function producerFailure(size: number): Promise<number> {
         size,
       );
       expect(await checkpointState(history, recording)).toStrictEqual(expected);
-      expect(checkpointScratch()).toStrictEqual([]);
+      expect(checkpointScratch(history)).toStrictEqual([]);
       const operation = handler.performCompression('source-fault');
       await expect(operation).rejects.toThrow(
         'injected curated producer failure',
       );
       await expect(operation).rejects.toBe(created?.failure);
       expect(created?.closedSnapshot).toBe(true);
-      expect(checkpointScratch()).toStrictEqual([]);
+      expect(checkpointScratch(history)).toStrictEqual([]);
       expect(await checkpointState(history, recording)).toStrictEqual(expected);
       expect((await collectRows(history)).map(rowIndex)).toStrictEqual(
         Array.from({ length: size }, (_, index) => index),

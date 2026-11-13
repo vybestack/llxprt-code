@@ -1,3 +1,5 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import type { JournalSessionOptions } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -68,6 +70,8 @@ export interface RecordingSwapCallbacks {
  * Context required for performing a session resume.
  */
 export interface ResumeContext {
+  scratchRoots: ScratchRootOwner;
+  journal?: JournalSessionOptions;
   chatsDir: string;
   projectHash: string;
   currentSessionId: string;
@@ -155,6 +159,7 @@ async function resumeCheckpointTarget(
   }
   const fork = await new SessionTransitionService({
     mediaStore: context.mediaStore,
+    journal: context.journal,
     maxQueueBytes: context.maxQueueBytes,
     counters: context.counters,
   }).forkFromCheckpoint(
@@ -197,6 +202,7 @@ async function resumeLivingSession(
   }
   const result = await resumeSession({
     continueRef: target.session.sessionId,
+    journal: context.journal,
     counters: context.counters,
     projectHash,
     chatsDir,
@@ -231,7 +237,10 @@ async function commitResumeBoot(
   const oldIntegration = callbacks.getCurrentIntegration();
   const oldLock = callbacks.getCurrentLockHandle();
   const oldMetadata = callbacks.getCurrentMetadata();
-  const integration = new RecordingIntegration(result.recording);
+  const integration = new RecordingIntegration(
+    result.recording,
+    context.scratchRoots,
+  );
   let warnings: string[] = [];
   try {
     const publish = async (): Promise<void> => {

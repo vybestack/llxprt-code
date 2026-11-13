@@ -3,10 +3,10 @@ import { readdirSync } from 'node:fs';
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from './IContent.js';
 import { HistoryRowOrigins } from './historyRowOrigins.js';
-import { getScratchRoot } from '../../storage/scratch-root.js';
+import { ScratchRootOwner } from '../../storage/scratch-root.js';
 
 function scratch(): string[] {
-  return readdirSync(getScratchRoot()).filter((name) =>
+  return readdirSync(scratchRoots.getRoot()).filter((name) =>
     name.startsWith('history-row-origins-'),
   );
 }
@@ -23,7 +23,7 @@ function textRow(text: string): IContent {
 describe('HistoryRowOrigins', () => {
   it('returns each row its own origin across several write chunks', () => {
     const length = 10_000;
-    const origins = HistoryRowOrigins.capture({
+    const origins = HistoryRowOrigins.capture(scratchRoots, {
       length,
       originAt: patternOrigin,
     });
@@ -40,7 +40,7 @@ describe('HistoryRowOrigins', () => {
   });
 
   it('pairs rows with origins by position and keeps unowned rows unowned', () => {
-    const origins = HistoryRowOrigins.capture({
+    const origins = HistoryRowOrigins.capture(scratchRoots, {
       length: 3,
       originAt: patternOrigin,
     });
@@ -59,7 +59,7 @@ describe('HistoryRowOrigins', () => {
   });
 
   it('rejects a row outside the captured range', () => {
-    const origins = HistoryRowOrigins.capture({
+    const origins = HistoryRowOrigins.capture(scratchRoots, {
       length: 2,
       originAt: patternOrigin,
     });
@@ -72,7 +72,7 @@ describe('HistoryRowOrigins', () => {
 
   it('removes its scratch storage on close and refuses later reads', () => {
     const before = scratch().length;
-    const origins = HistoryRowOrigins.capture({
+    const origins = HistoryRowOrigins.capture(scratchRoots, {
       length: 1,
       originAt: patternOrigin,
     });
@@ -88,7 +88,7 @@ describe('HistoryRowOrigins', () => {
     const before = scratch().length;
 
     expect(() =>
-      HistoryRowOrigins.capture({
+      HistoryRowOrigins.capture(scratchRoots, {
         length: 1,
         originAt: () => {
           throw new Error('cursor failed');
@@ -99,3 +99,5 @@ describe('HistoryRowOrigins', () => {
     expect(scratch().length).toBe(before);
   });
 });
+
+const scratchRoots = new ScratchRootOwner();

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '../__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -7,6 +8,7 @@ import {
   forbidHistoryMaterializationForTest,
   materializeHistoryForTest,
 } from './history-materialization-test-guard.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('test-only history materialization guard', () => {
   it('rejects an eager read of committed history while leaving the public stream usable', async () => {
@@ -25,7 +27,7 @@ describe('test-only history materialization guard', () => {
   });
 
   it('keeps committed detached values when a conditional guard permits reads and restores after rejection', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const row = suffixRow(0);
     let forbidden = false;
     try {

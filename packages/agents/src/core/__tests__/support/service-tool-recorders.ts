@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -52,18 +53,20 @@ export async function observedRecording(directory: string, name: string) {
   const seams = testJournalSeams(failures);
   const fullFlush = await loadFlushRecords();
   let flushes = 0;
-  const recording = await JournalRecordingService.createLocked({
-    ...recordingConfig(directory, name),
-    journal: {
+  const recording = await JournalRecordingService.createLocked(
+    withTestNamedWriters({
+      ...recordingConfig(directory, name),
       journal: {
-        ...seams.dependencies,
-        flush: (fd) => {
-          fullFlush(fd);
-          flushes++;
+        journal: {
+          ...seams.dependencies,
+          flush: (fd) => {
+            fullFlush(fd);
+            flushes++;
+          },
         },
       },
-    },
-  });
+    }),
+  );
   return { recording, failures, seams, flushes: () => flushes };
 }
 export function recordingFile(recording: JournalRecordingService): string {

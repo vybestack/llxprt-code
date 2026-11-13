@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -20,7 +21,11 @@ describe('transcript commit-group amplification', () => {
   it('writes completed leaves once and retains only the changed right path across groups', async () => {
     const file = join(directory(), 'history.llxj');
     const count = 4096;
-    const store = await JournalStore.create(file, storeDeps());
+    const store = await JournalStore.create(
+      file,
+      storeDeps(),
+      testNamedWriters,
+    );
     try {
       await store.commit([{ kind: 'replace', rows: rows(count) }]);
       await store.commit([{ kind: 'append', rows: [...rows(33)] }]);

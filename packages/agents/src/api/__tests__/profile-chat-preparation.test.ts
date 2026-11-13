@@ -414,7 +414,10 @@ describe('profile-chat-preparation', () => {
         builtCredentials().authority,
         builtCallerRelease,
       );
-      builtCallerTokenizer = configureProviderTokenizer(builtCallerManager);
+      builtCallerTokenizer = configureProviderTokenizer(
+        builtCallerManager,
+        builtCallerConfig.scratchRoots,
+      );
       builtCallerContent = createRuntimeContentGeneratorFactory();
       builtCallerOAuth = acquirePreferredOAuth(
         undefined,

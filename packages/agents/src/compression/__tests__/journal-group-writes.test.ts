@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { open } from 'node:fs/promises';
@@ -34,28 +35,31 @@ describe('compression journal group writes', () => {
   for (const size of [65])
     it(`streams ${size} normalized rows without a descriptor write per row`, async () => {
       let writes = 0;
-      const session = await JournalSession.create(`${directory()}/group.llxj`, {
-        journal: {
-          open: async (path, flags) => {
-            const handle = await open(path, flags);
-            return {
-              fd: handle.fd,
-              read: (...args) => handle.read(...args),
-              stat: () => handle.stat(),
-              truncate: (length) => handle.truncate(length),
-              close: () => handle.close(),
-              write: (...args) => {
-                writes++;
-                return handle.write(...args);
-              },
-              writev: (...args) => {
-                writes++;
-                return handle.writev(...args);
-              },
-            };
+      const session = await JournalSession.create(
+        `${directory()}/group.llxj`,
+        testJournalOptions({
+          journal: {
+            open: async (path, flags) => {
+              const handle = await open(path, flags);
+              return {
+                fd: handle.fd,
+                read: (...args) => handle.read(...args),
+                stat: () => handle.stat(),
+                truncate: (length) => handle.truncate(length),
+                close: () => handle.close(),
+                write: (...args) => {
+                  writes++;
+                  return handle.write(...args);
+                },
+                writev: (...args) => {
+                  writes++;
+                  return handle.writev(...args);
+                },
+              };
+            },
           },
-        },
-      });
+        }),
+      );
       try {
         await session.store.commit([
           {
@@ -83,7 +87,7 @@ describe('compression journal group writes', () => {
     let writes = 0;
     const session = await JournalSession.create(
       `${directory()}/repeated.llxj`,
-      {
+      testJournalOptions({
         journal: {
           open: async (path, flags) => {
             const handle = await open(path, flags);
@@ -107,7 +111,7 @@ describe('compression journal group writes', () => {
             };
           },
         },
-      },
+      }),
     );
     try {
       await session.store.commit([

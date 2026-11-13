@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdir } from 'node:fs/promises';
@@ -70,15 +71,17 @@ describe('discovery and continuation of a partial native tool turn', () => {
       messageCount: 3,
       filePath: recorded.filePath,
     });
-    const resumed = await resumeSession({
-      continueRef: 'partial-turn',
-      projectHash: PROJECT,
-      chatsDir: chats,
-      currentProvider: 'anthropic',
-      currentModel: 'model-1',
-      workspaceDirs: ['/work/a'],
-      journal: journalSeams(),
-    });
+    const resumed = await resumeSession(
+      withTestNamedWriters({
+        continueRef: 'partial-turn',
+        projectHash: PROJECT,
+        chatsDir: chats,
+        currentProvider: 'anthropic',
+        currentModel: 'model-1',
+        workspaceDirs: ['/work/a'],
+        journal: journalSeams(),
+      }),
+    );
     if (!resumed.ok) throw new Error(resumed.error);
     try {
       expect(resumed.metadata.sessionId).toBe('partial-turn');

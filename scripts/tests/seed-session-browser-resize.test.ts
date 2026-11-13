@@ -9,11 +9,16 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  ScratchRootOwner,
+  NamedWriterOwnership,
   getProjectHash,
   SessionDiscovery,
   SessionLockManager,
 } from '@vybestack/llxprt-code-core';
 import { seedSessionBrowserResize } from '../seed-session-browser-resize.ts';
+
+const scratchRoots = new ScratchRootOwner();
+const namedWriters = new NamedWriterOwnership();
 
 const EXPECTED_SESSION_ID = '00000000-0000-4000-8000-000000002017';
 
@@ -28,12 +33,18 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  scratchRoots.removeRoot();
   await rm(tempRoot, { recursive: true, force: true });
 });
 
 describe('session-browser resize seed', () => {
   it('persists the fixed unlocked fake-provider session for the target project', async () => {
-    await seedSessionBrowserResize({ chatsDir, projectRoot });
+    await seedSessionBrowserResize({
+      chatsDir,
+      projectRoot,
+      scratchRoots,
+      namedWriters,
+    });
 
     const targets = await SessionDiscovery.listContinueTargets(
       chatsDir,

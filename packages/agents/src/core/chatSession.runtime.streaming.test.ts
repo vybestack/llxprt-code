@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
@@ -50,6 +51,7 @@ import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager
 import { ChatSession } from './chatSession.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -75,7 +77,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
   });
 
   it('applies BeforeToolSelection to request-scoped streaming tools', async () => {
@@ -137,6 +139,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       sessionId: config.getSessionId(),
     });
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       readRuntimeSettings: fixtureRuntimePolicyReader(config, settingsService),
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
@@ -152,7 +155,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
           signal,
         ),
       state: runtimeState,
-      history: new HistoryService(),
+      history: new HistoryService({ scratchRoots: historyScratchRoots }),
       settings: {
         compressionThreshold: 0.8,
         contextLimit: 128000,
@@ -249,8 +252,11 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         model: config.getModel(),
         sessionId: config.getSessionId(),
       });
-      const historyService = new HistoryService();
+      const historyService = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
       const view = createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         readRuntimeSettings: fixtureRuntimePolicyReader(
           config,
           settingsService,
@@ -376,8 +382,11 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         model: config.getModel(),
         sessionId: config.getSessionId(),
       });
-      const historyService = new HistoryService();
+      const historyService = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
       const view = createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         readRuntimeSettings: fixtureRuntimePolicyReader(
           config,
           settingsService,

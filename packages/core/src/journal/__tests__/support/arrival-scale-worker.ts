@@ -1,3 +1,4 @@
+import { testNamedWriters } from './namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -94,6 +95,7 @@ const adapter: SessionRouteAdapter = {
         seams: testJournalSeams({}, 1, false),
         compactionDue: () => false,
       }),
+      testNamedWriters,
     );
     const recorder = new JournalArrivalRecorder(store);
     try {
@@ -120,6 +122,7 @@ const adapter: SessionRouteAdapter = {
         seams: testJournalSeams({}, 1, false),
         compactionDue: () => false,
       }),
+      testNamedWriters,
     );
     let journalBytes = (await stat(path)).size;
     return {

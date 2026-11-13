@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
@@ -28,6 +29,7 @@ import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import { convertGeminiRow } from '../gemini/GeminiMessageConverter.js';
 import { geminiWireContents } from '../gemini/streamed-request.js';
 import { createProviderCallOptions } from './testSupport.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 function content(row: RealisticSessionRow): IContent {
   if (row.kind === 'tool-call')
@@ -119,7 +121,10 @@ async function seedJournal(): Promise<JournalFixture> {
     provider: 'gemini',
     model,
   });
-  const history = new HistoryService({ recording });
+  const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
+    recording,
+  });
   let batch: IContent[] = [];
   for (const row of realisticSessionRows()) {
     batch.push(content(row));

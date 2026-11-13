@@ -10,6 +10,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SessionAuthPolicy } from '../auth/types.js';
 
@@ -63,10 +64,12 @@ export function createRuntimeContentGeneratorFactory(): RuntimeContentGeneratorF
 
 export function configureProviderTokenizer(
   manager: RuntimeProviderManager,
+  scratchRoots: ScratchRootOwner,
   supplied: RuntimeTokenizerFactory | undefined = undefined,
 ): RuntimeTokenizerFactory {
   const installed = manager.getTokenizerFactory?.();
-  const selected = supplied ?? installed ?? createRuntimeTokenizerFactory();
+  const selected =
+    supplied ?? installed ?? createRuntimeTokenizerFactory(scratchRoots);
   if (selected !== installed) manager.setTokenizerFactory?.(selected);
   return selected;
 }
@@ -353,6 +356,12 @@ function resolveOpenaiSettings(
       GOOGLE_APPLICATION_CREDENTIALS:
         process.env.GOOGLE_APPLICATION_CREDENTIALS,
       GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+      HOME: process.env.HOME,
+      APPDATA: process.env.APPDATA,
+      GCE_METADATA_IP: process.env.GCE_METADATA_IP,
+      GCE_METADATA_HOST: process.env.GCE_METADATA_HOST,
+      METADATA_SERVER_DETECTION: process.env.METADATA_SERVER_DETECTION,
+      GOOGLE_CLOUD_QUOTA_PROJECT: process.env.GOOGLE_CLOUD_QUOTA_PROJECT,
     }),
     enableTextToolCallParsing:
       (settingsData.enableTextToolCallParsing as boolean | undefined) ?? false,
@@ -456,7 +465,7 @@ function tryActivateFakeProvider(
   }
   if (config) {
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
   }
   const fakeProvider = new FakeProvider(fakeResponsesPath, process.cwd());
   manager.registerProvider(fakeProvider);
@@ -542,7 +551,7 @@ export function createProviderPopulationTarget(
       tryActivateFakeProvider(manager, config, path),
     configure: (config) => {
       manager.setConfig(config);
-      configureProviderTokenizer(manager);
+      configureProviderTokenizer(manager, config.scratchRoots);
     },
     registerProviders: (options) =>
       registerAllProviders(

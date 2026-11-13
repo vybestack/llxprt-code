@@ -1,3 +1,4 @@
+import type { JournalMaintenanceScope } from '@vybestack/llxprt-code-core/journal/deferred-maintenance.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -126,6 +127,7 @@ export interface AgenticLoopRuntime {
  * Display callbacks observe tool/output updates without owning completion.
  */
 export interface AgenticLoopOptions {
+  readonly maintenanceScope?: JournalMaintenanceScope;
   streamModel: (
     message: AgentMessageInput,
     signal: AbortSignal,

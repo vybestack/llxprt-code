@@ -1,9 +1,11 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { DensitySpanRows } from './densitySpanRows.js';
 import { mergeRemovedInteriorSpans } from './contextRange.js';
 import { SPAN_WINDOW_CAPACITY } from './historySpanWindow.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function span(index: number): RemovedInteriorSpan {
   return {
@@ -15,13 +17,13 @@ function span(index: number): RemovedInteriorSpan {
 
 describe('density span disk sort and existing standing window', () => {
   it('keeps a closed accumulator closed before its first density edit', () => {
-    const disk = new DensitySpanRows();
+    const disk = new DensitySpanRows(historyScratchRoots);
     disk.close();
     expect(() => disk.append(span(0))).toThrow(RangeError);
   });
 
   it('projects accumulated and trailing spans without density edits', () => {
-    const disk = new DensitySpanRows();
+    const disk = new DensitySpanRows(historyScratchRoots);
     try {
       expect(
         disk.project(
@@ -46,7 +48,7 @@ describe('density span disk sort and existing standing window', () => {
 
   for (const size of [512, 8192])
     it(`preserves exact sorted merge semantics across ${size} nonmonotonic spans`, () => {
-      const disk = new DensitySpanRows();
+      const disk = new DensitySpanRows(historyScratchRoots);
       const accumulated: RemovedInteriorSpan[] = [
         { start: 800, end: 860, reason: 'rewound' },
         { start: 0, end: 30, reason: 'cleared' },

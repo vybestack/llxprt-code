@@ -1,3 +1,4 @@
+import { testJournalOptions } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -29,6 +30,7 @@ export function rawBrowserCatalog(
       chatsDir,
       projectHash,
       () => activeRecording ?? null,
+      testJournalOptions(),
     ),
   };
 }

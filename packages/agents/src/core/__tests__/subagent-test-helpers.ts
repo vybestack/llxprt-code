@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { defaultEnvironmentContextLoader } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
@@ -62,6 +63,7 @@ import { afterEach, vi } from 'bun:test';
 import type { McpRuntimeOwner } from '../../api/mcpRuntimeAssembly.js';
 import { createTestMcpRuntime } from '../../api/__tests__/helpers/create-mcp-runtime.js';
 import { StreamEventType } from '../chatSession.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 type RetainSubagentCleanup = (close: () => void | Promise<void>) => () => void;
 
@@ -357,7 +359,7 @@ function createDefaultTelemetryAdapter(): AgentRuntimeTelemetryAdapter {
 }
 
 function createDefaultHistory(): HistoryService {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   vi.spyOn(history, 'clear');
   vi.spyOn(history, 'add');
   vi.spyOn(history, 'getCuratedForProviderStream');

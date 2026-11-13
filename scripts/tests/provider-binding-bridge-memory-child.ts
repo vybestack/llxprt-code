@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { gcAndSweep, heapSize } from 'bun:jsc';
 import { readFileSync } from 'node:fs';
@@ -17,6 +18,7 @@ import {
   rejectedValue,
 } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 async function withBindingHistory(
   size: number,
@@ -26,7 +28,10 @@ async function withBindingHistory(
   }) => Promise<void>,
 ): Promise<void> {
   const owners = new RowOwnership();
-  const history = new HistoryService({ mutationOwnership: owners });
+  const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
+    mutationOwnership: owners,
+  });
   history.setTokenizerFactory(exactTokenizer());
   try {
     await history.waitForCommit();

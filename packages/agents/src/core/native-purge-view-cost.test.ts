@@ -108,7 +108,7 @@ describe('native purge warm selected-view planning', () => {
                   prepared.estimate.projection,
                   { model: 'gpt-4o', releaseIfUnsent: async () => undefined },
                 ),
-                createRuntimeTokenizerFactory(),
+                createRuntimeTokenizerFactory(history.scratchRoots),
               );
               return {
                 bytes: prepared.spool.byteLength,

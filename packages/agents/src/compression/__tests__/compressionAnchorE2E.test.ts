@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -32,6 +33,7 @@ import {
 } from './MiddleOutStrategy-test-helpers.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -147,7 +149,9 @@ describe('E2E: CompressionHandler.performCompression keeps prefix monotonically 
   });
 
   it('serialized content prefix never shrinks across 5 append-compress cycles', async () => {
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     const capturedRequests: IContent[] = [];
     const handler = buildHandler({ historyService, capturedRequests });
 
@@ -226,7 +230,9 @@ describe('Defect 5: prefix-destroying compression resets the anchor and next com
   }, 30_000);
 
   async function observeCompressionAfterPrefixDestruction() {
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     const capturedRequests: IContent[] = [];
     const handler = buildHandler({ historyService, capturedRequests });
 
@@ -269,7 +275,7 @@ describe('Defect 5: prefix-destroying compression resets the anchor and next com
 
 describe('Defect 6: client.restoreHistory resets the cache anchor (#3070)', () => {
   it('HistoryService.resetCacheAnchorSeq resets to 0 (the primitive restoreHistory calls)', () => {
-    const hs = new HistoryService();
+    const hs = new HistoryService({ scratchRoots: historyScratchRoots });
     hs.setCacheAnchorSeq(42);
     expect(hs.getCacheAnchorSeq()).toBe(42);
 
@@ -278,7 +284,7 @@ describe('Defect 6: client.restoreHistory resets the cache anchor (#3070)', () =
   });
 
   it('a wholesale history replacement via addAll after resetCacheAnchorSeq leaves the anchor at 0', async () => {
-    const hs = new HistoryService();
+    const hs = new HistoryService({ scratchRoots: historyScratchRoots });
     hs.setCacheAnchorSeq(99);
     expect(hs.getCacheAnchorSeq()).toBe(99);
 

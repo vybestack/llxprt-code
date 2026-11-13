@@ -3,7 +3,6 @@ import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { openOwnedJournal } from './journalOwnedFixture.js';
-import { historyOriginId } from './historyOriginId.js';
 import { MUTATION } from '../../journal/recordKinds.js';
 import { decodeStoredRow } from './journalRowCodec.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
@@ -98,7 +97,7 @@ describe('native annotated append current source ownership', () => {
                 { length: size },
                 (_, index) => owners[index % owners.length],
               ),
-              historyOriginId(origin),
+              journal.store.originIds.get(origin),
               ...Array.from(
                 { length: size },
                 (_, index) => owners[index % owners.length],

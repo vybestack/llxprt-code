@@ -1,12 +1,14 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { estimateSourcePendingTokens } from '../compressionBudgeting.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('pending native token blocks', () => {
   it('matches the whole-row count without opening the row-hydrating reader', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const contents: IContent[] = [
       {
         speaker: 'human',

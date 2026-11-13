@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
@@ -16,9 +17,12 @@ describe('journal row reads', () => {
   });
 
   it('reads a row body into one buffer, never gathering chunks and joining them', async () => {
-    session = await JournalSession.create(path.join(directory(), 'row.llxj'), {
-      journal: testJournalSeams().dependencies,
-    });
+    session = await JournalSession.create(
+      path.join(directory(), 'row.llxj'),
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     const text = 'x'.repeat(ROW_TEXT_BYTES);
     await session.append([
       { speaker: 'human', blocks: [{ type: 'text', text }] },

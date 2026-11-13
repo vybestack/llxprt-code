@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 /**
  * Cloning a journal for a new session and attaching one history to another
@@ -71,9 +72,12 @@ describe('journal history transfer', () => {
     name: string,
     failures: Failures = {},
   ): Promise<JournalSession> {
-    const created = await JournalSession.create(path.join(directory(), name), {
-      journal: testJournalSeams(failures).dependencies,
-    });
+    const created = await JournalSession.create(
+      path.join(directory(), name),
+      testJournalOptions({
+        journal: testJournalSeams(failures).dependencies,
+      }),
+    );
     open.push(created);
     return created;
   }
@@ -103,7 +107,7 @@ describe('journal history transfer', () => {
         const clone = await cloneJournalHistory(
           source,
           target,
-          { journal: testJournalSeams().dependencies },
+          testJournalOptions({ journal: testJournalSeams().dependencies }),
           () => false,
         );
         open.push(clone);
@@ -133,7 +137,7 @@ describe('journal history transfer', () => {
         const clone = await cloneJournalHistory(
           source,
           path.join(directory(), 'clone.llxj'),
-          { journal: testJournalSeams().dependencies },
+          testJournalOptions({ journal: testJournalSeams().dependencies }),
           () => false,
         );
         open.push(clone);
@@ -153,7 +157,7 @@ describe('journal history transfer', () => {
             cloneJournalHistory(
               source,
               target,
-              { journal: testJournalSeams().dependencies },
+              testJournalOptions({ journal: testJournalSeams().dependencies }),
               () => calls++ >= cancelledAfterCalls,
             ),
           ).rejects.toThrow('History journal store is disposed');
@@ -314,7 +318,7 @@ describe('journal history transfer', () => {
         const seams = testJournalSeams(failures);
         const destination = await JournalSession.create(
           path.join(directory(), 'destination.llxj'),
-          { journal: seams.dependencies },
+          testJournalOptions({ journal: seams.dependencies }),
         );
         open.push(destination);
         await destination.append([row('existing destination')]);

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -48,7 +49,10 @@ describe('journal history store owners and mirrors', () => {
   });
 
   async function newSession(name: string): Promise<JournalSession> {
-    const session = await JournalSession.create(path.join(directory(), name));
+    const session = await JournalSession.create(
+      path.join(directory(), name),
+      testJournalOptions(),
+    );
     sessions.push(session);
     return session;
   }
@@ -95,7 +99,7 @@ describe('journal history store owners and mirrors', () => {
       await store.dispose();
       await primary.close();
 
-      const reopened = await JournalSession.open(file);
+      const reopened = await JournalSession.open(file, testJournalOptions());
       sessions.push(reopened);
       const again = new JournalHistoryStore(reopened);
       stores.push(again);

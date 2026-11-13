@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '../../../core/src/storage/scratch-root.js';
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -34,6 +36,8 @@ import type {
 
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import { MessageType } from '../ui/types.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 export const PROJECT_HASH = 'e2e-test-project-hash';
 
@@ -128,7 +132,7 @@ export async function createTestSession(
     model: opts.model,
     projectHash: opts.projectHash,
   });
-  const svc = createSessionRecorder(config);
+  const svc = createSessionRecorder(withTestNamedWriters(config));
 
   // If contents are provided, use those directly
   if (opts.contents) {
@@ -163,7 +167,7 @@ export async function createEmptySession(
   projectHash: string = PROJECT_HASH,
 ): Promise<{ filePath: string; sessionId: string }> {
   const config = makeConfig(dir, { sessionId, projectHash });
-  const svc = createSessionRecorder(config);
+  const svc = createSessionRecorder(withTestNamedWriters(config));
   await seedSessionRows(svc, []);
   svc.recordSessionEvent('info', 'session initialized');
   await svc.flush();
@@ -224,6 +228,7 @@ export function makeResumeContext(
   };
 
   return {
+    scratchRoots: recordingScratchRoots,
     chatsDir,
     projectHash: PROJECT_HASH,
     currentSessionId: opts.currentSessionId ?? 'current-session',

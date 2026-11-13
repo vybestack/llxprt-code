@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '../../storage/scratch-root.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -25,7 +26,6 @@ import { estimateTokenRange } from './estimate-token-range.js';
 import { finalizeHistoryMutation } from './finalizeHistoryMutation.js';
 import { HistoryTokenTickets } from './history-token-tickets.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
-import { historyOriginId } from './historyOriginId.js';
 import { type IContent } from './IContent.js';
 import type { NativeDensityPolicy } from './nativeDensityPolicy.js';
 import type { ProviderCuratedStreamOptions } from './provider-request-options.js';
@@ -147,7 +147,16 @@ export abstract class HistoryServiceCore
    *
    * @plan PLAN-20260917-ISSUE854.P05b3
    */
+  readonly scratchRoots: ScratchRootOwner;
   protected readonly journal: HistoryStorePort;
+
+  get maintenanceScope(): HistoryStorePort['maintenanceScope'] {
+    return this.journal.maintenanceScope;
+  }
+
+  get originIds(): HistoryStorePort['originIds'] {
+    return this.journal.originIds;
+  }
   protected readonly captureTokenRow: (start?: number) => TokenRowSource;
   readonly detachedValues: DetachedHistoryAPI;
 
@@ -253,8 +262,9 @@ export abstract class HistoryServiceCore
    *
    * @plan PLAN-20260917-ISSUE854.P05b3
    */
-  protected constructor(options: HistoryServiceJournalOptions = {}) {
+  protected constructor(options: HistoryServiceJournalOptions) {
     super();
+    this.scratchRoots = options.scratchRoots;
     this.mutationOwnership = options.mutationOwnership;
     const journal = createHistoryStore(options);
     this.journal = journal;
@@ -302,7 +312,8 @@ export abstract class HistoryServiceCore
     onAttached?: () => void,
     origin?: object,
   ): Promise<void> {
-    const originId = origin === undefined ? undefined : historyOriginId(origin);
+    const originId =
+      origin === undefined ? undefined : this.journal.originIds.get(origin);
     if (this.journal.isAdoptingRecorder(recorder)) {
       this.journal.adoptedOrigin(originId);
       onAttached?.();
@@ -706,7 +717,7 @@ export abstract class HistoryServiceCore
       // Durable write first: the postcondition of every mutation is "journal
       // appended (awaitable ack) + observers notified" (#854).
       const originId =
-        origin === undefined ? undefined : historyOriginId(origin);
+        origin === undefined ? undefined : this.journal.originIds.get(origin);
       this.journal.apply({ kind: 'content', content, origin: originId });
       token = this.tokenTickets.prepare(
         this.captureTokenRow(),
@@ -1074,6 +1085,7 @@ export abstract class HistoryServiceCore
   ): Promise<void> {
     await this.enqueueAsynchronousHistoryMutation(() =>
       this.journal.optimizeDensity({
+        scratchRoots: this.scratchRoots,
         optimize,
         nativePolicy,
         ownership: this.mutationOwnership,
@@ -1081,6 +1093,7 @@ export abstract class HistoryServiceCore
         mutate: async (previous) => {
           await this.waitForTokenUpdates();
           await withDiskDensityMutation(
+            this.scratchRoots,
             previous,
             optimize,
             (input) => this.commitHistoryMutation(input, previous),

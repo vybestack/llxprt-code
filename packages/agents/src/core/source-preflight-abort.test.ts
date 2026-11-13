@@ -125,7 +125,9 @@ describe('source prepared preflight cancellation during actual artifact writing'
         expect(input.http.bodies).toHaveLength(0);
         expect(input.state.callbacks).toBe(1);
         expect(input.state.retries).toBe(0);
-        expect(activeRequestBodyCount()).toBe(0);
+        expect(
+          activeRequestBodyCount(input.setup.provider.requestBodyCensus),
+        ).toBe(0);
       } finally {
         input.controller.abort();
         input.held.release();

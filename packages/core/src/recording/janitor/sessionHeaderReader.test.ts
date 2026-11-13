@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, it, expect } from 'bun:test';
 import * as fs from 'node:fs/promises';
@@ -30,7 +34,9 @@ describe('native session header reader', () => {
   }
 
   async function record(config: JournalRecordingConfig): Promise<string> {
-    const recording = JournalRecordingService.create(config);
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters(config),
+    );
     try {
       const session = await recording.session();
       await session.append([
@@ -66,7 +72,10 @@ describe('native session header reader', () => {
 
   it('returns null for a journal with no session facts', async () => {
     const filePath = path.join(tempDir(), 'session-noheader.llxj');
-    const session = await JournalSession.create(filePath, journalSeams());
+    const session = await JournalSession.create(
+      filePath,
+      testJournalOptions(journalSeams()),
+    );
     await session.close();
     expect(await readSessionHeaderInfo(filePath)).toBeNull();
   });
@@ -97,7 +106,10 @@ describe('native session header reader', () => {
 
   it('returns null for native session facts with an unsafe/path-like sessionId', async () => {
     const filePath = await record(makeConfig());
-    const session = await JournalSession.open(filePath, journalSeams());
+    const session = await JournalSession.open(
+      filePath,
+      testJournalOptions(journalSeams()),
+    );
     try {
       await session.store.commit([
         sessionFactEdit(SESSION_KEYS.id, '../../etc/passwd'),

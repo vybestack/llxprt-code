@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -14,7 +15,7 @@ const PAGE_ROWS = 8;
 const WINDOW_BOUND = { rows: 24, serializedBytes: 128 * 1024 };
 
 async function seed(path: string): Promise<void> {
-  const session = await JournalSession.create(path);
+  const session = await JournalSession.create(path, testJournalOptions());
   try {
     for (let batch = 0; batch < ROWS / 64; batch++) {
       await session.append(
@@ -77,6 +78,7 @@ describe('journal window residency', () => {
     const text = 'a very long assistant response. '.repeat(12500);
     const session = await JournalSession.create(
       join(directory(), 'giant.llxj'),
+      testJournalOptions(),
     );
     try {
       await session.append([

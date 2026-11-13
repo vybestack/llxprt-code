@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
@@ -78,10 +79,12 @@ export async function createJournalTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = JournalRecordingService.create({
-    ...config,
-    ...(opts.journal === undefined ? {} : { journal: opts.journal }),
-  });
+  const svc = JournalRecordingService.create(
+    withTestNamedWriters({
+      ...config,
+      ...(opts.journal === undefined ? {} : { journal: opts.journal }),
+    }),
+  );
 
   const contents = opts.contents ?? [makeContent('hello')];
   await (await svc.session()).append(contents);

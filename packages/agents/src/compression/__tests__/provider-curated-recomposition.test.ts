@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -12,10 +13,11 @@ import {
 import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { describe, expect, it } from 'bun:test';
 import { recomposeFixture } from './provider-curated-recomposition-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class CursorOnlyHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(this, 'eager recomposition');
   }
 
@@ -26,7 +28,9 @@ class CursorOnlyHistory extends HistoryService {
 
 describe('journal materialization guard', () => {
   it('CursorOnlyHistory rejects journal eager materialization', async () => {
-    const history = new CursorOnlyHistory();
+    const history = new CursorOnlyHistory({
+      scratchRoots: historyScratchRoots,
+    });
 
     try {
       await expect(history.eagerRowsForTest()).rejects.toThrow(
@@ -59,7 +63,10 @@ describe('invoked provider-source reopening', () => {
           size,
           (root) => {
             const recording = createRecorderForTest({ chatsDir: root });
-            const service = new CursorOnlyHistory({ recording });
+            const service = new CursorOnlyHistory({
+              scratchRoots: historyScratchRoots,
+              recording,
+            });
             return {
               service,
               recording,

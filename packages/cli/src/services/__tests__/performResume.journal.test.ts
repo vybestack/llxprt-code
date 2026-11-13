@@ -1,3 +1,13 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import {
+  afterAll as afterRecordingTests,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   RecordingIntegration,
@@ -11,7 +21,6 @@ import {
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,6 +29,8 @@ import {
   type RecordingSwapCallbacks,
   type ResumeContext,
 } from '../performResume.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 const PROJECT = 'journal-project';
 
@@ -44,6 +55,8 @@ interface Live {
 }
 
 describe('performResume on the journal backend with the live recorder bound', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   let chatsDir: string;
   let history: HistoryService;
   let live: Live;
@@ -52,30 +65,37 @@ describe('performResume on the journal backend with the live recorder bound', ()
 
   beforeEach(async () => {
     chatsDir = await mkdtemp(join(tmpdir(), 'perform-resume-journal-'));
-    const source = JournalRecordingService.create({
-      sessionId: 'source',
-      projectHash: PROJECT,
-      chatsDir,
-      workspaceDirs: [],
-      // Differs from the live model so the resume records a provider switch.
-      provider: 'anthropic',
-      model: 'claude-3',
-    });
+    const source = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'source',
+        projectHash: PROJECT,
+        chatsDir,
+        workspaceDirs: [],
+        // Differs from the live model so the resume records a provider switch.
+        provider: 'anthropic',
+        model: 'claude-3',
+      }),
+    );
     await (
       await source.session()
     ).append([row('one'), row('two', 'ai'), row('three')]);
     await source.dispose();
 
-    liveRecording = await createLockedSessionRecorder({
-      sessionId: 'live',
-      projectHash: PROJECT,
-      chatsDir,
-      workspaceDirs: [],
-      provider: 'anthropic',
-      model: 'claude-4',
-    });
-    history = new HistoryService({});
-    const integration = new RecordingIntegration(liveRecording);
+    liveRecording = await createLockedSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'live',
+        projectHash: PROJECT,
+        chatsDir,
+        workspaceDirs: [],
+        provider: 'anthropic',
+        model: 'claude-4',
+      }),
+    );
+    history = new HistoryService({ scratchRoots: recordingScratchRoots });
+    const integration = new RecordingIntegration(
+      liveRecording,
+      recordingScratchRoots,
+    );
     await integration.subscribeToJournal(history);
     history.add(row('live-row'));
     await history.waitForCommit();
@@ -106,6 +126,7 @@ describe('performResume on the journal backend with the live recorder bound', ()
       },
     };
     return {
+      scratchRoots: recordingScratchRoots,
       chatsDir,
       projectHash: PROJECT,
       currentSessionId: 'live',
@@ -127,7 +148,10 @@ describe('performResume on the journal backend with the live recorder bound', ()
   }
 
   it('swaps to the resumed session, retires the live recording and keeps the resumed rows', async () => {
-    const result = await performResume('source', context());
+    const result = await performResume(
+      'source',
+      withTestNamedWriters(context()),
+    );
     if (!result.ok) throw new Error(result.error);
 
     expect(await texts(result.history)).toStrictEqual(['one', 'two', 'three']);
@@ -146,7 +170,10 @@ describe('performResume on the journal backend with the live recorder bound', ()
   });
 
   it('keeps recording to the resumed file after the swap', async () => {
-    const result = await performResume('source', context());
+    const result = await performResume(
+      'source',
+      withTestNamedWriters(context()),
+    );
     if (!result.ok) throw new Error(result.error);
     history.add(row('after'));
     await history.waitForCommit();
@@ -159,9 +186,11 @@ describe('performResume on the journal backend with the live recorder bound', ()
   it('releases the resumed lock and keeps the live session when publication fails', async () => {
     const result = await performResume(
       'source',
-      context(() => {
-        throw new Error('adopt failed');
-      }),
+      withTestNamedWriters(
+        context(() => {
+          throw new Error('adopt failed');
+        }),
+      ),
     );
 
     expect(result.ok).toBe(false);

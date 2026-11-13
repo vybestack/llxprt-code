@@ -7,7 +7,6 @@ import {
   detachedRows,
 } from './detached-rollback-test-helpers.js';
 import { rejectedValue } from './chronology-rollback-test-helpers.js';
-import { getScratchRoot } from '../../storage/scratch-root.js';
 
 const cases: ReadonlyArray<{ size: number; kind: 'read' | 'write' }> = [
   { size: 512, kind: 'read' },
@@ -25,7 +24,7 @@ describe('native detached positional I/O', () => {
           await history.detachedValues.replace(detachedRows(size));
           const expected = await detachedDigest(detachedRows(size));
           await history.waitForCommit();
-          const before = readdirSync(getScratchRoot());
+          const before = readdirSync(history.scratchRoots.getRoot());
           const result = await rejectedValue(
             history.detachedValues.transform(async (source, sink) => {
               io.zeroNext(kind);
@@ -52,7 +51,7 @@ describe('native detached positional I/O', () => {
           expect(history.getTotalTokens()).toBe(size * 4);
           expect(owners.snapshot().liveRows).toBe(0);
           expect(
-            readdirSync(getScratchRoot()).filter(
+            readdirSync(history.scratchRoots.getRoot()).filter(
               (name) =>
                 name.startsWith('history-detached-') && !before.includes(name),
             ),

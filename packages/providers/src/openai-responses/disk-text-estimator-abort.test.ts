@@ -6,7 +6,6 @@ import { requestSelection } from './__tests__/support/request-selection.js';
 import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
 import { diskTextFixture } from './__tests__/support/disk-text-fixture.js';
 import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 describe('actual request source estimation cancellation', () => {
   it('cancels source estimation through the actual request signal without a separately configured global factory signal', async () => {
@@ -16,19 +15,22 @@ describe('actual request source estimation cancellation', () => {
     const projection = await setup.provider.projectPromptEnvelope(
       setup.options(requestSelection(disk.rows), controller.signal),
     );
-    const before = new Set(readdirSync(getScratchRoot()));
+    const before = new Set(readdirSync(setup.config.scratchRoots.getRoot()));
     try {
       const reason = new Error('cancel finalized source count');
       controller.abort(reason);
       const estimate = estimatePromptEnvelope(
         setup.provider.name,
         projection,
-        withGpt56DiskSources(setup.factory, getScratchRoot()),
+        withGpt56DiskSources(
+          setup.factory,
+          setup.config.scratchRoots.getRoot(),
+        ),
       );
       await expect(estimate).rejects.toThrow('cancel finalized source count');
       await expect(estimate).rejects.toBe(reason);
       expect(
-        readdirSync(getScratchRoot()).filter(
+        readdirSync(setup.config.scratchRoots.getRoot()).filter(
           (name) => name.startsWith('o200k-count-') && !before.has(name),
         ),
       ).toHaveLength(0);

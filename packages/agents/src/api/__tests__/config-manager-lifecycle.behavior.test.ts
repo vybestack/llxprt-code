@@ -318,7 +318,7 @@ describe('Config-independent provider owner lifecycle', () => {
         manager,
         oauth,
         'owned-manager',
-        configureProviderTokenizer(manager),
+        configureProviderTokenizer(manager, ownerConfig.scratchRoots),
         undefined,
         process.env.LLXPRT_FAKE_RESPONSES,
       );
@@ -405,7 +405,7 @@ describe('Config-independent provider owner lifecycle', () => {
         earlyManager,
         earlyOAuth,
         'shared-label',
-        configureProviderTokenizer(earlyManager),
+        configureProviderTokenizer(earlyManager, ownerConfig.scratchRoots),
         undefined,
         process.env.LLXPRT_FAKE_RESPONSES,
       );

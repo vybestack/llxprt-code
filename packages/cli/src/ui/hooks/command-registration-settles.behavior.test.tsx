@@ -7,7 +7,11 @@ import type { DebugCommandOperations } from '../commands/debugCommands.js';
 import { describe, expect, it } from 'bun:test';
 import { act, type ReactNode } from 'react';
 import { setTimeout as idle } from 'node:timers/promises';
-import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+import {
+  UiTelemetryService,
+  type UiEvent,
+} from '@vybestack/llxprt-code-telemetry';
+import { EVENT_API_RESPONSE } from '@vybestack/llxprt-code-telemetry/telemetry/constants.js';
 import {
   createCommandRegistrationFixture,
   createCommandRegistryFixture,
@@ -35,10 +39,11 @@ import {
   type UseSlashCommandProcessorCoreArgs,
 } from './useSlashCommandProcessorCore.js';
 
-function createWrapper(): ({ children }: { children: ReactNode }) => ReactNode {
+function createWrapper(
+  metrics = new UiTelemetryService(),
+): ({ children }: { children: ReactNode }) => ReactNode {
   const api = createMockRuntimeApi();
   const oauth = createMockCommandContext().oauthControl;
-  const metrics = new UiTelemetryService();
   return function Wrapper({ children }: { children: ReactNode }): ReactNode {
     return (
       <Runtime.GetActiveProviderDetailsProvider
@@ -276,6 +281,73 @@ describe('production command registration lifecycle', () => {
       expect(loads).toBe(settledLoads + 1);
     } finally {
       hook.unmount();
+    }
+    expect(listeners.size).toBe(0);
+  });
+
+  it('does not rediscover commands on metrics updates and quits with the latest metrics', async () => {
+    const metrics = new UiTelemetryService();
+    const args = inputs();
+    const listeners = new Set<() => void>();
+    const quitMessages: Array<Parameters<typeof args.actions.quit>[0]> = [];
+    let loads = 0;
+    const load = args.loadRegisteredCommands;
+    args.loadRegisteredCommands = async (owners, signal) => {
+      loads++;
+      return load(owners, signal);
+    };
+    args.subscribeCommandChanges = (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    };
+    args.actions.quit = (messages) => quitMessages.push(messages);
+    const hook = renderHook(() => useSlashCommandProcessorCore(args), {
+      wrapper: createWrapper(metrics),
+    });
+    try {
+      await waitFor(() =>
+        expect(hook.result.current.slashCommands?.length).toBeGreaterThan(0),
+      );
+      const startupLoads = loads;
+      await act(async () => {
+        for (let index = 1; index <= 3; index++) {
+          metrics.addEvent({
+            'event.name': EVENT_API_RESPONSE,
+            'event.timestamp': new Date().toISOString(),
+            model: 'metrics-update-test',
+            duration_ms: 10,
+            input_token_count: index * 100,
+            output_token_count: index * 50,
+            total_token_count: index * 150,
+            cached_content_token_count: 0,
+            thoughts_token_count: 0,
+            tool_token_count: 0,
+            finish_reasons: [],
+            prompt_id: `metrics-update-${index}`,
+            provider_owned: true,
+            usage_metadata_present: true,
+          } as UiEvent);
+        }
+      });
+      await waitFor(() =>
+        expect(
+          hook.result.current.commandContext.session.stats.metrics.models[
+            'metrics-update-test'
+          ].api.totalRequests,
+        ).toBe(3),
+      );
+      expect(loads).toBe(startupLoads);
+
+      await act(async () => {
+        await hook.result.current.handleSlashCommand('/quit');
+      });
+      const quit = quitMessages
+        .flat()
+        .find((message) => message.type === 'quit');
+      expect(quit).toMatchObject({ totalApiRequests: 3, totalTokens: 900 });
+    } finally {
+      hook.unmount();
+      metrics.close();
     }
     expect(listeners.size).toBe(0);
   });

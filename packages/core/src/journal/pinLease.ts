@@ -67,7 +67,12 @@ export function releaseRead(
 
 /** The reads of `raw`, each refused once the lease is free (a swap may have moved what they reach). */
 function leased(raw: RecordAccess, lease: PinLease): RecordAccess {
+  let rowTreePath: RecordAccess['rowTreePath'] | undefined;
   return {
+    get rowTreePath() {
+      lease.require();
+      return (rowTreePath ??= new Map());
+    },
     get sourceIdentity() {
       lease.require();
       return raw.sourceIdentity;

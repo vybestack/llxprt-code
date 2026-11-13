@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { appendFile } from 'node:fs/promises';
@@ -32,9 +33,9 @@ describe('request Kimi metadata read bounds', () => {
     it(`maps a fixed tail over ${size} rows with ${calls} calls without scanning or decoding history`, async () => {
       const session = await JournalSession.create(
         `${directory()}/${size}.llxj`,
-        {
+        testJournalOptions({
           journal: testJournalSeams({}, size, false).dependencies,
-        },
+        }),
       );
       try {
         function* rows(): Generator<RowDraft> {

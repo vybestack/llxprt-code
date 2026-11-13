@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { readdir } from 'node:fs/promises';
@@ -19,7 +22,11 @@ import {
   textRow,
 } from './__tests__/support/journalRecordingFixture.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 describe('RecordingIntegration journal lifecycle', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const directory = useTempDir('recording-lifecycle-');
   let recording: JournalRecordingService;
   let integration: RecordingIntegration;
@@ -27,10 +34,10 @@ describe('RecordingIntegration journal lifecycle', () => {
   const histories: HistoryService[] = [];
   beforeEach(() => {
     recording = JournalRecordingService.create(
-      recordingConfig(join(directory(), 'chats')),
+      withTestNamedWriters(recordingConfig(join(directory(), 'chats'))),
     );
-    integration = new RecordingIntegration(recording);
-    history = new HistoryService();
+    integration = new RecordingIntegration(recording, recordingScratchRoots);
+    history = new HistoryService({ scratchRoots: recordingScratchRoots });
     histories.push(history);
   });
   afterEach(async () => {
@@ -50,7 +57,7 @@ describe('RecordingIntegration journal lifecycle', () => {
     return rowTexts((await saved()).history);
   }
   function second(): HistoryService {
-    const result = new HistoryService();
+    const result = new HistoryService({ scratchRoots: recordingScratchRoots });
     histories.push(result);
     return result;
   }
@@ -130,11 +137,13 @@ describe('RecordingIntegration journal lifecycle', () => {
       await recording.dispose();
       const failures: Failures = { recordKinds: true };
       const seams = testJournalSeams(failures);
-      recording = JournalRecordingService.create({
-        ...recordingConfig(join(directory(), 'chats')),
-        journal: { journal: seams.dependencies },
-      });
-      integration = new RecordingIntegration(recording);
+      recording = JournalRecordingService.create(
+        withTestNamedWriters({
+          ...recordingConfig(join(directory(), 'chats')),
+          journal: { journal: seams.dependencies },
+        }),
+      );
+      integration = new RecordingIntegration(recording, recordingScratchRoots);
       if (mirror) {
         history.add(textRow('baseline'));
         await history.waitForCommit();

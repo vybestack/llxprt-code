@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { open } from 'node:fs/promises';
 import { describe, expect, it } from 'bun:test';
@@ -15,9 +16,12 @@ describe('native Mistral value identity', () => {
 
   it('rejects a mapped reference to a CRC-valid VALUE of another raw id', async () => {
     const path = `${directory()}/wrong-raw.llxj`;
-    const session = await JournalSession.create(path, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.store.commit([{ kind: 'mistral', slot: 0 }]);
       await session.append([
@@ -77,9 +81,12 @@ describe('native Mistral value identity', () => {
   });
 
   it('refuses mapping slots outside the fixed three slots', async () => {
-    const session = await JournalSession.create(`${directory()}/slots.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/slots.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       for (const slot of [-1, 3, 0.5])
         await expect(

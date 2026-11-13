@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -6,6 +7,7 @@ import { join } from 'node:path';
 import { HistoryMediaOwnership } from './history-media-ownership.js';
 import { LocalMediaStore } from './local-media-store.js';
 import { RowOwnership } from '../recording/rowOwnership.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('bounded media ownership', () => {
   it('streams duplicates without retiring prior media before commit and rolls back source failure', async () => {
@@ -14,7 +16,7 @@ describe('bounded media ownership', () => {
       rootDirectory: directory,
       quotaBytes: 1024,
     });
-    const owner = new HistoryMediaOwnership(store);
+    const owner = new HistoryMediaOwnership(store, historyScratchRoots);
     const ownership = new RowOwnership();
     try {
       const prior = await store.admit({

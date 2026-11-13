@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -14,6 +15,7 @@ import {
   type CapturedWireRequest,
 } from './support/wireBodyCapture.js';
 import { normalizedRows } from './support/frozenWire/normalizedRows.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const rows: readonly IContent[] = [
   {
@@ -82,7 +84,7 @@ describe('caller-owned Anthropic media and anchors', () => {
     (route) => route.providerName === 'anthropic',
   )) {
     it(`${route.id} preserves request bytes and media estimates`, async () => {
-      const factory = createRuntimeTokenizerFactory();
+      const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
       await factory.prepareTokenizer?.(route.providerName, route.model);
       const selection = await callerOwnedProviderRequest(rows);
       const reference = rowsSelection(await normalizedRows(rows));

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -108,7 +109,7 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = createSessionRecorder(config);
+  const svc = createSessionRecorder(withTestNamedWriters(config));
 
   const contents = opts.contents ?? [makeContent('hello')];
   for (const content of contents) {
@@ -279,7 +280,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
     it('empty sessions are excluded', async () => {
       // Create a session with no user content
       const emptyConfig = makeConfig(chatsDir, { sessionId: 'empty-session' });
-      const emptySvc = createSessionRecorder(emptyConfig);
+      const emptySvc = createSessionRecorder(withTestNamedWriters(emptyConfig));
       await seedSessionRows(emptySvc, []);
       emptySvc.recordSessionEvent('info', 'session started');
       await emptySvc.flush();
@@ -310,7 +311,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 2)', ()
     it('lists session and checkpoint rows and tombstones only the checkpoint', async () => {
       const sessionId = 'checkpoint-source-session';
       const recording = await createLockedSessionRecorder(
-        makeConfig(chatsDir, { sessionId }),
+        withTestNamedWriters(makeConfig(chatsDir, { sessionId })),
       );
       await seedSessionRows(recording, [makeContent('branch content')]);
       const checkpoint = await recording.createCheckpoint('branch-point');

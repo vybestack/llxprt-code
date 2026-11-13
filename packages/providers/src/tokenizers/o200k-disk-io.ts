@@ -6,7 +6,10 @@
 import { closeSync, openSync, readSync, writeSync } from 'node:fs';
 import { open, type FileHandle } from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
-import { diskAssets, type CharacterClass } from './o200k-disk-assets.js';
+import {
+  createDiskClassifier,
+  type CharacterClass,
+} from './o200k-disk-assets.js';
 
 export async function checkpoint(signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted();
@@ -86,8 +89,18 @@ export class DiskCharacters {
   private start = -1;
   private length = 0;
 
-  constructor(path: string) {
+  private readonly classify: (text: string) => CharacterClass;
+  private readonly releaseClassifier?: () => void;
+
+  constructor(path: string, classify?: (text: string) => CharacterClass) {
     this.fd = openSync(path, 'r');
+    if (classify === undefined) {
+      const owned = createDiskClassifier();
+      this.classify = owned;
+      this.releaseClassifier = owned.dispose;
+    } else {
+      this.classify = classify;
+    }
   }
 
   at(position: number): Character | undefined {
@@ -107,11 +120,15 @@ export class DiskCharacters {
     const first = this.buffer[offset];
     const width = utf8Width(first);
     const text = this.buffer.toString('utf8', offset, offset + width);
-    return { text, end: position + width, kind: diskAssets().classify(text) };
+    return { text, end: position + width, kind: this.classify(text) };
   }
 
   close(): void {
-    closeSync(this.fd);
+    try {
+      closeSync(this.fd);
+    } finally {
+      this.releaseClassifier?.();
+    }
   }
 }
 

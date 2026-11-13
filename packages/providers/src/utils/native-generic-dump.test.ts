@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -6,6 +7,7 @@ import { operationFileCreates } from '../../../agents/src/compression/__tests__/
 import { buildProviderDumpBodyStream } from './providerRequestConversion.js';
 import { buildProviderDumpBody } from './__tests__/support/arrayDumpBody.js';
 import { streamPrettyJson } from './streamPrettyJson.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const rows: IContent[] = [
   {
@@ -134,7 +136,7 @@ async function journalDump(
   readonly expected: string;
   readonly creates: Awaited<ReturnType<typeof operationFileCreates>>;
 }> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   try {
     history.addAll(structuredClone(contents));
     await history.waitForCommit();
@@ -202,7 +204,7 @@ describe('native generic raw dump', () => {
     expect(creates).toStrictEqual({ files: [], directories: [] });
   });
   it('reopens the same raw journal pin after later history publication without changing tool occurrences', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       history.addAll(structuredClone(chainRows));
       const snapshot = await history.openDumpSnapshot();

@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -39,6 +41,7 @@ import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/j
 import { encodeContentRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { collectHistoryFixture } from './collect-history-test-fixture.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 type ReferenceMediaBlock = Extract<
   IContent['blocks'][number],
@@ -145,6 +148,20 @@ function createPurgeProvider(
   };
 }
 
+function createPurgeRecording(
+  options: PurgeChatOptions,
+): JournalRecordingService {
+  return JournalRecordingService.create({
+    journal: testJournalOptions(),
+    sessionId: `purge-${options.providerName}`,
+    projectHash: 'purge-project',
+    chatsDir: join(directory, `chats-${options.providerName}`),
+    workspaceDirs: [],
+    provider: options.providerName,
+    model: 'media-history-model',
+  });
+}
+
 export async function createPurgeChat(options: PurgeChatOptions): Promise<{
   readonly chat: ChatSession;
   readonly recording: JournalRecordingService;
@@ -153,18 +170,11 @@ export async function createPurgeChat(options: PurgeChatOptions): Promise<{
 }> {
   const requests: IContent[][] = [];
   const provider = createPurgeProvider(options, requests);
-  const recording = JournalRecordingService.create({
-    sessionId: `purge-${options.providerName}`,
-    projectHash: 'purge-project',
-    chatsDir: join(directory, `chats-${options.providerName}`),
-    workspaceDirs: [],
-    provider: options.providerName,
-    model: 'media-history-model',
-  });
+  const recording = createPurgeRecording(options);
   const setup = createChatSessionRuntime({ provider });
   setup.settingsService.set('media.semantic-purge', options.mode);
   setup.settingsService.set('prompt-caching', '5m');
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const store = new LocalMediaStore({
     rootDirectory: join(directory, `media-${options.providerName}`),
     quotaBytes: 1024 * 1024,
@@ -178,6 +188,7 @@ export async function createPurgeChat(options: PurgeChatOptions): Promise<{
   const invocationOwner = new SessionSettingsOwner(setup.settingsService);
   retainedInvocationOwners.push(invocationOwner);
   const runtime = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       invocationOwner.prepareProviderInvocation(
         state.runtimeId,
@@ -318,7 +329,7 @@ export async function createChat(
     },
   };
   const setup = createChatSessionRuntime({ provider });
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const store = new LocalMediaStore({
     rootDirectory: join(directory, 'media'),
     quotaBytes: 1024 * 1024,
@@ -332,6 +343,7 @@ export async function createChat(
   const invocationOwner = new SessionSettingsOwner(setup.settingsService);
   retainedInvocationOwners.push(invocationOwner);
   const runtime = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       invocationOwner.prepareProviderInvocation(
         state.runtimeId,

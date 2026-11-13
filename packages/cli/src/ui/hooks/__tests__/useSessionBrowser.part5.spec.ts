@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -107,7 +108,7 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = createSessionRecorder(config);
+  const svc = createSessionRecorder(withTestNamedWriters(config));
 
   const contents = opts.contents ?? [makeContent('hello')];
   for (const content of contents) {

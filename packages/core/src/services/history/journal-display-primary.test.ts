@@ -1,3 +1,7 @@
+import {
+  testJournalOptions,
+  withTestNamedWriters,
+} from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -28,7 +32,9 @@ describe('primary journal presentation ownership', () => {
   const directory = useTempDir('display-primary-');
   it('persists presentation to the primary when no recorder is attached', async () => {
     const path = join(directory(), 'primary.llxj');
-    const store = new JournalHistoryStore(await JournalSession.create(path));
+    const store = new JournalHistoryStore(
+      await JournalSession.create(path, testJournalOptions()),
+    );
     try {
       const display = await store.appendDisplay(
         { type: 'info' },
@@ -42,15 +48,19 @@ describe('primary journal presentation ownership', () => {
   });
   it('keeps unrecorded-origin presentation on the primary while a peer records', async () => {
     const path = join(directory(), 'shared-primary.llxj');
-    const store = new JournalHistoryStore(await JournalSession.create(path));
-    const recorder = JournalRecordingService.create({
-      sessionId: 'peer',
-      projectHash: 'peer',
-      chatsDir: directory(),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
+    const store = new JournalHistoryStore(
+      await JournalSession.create(path, testJournalOptions()),
+    );
+    const recorder = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'peer',
+        projectHash: 'peer',
+        chatsDir: directory(),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
     try {
       await store.attachJournal(recorder, false, undefined, 'peer');
       const display = await store.appendDisplay(

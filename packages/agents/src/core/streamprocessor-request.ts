@@ -23,7 +23,11 @@ import type { PreparedSourcePromptEnvelopeSend } from './prompt-envelope-source-
 import type { SourceAfterModelRequest } from './source-after-model-hook.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
-import { bindResponseArrival, responseArrivalFor } from './responseArrival.js';
+import {
+  bindResponseArrival,
+  responseArrivalFor,
+  takePrefetchedArrival,
+} from './responseArrival.js';
 import { logApiError, turnTelemetryPorts } from './turnLogging.js';
 
 export interface StreamRequestInput {
@@ -208,8 +212,11 @@ export async function buildAndSendStreamRequest(
       input.params.config?.abortSignal,
     );
     const arrival = responseArrivalFor(source);
-    if (arrival !== undefined) bindResponseArrival(stream, arrival);
-    return stream;
+    return arrival === undefined
+      ? stream
+      : bindResponseArrival(stream, arrival, (chunk) =>
+          takePrefetchedArrival(source, chunk),
+        );
   } catch (error) {
     input.compression.clearProviderCompressionCallback(input.provider);
     throw error;

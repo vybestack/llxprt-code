@@ -8,7 +8,6 @@ import { journalPublicationOwners } from './historyPublicationOwners.js';
 import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import { densityShapeOps } from './detachedDensityOps.js';
 import { rowsUnchanged, truncationCut } from './detachedRowShapes.js';
-import { historyOriginId } from './historyOriginId.js';
 import { replaceOwnedRowsOps } from './historyReplaceOps.js';
 import type { HistoryRowOrigins } from './historyRowOrigins.js';
 
@@ -82,7 +81,8 @@ export class DetachedHistoryPublication {
   ) {
     if (origin !== undefined && rowOrigins !== undefined)
       throw new Error('A restoring publication cannot name an origin');
-    this.origin = origin === undefined ? undefined : historyOriginId(origin);
+    this.origin =
+      origin === undefined ? undefined : journal.originIds.get(origin);
   }
 
   private readonly origin: string | undefined;

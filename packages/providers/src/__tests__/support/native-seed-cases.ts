@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
@@ -39,6 +40,7 @@ import {
   type CapturedWireRequest,
 } from './wireBodyCapture.js';
 import type { HistoryCase } from './wireBodyHistories.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export function seedInput(format: FrozenFormat, seed: number): HistoryCase {
   const settings = settingsOf(format, seed);
@@ -97,7 +99,10 @@ export async function captureSeed(
 export function guardedSeedHistory(
   options?: ConstructorParameters<typeof HistoryService>[0],
 ): HistoryService {
-  const history = new HistoryService(options);
+  const history = new HistoryService({
+    ...options,
+    scratchRoots: historyScratchRoots,
+  });
   forbidHistoryMaterializationForTest(
     history,
     'full native seeds eagerly materialized history',

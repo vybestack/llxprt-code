@@ -6,11 +6,34 @@ import type { StreamProcessorRuntime } from './chatSessionPorts.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { openResponseArrival } from './responseArrival.js';
 
-const sources = new WeakMap<AsyncIterable<IContent>, ResponseArrival>();
+class ResponseTransportStream implements AsyncIterableIterator<IContent> {
+  constructor(
+    private readonly source: AsyncIterableIterator<IContent>,
+    readonly arrival: ResponseArrival,
+  ) {}
+
+  next(...args: [] | [unknown]): Promise<IteratorResult<IContent>> {
+    return this.source.next(...args);
+  }
+
+  async return(value?: unknown): Promise<IteratorResult<IContent>> {
+    return (await this.source.return?.(value)) ?? { done: true, value };
+  }
+
+  async throw(error: unknown): Promise<IteratorResult<IContent>> {
+    if (this.source.throw !== undefined) return this.source.throw(error);
+    throw error;
+  }
+
+  [Symbol.asyncIterator](): AsyncIterableIterator<IContent> {
+    return this;
+  }
+}
+
 export function sourceResponseArrival(
   source: AsyncIterable<IContent>,
 ): ResponseArrival | undefined {
-  return sources.get(source);
+  return source instanceof ResponseTransportStream ? source.arrival : undefined;
 }
 export function responseTransportAttempts(
   arrival: ResponseArrival,
@@ -59,8 +82,7 @@ export async function responseTransportSource(
   );
   try {
     const stream = await send(responseTransportAttempts(arrival));
-    sources.set(stream, arrival);
-    return stream;
+    return new ResponseTransportStream(stream, arrival);
   } catch (error) {
     await arrival.interrupt('error');
     throw error;

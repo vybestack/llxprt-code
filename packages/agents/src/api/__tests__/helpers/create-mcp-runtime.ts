@@ -34,6 +34,7 @@ export interface McpRuntimeTestOwner<Owner> {
 export interface McpRuntimeTestAcquisition {
   readonly oauth: McpRuntimeAcquisition['oauth'];
   readonly config: McpRuntimeAcquisition['config'];
+  readonly requestFetch?: McpRuntimeAcquisition['requestFetch'];
   readonly managerFactory?: McpRuntimeAcquisition['managerFactory'];
   readonly extensionLoader?: Supplied<McpRuntimeAcquisition['extensionLoader']>;
   readonly policy?: {
@@ -127,6 +128,9 @@ export function createTestMcpRuntime(
     {
       oauth: acquisition.oauth,
       config: acquisition.config,
+      requestFetch:
+        acquisition.requestFetch ??
+        ((input, init) => globalThis.fetch(input, init)),
       managerFactory: acquisition.managerFactory ?? McpClientManager,
       extensionLoader: handoffOf(
         acquisition.extensionLoader,

@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { testJournalSeams } from '@vybestack/llxprt-code-core/journal/__tests__/support/journalFixtures.js';
@@ -18,6 +20,7 @@ import {
   readPreparedChatBody,
 } from './__tests__/support/prepareRequestBody.js';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const logger = new DebugLogger('native-chat-preparation');
 function options(
@@ -96,19 +99,24 @@ describe('native Chat preparation ownership and planning', () => {
     ) => Promise<void>,
   ): Promise<void> {
     const counter = { reads: 0 };
-    const recording = JournalRecordingService.create({
-      sessionId: `prepare-${size}`,
-      projectHash: 'native-chat',
-      chatsDir: directory(),
-      workspaceDirs: [],
-      provider: 'openai',
-      model: 'gpt-4o',
-      journal: {
-        journal: testJournalSeams({ readCounter: counter }, 1, false)
-          .dependencies,
-      },
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: `prepare-${size}`,
+        projectHash: 'native-chat',
+        chatsDir: directory(),
+        workspaceDirs: [],
+        provider: 'openai',
+        model: 'gpt-4o',
+        journal: {
+          journal: testJournalSeams({ readCounter: counter }, 1, false)
+            .dependencies,
+        },
+      }),
+    );
+    const history = new HistoryService({
+      scratchRoots: historyScratchRoots,
+      recording,
     });
-    const history = new HistoryService({ recording });
     try {
       await history.addBatch(
         Array.from({ length: size }, (_, index) => ({

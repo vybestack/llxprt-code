@@ -105,7 +105,7 @@ describe('provider switch assembly', () => {
         settings,
         config,
       );
-      configureProviderTokenizer(manager);
+      configureProviderTokenizer(manager, config.scratchRoots);
       manager.setConfig(config);
       const result = await switchProvider('claudecode');
       expect(result.infoMessages.join(' ')).toContain(

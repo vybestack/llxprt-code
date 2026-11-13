@@ -77,7 +77,7 @@ describe('Responses disk-text projection adaptation failure', () => {
       resolver,
       image.normalizedBase64Length,
     );
-    const before = promptDirs();
+    const before = promptDirs(harness.setup.config.scratchRoots);
     const failure = await provider
       .projectPromptEnvelope({
         ...options,
@@ -93,7 +93,9 @@ describe('Responses disk-text projection adaptation failure', () => {
     expect(installed.installed).toHaveLength(1);
     expect(installed.has(installed.installed[0])).toBe(false);
     expect(
-      [...promptDirs()].filter((entry) => !before.has(entry)),
+      [...promptDirs(harness.setup.config.scratchRoots)].filter(
+        (entry) => !before.has(entry),
+      ),
     ).toHaveLength(0);
     expect(resolver.accounting()).toMatchObject({
       activeRequestCount: 0,

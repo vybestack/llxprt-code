@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -115,14 +116,16 @@ export async function writeMemoryFixture(
 ): Promise<void> {
   await mkdir(directory, { recursive: true });
   const media = await prepareMediaFixture(directory, workload);
-  const recording = JournalRecordingService.create({
-    chatsDir: directory,
-    sessionId: identity.sessionId,
-    projectHash: MEMORY_PROJECT,
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
-  });
+  const recording = JournalRecordingService.create(
+    withTestNamedWriters({
+      chatsDir: directory,
+      sessionId: identity.sessionId,
+      projectHash: MEMORY_PROJECT,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
   try {
     const session = await recording.session();
     if (identity.name !== '') await recording.setSessionName(identity.name);

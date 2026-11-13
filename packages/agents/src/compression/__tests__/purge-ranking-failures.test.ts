@@ -13,7 +13,7 @@ import {
   transformProbes,
   withValueTransformFixture,
 } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import {
@@ -42,7 +42,7 @@ async function observeFailure(
       expect(history.getContextRange()).toStrictEqual(range);
       const prepared = await prepareValueRoute(history, route, size, owners);
       const failure = new Error(`external ${kind} failure`);
-      const scratch = fs.readdirSync(getScratchRoot());
+      const scratch = fs.readdirSync(history.scratchRoots.getRoot());
       let restore = (): void => {};
       let result: unknown;
       try {
@@ -82,7 +82,7 @@ async function observeFailure(
       ).toBe(true);
       expect(
         fs
-          .readdirSync(getScratchRoot())
+          .readdirSync(history.scratchRoots.getRoot())
           .filter(
             (name) =>
               /^(history-detached-|history-density-|tool-response-ranking-)/.test(

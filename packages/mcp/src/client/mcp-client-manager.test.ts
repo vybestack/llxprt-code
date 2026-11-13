@@ -146,11 +146,12 @@ describe('McpClientManager', () => {
         getStatus: vi.fn(),
         getServerConfig: vi.fn().mockReturnValue({}),
       };
-      let onToolsUpdated: ConstructorParameters<typeof McpClient>[11];
+      let onToolsUpdated: ConstructorParameters<typeof McpClient>[12];
       (
         McpClient as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation(
         (
+          _requestFetch,
           _oauth,
           _approvalPolicy,
           _serverName,
@@ -218,7 +219,7 @@ describe('McpClientManager', () => {
   it('retries a context refresh requested while a failed refresh is pending', async () => {
     vi.useFakeTimers();
     try {
-      let onToolsUpdated: ConstructorParameters<typeof McpClient>[11];
+      let onToolsUpdated: ConstructorParameters<typeof McpClient>[12];
       const mockedMcpClient = {
         connect: vi.fn(),
         discover: vi.fn(),
@@ -232,6 +233,7 @@ describe('McpClientManager', () => {
         McpClient as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation(
         (
+          _requestFetch,
           _oauth,
           _approvalPolicy,
           _serverName,
@@ -606,6 +608,7 @@ describe('McpClientManager', () => {
         refreshMcpContext: vi.fn(),
       } as unknown as Config;
       const manager = new McpClientManager(
+        (input, init) => globalThis.fetch(input, init),
         createTestOAuthBinding(),
         unsupportedApprovalPolicy(),
         '0.0.1',

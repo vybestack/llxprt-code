@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '../../storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mergeCommitSpans } from './contextRange.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
@@ -102,6 +103,7 @@ function collectDiskDensitySpans(
 }
 
 export async function withDiskDensityMutation(
+  scratchRoots: ScratchRootOwner,
   previous: HistoryMutationSnapshot,
   optimize: DiskDensityOptimizer,
   commit: (input: HistoryMutationInput) => Promise<void>,
@@ -111,9 +113,9 @@ export async function withDiskDensityMutation(
   const result = optimize(previous);
   try {
     if (result.removalCount === 0 && result.replacementCount === 0) return;
-    const next = new HistoryDensityRows(ownership);
+    const next = new HistoryDensityRows(scratchRoots, ownership);
     try {
-      const spans = new DensitySpanRows();
+      const spans = new DensitySpanRows(scratchRoots);
       try {
         captureCandidate(previous, result, next, ownership);
         collectDiskDensitySpans(previous, result, spans);

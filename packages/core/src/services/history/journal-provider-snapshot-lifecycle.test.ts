@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
@@ -12,6 +13,7 @@ import { rejectedValue } from './chronology-rollback-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function withRoot(
   action: (root: string) => Promise<void>,
@@ -34,7 +36,7 @@ async function textLabels(rows: AsyncIterable<IContent>): Promise<string[]> {
 
 describe('independent journal provider cursor membership', () => {
   it('pins an active cursor while a later cursor sees the appended row', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const initial: IContent[] = ['first', 'second'].map((text) => ({
       speaker: 'human',
       blocks: [{ type: 'text', text }],

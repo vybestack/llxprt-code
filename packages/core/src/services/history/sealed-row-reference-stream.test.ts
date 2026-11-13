@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -17,6 +18,7 @@ describe('sealed row reference stream', () => {
     });
     const session = await JournalSession.create(
       join(directory(), 'session.llxj'),
+      testJournalOptions(),
     );
     try {
       const reference = await media.admit({
@@ -63,6 +65,7 @@ describe('sealed row reference stream', () => {
   it('does not let a deferred reference reader outlive its snapshot', async () => {
     const session = await JournalSession.create(
       join(directory(), 'closed.llxj'),
+      testJournalOptions(),
     );
     try {
       await session.append([

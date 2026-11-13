@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -31,6 +32,7 @@ import { chatSessionPorts } from './chatSessionPorts.js';
  */
 import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -68,7 +70,7 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
 
     const manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
 
     const runtimeState = createAgentRuntimeState({
       runtimeId: 'runtime-test',
@@ -77,8 +79,11 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
       sessionId: config.getSessionId(),
     });
 
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {

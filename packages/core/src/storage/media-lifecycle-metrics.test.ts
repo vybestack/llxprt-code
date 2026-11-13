@@ -1,3 +1,6 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { testMetricScratch } from './media-metrics-test-helpers.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -25,6 +28,7 @@ import {
   MediaLifecycleMetrics,
 } from './media-lifecycle-metrics.js';
 import { RequestMediaResolver } from './request-media-resolver.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function imageBytes(length: number): Uint8Array {
   const bytes = new Uint8Array(length).fill(0x5a);
@@ -91,7 +95,7 @@ async function lifecycleBehavior(): Promise<number> {
     rootDirectory: join(directory, 'media'),
     quotaBytes: 1024 * 1024,
   });
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const admission = new MediaAdmissionService(store);
   await admission.addToHistory(history, inlineImage(encoded), {
     turnId: 'turn-1',
@@ -109,21 +113,24 @@ async function lifecycleBehavior(): Promise<number> {
   const activeRecording = await startMetricRecording(probe);
   recording = activeRecording;
   const persistence = new NativeRecordingProbe();
-  persistedRecording = JournalRecordingService.create({
-    sessionId: 'metrics-persisted',
-    projectHash: 'metrics-project',
-    chatsDir: join(directory, 'persisted'),
-    journal: persistence.options,
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
-  });
+  persistedRecording = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: 'metrics-persisted',
+      projectHash: 'metrics-project',
+      chatsDir: join(directory, 'persisted'),
+      journal: persistence.options,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
   const persistedSession = await persistedRecording.session();
   await collectRowsForAssertions(
     history.streamRawHistory(),
     async (contentsForAssertions) => {
       const providerRetention = new ProviderRetentionSource(321);
       const metrics = new MediaLifecycleMetrics({
+        scratchRoots: testMetricScratch,
         store,
         history,
         requestResolver: resolver,
@@ -192,8 +199,9 @@ async function cacheBehavior(): Promise<number> {
     quotaBytes: 1024,
   });
   const metrics = new MediaLifecycleMetrics({
+    scratchRoots: testMetricScratch,
     store,
-    history: new HistoryService(),
+    history: new HistoryService({ scratchRoots: historyScratchRoots }),
     requestResolver: new RequestMediaResolver(store),
     recording: { getPendingByteCount: () => 0 },
     persistence: { getPendingByteCount: () => 0 },
@@ -284,15 +292,17 @@ function assertActiveMetrics(
 async function startMetricRecording(
   probe: NativeRecordingProbe,
 ): Promise<JournalRecordingService> {
-  const activeRecording = JournalRecordingService.create({
-    sessionId: 'metrics-session',
-    projectHash: 'metrics-project',
-    chatsDir: join(directory, 'recording'),
-    journal: probe.options,
-    workspaceDirs: [directory],
-    provider: 'test',
-    model: 'test',
-  });
+  const activeRecording = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: 'metrics-session',
+      projectHash: 'metrics-project',
+      chatsDir: join(directory, 'recording'),
+      journal: probe.options,
+      workspaceDirs: [directory],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
   activeRecording.recordProviderSwitch('provider', 'model');
   await activeRecording.session();
   return activeRecording;

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
@@ -46,7 +47,9 @@ describe('the resume front door', () => {
 
   it('resumes a journal session with its recorder and point boot without selecting a backend', async () => {
     const fixture = await createResumableSession(directory(), { rows: 3 });
-    const result = await resumeSession(request(fixture.sessionId));
+    const result = await resumeSession(
+      withTestNamedWriters(request(fixture.sessionId)),
+    );
     if (!result.ok) throw new Error(result.error);
     resumed = result;
     expect(result.recording).toBeInstanceOf(JournalRecordingService);
@@ -69,7 +72,9 @@ describe('the resume front door', () => {
       filePath: join(directory(), 'session-retired-session.jsonl'),
     };
     await writeFile(fixture.filePath, '{"v":1,"type":"session_start"}\n');
-    const result = await resumeSession(request(basename(fixture.filePath)));
+    const result = await resumeSession(
+      withTestNamedWriters(request(basename(fixture.filePath))),
+    );
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Resumed a retired JSONL session');
     expect(result.error).toContain(retiredJournalMessage(fixture.filePath));

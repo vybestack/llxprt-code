@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import type OpenAI from 'openai';
 import { nativeKimiRow, type NativeKimiResolver } from './native-kimi-row.js';
 import {
@@ -37,6 +38,7 @@ import {
 export type ChatBodyRows = HistoryDumpSource;
 
 export interface ChatBodyOptions {
+  readonly scratchRoots: ScratchRootOwner;
   readonly reasoning: ReasoningMessageOptions;
   /** The tool format of the target model; `undefined` means the generic one. */
   readonly toolFormat: ToolFormat | undefined;
@@ -244,7 +246,7 @@ function* toolMediaParts(
 
 /** Pass 2 state: what the conversion carries from one row to the next. */
 class ChatConversion {
-  private readonly images = new DumpScratch<MediaBlock>();
+  private readonly images: DumpScratch<MediaBlock>;
   private imageStart = 0;
   private lastCallIds: string[] = [];
 
@@ -252,7 +254,10 @@ class ChatConversion {
     private readonly settings: ConversionSettings,
     private readonly facts: ChatFacts,
     private readonly mapper: StreamingToolIdMapper | undefined,
-  ) {}
+    scratchRoots: ScratchRootOwner,
+  ) {
+    this.images = new DumpScratch(scratchRoots);
+  }
 
   close(): void {
     this.images.close();
@@ -340,7 +345,12 @@ export async function* streamChatMessages(
 ): AsyncGenerator<ChatMessageItem> {
   const mapper = createToolIdMapper(options);
   const facts = await observeRows(source, mapper);
-  const conversion = new ChatConversion(readSettings(options), facts, mapper);
+  const conversion = new ChatConversion(
+    readSettings(options),
+    facts,
+    mapper,
+    options.scratchRoots,
+  );
   try {
     const rows = blockBearingRows(source);
     let index = -1;

@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -22,6 +23,7 @@ import {
   reachesGate,
   type NativeFallbackFixture,
 } from './native-fallback-fixture.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 async function* expectedRows(
   size: number,
@@ -151,7 +153,7 @@ export async function nativeFallbackPhases(
     const failure = new Error('native fallback rejected after installation');
     const finalizationFailure = !pending && rollback ? failure : undefined;
     await fixture.pauseFinalization(finalizationFailure);
-    const rows = new DetachedHistoryJournal(owners);
+    const rows = new DetachedHistoryJournal(historyScratchRoots, owners);
     try {
       for (let index = 0; index < size; index++)
         rows.append(suffixRow(index, 2048));

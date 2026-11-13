@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 import { checkpointBindings } from '../../__tests__/recording-checkpoint-fixture.js';
 /**
  * @license
@@ -58,15 +59,17 @@ function actions(): SlashCommandProcessorActions {
 async function restore(owner: Agent, decoy: Agent): Promise<void> {
   await owner.session.setRecording({ enabled: true });
   const root = owner.workspace.getWorkingDirectory();
-  const recording = await createLockedSessionRecorder({
-    sessionId: crypto.randomUUID(),
-    projectHash: getProjectHash(root),
-    chatsDir: join(root, 'raw-chats'),
-    workspaceDirs: [root],
-    cwd: root,
-    provider: 'fake',
-    model: 'fake-model',
-  });
+  const recording = await createLockedSessionRecorder(
+    withTestNamedWriters({
+      sessionId: crypto.randomUUID(),
+      projectHash: getProjectHash(root),
+      chatsDir: join(root, 'raw-chats'),
+      workspaceDirs: [root],
+      cwd: root,
+      provider: 'fake',
+      model: 'fake-model',
+    }),
+  );
   try {
     for await (const content of owner.streamHistory())
       await recordRowsForTest(recording, [content]);

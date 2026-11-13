@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
@@ -5,6 +6,7 @@ import { HighDensityStrategy } from '../HighDensityStrategy.js';
 import { optimizeDiskDensity } from '../diskDensityOptimization.js';
 import { densityConfig, densityRow } from './density-disk-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const inclusion = '\n--- shared.ts ---\nbody\n--- End of content ---\n';
 const EDGE_ROWS: IContent[] = [
@@ -116,13 +118,17 @@ const EDGE_ROWS: IContent[] = [
 ];
 
 function compare(rows: readonly IContent[], mask: number): number {
-  const source = new HistoryDensityRows();
+  const source = new HistoryDensityRows(historyScratchRoots);
   for (const row of rows) source.append(row);
   const expected = new HighDensityStrategy().optimize(
     rows,
     densityConfig(mask),
   );
-  const actual = optimizeDiskDensity(source, densityConfig(mask));
+  const actual = optimizeDiskDensity(
+    source,
+    densityConfig(mask),
+    historyScratchRoots,
+  );
   try {
     expect(actual.rowOwnership().peakRows).toBeLessThanOrEqual(440);
     expect(actual.rowOwnership().peakSerializedBytes).toBeLessThanOrEqual(

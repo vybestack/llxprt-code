@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -19,6 +20,7 @@ import type { AgentRuntimeState } from './AgentRuntimeState.js';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('createAgentRuntimeContext', () => {
   let mockProvider: IProvider;
@@ -87,6 +89,7 @@ describe('createAgentRuntimeContext', () => {
       const liveSettings = new SettingsService();
       const owner = new SessionSettingsOwner(liveSettings);
       const context = createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         state: mockState,
         settings,
         provider: mockProviderAdapter,
@@ -112,6 +115,7 @@ describe('createAgentRuntimeContext', () => {
       liveSettings.set('media.semantic-purge', 'REMOVE');
       expect(() => {
         createAgentRuntimeContext({
+          scratchRoots: historyScratchRoots,
           state: mockState,
           settings,
           provider: mockProviderAdapter,

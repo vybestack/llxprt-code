@@ -1,3 +1,5 @@
+import { afterAll as afterRequestTests } from 'bun:test';
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
@@ -10,7 +12,8 @@ import {
   nativePromptKeys,
 } from './__tests__/native-responses-fixture.js';
 import { requestScopedContents } from '../utils/requestScopedBody.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
+const requestScratchRoots = new ScratchRootOwner();
 
 const context = {
   includeReasoningInContext: false,
@@ -32,8 +35,10 @@ function gate(): { wait: Promise<void>; release(): void } {
 }
 
 describe('Responses source deterministic lifecycle', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('returns the exact abort reason and closes a partially consumed source', async () => {
-    const before = new Set(readdirSync(getScratchRoot()));
+    const before = new Set(readdirSync(requestScratchRoots.getRoot()));
     const controller = new AbortController();
     const reason = new Error('abort while serializing');
     let closed = false;
@@ -46,11 +51,11 @@ describe('Responses source deterministic lifecycle', () => {
         closed = true;
       }
     }
-    await expect(readOwnedSource(contents(), controller.signal)).rejects.toBe(
-      reason,
-    );
+    await expect(
+      readOwnedSource(contents(), requestScratchRoots, controller.signal),
+    ).rejects.toBe(reason);
     expect(closed).toBe(true);
-    const leaked = readdirSync(getScratchRoot()).filter(
+    const leaked = readdirSync(requestScratchRoots.getRoot()).filter(
       (name) => !before.has(name),
     );
     expect(leaked).toStrictEqual([]);
@@ -60,7 +65,7 @@ describe('Responses source deterministic lifecycle', () => {
       yield row;
       yield { ...row, blocks: [{ type: 'text', text: 'second' }] };
     }
-    const owner = requestScopedContents(contents());
+    const owner = requestScopedContents(contents(), requestScratchRoots);
     try {
       const a = owner.stream()[Symbol.asyncIterator]();
       const b = owner.stream()[Symbol.asyncIterator]();
@@ -126,6 +131,8 @@ describe('Responses source deterministic lifecycle', () => {
 });
 
 describe('Responses source pending-next cancellation demand', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('settles abort before an uncooperative source next completes', async () => {
     const started = gate();
     const blocked = gate();
@@ -136,7 +143,11 @@ describe('Responses source pending-next cancellation demand', () => {
       await blocked.wait;
       yield row;
     }
-    const pending = readOwnedSource(contents(), controller.signal);
+    const pending = readOwnedSource(
+      contents(),
+      requestScratchRoots,
+      controller.signal,
+    );
     await started.wait;
     controller.abort(reason);
     const result = await Promise.race([

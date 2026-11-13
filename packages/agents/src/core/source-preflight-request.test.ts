@@ -140,7 +140,9 @@ async function afterAck(
     mode !== 'release',
   );
   expect(input.setup.history.owners.every((owner) => owner.closed)).toBe(true);
-  expect(activeRequestBodyCount()).toBe(0);
+  expect(activeRequestBodyCount(input.setup.provider.requestBodyCensus)).toBe(
+    0,
+  );
 }
 describe('actual StreamProcessor awaited disabled-source scalar telemetry', () => {
   it.each(['release', 'reject', 'abort'] as const)(

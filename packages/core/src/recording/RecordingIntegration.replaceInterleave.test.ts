@@ -1,3 +1,6 @@
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { ScratchRootOwner } from '../storage/scratch-root.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 
 /**
@@ -18,6 +21,8 @@ import { createSessionRecorder } from './sessionRecorderFactory.js';
 import type { SessionRecordingPort } from './recordingPort.js';
 import type { SessionRecordingServiceConfig } from './types.js';
 import { journalRows } from './__tests__/support/journal-read-test-helpers.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 const PROJECT_HASH = 'project-hash-replace-interleave';
 
@@ -57,6 +62,8 @@ async function replayTexts(
 }
 
 describe('replace transaction interleaving', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'replace-interleave-'));
     chatsDir = path.join(tempDir, 'chats');
@@ -69,13 +76,18 @@ describe('replace transaction interleaving', () => {
 
   describe('RecordingIntegration.subscribeToJournal handover', () => {
     it('finishes detaching the previous history before the next one attaches', async () => {
-      const recording = createSessionRecorder(makeConfig());
-      const integration = new RecordingIntegration(recording);
+      const recording = createSessionRecorder(
+        withTestNamedWriters(makeConfig()),
+      );
+      const integration = new RecordingIntegration(
+        recording,
+        recordingScratchRoots,
+      );
       const events: string[] = [];
 
       class ObservedHistory extends HistoryService {
         constructor(private readonly name: string) {
-          super({});
+          super({ scratchRoots: recordingScratchRoots });
         }
 
         override async detachJournal(

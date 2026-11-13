@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -49,16 +50,18 @@ async function writeJournal(
   modifiedAt: Date,
   parentSessionId?: string,
 ): Promise<void> {
-  const recorder = JournalRecordingService.create({
-    sessionId,
-    chatsDir,
-    projectHash: PROJECT_HASH,
-    workspaceDirs: ['/w'],
-    provider: 'anthropic',
-    model: 'claude-4',
-    kind: parentSessionId === undefined ? 'main' : 'subagent',
-    ...(parentSessionId === undefined ? {} : { parentSessionId }),
-  });
+  const recorder = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId,
+      chatsDir,
+      projectHash: PROJECT_HASH,
+      workspaceDirs: ['/w'],
+      provider: 'anthropic',
+      model: 'claude-4',
+      kind: parentSessionId === undefined ? 'main' : 'subagent',
+      ...(parentSessionId === undefined ? {} : { parentSessionId }),
+    }),
+  );
   let filePath: string;
   try {
     const session = await recorder.session();

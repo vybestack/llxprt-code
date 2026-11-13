@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 import {
   collectJournalFileRowsForAssertions,
   collectRowsForAssertions,
@@ -23,6 +26,8 @@ import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js
 import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import { createRowCounters } from '../../recording/journalCounters.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 function sourcePath(recording: SessionRecordingPort): string {
   const path = recording.getFilePath();
   if (path === null) throw new Error('Missing recording');
@@ -40,18 +45,23 @@ let history: HistoryService;
 let reads = createRowCounters();
 
 describe('bounded journal detachment', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'history-detachment-'));
-    recording = createSessionRecorder({
-      sessionId: 'source',
-      projectHash: 'project',
-      chatsDir: directory,
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
+    recording = createSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'source',
+        projectHash: 'project',
+        chatsDir: directory,
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
     reads = createRowCounters();
     history = new HistoryService({
+      scratchRoots: recordingScratchRoots,
       recording,
       attachmentCounters: reads.counters,
     });
@@ -133,7 +143,10 @@ async function verifyDetachesPendingWritesByCopyingRawJournalBytesWithoutMateria
 }
 
 async function verifyIntegrationDisposalSettlesDetachmentBeforeTheCallerClosesItsRecorder(): Promise<void> {
-  const integration = new RecordingIntegration(recording);
+  const integration = new RecordingIntegration(
+    recording,
+    recordingScratchRoots,
+  );
   void integration.subscribeToJournal(history);
   history.add({
     speaker: 'human',
@@ -286,15 +299,17 @@ async function verifyOrdersAQueuedAddAndCommitBarrierAfterDetachmentWithoutWriti
 }
 
 async function verifyCancelsAnAttachmentQueuedBehindAnAsynchronousHistoryMutation(): Promise<void> {
-  const next = createSessionRecorder({
-    sessionId: 'next',
-    projectHash: 'project',
-    chatsDir: directory,
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
-  });
-  const integration = new RecordingIntegration(next);
+  const next = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'next',
+      projectHash: 'project',
+      chatsDir: directory,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
+  const integration = new RecordingIntegration(next, recordingScratchRoots);
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   history.add({
@@ -336,15 +351,17 @@ async function verifyCancelsAnAttachmentQueuedBehindAnAsynchronousHistoryMutatio
 }
 
 async function verifyBindsRetirementToTheSelectedJournalWhenAttachmentIsDeferred(): Promise<void> {
-  const next = createSessionRecorder({
-    sessionId: 'next',
-    projectHash: 'project',
-    chatsDir: directory,
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
-  });
-  const integration = new RecordingIntegration(next);
+  const next = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'next',
+      projectHash: 'project',
+      chatsDir: directory,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
+  const integration = new RecordingIntegration(next, recordingScratchRoots);
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   history.add({

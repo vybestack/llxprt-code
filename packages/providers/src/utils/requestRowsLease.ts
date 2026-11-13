@@ -18,7 +18,16 @@ import {
 } from './abortSignal.js';
 import { isAsyncIterableContents } from './collectContents.js';
 
-const leases = new WeakMap<AsyncIterable<IContent>, RequestRowsLease>();
+class RequestLeaseContents implements AsyncIterable<IContent> {
+  constructor(
+    readonly owner: RequestRowsLease,
+    private readonly open: () => AsyncIterator<IContent>,
+  ) {}
+
+  [Symbol.asyncIterator](): AsyncIterator<IContent> {
+    return this.open();
+  }
+}
 
 export interface RequestRowsScope {
   readonly options: GenerateChatOptions;
@@ -47,8 +56,7 @@ export function acquireRequestRows(
     : admitProviderContents(input);
   const options =
     signal === undefined ? rawOptions : withRequestSignal(rawOptions, signal);
-  const existing = leases.get(options.contents);
-  if (existing !== undefined) {
+  if (options.contents instanceof RequestLeaseContents) {
     return { options, close: async () => {} };
   }
   const owner = new RequestRowsLease(
@@ -69,15 +77,14 @@ export function acquireRequestRows(
 export function stagedRequestRows(
   contents: AsyncIterable<IContent>,
 ): Promise<ProviderRequestRows> {
-  const lease = leases.get(contents);
-  if (lease === undefined) {
+  if (!(contents instanceof RequestLeaseContents)) {
     return Promise.reject(
       new Error(
         'Provider request rows were not staged; acquire them with acquireRequestRows',
       ),
     );
   }
-  return lease.staged();
+  return contents.owner.staged();
 }
 
 class RequestRowsLease {
@@ -93,8 +100,7 @@ class RequestRowsLease {
     private readonly signal?: AbortSignal,
   ) {
     signal?.throwIfAborted();
-    this.contents = { [Symbol.asyncIterator]: () => this.openReader() };
-    leases.set(this.contents, this);
+    this.contents = new RequestLeaseContents(this, () => this.openReader());
     signal?.addEventListener('abort', this.onAbort, { once: true });
   }
 

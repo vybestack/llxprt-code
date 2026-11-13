@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { directMessagePorts } from './directMessagePorts.js';
 /**
  * @license
@@ -23,6 +24,7 @@ import {
   stagedRequestRows,
 } from '@vybestack/llxprt-code-providers/utils/requestRowsLease.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function rows(source: AsyncIterable<IContent>): Promise<number> {
   let count = 0;
@@ -71,11 +73,12 @@ describe('direct-message flat tools and replayable contents', () => {
       debugMode: false,
       model: 'test',
     });
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const providerRuntime = createProviderRuntimeContext({
       runtimeId: 'critical-direct',
     });
     const context = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {

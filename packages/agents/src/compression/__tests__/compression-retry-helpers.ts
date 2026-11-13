@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { afterEach as closeInvocationRoots } from 'bun:test';
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
@@ -45,6 +46,7 @@ import { ChatSession } from '../../core/chatSession.js';
 import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -127,7 +129,9 @@ export function makeChatSession(
     sessionId: 'test-session-id',
   });
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   retainedHistories.push(historyService);
   vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(100000);
   vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(undefined);
@@ -147,6 +151,7 @@ export function makeChatSession(
   invocationOwner.bindTelemetry(runtimeSetup.config);
   retainedInvocationOwners.push(invocationOwner);
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       invocationOwner.prepareProviderInvocation(
         runtimeState.runtimeId,
@@ -268,7 +273,9 @@ export function makeChatForEnforceContextWindow(
     sessionId: 'test-session-id',
   });
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   retainedHistories.push(historyService);
   vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(totalTokens);
   vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(undefined);
@@ -290,6 +297,7 @@ export function makeChatForEnforceContextWindow(
   invocationOwner.bindTelemetry(runtimeSetup.config);
   retainedInvocationOwners.push(invocationOwner);
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       invocationOwner.prepareProviderInvocation(
         runtimeState.runtimeId,

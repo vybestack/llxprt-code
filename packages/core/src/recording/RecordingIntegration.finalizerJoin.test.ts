@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -16,6 +19,8 @@ import {
   recordedRows,
 } from './__tests__/support/native-integration-fixture.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 function gate(): { promise: Promise<void>; release(): void } {
   let release!: () => void;
   const promise = new Promise<void>((resolve) => {
@@ -25,6 +30,8 @@ function gate(): { promise: Promise<void>; release(): void } {
 }
 
 describe('RecordingIntegration finalizer join', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   let directory: string;
   let history: HistoryService;
   let recording: JournalRecordingService;
@@ -36,39 +43,41 @@ describe('RecordingIntegration finalizer join', () => {
     directory = await fs.mkdtemp(join(tmpdir(), 'recording-finalizer-'));
     intercept = async () => {};
     releaseWrite = () => {};
-    recording = JournalRecordingService.create({
-      sessionId: 'recording-finalizer-session-0001',
-      projectHash: 'project-hash-recording-finalizer',
-      chatsDir: directory,
-      workspaceDirs: ['/workspace/project-a'],
-      provider: 'anthropic',
-      model: 'claude-4',
-      journal: {
+    recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'recording-finalizer-session-0001',
+        projectHash: 'project-hash-recording-finalizer',
+        chatsDir: directory,
+        workspaceDirs: ['/workspace/project-a'],
+        provider: 'anthropic',
+        model: 'claude-4',
         journal: {
-          open: async (path, flags) => {
-            const file = await fs.open(path, flags);
-            return {
-              fd: file.fd,
-              read: (buffer, offset, length, position) =>
-                file.read(buffer, offset, length, position),
-              write: async (buffer, offset, length, position) => {
-                await intercept();
-                return file.write(buffer, offset, length, position);
-              },
-              writev: async (buffers, position) => {
-                await intercept();
-                return file.writev(buffers, position);
-              },
-              stat: () => file.stat(),
-              truncate: (length) => file.truncate(length),
-              close: () => file.close(),
-            };
+          journal: {
+            open: async (path, flags) => {
+              const file = await fs.open(path, flags);
+              return {
+                fd: file.fd,
+                read: (buffer, offset, length, position) =>
+                  file.read(buffer, offset, length, position),
+                write: async (buffer, offset, length, position) => {
+                  await intercept();
+                  return file.write(buffer, offset, length, position);
+                },
+                writev: async (buffers, position) => {
+                  await intercept();
+                  return file.writev(buffers, position);
+                },
+                stat: () => file.stat(),
+                truncate: (length) => file.truncate(length),
+                close: () => file.close(),
+              };
+            },
           },
         },
-      },
-    });
-    integration = new RecordingIntegration(recording);
-    history = new HistoryService();
+      }),
+    );
+    integration = new RecordingIntegration(recording, recordingScratchRoots);
+    history = new HistoryService({ scratchRoots: recordingScratchRoots });
     history.add(nativeText('baseline'));
     await history.waitForCommit();
     await integration.subscribeToJournal(history);

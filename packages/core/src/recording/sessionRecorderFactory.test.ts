@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
@@ -29,7 +30,9 @@ describe('session recorder factory', () => {
   }
 
   it('creates the journal recorder with the configured identity without a backend selection', () => {
-    const recorder = createSessionRecorder(config('session-fac-0001'));
+    const recorder = createSessionRecorder(
+      withTestNamedWriters(config('session-fac-0001')),
+    );
     live.push(recorder);
     expect(recorder).toBeInstanceOf(JournalRecordingService);
     expect(recorder.getSessionId()).toBe('session-fac-0001');
@@ -39,7 +42,7 @@ describe('session recorder factory', () => {
 
   it('creates a journal recorder holding the session lock', async () => {
     const recorder = await createLockedSessionRecorder(
-      config('session-fac-0002'),
+      withTestNamedWriters(config('session-fac-0002')),
     );
     live.push(recorder);
     expect(recorder).toBeInstanceOf(JournalRecordingService);

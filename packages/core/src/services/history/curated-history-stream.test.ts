@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
@@ -15,6 +16,7 @@ import {
   collectCuratedFixture,
   consumeCuratedExit,
 } from './__tests__/support/curated-stream-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 for (const size of [512, 8192]) {
   describe(`curated real journal iteration: ${size} rows`, () => {
@@ -206,6 +208,7 @@ describe('curated reader errors', () => {
     let active = 0;
     let decoded = 0;
     const service = new HistoryService({
+      scratchRoots: historyScratchRoots,
       attachmentCounters: {
         recordDecoded: () => {},
         rowDecoded: () => {

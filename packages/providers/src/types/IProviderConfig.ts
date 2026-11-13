@@ -14,11 +14,16 @@
  * limitations under the License.
  */
 
+import type { RequestBodyCensus } from '../utils/requestScopedBody.js';
+
 /**
  * Provider configuration interface that provides a subset of settings
  * required by provider implementations.
  */
 export interface IProviderConfig {
+  /** Shared with request-body probes for this provider runtime. */
+  readonly requestBodyCensus?: RequestBodyCensus;
+
   /**
    * API key for authenticating with the provider.
    */
@@ -130,6 +135,12 @@ export interface IProviderConfig {
     GOOGLE_GENAI_USE_VERTEXAI?: string;
     GOOGLE_APPLICATION_CREDENTIALS?: string;
     GOOGLE_API_KEY?: string;
+    HOME?: string;
+    APPDATA?: string;
+    GCE_METADATA_IP?: string;
+    GCE_METADATA_HOST?: string;
+    METADATA_SERVER_DETECTION?: string;
+    GOOGLE_CLOUD_QUOTA_PROJECT?: string;
   }>;
 }
 

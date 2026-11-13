@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -11,6 +12,7 @@ import type { DetachedHistoryTransform } from './detachedHistoryMutation.js';
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
 import { openOwnedJournal, type OwnedJournal } from './journalOwnedFixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const now = (execute: () => Promise<void>): Promise<void> => execute();
 
@@ -54,7 +56,7 @@ describe('detached publication and media ownership on the journal', () => {
   beforeEach(async () => {
     mediaRoot = await mkdtemp(path.join(tmpdir(), 'journal-media-store-'));
     media = new LocalMediaStore({ rootDirectory: mediaRoot, quotaBytes: 4096 });
-    owner = new HistoryMediaOwnership(media);
+    owner = new HistoryMediaOwnership(media, historyScratchRoots);
     ownership = new RowOwnership();
     a = await admit(1);
     b = await admit(2);

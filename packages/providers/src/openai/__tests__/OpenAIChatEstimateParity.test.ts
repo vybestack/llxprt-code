@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 
 /**
@@ -21,7 +22,7 @@ import {
   estimatePromptEnvelope,
   type PromptEnvelopeProjection,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import { createRuntimeTokenizerFactory } from '../../composition/runtimeTokenizerFactory.js';
 import { projectOpenAIChatPromptEnvelope } from '../../runtime/promptEnvelopeProjections.js';
 import { NativeChatEstimateProjection } from '../native-chat-estimate.js';
@@ -37,6 +38,9 @@ import {
 import { estimatorCorpus } from '../../__tests__/support/estimatorCorpus.js';
 import type { HistoryCase } from '../../__tests__/support/wireBodyHistories.js';
 import { collectUnsupportedMedia } from '../../utils/mediaUtils.js';
+const tokenizerScratchRoots = createTestScratchOwner();
+
+const historyScratchRoots = createTestScratchOwner();
 
 const ROUTE_IDS = [
   'openai-chat-plain',
@@ -44,7 +48,7 @@ const ROUTE_IDS = [
   'openai-chat-mistral',
 ];
 const routes = WIRE_ROUTES.filter((route) => ROUTE_IDS.includes(route.id));
-const factory = createRuntimeTokenizerFactory();
+const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 
 function rowsOptions(route: WireRoute, entry: HistoryCase) {
   return {
@@ -112,7 +116,7 @@ async function wireBodyEstimate(
 describe.each(routes.map((route) => [route.id, route] as const))(
   'chat estimate from segment files, route %s',
   (_id, route) => {
-    const startingScratch = new Set(readdirSync(getScratchRoot()));
+    const startingScratch = new Set(readdirSync(historyScratchRoots.getRoot()));
 
     const boundaryText = String.raw`role 雪 \ " punctuation 123456, `.repeat(
       240,
@@ -187,7 +191,9 @@ describe.each(routes.map((route) => [route.id, route] as const))(
         );
         if (entry === undefined)
           throw new Error('Missing inline-image corpus case');
-        const history = new HistoryService({});
+        const history = new HistoryService({
+          scratchRoots: historyScratchRoots,
+        });
         await history.addBatch(entry.rows);
         const selection = await history.prepareCuratedForProviderSnapshot(
           [],
@@ -234,7 +240,7 @@ describe.each(routes.map((route) => [route.id, route] as const))(
     }
 
     it('leaves no scratch files behind', () => {
-      expect(new Set(readdirSync(getScratchRoot()))).toStrictEqual(
+      expect(new Set(readdirSync(historyScratchRoots.getRoot()))).toStrictEqual(
         startingScratch,
       );
     });

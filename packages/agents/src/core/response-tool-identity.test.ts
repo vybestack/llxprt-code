@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -8,9 +10,14 @@ import type { ResponseJournalIdentity } from '@vybestack/llxprt-code-core/servic
 import type { ToolCallBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   appendResponseChunk,
+  bindResponseArrival,
+  prefetchResponseArrival,
+  responseArrivalFor,
   responseToolIdentity,
+  takePrefetchedArrival,
 } from './responseArrival.js';
 import { toolRequestFromBlock } from './turnChunkEvents.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function assertPresentation(
   history: HistoryService,
@@ -48,15 +55,17 @@ describe('journal tool request identity', () => {
   async function withHistory(
     run: (history: HistoryService) => Promise<void>,
   ): Promise<void> {
-    const recording = createSessionRecorder({
-      sessionId: 'identity',
-      projectHash: 'identity',
-      chatsDir: directory(),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
-    const history = new HistoryService();
+    const recording = createSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'identity',
+        projectHash: 'identity',
+        chatsDir: directory(),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     await history.attachJournal(recording, true);
     try {
       await run(history);
@@ -65,6 +74,86 @@ describe('journal tool request identity', () => {
       await recording.dispose();
     }
   }
+
+  it('keeps a frozen shared chunk prefetched independently for each stream', async () => {
+    await withHistory(async (history) => {
+      const chunk = Object.freeze({
+        content: Object.freeze({
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'shared response' }],
+        } satisfies import('@vybestack/llxprt-code-core/services/history/IContent.js').IContent),
+      });
+      const source = async function* () {
+        yield chunk;
+      };
+      const firstArrival = await history.openResponseArrival({
+        id: 'first',
+        submissionId: 'submission',
+      });
+      const first = await prefetchResponseArrival(source(), firstArrival, true);
+      await firstArrival.interrupt('cancelled');
+      const secondArrival = await history.openResponseArrival({
+        id: 'second',
+        submissionId: 'submission',
+      });
+      const second = await prefetchResponseArrival(
+        source(),
+        secondArrival,
+        true,
+      );
+      const wrapped = bindResponseArrival(first, firstArrival, (value) =>
+        takePrefetchedArrival(first, value),
+      );
+      expect(
+        takePrefetchedArrival(wrapped, chunk)?.content.blocks,
+      ).toStrictEqual(chunk.content.blocks);
+      expect(takePrefetchedArrival(wrapped, chunk)).toBeUndefined();
+      expect(
+        takePrefetchedArrival(second, chunk)?.content.blocks,
+      ).toStrictEqual(chunk.content.blocks);
+      expect(responseArrivalFor(second)?.identity.attemptId).toBe('second');
+      await responseArrivalFor(second)?.interrupt('cancelled');
+      await first.return(undefined);
+      await second.return(undefined);
+    });
+  });
+
+  it('releases prepared prefetch ownership on interruption before consumption', async () => {
+    await withHistory(async (history) => {
+      const arrival = await history.openResponseArrival({
+        id: 'prepared',
+        submissionId: 'submission',
+      });
+      const chunk = {
+        content: { speaker: 'ai', blocks: [] },
+      } satisfies import('@vybestack/llxprt-code-core/llm-types/index.js').ModelStreamChunk;
+      let owned = 0;
+      const source = async function* () {
+        yield chunk;
+      };
+      const stream = await prefetchResponseArrival(
+        source(),
+        arrival,
+        true,
+        async (value) => {
+          owned++;
+          return {
+            historyChunk: value,
+            release: async () => {
+              owned--;
+            },
+          };
+        },
+      );
+      expect(owned).toBe(1);
+      await responseArrivalFor(stream)?.interrupt('cancelled');
+      expect(owned).toBe(0);
+      expect(takePrefetchedArrival(stream, chunk)).toBeUndefined();
+      await responseArrivalFor(stream)?.interrupt('cancelled');
+      expect(owned).toBe(0);
+      await stream.return(undefined);
+    });
+  });
 
   it('binds each tool to the persisted attempt across provider retries', async () => {
     await withHistory(async (history) => {

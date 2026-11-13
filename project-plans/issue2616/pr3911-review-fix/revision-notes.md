@@ -124,7 +124,7 @@ Checked against the code at `28094bb75` before editing. Status "pending" means t
 
 Not decided here (outside the five questions, recorded so the orchestrator can decide whether to file them): the `*Ownership` members can still be half-supplied (`ownership: 'caller'` with an `undefined` owner), which the callers reject at run time (`assertAdoptedWorkspaceRoots`, the checks at the top of `assembleMcpRuntime`); and `skillOperations \| undefined` keeps the constructor's `?? DEFAULT_SKILL_OPERATIONS` default. T6.D2 deletes the `'caller'` ownership options, which removes the first.
 
-# Phase 6 inventory decisions (B2-slices/S01.md-S26.md, open points and risks)
+# Phase 6 inventory decisions (T6.0-S01-S26 slice records, open points and risks)
 
 Checked against the code at `1eb984652` before editing. Status "pending" means PLAN.md is not yet edited for that item; each line flips to "done" as its edit is saved. Rules applied: B2 and the E9a bullet in `feedback.txt`, #2616's target design ("CLI, ACP, A2A, and SDK adapters pass declarative inputs and host capabilities; they do not construct runtimes or register factories"), the test conservation rule, and `dev-docs/RULES.md` (no mock of the unit under test, no mock-call assertions).
 

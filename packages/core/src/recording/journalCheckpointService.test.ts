@@ -1,3 +1,7 @@
+import {
+  testJournalOptions,
+  withTestNamedWriters,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 /**
  * Behaviour of the checkpoint lifecycle on the journal backend. The cases of
@@ -39,7 +43,7 @@ describe('checkpoint lifecycle on the journal backend', () => {
   }
 
   function service(): JournalCheckpointService {
-    return new JournalCheckpointService(journalSeams());
+    return new JournalCheckpointService(testJournalOptions(journalSeams()));
   }
 
   async function active(
@@ -47,15 +51,17 @@ describe('checkpoint lifecycle on the journal backend', () => {
     sessionId: string,
     texts: string[],
   ): Promise<JournalRecordingService> {
-    const recording = await JournalRecordingService.createLocked({
-      sessionId,
-      projectHash: PROJECT,
-      chatsDir,
-      workspaceDirs: ['/work/a'],
-      provider: 'anthropic',
-      model: 'model-1',
-      journal: journalSeams(),
-    });
+    const recording = await JournalRecordingService.createLocked(
+      withTestNamedWriters({
+        sessionId,
+        projectHash: PROJECT,
+        chatsDir,
+        workspaceDirs: ['/work/a'],
+        provider: 'anthropic',
+        model: 'model-1',
+        journal: journalSeams(),
+      }),
+    );
     live.push(recording);
     const session = await recording.session();
     await session.append(texts.map(userRow));
@@ -433,7 +439,7 @@ describe('checkpoint lifecycle on the journal backend', () => {
       const commitSeq = async (): Promise<number | undefined> => {
         const session = await JournalSession.open(
           source.filePath,
-          journalSeams(),
+          testJournalOptions(journalSeams()),
         );
         try {
           return session.store.published?.commitSeq;

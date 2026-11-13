@@ -4,7 +4,6 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { ToolCallBlock } from './IContent.js';
-import { getScratchRoot } from '../../storage/scratch-root.js';
 
 const callSchema = z
   .object({
@@ -32,7 +31,7 @@ export class ToolPairingIndex {
   private readonly directory: string;
   private count = 0;
 
-  constructor(root = getScratchRoot()) {
+  constructor(root: string) {
     this.directory = mkdtempSync(join(root, 'llxprt-tool-pairing-'));
   }
 

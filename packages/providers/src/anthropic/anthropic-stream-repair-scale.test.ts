@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { recordedMessages as emittedCandidate } from './__tests__/wire-reference/support/recorded-wire-oracle.js';
 import { describe, expect, it } from 'bun:test';
@@ -91,9 +92,13 @@ async function checkChain(path: string, count: number): Promise<Work> {
     {},
   );
   const counter = { reads: 0 };
-  const session = await JournalSession.create(path, {
-    journal: testJournalSeams({ readCounter: counter }, 1, false).dependencies,
-  });
+  const session = await JournalSession.create(
+    path,
+    testJournalOptions({
+      journal: testJournalSeams({ readCounter: counter }, 1, false)
+        .dependencies,
+    }),
+  );
   try {
     await session.append(rows);
     const fillStart = counter.reads;
@@ -225,9 +230,13 @@ async function checkRepeated(
   process.stdout.write(
     `Repeated-ID stage ${JSON.stringify({ count, ids, stage: 'append', pid: process.pid })}\n`,
   );
-  const session = await JournalSession.create(path, {
-    journal: testJournalSeams({ readCounter: counter }, 1, false).dependencies,
-  });
+  const session = await JournalSession.create(
+    path,
+    testJournalOptions({
+      journal: testJournalSeams({ readCounter: counter }, 1, false)
+        .dependencies,
+    }),
+  );
   try {
     await session.append(rows);
     process.stdout.write(

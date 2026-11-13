@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createServer } from 'node:http';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -12,6 +13,7 @@ import {
   WIRE_ROUTES,
   type WireRoute,
 } from './wireBodyCapture.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 export interface AnthropicCapturedRequest {
   readonly body: string;
@@ -102,7 +104,7 @@ export async function sendAnthropicJournalCase(
         : await estimatePromptEnvelope(
             provider.name,
             projection,
-            createRuntimeTokenizerFactory(),
+            createRuntimeTokenizerFactory(tokenizerScratchRoots),
           );
     for await (const chunk of provider.generateChatCompletion({
       ...request,

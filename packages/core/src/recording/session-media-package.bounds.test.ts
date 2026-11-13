@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -347,6 +348,8 @@ describe('session media package bounded validation', () => {
         join(tempDirectory, 'import-chats'),
         PROJECT_HASH,
         media,
+        undefined,
+        testJournalOptions(),
       );
       expect(
         (await readPackageRows(imported.recordingPath, PROJECT_HASH)).map(

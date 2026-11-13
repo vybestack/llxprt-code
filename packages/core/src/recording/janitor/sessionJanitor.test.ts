@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -70,7 +71,7 @@ async function createSession(
     ...makeConfig(chatsDir),
     sessionId,
   };
-  const svc = JournalRecordingService.create(config);
+  const svc = JournalRecordingService.create(withTestNamedWriters(config));
   await (
     await svc.session()
   ).append([

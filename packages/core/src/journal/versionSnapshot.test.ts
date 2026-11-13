@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
@@ -19,6 +20,7 @@ describe('version snapshot', () => {
     const store = await JournalStore.create(
       path.join(directory(), 'empty.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     const snapshot = await store.snapshot();
     expect(snapshot.rows).toBe(0);
@@ -31,6 +33,7 @@ describe('version snapshot', () => {
     const store = await JournalStore.create(
       path.join(directory(), 'pinned.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     await store.commit([
       { kind: 'append', rows: [draftRow(), draftRow(), draftRow()] },

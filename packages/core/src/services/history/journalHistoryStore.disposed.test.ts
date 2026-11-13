@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
@@ -17,7 +18,7 @@ describe('a disposed journal history store', () => {
   async function disposedStore(): Promise<JournalHistoryStore> {
     const session = await JournalSession.create(
       path.join(directory(), 'disposed.llxj'),
-      { journal: testJournalSeams({}).dependencies },
+      testJournalOptions({ journal: testJournalSeams({}).dependencies }),
     );
     const store = new JournalHistoryStore(session);
     store.apply({
@@ -52,7 +53,7 @@ describe('a disposed journal history store', () => {
   it('closes a dump snapshot that is still open, so that reading it fails as closed', async () => {
     const session = await JournalSession.create(
       path.join(directory(), 'open-dump.llxj'),
-      { journal: testJournalSeams({}).dependencies },
+      testJournalOptions({ journal: testJournalSeams({}).dependencies }),
     );
     const store = new JournalHistoryStore(session);
     store.apply({

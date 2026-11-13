@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
 import { describe, expect, it } from 'bun:test';
@@ -12,6 +13,7 @@ import { detachedDigest } from './detached-rollback-test-helpers.js';
 import { bindingFile } from './provider-binding-bridge-test-helpers.js';
 import { rejectedValue } from './chronology-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const png =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
@@ -47,7 +49,9 @@ describe('binding bridge local media reservations', () => {
         const reference = rows[0].blocks[0];
         if (reference.type !== 'media' || reference.encoding !== 'reference')
           throw new Error('Expected admitted reference');
-        await history.registerMediaOwner(new HistoryMediaOwnership(store));
+        await history.registerMediaOwner(
+          new HistoryMediaOwnership(store, historyScratchRoots),
+        );
         await history.addBatch(rows);
         await history.waitForCommit();
         await new MediaAdmissionService(store).releaseContents(rows, {

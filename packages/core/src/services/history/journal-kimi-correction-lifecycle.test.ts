@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
@@ -63,7 +64,7 @@ describe('native Kimi correction lifecycle', () => {
   it('updates the persisted unmapped counter when a later named call maps earlier unnamed uses', async () => {
     const session = await JournalSession.create(
       `${directory()}/unmapped.llxj`,
-      options,
+      testJournalOptions(options),
     );
     try {
       await session.store.commit([{ kind: 'kimi' }]);
@@ -115,7 +116,7 @@ describe('native Kimi correction lifecycle', () => {
   it('rebuilds mappings from surviving order after density, compression, insertion, pop, clear and replacement', async () => {
     const session = await JournalSession.create(
       `${directory()}/mutations.llxj`,
-      options,
+      testJournalOptions(options),
     );
     const rows: readonly IContent[] = [
       { speaker: 'ai', blocks: [call('x', 'first')] },
@@ -183,7 +184,10 @@ describe('native Kimi correction lifecycle', () => {
 
   it('retains active facts through owner changes, reopen, fork and compact with a live original pin', async () => {
     const path = `${directory()}/copy.llxj`;
-    const session = await JournalSession.create(path, options);
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions(options),
+    );
     try {
       await session.store.commit([{ kind: 'kimi' }]);
       await session.append([
@@ -198,7 +202,10 @@ describe('native Kimi correction lifecycle', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path, options);
+    const reopened = await JournalSession.open(
+      path,
+      testJournalOptions(options),
+    );
     try {
       const original = await reopened.store.snapshot();
       try {
@@ -229,9 +236,12 @@ describe('native Kimi correction lifecycle', () => {
   it('does not publish duplicate corrections on failed append and poisons later writes', async () => {
     const failures: Failures = {};
     const seams = testJournalSeams(failures);
-    const session = await JournalSession.create(`${directory()}/failure.llxj`, {
-      journal: seams.dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/failure.llxj`,
+      testJournalOptions({
+        journal: seams.dependencies,
+      }),
+    );
     try {
       await session.store.commit([{ kind: 'kimi' }]);
       const before = await session.append([

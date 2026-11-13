@@ -1,7 +1,8 @@
+import { testNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { join } from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core';
+import { LocalMediaStore, ScratchRootOwner } from '@vybestack/llxprt-code-core';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -9,6 +10,7 @@ import { createTestAgentClient } from '@vybestack/llxprt-code-test-utils/core/co
 import { SessionConversationBinding } from '../../../session/session-conversation-binding.js';
 import type { SessionControl } from '../../control/sessionControl.js';
 import { trackTestHistories } from './test-histories.js';
+
 const createTrackedHistory = trackTestHistories();
 class IsolatedTestStorage extends Storage {
   constructor(private readonly projectTempDir: string) {
@@ -27,6 +29,7 @@ class IsolatedTestStorage extends Storage {
  * Recording ownership is observable through the real SessionControl and JSONL.
  */
 export interface FakeConfig {
+  readonly scratchRoots: ScratchRootOwner;
   readonly getSessionId: () => string;
   readonly adoptSessionId: (sessionId: string) => void;
   readonly getProjectRoot: () => string;
@@ -51,6 +54,7 @@ export function buildFakeConfig(
   const persistenceStorage = new IsolatedTestStorage(persistenceRoot);
   let sessionId = initialSessionId;
   return {
+    scratchRoots: new ScratchRootOwner(),
     getSessionId: () => sessionId,
     adoptSessionId: (next) => {
       sessionId = next;
@@ -134,6 +138,7 @@ export function createSessionControl(
   mediaStore: LocalMediaStore,
 ): SessionControl {
   const conversation = new SessionConversationBinding({
+    scratchRoots: config.scratchRoots,
     readClient: () => client,
     assertOpen: () => {},
   });
@@ -143,6 +148,8 @@ export function createSessionControl(
       projectRoot: config.getProjectRoot(),
       projectTempDir: config.projectTempDir,
       projectChatsDir: config.projectChatsDir,
+      scratchRoots: config.scratchRoots,
+      namedWriters: testNamedWriters,
       persistenceQueueBytes: 1024 * 1024,
     },
     mediaStore,

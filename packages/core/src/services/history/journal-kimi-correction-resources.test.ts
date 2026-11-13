@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
@@ -14,10 +15,10 @@ describe('native Kimi sparse correction resources', () => {
       const counter = { reads: 0 };
       const session = await JournalSession.create(
         `${directory()}/bounded.llxj`,
-        {
+        testJournalOptions({
           journal: testJournalSeams({ readCounter: counter }, 1, false)
             .dependencies,
-        },
+        }),
       );
       function* rows(): Generator<ReturnType<typeof encodeContentRow>> {
         for (let index = 0; index < size; index++)
@@ -74,10 +75,13 @@ describe('native Kimi sparse correction resources', () => {
 
   it('streams dense exceptions without visiting clean IDs and preserves exact raw-name code units', async () => {
     const counter = { reads: 0 };
-    const session = await JournalSession.create(`${directory()}/dense.llxj`, {
-      journal: testJournalSeams({ readCounter: counter }, 1, false)
-        .dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/dense.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({ readCounter: counter }, 1, false)
+          .dependencies,
+      }),
+    );
     try {
       await session.store.commit([{ kind: 'kimi' }]);
       for (let index = 0; index < 100; index++)

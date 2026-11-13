@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readAtOf } from '../../../__tests__/requestRowsTestSupport.js';
 import { tmpdir } from 'node:os';
@@ -7,10 +8,7 @@ import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import {
-  getScratchRoot,
-  removeScratchRoot,
-} from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { GenerateChatOptions } from '../../../IProvider.js';
 import {
@@ -24,6 +22,7 @@ import {
   projectionRuntime,
   type ProjectionRuntime,
 } from './projection-ownership-fixture.js';
+
 export function singleAttemptOptions(
   options: GenerateChatOptions,
 ): GenerateChatOptions {
@@ -46,7 +45,13 @@ export function singleAttemptOptions(
   };
 }
 
-export function registerProjectionWorkspace(): () => string {
+interface WorkspaceFixture {
+  readonly root: () => string;
+  readonly scratchRoots: ScratchRootOwner;
+}
+
+export function registerProjectionWorkspace(): WorkspaceFixture {
+  const scratchRoots = new ScratchRootOwner();
   let root = '';
   let previousTmpdir: string | undefined;
   let previousConfig: string | undefined;
@@ -59,35 +64,35 @@ export function registerProjectionWorkspace(): () => string {
     process.env.LLXPRT_CONFIG_HOME = join(root, 'config');
     // Snapshot workspaces live in the process scratch root; start a fresh one
     // under this test's TMPDIR.
-    removeScratchRoot();
+    scratchRoots.removeRoot();
   });
   afterEach(() => {
     writeFileSync(
       join(root, 'remaining.json'),
-      JSON.stringify(snapshotWorkspaces(root)),
+      JSON.stringify(snapshotWorkspaces(scratchRoots)),
     );
-    removeScratchRoot();
+    scratchRoots.removeRoot();
     if (previousTmpdir === undefined) delete process.env.TMPDIR;
     else process.env.TMPDIR = previousTmpdir;
     if (previousConfig === undefined) delete process.env.LLXPRT_CONFIG_HOME;
     else process.env.LLXPRT_CONFIG_HOME = previousConfig;
   });
-  return () => root;
+  return { root: () => root, scratchRoots };
 }
 
 /**
  * Lists the request's staged-rows workspaces in the process scratch root: the
  * rows a call without `requestRows` is staged into before its body is built.
  */
-export function snapshotWorkspaces(_fixtureRoot?: string): string[] {
-  return readdirSync(getScratchRoot())
+export function snapshotWorkspaces(scratchRoots: ScratchRootOwner): string[] {
+  return readdirSync(scratchRoots.getRoot())
     .filter((name) => name.startsWith('provider-normalization-'))
     .sort();
 }
 
 /** Lists the prompt-key file workspaces the request body is served from. */
-export function promptKeyWorkspaces(_fixtureRoot?: string): string[] {
-  return readdirSync(getScratchRoot())
+export function promptKeyWorkspaces(scratchRoots: ScratchRootOwner): string[] {
+  return readdirSync(scratchRoots.getRoot())
     .filter((name) => name.startsWith('responses-prompt-keys-'))
     .sort();
 }
@@ -150,7 +155,7 @@ export function workspaceBody(rows: readonly IContent[]): {
 }
 
 export function workspaceEndpoint(
-  root: string,
+  scratchRoots: ScratchRootOwner,
   retry: boolean,
 ): {
   readonly server: Bun.Server<undefined>;
@@ -184,7 +189,7 @@ export function workspaceEndpoint(
         await new Response(request.body).arrayBuffer(),
       );
       observations.push({
-        snapshots: snapshotWorkspaces(root),
+        snapshots: snapshotWorkspaces(scratchRoots),
         bytes: bytes.byteLength,
         sha256: createHash('sha256').update(bytes).digest('hex'),
       });
@@ -211,17 +216,18 @@ export type WorkspaceRuntime = ProjectionRuntime & {
 };
 
 export async function withWorkspaceRuntime<T>(
-  root: string,
+  fixture: WorkspaceFixture,
   consume: (
     setup: WorkspaceRuntime,
     http: ReturnType<typeof workspaceEndpoint>,
   ) => Promise<T>,
   retry = false,
 ): Promise<T> {
-  const http = workspaceEndpoint(root, retry);
+  const http = workspaceEndpoint(fixture.scratchRoots, retry);
   const runtime = await projectionRuntime(
     `http://127.0.0.1:${http.server.port}/v1`,
-    root,
+    fixture.root(),
+    fixture.scratchRoots,
   );
   const fixtures: Array<Promise<JournalSendFixture>> = [];
   const setup: WorkspaceRuntime = {

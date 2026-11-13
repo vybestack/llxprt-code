@@ -7,7 +7,6 @@ import {
   truncationValues,
 } from './truncation-value-helpers.js';
 import { compressionValueDigest } from './compression-value-fixture.js';
-import { getScratchRoot } from '../../../../core/src/storage/scratch-root.js';
 
 describe('native truncation span preparation', () => {
   it.each([64, 65, 5000])(
@@ -15,7 +14,7 @@ describe('native truncation span preparation', () => {
     async (size) => {
       await withNativeFallbackFixture(async ({ history, durable }) => {
         await history.detachedValues.replace(truncationValues(size, 0, 64));
-        getScratchRoot();
+        history.scratchRoots.getRoot();
         const expected = await compressionValueDigest(
           truncationValues(size, 11, 64, true),
         );
@@ -37,7 +36,7 @@ describe('native truncation span preparation', () => {
   it('denies every creating API across roots during a native compression lock', async () => {
     await withNativeFallbackFixture(async ({ history }) => {
       await history.detachedValues.replace(truncationValues(64, 0, 64));
-      getScratchRoot();
+      history.scratchRoots.getRoot();
       history.startCompression();
       try {
         const creates = await operationFileCreates(async () => {

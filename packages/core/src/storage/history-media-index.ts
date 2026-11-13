@@ -15,12 +15,15 @@ import {
   type MediaReferenceBlock,
 } from '../services/history/IContent.js';
 import type { RowOwnership } from '../recording/rowOwnership.js';
-import { getScratchRoot } from './scratch-root.js';
+import type { ScratchRootOwner } from './scratch-root.js';
 
 export class HistoryMediaIndex {
   private directory: string | undefined;
 
-  constructor(private readonly rootDirectory = getScratchRoot()) {}
+  constructor(
+    private readonly scratchRoots: ScratchRootOwner,
+    private readonly rootDirectory?: string,
+  ) {}
 
   private path(contentId: string): string | undefined {
     return this.directory === undefined
@@ -45,7 +48,10 @@ export class HistoryMediaIndex {
 
   set(reference: MediaReferenceBlock): void {
     this.directory ??= mkdtempSync(
-      join(this.rootDirectory, 'history-media-index-'),
+      join(
+        this.rootDirectory ?? this.scratchRoots.getRoot(),
+        'history-media-index-',
+      ),
     );
     const path = this.path(reference.contentId);
     if (path === undefined) throw new Error('Media index was not initialized');

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -21,7 +22,7 @@ describe('journal dump snapshot row accounting', () => {
     const counters = createRowCounters();
     const session = await JournalSession.create(
       path.join(directory(), 'dump.llxj'),
-      { journal: testJournalSeams({}).dependencies },
+      testJournalOptions({ journal: testJournalSeams({}).dependencies }),
     );
     const store = new JournalHistoryStore(session, {
       counters: { ...counters.counters, ownership },

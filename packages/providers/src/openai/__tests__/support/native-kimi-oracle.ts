@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
 import {
@@ -15,6 +16,7 @@ import {
   streamChatMessages,
   type ChatMessageItem,
 } from '../../OpenAIChatBodyBuilder.js';
+const testScratchRoots = createTestScratchOwner();
 
 function writtenIds(item: ChatMessageItem): string[] {
   if (item.kind !== 'message') return [];
@@ -60,6 +62,7 @@ async function actualFacts(
       },
     },
     {
+      scratchRoots: testScratchRoots,
       toolFormat: 'kimi',
       toolIdStore: store,
       reasoning: { invocation: { ephemerals: {} } },
@@ -153,6 +156,7 @@ export async function assertNativeKimi(
       },
     },
     {
+      scratchRoots: testScratchRoots,
       toolFormat: 'kimi',
       toolIdStore: createInMemoryToolIdStore(),
       reasoning: { invocation: { ephemerals: {} } },
@@ -164,6 +168,7 @@ export async function assertNativeKimi(
   for await (const item of streamChatMessages(
     { rows: () => request.openReader() },
     {
+      scratchRoots: testScratchRoots,
       toolFormat: 'kimi',
       nativeKimi: {
         mappedId: (id) => {

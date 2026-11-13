@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -11,14 +12,16 @@ import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership
 describe('native journal scrollback', () => {
   it('resumes the last page and pages older committed rows in order', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'native-scrollback-'));
-    const recording = JournalRecordingService.create({
-      chatsDir: directory,
-      sessionId: 'scrollback',
-      projectHash: 'project',
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        chatsDir: directory,
+        sessionId: 'scrollback',
+        projectHash: 'project',
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
     try {
       const session = await recording.session();
       await session.append(

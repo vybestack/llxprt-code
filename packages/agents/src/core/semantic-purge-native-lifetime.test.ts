@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -6,6 +7,7 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(index: number, text = `surviving value ${index}`): IContent {
   if (index === 1)
@@ -138,7 +140,9 @@ describe('native semantic purge output lifetimes', () => {
   for (const size of [65, 650]) {
     for (const trap of [false, true]) {
       it(`${trap ? 'rejects a retaining output owner' : 'bounds live output sink arguments at awaited backpressure'} over ${size} source rows`, async () => {
-        const history = new HistoryService({});
+        const history = new HistoryService({
+          scratchRoots: historyScratchRoots,
+        });
         history.setTokenizerFactory(exactTokenizer());
         const retained: IContent[] = [];
         try {
@@ -159,7 +163,7 @@ describe('native semantic purge output lifetimes', () => {
     }
   }
   it('preserves every byte of a greater-than-nine-MiB surviving value', async () => {
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.setTokenizerFactory(exactTokenizer());
     const text = 'x'.repeat(9 * 1024 * 1024 + 17);
     try {

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
@@ -14,9 +15,9 @@ describe('pending request overlay input bound', () => {
     it(`keeps only pending targets over ${size} journal rows`, async () => {
       const session = await JournalSession.create(
         `${directory()}/${size}.llxj`,
-        {
+        testJournalOptions({
           journal: testJournalSeams().dependencies,
-        },
+        }),
       );
       try {
         await session.append(
@@ -50,9 +51,12 @@ describe('pending request overlay input bound', () => {
   }
 
   it('rejects a source that admits more journal targets than its pending input', async () => {
-    const session = await JournalSession.create(`${directory()}/excess.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/excess.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([
         { speaker: 'ai', blocks: [call('first')] },

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { batchGate } from '@vybestack/llxprt-code-core/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import { transformFixtureRows } from '@vybestack/llxprt-code-core/services/history/__tests__/support/transform-value-fixtures-test-helpers.js';
@@ -21,6 +22,7 @@ import {
   fallbackCandidate,
   fallbackHarness,
 } from './provider-fallback-disk-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const failures = [
   'reject',
@@ -43,7 +45,7 @@ async function enforceRollback(
       const before = await detachedDigest(transformFixtureRows(size));
       history.setBaseTokenOffset(37);
       history.setCacheAnchorSeq(1);
-      const rows = new DetachedHistoryJournal(owners);
+      const rows = new DetachedHistoryJournal(historyScratchRoots, owners);
       try {
         rows.append(fallbackCandidate());
         const abort = new DOMException(
@@ -136,7 +138,7 @@ async function pendingQueued(size: number): Promise<number> {
     history.startCompression();
     const queued = suffixRow(size + 2);
     history.add(queued);
-    const rows = new DetachedHistoryJournal(owners);
+    const rows = new DetachedHistoryJournal(historyScratchRoots, owners);
     const ready = batchGate();
     const release = batchGate();
     const failure = new DOMException(
@@ -197,7 +199,7 @@ describe('fallback value compensation and pending chronology', () => {
   it('sends an accepted fallback through the production transport boundary', async () => {
     await withValueTransformFixture(async ({ history, owners }) => {
       await history.detachedValues.replace(transformFixtureRows(3));
-      const rows = new DetachedHistoryJournal(owners);
+      const rows = new DetachedHistoryJournal(historyScratchRoots, owners);
       try {
         rows.append(fallbackCandidate());
         const harness = fallbackHarness(

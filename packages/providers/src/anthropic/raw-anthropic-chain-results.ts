@@ -16,17 +16,30 @@ import type { AnthropicRepairRows } from './anthropic-repair-source.js';
 import type { AnthropicWirePiece } from './anthropic-wire-media.js';
 
 type Range = { readonly start: number; readonly end: number };
-const descriptors = new WeakMap<
-  AnthropicMessageBlock,
-  () => AsyncGenerator<string>
->();
+const rawChainDescriptor = Symbol('raw-anthropic-chain-descriptor');
+
+class RawChainDescriptor {
+  constructor(readonly chunks: () => AsyncGenerator<string>) {}
+}
+
+function descriptorFor(
+  block: AnthropicMessageBlock,
+): RawChainDescriptor | undefined {
+  return rawChainDescriptor in block &&
+    block[rawChainDescriptor] instanceof RawChainDescriptor
+    ? block[rawChainDescriptor]
+    : undefined;
+}
 
 export function copyRawChainResult(
   source: AnthropicMessageBlock,
   target: AnthropicMessageBlock,
-): void {
-  const descriptor = descriptors.get(source);
-  if (descriptor !== undefined) descriptors.set(target, descriptor);
+): AnthropicMessageBlock {
+  const copy = { ...target };
+  const descriptor = descriptorFor(source);
+  if (descriptor !== undefined)
+    Object.defineProperty(copy, rawChainDescriptor, { value: descriptor });
+  return copy;
 }
 
 async function* chainBlocks(
@@ -158,19 +171,21 @@ export async function rawChainResults(
         content: '',
         ...(payload.status === 'error' ? { is_error: true } : {}),
       };
-      descriptors.set(result, async function* () {
-        yield '{"type":"tool_result","tool_use_id":' +
-          JSON.stringify(result.tool_use_id) +
-          ',"content":';
-        if (media) yield '[{"type":"text","text":';
-        yield* quotedChunks(text);
-        if (media) {
+      Object.defineProperty(result, rawChainDescriptor, {
+        value: new RawChainDescriptor(async function* () {
+          yield '{"type":"tool_result","tool_use_id":' +
+            JSON.stringify(result.tool_use_id) +
+            ',"content":';
+          if (media) yield '[{"type":"text","text":';
+          yield* quotedChunks(text);
+          if (media) {
+            yield '}';
+            yield* mediaBytes(query, range, options);
+            yield ']';
+          }
+          if (payload.status === 'error') yield ',"is_error":true';
           yield '}';
-          yield* mediaBytes(query, range, options);
-          yield ']';
-        }
-        if (payload.status === 'error') yield ',"is_error":true';
-        yield '}';
+        }),
       });
       return result;
     });
@@ -181,11 +196,12 @@ export async function* rawAnthropicWireBytes(
 ): AsyncGenerator<Uint8Array> {
   for await (const piece of pieces) {
     const descriptor =
-      typeof piece === 'string' ? undefined : descriptors.get(piece);
+      typeof piece === 'string' ? undefined : descriptorFor(piece);
     if (descriptor === undefined)
       yield Buffer.from(
         typeof piece === 'string' ? piece : JSON.stringify(piece),
       );
-    else for await (const chunk of descriptor()) yield Buffer.from(chunk);
+    else
+      for await (const chunk of descriptor.chunks()) yield Buffer.from(chunk);
   }
 }

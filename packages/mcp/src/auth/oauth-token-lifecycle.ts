@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-tools/utils/errors.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-auth/network-fetch.js';
 import type { MCPOAuthConfig, MCPOAuthProvider } from './oauth-provider.js';
 import {
   MCPOAuthTokenStorage,
@@ -88,6 +89,7 @@ export async function saveAndVerifyToken(
 }
 
 export async function getValidOAuthToken(
+  requestFetch: NetworkFetch,
   tokenStorage: TokenStore,
   serverName: string,
   config: MCPOAuthConfig,
@@ -106,6 +108,7 @@ export async function getValidOAuthToken(
   try {
     logger.log(`Refreshing expired token for MCP server: ${serverName}`);
     const response = await refresh(
+      requestFetch,
       config,
       token.refreshToken,
       credentials.tokenUrl,

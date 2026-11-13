@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -9,6 +10,7 @@ import {
   FailOnceReleaseStore,
   inlineMediaHistory,
 } from './__tests__/support/client-media-history-fixtures.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('session history admission', () => {
   it('retries scoped media cleanup without releasing a sibling admission', async () => {
@@ -24,11 +26,13 @@ describe('session history admission', () => {
       [...inlineMediaHistory(), ...inlineMediaHistory()],
       admission,
       'same-label',
+      historyScratchRoots,
     );
     const second = admitSessionHistory(
       inlineMediaHistory(),
       admission,
       'same-label',
+      historyScratchRoots,
     );
     try {
       let contentId: string | undefined;

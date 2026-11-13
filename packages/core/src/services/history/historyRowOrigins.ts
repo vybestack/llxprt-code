@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { IContent } from './IContent.js';
 import type { OwnedRow } from './historyReplaceOps.js';
 import { RowOriginDictionary } from '../../recording/rowOriginDictionary.js';
-import { createScratchDirSync } from '../../storage/scratch-root.js';
+import type { ScratchRootOwner } from '../../storage/scratch-root.js';
 
 /** The part of a read cursor that names row origins. */
 export interface RowOriginSource {
@@ -34,8 +34,11 @@ export class HistoryRowOrigins {
   ) {}
 
   /** Record the origin of every row `cursor` holds, in row order. */
-  static capture(cursor: RowOriginSource): HistoryRowOrigins {
-    const root = createScratchDirSync('history-row-origins-');
+  static capture(
+    scratchRoots: ScratchRootOwner,
+    cursor: RowOriginSource,
+  ): HistoryRowOrigins {
+    const root = scratchRoots.createDirSync('history-row-origins-');
     const drop = (): void => rmSync(root, { recursive: true, force: true });
     let fd: number | undefined;
     try {

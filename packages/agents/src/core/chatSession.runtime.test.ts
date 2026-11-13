@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -48,6 +49,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
+const historyScratchRoots = createTestScratchOwner();
 
 /**
  * Extracts visible text from a neutral ModelOutput — the post-P13
@@ -129,6 +131,7 @@ function buildView(history: HistoryService) {
     sessionId: config.getSessionId(),
   });
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         invocationData(providerRuntime, name, settingsService),
@@ -212,7 +215,9 @@ async function verifyRuntime1(): Promise<GenerateChatOptions> {
   ];
   const generationConfig: ChatSessionConfig = { tools };
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   historyService.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'Previous question' }],
@@ -326,7 +331,9 @@ async function verifyRuntime2(): Promise<IContent> {
     { name: 'read_file', parametersJsonSchema: {} },
     { name: 'run_shell_command', parametersJsonSchema: {} },
   ];
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const hookOwner = createHookOwner(false);
   const view = buildView(historyService);
 
@@ -408,7 +415,9 @@ async function verifyRuntime3(): Promise<
     { name: 'run_shell_command', parametersJsonSchema: {} },
   ];
   const hookOwner = createHookOwner(true);
-  const view = buildView(new HistoryService());
+  const view = buildView(
+    new HistoryService({ scratchRoots: historyScratchRoots }),
+  );
 
   const chat = new ChatSession(
     chatSessionPorts(view),
@@ -457,7 +466,7 @@ describe('ChatSession runtime context', () => {
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
   });
 
   it('passes runtime context and tools to provider generateChatCompletion', async () => {

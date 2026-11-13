@@ -45,8 +45,6 @@ export interface DiskAssets {
   classify: (text: string) => CharacterClass;
 }
 
-let shared: DiskAssets | undefined;
-
 function buildRanks(): { ranks: Map<string, number>; maxBytes: number } {
   const ranks = new Map<string, number>();
   let maxBytes = 0;
@@ -63,7 +61,12 @@ function buildRanks(): { ranks: Map<string, number>; maxBytes: number } {
   return { ranks, maxBytes };
 }
 
-function buildClassifier(): (text: string) => CharacterClass {
+export interface DiskClassifier {
+  (text: string): CharacterClass;
+  dispose(): void;
+}
+
+export function createDiskClassifier(): DiskClassifier {
   let byteRanks = '';
   for (let byte = 0; byte < 256; byte++)
     byteRanks += `${Buffer.from([byte]).toString('base64')} ${byte}\n`;
@@ -79,7 +82,7 @@ function buildClassifier(): (text: string) => CharacterClass {
     (pattern) => new Tiktoken(byteRanks, {}, pattern),
   );
   const cache = new Map<string, CharacterClass>();
-  return (text): CharacterClass => {
+  const classify = (text: string): CharacterClass => {
     const cached = cache.get(text);
     if (cached) return cached;
     const matched = probes.map(
@@ -98,9 +101,30 @@ function buildClassifier(): (text: string) => CharacterClass {
     cache.set(text, result);
     return result;
   };
+  return Object.assign(classify, {
+    dispose: (): void => {
+      for (const probe of probes) probe.free();
+      cache.clear();
+    },
+  });
 }
 
-export function diskAssets(): DiskAssets {
-  shared ??= { ...buildRanks(), classify: buildClassifier() };
-  return shared;
+const DISK_ASSETS = Symbol('o200kDiskAssets');
+class TokenizerDiskAssets implements DiskAssets {
+  readonly ranks: ReadonlyMap<string, number>;
+  readonly maxBytes: number;
+  readonly classify = createDiskClassifier();
+  constructor() {
+    const assets = buildRanks();
+    this.ranks = assets.ranks;
+    this.maxBytes = assets.maxBytes;
+  }
+}
+
+export function diskAssets(owner: object = {}): DiskAssets {
+  if (DISK_ASSETS in owner && owner[DISK_ASSETS] instanceof TokenizerDiskAssets)
+    return owner[DISK_ASSETS];
+  const assets = new TokenizerDiskAssets();
+  Object.defineProperty(owner, DISK_ASSETS, { value: assets });
+  return assets;
 }

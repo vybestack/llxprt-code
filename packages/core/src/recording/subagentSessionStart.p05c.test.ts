@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -54,7 +58,9 @@ async function readStartPayload(recording: JournalRecordingService) {
 async function materializedRecording(
   config: JournalRecordingConfig,
 ): Promise<JournalRecordingService> {
-  const recording = await JournalRecordingService.createLocked(config);
+  const recording = await JournalRecordingService.createLocked(
+    withTestNamedWriters(config),
+  );
   await (
     await recording.session()
   ).append([
@@ -134,9 +140,9 @@ describe('P05c session_start payload extension @plan:PLAN-20260917-ISSUE854.P05c
         payload: { sessionId: randomUUID(), projectHash: PROJECT_HASH },
       }),
     );
-    await expect(JournalSession.open(filePath)).rejects.toThrow(
-      retiredJournalMessage(filePath),
-    );
+    await expect(
+      JournalSession.open(filePath, testJournalOptions()),
+    ).rejects.toThrow(retiredJournalMessage(filePath));
   });
 });
 
@@ -177,12 +183,12 @@ describe('P05c lock grammar and filename bucketing @plan:PLAN-20260917-ISSUE854.
     const chatsDir = await makeChatsDir();
     const sessionId = randomUUID();
     const first = await JournalRecordingService.createLocked(
-      baseConfig(chatsDir, sessionId),
+      withTestNamedWriters(baseConfig(chatsDir, sessionId)),
     );
     let secondError: unknown = null;
     try {
       await JournalRecordingService.createLocked(
-        baseConfig(chatsDir, sessionId),
+        withTestNamedWriters(baseConfig(chatsDir, sessionId)),
       );
     } catch (error: unknown) {
       secondError = error;

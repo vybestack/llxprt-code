@@ -70,11 +70,62 @@ function scan(body: string): ReturnType<typeof scanAmbientDelegation> {
 }
 
 describe('ambient delegation provenance guard', () => {
+  it('rejects delegation from a structurally ambient accessor with an arbitrary name', () => {
+    const files = new Map([
+      [
+        '/ambient-owner.ts',
+        `export interface Service { run(): void; }
+         class AsyncLocalStorage<T> { getStore(): T | undefined { return undefined; } }
+         const processOwned = new AsyncLocalStorage<Service>();
+         export function readCurrentThing(): Service { return processOwned.getStore()!; }`,
+      ],
+      [
+        '/consumer.ts',
+        `import { readCurrentThing } from './ambient-owner';
+         import type { Service } from './ambient-owner';
+         declare function operate(service: Service): void;
+         operate(readCurrentThing());`,
+      ],
+    ]);
+    const options: ts.CompilerOptions = {
+      strict: true,
+      noLib: true,
+      types: [],
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+    };
+    const host = ts.createCompilerHost(options);
+    host.fileExists = (file): boolean => files.has(file);
+    host.readFile = (file): string | undefined => files.get(file);
+    host.getSourceFile = (file, version): ts.SourceFile | undefined => {
+      const text = files.get(file);
+      return text === undefined
+        ? undefined
+        : ts.createSourceFile(file, text, version, true);
+    };
+    const program = ts.createProgram([...files.keys()], options, host);
+    expect(program.getSemanticDiagnostics()).toEqual([]);
+    expect(
+      scanAmbientDelegation(
+        program,
+        [program.getSourceFile('/consumer.ts')!],
+        [],
+      ),
+    ).toContainEqual(
+      expect.objectContaining({
+        rule: 'runtime-ambient-delegation',
+        file: '/consumer.ts',
+        kind: 'argument',
+      }),
+    );
+  });
+
   it.each([
     'function wrapper() { operate(lookup()); }',
     "import { lookup as renamed } from './ambient'; function wrapper() { operate(renamed()); }",
     "import { renamed } from './barrel'; function wrapper() { operate(renamed()); }",
     'function wrapper() { const get = lookup; const service = get(); operate(service); }',
+
     'function wrapper() { let get = lookup; const alias = get; operate(alias()); }',
     'function intermediary() { return lookup(); } function wrapper() { operate(intermediary()); }',
     'const intermediary = () => lookup(); function wrapper() { operate(intermediary()); }',
@@ -120,6 +171,7 @@ describe('ambient delegation provenance guard', () => {
       file: '/consumer.ts',
       line: 2,
       column: 22,
+      declaration: 'operate',
       kind: 'argument',
     });
   });
@@ -152,6 +204,7 @@ describe('ambient delegation provenance guard', () => {
         file: '/consumer.ts',
         line: 2,
         column: 64,
+        declaration: 'operate',
         kind: 'argument',
       },
     ]);
@@ -200,6 +253,7 @@ describe('ambient delegation provenance guard', () => {
         file: '/consumer.ts',
         line: 4,
         column: 19,
+        declaration: 'service',
         kind: 'return',
       },
       {
@@ -207,6 +261,7 @@ describe('ambient delegation provenance guard', () => {
         file: '/consumer.ts',
         line: 5,
         column: 19,
+        declaration: 'run',
         kind: 'receiver',
       },
     ]);
@@ -226,6 +281,7 @@ describe('ambient delegation provenance guard', () => {
         file: '/consumer.ts',
         line: 3,
         column: 1,
+        declaration: 'operate',
         kind: 'argument',
       });
     },

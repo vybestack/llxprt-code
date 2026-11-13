@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -5,6 +7,7 @@ import { createSessionRecorder } from '@vybestack/llxprt-code-core/recording/ses
 import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
 import { NativeJournalCursor } from './native-journal-cursor.js';
 import type { HistoryItem } from '../../types.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function readAiItems(
   history: HistoryService,
@@ -35,15 +38,17 @@ async function readAiItems(
 describe('native journal attempt visibility', () => {
   const directory = useTempDir('native-attempt-visibility-');
   it('hides superseded thinking and text while retaining earlier and replacement replies', async () => {
-    const recording = createSessionRecorder({
-      sessionId: 'attempt-visibility',
-      projectHash: 'attempt-visibility',
-      chatsDir: directory(),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
-    const history = new HistoryService();
+    const recording = createSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'attempt-visibility',
+        projectHash: 'attempt-visibility',
+        chatsDir: directory(),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       history.add({
         speaker: 'human',

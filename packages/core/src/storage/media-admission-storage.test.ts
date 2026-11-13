@@ -4,10 +4,59 @@ import type { IContent } from '../services/history/IContent.js';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { LocalMediaStore } from './local-media-store.js';
 import { MediaAdmissionService } from './media-admission-service.js';
-import { admittedMediaSource } from './admitted-media-source.js';
+import { join } from 'node:path';
+import {
+  admittedMediaSource,
+  captureAdmittedMediaSource,
+} from './admitted-media-source.js';
 
 describe('journal-bound media admission', () => {
   const directory = useTempDir('media-storage-admission-');
+  it('closes only the releasing store owner while leaving frozen input unchanged', async () => {
+    const stores = ['first', 'second'].map(
+      (name) =>
+        new LocalMediaStore({
+          rootDirectory: join(directory(), name),
+          quotaBytes: 1024,
+        }),
+    );
+    const bytes = new Uint8Array([1, 2, 3]);
+    try {
+      const captured = await Promise.all(
+        stores.map(async (store) => {
+          const reference = Object.freeze(
+            await store.admit({
+              bytes,
+              mimeType: 'image/png',
+              semanticMetadata: {},
+            }),
+          );
+          await store.reserve(reference, 'shared-owner');
+          const result = captureAdmittedMediaSource(
+            reference,
+            store,
+            'shared-owner',
+          );
+          expect(admittedMediaSource(reference)).toBeUndefined();
+          expect(JSON.stringify(result)).toBe(JSON.stringify(reference));
+          expect(Object.isFrozen(result)).toBe(true);
+          return result;
+        }),
+      );
+      const first = admittedMediaSource(captured[0]);
+      const second = admittedMediaSource(captured[1]);
+      if (first === undefined || second === undefined)
+        throw new Error('Missing captured media source');
+      await stores[0].release(captured[0].contentId, 'shared-owner');
+      expect(() => first.read(captured[0])).toThrow('closed');
+      expect(await second.read(captured[1])).toStrictEqual(bytes);
+      await stores[1].release(captured[1].contentId, 'shared-owner');
+      expect(() => second.read(captured[1])).toThrow('closed');
+    } finally {
+      await Promise.all(stores.map((store) => store.close()));
+    }
+  });
+
   it('verifies and reserves a stored reference without an in-memory authority copy', async () => {
     const store = new LocalMediaStore({
       rootDirectory: directory(),

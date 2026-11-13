@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { appendFileSync } from 'node:fs';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
@@ -18,6 +19,7 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import { TestRuntimeProviderManager } from '../../../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from '../../chatSession-runtime-helpers.js';
 import { ConversationManager } from '../../ConversationManager.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 /**
  * Conversation-array helpers that need no test-runner hooks. The memory probe
@@ -41,8 +43,9 @@ export function conversationWithOwners(
   });
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, historyScratchRoots);
   const runtime = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         {

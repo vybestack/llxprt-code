@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import { describe, expect, it } from 'bun:test';
@@ -38,13 +39,20 @@ interface Reopened {
 }
 
 async function resume(rig: MirrorRig): Promise<Reopened> {
-  const primary = await JournalStore.open(rig.primaryFile, storeDeps());
+  const primary = await JournalStore.open(
+    rig.primaryFile,
+    storeDeps(),
+    testNamedWriters,
+  );
   const fanout = new MirrorFanout(primary);
   const mirrors = new Map<number, JournalStore>();
   for (const owner of AGENTS) {
     const file = rig.files.get(owner);
     if (file === undefined) throw new Error(`no file for owner ${owner}`);
-    mirrors.set(owner, await JournalStore.open(file, storeDeps()));
+    mirrors.set(
+      owner,
+      await JournalStore.open(file, storeDeps(), testNamedWriters),
+    );
   }
   return { primary, mirrors, fanout };
 }
@@ -75,7 +83,11 @@ describe('a compaction keeps the version identity (D-ORCH-6)', () => {
     expect(rig.primary.published?.commitSeq).toBe(commitSeq);
     expect(rig.primary.published?.groupTag).toBe(groupTag);
     await rig.closeAll();
-    const reopened = await JournalStore.open(rig.primaryFile, storeDeps());
+    const reopened = await JournalStore.open(
+      rig.primaryFile,
+      storeDeps(),
+      testNamedWriters,
+    );
     expect(reopened.published?.commitSeq).toBe(commitSeq);
     expect(reopened.published?.groupTag).toBe(groupTag);
     await reopened.close();

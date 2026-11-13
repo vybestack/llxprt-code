@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { fstatSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -55,7 +59,9 @@ describe('journal recording service', () => {
   function created(
     overrides: Partial<JournalRecordingConfig> = {},
   ): JournalRecordingService {
-    const recording = JournalRecordingService.create(config(overrides));
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters(config(overrides)),
+    );
     live.push(recording);
     return recording;
   }
@@ -290,7 +296,10 @@ describe('journal recording service', () => {
     const file = first.getFilePath()!;
     await first.dispose();
 
-    const reopened = await JournalRecordingService.open(config(), file);
+    const reopened = await JournalRecordingService.open(
+      withTestNamedWriters(config()),
+      file,
+    );
     live.push(reopened);
     expect(reopened.getFilePath()).toBe(file);
     expect(reopened.getSessionMetadataTitle()).toBe('Saved');
@@ -303,7 +312,7 @@ describe('journal recording service', () => {
 
     await expect(
       JournalRecordingService.open(
-        config({ sessionId: 'other-session' }),
+        withTestNamedWriters(config({ sessionId: 'other-session' })),
         file,
       ),
     ).rejects.toThrow('does not belong to session other-session');
@@ -352,7 +361,9 @@ describe('journal recording service', () => {
   it('holds the session lock until disposed', async () => {
     const chatsDir = config().chatsDir;
     await fsp.mkdir(chatsDir, { recursive: true });
-    const recording = await JournalRecordingService.createLocked(config());
+    const recording = await JournalRecordingService.createLocked(
+      withTestNamedWriters(config()),
+    );
     live.push(recording);
     const handle = recording.getOwnedLockHandle()!;
 
@@ -371,9 +382,12 @@ describe('journal recording service', () => {
     recording.recordSessionMetadata('late');
 
     expect(recording.isActive()).toBe(false);
-    const reopened = await JournalSession.open(session.path, {
-      journal: testJournalSeams().dependencies,
-    });
+    const reopened = await JournalSession.open(
+      session.path,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       expect(await reopened.store.getState(SESSION_KEYS.title)).toBeUndefined();
     } finally {

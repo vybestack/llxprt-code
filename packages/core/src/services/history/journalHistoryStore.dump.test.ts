@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -33,7 +34,10 @@ describe('journal history store dump snapshot', () => {
   });
 
   async function created(name: string): Promise<JournalHistoryStore> {
-    const session = await JournalSession.create(path.join(directory(), name));
+    const session = await JournalSession.create(
+      path.join(directory(), name),
+      testJournalOptions(),
+    );
     const store = new JournalHistoryStore(session);
     open.push(store);
     return store;

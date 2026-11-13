@@ -1,3 +1,4 @@
+import { registerScratchInspection } from '../__tests__/support/scratch-inspection.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 
 /**
@@ -6,11 +7,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { readdirSync } from 'node:fs';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { closeInOrder } from '../__tests__/support/close-in-order.js';
 import { rowsSelection } from '../__tests__/support/wireBodyCapture.js';
@@ -21,6 +21,7 @@ import {
   prepareRequest,
   type RequestContext,
 } from './OpenAIRequestPreparation.js';
+const scratchEntries = registerScratchInspection();
 
 const liveBodies = observeNativeBodies();
 
@@ -79,7 +80,7 @@ function optionsFor(
 }
 
 function scratchNames(): Set<string> {
-  return new Set(readdirSync(getScratchRoot()));
+  return new Set(scratchEntries());
 }
 
 describe('prepareRequest streams the native chat body', () => {

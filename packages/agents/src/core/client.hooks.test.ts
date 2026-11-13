@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -30,6 +31,7 @@ import {
   setupAgentClient,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 // Mock prompts module before imports
 const realConfigModule = {
@@ -247,7 +249,7 @@ async function checkBlockingHook(): Promise<string | undefined> {
   })();
   mockTurnRunFn.mockReturnValue(mockStream);
 
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const mockChat: Partial<ChatSession> = {
     clearHistoryForDisposal: async (): Promise<void> => {
       await history.clear();
@@ -330,7 +332,7 @@ const observeAppendAdditionalContextFromBeforeAgentHookToRequest = async () => {
     return mockStream;
   });
 
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const mockChat: Partial<ChatSession> = {
     clearHistoryForDisposal: async (): Promise<void> => {
       await history.clear();

@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -32,6 +34,7 @@ import { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import { JournalRecordingService } from './journalRecordingService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const PROJECT_HASH = 'p05c-facade-hash';
 
@@ -46,14 +49,16 @@ async function startRecording(
   chatsDir: string,
   sessionId: string,
 ): Promise<JournalRecordingService> {
-  const recording = await JournalRecordingService.createLocked({
-    sessionId,
-    projectHash: PROJECT_HASH,
-    chatsDir,
-    workspaceDirs: ['/w'],
-    provider: 'anthropic',
-    model: 'claude-4',
-  });
+  const recording = await JournalRecordingService.createLocked(
+    withTestNamedWriters({
+      sessionId,
+      projectHash: PROJECT_HASH,
+      chatsDir,
+      workspaceDirs: ['/w'],
+      provider: 'anthropic',
+      model: 'claude-4',
+    }),
+  );
   return recording;
 }
 
@@ -83,7 +88,10 @@ describe('P05c child facade is HistoryService over its own journal @plan:PLAN-20
   it('child facade commits rows durably to its own journal', async () => {
     const chatsDir = await makeChatsDir();
     const recording = await startRecording(chatsDir, randomUUID());
-    const history = new HistoryService({ recording });
+    const history = new HistoryService({
+      scratchRoots: historyScratchRoots,
+      recording,
+    });
     history.add(textContent('seed'));
     history.add(textContent('durable child row'));
     await history.waitForCommit();
@@ -96,7 +104,7 @@ describe('P05c child facade is HistoryService over its own journal @plan:PLAN-20
   it('a child facade can late-attach to a child recorder', async () => {
     const chatsDir = await makeChatsDir();
     const childRecording = await startRecording(chatsDir, randomUUID());
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.add(textContent('seed'));
     history.add(textContent('pre-attach child row'));
     await history.waitForCommit();
@@ -144,9 +152,13 @@ async function verifyChildFacadeCase1(): Promise<void> {
   const parentRecording = await startRecording(chatsDir, randomUUID());
   const childRecording = await startRecording(chatsDir, randomUUID());
   const parentHistory = new HistoryService({
+    scratchRoots: historyScratchRoots,
     recording: parentRecording,
   });
-  const childHistory = new HistoryService({ recording: childRecording });
+  const childHistory = new HistoryService({
+    scratchRoots: historyScratchRoots,
+    recording: childRecording,
+  });
   parentHistory.add(textContent('seed'));
   childHistory.add(textContent('seed'));
 

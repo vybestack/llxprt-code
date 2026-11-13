@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -29,6 +30,7 @@ import {
   buildHandlerHarness,
   type HandlerHarness,
 } from './support/handler-harness.js';
+const historyScratchRoots = createTestScratchOwner();
 
 /**
  * Token estimate that puts the initial projection above both the compression
@@ -69,7 +71,7 @@ function textOf(rows: ReadonlyArray<{ blocks: unknown[] }>): string {
 describe('CompressionHandler pending-boundary enforcement (issue #2304)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    historyService = new HistoryService();
+    historyService = new HistoryService({ scratchRoots: historyScratchRoots });
     runtimeContext = buildRuntimeContext(historyService, {
       contextLimit: 200_000,
       compressionThreshold: 0.8,

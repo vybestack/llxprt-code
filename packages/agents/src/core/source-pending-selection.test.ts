@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -5,6 +6,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { sourceBeforeModelHook } from './source-before-model-hook.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const root = sourceRootSetup();
 const pending: IContent = {
@@ -21,7 +23,7 @@ const pending: IContent = {
 };
 
 async function selection(signal?: AbortSignal) {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   history.add({
     speaker: 'ai',
     blocks: [

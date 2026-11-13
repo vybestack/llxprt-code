@@ -19,39 +19,42 @@ const logger = new DebugLogger('llxprt:storage:scratch-root');
 const ROOT_PREFIX = 'llxprt-scratch-';
 const ROOT_NAME = /^llxprt-scratch-(\d+)-[A-Za-z0-9]{6}$/;
 
-let root: string | undefined;
-let exitHookInstalled = false;
-let swept = false;
+export class ScratchRootOwner {
+  private root: string | undefined;
+  private exitHookInstalled = false;
+  private swept = false;
 
-export function getScratchRoot(): string {
-  if (root === undefined) {
-    root = fs.mkdtempSync(join(tmpdir(), `${ROOT_PREFIX}${process.pid}-`));
-    if (!exitHookInstalled) {
-      exitHookInstalled = true;
-      process.once('exit', removeScratchRoot);
+  getRoot(): string {
+    if (this.root === undefined) {
+      this.root = fs.mkdtempSync(
+        join(tmpdir(), `${ROOT_PREFIX}${process.pid}-`),
+      );
+      if (!this.exitHookInstalled) {
+        this.exitHookInstalled = true;
+        process.once('exit', () => this.removeRoot());
+      }
+      if (!this.swept) {
+        this.swept = true;
+        sweepDeadScratchRoots();
+      }
     }
-    if (!swept) {
-      swept = true;
-      sweepDeadScratchRoots();
-    }
+    return this.root;
   }
-  return root;
-}
 
-export function createScratchDirSync(prefix: string): string {
-  return fs.mkdtempSync(join(getScratchRoot(), prefix));
-}
+  createDirSync(prefix: string): string {
+    return fs.mkdtempSync(join(this.getRoot(), prefix));
+  }
 
-export function createScratchDir(prefix: string): Promise<string> {
-  return mkdtemp(join(getScratchRoot(), prefix));
-}
+  createDir(prefix: string): Promise<string> {
+    return mkdtemp(join(this.getRoot(), prefix));
+  }
 
-/** Removes this process's scratch root. A later use creates a fresh root. */
-export function removeScratchRoot(): void {
-  if (root === undefined) return;
-  const owned = root;
-  root = undefined;
-  fs.rmSync(owned, { recursive: true, force: true });
+  removeRoot(): void {
+    if (this.root === undefined) return;
+    const owned = this.root;
+    this.root = undefined;
+    fs.rmSync(owned, { recursive: true, force: true });
+  }
 }
 
 /**

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -10,8 +11,9 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import { admitSessionHistory } from './sessionHistoryAdmission.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
@@ -30,7 +32,7 @@ const imageRow: IContent = {
 };
 
 function mediaIndexDirectories(): string[] {
-  return readdirSync(getScratchRoot()).filter((name) =>
+  return readdirSync(historyScratchRoots.getRoot()).filter((name) =>
     name.startsWith('history-media-index-'),
   );
 }
@@ -50,7 +52,12 @@ describe('session history admission release', () => {
       quotaBytes: 1024,
     });
     const admission = new MediaAdmissionService(store);
-    const admitted = admitSessionHistory([imageRow], admission, 'scope-1');
+    const admitted = admitSessionHistory(
+      [imageRow],
+      admission,
+      'scope-1',
+      historyScratchRoots,
+    );
     let contentId = '';
     for await (const row of admitted.rows) {
       expect(row.blocks).toHaveLength(1);

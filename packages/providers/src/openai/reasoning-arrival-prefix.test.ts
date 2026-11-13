@@ -1,7 +1,9 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { parseResponsesStream } from './parseResponsesStream.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('Responses reasoning arrival prefixes', () => {
   it.each(
@@ -11,7 +13,7 @@ describe('Responses reasoning arrival prefixes', () => {
   )(
     'records exact split-word text and whitespace ($source, $ending)',
     async ({ source, ending }) => {
-      const history = new HistoryService();
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       const arrival = await history.openResponseArrival({
         id: 'reasoning',
         submissionId: 'prompt',

@@ -1,3 +1,4 @@
+import { testNamedWriters } from './support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   afterAll,
@@ -95,7 +96,7 @@ async function roundTrip(
   path: string,
   input: HistoryCase,
 ): Promise<HistoryCase> {
-  const store = await JournalStore.create(path, storeDeps());
+  const store = await JournalStore.create(path, storeDeps(), testNamedWriters);
   const recorder = new JournalArrivalRecorder(store);
   const rows: IContent[] = [];
   try {

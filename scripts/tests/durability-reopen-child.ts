@@ -1,3 +1,4 @@
+import { testJournalOptions } from './named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { writeFile } from 'node:fs/promises';
 import { JournalSession } from '../../packages/core/src/services/history/journalSession.js';
@@ -13,7 +14,7 @@ const store = new LocalMediaStore({
   rootDirectory: mediaRoot,
   quotaBytes: 1024 * 1024,
 });
-const resolver = await JournalSession.open(file);
+const resolver = await JournalSession.open(file, testJournalOptions());
 let rows = 0;
 let verifiedMedia = 0;
 const storedRows: number[] = [];

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
@@ -11,14 +12,16 @@ import { ToolCallStatus } from '../types.js';
 describe('resume cursor tool projection', () => {
   it('displays the paired response when a tool group is paged from the journal', async () => {
     const root = await mkdtemp(join(tmpdir(), 'resume-pager-tools-'));
-    const recording = createSessionRecorder({
-      chatsDir: root,
-      sessionId: 'tools',
-      projectHash: 'project',
-      provider: 'test',
-      model: 'test',
-      workspaceDirs: [],
-    });
+    const recording = createSessionRecorder(
+      withTestNamedWriters({
+        chatsDir: root,
+        sessionId: 'tools',
+        projectHash: 'project',
+        provider: 'test',
+        model: 'test',
+        workspaceDirs: [],
+      }),
+    );
     try {
       await recordRowsForTest(recording, [
         {

@@ -9,6 +9,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import {
   subscribeMcpTrust,
   reconcileMcpStartupTrust,
@@ -248,6 +249,7 @@ export class McpRuntimeOwner
   private readonly feedback: HostFeedbackSink;
   private readonly oauth: McpOAuthBinding;
   readonly performOAuth = assembleMcpOAuthOperation(
+    () => this.requestFetch,
     () => this.oauth,
     () => {
       if (this.stopped) throw new Error('MCP runtime is stopped');
@@ -268,6 +270,7 @@ export class McpRuntimeOwner
     }
   }
 
+  private readonly requestFetch: NetworkFetch;
   private readonly config: Config;
   private readonly managerFactory: typeof McpClientManager;
   private readonly mcpSettings: SessionMcpSettingsReads | undefined;
@@ -277,6 +280,7 @@ export class McpRuntimeOwner
     inputs: McpRuntimeAcquisition,
     operations: McpRuntimeOperations,
   ) {
+    this.requestFetch = inputs.requestFetch;
     this.config = inputs.config;
     this.managerFactory = inputs.managerFactory;
     this.ownsMemory = handoffOwnership(inputs.memory) === 'runtime';
@@ -529,6 +533,7 @@ export class McpRuntimeOwner
     const publication = this.tools.acceptMcpPublication();
     this.releaseMcpPublication = publication.release;
     this.manager = new this.managerFactory(
+      this.requestFetch,
       this.oauth,
       this.approvalPolicy,
       version,

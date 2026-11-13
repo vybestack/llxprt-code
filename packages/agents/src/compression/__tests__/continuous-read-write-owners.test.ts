@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -12,6 +13,7 @@ import {
   digestRows,
   digestStream,
 } from './density-disk-helpers.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 function row(index: number): IContent {
   const phase = index % 3;
@@ -75,6 +77,7 @@ describe('native read/write source ownership', () => {
             : [result.replacements.get(index) ?? content],
         );
         await owned.store.optimizeDensity({
+          scratchRoots: historyScratchRoots,
           nativePolicy: () => nativeRecencyPolicy(densityConfig(1)),
           optimize: () => {
             throw new Error('Native density selected disk optimizer');

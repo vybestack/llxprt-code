@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -29,6 +30,8 @@ import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { CompressionHandler } from '../../compression/CompressionHandler.js';
 import { reasoningInclusionPolicy } from '../runtimePorts.js';
+const historyScratchRoots = createTestScratchOwner();
+
 // ---------------------------------------------------------------------------
 // REQ-005.3: streamValidationHelpers accumulation
 // (imports DebugLogger and CompressionHandler type — declared at top of file)
@@ -142,7 +145,7 @@ describe('REQ-005.3: recordHistoryWithUsage accumulation', () => {
   let logger: DebugLogger;
 
   beforeEach(() => {
-    historyService = new HistoryService();
+    historyService = new HistoryService({ scratchRoots: historyScratchRoots });
     logger = new DebugLogger('p14-req0053');
   });
 

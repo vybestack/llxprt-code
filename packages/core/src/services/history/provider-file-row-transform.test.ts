@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { materializeHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
@@ -16,17 +17,20 @@ import {
   exactTokenizer,
   rejectedValue,
 } from './chronology-rollback-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class CursorOnlyHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(this, 'Whole-history array escape');
   }
 }
 
 describe('journal materialization guard', () => {
   it('CursorOnlyHistory rejects journal eager materialization', async () => {
-    const history = new CursorOnlyHistory();
+    const history = new CursorOnlyHistory({
+      scratchRoots: historyScratchRoots,
+    });
 
     try {
       await expect(materializeHistoryForTest(history)).rejects.toThrow(

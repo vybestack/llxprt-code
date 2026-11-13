@@ -125,8 +125,7 @@ the facade does not retain construction-only state.
 bags, configuration service locators, assembly closures, retired ambient exports,
 and mutable runtime state. State roots are derived from runtime, api and settings
 directories plus explicit UI context files. ALS scanning covers the package source
-roots derived from those state roots. It does not currently cover A2A's HTTP
-request transport storage; see `packages/a2a-server/src/http/requestStorage.ts`.
+roots derived from those state roots.
 
 Scanner tests use small fixtures to verify these rules. CI runs the production
 analysis command independently of those fixtures. Compiler errors or scanner

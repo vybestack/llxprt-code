@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -30,6 +31,7 @@ import {
   makeUserMessage,
   resetCallIds,
 } from './chatSession-density-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 type RawHistoryEntry =
   import('@vybestack/llxprt-code-core/services/history/IContent.js').IContent;
@@ -60,7 +62,7 @@ const densityFixture1_observeEmptyResultProducesNoHistoryChanges = async () => {
   const emptyResultProducesNoHistoryChangesProperty = fc.asyncProperty(
     fc.integer({ min: 1, max: 5 }),
     async (messageCount) => {
-      const hs = new HistoryService();
+      const hs = new HistoryService({ scratchRoots: historyScratchRoots });
       // Only add non-prunable content (plain messages)
       for (let i = 0; i < messageCount; i++) {
         hs.add(makeUserMessage(`Plain message ${i}`));
@@ -109,7 +111,7 @@ const densityFixture2_observeOptimizationOnlyRemovesEntriesNeverFabricatesNewOne
     const optimizationOnlyRemovesEntriesNeverFabricatesNewOnesProperty =
       fc.asyncProperty(fc.integer({ min: 1, max: 3 }), async (pairCount) => {
         resetCallIds();
-        const hs = new HistoryService();
+        const hs = new HistoryService({ scratchRoots: historyScratchRoots });
 
         hs.add(makeUserMessage('Start'));
         for (let i = 0; i < pairCount; i++) {
@@ -164,7 +166,7 @@ const densityFixture3_observeConsecutiveCleanOptimizationsAreNoOps =
       fc.integer({ min: 1, max: 5 }),
       async (messageCount) => {
         resetCallIds();
-        const hs = new HistoryService();
+        const hs = new HistoryService({ scratchRoots: historyScratchRoots });
 
         hs.add(makeUserMessage('Hello'));
         for (let i = 0; i < messageCount; i++) {
@@ -345,7 +347,7 @@ async function observeDensityCase4() {
       ),
       fc.integer({ min: 1, max: 5 }),
       async (strategyName, messageCount) => {
-        const hs = new HistoryService();
+        const hs = new HistoryService({ scratchRoots: historyScratchRoots });
         for (let i = 0; i < messageCount; i++) {
           hs.add(makeUserMessage(`Message ${i}`));
           hs.add(makeAiText(`Response ${i}`));
@@ -385,7 +387,7 @@ async function observeDensityCase5() {
     property0: fc.asyncProperty(
       fc.integer({ min: 1, max: 8 }),
       async (messageCount) => {
-        const hs = new HistoryService();
+        const hs = new HistoryService({ scratchRoots: historyScratchRoots });
         for (let i = 0; i < messageCount; i++) {
           hs.add(makeUserMessage(`Msg ${i}`));
           hs.add(makeAiText(`Resp ${i}`));
@@ -428,7 +430,7 @@ async function observeDensityCase6() {
       fc.integer({ min: 1, max: 3 }),
       async (pairCount) => {
         resetCallIds();
-        const hs = new HistoryService();
+        const hs = new HistoryService({ scratchRoots: historyScratchRoots });
 
         hs.add(makeUserMessage('Initial'));
         for (let i = 0; i < pairCount; i++) {
@@ -479,7 +481,7 @@ async function observeDensityCase7() {
       fc.integer({ min: 1, max: 3 }),
       async (pairCount) => {
         resetCallIds();
-        const hs = new HistoryService();
+        const hs = new HistoryService({ scratchRoots: historyScratchRoots });
 
         hs.add(makeUserMessage('Start'));
         for (let i = 0; i < pairCount; i++) {
@@ -532,7 +534,7 @@ async function observeDensityCase8() {
       fc.integer({ min: 0, max: 5 }),
       async (strategyName, messageCount) => {
         resetCallIds();
-        const hs = new HistoryService();
+        const hs = new HistoryService({ scratchRoots: historyScratchRoots });
         for (let i = 0; i < messageCount; i++) {
           hs.add(makeUserMessage(`Msg ${i}`));
           hs.add(makeAiText(`Resp ${i}`));

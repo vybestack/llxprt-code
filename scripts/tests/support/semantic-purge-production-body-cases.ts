@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { writeBodyFile } from '../../../packages/test-utils/src/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
@@ -25,6 +26,7 @@ import {
   SemanticMediaPurgeSession,
   type SemanticMediaPurgeAttempt,
 } from '../../../packages/agents/src/core/semanticMediaPurgeSession.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 function row(index: number, bytes: number): IContent {
   const text = {
@@ -91,7 +93,7 @@ async function expectedBody(
   provider: string,
   caching: boolean,
 ): Promise<string> {
-  const eager = new HistoryService();
+  const eager = new HistoryService({ scratchRoots: historyScratchRoots });
   try {
     for (let index = 0; index < size; index++) eager.add(row(index, 2048));
     const transaction = await new EagerSemanticPurgeOracle(eager, {

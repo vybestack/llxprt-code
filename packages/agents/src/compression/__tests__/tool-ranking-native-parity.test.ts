@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import {
   invalidateResponsesStatefulChain,
   type ContentBlock,
@@ -129,7 +129,7 @@ describe('native ranking equals the old array optimizer', () => {
             (await total([...baseline, ...pending])) * 0.78,
           );
           const expected = await arrayOracle(baseline, pending, limit);
-          getScratchRoot();
+          history.scratchRoots.getRoot();
           const files = await operationFileCreates(async () => {
             const result = await truncateToolResponsesInOnePass(
               {

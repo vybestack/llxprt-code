@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
@@ -45,6 +46,7 @@ import { createConfigParams } from './chatSession-runtime-helpers.js';
 import type { ChatSession } from './chatSession.js';
 import { createChatObject } from './subagentRuntimeSetup.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -141,7 +143,7 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
 
     const manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
     manager.registerProvider(provider);
 
     const memoryOverrides: PropertyDescriptorMap = {};
@@ -175,6 +177,7 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
       sessionId: config.getSessionId(),
     });
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       state: {
         ...runtimeState,
         get model() {
@@ -188,7 +191,7 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
         await import(
           '@vybestack/llxprt-code-core/services/history/HistoryService.js'
         )
-      ).HistoryService(),
+      ).HistoryService({ scratchRoots: historyScratchRoots }),
       settings: {
         compressionThreshold: 0.8,
         contextLimit: 128000,

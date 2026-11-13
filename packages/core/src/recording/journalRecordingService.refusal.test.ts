@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -66,7 +67,10 @@ describe('opening a retired session file', () => {
       await fsp.writeFile(file, content());
       const before = await fsp.readFile(file);
 
-      const failure = await JournalRecordingService.open(settings, file).then(
+      const failure = await JournalRecordingService.open(
+        withTestNamedWriters(settings),
+        file,
+      ).then(
         () => undefined,
         (error: unknown) => error,
       );

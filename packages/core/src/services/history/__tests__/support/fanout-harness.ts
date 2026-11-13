@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -15,6 +17,7 @@ import { readStoredRow } from '../../../../journal/rowReads.js';
 import { decodeStoredRow } from '../../journalRowCodec.js';
 import { HistoryService } from '../../HistoryService.js';
 import type { IContent } from '../../IContent.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export const FANOUT_PROJECT_HASH = 'fanout-harness';
 
@@ -59,21 +62,23 @@ export class FanoutHarness {
     id: string,
     journal?: JournalSessionOptions,
   ): JournalRecordingService {
-    const created = JournalRecordingService.create({
-      sessionId: `harness-${id}-${this.counter++}`,
-      projectHash: FANOUT_PROJECT_HASH,
-      chatsDir: this.dir,
-      workspaceDirs: [this.dir],
-      provider: 'test',
-      model: 'test',
-      journal,
-    });
+    const created = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: `harness-${id}-${this.counter++}`,
+        projectHash: FANOUT_PROJECT_HASH,
+        chatsDir: this.dir,
+        workspaceDirs: [this.dir],
+        provider: 'test',
+        model: 'test',
+        journal,
+      }),
+    );
     this.recorders.push(created);
     return created;
   }
 
   history(): HistoryService {
-    const created = new HistoryService({});
+    const created = new HistoryService({ scratchRoots: historyScratchRoots });
     this.histories.push(created);
     return created;
   }

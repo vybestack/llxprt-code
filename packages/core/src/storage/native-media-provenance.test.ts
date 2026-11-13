@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
@@ -16,6 +17,7 @@ import {
   historyOwnerIdFor,
 } from './media-admission-service.js';
 import { RequestMediaResolver } from './request-media-resolver.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const directory = tempDirectory('native-media-provenance-');
 
@@ -27,8 +29,10 @@ describe('native media reference provenance', () => {
         rootDirectory: join(directory(), 'pending'),
         quotaBytes: 1024,
       });
-      const history = new HistoryService({});
-      await history.registerMediaOwner(new HistoryMediaOwnership(store));
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
+      await history.registerMediaOwner(
+        new HistoryMediaOwnership(store, historyScratchRoots),
+      );
       const admission = new MediaAdmissionService(store);
       const context = {
         turnId: 'pending',
@@ -181,13 +185,15 @@ describe('native media reference provenance', () => {
       rootDirectory: join(directory(), 'media'),
       quotaBytes: 1024,
     });
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const reference = await store.admit({
       bytes: new Uint8Array([1, 2, 3]),
       mimeType: 'image/png',
       semanticMetadata: {},
     });
-    await history.registerMediaOwner(new HistoryMediaOwnership(store));
+    await history.registerMediaOwner(
+      new HistoryMediaOwnership(store, historyScratchRoots),
+    );
     await history.addBatch([
       { speaker: 'human', blocks: [reference], metadata: { id: 'same-row' } },
     ]);
@@ -276,8 +282,10 @@ describe('native media reference provenance', () => {
     };
     const reference = await left.admit(input);
     await right.admit(input);
-    const history = new HistoryService({});
-    await history.registerMediaOwner(new HistoryMediaOwnership(left));
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
+    await history.registerMediaOwner(
+      new HistoryMediaOwnership(left, historyScratchRoots),
+    );
     await history.addBatch([{ speaker: 'human', blocks: [reference] }]);
     const source = await history.prepareCuratedForProviderSnapshot();
     try {

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { adaptGenerator } from './__tests__/chatSession-thinking-toolcalls-helpers.js';
@@ -49,6 +50,7 @@ import {
   createConfigParams,
   invocationData,
 } from './chatSession-runtime-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 let settingsService: SettingsService;
 let config: Config;
@@ -70,7 +72,7 @@ function setupHistoryRuntime(): void {
 
   manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, config.scratchRoots);
 }
 
 function createHistoryChat(
@@ -90,6 +92,7 @@ function createHistoryChat(
     sessionId: options.sessionId ?? config.getSessionId(),
   });
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         invocationData(providerRuntime, name, settingsService),
@@ -149,7 +152,9 @@ async function commitThinkingToolResults(): Promise<number> {
 
   manager.registerProvider(provider);
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const chat = createHistoryChat(historyService);
 
   const inputToolCall: IContent = {
@@ -305,7 +310,9 @@ function continuedReadFileFixture(): CompletedToolCall[] {
 }
 
 async function recordCompletedToolCalls(): Promise<number> {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const chat = createHistoryChat(historyService, {
     runtimeId: 'runtime-record-completed',
     model: 'stub-model',
@@ -377,7 +384,9 @@ async function avoidDuplicateToolResponses(): Promise<number> {
 
   manager.registerProvider(provider);
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const chat = createHistoryChat(historyService, {
     runtimeId: 'runtime-no-duplicate-tool-response',
   });
@@ -481,7 +490,9 @@ async function retainThinkingToolCalls(): Promise<boolean> {
 
   manager.registerProvider(provider);
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const chat = createHistoryChat(historyService);
 
   const stream = await chat.sendMessageStream(
@@ -535,7 +546,9 @@ async function closePendingToolCalls(): Promise<number> {
 
   manager.registerProvider(provider);
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const chat = createHistoryChat(historyService, {
     settings: {
       compressionThreshold: 0.8,
@@ -626,7 +639,9 @@ async function retainActiveProvider(): Promise<void> {
   manager.registerProvider(anthropicProvider);
   settingsService.set('activeProvider', 'openai');
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const chat = createHistoryChat(historyService, {
     provider: 'anthropic',
     settings: {
@@ -710,7 +725,9 @@ describe('ChatSession runtime terminal metadata', () => {
   ])(
     'coalesces $label metadata into a terminal Finished event in Turn stream',
     async ({ metadata }) => {
-      const historyService = new HistoryService();
+      const historyService = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
       registerTerminalProvider(metadata);
       const chat = createHistoryChat(historyService);
       const { Turn, AgentEventType } = await import('./turn.js');

@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -18,6 +21,8 @@ import { JournalRecordingService } from './journalRecordingService.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
 import { SessionLockManager } from './SessionLockManager.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 function messages(error: unknown): string[] {
   if (error instanceof AggregateError) return error.errors.flatMap(messages);
   if (error instanceof Error) return [error.message];
@@ -25,6 +30,8 @@ function messages(error: unknown): string[] {
 }
 
 describe('native recorder cleanup ownership', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const directory = useTempDir('native-recorder-cleanup-');
 
   it('aggregates write, file close and lock release failures after releasing the actual lock', async () => {
@@ -34,29 +41,31 @@ describe('native recorder cleanup ownership', () => {
     const lock = await SessionLockManager.acquire(chatsDir, 'cleanup');
     let failClose = false;
     let failRelease = false;
-    const recording = JournalRecordingService.create({
-      sessionId: 'cleanup',
-      projectHash: 'cleanup',
-      chatsDir,
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-      journal: {
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'cleanup',
+        projectHash: 'cleanup',
+        chatsDir,
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
         journal: {
-          ...seams.dependencies,
-          open: async (file, flags) => {
-            const handle = await seams.dependencies.open(file, flags);
-            return {
-              ...handle,
-              close: async () => {
-                await handle.close();
-                if (failClose) throw new Error('injected file close failure');
-              },
-            };
+          journal: {
+            ...seams.dependencies,
+            open: async (file, flags) => {
+              const handle = await seams.dependencies.open(file, flags);
+              return {
+                ...handle,
+                close: async () => {
+                  await handle.close();
+                  if (failClose) throw new Error('injected file close failure');
+                },
+              };
+            },
           },
         },
-      },
-    });
+      }),
+    );
     recording.adoptLock({
       lockPath: lock.lockPath,
       ownsLock: () => lock.ownsLock(),
@@ -65,8 +74,11 @@ describe('native recorder cleanup ownership', () => {
         if (failRelease) throw new Error('injected lock release failure');
       },
     });
-    const history = new HistoryService({});
-    const integration = new RecordingIntegration(recording);
+    const history = new HistoryService({ scratchRoots: recordingScratchRoots });
+    const integration = new RecordingIntegration(
+      recording,
+      recordingScratchRoots,
+    );
     try {
       await integration.subscribeToJournal(history);
       history.add(nativeText('durable'));
@@ -109,6 +121,8 @@ describe('native recorder cleanup ownership', () => {
 });
 
 describe('native integration media ownership', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const fixture = useNativeIntegration();
 
   it('retains real media reservations through recorder detachment until the history owner closes', async () => {
@@ -124,7 +138,9 @@ describe('native integration media ownership', () => {
       reservationOwnerScope: 'lifecycle-admission',
     };
     try {
-      await history.registerMediaOwner(new HistoryMediaOwnership(media));
+      await history.registerMediaOwner(
+        new HistoryMediaOwnership(media, recordingScratchRoots),
+      );
       const rows = await admission.admitContents(
         [
           {

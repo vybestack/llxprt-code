@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -112,6 +113,7 @@ describe('compaction of a live store (design 4.11)', () => {
     const store = await JournalStore.create(
       target,
       storeDeps({ fileOperations: ops, compactionDue: policy }),
+      testNamedWriters,
     );
     await store.commit(
       SESSION_STATE.map(([key, value]) => setState(key, value)),
@@ -238,7 +240,11 @@ describe('compaction of a live store (design 4.11)', () => {
 
   it('retains a popped 70 MiB transcript body without repeatedly compacting its live bytes', async () => {
     const target = file('real.llxj');
-    const store = await JournalStore.create(target, storeDeps());
+    const store = await JournalStore.create(
+      target,
+      storeDeps(),
+      testNamedWriters,
+    );
     await store.commit([
       { kind: 'append', rows: [draftRow({ text: 'x'.repeat(70 * MIB) })] },
     ]);
@@ -319,6 +325,7 @@ describe('compaction of a live store (design 4.11)', () => {
       const store = await JournalStore.create(
         target,
         storeDeps({ fileOperations: ops }),
+        testNamedWriters,
       );
       await appendEach(store, [draftRow()]);
 

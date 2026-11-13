@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -14,6 +15,7 @@ import {
   rowsSelection,
   WIRE_ROUTES,
 } from './support/wireBodyCapture.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 interface Scenario {
   readonly usage: boolean;
@@ -176,7 +178,7 @@ async function capture(
       const estimate = await estimatePromptEnvelope(
         'openai-responses',
         projection,
-        createRuntimeTokenizerFactory(),
+        createRuntimeTokenizerFactory(tokenizerScratchRoots),
       );
       for await (const chunk of provider.generateChatCompletion({
         ...request,

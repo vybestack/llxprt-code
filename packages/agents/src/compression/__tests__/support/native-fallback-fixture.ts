@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { exactTokenizer } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -18,6 +20,7 @@ import {
 import { createCoreSuffixFixtureGraph } from '../../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { compressionValueDigest } from '../compression-value-fixture.js';
 import { nativeFileRows } from './native-file-rows.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 class FinalizationOwner extends HistoryMediaOwnership {
   readonly acknowledged = batchGate();
@@ -61,28 +64,31 @@ export async function pausedWriter(root: string): Promise<{
     paused.resolve();
     await resume.promise;
   };
-  const session = await JournalSession.create(join(root, 'primary.llxj'), {
-    journal: {
-      open: async (path, flags) => {
-        const handle = await open(path, flags);
-        return {
-          fd: handle.fd,
-          read: (...args) => handle.read(...args),
-          stat: () => handle.stat(),
-          truncate: (length) => handle.truncate(length),
-          close: () => handle.close(),
-          write: async (...args) => {
-            await wait();
-            return handle.write(...args);
-          },
-          writev: async (buffers, position) => {
-            await wait();
-            return handle.writev([...buffers], position);
-          },
-        };
+  const session = await JournalSession.create(
+    join(root, 'primary.llxj'),
+    testJournalOptions({
+      journal: {
+        open: async (path, flags) => {
+          const handle = await open(path, flags);
+          return {
+            fd: handle.fd,
+            read: (...args) => handle.read(...args),
+            stat: () => handle.stat(),
+            truncate: (length) => handle.truncate(length),
+            close: () => handle.close(),
+            write: async (...args) => {
+              await wait();
+              return handle.write(...args);
+            },
+            writev: async (buffers, position) => {
+              await wait();
+              return handle.writev([...buffers], position);
+            },
+          };
+        },
       },
-    },
-  });
+    }),
+  );
   return {
     session,
     paused: paused.promise,
@@ -149,7 +155,7 @@ export async function withNativeFallbackFixture(
     rootDirectory: join(root, 'media'),
     quotaBytes: 1024,
   });
-  const owner = new FinalizationOwner(media);
+  const owner = new FinalizationOwner(media, historyScratchRoots);
   history.setTokenizerFactory(exactTokenizer());
   try {
     await history.waitForCommit();

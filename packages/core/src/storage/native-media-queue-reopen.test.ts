@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { testJournalOptions } from '../journal/__tests__/support/namedWriterOwner.js';
 import { openIndependentJournal } from '../services/history/__tests__/support/independent-journal.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
@@ -12,6 +14,7 @@ import { HistoryMediaOwnership } from './history-media-ownership.js';
 import { HistoryMediaReleaseGate } from './history-media-release-gate.js';
 import { deferredMediaFixture } from './native-media-queue-test-helpers.js';
 import { projectRecordedContentIds } from '../recording/janitor/mediaReclamation.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const directory = tempDirectory('native-media-queue-reopen-');
 const contentId = `sha256:${createHash('sha256')
@@ -69,6 +72,7 @@ describe('native media release queue across owner reopen', () => {
     await crashWithDeferredRelease(directory());
     const session = await JournalSession.open(
       join(directory(), 'history.llxj'),
+      testJournalOptions(),
     );
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'media'),
@@ -84,7 +88,10 @@ describe('native media release queue across owner reopen', () => {
         (await media.reclaimUnreferenced(new Set(), Number.MAX_SAFE_INTEGER))
           .objectsRemoved,
       ).toBe(0);
-      await new HistoryMediaOwnership(media).bindNativeMedia(session.store);
+      await new HistoryMediaOwnership(
+        media,
+        historyScratchRoots,
+      ).bindNativeMedia(session.store);
       expect(
         (await media.reclaimUnreferenced(new Set(), Number.MAX_SAFE_INTEGER))
           .objectsRemoved,
@@ -161,7 +168,10 @@ describe('native media release queue across owner reopen', () => {
       expect(await media.hasReservations(reference.contentId)).toBe(false);
       commit.mockRestore();
       await session.close();
-      const reopened = await JournalSession.open(session.path);
+      const reopened = await JournalSession.open(
+        session.path,
+        testJournalOptions(),
+      );
       const nextMedia = new LocalMediaStore({
         rootDirectory: media.rootDirectory,
         quotaBytes: 1024,
@@ -169,9 +179,10 @@ describe('native media release queue across owner reopen', () => {
       try {
         expect(await queueCounter(reopened, 'head')).toBe(0);
         expect(await reopened.store.getState('rel:0')).toBeDefined();
-        await new HistoryMediaOwnership(nextMedia).bindNativeMedia(
-          reopened.store,
-        );
+        await new HistoryMediaOwnership(
+          nextMedia,
+          historyScratchRoots,
+        ).bindNativeMedia(reopened.store);
         expect(await queueCounter(reopened, 'head')).toBe(1);
         expect(
           (
@@ -206,7 +217,10 @@ describe('native media release queue across owner reopen', () => {
       ).toBe(0);
       expect(await session.store.compact()).toBe('swapped');
       await session.close();
-      const reopened = await JournalSession.open(session.path);
+      const reopened = await JournalSession.open(
+        session.path,
+        testJournalOptions(),
+      );
       try {
         expect((await reopened.store.checkpoint('media'))?.name).toBe('media');
         const retained = await projectRecordedContentIds(directory());
@@ -281,7 +295,10 @@ describe('native media release queue across owner reopen', () => {
       ).toBe(0);
       release.mockRestore();
       await session.close();
-      const reopened = await JournalSession.open(session.path);
+      const reopened = await JournalSession.open(
+        session.path,
+        testJournalOptions(),
+      );
       const nextMedia = new LocalMediaStore({
         rootDirectory: media.rootDirectory,
         quotaBytes: 1024,

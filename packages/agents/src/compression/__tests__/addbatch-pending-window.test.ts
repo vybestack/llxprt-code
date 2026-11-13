@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
@@ -10,6 +11,7 @@ import {
   pendingGate,
   withPendingFixture,
 } from './pending-window-disk-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function pendingBatch(size: number): Promise<number> {
   return withPendingFixture(size, async (fixture) => {
@@ -75,6 +77,7 @@ async function pendingBatch(size: number): Promise<number> {
       }
     };
     const runtime = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       state: setup.runtime.state,
       history,
       settings: { contextLimit: 30000 },

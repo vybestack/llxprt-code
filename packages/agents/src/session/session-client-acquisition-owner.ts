@@ -135,6 +135,7 @@ export class SessionClientAcquisitionOwner {
       this.auxiliary,
     );
     this.conversationBinding = new SessionConversationBinding({
+      scratchRoots: environment.config.scratchRoots,
       readClient: () => this.client,
       assertOpen: () => {
         this.getAgentClient();
@@ -146,6 +147,16 @@ export class SessionClientAcquisitionOwner {
   }
   async prepareTokenizer(provider: string, model: string): Promise<void> {
     await this.factories.tokenizerFactory.prepareTokenizer?.(provider, model);
+  }
+  fetchWithLifetime(
+    input: Parameters<NetworkFetch>[0],
+    init?: Parameters<NetworkFetch>[1],
+  ): ReturnType<NetworkFetch> {
+    const effective = new Request(input, init);
+    return this.auxiliary.run(
+      (signal) => this.fetch(effective, { signal }),
+      effective.signal,
+    );
   }
   async initializeInitialClientBinding(): Promise<void> {
     if (!this.initialBindingComplete) {

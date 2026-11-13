@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
@@ -17,6 +18,7 @@ import {
 } from './batch-event-test-helpers.js';
 import { publishMutationTokens } from './historyBatchContracts.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class FailedReaderJournal extends DetachedHistoryJournal {
   readonly failure = new Error('disk batch read failed');
@@ -35,7 +37,9 @@ class FalseListenerHistory extends HistoryService {
 
 describe('batch reader scope failures', () => {
   it('does not mistake a false listenerCount for absence of a real subscriber', async () => {
-    const history = new FalseListenerHistory();
+    const history = new FalseListenerHistory({
+      scratchRoots: historyScratchRoots,
+    });
     history.setTokenizerFactory(exactTokenizer());
     let reading: Promise<undefined[]> | undefined;
     history.on('contentBatchAdded', (values) => {
@@ -51,9 +55,9 @@ describe('batch reader scope failures', () => {
     }
   });
   it('releases a failed disk reader and preserves its exact error through dispatch', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const owners = new RowOwnership();
-    const source = new FailedReaderJournal();
+    const source = new FailedReaderJournal(historyScratchRoots);
     for (const row of eventRows(3)) source.append(row);
     let saved: HistoryBatchCursor | undefined;
     let view: HistoryBatchValues | undefined;
@@ -81,8 +85,8 @@ describe('batch reader scope failures', () => {
 
 describe('batch reader misuse and legacy producer', () => {
   it('closes a cursor acquired by runtime asynchronous misuse before a later continuation', async () => {
-    const history = new HistoryService();
-    const source = new DetachedHistoryJournal();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
+    const source = new DetachedHistoryJournal(historyScratchRoots);
     for (const row of eventRows(1)) source.append(row);
     let escaped: HistoryBatchCursor | undefined;
     const thenable = { then: (): void => {} };
@@ -106,9 +110,9 @@ describe('batch reader misuse and legacy producer', () => {
     }
   });
   it('migrates the legacy batch producer without changing per-row and token publication order', async () => {
-    const history = new HistoryService();
-    const source = new DetachedHistoryJournal();
-    const next = new HistoryDensityRows();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
+    const source = new DetachedHistoryJournal(historyScratchRoots);
+    const next = new HistoryDensityRows(historyScratchRoots);
     for (const row of eventRows(3)) {
       source.append(row);
       next.append(row);

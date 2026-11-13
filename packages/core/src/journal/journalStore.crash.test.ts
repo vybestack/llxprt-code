@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -65,7 +66,11 @@ type WriteEvent = Extract<JournalEvent, { type: 'write' }>;
 async function buildReplaceGroup(directory: string): Promise<ReplaceGroup> {
   const file = path.join(directory, 'source.llxj');
   const seams = testJournalSeams();
-  const store = await JournalStore.create(file, storeDeps({ seams }));
+  const store = await JournalStore.create(
+    file,
+    storeDeps({ seams }),
+    testNamedWriters,
+  );
   await appendEach(
     store,
     scenarioDrafts().map((draft, index) => ({ ...draft, owner: index % 3 })),
@@ -110,7 +115,7 @@ async function openAsOwner(
 ): Promise<{ snapshot: StoreSnapshot; sizeAfter: number }> {
   const file = path.join(directory, 'copy.llxj');
   await fsp.writeFile(file, bytes);
-  const store = await JournalStore.open(file, storeDeps());
+  const store = await JournalStore.open(file, storeDeps(), testNamedWriters);
   const snapshot = await snapshotStore(store, IDS);
   await store.close();
   return { snapshot, sizeAfter: (await fsp.stat(file)).size };

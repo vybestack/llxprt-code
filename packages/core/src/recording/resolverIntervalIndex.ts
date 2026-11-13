@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getScratchRoot, removeScratchDir } from '../storage/scratch-root.js';
+import { removeScratchDir } from '../storage/scratch-root.js';
 
 export interface SurvivorInterval {
   readonly fromSeq: number;
@@ -25,7 +25,7 @@ export class ResolverIntervalIndex {
   private closed = false;
   private size = 0;
 
-  constructor(root = getScratchRoot()) {
+  constructor(root: string) {
     this.directory = fs.mkdtempSync(path.join(root, 'llxprt-resolver-'));
     try {
       this.fd = fs.openSync(

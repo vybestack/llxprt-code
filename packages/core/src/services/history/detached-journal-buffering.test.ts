@@ -1,8 +1,10 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import * as fs from 'node:fs';
 import { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import { detachedRow } from './detached-rollback-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function journalWrites(): { count: () => number } {
   // Call-through spies; counts are read from the recorded calls at assertion
@@ -43,7 +45,7 @@ describe('detached journal buffered appends', () => {
 
   it('appends thousands of rows with far fewer system writes than rows', () => {
     const writes = journalWrites();
-    const journal = new DetachedHistoryJournal();
+    const journal = new DetachedHistoryJournal(historyScratchRoots);
     try {
       for (let index = 0; index < 4000; index++)
         journal.append(detachedRow(index, 64));
@@ -58,7 +60,7 @@ describe('detached journal buffered appends', () => {
   });
 
   it('reads rows and markers appended since the last flush', () => {
-    const journal = new DetachedHistoryJournal();
+    const journal = new DetachedHistoryJournal(historyScratchRoots);
     try {
       journal.append(detachedRow(1));
       expect(journal.readRow(0)).toStrictEqual(detachedRow(1));
@@ -79,7 +81,7 @@ describe('detached journal buffered appends', () => {
   });
 
   it('rewrites a buffered row and keeps its original marker', () => {
-    const journal = new DetachedHistoryJournal();
+    const journal = new DetachedHistoryJournal(historyScratchRoots);
     try {
       for (let index = 0; index < 5; index++)
         journal.append(detachedRow(index));
@@ -98,7 +100,7 @@ describe('detached journal buffered appends', () => {
   });
 
   it('reports a failed write when the buffered rows are settled', () => {
-    const journal = new DetachedHistoryJournal();
+    const journal = new DetachedHistoryJournal(historyScratchRoots);
     try {
       journal.append(detachedRow(1));
       vi.spyOn(fs, 'writeSync').mockImplementation(() => 0);

@@ -245,7 +245,7 @@ export class CompressionHandler {
       const optimize = strategy.optimizeRows;
       const nativePolicy = strategy.nativeDensityPolicy;
       await this.historyService.optimizeDensityRows(
-        (source) => optimize(source, config),
+        (source) => optimize(source, config, this.historyService.scratchRoots),
         nativePolicy === undefined ? undefined : () => nativePolicy(config),
       );
       await this.historyService.waitForTokenUpdates();

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -18,7 +19,7 @@ describe('native Anthropic cache discovery', () => {
     async (image) => {
       const session = await JournalSession.create(
         `${directory()}/${image}.llxj`,
-        { journal: testJournalSeams().dependencies },
+        testJournalOptions({ journal: testJournalSeams().dependencies }),
       );
       try {
         await session.append(

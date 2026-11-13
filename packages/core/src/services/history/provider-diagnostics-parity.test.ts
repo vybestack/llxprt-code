@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
@@ -11,6 +12,7 @@ import {
   useDiagnosticSink,
   type Diagnostic,
 } from './__tests__/support/provider-diagnostics-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function expectedDiagnostics(
   size: number,
@@ -158,8 +160,10 @@ describe('request override curation diagnostics', () => {
   it.each([false, true])(
     'preserves override curation and compression diagnostics with compression %s',
     async (compressing) => {
-      const eager = new HistoryService();
-      const streamed = new DiagnosticsCursorHistory();
+      const eager = new HistoryService({ scratchRoots: historyScratchRoots });
+      const streamed = new DiagnosticsCursorHistory({
+        scratchRoots: historyScratchRoots,
+      });
       const input = Array.from({ length: 16 }, (_, i) => diagnosticsRow(i));
       try {
         if (compressing) {
@@ -193,8 +197,10 @@ describe('request override curation diagnostics', () => {
 describe('pre-output diagnostics', () => {
   const take = useDiagnosticSink();
   it('emits the complete eager event sequence before the first row and never repeats it on return', async () => {
-    const eager = new HistoryService();
-    const history = new DiagnosticsCursorHistory();
+    const eager = new HistoryService({ scratchRoots: historyScratchRoots });
+    const history = new DiagnosticsCursorHistory({
+      scratchRoots: historyScratchRoots,
+    });
     const input = Array.from({ length: 16 }, (_, i) => diagnosticsRow(i));
     const cursor = history.getCuratedForProviderStream([], undefined, input);
     try {

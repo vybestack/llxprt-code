@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   collectRowsForAssertions,
@@ -14,6 +17,9 @@ import { JournalRecordingService } from '../../recording/journalRecordingService
 import { RecordingIntegration } from '../../recording/RecordingIntegration.js';
 import { journalSeams } from '../../recording/__tests__/support/recordedJournals.js';
 import { readJournalSnapshot } from '../../recording/__tests__/support/journalSnapshot.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
+
 let directory: string;
 let recorders: JournalRecordingService[];
 let histories: HistoryService[];
@@ -26,19 +32,23 @@ function journalFile(history: HistoryService): string {
   return path;
 }
 function recorder(sessionId: string): JournalRecordingService {
-  const created = JournalRecordingService.create({
-    sessionId,
-    projectHash: 'attachment',
-    chatsDir: directory,
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
-    journal: journalSeams(),
-  });
+  const created = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId,
+      projectHash: 'attachment',
+      chatsDir: directory,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+      journal: journalSeams(),
+    }),
+  );
   recorders.push(created);
   return created;
 }
 describe('bounded journal attachment', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'history-attachment-'));
     recorders = [];
@@ -67,12 +77,15 @@ describe('bounded journal attachment', () => {
   );
 });
 async function verifyLateAttachesBareHistoryThroughTheRecordingIntegrationWithoutEagerReads(): Promise<void> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: recordingScratchRoots });
   histories.push(history);
   history.add(row('source'));
   const destination = recorder('destination');
   await (await destination.session()).append([row('discarded destination')]);
-  const integration = new RecordingIntegration(destination);
+  const integration = new RecordingIntegration(
+    destination,
+    recordingScratchRoots,
+  );
   const eager = spyOn(
     JournalHistoryStore.prototype,
     'materialize',
@@ -104,7 +117,7 @@ async function verifyLateAttachesBareHistoryThroughTheRecordingIntegrationWithou
   });
 }
 async function verifyKeepsTheOriginalBindingUsableWhenTheDestinationRejectsAttachment(): Promise<void> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: recordingScratchRoots });
   histories.push(history);
   history.add(row('source'));
   await history.waitForCommit();
@@ -129,7 +142,7 @@ async function verifyKeepsTheOriginalBindingUsableWhenTheDestinationRejectsAttac
   });
 }
 async function verifyRestoresTheOriginalBindingWhenPublicationFailsAndRetainsLaterAcceptedWrites(): Promise<void> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: recordingScratchRoots });
   histories.push(history);
   history.add(row('original'));
   await history.waitForCommit();
@@ -152,7 +165,7 @@ async function verifyRestoresTheOriginalBindingWhenPublicationFailsAndRetainsLat
   await (await destination.session()).append([row('still usable')]);
 }
 async function verifyPreservesChronologyAndContextMembershipAcrossAttachmentAndSubsequentAddressedReplacement(): Promise<void> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: recordingScratchRoots });
   histories.push(history);
   history.add(row('one'));
   history.add(row('two'));

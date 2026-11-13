@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
@@ -17,6 +19,7 @@ import {
   resumeSession,
   type ResumeResult,
 } from '../../recording/resumeSession.js';
+const historyScratchRoots = createTestScratchOwner();
 
 let root: string;
 
@@ -47,8 +50,10 @@ describe('resume media lifecycle', () => {
       rootDirectory: join(root, 'media'),
       quotaBytes: 1024 * 1024,
     });
-    history = new HistoryService();
-    await history.registerMediaOwner(new HistoryMediaOwnership(store));
+    history = new HistoryService({ scratchRoots: historyScratchRoots });
+    await history.registerMediaOwner(
+      new HistoryMediaOwnership(store, historyScratchRoots),
+    );
     const admission = new MediaAdmissionService(store);
     const context = { turnId: 'old', source: 'user-input' };
     const old = await admission.admitContents([inline], context);
@@ -74,15 +79,17 @@ describe('resume media lifecycle', () => {
     ]);
     await recording.flush();
     await recording.dispose();
-    const result = await resumeSession({
-      continueRef: 'next',
-      chatsDir: root,
-      projectHash: 'project',
-      currentProvider: 'test',
-      currentModel: 'test',
-      workspaceDirs: [],
-      mediaStore: store,
-    });
+    const result = await resumeSession(
+      withTestNamedWriters({
+        continueRef: 'next',
+        chatsDir: root,
+        projectHash: 'project',
+        currentProvider: 'test',
+        currentModel: 'test',
+        workspaceDirs: [],
+        mediaStore: store,
+      }),
+    );
     if (!result.ok) throw new Error(result.error);
     resumed = result;
   });
@@ -161,15 +168,17 @@ async function verifyKeepsInlineMediaProjectionsOnAdoptedReadsWithoutReleasingAn
   ]);
   await recording.flush();
   await recording.dispose();
-  const result = await resumeSession({
-    continueRef: 'inline',
-    chatsDir: root,
-    projectHash: 'project',
-    currentProvider: 'test',
-    currentModel: 'test',
-    workspaceDirs: [],
-    mediaStore: store,
-  });
+  const result = await resumeSession(
+    withTestNamedWriters({
+      continueRef: 'inline',
+      chatsDir: root,
+      projectHash: 'project',
+      currentProvider: 'test',
+      currentModel: 'test',
+      workspaceDirs: [],
+      mediaStore: store,
+    }),
+  );
   if (!result.ok) throw new Error(result.error);
   resumed = result;
   await Array.fromAsync(result.boot.streamRows());

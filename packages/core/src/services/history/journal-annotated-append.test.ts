@@ -1,13 +1,15 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import * as promises from 'node:fs/promises';
-import { getScratchRoot } from '../../storage/scratch-root.js';
+
 import { mergeRemovedInteriorSpans } from './contextRange.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { JournalDensitySpans } from './journalDensitySpans.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(index: number): IContent {
   return {
@@ -20,7 +22,7 @@ function row(index: number): IContent {
 }
 
 async function denyCreates(action: () => Promise<void>): Promise<void> {
-  getScratchRoot();
+  historyScratchRoots.getRoot();
   const attempts: string[] = [];
   const denied = (path: unknown): never => {
     attempts.push(String(path));
@@ -73,7 +75,7 @@ describe('native annotated append through the public history host', () => {
   it.each([3, 64, 65, 5000])(
     'appends %i unordered annotations without interval files and preserves the existing prefix',
     async (size) => {
-      const history = new HistoryService({});
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       try {
         await history.detachedValues.append(
           Array.from({ length: size }, (_, index) => row(index)),
@@ -129,7 +131,7 @@ describe('native annotated append through the public history host', () => {
   it.each(['producer', 'projection', 'acknowledged', 'abort'])(
     'restores annotated append metadata and the exact %s cause then continues',
     async (stage) => {
-      const history = new HistoryService({});
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       const failure = new Error(`failed ${stage}`);
       const controller = new AbortController();
       const projection = spyOn(JournalDensitySpans.prototype, 'project');

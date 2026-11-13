@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from './journalSession.js';
@@ -13,21 +14,24 @@ describe('native row block and metadata range reads', () => {
   it('reads a relocated response and metadata without reading unrelated row text', async () => {
     const lengths: number[] = [];
     const base = testJournalSeams({}, 1, false).dependencies;
-    const session = await JournalSession.create(`${directory()}/ranges.llxj`, {
-      journal: {
-        ...base,
-        open: async (path, flags) => {
-          const handle = await base.open(path, flags);
-          return {
-            ...handle,
-            read: async (buffer, offset, length, position) => {
-              lengths.push(length);
-              return handle.read(buffer, offset, length, position);
-            },
-          };
+    const session = await JournalSession.create(
+      `${directory()}/ranges.llxj`,
+      testJournalOptions({
+        journal: {
+          ...base,
+          open: async (path, flags) => {
+            const handle = await base.open(path, flags);
+            return {
+              ...handle,
+              read: async (buffer, offset, length, position) => {
+                lengths.push(length);
+                return handle.read(buffer, offset, length, position);
+              },
+            };
+          },
         },
-      },
-    });
+      }),
+    );
     try {
       await session.append([
         {

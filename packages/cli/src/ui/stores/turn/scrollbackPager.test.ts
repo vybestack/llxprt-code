@@ -1,3 +1,5 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
+import { JournalWatermarks } from '@vybestack/llxprt-code-core/journal/journal-watermarks.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -60,6 +62,7 @@ class FakeViewport implements ScrollbackViewportReporter {
 
 interface Fixture {
   filePath: string;
+  watermarks: JournalWatermarks;
   add(content: IContent): Promise<number>;
   addUser(seq: number, padChars?: number): Promise<number>;
   addCompressed(seq: number): Promise<void>;
@@ -82,11 +85,19 @@ function userText(text: string, seq: number): IContent {
 async function createJournalFixture(): Promise<Fixture> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'scrollback-pager-'));
   const filePath = path.join(dir, 'session-under-test.llxj');
-  await (await JournalSession.create(filePath)).close();
+  const watermarks = new JournalWatermarks();
+  const options = { journal: { watermarks } };
+  await (
+    await JournalSession.create(filePath, testJournalOptions(options))
+  ).close();
   const fixture: Fixture = {
     filePath,
+    watermarks,
     async add(content: IContent): Promise<number> {
-      const session = await JournalSession.open(filePath);
+      const session = await JournalSession.open(
+        filePath,
+        testJournalOptions(options),
+      );
       try {
         await session.append([content]);
         for await (const entry of session.store.rows(
@@ -102,7 +113,10 @@ async function createJournalFixture(): Promise<Fixture> {
       return fixture.add(userText(`r-${seq}${'x'.repeat(padChars)}`, seq));
     },
     async addCompressed(seq: number): Promise<void> {
-      const session = await JournalSession.open(filePath);
+      const session = await JournalSession.open(
+        filePath,
+        testJournalOptions(options),
+      );
       try {
         const version = session.store.published;
         if (version === undefined)
@@ -127,7 +141,10 @@ async function createJournalFixture(): Promise<Fixture> {
       }
     },
     async addRewind(_seq: number): Promise<void> {
-      const session = await JournalSession.open(filePath);
+      const session = await JournalSession.open(
+        filePath,
+        testJournalOptions(options),
+      );
       try {
         for await (const entry of session.store.rows(1)) {
           await session.store.commit([
@@ -144,7 +161,7 @@ async function createJournalFixture(): Promise<Fixture> {
       const before = (await fs.stat(filePath)).size;
       const staged = `${filePath}.staged`;
       await fs.copyFile(filePath, staged);
-      const writer = await JournalSession.open(staged);
+      const writer = await JournalSession.open(staged, testJournalOptions());
       try {
         await writer.append([
           userText(`r-${seq}${'x'.repeat(ROW_PAD_CHARS)}`, seq),
@@ -172,6 +189,7 @@ function makeStore(
 ): ScrollbackPagerStore {
   const store = createScrollbackPagerStore({
     filePath: fixture.filePath,
+    watermarks: fixture.watermarks,
     viewport,
     pageRows: 4,
     settings: {
@@ -476,7 +494,10 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
   afterEach(() => cleanupPagerFixture());
 
   it('refreshes a partial row under its journal identity and seals it without duplicates', async () => {
-    const session = await JournalSession.open(fixture.filePath);
+    const session = await JournalSession.open(
+      fixture.filePath,
+      testJournalOptions(),
+    );
     const recorder = new JournalArrivalRecorder(session.store);
     const store = makeStore();
     try {

@@ -1,8 +1,10 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import type { HistoryDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
 import type { PreparedHistoryBatchEffect } from '@vybestack/llxprt-code-core/services/history/historyBatchContracts.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export class PendingPublicationOwner extends HistoryMediaOwnership {
   private snapshot: HistoryDumpSnapshot | undefined;
@@ -12,7 +14,7 @@ export class PendingPublicationOwner extends HistoryMediaOwnership {
     private readonly ready: () => void,
     private readonly release: Promise<void>,
   ) {
-    super(store);
+    super(store, historyScratchRoots);
   }
 
   arm(snapshot: HistoryDumpSnapshot): void {

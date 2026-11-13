@@ -1,3 +1,8 @@
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
+import { BaseProvider } from '@vybestack/llxprt-code-providers/BaseProvider.js';
+import { LoggingProviderWrapper } from '@vybestack/llxprt-code-providers/LoggingProviderWrapper.js';
+import { RetryOrchestrator } from '@vybestack/llxprt-code-providers/RetryOrchestrator.js';
+import type { RequestBodyCensus } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import {
   loadAgentRuntime,
   type ToolSelectedRuntimeLoaderResult,
@@ -134,14 +139,14 @@ export async function openChildResumeBoot(path: string): Promise<{
   if (found === undefined) throw new Error('Missing committed child facts');
   const { facts } = found;
   const recording = await JournalRecordingService.open(
-    {
+    withTestNamedWriters({
       sessionId: facts.sessionId,
       projectHash: facts.start.projectHash,
       chatsDir: dirname(path),
       workspaceDirs: facts.directories,
       provider: facts.provider,
       model: facts.model,
-    },
+    }),
     path,
   );
   const boot = new JournalResumeBoot(recording, await resumePointOf(recording));
@@ -154,4 +159,19 @@ export async function openChildResumeBoot(path: string): Promise<{
 export interface AcceptanceChild extends SubagentLaunchResult {
   readonly runtime: ToolSelectedRuntimeLoaderResult;
   readonly scopeHistory: HistoryService;
+}
+
+export function childRequestBodyCensus(
+  child: AcceptanceChild,
+): RequestBodyCensus {
+  let provider = child.runtime.providerAdapter.getActiveProvider();
+  while (
+    provider instanceof LoggingProviderWrapper ||
+    provider instanceof RetryOrchestrator
+  ) {
+    provider = provider.wrappedProvider;
+  }
+  if (!(provider instanceof BaseProvider))
+    throw new Error('Child transport provider does not expose its body census');
+  return provider.requestBodyCensus;
 }

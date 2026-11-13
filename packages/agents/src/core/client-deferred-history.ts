@@ -10,10 +10,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ChatSession } from './chatSession.js';
-import {
-  createChatSessionSafe,
-  type CreateChatSessionDeps,
-} from './ChatSessionFactory.js';
+import type { CreateChatSessionDeps } from './ChatSessionFactory.js';
 import {
   replaceClientArrayHistory,
   replaceClientHistorySource,
@@ -47,7 +44,7 @@ export interface DeferredHistoryPort {
   resetIdeContext(): void;
 }
 
-export type ChatSessionInputs = Omit<
+export type DeferredChatCreation = Pick<
   CreateChatSessionDeps,
   'storedHistoryService' | 'clearStoredHistoryService' | 'extraHistory'
 >;
@@ -181,14 +178,13 @@ function replaceDeferredHistory(
  */
 export async function startChatWithDeferredHistory(
   port: DeferredHistoryPort,
-  inputs: () => ChatSessionInputs,
+  createChat: (history: DeferredChatCreation) => Promise<ChatSession>,
   extraHistory: readonly IContent[] | undefined,
 ): Promise<ChatSession> {
   const deferredAdmission = port.admission();
   let chat: ChatSession;
   try {
-    chat = await createChatSessionSafe({
-      ...inputs(),
+    chat = await createChat({
       storedHistoryService: port.stored(),
       clearStoredHistoryService: () => {
         if (port.release() === undefined) port.setStored(undefined);

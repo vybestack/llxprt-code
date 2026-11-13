@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
@@ -13,6 +14,7 @@ import {
   oneshotRow,
   OneshotDiskHistory,
 } from './oneshot-disk-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function expectedCharge(request: string): { rows: number } {
   const expected: unknown = JSON.parse(request);
@@ -35,8 +37,8 @@ async function charge(size: number): Promise<number> {
         undefined,
       );
       const snapshot = await history.openDumpSnapshot();
-      const source = new HistoryDensityRows();
-      const candidate = new HistoryDensityRows();
+      const source = new HistoryDensityRows(historyScratchRoots);
+      const candidate = new HistoryDensityRows(historyScratchRoots);
       try {
         for await (const row of snapshot.rows())
           if (isCuratedContent(row)) source.append(row);

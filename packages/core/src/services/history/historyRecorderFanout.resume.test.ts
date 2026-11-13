@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -19,21 +21,24 @@ import {
   rowText,
   textRow,
 } from './__tests__/support/fanout-harness.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const harness = new FanoutHarness();
 let root: string;
 let resumed: ResumeResult | undefined;
 
 async function resumedSession(owner: object): Promise<ResumeResult> {
-  const recording = createSessionRecorder({
-    sessionId: 'fanout-resumed-session',
-    projectHash: PROJECT_HASH,
-    chatsDir: root,
-    workspaceDirs: [],
-    provider: 'anthropic',
-    model: 'claude-4',
-  });
-  const history = new HistoryService();
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'fanout-resumed-session',
+      projectHash: PROJECT_HASH,
+      chatsDir: root,
+      workspaceDirs: [],
+      provider: 'anthropic',
+      model: 'claude-4',
+    }),
+  );
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   try {
     await history.attachJournal(recording, true, undefined, owner);
     for (let index = 0; index < 3; index++)
@@ -43,14 +48,16 @@ async function resumedSession(owner: object): Promise<ResumeResult> {
     await history.dispose();
     await recording.dispose();
   }
-  const result = await resumeSession({
-    continueRef: recording.getSessionId(),
-    chatsDir: root,
-    projectHash: PROJECT_HASH,
-    currentProvider: 'anthropic',
-    currentModel: 'claude-4',
-    workspaceDirs: [],
-  });
+  const result = await resumeSession(
+    withTestNamedWriters({
+      continueRef: recording.getSessionId(),
+      chatsDir: root,
+      projectHash: PROJECT_HASH,
+      currentProvider: 'anthropic',
+      currentModel: 'claude-4',
+      workspaceDirs: [],
+    }),
+  );
   if (!result.ok) throw new Error(result.error);
   resumed = result;
   return result;
@@ -73,7 +80,7 @@ describe('resuming one origin while another is mirrored', () => {
   it('keeps the named recording durable when a new runtime resumes and replaces its history', async () => {
     const result = await resumedSession({});
     const owner = {};
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await service.adoptResumeBoot(result.recording, result.boot, () =>
         service.attachJournal(result.recording, false, undefined, owner),

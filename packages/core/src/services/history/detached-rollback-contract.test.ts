@@ -1,7 +1,8 @@
+import type { ScratchRootOwner } from '../../storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdirSync } from 'node:fs';
-import { getScratchRoot } from '../../storage/scratch-root.js';
+
 import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
 import {
   rejectedValue,
@@ -30,8 +31,8 @@ function mediaParticipant(
   };
 }
 
-function scratch(): string[] {
-  return readdirSync(getScratchRoot()).filter((name) =>
+function scratch(scratchRoots: ScratchRootOwner): string[] {
+  return readdirSync(scratchRoots.getRoot()).filter((name) =>
     name.startsWith('history-detached-'),
   );
 }
@@ -82,7 +83,7 @@ for (const stage of [
             removedInterior: [],
             approximate: false,
           };
-          const dirs = scratch();
+          const dirs = scratch(history.scratchRoots);
           const failure = new Error(stage);
           const controller = new AbortController();
           if (stage === 'prepare')
@@ -133,7 +134,9 @@ for (const stage of [
           expect(history.getContextRange()).toStrictEqual(range);
           expect(owners.snapshot().liveRows).toBe(0);
           expect(
-            scratch().filter((name) => !dirs.includes(name)),
+            scratch(history.scratchRoots).filter(
+              (name) => !dirs.includes(name),
+            ),
           ).toStrictEqual([]);
         },
       );

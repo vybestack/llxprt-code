@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from './scratch-root.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -66,6 +67,7 @@ export interface MediaLifecycleMetricsSnapshot {
 }
 
 export interface MediaLifecycleMetricsSources {
+  readonly scratchRoots: ScratchRootOwner;
   readonly store: LocalMediaStore;
   readonly history: HistoryMetricSource;
   readonly requestResolver: RequestMaterializationMetricSource;
@@ -120,9 +122,10 @@ function measureRetainedContent(
 }
 
 async function measureRetainedHistory(
+  scratchRoots: ScratchRootOwner,
   history: AsyncGenerator<IContent, void, unknown>,
 ): Promise<RetainedHistoryMetrics> {
-  const referenceBytes = new MediaMetricByteIndex();
+  const referenceBytes = new MediaMetricByteIndex(scratchRoots);
   let retained: RetainedHistoryMetrics = {
     localRetainedBlobBytes: 0,
     residentEncodedBytes: 0,
@@ -142,9 +145,10 @@ type RetainedMetricResult =
   | { readonly ok: false; readonly error: unknown };
 
 function observeRetainedMetrics(
+  scratchRoots: ScratchRootOwner,
   history: AsyncGenerator<IContent, void, unknown>,
 ): Promise<RetainedMetricResult> {
-  return measureRetainedHistory(history).then(
+  return measureRetainedHistory(scratchRoots, history).then(
     (metrics): RetainedMetricResult => ({ ok: true, metrics }),
     (error: unknown): RetainedMetricResult => ({ ok: false, error }),
   );
@@ -199,7 +203,7 @@ export class MediaLifecycleMetrics {
 
   async snapshot(signal?: AbortSignal): Promise<MediaLifecycleMetricsSnapshot> {
     const history = this.sources.history.streamRawHistory(signal);
-    const retained = observeRetainedMetrics(history);
+    const retained = observeRetainedMetrics(this.sources.scratchRoots, history);
     try {
       const request = this.sources.requestResolver.accounting();
       const recordingQueueBytes = requireByteCount(

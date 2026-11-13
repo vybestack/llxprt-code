@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { rawHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
@@ -11,6 +12,8 @@ import { ContentConverters } from '../services/history/ContentConverters.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
 import { encodeForProvider } from './__tests__/support/compression-wire-fixture.js';
+const historyScratchRoots = createTestScratchOwner();
+
 type HistoryBackend = 'old' | 'journal';
 
 function human(text: string): IContent {
@@ -46,7 +49,7 @@ async function withHistory<T>(
     chatsDir: root,
     sessionId: 'compression-ids',
   });
-  const history = new HistoryService({});
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   try {
     await history.attachJournal(recording, true);
     const result = await action(history);

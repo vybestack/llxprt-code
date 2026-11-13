@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '../services/history/HistoryService.js';
@@ -6,6 +7,7 @@ import {
   nativeText,
   useNativeIntegration,
 } from './__tests__/support/native-integration-fixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function toolCall(name: string): IContent {
   return {
@@ -232,7 +234,9 @@ describe('native recording integration core contracts', () => {
 
   it('switches history subscriptions and ignores the old instance', async () => {
     const { history, integration, histories, texts } = fixture();
-    const replacement = new HistoryService({});
+    const replacement = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     histories.push(replacement);
     await integration.subscribeToJournal(history);
     await integration.subscribeToJournal(replacement);

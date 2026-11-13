@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -73,7 +74,10 @@ describe('journal history store repair and media owner', () => {
     rows: readonly IContent[],
     ownerOf: (index: number) => number = () => 0,
   ): Promise<{ store: JournalHistoryStore; session: JournalSession }> {
-    const session = await JournalSession.create(path.join(directory(), name));
+    const session = await JournalSession.create(
+      path.join(directory(), name),
+      testJournalOptions(),
+    );
     await session.store.commit([
       {
         kind: 'append',

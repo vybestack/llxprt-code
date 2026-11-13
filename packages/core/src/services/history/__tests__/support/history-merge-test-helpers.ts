@@ -1,13 +1,15 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import { HistoryService } from '../../HistoryService.js';
 import type { IContent, ChronologyMarker } from '../../IContent.js';
 import { rollbackRow } from '../../chronology-rollback-test-helpers.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export class MergeRowHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'merge materialization forbidden',

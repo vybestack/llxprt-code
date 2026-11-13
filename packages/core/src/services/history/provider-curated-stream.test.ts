@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { materializeHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
@@ -12,9 +13,11 @@ import { buildProviderContent } from './historyProviderPipeline.js';
 
 import { providerCurationRuleCases } from './__tests__/support/provider-curated-rule-cases.js';
 import { buildCuratedHistory } from './historyCuration.js';
+const historyScratchRoots = createTestScratchOwner();
+
 class CursorOnlyProviderHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(this, 'eager provider preparation');
   }
 
@@ -25,7 +28,9 @@ class CursorOnlyProviderHistory extends HistoryService {
 
 describe('journal materialization guard', () => {
   it('preserves the native materialization trap', async () => {
-    const history = new CursorOnlyProviderHistory({});
+    const history = new CursorOnlyProviderHistory({
+      scratchRoots: historyScratchRoots,
+    });
     try {
       await expect(materializeHistoryForTest(history)).rejects.toThrow(
         'eager provider preparation',
@@ -36,7 +41,9 @@ describe('journal materialization guard', () => {
   });
 
   it('CursorOnlyProviderHistory rejects journal eager materialization', async () => {
-    const history = new CursorOnlyProviderHistory();
+    const history = new CursorOnlyProviderHistory({
+      scratchRoots: historyScratchRoots,
+    });
 
     try {
       await expect(history.eagerRowsForTest()).rejects.toThrow(
@@ -110,7 +117,9 @@ describe('journal-backed provider normalization', () => {
   }
 
   it('preserves adjacent cache-anchor metadata and cyclic payload wire serialization', async () => {
-    const history = new CursorOnlyProviderHistory();
+    const history = new CursorOnlyProviderHistory({
+      scratchRoots: historyScratchRoots,
+    });
     const cycle: { self?: unknown } = {};
     cycle.self = cycle;
     const tail: IContent[] = [
@@ -163,7 +172,9 @@ describe('pending block identity during adjacency', () => {
       },
       { speaker: 'tool', blocks: [response], metadata: { cacheAnchor: true } },
     ];
-    const history = new CursorOnlyProviderHistory();
+    const history = new CursorOnlyProviderHistory({
+      scratchRoots: historyScratchRoots,
+    });
     try {
       expect(await digest(history.getCuratedForProviderStream(tail))).toBe(
         await digest(buildProviderContent([], tail, logger)),

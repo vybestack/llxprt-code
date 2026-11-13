@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 /**
  * @license
@@ -121,14 +122,16 @@ describe('ToolResultExpansionProvider — load on expand, purge on append (#3428
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), '3428-provider-'));
-    service = createSessionRecorder({
-      sessionId: 'test-session-3428-provider',
-      projectHash: 'testhash',
-      chatsDir: tempDir,
-      workspaceDirs: [tempDir],
-      provider: 'fake',
-      model: 'fake-model',
-    });
+    service = createSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'test-session-3428-provider',
+        projectHash: 'testhash',
+        chatsDir: tempDir,
+        workspaceDirs: [tempDir],
+        provider: 'fake',
+        model: 'fake-model',
+      }),
+    );
     turnStore = createTurnStore();
   });
 
@@ -345,14 +348,16 @@ FAILRETRY-end`;
     await service.flush();
     const firstPath = service.getFilePath();
     if (!firstPath) throw new Error('Missing original transcript');
-    const replacement = createSessionRecorder({
-      sessionId: 'replacement-session',
-      projectHash: 'testhash',
-      chatsDir: tempDir,
-      workspaceDirs: [tempDir],
-      provider: 'fake',
-      model: 'fake-model',
-    });
+    const replacement = createSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'replacement-session',
+        projectHash: 'testhash',
+        chatsDir: tempDir,
+        workspaceDirs: [tempDir],
+        provider: 'fake',
+        model: 'fake-model',
+      }),
+    );
     await recordRowsForTest(replacement, [
       toolResponseContent('replacement-call', nextBody),
     ]);

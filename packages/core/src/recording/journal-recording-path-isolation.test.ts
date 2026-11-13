@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it, spyOn, vi } from 'bun:test';
 import * as fs from 'node:fs/promises';
@@ -32,10 +33,10 @@ describe('native recorder pathname ownership', () => {
     const chats = await remainderDirectory('same-label');
     spyOn(Date.prototype, 'toISOString').mockReturnValue(START);
     const first = JournalRecordingService.create(
-      remainderConfig(chats, 'same-label'),
+      withTestNamedWriters(remainderConfig(chats, 'same-label')),
     );
     const second = JournalRecordingService.create(
-      remainderConfig(chats, 'same-label'),
+      withTestNamedWriters(remainderConfig(chats, 'same-label')),
     );
     try {
       await (await first.session()).append([userRow('first')]);
@@ -65,7 +66,7 @@ describe('native recorder pathname ownership', () => {
         new Set([a, b]),
       );
       const reopened = await JournalRecordingService.open(
-        remainderConfig(chats, 'same-label'),
+        withTestNamedWriters(remainderConfig(chats, 'same-label')),
         a,
       );
       try {
@@ -99,7 +100,7 @@ describe('native recorder pathname ownership', () => {
       const file = join(chats, journalSessionFileName('collision'));
       await fs.writeFile(file, bytes);
       const recording = JournalRecordingService.create(
-        remainderConfig(chats, 'collision'),
+        withTestNamedWriters(remainderConfig(chats, 'collision')),
       );
       try {
         await expect(recording.session()).rejects.toThrow('EEXIST');
@@ -110,7 +111,7 @@ describe('native recorder pathname ownership', () => {
         expect(await fs.readdir(chats)).toStrictEqual([basename(file)]);
         await fs.rename(file, `${file}.held`);
         const next = JournalRecordingService.create(
-          remainderConfig(chats, 'collision'),
+          withTestNamedWriters(remainderConfig(chats, 'collision')),
         );
         try {
           await (await next.session()).append([userRow('next recorder')]);
@@ -144,15 +145,17 @@ describe('native recorder pathname ownership', () => {
     spyOn(crypto, 'randomUUID').mockReturnValue(INSTANCE);
     const occupied = join(chats, journalSessionFileName(INSTANCE));
     await fs.writeFile(occupied, 'another owner');
-    const result = await forkJournalFromCheckpoint({
-      target,
-      chatsDir: chats,
-      projectHash: PROJECT,
-      currentProvider: 'anthropic',
-      currentModel: 'model-1',
-      workspaceDirs: ['/work/a'],
-      journal: journalSeams(),
-    });
+    const result = await forkJournalFromCheckpoint(
+      withTestNamedWriters({
+        target,
+        chatsDir: chats,
+        projectHash: PROJECT,
+        currentProvider: 'anthropic',
+        currentModel: 'model-1',
+        workspaceDirs: ['/work/a'],
+        journal: journalSeams(),
+      }),
+    );
     expect(result.ok).toBe(false);
     if (result.ok) {
       await result.recording.dispose();

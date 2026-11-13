@@ -11,6 +11,7 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import {
   acceptanceDirectory,
+  childRequestBodyCensus,
   childJournalExtension,
   launchAcceptanceChild,
   openChildResumeBoot,
@@ -98,7 +99,9 @@ describe('child facade transport equivalence', () => {
           expect(transport.digest()).toBe(
             createHash('sha256').update(reference).digest('hex'),
           );
-          expect(activeRequestBodyCount()).toBe(0);
+          expect(
+            activeRequestBodyCount(childRequestBodyCensus(fixture.child)),
+          ).toBe(0);
         }
         expect(await readFile(parent.path)).toStrictEqual(parent.before);
         const childPath = fixture.child.runtime.history.journalPath();
@@ -167,7 +170,9 @@ describe('child facade resume markers', () => {
       expect(await readFile(join(directory, 'request-3.json'), 'utf8')).toBe(
         referenceBody(rows),
       );
-      expect(activeRequestBodyCount()).toBe(0);
+      expect(
+        activeRequestBodyCount(childRequestBodyCensus(fixture.child)),
+      ).toBe(0);
     } finally {
       await fixture.close();
       await transport.close();
@@ -193,7 +198,9 @@ describe('child facade retry bytes', () => {
         expect(
           await readFile(join(directory, `request-${attempt}.json`), 'utf8'),
         ).toBe(referenceBody(rows));
-      expect(activeRequestBodyCount()).toBe(0);
+      expect(
+        activeRequestBodyCount(childRequestBodyCensus(fixture.child)),
+      ).toBe(0);
     } finally {
       await fixture.close();
       await transport.close();

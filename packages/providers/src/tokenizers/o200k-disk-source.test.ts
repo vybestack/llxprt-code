@@ -16,6 +16,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { countO200kBaseTokensFromDiskSource } from './o200k-disk-source.js';
+import { diskAssets } from './o200k-disk-assets.js';
 import { estimateGpt56Prompt } from './Gpt56O200kPromptEstimator.js';
 import { differentialTexts, adverseTexts } from './o200k-disk-test-data.js';
 
@@ -38,7 +39,7 @@ async function countText(
   writeFileSync(path, text, encoding);
   const result = await countO200kBaseTokensFromDiskSource(
     { path, encoding },
-    { workspaceDirectory: workspace },
+    { workspaceDirectory: workspace, assets: diskAssets(encoder) },
   );
   expect(readdirSync(workspace)).toStrictEqual([]);
   return result;

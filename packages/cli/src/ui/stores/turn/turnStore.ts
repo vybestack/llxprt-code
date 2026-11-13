@@ -215,9 +215,8 @@ function createTurnStatusCommands(store: Store<TurnState>): TurnStatusCommands {
   };
 }
 
-let nextDisplayId = 0;
-
 export function createTurnStore(initial?: Partial<TurnState>): TurnStore {
+  let nextDisplayId = 0;
   const store = createStore<TurnState>({ ...initialTurnState(), ...initial });
   let readHistory:
     | (() => Pick<HistoryService, 'appendDisplay' | 'length'> | null)

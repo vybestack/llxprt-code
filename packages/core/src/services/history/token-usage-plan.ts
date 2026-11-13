@@ -1,6 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { NeutralTextStream } from '../../utils/neutral-text-stream.js';
-import { estimateTokens } from '../../utils/toolOutputLimiter.js';
+import {
+  estimateTokens,
+  neutralEncodingCache,
+} from '../../utils/toolOutputLimiter.js';
 import type { JournalResponsePlan } from './journal-response-plan.js';
 import type { ContentBlock, IContent } from './IContent.js';
 import {
@@ -60,7 +63,7 @@ export async function measureTokenUsagePlan(
 ): Promise<RequestRowMeasurement> {
   if (countTokens !== estimateTokens || plan.openCountingBlocks === undefined)
     return measureRequestRow(await readTokenUsagePlan(plan), countTokens);
-  const counter = new NeutralTextStream();
+  const counter = new NeutralTextStream(neutralEncodingCache());
   const decoder = new TextDecoder('utf-8', { ignoreBOM: true });
   let length = 0;
   let tail = '';

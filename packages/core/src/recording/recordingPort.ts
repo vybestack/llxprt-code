@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { JournalWatermarks } from '../journal/journal-watermarks.js';
 import type { LockHandle } from './SessionLockManager.js';
 import type { RecordingCheckpointInfo, SessionForkedPayload } from './types.js';
 
@@ -26,6 +27,7 @@ export interface SessionRecordingPort {
   dispose(): Promise<void>;
   isActive(): boolean;
   getFilePath(): string | null;
+  getJournalWatermarks?(): Pick<JournalWatermarks, 'subscribe'> | undefined;
   getSessionId(): string;
   getChatsDir(): string;
   getProjectHash(): string;

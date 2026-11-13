@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /**
  * @license
@@ -28,6 +29,7 @@ import { MediaAdmissionService } from '../../storage/media-admission-service.js'
 import { historyOwnerIdFor } from '../../storage/media-admission-service.js';
 import type { DensityResult } from '../../core/compression/types.js';
 import { HistoryMediaOwnership } from '../../storage/history-media-ownership.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
@@ -135,9 +137,11 @@ describe('HistoryService local-media ownership lifecycle', () => {
   }
 
   async function serviceOf(store: LocalMediaStore): Promise<HistoryService> {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     services.push(service);
-    await service.registerMediaOwner(new HistoryMediaOwnership(store));
+    await service.registerMediaOwner(
+      new HistoryMediaOwnership(store, historyScratchRoots),
+    );
     return service;
   }
 
@@ -178,10 +182,12 @@ describe('HistoryService local-media ownership lifecycle', () => {
       source: 'user-input',
       reservationOwnerScope: 'history',
     };
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     services.push(service);
     service.addAll(initial);
-    await service.registerMediaOwner(new HistoryMediaOwnership(store));
+    await service.registerMediaOwner(
+      new HistoryMediaOwnership(store, historyScratchRoots),
+    );
     store.failNextReserve();
 
     await expect(service.settleMediaOwnership()).rejects.toThrow(

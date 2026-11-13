@@ -1,3 +1,4 @@
+import { registerScratchInspection } from './support/scratch-inspection.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -18,7 +19,6 @@
  */
 
 import { gcAndSweep } from 'bun:jsc';
-import { readdirSync } from 'node:fs';
 import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -32,7 +32,7 @@ import {
 } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../IProvider.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 import { withRequestSignal } from '../utils/abortSignal.js';
 import {
@@ -171,8 +171,10 @@ async function cleanup(): Promise<void> {
 }
 
 /** Scratch entries this request creates: staged rows and prompt segment files. */
+const scratchEntries = registerScratchInspection();
+
 function requestScratchEntries(): string[] {
-  return readdirSync(getScratchRoot())
+  return scratchEntries()
     .filter(
       (name) =>
         name.startsWith('provider-normalization-') ||

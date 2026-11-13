@@ -57,6 +57,7 @@ export async function openJournalReadOnly(
     const access: RecordAccess =
       trailer === undefined
         ? {
+            rowTreePath: new Map(),
             recordError: () => noCommittedState(),
             readRecordHead: (): Promise<FrameHead> => noCommittedState(),
             readRecordStart: (): Promise<FrameStart> => noCommittedState(),
@@ -70,6 +71,7 @@ export async function openJournalReadOnly(
       header,
       trailer,
       fileSize: size,
+      rowTreePath: access.rowTreePath,
       recordError: access.recordError,
       readRecordHead: access.readRecordHead,
       readRecordStart: access.readRecordStart,

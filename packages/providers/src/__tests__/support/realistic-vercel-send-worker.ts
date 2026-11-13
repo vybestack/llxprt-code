@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from './named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
@@ -28,6 +30,7 @@ import { OpenAIVercelProvider } from '../../openai-vercel/OpenAIVercelProvider.j
 import { convertToVercelMessages } from '../../openai-vercel/messageConversion.js';
 import { vercelWireMessages } from '../../openai-vercel/streamed-request.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 function content(row: RealisticSessionRow): IContent {
   if (row.kind === 'tool-call')
@@ -112,15 +115,20 @@ interface JournalFixture {
 }
 async function seedJournal(): Promise<JournalFixture> {
   const directory = await mkdtemp(join(tmpdir(), 'llxprt-vercel-realistic-'));
-  const recording = createSessionRecorder({
-    sessionId: 'realistic',
-    projectHash: 'realistic',
-    workspaceDirs: [directory],
-    chatsDir: directory,
-    provider: 'openaivercel',
-    model,
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'realistic',
+      projectHash: 'realistic',
+      workspaceDirs: [directory],
+      chatsDir: directory,
+      provider: 'openaivercel',
+      model,
+    }),
+  );
+  const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
+    recording,
   });
-  const history = new HistoryService({ recording });
   let batch: IContent[] = [];
   for (const row of realisticSessionRows()) {
     batch.push(content(row));

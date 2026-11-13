@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { appendFile, stat } from 'node:fs/promises';
@@ -11,7 +12,7 @@ describe('journal assertion reader', () => {
   const directory = useTempDir('journal-assertion-reader-');
   it('leaves an active writer tail intact while reading only committed rows', async () => {
     const path = join(directory(), 'active.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     const rows = [densityRow(0), densityRow(1)];
     try {
       await session.append(rows);

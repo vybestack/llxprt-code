@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,6 +18,7 @@ import type {
 } from '../services/history/IContent.js';
 import { LocalMediaStore } from './local-media-store.js';
 import { MediaAdmissionService } from './media-admission-service.js';
+const historyScratchRoots = createTestScratchOwner();
 
 let tempDirectory: () => string;
 
@@ -113,7 +115,7 @@ async function verifyMediaAdmissionCase1(): Promise<void> {
     quotaBytes: 1024,
   });
   const admission = new MediaAdmissionService(store);
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
 
   await admission.addToHistory(history, imageContent(), {
     turnId: 'turn-7',
@@ -407,7 +409,7 @@ async function verifyMediaAdmissionCase8(): Promise<void> {
     quotaBytes: 1,
   });
   const admission = new MediaAdmissionService(store);
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
 
   const work = admission.addToHistory(history, imageContent(), {
     turnId: 'turn-quota',
@@ -431,7 +433,7 @@ async function verifyMediaAdmissionCase9(): Promise<void> {
     quotaBytes: 1024,
   });
   const admission = new MediaAdmissionService(store);
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
 
   const work = admission.addToHistory(history, imageContent('not base64!'), {
     turnId: 'turn-invalid',

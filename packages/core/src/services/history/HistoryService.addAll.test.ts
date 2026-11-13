@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /**
  * @license
@@ -19,6 +20,7 @@ import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collec
 import { describe, it, expect } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function makeEntry(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -26,7 +28,7 @@ function makeEntry(text: string): IContent {
 
 describe('HistoryService.addAll', () => {
   it('terminates and doubles the history when fed its own backing array', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     service.addAll([makeEntry('one'), makeEntry('two')]);
 
     service.addAll(await collectRawHistory(service));
@@ -43,7 +45,7 @@ describe('HistoryService.addAll', () => {
   });
 
   it('appends every entry of an unrelated array in order', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     service.addAll([makeEntry('first')]);
     service.addAll([makeEntry('second'), makeEntry('third')]);
 
@@ -57,7 +59,7 @@ describe('HistoryService.addAll', () => {
   });
 
   it('is a no-op for an empty array', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     service.addAll([makeEntry('only')]);
 
     service.addAll([]);

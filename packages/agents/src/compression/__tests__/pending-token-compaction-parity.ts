@@ -39,14 +39,25 @@ function compactionTrigger(): {
 } {
   let enabled = false;
   let afterCommit = Infinity;
+  let armedPath: string | undefined;
   const compactionDue = (version: Version): boolean =>
     enabled && version.commitSeq > afterCommit;
   const create = JournalStore.create;
   const seam = spyOn(JournalStore, 'create').mockImplementation(
-    (path, dependencies) => create(path, { ...dependencies, compactionDue }),
+    (path, dependencies, namedWriters) =>
+      create(
+        path,
+        {
+          ...dependencies,
+          compactionDue: (version) =>
+            path === armedPath && compactionDue(version),
+        },
+        namedWriters,
+      ),
   );
   return {
     arm: (store) => {
+      armedPath = store.path;
       const published = store.published;
       if (published === undefined)
         throw new Error('Missing compaction baseline');

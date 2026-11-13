@@ -3,10 +3,13 @@ import { rowIndex } from '@vybestack/llxprt-code-test-utils/core/history-suffix-
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import { join } from 'node:path';
-import { getScratchRoot } from '../../storage/scratch-root.js';
+
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
-import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
+import {
+  historyScratchRoots,
+  withCoreSuffixFixture,
+} from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
 
 type Query = 'recent' | 'tokens';
@@ -14,11 +17,11 @@ type Exit = 'return' | 'break' | 'throw' | 'abort';
 
 function scratchDirectories(): string[] {
   return fs
-    .readdirSync(getScratchRoot())
+    .readdirSync(historyScratchRoots.getRoot())
     .filter((name) =>
       /llxprt-(row-directory|resolver|density-index)-/.test(name),
     )
-    .map((name) => join(getScratchRoot(), name));
+    .map((name) => join(historyScratchRoots.getRoot(), name));
 }
 
 function queryStream(

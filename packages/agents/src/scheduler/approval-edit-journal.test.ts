@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
@@ -21,6 +23,7 @@ import {
   makeStatusMutator,
   makeEditorCallbacks,
 } from './__tests__/confirmation-coordinator-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class EditableTool extends MockTool {
   getModifyContext(): ModifyContext<Record<string, unknown>> {
@@ -62,15 +65,17 @@ function waitingCall(): WaitingToolCall {
 }
 
 async function journal(directory: string) {
-  const history = new HistoryService();
-  const recording = createSessionRecorder({
-    sessionId: 'edit',
-    projectHash: 'edit',
-    chatsDir: directory,
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
-  });
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'edit',
+      projectHash: 'edit',
+      chatsDir: directory,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
   await history.attachJournal(recording, true);
   return {
     history,

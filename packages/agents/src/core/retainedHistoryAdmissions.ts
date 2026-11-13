@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -45,6 +46,7 @@ async function publishDeferredArray(
   const journal =
     stored ??
     new HistoryService({
+      scratchRoots: admissions.scratchRoots,
       mutationOwnership: options.ownership,
       attachmentCounters: options.counters,
     });
@@ -89,7 +91,10 @@ export class RetainedHistoryAdmissions {
   private retained: readonly RetainedHistoryAdmission[] = [];
   private sequence = 0;
 
-  constructor(private readonly mediaStore: LocalMediaStore) {}
+  constructor(
+    private readonly mediaStore: LocalMediaStore,
+    readonly scratchRoots: ScratchRootOwner,
+  ) {}
 
   get all(): readonly RetainedHistoryAdmission[] {
     return this.retained;
@@ -104,6 +109,7 @@ export class RetainedHistoryAdmissions {
       prepareDeferredArrayAdmission(
         history,
         this.mediaStore,
+        this.scratchRoots,
         `agent-client-history:${this.sequence}`,
         options,
       ),

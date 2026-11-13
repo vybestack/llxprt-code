@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { medianSettledDelta } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { describe, expect, it } from 'bun:test';
@@ -13,6 +14,7 @@ import {
   TRANSCRIPT_HEAD_KEY,
 } from '../../journal/transcript-head.js';
 import { transcriptEntries } from '../../journal/transcript-tree.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const MIB = 1024 * 1024;
 const ROW_BYTES = 70 * MIB;
@@ -107,6 +109,7 @@ describe('service send pin defers real compaction', () => {
         const reader = new RowOwnership();
         const counters = createRowCounters();
         const history = new HistoryService({
+          scratchRoots: historyScratchRoots,
           attachmentCounters: { ...counters.counters, ownership: reader },
         });
         histories.push(history);

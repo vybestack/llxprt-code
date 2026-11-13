@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readRecordedRows } from '../../__tests__/journal-recording.js';
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
@@ -17,6 +19,7 @@ import {
   ResumeTestSetup,
   createSessionRecorder,
 } from './performResume-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('checkpoint resume adoption', () => {
   const setup = new ResumeTestSetup();
@@ -24,7 +27,7 @@ describe('checkpoint resume adoption', () => {
   let context: ReturnType<typeof makeResumeContext>;
   beforeEach(async () => {
     await setup.beforeEach();
-    history = new HistoryService();
+    history = new HistoryService({ scratchRoots: historyScratchRoots });
     context = {
       ...makeResumeContext(setup.chatsDir),
       history: {
@@ -35,7 +38,9 @@ describe('checkpoint resume adoption', () => {
       },
     };
     const source = createSessionRecorder(
-      makeConfig(setup.chatsDir, { sessionId: 'checkpoint-source' }),
+      withTestNamedWriters(
+        makeConfig(setup.chatsDir, { sessionId: 'checkpoint-source' }),
+      ),
     );
     await recordRowsForTest(source, [makeContent('prefix')]);
     await source.createCheckpoint('checkpoint-cut');
@@ -52,10 +57,13 @@ describe('checkpoint resume adoption', () => {
   it('adopts the child journal without eager history and appends exactly once', async () => {
     forbidHistoryMaterializationForTest(history);
     const kit = createRowCounters();
-    const result = await performResume('checkpoint-cut', {
-      ...context,
-      counters: kit.counters,
-    });
+    const result = await performResume(
+      'checkpoint-cut',
+      withTestNamedWriters({
+        ...context,
+        counters: kit.counters,
+      }),
+    );
     if (!result.ok) throw new Error(result.error);
     expect(kit.snapshot().recordsDecoded).toBe(0);
     expect(kit.snapshot().peakDecodedRows).toBeLessThanOrEqual(256);
@@ -80,15 +88,18 @@ describe('checkpoint resume adoption', () => {
     history.add(makeContent('previous'));
     await history.waitForCommit();
     const before = await readdir(setup.chatsDir);
-    const result = await performResume('checkpoint-cut', {
-      ...context,
-      recordingCallbacks: {
-        ...context.recordingCallbacks,
-        setRecording: () => {
-          throw new Error('publication failed');
+    const result = await performResume(
+      'checkpoint-cut',
+      withTestNamedWriters({
+        ...context,
+        recordingCallbacks: {
+          ...context.recordingCallbacks,
+          setRecording: () => {
+            throw new Error('publication failed');
+          },
         },
-      },
-    });
+      }),
+    );
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Unexpected successful publication');
     expect(result.error).toContain('publication failed');

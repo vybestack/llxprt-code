@@ -24,7 +24,8 @@ import {
   ptyInactivityAbortAction,
 } from './shellPtyLifecycle.js';
 import type { ActivePty } from './shellPtyHelpers.js';
-import { loadNodePty, type PtyImplementation } from '../utils/getPty.js';
+import { forkptyBackend } from '../test-utils/shellPtyProbe.js';
+import type { PtyImplementation } from '../utils/getPty.js';
 import { getShellConfiguration } from '../utils/shell-utils.js';
 import {
   ensureNativeExitCodePropagated,
@@ -817,99 +818,6 @@ async function waitForMarker(
 }
 
 /** Race a promise against a deadline, resolving `timeoutValue` on expiry. */
-function withDeadline<T>(
-  promise: Promise<T>,
-  ms: number,
-  timeoutValue: T,
-): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((resolve) => {
-      const timer = setTimeout(() => resolve(timeoutValue), ms);
-      timer.unref();
-    }),
-  ]);
-}
-
-/**
- * Deadline-bounded probe for a usable forkpty backend. Under Bun POSIX
- * getPty() routes to bun-pty (no process groups, so the group-kill branch
- * under test is unreachable there), which is why the lydell backend is
- * loaded directly here. @lydell/node-pty can spawn children that exit
- * without delivering any output under the Bun test runner
- * (oven-sh/bun#25822), so a single-spawn check is not trustworthy: the
- * probe requires PROBE_ROUNDS consecutive spawns that each deliver output
- * within the deadline. The suite skips when any round fails.
- */
-const PROBE_ROUNDS = 3;
-
-async function probeUsableForkptyPty(): Promise<PtyImplementation> {
-  const ptyInfo = await withDeadline(loadNodePty(), 5000, null);
-  if (ptyInfo === null) {
-    return null;
-  }
-  for (let round = 0; round < PROBE_ROUNDS; round++) {
-    const ok = await withDeadline(
-      new Promise<boolean>((resolve, reject) => {
-        let dataDisposable: { dispose(): void } | undefined;
-        let exitDisposable: { dispose(): void } | undefined;
-        let settled = false;
-        const settle = (ok: boolean, error?: unknown): void => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          dataDisposable?.dispose();
-          exitDisposable?.dispose();
-          if (error !== undefined) {
-            reject(error instanceof Error ? error : new Error(String(error)));
-            return;
-          }
-          resolve(ok);
-        };
-        try {
-          const probe = ptyInfo.module.spawn(
-            'bash',
-            ['-c', 'echo PTY_PROBE_OK'],
-            {
-              cols: 80,
-              rows: 30,
-              env: { ...process.env, TERM: 'xterm-256color' },
-            },
-          );
-          dataDisposable = probe.onData((chunk: string) => {
-            if (chunk.includes('PTY_PROBE_OK')) {
-              settle(true);
-            }
-          });
-          exitDisposable = probe.onExit(() => settle(false));
-        } catch (error) {
-          settle(false, error);
-        }
-      }),
-      5000,
-      false,
-    );
-    if (!ok) {
-      return null;
-    }
-  }
-  return ptyInfo;
-}
-
-// A probe rejection (e.g. a synchronous forkpty spawn throw surfacing through
-// the withDeadline race) must skip only the real-PTY suite below: letting it
-// propagate would fail the whole file and lose the deterministic fake-pty
-// tests too. The probe itself is unchanged and stays as strict as before.
-let forkptyBackend: PtyImplementation | null = null;
-if (!isWindows) {
-  try {
-    forkptyBackend = await probeUsableForkptyPty();
-  } catch {
-    forkptyBackend = null;
-  }
-}
-
 describe.skipIf(isWindows || forkptyBackend === null)(
   'PTY abort group reap (POSIX, forkpty backend, issue #3517)',
   () => {

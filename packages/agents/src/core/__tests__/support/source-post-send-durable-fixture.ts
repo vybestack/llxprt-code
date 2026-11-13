@@ -25,7 +25,6 @@ import {
   shutdownTelemetry,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import { createTelemetrySession } from './source-telemetry-session-fixture.js';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { assembleStrictBase } from './source-strict-logger-fixture.js';
 import {
   preflightDisk,
@@ -274,7 +273,9 @@ export async function mixedPostSendProbe(
       sourceClosed: input.fixture.state.closed,
       eagerClosed: disk.state.closed,
       activeReaders: input.fixture.state.active + disk.state.active,
-      activeBodies: activeRequestBodyCount(),
+      activeBodies: activeRequestBodyCount(
+        input.setup.provider.requestBodyCensus,
+      ),
     };
     return receipt;
   } finally {
@@ -282,6 +283,5 @@ export async function mixedPostSendProbe(
     await input.http.server.stop(true);
     await input.cleanup();
     await input.setup.config.dispose();
-    resetConversationFileWriterForTesting();
   }
 }

@@ -1,25 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { EncodingCache } from './neutral-long-piece.js';
 import { NeutralPrefixCount } from './neutral-prefix-count.js';
 import {
   isNeutralWhitespace,
-  neutralCharacterKey,
   neutralPatternMachines,
 } from './neutral-pattern-machine.js';
 
-const characters = new Map<
-  string,
-  { readonly bytes: Buffer; readonly key: string }
->();
-function characterData(value: string): {
-  readonly bytes: Buffer;
-  readonly key: string;
-} {
-  const known = characters.get(value);
-  if (known !== undefined) return known;
-  const data = { bytes: Buffer.from(value), key: neutralCharacterKey(value) };
-  if (characters.size < 256) characters.set(value, data);
-  return data;
-}
+import { NeutralStreamCache } from './neutral-stream-cache.js';
 
 interface Accepted {
   count?: number;
@@ -45,6 +32,8 @@ class NeutralLexemeStream {
   private total = 0;
   private transitions: Map<string, ShortTransition> | undefined;
 
+  constructor(private readonly cache: NeutralStreamCache) {}
+
   appendText(text: string): void {
     const before = this.shortState();
     const key =
@@ -56,12 +45,15 @@ class NeutralLexemeStream {
       this.accepted = known.state.counts.map((count) =>
         count === undefined ? undefined : { count },
       );
-      this.piece = NeutralPrefixCount.fromPrefix(known.state.prefix);
+      this.piece = NeutralPrefixCount.fromPrefix(
+        known.state.prefix,
+        this.cache,
+      );
       return;
     }
     const total = this.total;
     for (const value of text) {
-      const data = characterData(value);
+      const data = this.cache.character(value);
       this.append(value, data.bytes, data.key);
     }
     const after = this.shortState();
@@ -109,7 +101,7 @@ class NeutralLexemeStream {
       ? (this.piece?.count ?? 0)
       : undefined;
     if (next.some((state) => state >= 0)) {
-      this.piece ??= new NeutralPrefixCount();
+      this.piece ??= new NeutralPrefixCount(this.cache);
       this.piece.append(bytes);
     }
     for (const [index, machine] of neutralPatternMachines.entries()) {
@@ -119,13 +111,13 @@ class NeutralLexemeStream {
         };
         this.accepted[index] = saved;
         if (machine.lookaheadWhitespace) {
-          saved.suffix = new NeutralLexemeStream();
+          saved.suffix = new NeutralLexemeStream(this.cache);
           saved.suffix.append(value, bytes, key);
         }
       } else {
         const saved = this.accepted[index];
         if (saved !== undefined) {
-          saved.suffix ??= new NeutralLexemeStream();
+          saved.suffix ??= new NeutralLexemeStream(this.cache);
           saved.suffix.append(value, bytes, key);
         }
       }
@@ -153,7 +145,7 @@ class NeutralLexemeStream {
     const chosen = this.accepted.find((value) => value !== undefined);
     if (chosen === undefined)
       throw new Error('Neutral pattern did not cover input');
-    const suffix = chosen.suffix ?? new NeutralLexemeStream();
+    const suffix = chosen.suffix ?? new NeutralLexemeStream(this.cache);
     this.total += this.acceptedCount(chosen) + suffix.total;
     this.states = suffix.states;
     this.accepted = suffix.accepted;
@@ -163,8 +155,13 @@ class NeutralLexemeStream {
 
 /** Ordered regex alternatives retain counts and finite suffix states, never text. */
 export class NeutralTextStream {
+  private readonly cache: NeutralStreamCache;
   private readonly decoder = new TextDecoder('utf-8', { ignoreBOM: true });
-  private readonly stream = new NeutralLexemeStream();
+  private readonly stream: NeutralLexemeStream;
+  constructor(encodings: EncodingCache) {
+    this.cache = new NeutralStreamCache(encodings);
+    this.stream = new NeutralLexemeStream(this.cache);
+  }
   private finished = false;
   append(part: Uint8Array): void {
     if (this.finished) throw new Error('Neutral text stream is finished');
@@ -193,8 +190,9 @@ export class NeutralTextStream {
 
 export async function countNeutralTextStream(
   parts: AsyncIterable<Uint8Array>,
+  encodings: EncodingCache,
 ): Promise<number> {
-  const counter = new NeutralTextStream();
+  const counter = new NeutralTextStream(encodings);
   for await (const part of parts) counter.append(part);
   return counter.finish();
 }

@@ -1,15 +1,17 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { mergeRow } from './__tests__/support/history-merge-test-helpers.js';
 import { exactTokenizer, rowsOf } from './chronology-rollback-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function withHistories(
   action: (source: HistoryService, target: HistoryService) => Promise<void>,
 ): Promise<void> {
-  const source = new HistoryService();
-  const target = new HistoryService();
+  const source = new HistoryService({ scratchRoots: historyScratchRoots });
+  const target = new HistoryService({ scratchRoots: historyScratchRoots });
   source.setTokenizerFactory(exactTokenizer());
   target.setTokenizerFactory(exactTokenizer());
   try {

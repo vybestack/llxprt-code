@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -47,6 +50,8 @@ import { RecordingIntegration } from './RecordingIntegration.js';
 import { readJournalSnapshot } from './__tests__/support/journalSnapshot.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import type { SessionRecordingServiceConfig } from './types.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 function textOf(content: IContent): string {
   return content.blocks
@@ -105,12 +110,19 @@ async function withFreshHarness(
   await fs.mkdir(chatsDir, { recursive: true });
 
   const recordingService = JournalRecordingService.create(
-    makeConfig(chatsDir, {
-      sessionId: `recording-int-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
-    }),
+    withTestNamedWriters(
+      makeConfig(chatsDir, {
+        sessionId: `recording-int-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      }),
+    ),
   );
-  const integration = new RecordingIntegration(recordingService);
-  const historyService = new HistoryService({});
+  const integration = new RecordingIntegration(
+    recordingService,
+    recordingScratchRoots,
+  );
+  const historyService = new HistoryService({
+    scratchRoots: recordingScratchRoots,
+  });
   const emitter = historyEmitter(historyService);
 
   try {
@@ -143,6 +155,8 @@ let historyService: HistoryService;
 let emitter: EventEmitter;
 
 describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   beforeEach(beforeEachRecordingReplay);
 
   afterEach(afterEachRecordingReplay);
@@ -549,7 +563,9 @@ async function r21(): Promise<void> {
       }),
       async (messages) => {
         await withFreshHarness(async (harness) => {
-          const secondHistory = new HistoryService({});
+          const secondHistory = new HistoryService({
+            scratchRoots: recordingScratchRoots,
+          });
           extraHistories.push(secondHistory);
 
           await harness.integration.subscribeToJournal(harness.historyService);
@@ -676,9 +692,14 @@ async function beforeEachRecordingReplay(): Promise<void> {
   chatsDir = path.join(tempDir, 'chats');
   await fs.mkdir(chatsDir, { recursive: true });
 
-  recordingService = JournalRecordingService.create(makeConfig(chatsDir));
-  integration = new RecordingIntegration(recordingService);
-  historyService = new HistoryService({});
+  recordingService = JournalRecordingService.create(
+    withTestNamedWriters(makeConfig(chatsDir)),
+  );
+  integration = new RecordingIntegration(
+    recordingService,
+    recordingScratchRoots,
+  );
+  historyService = new HistoryService({ scratchRoots: recordingScratchRoots });
   emitter = historyEmitter(historyService);
 }
 

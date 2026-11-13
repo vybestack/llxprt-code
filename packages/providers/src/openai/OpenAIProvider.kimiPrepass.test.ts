@@ -1,3 +1,4 @@
+import { registerScratchInspection } from '../__tests__/support/scratch-inspection.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -16,13 +17,12 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
-import { readdirSync } from 'node:fs';
 import type OpenAI from 'openai';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
@@ -41,6 +41,7 @@ import {
   originalFetch,
   send,
 } from './__tests__/support/kimi-cache-transport-fixtures.js';
+const scratchEntries = registerScratchInspection();
 
 const MEDIA_INPUT: RowsMediaInput = { requestId: 'kimi-prepass' };
 const WORKSPACE = '/workspace/kimi-prepass';
@@ -223,9 +224,7 @@ async function collectingPrepass(
 }
 
 function kimiScratchDirectories(): string[] {
-  return readdirSync(getScratchRoot()).filter((name) =>
-    name.startsWith('kimi-media-'),
-  );
+  return scratchEntries().filter((name) => name.startsWith('kimi-media-'));
 }
 
 describe('Kimi file pre-pass residency', () => {

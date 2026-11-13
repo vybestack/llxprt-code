@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { gcAndSweep } from 'bun:jsc';
@@ -35,7 +36,9 @@ describe('Mistral multi-ID decoded holder lifetime', () => {
     );
     const session = await JournalSession.create(
       `${directory()}/retention.llxj`,
-      { journal: testJournalSeams({}, 1, false).dependencies },
+      testJournalOptions({
+        journal: testJournalSeams({}, 1, false).dependencies,
+      }),
     );
     try {
       await session.append(rows);

@@ -8,7 +8,6 @@ import {
   textRow,
 } from './__tests__/support/fanout-harness.js';
 import type { HistoryService } from './HistoryService.js';
-import { historyOriginId } from './historyOriginId.js';
 
 const harness = new FanoutHarness();
 
@@ -153,7 +152,7 @@ describe('a failed /clear keeps the origin of every restored row', () => {
     const restored = (await ownedRows(a)).slice(-2);
     expect(restored).toStrictEqual([
       { text: 'shared' },
-      { text: 'private to A', origin: historyOriginId(ownerA) },
+      { text: 'private to A', origin: service.originIds.get(ownerA) },
     ]);
   });
 

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -23,6 +24,7 @@ import {
   WIRE_ROUTES,
   type WireRoute,
 } from './support/wireBodyCapture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function png(width: number): Buffer {
   const bytes = Buffer.alloc(24);
@@ -166,8 +168,10 @@ async function recoveryFixture(tool: boolean): Promise<{
     semanticMetadata: {},
   });
   const rows = recoveryRows(tool, big, small);
-  const history = new HistoryService({});
-  await history.registerMediaOwner(new HistoryMediaOwnership(store));
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
+  await history.registerMediaOwner(
+    new HistoryMediaOwnership(store, historyScratchRoots),
+  );
   await history.addBatch(rows);
   const selection = await history.prepareCuratedForProviderSnapshot();
   const resolver = new RequestMediaResolver(store);

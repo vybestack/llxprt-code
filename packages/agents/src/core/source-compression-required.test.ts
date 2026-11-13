@@ -126,7 +126,7 @@ async function requiredCompression(spec: RequiredCase): Promise<void> {
       expect(failure === undefined || after === before).toBe(true);
     }
     expect(setup.history.owners.every((owner) => owner.closed)).toBe(true);
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
     await setup.history.dispose();
     await http.server.stop(true);
     await setup.config.dispose();

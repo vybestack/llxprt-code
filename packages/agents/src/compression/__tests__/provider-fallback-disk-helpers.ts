@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { vi } from 'bun:test';
@@ -41,6 +42,7 @@ import {
   toolRankingRow,
   digestRows,
 } from './tool-truncation-stream-helpers.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 interface FallbackHandlerInternals {
   logger: DebugLogger;
@@ -100,6 +102,7 @@ export async function withFallbackFixture(
   const history = fault.attach(
     () =>
       new FallbackDiskHistory({
+        scratchRoots: historyScratchRoots,
         recording: recorder,
         attachmentCounters: { ...reads.counters, ownership: owners },
         mutationOwnership: owners,
@@ -110,7 +113,7 @@ export async function withFallbackFixture(
     rootDirectory: join(root, 'media'),
     quotaBytes: 1024,
   });
-  const owner = new FallbackPublicationOwner(media);
+  const owner = new FallbackPublicationOwner(media, historyScratchRoots);
   try {
     await history.detachedValues.replace(
       (function* () {

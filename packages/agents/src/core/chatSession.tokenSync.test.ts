@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
@@ -26,6 +27,7 @@ import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
 import { ChatSession } from './chatSession.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
   let chat: ChatSession;
@@ -106,6 +108,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       };
 
       const view = createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         ...createSessionPolicyFixture(
           runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
@@ -208,6 +211,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       };
 
       const view = createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         ...createSessionPolicyFixture(
           runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
@@ -310,6 +314,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       };
 
       const view = createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         ...createSessionPolicyFixture(
           runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
@@ -419,6 +424,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       };
 
       const view = createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         ...createSessionPolicyFixture(
           runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
@@ -488,6 +494,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       });
 
       const view = createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         ...createSessionPolicyFixture(
           runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
@@ -593,6 +600,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       expect(estimatedCountBeforeAI).toBeGreaterThan(0);
 
       const view = createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         ...createSessionPolicyFixture(
           runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,

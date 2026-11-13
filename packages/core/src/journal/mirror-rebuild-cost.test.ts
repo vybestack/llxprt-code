@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { open } from 'node:fs/promises';
@@ -49,10 +50,12 @@ describe('recording mirror rebuild cost', () => {
       const primary = await JournalStore.create(
         primaryPath,
         storeDeps({ seams: primarySeams }),
+        testNamedWriters,
       );
       const mirror = await JournalStore.create(
         mirrorPath,
         storeDeps({ seams: mirrorSeams }),
+        testNamedWriters,
       );
       const fanout = new MirrorFanout(primary);
       try {

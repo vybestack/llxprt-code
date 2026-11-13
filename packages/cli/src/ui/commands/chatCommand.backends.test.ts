@@ -1,3 +1,13 @@
+import {
+  afterAll as afterRecordingTests,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import { ScratchRootOwner } from '../../../../core/src/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   SessionDiscovery,
@@ -9,7 +19,6 @@ import {
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,6 +31,8 @@ import {
 import type { HistoryItemWithoutId } from '../types.js';
 import { rawChatCommand } from '../../__tests__/raw-chat-command.fixture.js';
 import type { CommandContext, SlashCommand } from './types.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 const PROJECT = 'chat-command-backends';
 
@@ -46,6 +57,8 @@ interface Live {
 }
 
 describe('/chat save then /chat resume with journal history', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   let root: string;
   let chatsDir: string;
   let live: Live;
@@ -65,15 +78,17 @@ describe('/chat save then /chat resume with journal history', () => {
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'chat-command-backends-'));
     chatsDir = join(root, 'chats');
-    const recording = await createLockedSessionRecorder({
-      sessionId: 'live',
-      projectHash: PROJECT,
-      chatsDir,
-      workspaceDirs: [root],
-      cwd: root,
-      provider: 'anthropic',
-      model: 'claude-4',
-    });
+    const recording = await createLockedSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'live',
+        projectHash: PROJECT,
+        chatsDir,
+        workspaceDirs: [root],
+        cwd: root,
+        provider: 'anthropic',
+        model: 'claude-4',
+      }),
+    );
     await recordRowsForTest(recording, [row('A'), row('B', 'ai'), row('C')]);
     await recording.flush();
     live = {
@@ -112,6 +127,7 @@ describe('/chat save then /chat resume with journal history', () => {
       },
     };
     return {
+      scratchRoots: recordingScratchRoots,
       chatsDir,
       projectHash: PROJECT,
       currentSessionId: 'live',
@@ -147,7 +163,10 @@ describe('/chat save then /chat resume with journal history', () => {
       sessionRef: 'milestone',
     });
 
-    const result = await performResume('milestone', resumeContext());
+    const result = await performResume(
+      'milestone',
+      withTestNamedWriters(resumeContext()),
+    );
     if (!result.ok) throw new Error(result.error);
     expect(await texts(result.history)).toStrictEqual(['A', 'B', 'C']);
     expect(result.metadata.sessionId).not.toBe('live');
@@ -190,7 +209,10 @@ describe('/chat save then /chat resume with journal history', () => {
     ).filter((target) => target.kind === 'checkpoint');
     expect(checkpoints).toHaveLength(1);
     expect(checkpoints[0].checkpointId).not.toBe(original.checkpointId);
-    const result = await performResume('milestone', resumeContext());
+    const result = await performResume(
+      'milestone',
+      withTestNamedWriters(resumeContext()),
+    );
     if (!result.ok) throw new Error(result.error);
     expect(await texts(result.history)).toStrictEqual([
       'A',
@@ -207,14 +229,16 @@ describe('/chat save then /chat resume with journal history', () => {
     });
     assertDefined(live.recording);
     await live.recording.dispose();
-    const recording = await createLockedSessionRecorder({
-      sessionId: 'next',
-      projectHash: PROJECT,
-      chatsDir,
-      workspaceDirs: [root],
-      provider: 'anthropic',
-      model: 'claude-4',
-    });
+    const recording = await createLockedSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'next',
+        projectHash: PROJECT,
+        chatsDir,
+        workspaceDirs: [root],
+        provider: 'anthropic',
+        model: 'claude-4',
+      }),
+    );
     live = {
       recording,
       integration: null,

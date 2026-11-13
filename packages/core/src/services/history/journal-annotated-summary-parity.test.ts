@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 import { openIndependentJournal } from './__tests__/support/independent-journal.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
@@ -13,6 +15,7 @@ import {
 } from './journalSpanWindow.js';
 
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function appendAnnotations(
   target: HistoryService,
@@ -106,19 +109,21 @@ describe('annotated append summary spans are independent of the density window',
   it.each([512, 8192])(
     'retains the summary, exact latest window and nonempty cache anchors at %i rows in both mirrors',
     async (size) => {
-      const history = new HistoryService({});
-      const old = new HistoryService({});
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
+      const old = new HistoryService({ scratchRoots: historyScratchRoots });
       history.setTokenizerFactory(exactTokenizer());
       old.setTokenizerFactory(exactTokenizer());
       const mirrors = [0, 1].map((index) =>
-        createSessionRecorder({
-          sessionId: `summary-${size}-${index}`,
-          projectHash: 'summary-parity',
-          chatsDir: directory(),
-          workspaceDirs: [directory()],
-          provider: 'test',
-          model: 'test',
-        }),
+        createSessionRecorder(
+          withTestNamedWriters({
+            sessionId: `summary-${size}-${index}`,
+            projectHash: 'summary-parity',
+            chatsDir: directory(),
+            workspaceDirs: [directory()],
+            provider: 'test',
+            model: 'test',
+          }),
+        ),
       );
       const initial = Array.from({ length: size }, (_, index) => row(index));
       const appended = Array.from({ length: size }, (_, index) => {

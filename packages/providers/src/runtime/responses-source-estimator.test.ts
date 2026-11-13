@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { describe, expect, it } from 'bun:test';
@@ -19,6 +20,7 @@ import {
   nativeRows,
 } from './__tests__/native-responses-fixture.js';
 import { projectOpenAIResponsesPromptEnvelope } from './promptEnvelopeProjections.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const context = {
   includeReasoningInContext: false,
@@ -122,7 +124,7 @@ async function parity(
     const owner = prompt.toEstimatorProjection();
     const actual = await owner.estimate(
       request(owner, activeProvider),
-      createRuntimeTokenizerFactory(),
+      createRuntimeTokenizerFactory(tokenizerScratchRoots),
     );
     expect(actual).toStrictEqual(expected);
     expect(
@@ -247,7 +249,10 @@ describe('Responses disk unsupported-media enforcement', () => {
         );
         const owner = prompt.toEstimatorProjection();
         expect(
-          await owner.estimate(request(owner), createRuntimeTokenizerFactory()),
+          await owner.estimate(
+            request(owner),
+            createRuntimeTokenizerFactory(tokenizerScratchRoots),
+          ),
         ).toStrictEqual(
           await estimateGpt56Prompt(
             request(

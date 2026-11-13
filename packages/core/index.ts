@@ -1,3 +1,4 @@
+export { NamedWriterOwnership } from './src/journal/named-writer-ownership.js';
 export {
   NativeHistoryPrefix,
   nativeHistoryPrefixOwner,
@@ -58,5 +59,6 @@ export {
 export { JournalSession } from './src/services/history/journalSession.js';
 export {
   subscribeJournalCommits,
+  JournalWatermarks,
   type JournalCommitWatermark,
 } from './src/journal/journal-watermarks.js';

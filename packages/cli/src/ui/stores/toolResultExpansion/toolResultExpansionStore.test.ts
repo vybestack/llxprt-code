@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 /**
  * @license
@@ -59,14 +60,16 @@ describe('toolResultExpansionStore — transcript-backed expansion (#3428)', () 
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), '3428-expansion-'));
-    service = createSessionRecorder({
-      sessionId: 'test-session-3428-expansion',
-      projectHash: 'testhash',
-      chatsDir: tempDir,
-      workspaceDirs: [tempDir],
-      provider: 'fake',
-      model: 'fake-model',
-    });
+    service = createSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'test-session-3428-expansion',
+        projectHash: 'testhash',
+        chatsDir: tempDir,
+        workspaceDirs: [tempDir],
+        provider: 'fake',
+        model: 'fake-model',
+      }),
+    );
   });
 
   afterEach(async () => {

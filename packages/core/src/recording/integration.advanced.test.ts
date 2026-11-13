@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 import { versionOf } from '../journal/version.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
@@ -15,6 +17,7 @@ import { JournalRecordingService } from './journalRecordingService.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { resumeSession } from './resumeSession.js';
 import { deleteSession } from './sessionManagement.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const PROJECT_HASH = 'integration-test-project';
 
@@ -58,7 +61,9 @@ async function record(
   rows: readonly IContent[],
   sessionId?: string,
 ): Promise<JournalRecordingService> {
-  const recording = JournalRecordingService.create(config(chatsDir, sessionId));
+  const recording = JournalRecordingService.create(
+    withTestNamedWriters(config(chatsDir, sessionId)),
+  );
   try {
     await recordRowsForTest(recording, rows);
     await recording.flush();
@@ -125,14 +130,16 @@ describe('integration: journal recording lifecycle properties', () => {
       fc.asyncProperty(fc.integer({ min: 1, max: 15 }), async (turnCount) => {
         const rows = generatedRows('turn', turnCount * 2);
         const recording = await record(directory(), rows);
-        const result = await resumeSession({
-          continueRef: recording.getSessionId(),
-          projectHash: PROJECT_HASH,
-          chatsDir: directory(),
-          currentProvider: 'anthropic',
-          currentModel: 'claude-4',
-          workspaceDirs: ['/test/workspace'],
-        });
+        const result = await resumeSession(
+          withTestNamedWriters({
+            continueRef: recording.getSessionId(),
+            projectHash: PROJECT_HASH,
+            chatsDir: directory(),
+            currentProvider: 'anthropic',
+            currentModel: 'claude-4',
+            workspaceDirs: ['/test/workspace'],
+          }),
+        );
         if (!result.ok) throw new Error(result.error);
         try {
           const restored = await Array.fromAsync(result.boot.streamRows());
@@ -162,7 +169,7 @@ describe('integration: journal recording lifecycle properties', () => {
           .commitSeq;
         for (let index = 0; index < resumeCount; index++) {
           const reopened = await JournalRecordingService.open(
-            config(directory(), recording.getSessionId()),
+            withTestNamedWriters(config(directory(), recording.getSessionId())),
             file,
           );
           try {
@@ -217,8 +224,13 @@ describe('integration: journal recording lifecycle properties', () => {
         fc.integer({ min: 1, max: 10 }),
         fc.integer({ min: 0, max: 10 }),
         async (preCount, postCount) => {
-          const recording = JournalRecordingService.create(config(directory()));
-          const history = new HistoryService({ recording });
+          const recording = JournalRecordingService.create(
+            withTestNamedWriters(config(directory())),
+          );
+          const history = new HistoryService({
+            scratchRoots: historyScratchRoots,
+            recording,
+          });
           const summary = content('compressed-summary', 'ai');
           const post = generatedRows('post', postCount);
           try {
@@ -249,7 +261,9 @@ describe('integration: journal recording lifecycle properties', () => {
   it('persists each provider switch and exposes the last provider and model', async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 1, max: 8 }), async (switchCount) => {
-        const recording = JournalRecordingService.create(config(directory()));
+        const recording = JournalRecordingService.create(
+          withTestNamedWriters(config(directory())),
+        );
         try {
           await recordRowsForTest(recording, [content('start')]);
           const before = (
@@ -286,7 +300,9 @@ describe('integration: journal recording lifecycle properties', () => {
   it('defers materialization for arbitrary operational-event counts until content arrives', async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 1, max: 15 }), async (eventCount) => {
-        const recording = JournalRecordingService.create(config(directory()));
+        const recording = JournalRecordingService.create(
+          withTestNamedWriters(config(directory())),
+        );
         try {
           for (let index = 0; index < eventCount; index++)
             recording.recordSessionEvent('info', `event-${index}`);
@@ -313,8 +329,13 @@ describe('integration: journal recording lifecycle properties', () => {
         fc.integer({ min: 1, max: 10 }),
         fc.integer({ min: 0, max: 10 }),
         async (totalItems, rewindCount) => {
-          const recording = JournalRecordingService.create(config(directory()));
-          const history = new HistoryService({ recording });
+          const recording = JournalRecordingService.create(
+            withTestNamedWriters(config(directory())),
+          );
+          const history = new HistoryService({
+            scratchRoots: historyScratchRoots,
+            recording,
+          });
           const rows = generatedRows('item', totalItems);
           try {
             await history.addBatch(rows);
@@ -351,7 +372,7 @@ describe('integration: journal recording lifecycle properties', () => {
           const recording = await record(directory(), initial);
           const file = fileOf(recording);
           const reopened = await JournalRecordingService.open(
-            config(directory(), recording.getSessionId()),
+            withTestNamedWriters(config(directory(), recording.getSessionId())),
             file,
           );
           try {

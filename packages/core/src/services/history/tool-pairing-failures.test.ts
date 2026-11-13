@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -6,6 +7,7 @@ import { join } from 'node:path';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(id: string): IContent {
   return {
@@ -28,6 +30,7 @@ describe('tool pairing payload ownership', () => {
     for (const size of [512, 8192]) {
       const ownership = new RowOwnership();
       const service = new HistoryService({
+        scratchRoots: historyScratchRoots,
         attachmentCounters: {
           recordDecoded: () => {},
           rowDecoded: () => {},
@@ -73,7 +76,7 @@ describe('tool pairing disk read failure', () => {
   it('cleans up and propagates corrupt FIFO reads after a paused yield', async () => {
     const root = mkdtempSync(join(tmpdir(), 'pairing-test-'));
     const ownership = new RowOwnership();
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await service.addBatch([row('a'), row('b')]);
       const cursor = service.findUnmatchedToolCalls({ root, ownership });
@@ -96,6 +99,7 @@ describe('tool pairing disk write failure', () => {
     const ownership = new RowOwnership();
     let reads = 0;
     const service = new HistoryService({
+      scratchRoots: historyScratchRoots,
       attachmentCounters: {
         recordDecoded: () => {},
         rowReleased: () => {},
@@ -124,7 +128,7 @@ describe('tool pairing disk write failure', () => {
 describe('tool pairing empty cursors', () => {
   it('opens no disk state on an unstarted return and yields nothing for fully responded history', async () => {
     const root = mkdtempSync(join(tmpdir(), 'pairing-test-'));
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       const cursor = service.findUnmatchedToolCalls({ root });
       await cursor.return();

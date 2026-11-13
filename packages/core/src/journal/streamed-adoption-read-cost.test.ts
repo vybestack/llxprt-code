@@ -1,3 +1,4 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -36,15 +37,15 @@ describe('streamed recording adoption read cost', () => {
     async (size) => {
       const source = await JournalSession.create(
         join(directory(), `source-${size}.llxj`),
-        {
+        testJournalOptions({
           journal: testJournalSeams().dependencies,
-        },
+        }),
       );
       const target = await JournalSession.create(
         join(directory(), `target-${size}.llxj`),
-        {
+        testJournalOptions({
           journal: testJournalSeams().dependencies,
-        },
+        }),
       );
       try {
         await source.store.commit([

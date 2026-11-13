@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -30,6 +31,7 @@ import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/
 import { TokenUsageLogger } from './TokenUsageLogger.js';
 import type { SerializedTokenUsageRecord } from './TokenUsageLogger.js';
 import { recordFinalizedPromptEnvelopeEstimate } from './tokenUsageEstimateLogger.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 async function createLogger(): Promise<{
   logger: TokenUsageLogger;
@@ -146,7 +148,7 @@ async function estimateResponsesPrompt(
   return estimatePromptEnvelope(
     provider.name,
     projection,
-    createRuntimeTokenizerFactory(),
+    createRuntimeTokenizerFactory(tokenizerScratchRoots),
   );
 }
 

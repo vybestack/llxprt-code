@@ -339,8 +339,7 @@ export class AnthropicRepairSource<
     )
       return piece;
     const blocks = piece.map((block) => {
-      const copy = { ...block };
-      copyRawChainResult(block, copy);
+      const copy = copyRawChainResult(block, block);
       clearAnchorBlockTag(copy);
       return copy;
     });

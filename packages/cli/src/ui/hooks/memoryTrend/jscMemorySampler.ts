@@ -109,9 +109,6 @@ function defaultBaseSampler(): NodeJS.MemoryUsage {
   return proc.memoryUsage();
 }
 
-/** Resolved on the first sample; importing CLI modules does not sample memory. */
-let jscHeapApi: JscHeapApi | undefined;
-
 /**
  * Samples process memory, replacing `heapUsed` with JavaScriptCore's aggregate
  * heap size and flooring the shim's `heapTotal` at that value.
@@ -123,7 +120,7 @@ let jscHeapApi: JscHeapApi | undefined;
 export function sampleMemoryUsage(
   baseSampler: () => NodeJS.MemoryUsage = defaultBaseSampler,
 ): NodeJS.MemoryUsage {
-  const jsc = (jscHeapApi ??= loadJscHeapApi());
+  const jsc = loadJscHeapApi();
   const base = baseSampler();
   const heapUsed = jsc.heapSize();
   return {

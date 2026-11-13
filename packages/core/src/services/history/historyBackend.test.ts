@@ -1,3 +1,7 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
+import { HistoryOriginIds } from './historyOriginId.js';
+import { JournalMaintenanceScope } from '../../journal/deferred-maintenance.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
@@ -12,6 +16,7 @@ import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import { createHistoryStore } from './historyBackend.js';
 import type { HistoryStorePort } from './historyStorePort.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const PORT_METHODS = [
   'onRetired',
@@ -73,7 +78,11 @@ const PORT_METHODS = [
 // Fails to compile when the port gains a method this list does not name.
 const everyPortMethodListed: Exclude<
   keyof HistoryStorePort,
-  (typeof PORT_METHODS)[number] | 'clearIsAsynchronous' | 'compressionRowCount'
+  | (typeof PORT_METHODS)[number]
+  | 'clearIsAsynchronous'
+  | 'compressionRowCount'
+  | 'originIds'
+  | 'maintenanceScope'
 > extends never
   ? true
   : false = true;
@@ -85,7 +94,7 @@ const recorderIsARecordingPort: JournalRecordingService extends SessionRecording
 
 describe('createHistoryStore', () => {
   it('creates journal history without selecting a backend', async () => {
-    const store = createHistoryStore({});
+    const store = createHistoryStore({ scratchRoots: historyScratchRoots });
     try {
       store.apply({
         kind: 'content',
@@ -120,15 +129,17 @@ describe('createHistoryStore', () => {
     }
 
     function journalRecorder(): JournalRecordingService {
-      const created = JournalRecordingService.create({
-        sessionId: 'backend-journal-recorder',
-        projectHash: PROJECT,
-        chatsDir: chatsDirIn(directory()),
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'test',
-        journal: journalSeams(),
-      });
+      const created = JournalRecordingService.create(
+        withTestNamedWriters({
+          sessionId: 'backend-journal-recorder',
+          projectHash: PROJECT,
+          chatsDir: chatsDirIn(directory()),
+          workspaceDirs: [],
+          provider: 'test',
+          model: 'test',
+          journal: journalSeams(),
+        }),
+      );
       recorders.push(created);
       return created;
     }
@@ -136,8 +147,10 @@ describe('createHistoryStore', () => {
     it('builds the journal store, which provides every port method and opens itself', async () => {
       expect(everyPortMethodListed).toBe(true);
       expect(recorderIsARecordingPort).toBe(true);
-      const store = journalStore({});
+      const store = journalStore({ scratchRoots: historyScratchRoots });
       expect(store).toBeInstanceOf(JournalHistoryStore);
+      expect(store.originIds).toBeInstanceOf(HistoryOriginIds);
+      expect(store.maintenanceScope).toBeInstanceOf(JournalMaintenanceScope);
       for (const method of PORT_METHODS)
         expect(typeof store[method]).toBe('function');
       expect(store.getLength()).toBe(0);
@@ -152,16 +165,41 @@ describe('createHistoryStore', () => {
       expect(store.statistics().userMessages).toBe(1);
     });
 
+    it('keeps owners separate by default and shares explicitly supplied owners', () => {
+      const first = journalStore({ scratchRoots: historyScratchRoots });
+      const independent = journalStore({ scratchRoots: historyScratchRoots });
+      const related = journalStore({
+        scratchRoots: historyScratchRoots,
+        originIds: first.originIds,
+        maintenanceScope: first.maintenanceScope,
+      });
+      expect(independent.originIds).not.toBe(first.originIds);
+      expect(independent.maintenanceScope).not.toBe(first.maintenanceScope);
+      expect(related.originIds).toBe(first.originIds);
+      expect(related.maintenanceScope).toBe(first.maintenanceScope);
+      const origin = Object.freeze({});
+      expect(related.originIds.get(origin)).toBe(first.originIds.get(origin));
+      expect(independent.originIds.get(origin)).not.toBe(
+        first.originIds.get(origin),
+      );
+    });
+
     it('binds the recorder of the options once the journal is open', async () => {
       const recorder = journalRecorder();
-      const store = journalStore({ recording: recorder });
+      const store = journalStore({
+        scratchRoots: historyScratchRoots,
+        recording: recorder,
+      });
       await store.waitForDurable();
       expect(store.isRecorder(recorder)).toBe(true);
     });
 
     it('reports the rows its readers decode to the counters of the options', async () => {
       const { counters, snapshot } = createRowCounters();
-      const store = journalStore({ attachmentCounters: counters });
+      const store = journalStore({
+        scratchRoots: historyScratchRoots,
+        attachmentCounters: counters,
+      });
       store.apply({
         kind: 'content',
         content: { speaker: 'human', blocks: [{ type: 'text', text: 'one' }] },

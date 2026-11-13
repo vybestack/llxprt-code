@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from '../../../../core/src/services/history/journalSession.js';
@@ -246,9 +247,12 @@ async function checkClone(
 describe('occupied native Mistral mapping lifecycle', () => {
   const directory = useTempDir('mistral-occupied-life-');
   it('preserves old pins through real LRU eviction, new endpoint reentry, pop, rewrite, clone, compaction and reopen', async () => {
-    const session = await JournalSession.create(`${directory()}/source.llxj`, {
-      journal: testJournalSeams({}, 1, false).dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/source.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({}, 1, false).dependencies,
+      }),
+    );
     try {
       await session.append(rows);
       await occupy(session);
@@ -298,7 +302,7 @@ describe('occupied native Mistral mapping lifecycle', () => {
       await current(session, rows.slice(1), selected);
       const path = session.path;
       await session.close();
-      const reopened = await JournalSession.open(path);
+      const reopened = await JournalSession.open(path, testJournalOptions());
       try {
         await current(reopened, rows.slice(1), selected);
       } finally {

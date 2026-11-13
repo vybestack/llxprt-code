@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -44,7 +45,9 @@ describe('cold native resume', () => {
       );
       const deps = { journal: testJournalSeams().dependencies };
       const path = join(directory(), `resume-${size}.llxj`);
-      const original = (await JournalSession.create(path, deps)).store;
+      const original = (
+        await JournalSession.create(path, testJournalOptions(deps))
+      ).store;
       try {
         await original.commit([
           { kind: 'replace', rows: rows.slice(0, size) },
@@ -55,15 +58,18 @@ describe('cold native resume', () => {
         await original.close();
       }
       const resumed = (
-        await JournalSession.open(path, {
-          ...deps,
-          nativeFacts: registration.nativeFacts,
-        })
+        await JournalSession.open(
+          path,
+          testJournalOptions({
+            ...deps,
+            nativeFacts: registration.nativeFacts,
+          }),
+        )
       ).store;
       const cold = (
         await JournalSession.create(
           join(directory(), `cold-${size}.llxj`),
-          deps,
+          testJournalOptions(deps),
         )
       ).store;
       try {

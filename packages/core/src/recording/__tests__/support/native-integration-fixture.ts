@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach } from 'bun:test';
 import { join } from 'node:path';
@@ -18,6 +21,8 @@ import type { IContent } from '../../../services/history/IContent.js';
 import { decodeStoredRow } from '../../../services/history/journalRowCodec.js';
 import { JournalRecordingService } from '../../journalRecordingService.js';
 import { RecordingIntegration } from '../../RecordingIntegration.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 export function nativeText(
   text: string,
@@ -61,22 +66,29 @@ export async function recordedRows(
 }
 
 export function useNativeIntegration(): () => NativeIntegrationFixture {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const directory = useTempDir('native-recording-integration-');
   let fixture: NativeIntegrationFixture;
   beforeEach(() => {
     const failures: Failures = { recordKinds: true };
     const seams = testJournalSeams(failures);
-    const recording = JournalRecordingService.create({
-      sessionId: 'native-integration',
-      projectHash: 'native-integration',
-      chatsDir: join(directory(), 'chats'),
-      workspaceDirs: ['/workspace/project-a'],
-      provider: 'anthropic',
-      model: 'model-1',
-      journal: { journal: seams.dependencies },
-    });
-    const history = new HistoryService({});
-    const integration = new RecordingIntegration(recording);
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'native-integration',
+        projectHash: 'native-integration',
+        chatsDir: join(directory(), 'chats'),
+        workspaceDirs: ['/workspace/project-a'],
+        provider: 'anthropic',
+        model: 'model-1',
+        journal: { journal: seams.dependencies },
+      }),
+    );
+    const history = new HistoryService({ scratchRoots: recordingScratchRoots });
+    const integration = new RecordingIntegration(
+      recording,
+      recordingScratchRoots,
+    );
     fixture = {
       history,
       recording,

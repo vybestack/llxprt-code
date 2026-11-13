@@ -1,3 +1,5 @@
+import { afterAll as afterRequestTests } from 'bun:test';
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { describe, expect, it, spyOn } from 'bun:test';
@@ -15,7 +17,8 @@ import {
   finishMediaRequest,
 } from '../utils/request-media-resolution.js';
 import { cancellableSerialization } from './responses-serialization-lifecycle.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
+const requestScratchRoots = new ScratchRootOwner();
 
 const context = {
   includeReasoningInContext: false,
@@ -31,8 +34,10 @@ function leafFailures(error: unknown): unknown[] {
 }
 
 describe('Responses serializer disk-write lifecycle', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('retains both a disk-write failure and failed directory cleanup', async () => {
-    const before = new Set(fs.readdirSync(getScratchRoot()));
+    const before = new Set(fs.readdirSync(requestScratchRoots.getRoot()));
     const writeFailure = new Error('disk write failed');
     const cleanupFailure = new Error('directory removal failed');
     const write = spyOn(fs, 'writeSync').mockImplementation(() => {
@@ -42,11 +47,14 @@ describe('Responses serializer disk-write lifecycle', () => {
       throw cleanupFailure;
     });
     try {
-      const pending = readOwnedSource({
-        async *[Symbol.asyncIterator]() {
-          yield { speaker: 'human', blocks: [] };
+      const pending = readOwnedSource(
+        {
+          async *[Symbol.asyncIterator]() {
+            yield { speaker: 'human', blocks: [] };
+          },
         },
-      });
+        requestScratchRoots,
+      );
       const outcome = await pending.then(
         () => 'resolved',
         (error: unknown) => error,
@@ -74,9 +82,9 @@ describe('Responses serializer disk-write lifecycle', () => {
       write.mockRestore();
       remove.mockRestore();
       for (const name of fs
-        .readdirSync(getScratchRoot())
+        .readdirSync(requestScratchRoots.getRoot())
         .filter((name) => !before.has(name)))
-        fs.rmSync(join(getScratchRoot(), name), {
+        fs.rmSync(join(requestScratchRoots.getRoot(), name), {
           recursive: true,
           force: true,
         });
@@ -85,6 +93,8 @@ describe('Responses serializer disk-write lifecycle', () => {
 });
 
 describe('Responses synchronous disk-write cancellation limit', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('cannot dispatch queued cancellation inside a blocked synchronous write, then cleans when it resumes', async () => {
     const root = fs.mkdtempSync(join(tmpdir(), 'responses-write-gate-'));
     const fifo = join(root, 'gate');
@@ -142,6 +152,8 @@ describe('Responses synchronous disk-write cancellation limit', () => {
 });
 
 describe('Responses native source and media cleanup errors', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('retains a source failure alongside media-owner disposal failure', async () => {
     const sourceFailure = new Error('incremental source failed');
     const cleanupFailure = new Error('media owner release failed');
@@ -194,6 +206,8 @@ describe('Responses native source and media cleanup errors', () => {
 });
 
 describe('Responses native multi-owner disposal', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('reports every failed request cleanup instead of only the first failure', async () => {
     const baseFailure = new Error('base owner release failed');
     const incrementalFailure = new Error('incremental owner release failed');

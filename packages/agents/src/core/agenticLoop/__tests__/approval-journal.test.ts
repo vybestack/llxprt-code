@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 import { bindTurnModel } from '../../../session/bind-turn-model.js';
 import { TurnToolExecutionOwner } from '../../../session/turn-tool-execution-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
@@ -25,6 +27,7 @@ import {
   createToolRegistryForTest,
   finishedEvent,
 } from './agenticLoop-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function activeApproval(
   calls: ReadonlyArray<
@@ -145,15 +148,20 @@ class FailingDecisionHistory extends HistoryService {
   }
 }
 
-async function fixture(directory: string, history = new HistoryService()) {
-  const recording = createSessionRecorder({
-    sessionId: 'approval',
-    projectHash: 'approval',
-    chatsDir: directory,
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
-  });
+async function fixture(
+  directory: string,
+  history = new HistoryService({ scratchRoots: historyScratchRoots }),
+) {
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'approval',
+      projectHash: 'approval',
+      chatsDir: directory,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
   await history.attachJournal(recording, true);
   const request = await requestFor(history);
   const path = history.journalPath();
@@ -281,7 +289,10 @@ describe('approval journal publication boundaries', () => {
   });
 
   it('does not invoke a tool decision callback when its journal write fails', async () => {
-    const session = await fixture(directory(), new FailingDecisionHistory());
+    const session = await fixture(
+      directory(),
+      new FailingDecisionHistory({ scratchRoots: historyScratchRoots }),
+    );
     let decisions = 0;
     let executions = 0;
     const tool = new MockTool({
@@ -324,7 +335,10 @@ describe('approval journal publication boundaries', () => {
   });
 
   it('fails the turn before publication when the approval request cannot be persisted', async () => {
-    const session = await fixture(directory(), new FailingApprovalHistory());
+    const session = await fixture(
+      directory(),
+      new FailingApprovalHistory({ scratchRoots: historyScratchRoots }),
+    );
     const tool = new MockTool({
       name: 'lookup',
       execute: async () => {

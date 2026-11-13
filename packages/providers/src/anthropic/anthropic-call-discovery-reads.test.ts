@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
@@ -16,9 +17,9 @@ describe('native Anthropic call discovery', () => {
     async (count) => {
       const session = await JournalSession.create(
         `${directory()}/${count}.llxj`,
-        {
+        testJournalOptions({
           journal: testJournalSeams().dependencies,
-        },
+        }),
       );
       try {
         await session.append(

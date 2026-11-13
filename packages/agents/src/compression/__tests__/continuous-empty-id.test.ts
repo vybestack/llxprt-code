@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { DensityReadWriteFacts } from '@vybestack/llxprt-code-core/journal/density-read-write-facts.js';
@@ -23,6 +24,7 @@ import {
 import { withNativeFallbackFixture } from './support/native-fallback-fixture.js';
 import { operationFileCreates } from './support/operation-file-creates.js';
 import { compressionValueDigest } from './compression-value-fixture.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 function call(id: string, path: string, name = 'read_file'): ToolCallBlock {
   return { type: 'tool_call', id, name, parameters: { path } };
@@ -125,6 +127,7 @@ describe('continuous density duplicate empty raw IDs', () => {
     const failure = new Error('empty-ID candidate estimate failure');
     const config = densityConfig(1);
     const request = {
+      scratchRoots: historyScratchRoots,
       nativePolicy: () => nativeRecencyPolicy(config),
       optimize: (): never => {
         throw new Error('Native selected old optimizer');

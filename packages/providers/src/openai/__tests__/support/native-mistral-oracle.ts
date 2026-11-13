@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
 import {
@@ -14,6 +15,7 @@ import {
   normalizeToolCallArguments,
   buildToolResponseContent,
 } from '../../OpenAIRequestBuilder.js';
+const testScratchRoots = createTestScratchOwner();
 
 const reasoning = { invocation: { ephemerals: {} } };
 
@@ -56,6 +58,7 @@ export async function assertNativeMistral(
   for await (const item of streamChatMessages(
     { rows },
     {
+      scratchRoots: testScratchRoots,
       reasoning,
       toolFormat: 'mistral',
       nativeMistral: {

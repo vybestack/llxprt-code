@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 import { versionOf } from '../journal/version.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
@@ -17,6 +19,7 @@ import {
   type ResumeResult,
 } from './resumeSession.js';
 import { deleteSession } from './sessionManagement.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const PROJECT_HASH = 'integration-test-project';
 
@@ -61,7 +64,9 @@ describe('integration: full journal session lifecycle', () => {
   }
 
   function recorder(): JournalRecordingService {
-    const recording = JournalRecordingService.create(config());
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters(config()),
+    );
     recordings.push(recording);
     return recording;
   }
@@ -77,7 +82,10 @@ describe('integration: full journal session lifecycle', () => {
   }
 
   function live(recording: JournalRecordingService): HistoryService {
-    const history = new HistoryService({ recording });
+    const history = new HistoryService({
+      scratchRoots: historyScratchRoots,
+      recording,
+    });
     histories.push(history);
     return history;
   }
@@ -85,14 +93,16 @@ describe('integration: full journal session lifecycle', () => {
   function resume(
     ref: string = CONTINUE_LATEST,
   ): ReturnType<typeof resumeSession> {
-    return resumeSession({
-      continueRef: ref,
-      projectHash: PROJECT_HASH,
-      chatsDir: directory(),
-      currentProvider: 'anthropic',
-      currentModel: 'claude-4',
-      workspaceDirs: ['/test/workspace'],
-    });
+    return resumeSession(
+      withTestNamedWriters({
+        continueRef: ref,
+        projectHash: PROJECT_HASH,
+        chatsDir: directory(),
+        currentProvider: 'anthropic',
+        currentModel: 'claude-4',
+        workspaceDirs: ['/test/workspace'],
+      }),
+    );
   }
 
   async function resumeOk(

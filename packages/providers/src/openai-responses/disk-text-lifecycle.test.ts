@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdirSync } from 'node:fs';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import {
   estimatePromptEnvelope,
   type PromptEnvelopeProjection,
@@ -32,7 +32,7 @@ async function releasedProjection(
   if (signal?.aborted === true)
     await expect(estimate).rejects.toBe(signal.reason);
   else await expect(estimate).rejects.toThrow('closed');
-  const remaining = readdirSync(getScratchRoot()).filter(
+  const remaining = readdirSync(setup.config.scratchRoots.getRoot()).filter(
     (name) => !before.has(name),
   );
   expect(remaining).toStrictEqual([]);
@@ -51,7 +51,7 @@ async function lifecycle(
   const controller = new AbortController();
   const options = setup.options(requestSelection(disk.rows), controller.signal);
   const projection = await setup.provider.projectPromptEnvelope(options);
-  const before = new Set(readdirSync(getScratchRoot()));
+  const before = new Set(readdirSync(setup.config.scratchRoots.getRoot()));
   const stream = setup.provider.generateChatCompletion({
     ...options,
     promptEnvelopeTransportToken: projection.transportToken,
@@ -86,7 +86,7 @@ async function lifecycle(
       controller.signal,
     );
     expect(disk.state.active).toBe(0);
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
     return released;
   } finally {
     http.readBody.release();
@@ -109,7 +109,7 @@ describe('actual native source send lifetime', () => {
     );
     const options = setup.options(requestSelection(disk.rows));
     const projection = await setup.provider.projectPromptEnvelope(options);
-    const before = new Set(readdirSync(getScratchRoot()));
+    const before = new Set(readdirSync(setup.config.scratchRoots.getRoot()));
     const stream = setup.provider.generateChatCompletion({
       ...options,
       promptEnvelopeTransportToken: projection.transportToken,
@@ -120,7 +120,7 @@ describe('actual native source send lifetime', () => {
       expect((await stream.next()).done).toBe(false);
       await stream.return?.();
       expect(await releasedProjection(projection, setup, before)).toBe(true);
-      expect(activeRequestBodyCount()).toBe(0);
+      expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
     } finally {
       await stream.return?.();
       await projection.releaseIfUnsent?.();

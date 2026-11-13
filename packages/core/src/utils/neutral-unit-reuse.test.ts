@@ -1,5 +1,8 @@
+import { EncodingCache } from './neutral-long-piece.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterAll, describe, expect, it } from 'bun:test';
+
+const encodings = new EncodingCache();
 import { get_encoding } from '@dqbd/tiktoken';
 import { encodingLongTextCounter } from './neutral-long-piece.js';
 
@@ -8,7 +11,7 @@ const oracle = get_encoding('o200k_base');
 describe('unit-scoped neutral count reuse', () => {
   afterAll(() => oracle.free());
   it('bounds encoded short-piece work per row at two history sizes', () => {
-    const count = encodingLongTextCounter('o200k_base');
+    const count = encodingLongTextCounter('o200k_base', encodings);
     const measured = [20, 40].map((rows) => {
       let characters = 0;
       let tokens = 0;
@@ -47,7 +50,7 @@ describe('unit-scoped neutral count reuse', () => {
       { role: 'user', content: 'cold payload 雪 '.repeat(1800) },
     ];
     const cache = new Map<string, number>();
-    const count = encodingLongTextCounter('o200k_base');
+    const count = encodingLongTextCounter('o200k_base', encodings);
     let encodedChars = 0;
     const encode = (text: string): number => {
       encodedChars += text.length;
@@ -62,7 +65,7 @@ describe('unit-scoped neutral count reuse', () => {
 
   it('shares long pieces but keeps surrounding punctuation and Unicode exact', () => {
     const cache = new Map<string, number>();
-    const count = encodingLongTextCounter('o200k_base');
+    const count = encodingLongTextCounter('o200k_base', encodings);
     const text = 'x'.repeat(65536);
     for (const value of [
       `{"text":"${text}"}`,

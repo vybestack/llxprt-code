@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { loadFlushRecords } from '@vybestack/llxprt-code-core/journal/flushRecords.js';
 import { testJournalSeams } from '@vybestack/llxprt-code-core/journal/__tests__/support/journalFixtures.js';
@@ -27,53 +28,55 @@ export async function callerRecording(directory: string, name: string) {
         before: Awaited<ReturnType<typeof diskToolState>>;
       }
     | undefined;
-  const recording = await JournalRecordingService.createLocked({
-    ...recordingConfig(directory, name),
-    journal: {
+  const recording = await JournalRecordingService.createLocked(
+    withTestNamedWriters({
+      ...recordingConfig(directory, name),
       journal: {
-        ...seams.dependencies,
-        open: async (path, flags) => {
-          const handle = await open(path, flags);
-          return {
-            ...handle,
-            writev: (buffers, position) => {
-              groupRecordsWritten = true;
-              return handle.writev(buffers, position);
-            },
-            write: async (buffer, offset, length, position) => {
-              if (
-                length === TRAILER_RECORD_BYTES &&
-                target !== undefined &&
-                held === undefined
-              ) {
-                const trailer = decodeTrailerHeader(
-                  buffer.subarray(offset + 20, offset + length - 4),
-                );
-                if (trailer.rootAggregate.rows === target) {
-                  held = {
-                    seq: trailer.commitSeq,
-                    rows: target,
-                    flushes,
-                    barriers,
-                    before: await diskToolState(path),
-                  };
-                  await gate.promise;
+        journal: {
+          ...seams.dependencies,
+          open: async (path, flags) => {
+            const handle = await open(path, flags);
+            return {
+              ...handle,
+              writev: (buffers, position) => {
+                groupRecordsWritten = true;
+                return handle.writev(buffers, position);
+              },
+              write: async (buffer, offset, length, position) => {
+                if (
+                  length === TRAILER_RECORD_BYTES &&
+                  target !== undefined &&
+                  held === undefined
+                ) {
+                  const trailer = decodeTrailerHeader(
+                    buffer.subarray(offset + 20, offset + length - 4),
+                  );
+                  if (trailer.rootAggregate.rows === target) {
+                    held = {
+                      seq: trailer.commitSeq,
+                      rows: target,
+                      flushes,
+                      barriers,
+                      before: await diskToolState(path),
+                    };
+                    await gate.promise;
+                  }
                 }
-              }
-              if (length !== TRAILER_RECORD_BYTES) groupRecordsWritten = true;
-              return handle.write(buffer, offset, length, position);
-            },
-          };
-        },
-        flush: (fd) => {
-          flush(fd);
-          if (!groupRecordsWritten) barriers++;
-          groupRecordsWritten = false;
-          flushes++;
+                if (length !== TRAILER_RECORD_BYTES) groupRecordsWritten = true;
+                return handle.write(buffer, offset, length, position);
+              },
+            };
+          },
+          flush: (fd) => {
+            flush(fd);
+            if (!groupRecordsWritten) barriers++;
+            groupRecordsWritten = false;
+            flushes++;
+          },
         },
       },
-    },
-  });
+    }),
+  );
   return {
     recording,
     flushes: () => flushes,

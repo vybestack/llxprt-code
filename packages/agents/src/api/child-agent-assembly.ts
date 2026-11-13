@@ -212,6 +212,8 @@ export class ChildAgentAssembly {
     }
     const config = new Config({
       sessionId: this.data.childSessionId,
+      namedWriters: this.acquisition.foregroundConfig.namedWriters,
+      scratchRoots: this.acquisition.foregroundConfig.scratchRoots,
       targetDir: this.acquisition.foregroundConfig.getTargetDir(),
       debugMode: false,
       cwd: this.acquisition.foregroundConfig.getWorkingDir(),
@@ -265,7 +267,10 @@ export class ChildAgentAssembly {
         requestInteractiveAuth: this.operations.requestInteractiveAuth,
       },
       (manager, oauth) => {
-        const tokenizer = configureProviderTokenizer(manager);
+        const tokenizer = configureProviderTokenizer(
+          manager,
+          config.scratchRoots,
+        );
         const content = createRuntimeContentGeneratorFactory();
         return {
           assemble: (fakeResponses) =>
@@ -465,7 +470,10 @@ export class ChildAgentAssembly {
     const journal = this.childJournal;
     if (journal === undefined)
       throw new Error('Child journal was not acquired');
-    const history = new HistoryService({ recording: journal.recording });
+    const history = new HistoryService({
+      scratchRoots: workspaceConfig.scratchRoots,
+      recording: journal.recording,
+    });
     this.acquired.push(() => disposeHistoryLike(history));
     await history.waitForCommit();
     const loaded = await this.factories.runtimeLoader({

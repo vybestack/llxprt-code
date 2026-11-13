@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { chatSessionPorts } from '../../chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -15,6 +16,7 @@ import type {
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import { ChatSession } from '../../chatSession.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export const toolId = 'hist_w21_original_001';
 export const toolResult = {
@@ -157,6 +159,7 @@ export function serviceToolChat(
     model: modelName,
   });
   const runtime = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     state,
     history,
     readRuntimeSettings: () => owner.readRuntimePolicy(),

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
  * @license
@@ -10,6 +11,7 @@ import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { buildProviderContent } from './historyProviderPipeline.js';
 import { DebugLogger } from '../../debug/index.js';
+const historyScratchRoots = createTestScratchOwner();
 
 /**
  * CHARACTERIZATION TESTS for per-turn prefix stability (issue #3070 Defect B).
@@ -82,7 +84,7 @@ async function providerContent(hs: HistoryService): Promise<IContent[]> {
 
 describe('B1: per-turn provider pipeline is prefix-stable under append (characterization)', () => {
   it('appending a new turn keeps the previous provider content as a strict prefix', async () => {
-    const hs = new HistoryService();
+    const hs = new HistoryService({ scratchRoots: historyScratchRoots });
     hs.add(textMsg('human', 'hello'));
     hs.add(textMsg('ai', 'world'));
 
@@ -101,7 +103,7 @@ describe('B1: per-turn provider pipeline is prefix-stable under append (characte
   });
 
   it('appending a tool turn keeps the previous provider content as a strict prefix', async () => {
-    const hs = new HistoryService();
+    const hs = new HistoryService({ scratchRoots: historyScratchRoots });
     hs.add(textMsg('human', 'run a tool'));
     hs.add(toolCallMsg('tc-1', 'read_file'));
     hs.add(toolResponseMsg('tc-1', 'read_file'));
@@ -124,7 +126,7 @@ describe('B1: per-turn provider pipeline is prefix-stable under append (characte
 
 describe('B2: interrupted tool call perturbs only the tail, not the head (characterization)', () => {
   it('an unmatched tool_call at the end does not alter the established head prefix', async () => {
-    const hs = new HistoryService();
+    const hs = new HistoryService({ scratchRoots: historyScratchRoots });
     hs.add(textMsg('human', 'question one'));
     hs.add(textMsg('ai', 'answer one'));
     hs.add(textMsg('human', 'question two'));
@@ -148,7 +150,7 @@ describe('B2: interrupted tool call perturbs only the tail, not the head (charac
 
 describe('B3: curation is an identity map on any valid prefix (characterization)', () => {
   it('curating a prefix of curated history returns exactly that prefix', async () => {
-    const hs = new HistoryService();
+    const hs = new HistoryService({ scratchRoots: historyScratchRoots });
     for (let i = 0; i < 10; i++) {
       hs.add(textMsg('human', `prompt ${i}`));
       hs.add(textMsg('ai', `response ${i}`));
@@ -164,7 +166,9 @@ describe('B3: curation is an identity map on any valid prefix (characterization)
     for (const prefixLen of [4, 8, 12]) {
       const prefix = curated.slice(0, prefixLen);
 
-      const reCurated = new HistoryService();
+      const reCurated = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
       for (const entry of prefix) {
         reCurated.add(entry);
       }
@@ -181,7 +185,7 @@ describe('B3: curation is an identity map on any valid prefix (characterization)
   });
 
   it('curated history is prefix-stable under append', async () => {
-    const hs = new HistoryService();
+    const hs = new HistoryService({ scratchRoots: historyScratchRoots });
     hs.add(textMsg('human', 'first'));
     hs.add(textMsg('ai', 'reply'));
 

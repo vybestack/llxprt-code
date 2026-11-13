@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { MapLookupCache } from './map-lookup-cache.js';
 
 /**
  * The reader and the writer keep a fixed-capacity cache of trie nodes (design
@@ -17,7 +18,7 @@ export const ID_NODE_CACHE_ENTRY_OVERHEAD = 48;
  * really keeps.
  */
 export interface IdNodeCache {
-  readonly lookupCacheIdentity?: object;
+  readonly mapLookupCache: MapLookupCache;
   selectRoot(root: number): void;
   get(offset: number): Uint8Array | undefined;
   put(offset: number, kindHeader: Uint8Array, shallow?: boolean): void;
@@ -29,6 +30,7 @@ export interface IdNodeCache {
 
 /** Evicts deeper nodes first so cold fact scans retain their shared shallow paths. */
 export class BoundedIdNodeCache implements IdNodeCache {
+  readonly mapLookupCache = new MapLookupCache();
   private readonly nodes = new Map<number, Uint8Array>();
   private readonly shallowNodes = new Map<number, Uint8Array>();
   private charged = 0;

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -5,6 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
 import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('arrival media publication ownership', () => {
   let directory: string;
@@ -13,7 +15,7 @@ describe('arrival media publication ownership', () => {
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'arrival-media-'));
     media = new LocalMediaStore({ rootDirectory: directory, quotaBytes: 4096 });
-    history = new HistoryService();
+    history = new HistoryService({ scratchRoots: historyScratchRoots });
     await history.registerRuntimeMediaOwner(media);
   });
   afterEach(async () => {

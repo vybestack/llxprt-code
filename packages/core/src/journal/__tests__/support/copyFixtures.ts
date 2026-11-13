@@ -1,4 +1,6 @@
+import { testNamedWriters } from './namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { JournalWatermarks } from '../../journal-watermarks.js';
 import {
   decodeTranscriptHead,
   encodeTranscriptHead,
@@ -44,6 +46,7 @@ export function copyDepsWithoutEventLog(): CopyDependencies {
   const random = new SeededRandom(1);
   return {
     journal: {
+      watermarks: new JournalWatermarks(),
       open: (path, flags) => fsp.open(path, flags),
       flush: () => undefined,
       nowMs: () => FAKE_NOW_MS,
@@ -54,7 +57,7 @@ export function copyDepsWithoutEventLog(): CopyDependencies {
 }
 
 export function openStore(file: string): Promise<JournalStore> {
-  return JournalStore.open(file, storeDeps());
+  return JournalStore.open(file, storeDeps(), testNamedWriters);
 }
 
 export function setState(key: string, value: string): VersionEdit {
@@ -123,7 +126,7 @@ const OWNERS = [1, 2, 1, 2, 3, 0] as const;
 
 /** Six rows owned by three agents and one unowned, with the session state map a real session has. */
 export async function populatedSource(file: string): Promise<JournalStore> {
-  const store = await JournalStore.create(file, storeDeps());
+  const store = await JournalStore.create(file, storeDeps(), testNamedWriters);
   await store.commit(SESSION_STATE.map(([key, value]) => setState(key, value)));
   await appendEach(
     store,

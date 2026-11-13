@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, expect, it } from 'bun:test';
@@ -12,6 +14,7 @@ import { SessionLockManager } from './SessionLockManager.js';
 import { createLockedSessionRecorder } from './sessionRecorderFactory.js';
 
 import { userRow } from './__tests__/support/recordedJournals.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('child history on the journal backend', () => {
   const directory = useTempDir('child-backend-');
@@ -29,13 +32,20 @@ describe('child history on the journal backend', () => {
   }
 
   it('lazily attaches the child mirror, persists only child rows and removes its artifacts', async () => {
-    const parent = await createLockedSessionRecorder({
-      ...options(),
-      sessionId: 'parent-session',
-      workspaceDirs: [...options().workspaceDirs],
+    const parent = await createLockedSessionRecorder(
+      withTestNamedWriters({
+        ...options(),
+        sessionId: 'parent-session',
+        workspaceDirs: [...options().workspaceDirs],
+      }),
+    );
+    const parentHistory = new HistoryService({
+      scratchRoots: historyScratchRoots,
+      recording: parent,
     });
-    const parentHistory = new HistoryService({ recording: parent });
-    const child = await createChildSessionJournal(options());
+    const child = await createChildSessionJournal(
+      withTestNamedWriters(options()),
+    );
     let history: HistoryService | undefined;
     try {
       parentHistory.add(userRow('parent work'));
@@ -43,7 +53,10 @@ describe('child history on the journal backend', () => {
       const parentFile = parent.getFilePath();
       if (parentFile === null) throw new Error('Missing parent file');
       const before = await readFile(parentFile);
-      history = new HistoryService({ recording: child.recording });
+      history = new HistoryService({
+        scratchRoots: historyScratchRoots,
+        recording: child.recording,
+      });
       history.add(userRow('child work'));
       await history.waitForCommit();
       const childFile = child.recording.getFilePath();
@@ -81,8 +94,10 @@ describe('child history on the journal backend', () => {
   });
 
   it('late attaches pre-existing child rows without a parent seed', async () => {
-    const child = await createChildSessionJournal(options());
-    const history = new HistoryService();
+    const child = await createChildSessionJournal(
+      withTestNamedWriters(options()),
+    );
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       history.add(userRow('seed'));
       history.add(userRow('pre-attach child row'));
@@ -108,15 +123,17 @@ describe('child history on the journal backend', () => {
   it('removes the partial file and lock when initialization fails', async () => {
     const seams = testJournalSeams({ failWriteAt: 0 });
     await expect(
-      createChildSessionJournal({
-        ...options(),
-        io: {
-          appendFile: async () => {
-            throw new Error('injected init failure');
+      createChildSessionJournal(
+        withTestNamedWriters({
+          ...options(),
+          io: {
+            appendFile: async () => {
+              throw new Error('injected init failure');
+            },
           },
-        },
-        journal: { journal: seams.dependencies },
-      }),
+          journal: { journal: seams.dependencies },
+        }),
+      ),
     ).rejects.toThrow(/injected|write/i);
     expect(await readdir(directory())).toStrictEqual([]);
     expect(
@@ -129,15 +146,17 @@ describe('journal child metadata at creation', () => {
   const directory = useTempDir('child-metadata-');
 
   it('writes its allocated identity and parent before runtime initialization', async () => {
-    const child = await createChildSessionJournal({
-      sessionId: 'allocated-child',
-      parentSessionId: 'parent-session',
-      projectHash: 'project',
-      chatsDir: directory(),
-      workspaceDirs: [],
-      provider: 'anthropic',
-      model: 'model',
-    });
+    const child = await createChildSessionJournal(
+      withTestNamedWriters({
+        sessionId: 'allocated-child',
+        parentSessionId: 'parent-session',
+        projectHash: 'project',
+        chatsDir: directory(),
+        workspaceDirs: [],
+        provider: 'anthropic',
+        model: 'model',
+      }),
+    );
     try {
       const file = child.recording.getFilePath();
       if (file === null) throw new Error('Missing child file');

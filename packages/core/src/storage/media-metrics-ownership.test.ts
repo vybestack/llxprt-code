@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { MediaLifecycleMetrics } from './media-lifecycle-metrics.js';
@@ -8,6 +9,7 @@ import {
 } from './media-metrics-test-helpers.js';
 import { HistoryMediaOwnership } from './history-media-ownership.js';
 import { RequestMediaResolver } from './request-media-resolver.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const REQUEST_BUDGET = 8 * 1024 * 1024;
 
@@ -24,8 +26,12 @@ describe('media metrics and real ownership', () => {
         mimeType: 'audio/wav',
         semanticMetadata: {},
       });
-      const history = new StreamMetricHistory();
-      await history.registerMediaOwner(new HistoryMediaOwnership(store));
+      const history = new StreamMetricHistory({
+        scratchRoots: historyScratchRoots,
+      });
+      await history.registerMediaOwner(
+        new HistoryMediaOwnership(store, historyScratchRoots),
+      );
       const resolver = new RequestMediaResolver(store);
       const metrics = new MediaLifecycleMetrics({
         ...metricSources(store, history),

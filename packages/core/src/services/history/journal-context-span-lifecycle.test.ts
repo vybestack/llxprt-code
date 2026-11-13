@@ -1,8 +1,10 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { JournalSession } from './journalSession.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function summary(index: number): IContent {
   return {
@@ -26,7 +28,7 @@ function summary(index: number): IContent {
 
 describe('committed summary span attachment lifecycle', () => {
   it('does not apply the density cap to 1100 live summary annotations', async () => {
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.detachedValues.append(
         (function* (): Generator<IContent> {

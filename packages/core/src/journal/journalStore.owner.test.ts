@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -30,7 +31,7 @@ function withoutOwner(draft: RowDraft): RowDraft {
 }
 
 async function ownedStore(file: string): Promise<JournalStore> {
-  const store = await JournalStore.create(file, storeDeps());
+  const store = await JournalStore.create(file, storeDeps(), testNamedWriters);
   await appendEach(
     store,
     scenarioDrafts().map((draft, index) => ({
@@ -127,6 +128,7 @@ describe('the owner of a row is required (design 5.1)', () => {
     const reopened = await JournalStore.open(
       file('required.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     expect(reopened.published?.rows).toBe(before.rows.length + 1);
     await reopened.close();
@@ -262,7 +264,11 @@ describe('an owner change (design 4.6 and 5.4)', () => {
     expect(change.after.lineage).toBe(BigInt(change.after.commitSeq));
     expect(change.after.parent).toBe(0);
     expect(change.after.lineageDepth).toBe(0);
-    const reopened = await JournalStore.open(file('lineage.llxj'), storeDeps());
+    const reopened = await JournalStore.open(
+      file('lineage.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     expect(reopened.published?.mutation).toBe(MUTATION.owner);
     expect(reopened.published?.lastOwner).toBe(4);
     expect(await snapshotStore(reopened, IDS)).toStrictEqual(change.after);

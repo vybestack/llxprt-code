@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -15,6 +17,7 @@ import type { HistoryDensityRequest } from './historyStorePort.js';
 import type { IContent } from './IContent.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
 import { JournalSession } from './journalSession.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(
   speaker: IContent['speaker'],
@@ -79,7 +82,7 @@ function textsOf(rows: readonly IContent[]): unknown[] {
 
 describe('HistoryStorePort.optimizeDensity', () => {
   it('removes and replaces the rows the optimizer decided on, keeping the markers', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.setTokenizerFactory(exactTokenizer());
     try {
       history.addAll(SEED.map((content) => structuredClone(content)));
@@ -110,6 +113,7 @@ describe('HistoryStorePort.optimizeDensity', () => {
     async function openStore(): Promise<JournalHistoryStore> {
       const session = await JournalSession.create(
         path.join(directory(), `density-${counter++}.llxj`),
+        testJournalOptions(),
       );
       const store = new JournalHistoryStore(session);
       open.push(store);
@@ -154,6 +158,7 @@ describe('HistoryStorePort.optimizeDensity', () => {
       batches: HistoryBatchRowSource[],
     ): HistoryDensityRequest {
       return {
+        scratchRoots: historyScratchRoots,
         optimize,
         host: hostFor(store, batches),
         mutate: () => Promise.reject(new Error('the old store arm')),

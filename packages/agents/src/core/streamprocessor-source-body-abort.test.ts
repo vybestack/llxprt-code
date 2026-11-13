@@ -47,7 +47,7 @@ describe('actual StreamProcessor abort during progressive BODY', () => {
       await expect(started).rejects.toThrow(/(?:cancel actual body|abort)/i);
       expect(setup.processor.getPromptEnvelopeEstimate()).toBeNull();
       expect(setup.history.owners.every((owner) => owner.closed)).toBe(true);
-      expect(activeRequestBodyCount()).toBe(0);
+      expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
     } finally {
       controller.abort();
       observer.resume.release();

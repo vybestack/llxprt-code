@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -82,7 +83,9 @@ describe('P05c child journal creation and disposal @plan:PLAN-20260917-ISSUE854.
 
   it('materializes a locked child journal under its own file', async () => {
     const chatsDir = await makeChatsDir();
-    const journal = await createChildSessionJournal(journalOptions(chatsDir));
+    const journal = await createChildSessionJournal(
+      withTestNamedWriters(journalOptions(chatsDir)),
+    );
     await recordRowsForTest(journal.recording, [
       {
         speaker: 'human',
@@ -102,7 +105,9 @@ describe('P05c child journal creation and disposal @plan:PLAN-20260917-ISSUE854.
 
   it('dispose removes the journal file and releases the lock', async () => {
     const chatsDir = await makeChatsDir();
-    const journal = await createChildSessionJournal(journalOptions(chatsDir));
+    const journal = await createChildSessionJournal(
+      withTestNamedWriters(journalOptions(chatsDir)),
+    );
     const sessionId = journal.sessionId;
     await journal.dispose();
     expect(await SessionLockManager.isLocked(chatsDir, sessionId)).toBe(false);
@@ -112,7 +117,9 @@ describe('P05c child journal creation and disposal @plan:PLAN-20260917-ISSUE854.
 
   it('dispose is idempotent', async () => {
     const chatsDir = await makeChatsDir();
-    const journal = await createChildSessionJournal(journalOptions(chatsDir));
+    const journal = await createChildSessionJournal(
+      withTestNamedWriters(journalOptions(chatsDir)),
+    );
     await journal.dispose();
     await expect(journal.dispose()).resolves.toBeUndefined();
   });
@@ -126,10 +133,12 @@ describe('P05c child journal failure cleanup and isolation @plan:PLAN-20260917-I
     const seams = testJournalSeams({ failWriteAt: 0 });
     let error: unknown = null;
     try {
-      await createChildSessionJournal({
-        ...journalOptions(chatsDir),
-        journal: { journal: seams.dependencies },
-      });
+      await createChildSessionJournal(
+        withTestNamedWriters({
+          ...journalOptions(chatsDir),
+          journal: { journal: seams.dependencies },
+        }),
+      );
     } catch (caught: unknown) {
       error = caught;
     }
@@ -142,10 +151,12 @@ describe('P05c child journal failure cleanup and isolation @plan:PLAN-20260917-I
     const chatsDir = await makeChatsDir();
     const failures: Failures = {};
     const seams = testJournalSeams(failures);
-    const journal = await createChildSessionJournal({
-      ...journalOptions(chatsDir),
-      journal: { journal: seams.dependencies },
-    });
+    const journal = await createChildSessionJournal(
+      withTestNamedWriters({
+        ...journalOptions(chatsDir),
+        journal: { journal: seams.dependencies },
+      }),
+    );
     failures.failFlushAt = seams.events.filter(
       (event) => event.type === 'flush',
     ).length;
@@ -160,14 +171,16 @@ describe('P05c child journal failure cleanup and isolation @plan:PLAN-20260917-I
 
   it('the parent journal stays one task group, isolated from children', async () => {
     const chatsDir = await makeChatsDir();
-    const parent = await JournalRecordingService.createLocked({
-      sessionId: randomUUID(),
-      projectHash: PROJECT_HASH,
-      chatsDir,
-      workspaceDirs: ['/w'],
-      provider: 'anthropic',
-      model: 'claude-4',
-    });
+    const parent = await JournalRecordingService.createLocked(
+      withTestNamedWriters({
+        sessionId: randomUUID(),
+        projectHash: PROJECT_HASH,
+        chatsDir,
+        workspaceDirs: ['/w'],
+        provider: 'anthropic',
+        model: 'claude-4',
+      }),
+    );
     await recordRowsForTest(parent, [
       {
         speaker: 'human',
@@ -175,7 +188,9 @@ describe('P05c child journal failure cleanup and isolation @plan:PLAN-20260917-I
       },
     ]);
     await parent.flush();
-    const journal = await createChildSessionJournal(journalOptions(chatsDir));
+    const journal = await createChildSessionJournal(
+      withTestNamedWriters(journalOptions(chatsDir)),
+    );
     await recordRowsForTest(journal.recording, [
       {
         speaker: 'human',

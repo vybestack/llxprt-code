@@ -25,7 +25,7 @@ export async function optimizeDensityOnJournal(
   }
 
   await request.host.waitForTokenUpdates();
-  const rows = new HistoryDensityRows(request.ownership);
+  const rows = new HistoryDensityRows(request.scratchRoots, request.ownership);
   try {
     for await (const row of store.streamRows()) rows.append(row);
     const result = request.optimize(rows);

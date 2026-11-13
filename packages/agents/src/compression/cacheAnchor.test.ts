@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -25,6 +26,7 @@ import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it } from 'bun:test';
 import { applyCompressionWithAnchor } from './__tests__/support/cacheAnchor.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function human(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -84,7 +86,9 @@ function apply(
 function registerToolRoundTrip(): void {
   describe('preserved-head tool round-trip', () => {
     it('anchors the preserved-head tool content after a complete tool round-trip', async () => {
-      const historyService = new HistoryService();
+      const historyService = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
       const toolCallId = 'compression-tool-call';
       const roundTrip: IContent[] = [
         human('Read the file'),
@@ -150,7 +154,9 @@ function registerToolRoundTrip(): void {
 
 describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
   it('marks exactly the last preserved-head entry and the marker survives replacement', async () => {
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     // Seed an initial history so getRawHistory() is non-empty for annotate.
     for (const c of [human('old1'), ai('old2'), human('old3'), ai('old4')]) {
       historyService.add(c, 'test-model');
@@ -200,7 +206,9 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
 
 describe('applyCompressionWithAnchor marker replacement (#3070)', () => {
   it('clears stale markers so exactly one entry carries the marker after a second compression', async () => {
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     for (const c of [human('seed1'), ai('seed2')]) {
       historyService.add(c, 'test-model');
     }
@@ -251,7 +259,9 @@ describe('applyCompressionWithAnchor marker replacement (#3070)', () => {
   });
 
   it('marks no entry when the prefix is destroyed (topPreserved <= 0)', async () => {
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     for (const c of [human('seed1'), ai('seed2'), human('seed3')]) {
       historyService.add(c, 'test-model');
     }
@@ -278,7 +288,9 @@ describe('applyCompressionWithAnchor marker replacement (#3070)', () => {
 
 describe('applyCompressionWithAnchor atomic anchor publication (#3070)', () => {
   it('advances the cache anchor seq to the last preserved-head entry', async () => {
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     // Seed real history so the preserved-head entries carry chronology
     // markers, exactly as production does (the head is reused verbatim from
     // the existing history, not freshly minted).
@@ -309,7 +321,9 @@ describe('applyCompressionWithAnchor atomic anchor publication (#3070)', () => {
   });
 
   it('publishes compression as one atomic history mutation', async () => {
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     historyService.add(human('original'), 'test-model');
     await historyService.waitForTokenUpdates();
     await collectRowsForAssertions(
@@ -337,7 +351,9 @@ describe('applyCompressionWithAnchor atomic anchor publication (#3070)', () => {
 
 describe('applyCompressionWithAnchor under an active compression lock (#3338)', () => {
   it('flushes rebuild content before the lock release and keeps ordinary streaming adds on both sides streaming after it', async () => {
-    const historyService = new HistoryService({});
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     for (const c of [
       human('original-1'),
       ai('original-2'),

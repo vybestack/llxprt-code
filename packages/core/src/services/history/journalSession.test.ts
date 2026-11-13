@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -26,9 +27,12 @@ describe('journal session', () => {
   });
 
   async function created(name: string): Promise<JournalSession> {
-    const session = await JournalSession.create(path.join(directory(), name), {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      path.join(directory(), name),
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     open.push(session);
     return session;
   }
@@ -36,17 +40,23 @@ describe('journal session', () => {
   it('reads back every shape of entry in order, from the same session and after a reopen', async () => {
     const file = path.join(directory(), 'shapes.llxj');
     const contents = ROW_SHAPES.map(([, content]) => content);
-    const session = await JournalSession.create(file, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      file,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     await session.append(contents);
 
     expect(await contentsOf(session)).toStrictEqual(contents);
     await session.close();
 
-    const reopened = await JournalSession.open(file, {
-      journal: testJournalSeams().dependencies,
-    });
+    const reopened = await JournalSession.open(
+      file,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     open.push(reopened);
     expect(await contentsOf(reopened)).toStrictEqual(contents);
     expect(reopened.store.published?.rows).toBe(contents.length);

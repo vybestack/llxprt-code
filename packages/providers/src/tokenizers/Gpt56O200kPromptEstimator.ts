@@ -18,6 +18,7 @@ import {
 import { ModelPromptEstimatorError } from './ModelPromptEstimatorError.js';
 import {
   countO200kBaseTokens,
+  o200kEncodingCache,
   getO200kBaseEncoder,
   loadTiktokenModule,
   O200K_BASE_ASSET_REVISION,
@@ -232,8 +233,8 @@ export function createGpt56RuntimeTokenizer(
   return {
     fallbackPolicy: 'deny',
     async countTokenStream(parts): Promise<number> {
-      await resolveEncoder();
-      return countNeutralTextStream(parts);
+      const encoder = await resolveEncoder();
+      return countNeutralTextStream(parts, o200kEncodingCache(encoder));
     },
     async countTokens(content: unknown): Promise<number> {
       const promptText = normalizeRuntimeTokenizerInput(

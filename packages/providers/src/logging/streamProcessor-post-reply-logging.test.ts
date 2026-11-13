@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
@@ -38,6 +39,7 @@ function harness(
   const config: ProviderRequestDiagnostics = {
     conversationLoggingEnabled: true,
     conversationLogPath: '',
+    conversationFileWriter: getConversationFileWriter(''),
     requestBodyLoggingEnabled: true,
     redaction: {
       redactApiKeys: false,

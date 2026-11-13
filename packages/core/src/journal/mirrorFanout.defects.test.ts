@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { INHERIT_OWNER, type LabeledDraft } from './groupEdits.js';
@@ -118,6 +119,7 @@ describe('defect 4: a row that changed hands goes to its current owner at attach
     const mirrorA = await JournalStore.create(
       path.join(directory(), 'a.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     await fanout.attach(mirrorA, AGENT_A);
     const held = await rowsOf(mirrorA);

@@ -132,7 +132,10 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
       foregroundManager,
       foregroundOauth,
       foregroundConfig.getSessionId(),
-      configureProviderTokenizer(foregroundManager),
+      configureProviderTokenizer(
+        foregroundManager,
+        foregroundConfig.scratchRoots,
+      ),
       undefined,
       process.env.LLXPRT_FAKE_RESPONSES,
     );
@@ -230,7 +233,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
       firstManager,
       firstOauth,
       firstConfig.getSessionId(),
-      configureProviderTokenizer(firstManager),
+      configureProviderTokenizer(firstManager, foregroundConfig.scratchRoots),
       undefined,
       process.env.LLXPRT_FAKE_RESPONSES,
     );
@@ -331,7 +334,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
       secondManager,
       secondOauth,
       secondConfig.getSessionId(),
-      configureProviderTokenizer(secondManager),
+      configureProviderTokenizer(secondManager, foregroundConfig.scratchRoots),
       undefined,
       process.env.LLXPRT_FAKE_RESPONSES,
     );

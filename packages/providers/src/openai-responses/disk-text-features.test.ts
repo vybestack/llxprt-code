@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readAtOf } from '../__tests__/requestRowsTestSupport.js';
 import { describe, expect, it, spyOn } from 'bun:test';
@@ -7,7 +8,6 @@ import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/h
 import type { GenerateChatOptions } from '../IProvider.js';
 import { requestSelection } from './__tests__/support/request-selection.js';
 import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const completed =
   'data: {"type":"response.output_text.delta","delta":"ok"}\n\n' +
@@ -201,9 +201,9 @@ const tools = [
   },
 ];
 
-function tmpPromptDirs(): Set<string> {
+function tmpPromptDirs(scratchRoots: ScratchRootOwner): Set<string> {
   return new Set(
-    readdirSync(getScratchRoot()).filter((name) =>
+    readdirSync(scratchRoots.getRoot()).filter((name) =>
       name.startsWith('responses-prompt-keys-'),
     ),
   );
@@ -229,7 +229,6 @@ describe('Responses source route covers non-text features', () => {
   for (const [name, list] of Object.entries(fixtures)) {
     for (const withTools of [false, true]) {
       it(`matches the array route bytes for ${name}${withTools ? ' with tools' : ''}, including a 503 replay`, async () => {
-        const before = tmpPromptDirs();
         // Synthesized reasoning ids carry the request time, and the array and
         // source sends are separate requests, so both read one fixed clock.
         const clock = spyOn(Date, 'now').mockReturnValue(1700000000000);
@@ -238,6 +237,7 @@ describe('Responses source route covers non-text features', () => {
           `http://127.0.0.1:${http.server.port}/v1`,
           process.cwd(),
         );
+        const before = tmpPromptDirs(setup.config.scratchRoots);
         try {
           const extra = withTools ? { tools } : {};
           const rows = rowsOf(list);
@@ -252,7 +252,9 @@ describe('Responses source route covers non-text features', () => {
           expect(arrayBodies[0]).toBe(arrayBodies[1]);
           expect(http.bodies).toStrictEqual(arrayBodies);
           expect(
-            [...tmpPromptDirs()].filter((entry) => !before.has(entry)),
+            [...tmpPromptDirs(setup.config.scratchRoots)].filter(
+              (entry) => !before.has(entry),
+            ),
           ).toHaveLength(0);
         } finally {
           clock.mockRestore();

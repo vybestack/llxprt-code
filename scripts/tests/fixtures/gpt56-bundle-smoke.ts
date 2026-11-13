@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,8 +6,9 @@
  */
 
 import { createRuntimeTokenizerFactory } from '../../../packages/providers/src/composition/runtimeTokenizerFactory.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
-const factory = createRuntimeTokenizerFactory();
+const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 if (typeof factory.prepareTokenizer !== 'function') {
   throw new Error(
     'production factory must expose prepareTokenizer for mandatory model readiness',

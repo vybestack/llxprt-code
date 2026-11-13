@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
@@ -12,6 +13,7 @@ import {
 } from './provider-fallback-disk-helpers.js';
 import { publishProviderFallbackCandidate } from '../providerFallbackCandidate.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const failures = [
   'reject',
@@ -34,7 +36,7 @@ describe('native persisted fallback value compensation', () => {
         const before = await compressionValueDigest(transformFixtureRows(size));
         history.setBaseTokenOffset(37);
         history.setCacheAnchorSeq(1);
-        const rows = new DetachedHistoryJournal(owners);
+        const rows = new DetachedHistoryJournal(historyScratchRoots, owners);
         try {
           rows.append(fallbackCandidate());
           const abort = new DOMException(
@@ -88,7 +90,7 @@ describe('native persisted fallback value compensation', () => {
 
   it('persists a complete candidate larger than nine MiB without a row-size fallback', async () => {
     await withNativeValueFixture(async ({ history, durable, owners }) => {
-      const rows = new DetachedHistoryJournal(owners);
+      const rows = new DetachedHistoryJournal(historyScratchRoots, owners);
       try {
         const candidate = suffixRow(0, 9 * 1024 * 1024 + 1);
         rows.append(candidate);

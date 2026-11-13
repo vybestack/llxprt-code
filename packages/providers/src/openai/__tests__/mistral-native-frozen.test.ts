@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from '../../../../core/src/services/history/journalSession.js';
@@ -15,9 +16,12 @@ import { assertNativeMistral } from './support/native-mistral-oracle.js';
 describe('native Mistral frozen actual converter differential', () => {
   const directory = useTempDir('mistral-native-frozen-');
   it('converts every unchanged Stage A input and a fresh filtered selection without exclusions', async () => {
-    const session = await JournalSession.create(`${directory()}/all.llxj`, {
-      journal: testJournalSeams({}, 1, false).dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/all.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({}, 1, false).dependencies,
+      }),
+    );
     let converted = 0;
     let selected = 0;
     try {

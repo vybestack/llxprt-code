@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
@@ -8,6 +10,7 @@ import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js
 import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 /** Journal bytes plus fold-scratch bytes read through readSync by `action`. */
 async function bytesRead(action: () => Promise<void>): Promise<number> {
@@ -33,15 +36,20 @@ async function withSession<T>(
   action: (history: HistoryService) => Promise<T>,
 ): Promise<T> {
   const root = mkdtempSync(join(tmpdir(), 'history-summary-reads-'));
-  const recording = createSessionRecorder({
-    sessionId: 'summary-reads',
-    projectHash: 'summary-reads',
-    chatsDir: root,
-    workspaceDirs: [root],
-    provider: 'test',
-    model: 'test',
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'summary-reads',
+      projectHash: 'summary-reads',
+      chatsDir: root,
+      workspaceDirs: [root],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
+  const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
+    recording,
   });
-  const history = new HistoryService({ recording });
   history.setTokenizerFactory(exactTokenizer());
   try {
     for (let start = 0; start < rows; start += 256) {

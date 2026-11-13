@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
@@ -48,6 +50,7 @@ import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core
 
 import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -261,14 +264,16 @@ async function createFixture(
   const { provider, providerStarted } = createFixtureProvider(behavior);
   const recording =
     options.purgeFailure === true
-      ? createSessionRecorder({
-          sessionId: `turn-media-${behavior}`,
-          projectHash: 'turn-media-project',
-          chatsDir: join(directory, 'chats'),
-          workspaceDirs: [],
-          provider: provider.name,
-          model: 'turn-media-model',
-        })
+      ? createSessionRecorder(
+          withTestNamedWriters({
+            sessionId: `turn-media-${behavior}`,
+            projectHash: 'turn-media-project',
+            chatsDir: join(directory, 'chats'),
+            workspaceDirs: [],
+            provider: provider.name,
+            model: 'turn-media-model',
+          }),
+        )
       : undefined;
   const setup = createChatSessionRuntime({ provider });
   if (recording !== undefined) {
@@ -281,10 +286,11 @@ async function createFixture(
     rootDirectory,
     quotaBytes: 1024 * 1024,
   });
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const invocationOwner = new SessionSettingsOwner(setup.settingsService);
   retainedInvocationOwners.push(invocationOwner);
   const runtime = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       invocationOwner.prepareProviderInvocation(
         createAgentRuntimeState({

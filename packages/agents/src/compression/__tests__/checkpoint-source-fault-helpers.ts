@@ -9,7 +9,6 @@ import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording
 import { nativeFileRows } from './support/native-file-rows.js';
 import { detachedDigest } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
 import { expectedRange } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 export function checkpointSourceFault(
   history: HistoryService,
@@ -64,8 +63,8 @@ export function checkpointSourceFault(
   };
 }
 
-export function checkpointScratch(): string[] {
-  return readdirSync(getScratchRoot()).filter((name) =>
+export function checkpointScratch(history: HistoryService): string[] {
+  return readdirSync(history.scratchRoots.getRoot()).filter((name) =>
     /^(history-detached-|history-density-)/.test(name),
   );
 }

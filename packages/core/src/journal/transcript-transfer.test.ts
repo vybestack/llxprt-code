@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -50,7 +51,11 @@ describe('transcript relocation', () => {
   const dir = useTempDir('transcript-copy-');
   it('copies the transcript/context union once, including replaced and cleared rows, without a checkpoint', async () => {
     const path = join(dir(), 'source.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     await store.commit([
       {
         kind: 'append',
@@ -109,7 +114,11 @@ describe('transcript relocation', () => {
     expect(compact.stats.copied.ROW).toBe(6);
     expect(await contents(clone.path)).toStrictEqual(expected);
     expect(await contents(compact.path)).toStrictEqual(expected);
-    const reopened = await JournalStore.open(compact.path, storeDeps());
+    const reopened = await JournalStore.open(
+      compact.path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const [label] = await labelsOf(reopened);
     await reopened.commit([
       {
@@ -127,7 +136,11 @@ describe('transcript relocation', () => {
 
   it('forks the saved transcript head and shares bodies between retained versions during compaction', async () => {
     const path = join(dir(), 'checkpoint.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     await store.commit([
       { kind: 'append', rows: [draftRow({ text: 'saved' })] },
     ]);

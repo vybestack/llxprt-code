@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { mkdirSync } from 'node:fs';
-import { dirname, resolve, sep } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { portableRelativePath as relative } from './compiler-source-path.js';
 import { parseArgs } from 'node:util';
 import ts from 'typescript';
@@ -42,6 +42,13 @@ import {
   type RuntimeServiceShapeOptions,
 } from './tests/runtime-service-shape-guard.js';
 import { scanState, workspacePath } from './runtime-state-scan.js';
+import {
+  auditExitCode,
+  compareStateBaselineFile,
+  normalizeFindings,
+  unique,
+  writeStateBaselineDrift,
+} from './runtime-state-baseline.js';
 import { type StateRootDiscovery } from './runtime-state-roots.js';
 import {
   scanAmbientDelegation,
@@ -64,6 +71,7 @@ export interface AuditPolicy {
   readonly mutableRoots?: readonly string[];
   readonly alsRoots?: readonly string[];
   readonly stateRootDiscovery?: StateRootDiscovery;
+  readonly stateBaselineFile?: string;
   readonly services: readonly RuntimeDeclarationRoot[];
   readonly configs: readonly RuntimeDeclarationRoot[];
   readonly runtimeObjects?: readonly RuntimeDeclarationRoot[];
@@ -71,8 +79,8 @@ export interface AuditPolicy {
   readonly ambientSources: readonly AmbientPolicySource[];
   readonly alsAllowances: readonly AsyncLocalStorageAllowance[];
   /**
-   * Module-level object/array literals allowed inside `mutableRoots`; every
-   * other such literal that is not a frozen primitive table is rejected.
+   * Known immutable table declarations checked for stale entries. Module-level
+   * values are findings only when the scan observes an actual mutation.
    */
   readonly immutableTables?: readonly ImmutableTableAllowance[];
 }
@@ -128,9 +136,10 @@ export const productionPolicy: AuditPolicy = {
     ...productionPlugins.map((pkg) => `${pkg}/src`),
   ],
   stateRootDiscovery: {
-    directoryNames: ['runtime', 'api', 'settings'],
-    files: [cliContext, 'packages/a2a-server/src/http/request-cancellation.ts'],
+    directoryNames: [],
+    allProductionSources: true,
   },
+  stateBaselineFile: 'scripts/runtime-state-widened-baseline.json',
   services: [
     {
       file: 'packages/settings/src/settings/SettingsService.ts',
@@ -219,10 +228,7 @@ export const productionPolicy: AuditPolicy = {
     {
       file: 'packages/agents/src/api/createAgent.ts',
       functionName: 'createAgent',
-    },
-    {
-      file: 'packages/agents/src/api/createAgent.ts',
-      functionName: 'assembleFacade',
+      issueNumber: 3979,
     },
   ],
   ambientSources: [
@@ -322,6 +328,7 @@ export interface AuditResult {
   readonly exitCode: number;
   readonly files: readonly string[];
   readonly findings: readonly AuditFinding[];
+  readonly stateBaseline?: ReturnType<typeof compareStateBaselineFile>;
   readonly compilerDiagnostics: readonly CompilerProblem[];
   readonly absentAmbientSources: readonly AmbientPolicySource[];
   readonly scanners: {
@@ -473,11 +480,6 @@ function groupFindings(
   );
 }
 
-function unique<T>(items: readonly T[]): T[] {
-  return [
-    ...new Map(items.map((item) => [JSON.stringify(item), item])).values(),
-  ];
-}
 const resourceLimitRule = 'runtime-service-analysis-resource-limit';
 function scannerStatus(
   blocked: boolean,
@@ -645,12 +647,10 @@ function assertCoverage(
   }
 }
 
-export function auditRuntimeStateBoundary(
-  workspaceDirectory: string,
-  policy: AuditPolicy = productionPolicy,
-  onProgress?: (event: AuditProgress) => void,
-): AuditResult {
-  const workspace = resolve(workspaceDirectory);
+function productionSelection(
+  workspace: string,
+  policy: AuditPolicy,
+): ReturnType<typeof selectBoundarySources> {
   const selection = selectBoundarySources(
     workspace,
     policy.sourceRoots,
@@ -658,8 +658,24 @@ export function auditRuntimeStateBoundary(
     policy.entryManifest,
   );
   if (selection.gaps.length) throw new Error(selection.gaps.join('\n'));
+  if (!selection.files.length)
+    throw new Error('No production sources discovered');
+  for (const entry of policy.assembly)
+    if (!selection.files.includes(workspacePath(workspace, entry.file)))
+      throw new Error(
+        `Unresolved assembly exemption file: ${entry.file}#${entry.functionName}`,
+      );
+  return selection;
+}
+
+export function auditRuntimeStateBoundary(
+  workspaceDirectory: string,
+  policy: AuditPolicy = productionPolicy,
+  onProgress?: (event: AuditProgress) => void,
+): AuditResult {
+  const workspace = resolve(workspaceDirectory);
+  const selection = productionSelection(workspace, policy);
   const files = selection.files;
-  if (!files.length) throw new Error('No production sources discovered');
   const absentAmbientSources = absentCurrentAmbientExports(workspace, policy);
   const candidates = new Map(
     [
@@ -693,29 +709,29 @@ export function auditRuntimeStateBoundary(
   const ambientFindings = scans.flatMap((scan) => scan.ambientFindings);
   assertCoverage(workspace, policy, files, programs, absentAmbientSources);
   const stateFindings = scanState(workspace, policy, files);
-  const findings: AuditFinding[] = unique([
+  const findings: AuditFinding[] = normalizeFindings(workspace, [
     ...stateFindings,
     ...shapeFindings,
     ...ambientFindings,
-  ])
-    .map((finding) => {
-      const file = relative(workspace, finding.file).split(sep).join('/');
-      return { ...finding, file, owner: file.split('/')[1] ?? 'workspace' };
-    })
-    .sort(
-      (a, b) =>
-        a.file.localeCompare(b.file) ||
-        a.line - b.line ||
-        a.column - b.column ||
-        a.rule.localeCompare(b.rule),
-    );
+  ]);
+  const stateBaseline = policy.stateBaselineFile
+    ? compareStateBaselineFile(
+        workspacePath(workspace, policy.stateBaselineFile),
+        findings,
+      )
+    : undefined;
   const countsByOwner = groupFindings(findings);
   return {
     discovery: selection.inventory,
     programs,
-    exitCode: findings.length || compilerDiagnostics.length ? 1 : 0,
+    exitCode: auditExitCode(
+      stateBaseline,
+      findings.length,
+      compilerDiagnostics.length,
+    ),
     files: files.map((file) => relative(workspace, file)),
     findings,
+    ...(stateBaseline ? { stateBaseline } : {}),
     compilerDiagnostics: unique(compilerDiagnostics),
     absentAmbientSources: unique(absentAmbientSources),
     countsByOwner,
@@ -768,6 +784,9 @@ if (import.meta.main) {
       (event) => {
         process.stderr.write(`${JSON.stringify(event)}\n`);
       },
+    );
+    writeStateBaselineDrift(result.stateBaseline, (message) =>
+      process.stderr.write(message),
     );
     const json = `${JSON.stringify(result, null, 2)}\n`;
     if (values.output) {

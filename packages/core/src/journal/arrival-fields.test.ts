@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { open } from 'node:fs/promises';
@@ -63,7 +64,11 @@ describe('arrival named fields', () => {
   const directory = useTempDir('arrival-fields-');
   it('records independent fields losslessly and accepts only snapshot suffixes', async () => {
     const path = join(directory(), 'fields.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     try {
       const row = await recorder.beginRow(
@@ -104,7 +109,11 @@ describe('arrival named fields', () => {
   });
   it('fails shrinking or changed snapshots without publishing the invalid suffix', async () => {
     const path = join(directory(), 'mismatch.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     try {
       const row = await recorder.beginRow(
@@ -128,7 +137,11 @@ describe('arrival named fields', () => {
   });
   it('validates raw argument fragments once complete and rejects incomplete calls', async () => {
     const path = join(directory(), 'arguments.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     try {
       const row = await recorder.beginRow(
@@ -150,7 +163,11 @@ describe('arrival named fields', () => {
   });
   it('streams a large live block through bounded directory pieces', async () => {
     const path = join(directory(), 'stream.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     try {
       const row = await recorder.beginRow(
@@ -179,7 +196,11 @@ describe('arrival named fields', () => {
   });
   it('streams binary media with base64 carry across arbitrary source boundaries', async () => {
     const path = join(directory(), 'media.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     const source = Buffer.from('one\u0000two🌙three');
     try {
@@ -211,7 +232,11 @@ describe('arrival named fields', () => {
 
   it('publishes completed call id facts and argument values to context', async () => {
     const path = join(directory(), 'tool-facts.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     try {
       const row = await recorder.beginRow(
@@ -248,7 +273,11 @@ describe('arrival named fields', () => {
 
   it('checks a selected piece before exposing its bytes', async () => {
     const path = join(directory(), 'corrupt-piece.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     try {
       const row = await recorder.beginRow(

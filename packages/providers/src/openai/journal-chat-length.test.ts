@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { writeChatMessages } from './OpenAIChatBodyBuilder.js';
@@ -23,6 +24,7 @@ import {
   normalizeToolCallArguments,
 } from './OpenAIRequestBuilder.js';
 import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools';
+const testScratchRoots = createTestScratchOwner();
 
 const SETTINGS: RowFormatSettings = {
   formatId: 'openai-chat:plain',
@@ -126,6 +128,7 @@ async function streamedBytes(
     await writeChatMessages(
       { rows: () => request.openReader() },
       {
+        scratchRoots: testScratchRoots,
         toolFormat: undefined,
         reasoning: {
           invocation: {

@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach } from 'bun:test';
 import { join } from 'node:path';
@@ -11,6 +14,8 @@ import { HistoryService } from '../../../services/history/HistoryService.js';
 import { JournalRecordingService } from '../../journalRecordingService.js';
 import { RecordingIntegration } from '../../RecordingIntegration.js';
 import { nativeText } from './native-integration-fixture.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 export interface NativeFailureControl {
   writeError?: unknown;
@@ -100,25 +105,33 @@ function failingDependencies(
 }
 
 export function useNativeFailureIntegration(): () => NativeFailureFixture {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const directory = useTempDir('native-failure-contract-');
   let fixture: NativeFailureFixture;
   beforeEach(async () => {
     const control: NativeFailureControl = { fragments: 0 };
-    const recording = JournalRecordingService.create({
-      sessionId: 'native-failure',
-      projectHash: 'native-failure',
-      chatsDir: join(directory(), 'chats'),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-      journal: {
-        journal: failingDependencies(control),
-        createCache: () => new BoundedIdNodeCache(0),
-      },
-    });
-    const history = new HistoryService({});
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'native-failure',
+        projectHash: 'native-failure',
+        chatsDir: join(directory(), 'chats'),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+        journal: {
+          journal: failingDependencies(control),
+          createCache: () => new BoundedIdNodeCache(0),
+        },
+      }),
+    );
+    const history = new HistoryService({ scratchRoots: recordingScratchRoots });
     const reports = join(directory(), 'reports');
-    const integration = new RecordingIntegration(recording, reports);
+    const integration = new RecordingIntegration(
+      recording,
+      recordingScratchRoots,
+      reports,
+    );
     fixture = {
       history,
       recording,

@@ -1,4 +1,7 @@
-import { installFixtureRawResume } from '../../__tests__/command-raw-resume-fixture.js';
+import {
+  installFixtureRawResume,
+  createRawResumePersistence,
+} from '../../__tests__/command-raw-resume-fixture.js';
 import {
   performResume,
   type RecordingSwapCallbacks,
@@ -46,7 +49,6 @@ import { mkdtemp, readFile, rm, realpath } from 'node:fs/promises';
 import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CliSessionPersistence } from '../../cliSessionPersistence.js';
 
 import { describe, expect, it, vi } from 'bun:test';
 import { openRouteAAgent } from '../../../../agents/src/api/__tests__/helpers/route-a-agent.js';
@@ -718,12 +720,10 @@ describe('slashCommandHandlers', () => {
         rootDirectory: join(root, 'media'),
         quotaBytes: 1024,
       });
-      const persistence = new CliSessionPersistence(
-        { projectRoot: config.storageRoot, chatsDir: config.projectChatsDir },
-        {
-          mediaStore: store,
-          maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
-        },
+      const persistence = createRawResumePersistence(
+        config,
+        store,
+        config.getSessionRecordingQueueByteLimit(),
       );
       try {
         const reference = await store.admit({
@@ -776,13 +776,7 @@ describe('slashCommandHandlers', () => {
             })(),
           };
         };
-        const persistence = new CliSessionPersistence(
-          {
-            projectRoot: config.getProjectRoot(),
-            chatsDir: config.projectChatsDir,
-          },
-          { mediaStore: store },
-        );
+        const persistence = createRawResumePersistence(config, store);
         installFixtureRawResume(
           deps,
           {

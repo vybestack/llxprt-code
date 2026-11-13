@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import {
   buildFakeClient,
   buildFakeConfig,
@@ -65,6 +66,7 @@ import { SessionControl } from '../control/sessionControl.js';
 import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+const historyScratchRoots = createTestScratchOwner();
 
 /** chats dir SessionControl derives: join(projectTempDir, 'chats'). */
 function chatsDirOf(projectRoot: string): string {
@@ -221,6 +223,7 @@ describe('SessionControl concurrency: resume and stop', () => {
       });
       const first = createSessionControl(
         {
+          scratchRoots: historyScratchRoots,
           ...firstConfig,
           getLocalMediaStore: () => {
             throw new Error('first Config getter used');
@@ -235,6 +238,7 @@ describe('SessionControl concurrency: resume and stop', () => {
       );
       const second = createSessionControl(
         {
+          scratchRoots: historyScratchRoots,
           ...secondConfig,
           getLocalMediaStore: () => {
             throw new Error('second Config getter used');

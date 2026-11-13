@@ -154,6 +154,7 @@ export class MirrorFanout {
    */
   attach(store: JournalStore, owner: number): Promise<void> {
     return this.serial(async () => {
+      await this.primary.maintenanceScope.join(store.maintenanceScope);
       const read = await this.primary.openRead();
       try {
         await this.bind(store, owner, read);

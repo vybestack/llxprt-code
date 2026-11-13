@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
@@ -28,9 +29,12 @@ describe('held native Anthropic repair inputs', () => {
   const directory = useTempDir('anthropic-repair-inputs-');
 
   it('joins normalized occurrences with the selected raw best source without using an emitter', async () => {
-    const session = await JournalSession.create(`${directory()}/facts.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/facts.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([
         call('hist_tool_X'),
@@ -116,9 +120,12 @@ describe('held native Anthropic repair inputs', () => {
   });
 
   it('keeps duplicate converted-ID prefixes separate from raw best selection and pins append changes', async () => {
-    const session = await JournalSession.create(`${directory()}/pins.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/pins.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([call('hist_tool_X'), call('toolu_X')]);
       const old = await session.store.snapshot();
@@ -176,9 +183,9 @@ describe('held native Anthropic repair inputs', () => {
   it('counts duplicate uses in one unit without advancing the successor per call', async () => {
     const session = await JournalSession.create(
       `${directory()}/duplicates.llxj`,
-      {
+      testJournalOptions({
         journal: testJournalSeams().dependencies,
-      },
+      }),
     );
     try {
       await session.append([
@@ -220,9 +227,12 @@ describe('held native Anthropic repair inputs', () => {
   });
 
   it('does not treat a non-AI call as an Anthropic use when deciding orphan status', async () => {
-    const session = await JournalSession.create(`${directory()}/orphan.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/orphan.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([
         {
@@ -262,10 +272,10 @@ describe('held native Anthropic repair inputs', () => {
       const counter = { reads: 0 };
       const session = await JournalSession.create(
         `${directory()}/reads-${count}.llxj`,
-        {
+        testJournalOptions({
           journal: testJournalSeams({ readCounter: counter }, 1, false)
             .dependencies,
-        },
+        }),
       );
       try {
         await session.append([

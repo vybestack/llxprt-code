@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,6 +9,7 @@ import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collec
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function compressSummary(text: string): {
   speaker: 'human';
@@ -51,7 +53,7 @@ describe('journal rebuild scope boundary matrix (#3338)', () => {
   let historyService: HistoryService;
 
   beforeEach(() => {
-    historyService = new HistoryService({});
+    historyService = new HistoryService({ scratchRoots: historyScratchRoots });
   });
 
   afterEach(async () => {

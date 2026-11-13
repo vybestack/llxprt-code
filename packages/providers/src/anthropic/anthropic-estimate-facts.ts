@@ -121,7 +121,6 @@ const PROTOCOL_HEADS = new Set(
     ),
   ),
 );
-const protocolHeadCounts = new Map<string, Promise<number>>();
 export function encodeEstimatePieceFact(piece: EstimatePieceFact): unknown {
   const encode = (fact: EstimateTextFact): unknown => [
     fact.tokens,
@@ -147,8 +146,6 @@ export function encodeEstimatePieceFact(piece: EstimatePieceFact): unknown {
   };
 }
 
-const protocolTailCounts = new Map<string, Promise<number[]>>();
-
 function estimateBody(value: unknown): {
   readonly text: string;
   readonly images: number[][];
@@ -165,118 +162,124 @@ function estimateBody(value: unknown): {
   return { text, images };
 }
 
-async function countText(part: string): Promise<number> {
-  if (part === '') return 0;
-  const cached = protocolHeadCounts.get(part);
-  if (cached !== undefined) return cached;
-  const encoder = await getO200kBaseEncoder();
-  const count = countO200kBaseTokensFromChunks(
-    (async function* () {
-      yield part;
-    })(),
-    encoder,
-  );
-  if (PROTOCOL_HEADS.has(part)) protocolHeadCounts.set(part, count);
-  return count;
-}
-
-export async function estimateTextFact(
-  value: unknown,
-): Promise<EstimateTextFact> {
-  return measureTextFact(estimateBody(value));
-}
-
-async function measureTextFact(
-  { text, images }: ReturnType<typeof estimateBody>,
-  shared?: { readonly prefix: string; readonly tokens: number },
-): Promise<EstimateTextFact> {
-  if (!text.startsWith('{"'))
-    throw new Error('Anthropic estimate fact must start with an object key');
-  const body = text.slice(2);
-  const tail = trailingO200kPiece(body);
-  if (!tail.endsWith('}'))
-    throw new Error('Anthropic estimate fact has no closing punctuation');
-  const head = body.slice(0, -tail.length);
-  const oversized = hasOversizedO200kPiece(body);
-  // The chunk counter batches around oversized pieces. Measure their complete
-  // framed body to preserve that counter's results at each JSON boundary.
-  let tails = oversized ? undefined : protocolTailCounts.get(tail);
-  if (tails === undefined) {
-    tails = Promise.all(
-      ESTIMATE_SUFFIXES.map((suffix) =>
-        countText((oversized ? body : tail) + suffix),
-      ),
+export class AnthropicEstimateFacts {
+  private readonly protocolHeadCounts = new Map<string, Promise<number>>();
+  private readonly protocolTailCounts = new Map<string, Promise<number[]>>();
+  private async countText(part: string): Promise<number> {
+    if (part === '') return 0;
+    const cached = this.protocolHeadCounts.get(part);
+    if (cached !== undefined) return cached;
+    const encoder = await getO200kBaseEncoder();
+    const count = countO200kBaseTokensFromChunks(
+      (async function* () {
+        yield part;
+      })(),
+      encoder,
     );
-    if (!oversized && PROTOCOL_TAILS.has(tail))
-      protocolTailCounts.set(tail, tails);
+    if (PROTOCOL_HEADS.has(part)) this.protocolHeadCounts.set(part, count);
+    return count;
   }
-  let tokens = 0;
-  if (!oversized) {
-    tokens =
-      shared !== undefined && head.startsWith(shared.prefix)
-        ? shared.tokens + (await countText(head.slice(shared.prefix.length)))
-        : await countText(head);
-  }
-  return {
-    tokens,
-    tails: await tails,
-    length: body.length,
-    features: extractClaudeContentFeatures(body),
-    special: body.includes('<|endoftext|>') || body.includes('<|endofprompt|>'),
-    oversized,
-    images,
-  };
-}
 
-async function estimateVariants(
-  block: AnthropicMessageBlock,
-): Promise<EstimateTextFact[]> {
-  const bodies = [
-    block,
-    sanitizeBlockForCacheControl(block, '5m'),
-    sanitizeBlockForCacheControl(block, '1h'),
-  ].map(estimateBody);
-  let prefix = bodies[0].text.slice(2);
-  for (const { text } of bodies.slice(1)) {
-    let at = 0;
-    while (at < prefix.length && prefix[at] === text[at + 2]) at++;
-    prefix = prefix.slice(0, at);
+  async estimateTextFact(value: unknown): Promise<EstimateTextFact> {
+    return this.measureTextFact(estimateBody(value));
   }
-  // Discard the possibly incomplete final pre-tokenizer piece. The remaining
-  // prefix ends on a shared piece boundary in all three serialized variants.
-  prefix = prefix.slice(0, -trailingO200kPiece(prefix).length);
-  const shared = hasOversizedO200kPiece(prefix)
-    ? undefined
-    : { prefix, tokens: await countText(prefix) };
-  return Promise.all(bodies.map((body) => measureTextFact(body, shared)));
-}
 
-export async function estimatePieceFact(
-  piece: RepairPiece,
-  role: 'user' | 'assistant',
-): Promise<EstimatePieceFact> {
-  const blocks =
-    typeof piece === 'string'
-      ? [
-          {
-            type: 'text',
-            text: piece,
-          } satisfies AnthropicMessageBlock,
-        ]
-      : piece;
-  return {
-    string: typeof piece === 'string',
-    blank: typeof piece === 'string' && piece.trim() === '',
-    raw:
+  private async measureTextFact(
+    { text, images }: ReturnType<typeof estimateBody>,
+    shared?: { readonly prefix: string; readonly tokens: number },
+  ): Promise<EstimateTextFact> {
+    if (!text.startsWith('{"'))
+      throw new Error('Anthropic estimate fact must start with an object key');
+    const body = text.slice(2);
+    const tail = trailingO200kPiece(body);
+    if (!tail.endsWith('}'))
+      throw new Error('Anthropic estimate fact has no closing punctuation');
+    const head = body.slice(0, -tail.length);
+    const oversized = hasOversizedO200kPiece(body);
+    // The chunk counter batches around oversized pieces. Measure their complete
+    // framed body to preserve that counter's results at each JSON boundary.
+    let tails = oversized ? undefined : this.protocolTailCounts.get(tail);
+    if (tails === undefined) {
+      tails = Promise.all(
+        ESTIMATE_SUFFIXES.map((suffix) =>
+          this.countText((oversized ? body : tail) + suffix),
+        ),
+      );
+      if (!oversized && PROTOCOL_TAILS.has(tail))
+        this.protocolTailCounts.set(tail, tails);
+    }
+    let tokens = 0;
+    if (!oversized) {
+      tokens =
+        shared !== undefined && head.startsWith(shared.prefix)
+          ? shared.tokens +
+            (await this.countText(head.slice(shared.prefix.length)))
+          : await this.countText(head);
+    }
+    return {
+      tokens,
+      tails: await tails,
+      length: body.length,
+      features: extractClaudeContentFeatures(body),
+      special:
+        body.includes('<|endoftext|>') || body.includes('<|endofprompt|>'),
+      oversized,
+      images,
+    };
+  }
+
+  private async estimateVariants(
+    block: AnthropicMessageBlock,
+  ): Promise<EstimateTextFact[]> {
+    const bodies = [
+      block,
+      sanitizeBlockForCacheControl(block, '5m'),
+      sanitizeBlockForCacheControl(block, '1h'),
+    ].map(estimateBody);
+    let prefix = bodies[0].text.slice(2);
+    for (const { text } of bodies.slice(1)) {
+      let at = 0;
+      while (at < prefix.length && prefix[at] === text[at + 2]) at++;
+      prefix = prefix.slice(0, at);
+    }
+    // Discard the possibly incomplete final pre-tokenizer piece. The remaining
+    // prefix ends on a shared piece boundary in all three serialized variants.
+    prefix = prefix.slice(0, -trailingO200kPiece(prefix).length);
+    const shared = hasOversizedO200kPiece(prefix)
+      ? undefined
+      : { prefix, tokens: await this.countText(prefix) };
+    return Promise.all(
+      bodies.map((body) => this.measureTextFact(body, shared)),
+    );
+  }
+
+  async estimatePieceFact(
+    piece: RepairPiece,
+    role: 'user' | 'assistant',
+  ): Promise<EstimatePieceFact> {
+    const blocks =
       typeof piece === 'string'
-        ? await estimateTextFact({ role, content: piece })
-        : undefined,
-    blocks: await Promise.all(
-      blocks.map(async (block) => ({
-        kind: block.type,
-        blank: block.type === 'text' && block.text.trim() === '',
-        variants: await estimateVariants(block),
-      })),
-    ),
-  };
+        ? [
+            {
+              type: 'text',
+              text: piece,
+            } satisfies AnthropicMessageBlock,
+          ]
+        : piece;
+    return {
+      string: typeof piece === 'string',
+      blank: typeof piece === 'string' && piece.trim() === '',
+      raw:
+        typeof piece === 'string'
+          ? await this.estimateTextFact({ role, content: piece })
+          : undefined,
+      blocks: await Promise.all(
+        blocks.map(async (block) => ({
+          kind: block.type,
+          blank: block.type === 'text' && block.text.trim() === '',
+          variants: await this.estimateVariants(block),
+        })),
+      ),
+    };
+  }
 }

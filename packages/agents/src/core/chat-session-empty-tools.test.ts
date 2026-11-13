@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -27,9 +28,9 @@ import {
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ConversationRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
+import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -44,6 +45,7 @@ import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-syste
 import { ChatSession } from './chatSession.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -141,6 +143,7 @@ function conversationDiagnostics(
     requestBodyLoggingEnabled: false,
     assertRequestArtifactExporter: () => undefined,
     acknowledgeTerminalTelemetry: async () => () => undefined,
+    conversationFileWriter: getConversationFileWriter(conversationLogPath),
     redaction: {
       redactApiKeys: false,
       redactCredentials: false,
@@ -188,7 +191,7 @@ async function send(
   });
   const manager = new TestRuntimeProviderManager(runtime);
   manager.setConfig(config);
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, config.scratchRoots);
   const provider = observeProvider(requests);
   manager.registerProvider(
     diagnostics === undefined
@@ -205,6 +208,7 @@ async function send(
     settingsService,
   );
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
@@ -225,7 +229,7 @@ async function send(
       model: config.getModel(),
       sessionId: config.getSessionId(),
     }),
-    history: new HistoryService(),
+    history: new HistoryService({ scratchRoots: historyScratchRoots }),
     settings: {
       compressionThreshold: 0.8,
       contextLimit: 128000,
@@ -313,7 +317,6 @@ describe.each<Path>(['direct', 'stream', 'turn'])(
       async (origin) => {
         const dir = await mkdtemp(join(tmpdir(), 'issue3694-empty-origin-'));
         const events: ConversationRequestEvent[] = [];
-        resetConversationFileWriterForTesting();
         try {
           const { before, after, selection } = await send(
             path,
@@ -361,7 +364,6 @@ describe.each<Path>(['direct', 'stream', 'turn'])(
             expectedTools !== undefined,
           );
         } finally {
-          resetConversationFileWriterForTesting();
           await rm(dir, { recursive: true, force: true });
         }
       },

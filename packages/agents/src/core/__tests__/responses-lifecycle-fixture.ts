@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -40,6 +41,7 @@ import { chatSessionPorts } from '../chatSessionPorts.js';
 import { installModelToolFixture } from './model-tool-fixture.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const requestFetch: NetworkFetch = (input, init) =>
   globalThis.fetch(input, init);
@@ -132,7 +134,7 @@ function createProvider(harness: SocketHarness): {
   });
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  const promptEstimator = createRuntimeTokenizerFactory();
+  const promptEstimator = createRuntimeTokenizerFactory(historyScratchRoots);
   const provider = new SocketBoundaryProvider(harness);
   manager.registerProvider(provider);
   manager.setActiveProvider(provider.name);
@@ -213,9 +215,10 @@ export function installResponsesLifecycleFixture(): (
       settingsOwner,
       provider,
     } = createProvider(harness);
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const toolRegistry = modelTools();
     const runtime = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       prepareProviderInvocation: lifecycleInvocationReader(
         providerRuntime,
         settingsService,

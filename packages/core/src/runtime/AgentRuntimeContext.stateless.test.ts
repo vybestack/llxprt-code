@@ -1,9 +1,11 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { describe, it, expect, vi } from 'bun:test';
 import { createAgentRuntimeState } from './AgentRuntimeState.js';
 import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
 import type { ToolRegistryView } from './AgentRuntimeContext.js';
 import { createProviderRuntimeContext } from './providerRuntimeContext.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const baseState = createAgentRuntimeState({
   runtimeId: 'stateless-runtime',
@@ -16,6 +18,7 @@ describe('AgentRuntimeContext stateless enforcement', () => {
   it('should require explicit provider adapter when no provider manager supplied', () => {
     expect(() =>
       createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         state: baseState,
         settings: {},
         telemetry: {
@@ -53,6 +56,7 @@ describe('AgentRuntimeContext stateless enforcement', () => {
     };
 
     const context = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       state: baseState,
       settings: {},
       provider,

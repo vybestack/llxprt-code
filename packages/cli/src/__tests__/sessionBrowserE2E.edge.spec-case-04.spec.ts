@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -49,7 +50,7 @@ describe('Edge cases #4', () => {
       currentSessionId: 'other-session',
     });
 
-    const result = await performResume('999', context);
+    const result = await performResume('999', withTestNamedWriters(context));
 
     expect(result.ok).toBe(false);
     assertFalse(result.ok);

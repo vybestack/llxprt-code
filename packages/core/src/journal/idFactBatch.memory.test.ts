@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -65,6 +66,7 @@ describe('id fact batch memory over an 80,000-row rebuild (design 4.6)', () => {
         seams: testJournalSeams({}, 1, false),
         compactionDue: () => false,
       }),
+      testNamedWriters,
     );
     open.push(store);
     await store.commit([{ kind: 'replace', rows }]);

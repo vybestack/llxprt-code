@@ -1,7 +1,9 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import * as fs from 'node:fs';
 import { DensityDiskIndex } from '../densityDiskIndex.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('density index resource cleanup', () => {
   it('closes all descriptors when allocating hash buckets fails', () => {
@@ -19,7 +21,7 @@ describe('density index resource cleanup', () => {
       throw primary;
     });
     try {
-      expect(() => new DensityDiskIndex()).toThrow(primary);
+      expect(() => new DensityDiskIndex(historyScratchRoots)).toThrow(primary);
       expect(descriptors).toHaveLength(2);
       for (const fd of descriptors)
         expect(() => fs.fstatSync(fd)).toThrow('bad file descriptor');
@@ -29,7 +31,7 @@ describe('density index resource cleanup', () => {
     }
   });
   it('propagates zero-progress writes and closes the failed index', () => {
-    const index = new DensityDiskIndex();
+    const index = new DensityDiskIndex(historyScratchRoots);
     const write = vi.spyOn(fs, 'writeSync').mockReturnValue(0);
     try {
       expect(() => index.set('path', [1])).toThrow('made no progress');

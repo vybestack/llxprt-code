@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { NetworkFetch } from '@vybestack/llxprt-code-auth/network-fetch.js';
 
 import type { OAuthDisplaySink } from '../auth/oauth-authorization.js';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -188,7 +189,10 @@ export function detectDeprecatedSSEEndpoint(
 
 export interface McpOAuthCapabilities {
   getAuthProviderFactory?: McpOAuthBinding['getAuthProviderFactory'];
-  discover: typeof OAuthUtils.discoverOAuthConfig;
+  discover: (
+    url: string,
+    signal?: AbortSignal,
+  ) => Promise<MCPOAuthConfig | null>;
   tokenStorage: MCPOAuthTokenStorage;
   authenticate: (
     server: string,
@@ -356,12 +360,18 @@ async function doHandleAutomaticOAuth(
  * Creates SSE transport and connects client with proper timeout.
  */
 export async function connectWithSSETransport(
+  requestFetch: NetworkFetch,
   client: Client,
   config: MCPServerConfig,
   accessToken?: string | null,
   signal?: AbortSignal,
 ): Promise<void> {
-  const transport = createSSETransportWithAuth(config, accessToken, signal);
+  const transport = createSSETransportWithAuth(
+    requestFetch,
+    config,
+    accessToken,
+    signal,
+  );
   await connectClient(
     client,
     transport,
@@ -374,12 +384,14 @@ export async function connectWithSSETransport(
  * Checks for rejected stored token, emits feedback message, throws UnauthorizedError.
  */
 export async function showAuthRequiredMessage(
+  requestFetch: NetworkFetch,
   tokenStorage: MCPOAuthTokenStorage,
   serverName: string,
   signal?: AbortSignal,
   feedback: HostFeedbackSink = defaultFeedbackSink,
 ): Promise<never> {
   const storedToken = await getStoredOAuthToken(
+    requestFetch,
     tokenStorage,
     serverName,
     signal,
@@ -399,6 +411,7 @@ export async function showAuthRequiredMessage(
  * Otherwise tries HTTP first, falls back to SSE on 404.
  */
 export async function retryWithOAuth(
+  requestFetch: NetworkFetch,
   client: Client,
   serverName: string,
   config: MCPServerConfig,
@@ -407,7 +420,13 @@ export async function retryWithOAuth(
   signal?: AbortSignal,
 ): Promise<void> {
   if (httpReturned404) {
-    await connectWithSSETransport(client, config, accessToken, signal);
+    await connectWithSSETransport(
+      requestFetch,
+      client,
+      config,
+      accessToken,
+      signal,
+    );
     return;
   }
 
@@ -417,7 +436,13 @@ export async function retryWithOAuth(
   };
 
   if (config.type === 'sse') {
-    await connectWithSSETransport(client, config, accessToken, signal);
+    await connectWithSSETransport(
+      requestFetch,
+      client,
+      config,
+      accessToken,
+      signal,
+    );
     return;
   }
 
@@ -426,6 +451,7 @@ export async function retryWithOAuth(
       '@modelcontextprotocol/sdk/client/streamableHttp.js'
     );
     const httpTransport = createJoiningTransport(
+      requestFetch,
       (fetch) =>
         new StreamableHTTPClientTransport(
           new URL(config.httpUrl ?? config.url!),
@@ -454,7 +480,13 @@ export async function retryWithOAuth(
       debugLogger.log(
         `HTTP connection failed with 404 for '${serverName}', falling back to SSE with OAuth`,
       );
-      await connectWithSSETransport(client, config, accessToken, signal);
+      await connectWithSSETransport(
+        requestFetch,
+        client,
+        config,
+        accessToken,
+        signal,
+      );
     } else {
       throw httpError;
     }
@@ -465,13 +497,14 @@ export async function retryWithOAuth(
  * Fetches www-authenticate header from server via HEAD request.
  */
 export async function fetchWwwAuthenticateHeader(
+  requestFetch: NetworkFetch,
   mcpServerConfig: MCPServerConfig,
   signal?: AbortSignal,
 ): Promise<string | null> {
   try {
     const urlToFetch = mcpServerConfig.httpUrl ?? mcpServerConfig.url!;
     const response = await awaitOAuthOperation(signal, () =>
-      fetch(urlToFetch, {
+      requestFetch(urlToFetch, {
         method: 'HEAD',
         headers: {
           Accept: mcpServerConfig.httpUrl
@@ -504,6 +537,7 @@ export async function fetchWwwAuthenticateHeader(
  * Connects to MCP server with a discovered OAuth token.
  */
 export async function connectWithOAuthToken(
+  requestFetch: NetworkFetch,
   tokenStorage: MCPOAuthTokenStorage,
   mcpClient: Client,
   mcpServerName: string,
@@ -527,6 +561,7 @@ export async function connectWithOAuthToken(
   }
 
   const accessToken = await MCPOAuthProvider.getValidToken(
+    requestFetch,
     tokenStorage,
     mcpServerName,
     {
@@ -542,6 +577,7 @@ export async function connectWithOAuthToken(
   }
 
   const oauthTransport = await createTransportWithOAuth(
+    requestFetch,
     mcpServerName,
     mcpServerConfig,
     accessToken,
@@ -573,15 +609,18 @@ export async function connectWithOAuthToken(
 }
 
 export function bindMcpOAuthCapabilities(
+  requestFetch: NetworkFetch,
   binding: McpOAuthBinding,
 ): McpOAuthCapabilities {
   const { tokenStorage, openBrowser, getAuthProviderFactory } = binding;
   return {
     tokenStorage,
     getAuthProviderFactory,
-    discover: OAuthUtils.discoverOAuthConfig.bind(OAuthUtils),
+    discover: (url, signal) =>
+      OAuthUtils.discoverOAuthConfig(requestFetch, url, signal),
     authenticate: (server, config, url, display, signal) =>
       MCPOAuthProvider.authenticate(
+        requestFetch,
         { tokenStorage, openBrowser },
         server,
         config,

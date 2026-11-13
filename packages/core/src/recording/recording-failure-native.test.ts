@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
@@ -21,6 +24,8 @@ import {
 import { RecordingIntegration } from './RecordingIntegration.js';
 import { resumeSession } from './resumeSession.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 function reportsOf(error: unknown): RecordingFailureReport[] {
   if (error instanceof RecordingFailureReport) return [error];
   if (error instanceof AggregateError) return error.errors.flatMap(reportsOf);
@@ -37,6 +42,8 @@ async function consume(error: unknown): Promise<number[]> {
 }
 
 describe('native recording failure report contracts', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const fixture = useNativeFailureIntegration();
 
   for (const count of [512, 8192]) {
@@ -60,20 +67,24 @@ describe('native recording failure report contracts', () => {
       const path = recording.getFilePath();
       if (path === null) throw new Error('Missing native journal');
       await recording.dispose();
-      const result = await resumeSession({
-        continueRef: 'native-failure',
-        projectHash: 'native-failure',
-        chatsDir: join(directory, 'chats'),
-        workspaceDirs: [],
-        currentProvider: 'test',
-        currentModel: 'test',
-      });
+      const result = await resumeSession(
+        withTestNamedWriters({
+          continueRef: 'native-failure',
+          projectHash: 'native-failure',
+          chatsDir: join(directory, 'chats'),
+          workspaceDirs: [],
+          currentProvider: 'test',
+          currentModel: 'test',
+        }),
+      );
       if (!result.ok) throw new Error(result.error);
       const resumed = result.recording;
       if (!(resumed instanceof JournalRecordingService))
         throw new Error('Expected native recorder');
-      const nextHistory = new HistoryService({});
-      const next = new RecordingIntegration(resumed);
+      const nextHistory = new HistoryService({
+        scratchRoots: recordingScratchRoots,
+      });
+      const next = new RecordingIntegration(resumed, recordingScratchRoots);
       try {
         await nextHistory.adoptResumeBoot(resumed, result.boot);
         await next.subscribeToJournal(nextHistory);

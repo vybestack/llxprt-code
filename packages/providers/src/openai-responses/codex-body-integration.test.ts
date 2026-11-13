@@ -95,7 +95,7 @@ async function transportBody(
     expect(wire).toContain('first-pull-sentinel');
     expect(pulled).toBe(1);
     expect(closed).toBe(true);
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(provider.requestBodyCensus)).toBe(0);
     const body: unknown = JSON.parse(wire);
     if (
       typeof body !== 'object' ||

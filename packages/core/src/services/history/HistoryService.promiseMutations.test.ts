@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { mediaParticipant } from './chronology-rollback-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function textRow(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -16,7 +18,7 @@ function textRow(text: string): IContent {
 describe('HistoryService mutations that return promises', () => {
   let history: HistoryService;
   beforeEach(() => {
-    history = new HistoryService();
+    history = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(async () => {
     await history.dispose();

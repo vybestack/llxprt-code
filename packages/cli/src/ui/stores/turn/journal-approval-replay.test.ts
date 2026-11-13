@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -6,6 +8,7 @@ import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/suppor
 import { NativeJournalPageReader } from '@vybestack/llxprt-code-core/journal/native-journal-page-reader.js';
 import { NativeJournalCursor } from './native-journal-cursor.js';
 import { ToolCallStatus } from '../../types.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function requestIdentity(
   path: string,
@@ -26,15 +29,17 @@ describe('persisted approval replay', () => {
   const directory = useTempDir('approval-replay-');
   ['cancelled', 'awaiting_approval', 'scheduled'].forEach((status) => {
     it(`reopens ${status} without a pending callback or separate JSON row`, async () => {
-      const recording = createSessionRecorder({
-        sessionId: 'replay',
-        projectHash: 'replay',
-        chatsDir: directory(),
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'test',
-      });
-      const history = new HistoryService();
+      const recording = createSessionRecorder(
+        withTestNamedWriters({
+          sessionId: 'replay',
+          projectHash: 'replay',
+          chatsDir: directory(),
+          workspaceDirs: [],
+          provider: 'test',
+          model: 'test',
+        }),
+      );
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       await history.attachJournal(recording, true);
       try {
         const arrival = await history.openResponseArrival({

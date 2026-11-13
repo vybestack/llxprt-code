@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -13,7 +14,7 @@ describe('complete approval journal writes', () => {
   const dir = useTempDir('approval-string-commit-');
   it('publishes each complete approval decision and its relation under one durable trailer', async () => {
     const path = join(dir(), 'approval.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     try {
       const before = session.store.published?.commitSeq ?? 0;
       const writer = new JournalDisplayWriter(session.store);

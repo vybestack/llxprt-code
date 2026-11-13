@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
@@ -78,9 +79,12 @@ describe('immutable old-normalizer unit oracle', () => {
 
   it('matches the frozen subset admitted by the indexed orphan-only stream', async () => {
     const lines = (await readFile(fixture, 'utf8')).trimEnd().split('\n');
-    const session = await JournalSession.create(`${directory()}/units.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/units.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     let checked = 0;
     try {
       for (let seed = 0; seed < UNIT_CASE_COUNT; seed++) {
@@ -120,9 +124,9 @@ describe('immutable old-normalizer unit oracle', () => {
     expect(lines.length).toBe(UNIT_CASE_COUNT);
     const session = await JournalSession.create(
       `${directory()}/responses.llxj`,
-      {
+      testJournalOptions({
         journal: testJournalSeams().dependencies,
-      },
+      }),
     );
     let matched = 0;
     try {

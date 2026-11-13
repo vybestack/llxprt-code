@@ -1,8 +1,10 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import type { SealedHistoryRow } from './sealed-history-row.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function* auxiliary(label: string): AsyncGenerator<IContent> {
   yield {
@@ -30,8 +32,8 @@ async function* auxiliary(label: string): AsyncGenerator<IContent> {
 }
 describe('AFC journal row staging', () => {
   it('publishes only the newest snapshot with ordinary token and observer effects', async () => {
-    const history = new HistoryService();
-    const ordinary = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
+    const ordinary = new HistoryService({ scratchRoots: historyScratchRoots });
     const observed: string[] = [];
     history.on('contentSealed', (row: SealedHistoryRow) =>
       observed.push(row.speaker),
@@ -78,7 +80,7 @@ describe('AFC journal row staging', () => {
     }
   });
   it('compensates the whole response publication when an AFC observer fails', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const arrival = await history.openResponseArrival({
       id: 'rejected-afc',
       submissionId: 'prompt',

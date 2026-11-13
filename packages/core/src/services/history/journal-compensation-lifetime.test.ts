@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { fstatSync } from 'node:fs';
@@ -18,7 +19,7 @@ describe('history compensation reader lifetime', () => {
     let fd = -1;
     const session = await JournalSession.create(
       join(directory(), 'history.llxj'),
-      {
+      testJournalOptions({
         journal: {
           open: async (file, flags) => {
             const handle = await open(file, flags);
@@ -26,7 +27,7 @@ describe('history compensation reader lifetime', () => {
             return handle;
           },
         },
-      },
+      }),
     );
     return { store: new JournalHistoryStore(session), fd };
   }

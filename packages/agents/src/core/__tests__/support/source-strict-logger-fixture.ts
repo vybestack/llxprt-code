@@ -20,7 +20,6 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { logApiRequest } from '@vybestack/llxprt-code-telemetry/telemetry/loggers.js';
 import { ApiRequestEvent } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { LoggingProviderWrapper } from '../../../../../providers/src/LoggingProviderWrapper.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { getRequestSignal } from '@vybestack/llxprt-code-providers/utils/abortSignal.js';
@@ -198,7 +197,6 @@ export async function assembleStrictBase(
   fault: StrictFault,
   onUploaded?: () => Promise<void>,
 ): Promise<StrictBase> {
-  resetConversationFileWriterForTesting();
   const controller = new AbortController();
   const telemetryPath = join(root, 'strict.jsonl');
   const conversationPath = join(
@@ -385,12 +383,12 @@ async function captureStrictReceipt(
     writeFault: await faultWitness(faultPath),
     closed: fixture.state.closed,
     activeReaders: fixture.state.active,
-    activeBodies: activeRequestBodyCount(),
+    activeBodies: activeRequestBodyCount(setup.provider.requestBodyCensus),
     logPath: exporter.logPath,
   };
   await input.cleanup();
   await setup.config.dispose();
-  resetConversationFileWriterForTesting();
+
   return receipt;
 }
 async function publishPreflight(

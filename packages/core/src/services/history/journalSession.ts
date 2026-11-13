@@ -1,3 +1,5 @@
+import type { NamedWriterOwnership } from '../../journal/named-writer-ownership.js';
+import { JournalWatermarks } from '../../journal/journal-watermarks.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mapRowStream } from '../../journal/mapped-row-stream.js';
 import type { NativeFactIndexRegistration } from '../../journal/nativeFactIndex.js';
@@ -43,6 +45,8 @@ import {
 
 /** What a caller may replace: the file seams (tests) and the occurrence planner (the normalizer of phase 5). */
 export interface JournalSessionOptions {
+  readonly namedWriters?: NamedWriterOwnership;
+  readonly maintenanceScope?: JournalStoreDependencies['maintenanceScope'];
   readonly journal?: Partial<JournalOpenDependencies>;
   readonly createCache?: JournalStoreDependencies['createCache'];
   readonly tokenUsageCountTokens?: (text: string) => number;
@@ -68,6 +72,7 @@ function dependenciesWithJournal(
 ): JournalStoreDependencies {
   return {
     journal,
+    maintenanceScope: options.maintenanceScope,
     createCache: options.createCache,
     idDeps: {
       hasher: sha256KeyHash,
@@ -87,6 +92,14 @@ function dependenciesWithJournal(
     ),
     algebra: rowAlgebra,
   };
+}
+
+function requireNamedWriters(
+  options: JournalSessionOptions,
+): NamedWriterOwnership {
+  if (options.namedWriters === undefined)
+    throw new Error('Named journal opens require the process writer owner');
+  return options.namedWriters;
 }
 
 /** A history entry and the index entry of the row that holds it. */
@@ -118,7 +131,11 @@ export class JournalSession {
     options: JournalSessionOptions = {},
   ): Promise<JournalSession> {
     return new JournalSession(
-      await JournalStore.create(path, await storeDependencies(options)),
+      await JournalStore.create(
+        path,
+        await storeDependencies(options),
+        requireNamedWriters(options),
+      ),
       true,
     );
   }
@@ -131,6 +148,7 @@ export class JournalSession {
     const store = await JournalStore.open(
       path,
       await storeDependencies(options),
+      requireNamedWriters(options),
     );
     try {
       if (options.nativeFacts !== undefined)
@@ -201,6 +219,7 @@ export class JournalSession {
     options: JournalSessionOptions,
   ): JournalSession {
     const deps = dependenciesWithJournal(options, {
+      watermarks: new JournalWatermarks(),
       open: () =>
         openUnlinkedFile(
           options.unlinkedDirectory === undefined

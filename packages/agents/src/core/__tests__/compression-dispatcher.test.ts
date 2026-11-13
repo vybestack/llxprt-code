@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { compressionBackendFixture } from './support/compression-backend-fixture.js';
 import { createSessionPolicyFixture } from './session-policy-fixture.js';
 /**
@@ -32,6 +33,8 @@ import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compre
 import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
 import { PreCompressTrigger } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+const historyScratchRoots = createTestScratchOwner();
+
 // Mock the lifecycle hook triggers
 void vi.mock(
   '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js',
@@ -98,6 +101,7 @@ function buildRuntimeContext(
     getToolMetadata: () => undefined,
   };
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     ...createSessionPolicyFixture(settingsService, runtimeState.runtimeId),
     state: runtimeState,
     history: historyService,

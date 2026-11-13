@@ -33,7 +33,7 @@ import {
   OFFICIAL_PROMPT_ESTIMATOR_REGISTRATIONS,
   createOfficialRuntimeTokenizer,
 } from '../tokenizers/official/index.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { prepareNeutralTokenCounter } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 
 class RuntimeTokenizerAdapter implements RuntimeTokenizer {
@@ -97,6 +97,15 @@ function matchesTokenizer(
  * isolate encoder initialization and inject failures.
  */
 export function createRuntimeTokenizerFactory(
+  scratchRoots: ScratchRootOwner,
+  loadModule: TiktokenModuleLoader = loadTiktokenModule,
+): RuntimeTokenizerFactory {
+  return withGpt56DiskSources(createRuntimeTokenizerRegistry(loadModule), () =>
+    scratchRoots.getRoot(),
+  );
+}
+
+export function createRuntimeTokenizerRegistry(
   loadModule: TiktokenModuleLoader = loadTiktokenModule,
 ): RuntimeTokenizerFactory {
   const openaiTokenizer = new OpenAITokenizer();
@@ -177,7 +186,5 @@ export function createRuntimeTokenizerFactory(
       return undefined;
     },
   };
-  // Sends project a sealed disk owner rather than a context-sized string, so
-  // the production factory itself must estimate disk sources for every family.
-  return withGpt56DiskSources(registryFactory, getScratchRoot());
+  return registryFactory;
 }

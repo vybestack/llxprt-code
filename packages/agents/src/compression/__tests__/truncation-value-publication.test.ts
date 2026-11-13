@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { probedTransformInput } from '@vybestack/llxprt-code-core/services/history/__tests__/support/transform-value-fixtures-test-helpers.js';
 import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
@@ -22,15 +23,16 @@ import {
   truncationValueRow,
   truncationValues,
 } from './truncation-value-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function publish(
   history: HistoryService,
   options: DetachedHistoryOptions,
 ): Promise<IContent | undefined> {
   return history.detachedValues.withCheckpoint(async (checkpoint) => {
-    const previous = new DetachedHistoryJournal();
+    const previous = new DetachedHistoryJournal(historyScratchRoots);
     for await (const row of checkpointRows(checkpoint)) previous.append(row);
-    const candidate = new DetachedHistoryJournal();
+    const candidate = new DetachedHistoryJournal(historyScratchRoots);
     try {
       for (let index = 11; index < previous.length; index++)
         candidate.append(previous.readRow(index));
@@ -124,9 +126,9 @@ async function summaryPublication(): Promise<IContent | undefined> {
   return withValueTransformFixture(async ({ history }) => {
     await history.detachedValues.replace(truncationValues(32));
     return history.detachedValues.withCheckpoint(async (checkpoint) => {
-      const previous = new DetachedHistoryJournal();
+      const previous = new DetachedHistoryJournal(historyScratchRoots);
       for await (const row of checkpointRows(checkpoint)) previous.append(row);
-      const candidate = new DetachedHistoryJournal();
+      const candidate = new DetachedHistoryJournal(historyScratchRoots);
       try {
         for (let index = 11; index < 32; index++) {
           const row = previous.readRow(index);

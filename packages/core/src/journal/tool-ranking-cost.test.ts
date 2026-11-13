@@ -1,3 +1,4 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { join } from 'node:path';
@@ -84,9 +85,12 @@ describe('native tool ranking query cost', () => {
       const counter = { reads: 0 };
       const seams = testJournalSeams({ readCounter: counter }, 1, false);
       const file = join(directory(), `rank-${size}.llxj`);
-      const session = await JournalSession.create(file, {
-        journal: seams.dependencies,
-      });
+      const session = await JournalSession.create(
+        file,
+        testJournalOptions({
+          journal: seams.dependencies,
+        }),
+      );
       let measured = 0;
       const policy: ToolRankingPolicy = {
         revision: 'rank-cost:1',

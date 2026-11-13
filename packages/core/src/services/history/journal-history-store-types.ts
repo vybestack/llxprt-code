@@ -1,3 +1,4 @@
+import type { HistoryOriginIds } from './historyOriginId.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from './IContent.js';
 import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
@@ -19,6 +20,7 @@ export type JournalSessionOpener = () =>
   | Promise<JournalSession>;
 
 export interface JournalHistoryStoreOptions {
+  readonly originIds?: HistoryOriginIds;
   /** Bound as a mirror right after the journal is open (decision D-W7-3). */
   readonly recording?: JournalRecordingService;
   /** Observes every row the stream and batch readers decode (WIRING G9). */

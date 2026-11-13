@@ -1,15 +1,18 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { createTestAgentClient } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { SessionConversationBinding } from './session-conversation-binding.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('session journal context observation', () => {
   it('publishes the current range and follows a replacement history without retaining the retired listener', async () => {
-    const first = new HistoryService();
-    const second = new HistoryService();
+    const first = new HistoryService({ scratchRoots: historyScratchRoots });
+    const second = new HistoryService({ scratchRoots: historyScratchRoots });
     let active = first;
     const binding = new SessionConversationBinding({
+      scratchRoots: historyScratchRoots,
       readClient: () =>
         createTestAgentClient({ getHistoryService: () => active }),
       assertOpen: () => {},

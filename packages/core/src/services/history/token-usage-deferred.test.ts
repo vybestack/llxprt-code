@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '../../debug/index.js';
@@ -18,7 +19,10 @@ describe('request-scoped token usage preparation', () => {
         return text.length;
       },
     };
-    const original = await JournalSession.create(path, options);
+    const original = await JournalSession.create(
+      path,
+      testJournalOptions(options),
+    );
     let sequence: number | undefined;
     try {
       await original.append([
@@ -28,7 +32,10 @@ describe('request-scoped token usage preparation', () => {
     } finally {
       await original.close();
     }
-    const resumed = await JournalSession.open(path, options);
+    const resumed = await JournalSession.open(
+      path,
+      testJournalOptions(options),
+    );
     try {
       expect(resumed.store.published?.commitSeq).toBe(sequence);
       expect(calls).toBe(0);
@@ -74,10 +81,13 @@ describe('request-scoped token usage preparation', () => {
   it('rebuilds facts after an unmeasured append to a resumed journal', async () => {
     const path = directory() + '/session.llxj';
     const countTokens = (text: string): number => text.length;
-    const original = await JournalSession.create(path, {
-      tokenUsageCountTokens: countTokens,
-      eagerTokenUsageFacts: true,
-    });
+    const original = await JournalSession.create(
+      path,
+      testJournalOptions({
+        tokenUsageCountTokens: countTokens,
+        eagerTokenUsageFacts: true,
+      }),
+    );
     try {
       await original.append([
         { speaker: 'human', blocks: [{ type: 'text', text: 'first' }] },
@@ -85,9 +95,12 @@ describe('request-scoped token usage preparation', () => {
     } finally {
       await original.close();
     }
-    const session = await JournalSession.open(path, {
-      tokenUsageCountTokens: countTokens,
-    });
+    const session = await JournalSession.open(
+      path,
+      testJournalOptions({
+        tokenUsageCountTokens: countTokens,
+      }),
+    );
     await session.append([
       { speaker: 'human', blocks: [{ type: 'text', text: 'second' }] },
     ]);

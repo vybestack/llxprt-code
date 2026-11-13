@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
@@ -13,7 +14,7 @@ describe('native indexed unit metadata', () => {
   it('keeps empty-id Rt for reconstruction while excluding it from real-response targets', async () => {
     const session = await JournalSession.create(
       `${directory()}/empty-rt.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await session.append([
@@ -42,9 +43,12 @@ describe('native indexed unit metadata', () => {
   });
 
   it('counts reconstructed, split, stripped and cross-speaker adjacent units in the published tree', async () => {
-    const session = await JournalSession.create(`${directory()}/units.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/units.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     const rows: readonly IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'q' }, call('a')] },
       { speaker: 'ai', blocks: [call('a')] },

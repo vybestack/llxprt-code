@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -5,12 +6,14 @@ import type { NativeProviderHistory } from '@vybestack/llxprt-code-core/services
 import { ObservedHistory } from './__tests__/support/streamprocessor-source-fixture.js';
 import { openRequestContentsSnapshot } from './streamRequestHelpers.js';
 
+const historyScratchRoots = createTestScratchOwner();
+
 function text(speaker: IContent['speaker'], value: string): IContent {
   return { speaker, blocks: [{ type: 'text', text: value }] };
 }
 describe('bounded request selection preserves semantic pending membership', () => {
   it('uses normalized membership rather than treating the first pending row as an arbitrary suffix', async () => {
-    const history = new ObservedHistory();
+    const history = new ObservedHistory({ scratchRoots: historyScratchRoots });
     history.add(text('human', 'old prompt'));
     history.add(text('ai', 'old reply'));
     await history.waitForTokenUpdates();
@@ -39,7 +42,9 @@ describe('bounded request selection preserves semantic pending membership', () =
       },
       text('human', 'pending question'),
     ];
-    const selectedHistory = new ObservedHistory();
+    const selectedHistory = new ObservedHistory({
+      scratchRoots: historyScratchRoots,
+    });
     await selectedHistory.addBatch([
       text('human', 'semantic selected history'),
       text('ai', 'selected reply'),
@@ -89,7 +94,7 @@ describe('bounded request selection preserves semantic pending membership', () =
 
 describe('source selection cancellation', () => {
   it('does not create a standing disk selection after an already-aborted request', async () => {
-    const history = new ObservedHistory();
+    const history = new ObservedHistory({ scratchRoots: historyScratchRoots });
     const controller = new AbortController();
     controller.abort(new Error('selection cancelled'));
     try {

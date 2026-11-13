@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
@@ -35,9 +36,12 @@ describe('native emitted normalized occurrences', () => {
   const directory = useTempDir('normalized-occurrences-');
 
   it('counts empty collisions, reconstructed duplicates and cross-speaker orphan targets in emitted order', async () => {
-    const session = await JournalSession.create(`${directory()}/facts.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/facts.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     const rows: readonly IContent[] = [
       { speaker: 'ai', blocks: [call(''), call('call_')] },
       {
@@ -100,9 +104,9 @@ describe('native emitted normalized occurrences', () => {
   it('updates earlier targets without changing an older pin and rebuilds the exact lists after removal', async () => {
     const session = await JournalSession.create(
       `${directory()}/mutations.llxj`,
-      {
+      testJournalOptions({
         journal: testJournalSeams().dependencies,
-      },
+      }),
     );
     try {
       await session.append([{ speaker: 'human', blocks: [call('a')] }]);
@@ -147,9 +151,12 @@ describe('native emitted normalized occurrences', () => {
   });
 
   it('inserts a colliding normalized id before a long occurrence suffix across bounded fact batches', async () => {
-    const session = await JournalSession.create(`${directory()}/suffix.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/suffix.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       function* rows(): Generator<ReturnType<typeof encodeContentRow>> {
         for (let index = 0; index < 400; index++) {
@@ -199,9 +206,12 @@ describe('native emitted normalized occurrences', () => {
   });
 
   it('keeps normalized occurrences sorted when a later AI call creates an earlier cross-speaker response', async () => {
-    const session = await JournalSession.create(`${directory()}/earlier.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/earlier.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([
         { speaker: 'human', blocks: [call('hist_tool_X')] },

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -5,13 +6,14 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import { streamSemanticPurgeRequest } from './streamRequestHelpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function fixture(): Promise<{
   history: HistoryService;
   ownership: RowOwnership;
   attempt: NonNullable<Awaited<ReturnType<SemanticMediaPurgeSession['begin']>>>;
 }> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const ownership = new RowOwnership();
   for (const text of ['first', 'second'])
     history.add({

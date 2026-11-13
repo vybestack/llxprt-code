@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
@@ -7,6 +8,7 @@ import {
 import { HistoryService } from './HistoryService.js';
 import type { ContentBlock, IContent } from './IContent.js';
 import { HistoryReaderScope } from './historyReaderScope.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function scopedReader(scope: HistoryReaderScope): {
   reader: AsyncGenerator<IContent, void, unknown>;
@@ -55,7 +57,7 @@ describe('journal provider reader row release', () => {
     },
   );
   it('does not retain a delivered row while the consumer is paused', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     await history.addBatch([
       { speaker: 'human', blocks: [{ type: 'text', text: 'question' }] },
       { speaker: 'ai', blocks: [{ type: 'text', text: 'answer' }] },

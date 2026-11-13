@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { historyOriginId } from './historyOriginId.js';
 import type { HistoryService } from './HistoryService.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
 import { primaryRows } from '../../recording/__tests__/support/forkProof.js';
@@ -32,10 +31,11 @@ async function version(recorder: ObservedRecorder): Promise<number> {
 }
 
 async function assertAccepted(
+  history: HistoryService,
   recorder: ObservedRecorder,
   rows: readonly PersistedMutationRow[],
 ): Promise<void> {
-  const origin = historyOriginId(recorder.origin);
+  const origin = history.originIds.get(recorder.origin);
   expect(await persistedMutationRows(recorder.recording)).toStrictEqual(
     rows.filter((row) => row.origin === undefined || row.origin === origin),
   );
@@ -79,12 +79,14 @@ describe('HistoryService native two-recorder full rewrites', () => {
             .map((index) => ({
               blocks: mutationText(`original ${index}`).blocks,
               origin:
-                origin === undefined ? undefined : historyOriginId(origin),
+                origin === undefined
+                  ? undefined
+                  : history.originIds.get(origin),
             })),
         ),
       );
-      await assertAccepted(a, initial);
-      await assertAccepted(b, initial);
+      await assertAccepted(history, a, initial);
+      await assertAccepted(history, b, initial);
 
       const densityRows = initial.map(({ content, origin }, index) => ({
         content: {
@@ -113,8 +115,8 @@ describe('HistoryService native two-recorder full rewrites', () => {
       await a.integration.flushAtTurnBoundary();
       await b.integration.flushAtTurnBoundary();
       expect(await primaryRows(history)).toStrictEqual(densityRows);
-      await assertAccepted(a, densityRows);
-      await assertAccepted(b, densityRows);
+      await assertAccepted(history, a, densityRows);
+      await assertAccepted(history, b, densityRows);
       expect([
         primaryVersion(history),
         await version(a),
@@ -150,8 +152,8 @@ describe('HistoryService native two-recorder full rewrites', () => {
       await a.integration.flushAtTurnBoundary();
       await b.integration.flushAtTurnBoundary();
       expect(await primaryRows(history)).toStrictEqual(replacementRows);
-      await assertAccepted(a, replacementRows);
-      await assertAccepted(b, replacementRows);
+      await assertAccepted(history, a, replacementRows);
+      await assertAccepted(history, b, replacementRows);
       expect([
         primaryVersion(history),
         await version(a),

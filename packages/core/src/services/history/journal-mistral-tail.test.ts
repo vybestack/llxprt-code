@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { assertMistralTail } from './__tests__/support/mistral-tail-oracle.js';
@@ -16,7 +17,7 @@ describe('request-only Mistral observe mappings', () => {
   it('repairs an earlier human call made observable by a late response before a collision holder', async () => {
     const session = await JournalSession.create(
       `${directory()}/earlier.llxj`,
-      options,
+      testJournalOptions(options),
     );
     const rows: readonly IContent[] = [
       { speaker: 'human', blocks: [call('toolu_alpha-1')] },
@@ -47,7 +48,7 @@ describe('request-only Mistral observe mappings', () => {
   it('continues native owners and earlier request-only calls across all format slots', async () => {
     const session = await JournalSession.create(
       `${directory()}/slots.llxj`,
-      options,
+      testJournalOptions(options),
     );
     const rows: readonly IContent[] = [
       { speaker: 'ai', blocks: [call('4SftZvDMX')] },
@@ -92,7 +93,7 @@ describe('request-only Mistral observe mappings', () => {
     for (const passthroughFirst of [false, true]) {
       const session = await JournalSession.create(
         `${directory()}/pass-${passthroughFirst}.llxj`,
-        options,
+        testJournalOptions(options),
       );
       const tail: readonly IContent[] = [
         {
@@ -136,7 +137,7 @@ describe('request-only Mistral observe mappings', () => {
   it('reuses the already reconstructed journal mapping instead of pending insertion order', async () => {
     const session = await JournalSession.create(
       `${directory()}/reconstructed.llxj`,
-      options,
+      testJournalOptions(options),
     );
     const rows: readonly IContent[] = [
       { speaker: 'tool', blocks: [response('toolu_alpha-1')] },
@@ -183,7 +184,7 @@ describe('request-only Mistral observe mappings', () => {
   it('observes reconstructed pending calls before their split self and later duplicate calls', async () => {
     const session = await JournalSession.create(
       `${directory()}/emission.llxj`,
-      options,
+      testJournalOptions(options),
     );
     const tail: readonly IContent[] = [
       { speaker: 'tool', blocks: [response('toolu_alpha-1')] },
@@ -211,7 +212,7 @@ describe('request-only Mistral observe mappings', () => {
   it('refuses inactive and invalid slots rather than treating absent native facts as an empty used set', async () => {
     const session = await JournalSession.create(
       `${directory()}/inactive.llxj`,
-      options,
+      testJournalOptions(options),
     );
     try {
       await session.append([

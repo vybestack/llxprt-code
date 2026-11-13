@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import { describe, expect, it } from 'bun:test';
@@ -41,13 +42,20 @@ interface Reopened {
 
 /** Opens the files again and binds the mirrors the way a resume does. */
 async function resume(rig: MirrorRig): Promise<Reopened> {
-  const primary = await JournalStore.open(rig.primaryFile, storeDeps());
+  const primary = await JournalStore.open(
+    rig.primaryFile,
+    storeDeps(),
+    testNamedWriters,
+  );
   const fanout = new MirrorFanout(primary);
   const mirrors = new Map<number, JournalStore>();
   for (const owner of AGENTS) {
     const file = rig.files.get(owner);
     if (file === undefined) throw new Error(`no file for owner ${owner}`);
-    mirrors.set(owner, await JournalStore.open(file, storeDeps()));
+    mirrors.set(
+      owner,
+      await JournalStore.open(file, storeDeps(), testNamedWriters),
+    );
   }
   return { primary, mirrors, fanout };
 }
@@ -135,7 +143,11 @@ describe('mirror recovery (design 5.2 and 13.6)', () => {
     await fsp.truncate(rig.primaryFile, keep);
 
     // The primary, opened alone, writes a different third group.
-    const alone = await JournalStore.open(rig.primaryFile, storeDeps());
+    const alone = await JournalStore.open(
+      rig.primaryFile,
+      storeDeps(),
+      testNamedWriters,
+    );
     await alone.commit([group('replacement')]);
     expect(alone.published?.commitSeq).toBe(lostSeq);
     expect(alone.published?.groupTag).not.toBe(lostTag);

@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
@@ -81,7 +82,11 @@ describe('lineage rule (design 4.3 and 4.10)', () => {
     const file = (name: string) => path.join(directory(), name);
 
     it('fills skip pointers with the ancestors 8, 64 and 512 parent hops back', async () => {
-      const store = await JournalStore.create(file('skips.llxj'), storeDeps());
+      const store = await JournalStore.create(
+        file('skips.llxj'),
+        storeDeps(),
+        testNamedWriters,
+      );
       for (let at = 0; at < 600; at++) {
         await store.commit([{ kind: 'append', rows: [draftRow()] }]);
       }
@@ -107,6 +112,7 @@ describe('lineage rule (design 4.3 and 4.10)', () => {
       const store = await JournalStore.create(
         file('deep.llxj'),
         storeDeps({ seams }),
+        testNamedWriters,
       );
       const model = new ArrayModel();
       for (let at = 0; at < 600; at++) {
@@ -134,7 +140,11 @@ describe('lineage rule (design 4.3 and 4.10)', () => {
     });
 
     it('state-only groups keep the lineage, while clear and restore start one', async () => {
-      const store = await JournalStore.create(file('rule.llxj'), storeDeps());
+      const store = await JournalStore.create(
+        file('rule.llxj'),
+        storeDeps(),
+        testNamedWriters,
+      );
       await store.commit([{ kind: 'append', rows: [draftRow()] }]);
       const first = published(store);
       await store.commit([
@@ -163,6 +173,7 @@ describe('lineage rule (design 4.3 and 4.10)', () => {
         const store = await JournalStore.create(
           file(`random-${seed}.llxj`),
           storeDeps(),
+          testNamedWriters,
         );
         const random = new SeededRandom(seed);
         const model = new ArrayModel();
@@ -205,6 +216,7 @@ describe('lineage rule (design 4.3 and 4.10)', () => {
         const reopened = await JournalStore.open(
           file(`random-${seed}.llxj`),
           storeDeps(),
+          testNamedWriters,
         );
         expect(await labelsOf(reopened)).toStrictEqual([...model.liveLabels]);
         await reopened.close();

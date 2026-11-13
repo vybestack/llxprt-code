@@ -221,7 +221,10 @@ describe('session-owned model notifications', () => {
       aCredentials().authority,
       aCallerRelease,
     );
-    const factoriesTokenizer = configureProviderTokenizer(aCallerManager);
+    const factoriesTokenizer = configureProviderTokenizer(
+      aCallerManager,
+      aCallerConfig.scratchRoots,
+    );
     const factoriesContent = createRuntimeContentGeneratorFactory();
     aCallerTokenizer = factoriesTokenizer;
     aCallerContent = factoriesContent;
@@ -447,7 +450,10 @@ describe('session-owned model notifications', () => {
       bCredentials().authority,
       bCallerRelease,
     );
-    const factoriesTokenizer = configureProviderTokenizer(bCallerManager);
+    const factoriesTokenizer = configureProviderTokenizer(
+      bCallerManager,
+      aCallerConfig.scratchRoots,
+    );
     const factoriesContent = createRuntimeContentGeneratorFactory();
     bCallerTokenizer = factoriesTokenizer;
     bCallerContent = factoriesContent;

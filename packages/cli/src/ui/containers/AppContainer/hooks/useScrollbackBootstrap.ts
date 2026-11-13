@@ -1,6 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { useEffect, useState } from 'react';
-import type { EmojiFilterMode } from '@vybestack/llxprt-code-core';
+import type {
+  EmojiFilterMode,
+  JournalWatermarks,
+} from '@vybestack/llxprt-code-core';
 import type {
   ScrollbackPagerSettings,
   ScrollbackPagerStore,
@@ -22,7 +25,10 @@ export interface ScrollbackPagerBinding {
 }
 
 export interface JournalPathSource {
-  getCurrentRecording(): { getFilePath(): string | null } | null;
+  getCurrentRecording(): {
+    getFilePath(): string | null;
+    getJournalWatermarks?(): Pick<JournalWatermarks, 'subscribe'> | undefined;
+  } | null;
 }
 
 export interface UseScrollbackBootstrapOptions {
@@ -64,8 +70,8 @@ export function useScrollbackBootstrap({
     let awaitingFirstJournal =
       recordingSwapCallbacks.getCurrentRecording()?.getFilePath() == null;
     const update = (): void => {
-      const nextPath =
-        recordingSwapCallbacks.getCurrentRecording()?.getFilePath() ?? null;
+      const recording = recordingSwapCallbacks.getCurrentRecording();
+      const nextPath = recording?.getFilePath() ?? null;
       if (nextPath === path) return;
       path = nextPath;
       void active?.store.close();
@@ -81,6 +87,7 @@ export function useScrollbackBootstrap({
         viewport,
         store: createScrollbackPagerStore({
           filePath: nextPath,
+          watermarks: recording?.getJournalWatermarks?.(),
           // A journal created after mount belongs to the live first turn.
           // Its approvals must not become resumed-orphan cancellations.
           orphanBeforeTranscriptId: awaitingFirstJournal ? 0n : undefined,

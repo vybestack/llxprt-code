@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { open, stat } from 'node:fs/promises';
@@ -79,21 +80,24 @@ describe('version 8 ROW range lifecycle', () => {
     const path = `${directory()}/budget.llxj`;
     const reads: Array<{ position: number; length: number }> = [];
     const base = testJournalSeams({}, 1, false).dependencies;
-    const session = await JournalSession.create(path, {
-      journal: {
-        ...base,
-        open: async (file, flags) => {
-          const handle = await base.open(file, flags);
-          return {
-            ...handle,
-            read: async (buffer, offset, length, position) => {
-              reads.push({ position, length });
-              return handle.read(buffer, offset, length, position);
-            },
-          };
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions({
+        journal: {
+          ...base,
+          open: async (file, flags) => {
+            const handle = await base.open(file, flags);
+            return {
+              ...handle,
+              read: async (buffer, offset, length, position) => {
+                reads.push({ position, length });
+                return handle.read(buffer, offset, length, position);
+              },
+            };
+          },
         },
-      },
-    });
+      }),
+    );
     try {
       await session.append([
         {
@@ -148,7 +152,10 @@ describe('version 8 ROW range lifecycle', () => {
   it('preserves selected and metadata checks through rebuild, owner changes, reopen, clone and physical compaction', async () => {
     const path = `${directory()}/copy.llxj`;
     const options = { journal: testJournalSeams({}, 1, false).dependencies };
-    const session = await JournalSession.create(path, options);
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions(options),
+    );
     try {
       await session.append([
         CONTENT,
@@ -173,7 +180,10 @@ describe('version 8 ROW range lifecycle', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path, options);
+    const reopened = await JournalSession.open(
+      path,
+      testJournalOptions(options),
+    );
     try {
       const clone = await reopened.cloneUnlinked({
         unlinkedDirectory: directory(),
@@ -195,7 +205,10 @@ describe('version 8 ROW range lifecycle', () => {
   it('refuses a CRC-valid version 7 file through public reopen and package scanning', async () => {
     const path = `${directory()}/old.llxj`;
     const options = { journal: testJournalSeams({}, 1, false).dependencies };
-    const session = await JournalSession.create(path, options);
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions(options),
+    );
     await session.append([CONTENT]);
     await session.close();
     const handle = await open(path, 'r+');
@@ -209,18 +222,21 @@ describe('version 8 ROW range lifecycle', () => {
     } finally {
       await handle.close();
     }
-    await expect(JournalSession.open(path, options)).rejects.toBeInstanceOf(
-      RetiredJournalError,
-    );
+    await expect(
+      JournalSession.open(path, testJournalOptions(options)),
+    ).rejects.toBeInstanceOf(RetiredJournalError);
     await expect(scanJournalRecording(path, () => {})).rejects.toBeInstanceOf(
       RetiredJournalError,
     );
   });
   it('rejects piece corruption through the package scanner even when the whole-body CRC is repaired', async () => {
     const path = `${directory()}/scanner.llxj`;
-    const session = await JournalSession.create(path, {
-      journal: testJournalSeams({}, 1, false).dependencies,
-    });
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions({
+        journal: testJournalSeams({}, 1, false).dependencies,
+      }),
+    );
     let recordOffset = 0;
     try {
       await session.store.commit([

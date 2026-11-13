@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { Task } from '../agent/task.js';
 import { InMemoryTaskStore } from '@a2a-js/sdk/server';
@@ -153,6 +154,7 @@ describe('native A2A task protocol', () => {
     const agents: Agent[] = [];
     const store = new InMemoryTaskStore();
     const executor = new CoderAgentExecutor(
+      scratchRoots,
       store,
       async (taskId, contextId, _settings, eventBus) => {
         const agent = await createAgent(
@@ -379,3 +381,5 @@ describe('native A2A task protocol', () => {
     }
   }, 30000);
 });
+
+const scratchRoots = new ScratchRootOwner();

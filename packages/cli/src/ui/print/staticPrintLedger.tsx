@@ -50,7 +50,10 @@ export type StaticPrintBatch = {
   status(): 'pending' | 'acknowledged';
 };
 
+const ledgerState = Symbol('staticPrintLedger.state');
+
 export interface StaticPrintLedger {
+  readonly [ledgerState]: LedgerInternals;
   append(rows: readonly StaticPrintRow[]): StaticPrintBatch;
   items(): readonly StaticPrintRow[];
   forgetEvicted(keys: readonly string[]): void;
@@ -75,14 +78,8 @@ interface LedgerInternals {
   listeners: Set<() => void>;
 }
 
-const ledgerInternals = new WeakMap<StaticPrintLedger, LedgerInternals>();
-
 function internalsOf(ledger: StaticPrintLedger): LedgerInternals {
-  const internals = ledgerInternals.get(ledger);
-  if (!internals) {
-    throw new Error('Unknown static print ledger');
-  }
-  return internals;
+  return ledger[ledgerState];
 }
 
 function notifyListeners(internals: LedgerInternals): void {
@@ -112,12 +109,9 @@ function subscribeLedger(
   };
 }
 
-let remountNoticeSeq = 0;
-
-function createRemountNoticeRow(): StaticPrintRow {
-  remountNoticeSeq += 1;
+function createRemountNoticeRow(epoch: number): StaticPrintRow {
   const item: HistoryItem = {
-    id: -remountNoticeSeq,
+    id: -epoch,
     type: 'info',
     text: REMOUNT_NOTICE_TEXT,
   };
@@ -135,6 +129,7 @@ export function createStaticPrintLedger(): StaticPrintLedger {
   };
 
   const ledger: StaticPrintLedger = {
+    [ledgerState]: internals,
     append(rows) {
       for (const row of rows) {
         if (internals.appendedKeys.has(row.key)) {
@@ -165,7 +160,10 @@ export function createStaticPrintLedger(): StaticPrintLedger {
     },
     clear(residentRows) {
       internals.epochValue += 1;
-      internals.rows = [createRemountNoticeRow(), ...residentRows];
+      internals.rows = [
+        createRemountNoticeRow(internals.epochValue),
+        ...residentRows,
+      ];
       internals.appendedKeys = new Set<string>([
         REMOUNT_NOTICE_KEY,
         ...residentRows.map((row) => row.key),
@@ -176,7 +174,6 @@ export function createStaticPrintLedger(): StaticPrintLedger {
     epoch: () => internals.epochValue,
   };
 
-  ledgerInternals.set(ledger, internals);
   return ledger;
 }
 

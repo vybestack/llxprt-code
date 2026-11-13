@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -9,6 +11,7 @@ import type { IContent } from '../../../../core/src/services/history/IContent.js
 import { summaryOutput } from '../summaryOutput.js';
 import { replacedSpan } from '../diskTruncation.js';
 import { operationFileCreates } from './support/operation-file-creates.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(
   seq: number | undefined,
@@ -42,6 +45,7 @@ describe('native summary chronology membership', () => {
     async ({ seqs }) => {
       const session = await JournalSession.create(
         join(directory(), 'membership.llxj'),
+        testJournalOptions(),
       );
       const rows = seqs.map((seq, index) =>
         row(seq, `r${index}`, index % 2 === 0 ? 'human' : 'ai'),
@@ -67,7 +71,12 @@ describe('native summary chronology membership', () => {
           );
           let actual: Awaited<ReturnType<typeof replacedSpan>> | undefined;
           const creates = await operationFileCreates(async () => {
-            actual = await replacedSpan(dump, output.candidate, start);
+            actual = await replacedSpan(
+              historyScratchRoots,
+              dump,
+              output.candidate,
+              start,
+            );
           });
           expect(creates).toStrictEqual({ directories: [], files: [] });
           expect(actual?.span).toStrictEqual(
@@ -88,6 +97,7 @@ describe('native summary chronology membership', () => {
   it('keeps the old version after clear and rejects cancellation before querying', async () => {
     const session = await JournalSession.create(
       join(directory(), 'pinned.llxj'),
+      testJournalOptions(),
     );
     const rows = [
       row(7, 'first'),
@@ -104,13 +114,20 @@ describe('native summary chronology membership', () => {
       await session.store.commit([{ kind: 'clear' }]);
       await session.append([row(99, 'current')]);
       expect(
-        (await replacedSpan(dump, output.candidate, 0)).span,
+        (await replacedSpan(historyScratchRoots, dump, output.candidate, 0))
+          .span,
       ).toStrictEqual({ fromSeq: 2, toSeq: 7, itemCount: 2 });
       const controller = new AbortController();
       const failure = new Error('cancel before membership');
       controller.abort(failure);
       await expect(
-        replacedSpan(dump, output.candidate, 0, controller.signal),
+        replacedSpan(
+          historyScratchRoots,
+          dump,
+          output.candidate,
+          0,
+          controller.signal,
+        ),
       ).rejects.toBe(failure);
     } finally {
       await dump.close();
@@ -120,6 +137,7 @@ describe('native summary chronology membership', () => {
   it('keeps distinct repeated-sequence source rows and every block of a multi-unit row without preserving uncurated holes', async () => {
     const session = await JournalSession.create(
       join(directory(), 'source-rows.llxj'),
+      testJournalOptions(),
     );
     const calls: IContent = {
       speaker: 'ai',
@@ -146,7 +164,8 @@ describe('native summary chronology membership', () => {
       if (output.kind !== 'applied')
         throw new Error('Expected summary descriptor');
       expect(
-        (await replacedSpan(dump, output.candidate, 0)).span,
+        (await replacedSpan(historyScratchRoots, dump, output.candidate, 0))
+          .span,
       ).toStrictEqual({ fromSeq: 2, toSeq: 42, itemCount: 2 });
       expect(await output.candidate.readRow(0)).toStrictEqual(rows[0]);
       expect(await output.candidate.readRow(1)).toStrictEqual(calls);

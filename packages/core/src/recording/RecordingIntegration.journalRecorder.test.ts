@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fsp from 'node:fs/promises';
@@ -10,6 +13,8 @@ import { JournalRecordingService } from './journalRecordingService.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import { createLockedSessionRecorder } from './sessionRecorderFactory.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 const SESSION_ID = 'session-journal-integration';
 
@@ -26,6 +31,8 @@ function textOf(content: IContent): string {
 /** The service picks its store from the environment when it is constructed. */
 
 describe('RecordingIntegration over a journal recorder', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const directory = useTempDir('recording-integration-journal-');
   let recorder: JournalRecordingService;
   let history: HistoryService;
@@ -34,19 +41,21 @@ describe('RecordingIntegration over a journal recorder', () => {
 
   beforeEach(async () => {
     chatsDir = path.join(directory(), 'chats');
-    const created = await createLockedSessionRecorder({
-      sessionId: SESSION_ID,
-      projectHash: 'project',
-      chatsDir,
-      workspaceDirs: ['/work'],
-      provider: 'anthropic',
-      model: 'model-1',
-    });
+    const created = await createLockedSessionRecorder(
+      withTestNamedWriters({
+        sessionId: SESSION_ID,
+        projectHash: 'project',
+        chatsDir,
+        workspaceDirs: ['/work'],
+        provider: 'anthropic',
+        model: 'model-1',
+      }),
+    );
     if (!(created instanceof JournalRecordingService)) {
       throw new Error('the factory did not build a journal recorder');
     }
     recorder = created;
-    history = new HistoryService();
+    history = new HistoryService({ scratchRoots: recordingScratchRoots });
   });
 
   afterEach(async () => {
@@ -64,7 +73,7 @@ describe('RecordingIntegration over a journal recorder', () => {
   }
 
   it('holds the rows in the recorder file once the turn boundary has flushed', async () => {
-    integration = new RecordingIntegration(recorder);
+    integration = new RecordingIntegration(recorder, recordingScratchRoots);
     await integration.subscribeToJournal(history);
 
     history.add(textRow('human', 'question'));
@@ -75,7 +84,7 @@ describe('RecordingIntegration over a journal recorder', () => {
   });
 
   it('does not write the per-turn JSON snapshot for a journal recorder', async () => {
-    integration = new RecordingIntegration(recorder);
+    integration = new RecordingIntegration(recorder, recordingScratchRoots);
     await integration.subscribeToJournal(history);
 
     for (let turn = 0; turn < 4; turn++) {
@@ -105,7 +114,7 @@ describe('RecordingIntegration over a journal recorder', () => {
   });
 
   it('leaves no lock behind after detaching, then closing the recorder', async () => {
-    integration = new RecordingIntegration(recorder);
+    integration = new RecordingIntegration(recorder, recordingScratchRoots);
     await integration.subscribeToJournal(history);
     history.add(textRow('human', 'question'));
     await integration.flushAtTurnBoundary();

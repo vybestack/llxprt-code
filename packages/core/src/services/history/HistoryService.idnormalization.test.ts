@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /// <reference lib="esnext.array" />
 /**
@@ -21,6 +22,7 @@ import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { createUserMessage as createUserMessageFromIContent } from './IContent.js';
 import { ContentConverters } from './ContentConverters.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const createUserMessage = createUserMessageFromIContent;
 let service: HistoryService;
@@ -125,7 +127,7 @@ describe('HistoryService - Behavioral Tests', () => {
 });
 
 function facadeCallback0(): void {
-  service = new HistoryService();
+  service = new HistoryService({ scratchRoots: historyScratchRoots });
 }
 
 function facadeCallback1(): void {

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
@@ -42,14 +43,16 @@ export function helpersAcceptTheJournalRecorder(
 
 describe('session control helpers take the session surface', () => {
   it('requireActiveRecording returns a live journal recorder and rejects a disposed one', async () => {
-    const journal = JournalRecordingService.create({
-      sessionId: 'session-port-0002',
-      projectHash: 'project',
-      chatsDir: 'unused',
-      workspaceDirs: [],
-      provider: 'anthropic',
-      model: 'model-1',
-    });
+    const journal = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'session-port-0002',
+        projectHash: 'project',
+        chatsDir: 'unused',
+        workspaceDirs: [],
+        provider: 'anthropic',
+        model: 'model-1',
+      }),
+    );
     expect(requireActiveRecording(journal)).toBe(journal);
     await journal.dispose();
     expect(() => requireActiveRecording(journal)).toThrow(

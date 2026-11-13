@@ -1,3 +1,4 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -40,6 +41,7 @@ describe('public native journal page reader', () => {
   it('reads a tool page without decoding other call payloads', async () => {
     const session = await JournalSession.create(
       join(directory(), 'tools.llxj'),
+      testJournalOptions(),
     );
     try {
       await session.append([
@@ -105,6 +107,7 @@ describe('public native journal page reader', () => {
     it(`does not reread the same opener for each of ${calls} tool calls`, async () => {
       const session = await JournalSession.create(
         join(directory(), `repeated-${calls}.llxj`),
+        testJournalOptions(),
       );
       try {
         await session.append([
@@ -147,7 +150,10 @@ describe('public native journal page reader', () => {
   }
 
   it('reads committed rows and selects responses within label bounds', async () => {
-    const session = await JournalSession.create(join(directory(), 'page.llxj'));
+    const session = await JournalSession.create(
+      join(directory(), 'page.llxj'),
+      testJournalOptions(),
+    );
     try {
       await session.append([
         {
@@ -217,6 +223,7 @@ describe('public native journal page reader', () => {
   it('exposes an empty committed view without manufacturing a tree', async () => {
     const session = await JournalSession.create(
       join(directory(), 'empty.llxj'),
+      testJournalOptions(),
     );
     try {
       const reader = await NativeJournalPageReader.open(session.path);

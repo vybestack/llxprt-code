@@ -1,14 +1,16 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import * as promises from 'node:fs/promises';
 import { join } from 'node:path';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
-import { getScratchRoot } from '../../storage/scratch-root.js';
+
 import type { DetachedHistoryTransform } from './detachedHistoryMutation.js';
 import { openOwnedJournal } from './journalOwnedFixture.js';
 import type { IContent } from './IContent.js';
 import type { HistoryBatchRowSource } from './history-batch-values.js';
+const testScratchRoots = createTestScratchOwner();
 
 async function notifyRows(
   rows: HistoryBatchRowSource,
@@ -28,7 +30,7 @@ function row(text: string): IContent {
 async function withoutCandidateFiles(
   action: () => Promise<void>,
 ): Promise<void> {
-  getScratchRoot();
+  testScratchRoots.getRoot();
   const syncDirectories = spyOn(fs, 'mkdtempSync');
   const asyncDirectories = spyOn(promises, 'mkdtemp');
   const syncFiles = spyOn(fs, 'openSync');

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
@@ -12,15 +13,17 @@ describe('native recording probe write bytes', () => {
 
   it('measures real in-flight native write buffers and releases them after commit', async () => {
     const probe = new NativeRecordingProbe();
-    const recording = createSessionRecorder({
-      sessionId: 'probe',
-      projectHash: 'probe',
-      chatsDir: join(directory(), 'chats'),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-      journal: probe.options,
-    });
+    const recording = createSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'probe',
+        projectHash: 'probe',
+        chatsDir: join(directory(), 'chats'),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+        journal: probe.options,
+      }),
+    );
     try {
       const session = await requireJournalRecorder(recording).session();
       let observed = 0;
@@ -61,15 +64,17 @@ describe('native recording probe write bytes', () => {
 
   it('releases measured bytes when the observation rejects', async () => {
     const probe = new NativeRecordingProbe();
-    const recording = createSessionRecorder({
-      sessionId: 'failed-probe',
-      projectHash: 'probe',
-      chatsDir: join(directory(), 'chats'),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-      journal: probe.options,
-    });
+    const recording = createSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'failed-probe',
+        projectHash: 'probe',
+        chatsDir: join(directory(), 'chats'),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+        journal: probe.options,
+      }),
+    );
     try {
       const session = await requireJournalRecorder(recording).session();
       await expect(

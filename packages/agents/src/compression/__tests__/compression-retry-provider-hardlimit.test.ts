@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -38,6 +39,7 @@ import {
 } from '../../core/__tests__/chatSession-density-helpers.js';
 import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
 import { buildHandlerHarness } from './support/handler-harness.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const ISSUE_CONTEXT_LIMIT = 262_144;
 const STANDARD_CONTEXT_LIMIT = 200_000;
@@ -53,7 +55,7 @@ let historyService: HistoryService;
 
 function resetHistory(): void {
   vi.clearAllMocks();
-  historyService = new HistoryService();
+  historyService = new HistoryService({ scratchRoots: historyScratchRoots });
 }
 
 function restoreMocks(): void {
@@ -569,7 +571,7 @@ describe('provider-source pending boundaries, callbacks and restore (Issue #2588
       s.fallback.mockImplementation(async (_promptId, applyResult) => {
         // A candidate whose range cannot be published fails installation,
         // although the estimator would report that the candidate fits.
-        const rows = new HistoryDensityRows();
+        const rows = new HistoryDensityRows(historyScratchRoots);
         try {
           rows.appendSanitized(makeUserMessage('truncated history'));
           await applyResult({ rows, start: 99, hasPendingRows: true });

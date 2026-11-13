@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -17,6 +18,8 @@ import {
   forbidArrayRollback,
 } from './__tests__/support/conversation-array-test-helpers.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';
+const historyScratchRoots = createTestScratchOwner();
+
 const png =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
 const context = { turnId: 'conversation-media', source: 'conversation-media' };
@@ -62,7 +65,9 @@ describe('conversation array restore real local media ownership', () => {
             yield* rows;
           })(),
         );
-        await history.registerMediaOwner(new HistoryMediaOwnership(store));
+        await history.registerMediaOwner(
+          new HistoryMediaOwnership(store, historyScratchRoots),
+        );
         await history.addBatch(rows);
         await history.waitForCommit();
         await admission.releaseContents(rows, context);

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { curatedCandidate } from './curatedCandidate.js';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -27,6 +28,7 @@ import {
   testProviderRuntime,
 } from './__tests__/MiddleOutStrategy-test-helpers.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -41,7 +43,7 @@ describe('compression media composition', () => {
         }),
       );
       const bindings = createHistoryProviderFileBindingStore(
-        new HistoryService(),
+        new HistoryService({ scratchRoots: historyScratchRoots }),
       );
       const lifecycle = new ProviderFileLifecycle({
         maxFiles: 100,
@@ -109,11 +111,12 @@ describe('compression media composition', () => {
         }),
       });
       const rows = await curatedCandidate(
+        historyScratchRoots,
         (async function* () {
           yield* context.history;
         })(),
       );
-      const candidate = new HistoryDensityRows();
+      const candidate = new HistoryDensityRows(historyScratchRoots);
       try {
         const result = await new Strategy(
           resolver,

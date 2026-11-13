@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -14,6 +16,8 @@ import { createSessionRecorder } from '@vybestack/llxprt-code-core/recording/ses
 import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
 import { TranscriptReader } from '@vybestack/llxprt-code-core/journal/transcript-reader.js';
 import { sha256KeyHash } from '@vybestack/llxprt-code-core/journal/idKeys.js';
+const historyScratchRoots = new ScratchRootOwner();
+
 export const pieces = ['{"path":"a', '\\nb","count":', '2}'];
 export const expected: ToolCallBlock = {
   type: 'tool_call',
@@ -42,15 +46,17 @@ export async function runDiskArrival(
   argumentPieces: readonly string[] = pieces,
 ): Promise<ContentBlock[]> {
   const directory = await mkdtemp(join(tmpdir(), 'responses-tool-arrival-'));
-  const history = new HistoryService();
-  const recording = createSessionRecorder({
-    sessionId: 'arrival',
-    projectHash: 'arrival',
-    chatsDir: directory,
-    workspaceDirs: [],
-    provider: 'openai-responses',
-    model: 'gpt-5.6',
-  });
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'arrival',
+      projectHash: 'arrival',
+      chatsDir: directory,
+      workspaceDirs: [],
+      provider: 'openai-responses',
+      model: 'gpt-5.6',
+    }),
+  );
   let arrival: ResponseArrival | undefined;
   try {
     await history.attachJournal(recording);

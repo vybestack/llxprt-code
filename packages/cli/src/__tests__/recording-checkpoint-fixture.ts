@@ -1,3 +1,4 @@
+import { testJournalOptions } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -43,7 +44,7 @@ export function checkpointBindings(
         readMedia(),
       ),
     async (name, overwrite) => {
-      await createCheckpointService().createCheckpoint(
+      await createCheckpointService(testJournalOptions()).createCheckpoint(
         recording(),
         hash(),
         name,
@@ -51,7 +52,7 @@ export function checkpointBindings(
       );
     },
     async (target) => {
-      const service = createCheckpointService();
+      const service = createCheckpointService(testJournalOptions());
       const current = readRecording();
       if (current?.getSessionId() === target.source.sessionId)
         await service.deleteCheckpoint(
@@ -69,7 +70,7 @@ export function checkpointBindings(
         );
     },
     async (target, name, overwrite) => {
-      const service = createCheckpointService();
+      const service = createCheckpointService(testJournalOptions());
       const current = readRecording();
       if (current?.getSessionId() === target.source.sessionId)
         await service.renameCheckpoint(
@@ -91,7 +92,7 @@ export function checkpointBindings(
         );
     },
     async (name, overwrite) => {
-      await createCheckpointService().setSessionName(
+      await createCheckpointService(testJournalOptions()).setSessionName(
         recording(),
         hash(),
         name,

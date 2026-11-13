@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 
@@ -65,29 +66,33 @@ async function withDiskResume(
   ) => Promise<void>,
 ): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'deferred-restore-'));
-  const recording = createSessionRecorder({
-    chatsDir: root,
-    sessionId: 'source',
-    projectHash: 'project',
-    provider: 'fake',
-    model: 'fake-model',
-    workspaceDirs: [],
-  });
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      chatsDir: root,
+      sessionId: 'source',
+      projectHash: 'project',
+      provider: 'fake',
+      model: 'fake-model',
+      workspaceDirs: [],
+    }),
+  );
   for (let index = 0; index < size; index++)
     await recordRowsForTest(recording, [suffixRow(index, 2048)]);
   await recording.dispose();
   phase(size, 'recorded');
   const owners = new RowOwnership();
   const counters = createRowCounters();
-  const result = await resumeSession({
-    continueRef: 'source',
-    chatsDir: root,
-    projectHash: 'project',
-    currentProvider: 'fake',
-    currentModel: 'fake-model',
-    workspaceDirs: [],
-    counters: { ...counters.counters, ownership: owners },
-  });
+  const result = await resumeSession(
+    withTestNamedWriters({
+      continueRef: 'source',
+      chatsDir: root,
+      projectHash: 'project',
+      currentProvider: 'fake',
+      currentModel: 'fake-model',
+      workspaceDirs: [],
+      counters: { ...counters.counters, ownership: owners },
+    }),
+  );
   if (!result.ok) throw new Error(result.error);
   phase(size, 'opened');
   const {

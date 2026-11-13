@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -71,7 +72,7 @@ describe('Two-phase swap #4', () => {
       currentSessionId: 'other-session',
     });
 
-    const result = await performResume(targetId, context);
+    const result = await performResume(targetId, withTestNamedWriters(context));
     expect(result.ok).toBe(true);
     assertTrue(result.ok);
     const newRecording = context.recordingCallbacks.getCurrentRecording();

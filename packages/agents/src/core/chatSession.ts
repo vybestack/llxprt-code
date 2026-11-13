@@ -262,7 +262,7 @@ export class ChatSession {
   >();
   /** Serializes per-turn system-prompt resolution against send hand-off. */
   private systemPromptTurnChain: Promise<void> = Promise.resolve();
-  private readonly historyAdmissions = new ChatHistoryAdmissions();
+  private readonly historyAdmissions: ChatHistoryAdmissions;
   private removeDensityWrapper?: () => void;
 
   constructor(
@@ -282,6 +282,9 @@ export class ChatSession {
   ) {
     this.runtimeState = this.ports.runtime.state;
     this.historyService = this.ports.runtime.history;
+    this.historyAdmissions = new ChatHistoryAdmissions(
+      this.historyService.scratchRoots,
+    );
     this.generationConfig = generationConfig;
     this.semanticMediaPurge = createSemanticMediaPurgeSession(
       () => this.ports.runtime.ephemerals.semanticMediaPurge(),

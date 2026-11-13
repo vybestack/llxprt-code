@@ -247,7 +247,9 @@ async function runPublication(large: boolean, fault: Fault): Promise<number> {
     expect(await readdir(input.directory)).toStrictEqual([]);
     expect(input.fixture.state.active).toBe(0);
     expect(input.fixture.state.closed).toBe(1);
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(input.setup.provider.requestBodyCensus)).toBe(
+      0,
+    );
     return input.http.bodies.length;
   } finally {
     input.controller.abort(new Error('test cleanup'));
@@ -328,7 +330,9 @@ describe('awaited source prepared preflight with actual Responses and validated 
       expect(input.http.bodies).toHaveLength(0);
       expect(input.fixture.state.closed).toBe(1);
       expect(input.fixture.state.active).toBe(0);
-      expect(activeRequestBodyCount()).toBe(0);
+      expect(
+        activeRequestBodyCount(input.setup.provider.requestBodyCensus),
+      ).toBe(0);
       expect(input.state.callbacks).toBe(1);
       expect(input.state.retries).toBe(0);
     } finally {

@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '../storage/scratch-root.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -97,10 +98,12 @@ export class RecordingIntegration {
 
   constructor(
     recording: SessionRecordingPort,
+    scratchRoots: ScratchRootOwner,
     failureReportDirectory?: string,
   ) {
     this.recording = recording;
     this.persistenceFailures = new RecordingFailureStore(
+      scratchRoots,
       failureReportDirectory,
     );
   }

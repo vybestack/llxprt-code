@@ -67,7 +67,20 @@ interface MeasurementPage {
   dirty: boolean;
 }
 // A page contains only numeric/protocol facts for 32 source rows, never payloads.
-const pages = new WeakMap<NativeFactIndexReader, MeasurementPage>();
+const MEASUREMENT_PAGE = Symbol('anthropicMeasurementPage');
+class MeasurementPages {
+  current: MeasurementPage | undefined;
+}
+function pagesFor(reader: NativeFactIndexReader): MeasurementPages {
+  if (
+    MEASUREMENT_PAGE in reader &&
+    reader[MEASUREMENT_PAGE] instanceof MeasurementPages
+  )
+    return reader[MEASUREMENT_PAGE];
+  const pages = new MeasurementPages();
+  Object.defineProperty(reader, MEASUREMENT_PAGE, { value: pages });
+  return pages;
+}
 
 async function savePage(
   writer: NativeFactIndexWriter,
@@ -86,7 +99,7 @@ async function pageAt(
   key: number,
 ): Promise<MeasurementPage> {
   const ordinal = Math.floor(key / KEYS_PER_PAGE);
-  const current = pages.get(reader);
+  const current = pagesFor(reader).current;
   if (current?.ordinal === ordinal) return current;
   if (current?.dirty === true) {
     if (!(reader instanceof NativeFactIndexWriter))
@@ -99,7 +112,7 @@ async function pageAt(
       ? {}
       : pageSchema.parse(JSON.parse(inflateRawSync(bytes).toString('utf8')));
   const page = { ordinal, values, dirty: false };
-  pages.set(reader, page);
+  pagesFor(reader).current = page;
   return page;
 }
 
@@ -120,7 +133,7 @@ export async function writeAnthropicMeasurementFact(
 export async function flushAnthropicMeasurementFacts(
   writer: NativeFactIndexWriter,
 ): Promise<void> {
-  const page = pages.get(writer);
+  const page = pagesFor(writer).current;
   if (page !== undefined) await savePage(writer, page);
 }
 

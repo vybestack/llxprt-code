@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /// <reference lib="esnext.array" />
@@ -27,6 +28,7 @@ import {
   createUserMessage as createUserMessageFromIContent,
   createToolResponse as createToolResponseFromIContent,
 } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const createUserMessage = createUserMessageFromIContent;
 
@@ -53,7 +55,7 @@ function blocksMatch(content: IContent | undefined, id: string): boolean {
 }
 
 describe('HistoryService: handle a complete tool-use conversation flow', () => {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   afterEach(() => service.dispose());
 
   it('should handle a complete tool-use conversation flow', async () => {
@@ -143,7 +145,7 @@ describe('HistoryService: handle a complete tool-use conversation flow', () => {
 });
 
 describe('HistoryService: handle multiple tool calls in sequence', () => {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   afterEach(() => service.dispose());
 
   it('should handle multiple tool calls in sequence', async () => {
@@ -241,7 +243,7 @@ describe('HistoryService: handle multiple tool calls in sequence', () => {
 });
 
 describe('HistoryService: handle parallel tool calls', () => {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   afterEach(() => service.dispose());
 
   it('should handle parallel tool calls', async () => {
@@ -316,7 +318,7 @@ describe('HistoryService: handle parallel tool calls', () => {
 });
 
 describe('HistoryService: handle failed tool calls', () => {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   afterEach(() => service.dispose());
 
   it('should handle failed tool calls', async () => {
@@ -380,7 +382,7 @@ describe('HistoryService: handle failed tool calls', () => {
 });
 
 describe('HistoryService: handle mixed content types', () => {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   afterEach(() => service.dispose());
 
   it('should handle mixed content types', async () => {
@@ -432,7 +434,7 @@ describe('HistoryService: handle mixed content types', () => {
 });
 
 describe('HistoryService: return curated history without empty or invalid content', () => {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   afterEach(() => service.dispose());
 
   it('should return curated history without empty or invalid content', async () => {
@@ -467,7 +469,7 @@ describe('HistoryService: return curated history without empty or invalid conten
 });
 
 describe('HistoryService: track conversation statistics', () => {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   afterEach(() => service.dispose());
 
   it('should track conversation statistics', async () => {
@@ -504,7 +506,7 @@ describe('HistoryService: track conversation statistics', () => {
 });
 
 describe('HistoryService: handle recordTurn for complete conversation turns', () => {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   afterEach(() => service.dispose());
 
   it('should handle recordTurn for complete conversation turns', async () => {
@@ -549,7 +551,7 @@ describe('HistoryService: handle recordTurn for complete conversation turns', ()
 });
 
 describe('HistoryService: validate and fix unmatched tool calls', () => {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   afterEach(() => service.dispose());
 
   it('should validate and fix unmatched tool calls', async () => {
@@ -587,7 +589,7 @@ describe('HistoryService: validate and fix unmatched tool calls', () => {
 });
 
 describe('HistoryService: synthesize tool responses for provider payloads without mutating stored history', () => {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   afterEach(() => service.dispose());
 
   it('should synthesize tool responses for provider payloads without mutating stored history', async () => {
@@ -626,7 +628,7 @@ describe('HistoryService: synthesize tool responses for provider payloads withou
 });
 
 describe('HistoryService: synthesize tool responses when a new user message is provided as tail contents', () => {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   afterEach(() => service.dispose());
 
   it('should synthesize tool responses when a new user message is provided as tail contents', async () => {

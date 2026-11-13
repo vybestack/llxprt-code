@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import type { AdmittedModelParameters } from './admittedModelParameters.js';
 import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 /**
@@ -47,6 +48,7 @@ import type { IContent } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
 import { MediaAdmissionService } from '../storage/media-admission-service.js';
 import type { NetworkFetch } from '../utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -356,7 +358,9 @@ describe('AgentRuntimeLoader', () => {
   });
 
   it('reuses provided history service when supplied', async () => {
-    const sharedHistory = new HistoryService();
+    const sharedHistory = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     const bundle = await loadTestRuntime({
       mediaStore: new LocalMediaStore({
         rootDirectory: config.projectTempDir + '/media',
@@ -434,7 +438,9 @@ describe('AgentRuntimeLoader', () => {
       if (block.type !== 'media' || block.encoding !== 'reference') {
         throw new Error('Expected admitted media reference');
       }
-      const sharedHistory = new HistoryService();
+      const sharedHistory = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
       sharedHistory.addAll(admittedHistory);
 
       const runtimeOptions = {
@@ -721,7 +727,9 @@ describe('AgentRuntimeLoader', () => {
   });
 
   it('throws when providerManager is present but contentGeneratorFactory is missing and Config has no factory', async () => {
-    const callerHistory = new HistoryService();
+    const callerHistory = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     histories.add(callerHistory);
 
     const fakeManager: RuntimeProviderManager = {

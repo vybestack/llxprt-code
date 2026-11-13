@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { chatSessionPorts } from '../chatSessionPorts.js';
 import { buildMockContentGenerator } from './chatSession-density-helpers.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
@@ -37,6 +38,7 @@ import type {
   ThinkingBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createConfigParams } from '../chatSession-thinking-helpers.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const modelTools = installModelToolFixture();
 
@@ -90,7 +92,7 @@ export function createFixture(): {
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, historyScratchRoots);
   return { config, manager, providerRuntime };
 }
 
@@ -117,8 +119,11 @@ export function createChat(
     sessionId: config.getSessionId(),
   });
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         {

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
@@ -20,6 +21,7 @@ import {
   prepareValueRoute,
   type ValueRoute,
 } from './purge-ranking-value-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function* referenceRows(
   size: number,
@@ -117,7 +119,7 @@ async function mediaRoute(
 ): Promise<number> {
   const root = await mkdtemp(join(tmpdir(), 'purge-ranking-media-'));
   const store = new LocalMediaStore({ rootDirectory: root, quotaBytes: 1024 });
-  const owner = new HistoryMediaOwnership(store);
+  const owner = new HistoryMediaOwnership(store, historyScratchRoots);
   try {
     const media = await store.admit({
       bytes: new Uint8Array([1, 2, 3]),

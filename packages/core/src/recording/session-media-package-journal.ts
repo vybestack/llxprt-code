@@ -1,3 +1,4 @@
+import type { JournalSessionOptions } from '../services/history/journalSession.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import { open, stat, type FileHandle } from 'node:fs/promises';
@@ -86,9 +87,10 @@ export async function writeImportedJournal(
   outputPath: string,
   projectHash: string,
   sessionId: string,
+  journal: JournalSessionOptions,
 ): Promise<void> {
   await streamPinnedJournal(source, outputPath);
-  const session = await JournalSession.open(outputPath);
+  const session = await JournalSession.open(outputPath, journal);
   try {
     const facts = await readSessionFacts((key) => session.store.getState(key));
     if (facts === undefined)

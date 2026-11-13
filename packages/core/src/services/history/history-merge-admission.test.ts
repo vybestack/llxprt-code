@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
@@ -8,6 +9,7 @@ import {
   mergeRow,
   MergeRowHistory,
 } from './__tests__/support/history-merge-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function admissionRow(index: number): IContent {
   return index === 1 ? { speaker: 'ai', blocks: [] } : mergeRow(index);
@@ -21,7 +23,9 @@ describe('history merge accepted source rows', () => {
         await withCoreSuffixFixture(
           0,
           async (target) => {
-            const oracle = new HistoryService();
+            const oracle = new HistoryService({
+              scratchRoots: historyScratchRoots,
+            });
             oracle.setTokenizerFactory(exactTokenizer());
             target.setTokenizerFactory(exactTokenizer());
             try {

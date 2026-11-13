@@ -1,3 +1,5 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -65,6 +67,7 @@ describe('versioned chronology occurrence facts', () => {
             return cache;
           },
         }),
+        testNamedWriters,
       );
       try {
         await store.commit([
@@ -110,6 +113,7 @@ describe('versioned chronology occurrence facts', () => {
   it('rebuilds ordered occurrences through insertion, chronology and curation rewrites, pop, restore and clone', async () => {
     const session = await JournalSession.create(
       join(directory(), 'mutations.llxj'),
+      testJournalOptions(),
     );
     try {
       await session.append([content(8), content(2), content(8), content(4)]);
@@ -171,20 +175,24 @@ describe('versioned chronology occurrence facts', () => {
   it('fills an absent chronology namespace on open once without changing source labels or owners', async () => {
     const file = join(directory(), 'absent-index.llxj');
     const deps = storeDeps();
-    const before = await JournalStore.create(file, {
-      ...deps,
-      idDeps: {
-        ...deps.idDeps,
-        hasher: (namespace, key) =>
-          sha256KeyHash(
-            namespace,
-            namespace === ID_NS.chronology ||
-              new TextDecoder().decode(key) === CHRONOLOGY_INDEX_READY
-              ? new Uint8Array([...key, 0])
-              : key,
-          ),
+    const before = await JournalStore.create(
+      file,
+      {
+        ...deps,
+        idDeps: {
+          ...deps.idDeps,
+          hasher: (namespace, key) =>
+            sha256KeyHash(
+              namespace,
+              namespace === ID_NS.chronology ||
+                new TextDecoder().decode(key) === CHRONOLOGY_INDEX_READY
+                ? new Uint8Array([...key, 0])
+                : key,
+            ),
+        },
       },
-    });
+      testNamedWriters,
+    );
     await before.commit([
       {
         kind: 'append',
@@ -202,7 +210,7 @@ describe('versioned chronology occurrence facts', () => {
     await snapshot.close();
     const sequence = before.published?.commitSeq ?? 0;
     await before.close();
-    const reopened = await JournalSession.open(file);
+    const reopened = await JournalSession.open(file, testJournalOptions());
     try {
       expect(reopened.store.published?.commitSeq).toBe(sequence + 1);
       await assertFacts(reopened.store);
@@ -221,7 +229,7 @@ describe('versioned chronology occurrence facts', () => {
     } finally {
       await reopened.close();
     }
-    const warm = await JournalSession.open(file);
+    const warm = await JournalSession.open(file, testJournalOptions());
     try {
       expect(warm.store.published?.commitSeq).toBe(sequence + 1);
     } finally {
@@ -231,13 +239,13 @@ describe('versioned chronology occurrence facts', () => {
 
   it('publishes an explicit chronology rebuild once and preserves a ready index across reopen', async () => {
     const file = join(directory(), 'rebuild.llxj');
-    const session = await JournalSession.create(file);
+    const session = await JournalSession.create(file, testJournalOptions());
     await session.append([content(7), content(7), content(2)]);
     await session.store.commit([{ kind: 'chronology' }]);
     await assertFacts(session.store);
     const sequence = session.store.published?.commitSeq;
     await session.close();
-    const reopened = await JournalSession.open(file);
+    const reopened = await JournalSession.open(file, testJournalOptions());
     try {
       expect(reopened.store.published?.commitSeq).toBe(sequence);
       await assertFacts(reopened.store);

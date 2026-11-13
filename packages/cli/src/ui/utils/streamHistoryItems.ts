@@ -3,17 +3,19 @@ import type {
   IContent,
   EmojiFilterMode,
   RowOwnership,
+  ScratchRootOwner,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../types.js';
 import type { RowSource } from './rowIdentity.js';
 import { HistoryProjection } from './historyProjection.js';
 export interface StreamHistoryOptions {
-  readonly signal?: AbortSignal;
   readonly temporaryRoot?: string;
+  readonly signal?: AbortSignal;
   readonly sourceFor?: (row: IContent, index: number) => RowSource;
 }
 
 export async function* streamHistoryItems(
+  scratchRoots: ScratchRootOwner,
   rows:
     | AsyncIterable<IContent>
     | Iterable<IContent>
@@ -23,6 +25,7 @@ export async function* streamHistoryItems(
   options: StreamHistoryOptions = {},
 ): AsyncIterable<HistoryItem> {
   const projection = new HistoryProjection(
+    scratchRoots,
     mode,
     ownership,
     options.temporaryRoot,

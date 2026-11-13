@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
@@ -64,6 +65,7 @@ import { createConfigParams } from './chatSession-runtime-helpers.js';
 
 import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -89,7 +91,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
   });
 
   function buildChatSession(history?: HistoryService): ChatSession {
@@ -100,6 +102,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       sessionId: config.getSessionId(),
     });
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {
@@ -114,7 +117,8 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
           signal,
         ),
       state: runtimeState,
-      history: history ?? new HistoryService(),
+      history:
+        history ?? new HistoryService({ scratchRoots: historyScratchRoots }),
       settings: {
         compressionThreshold: 0.8,
         contextLimit: 128000,
@@ -448,7 +452,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
    * @scenario Durable history is the successful attempt alone
    */
   it('records only the successful attempt in history', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
@@ -713,7 +717,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
   });
 
   const observeKeepsEagerlyRecordedToolResponseIdsAcrossADiscard = async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,

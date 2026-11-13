@@ -5,7 +5,7 @@ import type { IContent } from './IContent.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { isSpeakerContent } from './historyJournalGuards.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
-import { createScratchDirSync } from '../../storage/scratch-root.js';
+import type { ScratchRootOwner } from '../../storage/scratch-root.js';
 
 /** Per row: offset and length in the rows file, then the source ordinal (or NO_ORDINAL). */
 const INDEX_RECORD_BYTES = 24;
@@ -19,8 +19,11 @@ export class HistoryDensityRows implements Iterable<IContent> {
   private count = 0;
   private closed = false;
 
-  constructor(private readonly ownership?: RowOwnership) {
-    this.root = createScratchDirSync('history-density-');
+  constructor(
+    scratchRoots: ScratchRootOwner,
+    private readonly ownership?: RowOwnership,
+  ) {
+    this.root = scratchRoots.createDirSync('history-density-');
     let rows: number | undefined;
     let index: number | undefined;
     try {

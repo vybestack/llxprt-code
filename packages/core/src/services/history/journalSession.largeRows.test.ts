@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import * as fsp from 'node:fs/promises';
@@ -76,10 +77,10 @@ describe('rows of 17, 40 and 200 MiB through the journal session (defect 5)', ()
     );
     try {
       const file = path.join(warmDirectory, 'warm.llxj');
-      const session = await JournalSession.create(file);
+      const session = await JournalSession.create(file, testJournalOptions());
       await appendRow(session, 1024);
       await session.close();
-      const reopened = await JournalSession.open(file);
+      const reopened = await JournalSession.open(file, testJournalOptions());
       await readDigest(reopened);
       await reopened.close();
     } finally {
@@ -92,14 +93,14 @@ describe('rows of 17, 40 and 200 MiB through the journal session (defect 5)', ()
       const file = path.join(directory(), `row-${mebibytes}.llxj`);
       const bytes = mebibytes * MIB;
       const baseline = await settledHeap();
-      const session = await JournalSession.create(file);
+      const session = await JournalSession.create(file, testJournalOptions());
 
       const written = await appendRow(session, bytes);
       const afterWrite = await settledHeap();
       await session.close();
       const fileBytes = (await fsp.stat(file)).size;
 
-      const reopened = await JournalSession.open(file);
+      const reopened = await JournalSession.open(file, testJournalOptions());
       const read = await readDigest(reopened);
       const afterRead = await settledHeap();
       await reopened.close();
@@ -115,6 +116,7 @@ describe('rows of 17, 40 and 200 MiB through the journal session (defect 5)', ()
   it('control: a writer side that keeps the row it was given shows the row in the same measurement', async () => {
     const session = await JournalSession.create(
       path.join(directory(), 'control-write.llxj'),
+      testJournalOptions(),
     );
     const bytes = 40 * MIB;
     const baseline = await settledHeap();
@@ -133,12 +135,12 @@ describe('rows of 17, 40 and 200 MiB through the journal session (defect 5)', ()
   it('control: a reader that keeps the row it read shows the row in the same measurement', async () => {
     const file = path.join(directory(), 'control.llxj');
     const bytes = 40 * MIB;
-    const session = await JournalSession.create(file);
+    const session = await JournalSession.create(file, testJournalOptions());
     await appendRow(session, bytes);
     await session.close();
     const baseline = await settledHeap();
 
-    const reopened = await JournalSession.open(file);
+    const reopened = await JournalSession.open(file, testJournalOptions());
     const kept: IContent[] = [];
     for await (const { content } of reopened.rows()) kept.push(content);
     const withRow = await settledHeap();

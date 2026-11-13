@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { utimes, writeFile } from 'node:fs/promises';
@@ -121,17 +125,19 @@ describe('SessionDiscovery isolates unreadable recordings', () => {
 
   it('names the live session while an unreadable recording sits beside it', async () => {
     await retired('corrupt-session-0004');
-    const recording = await JournalRecordingService.createLocked({
-      sessionId: 'live-session-0004',
-      projectHash: PROJECT_HASH,
-      chatsDir: directory(),
-      workspaceDirs: ['/test/workspace'],
-      provider: 'anthropic',
-      model: 'claude-4',
-    });
+    const recording = await JournalRecordingService.createLocked(
+      withTestNamedWriters({
+        sessionId: 'live-session-0004',
+        projectHash: PROJECT_HASH,
+        chatsDir: directory(),
+        workspaceDirs: ['/test/workspace'],
+        provider: 'anthropic',
+        model: 'claude-4',
+      }),
+    );
     try {
       await (await recording.session()).append([userRow('name me')]);
-      await new JournalCheckpointService().setSessionName(
+      await new JournalCheckpointService(testJournalOptions()).setSessionName(
         recording,
         PROJECT_HASH,
         'my-live-session',
@@ -158,7 +164,10 @@ describe('SessionDiscovery isolates unreadable recordings', () => {
     async (_label, id) => {
       const healthyPath = await healthy('healthy-session-0101');
       const brokenPath = await healthy('broken-session');
-      const session = await JournalSession.open(brokenPath);
+      const session = await JournalSession.open(
+        brokenPath,
+        testJournalOptions(),
+      );
       try {
         await session.store.commit([sessionFactEdit(SESSION_KEYS.id, id)]);
       } finally {

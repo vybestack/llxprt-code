@@ -26,6 +26,7 @@ import { useMemoryMonitor } from '../../../hooks/useMemoryMonitor.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type {
   HistoryService,
+  JournalWatermarks,
   ResumeBootHandle,
   IContent,
   IdeInfo,
@@ -78,6 +79,9 @@ export interface AppBootstrapProps {
   readJournal: () => Pick<HistoryService, 'appendDisplay' | 'length'> | null;
   settings: LoadedSettings;
   readRecordingPath: () => string | undefined;
+  readRecordingWatermarks?: () =>
+    | Pick<JournalWatermarks, 'subscribe'>
+    | undefined;
   version: string;
   /** P12: optional memory telemetry controller (perf+memory enabled only). */
   memoryController?: MemoryTelemetryController;
@@ -264,15 +268,20 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     props.turnStore.store,
     (state) => state.historyEpoch,
   );
-  const { readRecordingPath } = props;
+  const { readRecordingPath, readRecordingWatermarks } = props;
   const recordingSwapCallbacks = useMemo(
     () => ({
       getCurrentRecording: () => {
         const path = readRecordingPath();
-        return path ? { getFilePath: () => path } : null;
+        return path
+          ? {
+              getFilePath: () => path,
+              getJournalWatermarks: readRecordingWatermarks,
+            }
+          : null;
       },
     }),
-    [readRecordingPath],
+    [readRecordingPath, readRecordingWatermarks],
   );
   const { pager } = useScrollbackBootstrap({
     settings: props.settings,

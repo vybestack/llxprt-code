@@ -193,6 +193,7 @@ async function acquireActivationClient(
       contentGeneratorFactory: createRuntimeContentGeneratorFactory(),
       tokenizerFactory: configureProviderTokenizer(
         providers.manager,
+        config.scratchRoots,
         undefined,
       ),
       providerFiles: activation.files,

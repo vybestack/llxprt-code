@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
@@ -59,14 +60,16 @@ describe('production prompt submission barrier', () => {
         false,
         0,
       );
-      const recording = createSessionRecorder({
-        sessionId: 'cancelled-prompt',
-        projectHash: 'cancelled-prompt',
-        chatsDir: root(),
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'gpt-5.6',
-      });
+      const recording = createSessionRecorder(
+        withTestNamedWriters({
+          sessionId: 'cancelled-prompt',
+          projectHash: 'cancelled-prompt',
+          chatsDir: root(),
+          workspaceDirs: [],
+          provider: 'test',
+          model: 'gpt-5.6',
+        }),
+      );
       await setup.history.attachJournal(recording);
       try {
         const stream = await directProcessor(setup).sendMessageStream(
@@ -125,14 +128,16 @@ describe('production prompt submission barrier', () => {
         false,
         0,
       );
-      const recording = createSessionRecorder({
-        sessionId: 'prompt-barrier',
-        projectHash: 'prompt-barrier',
-        chatsDir: root(),
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'gpt-5.6',
-      });
+      const recording = createSessionRecorder(
+        withTestNamedWriters({
+          sessionId: 'prompt-barrier',
+          projectHash: 'prompt-barrier',
+          chatsDir: root(),
+          workspaceDirs: [],
+          provider: 'test',
+          model: 'gpt-5.6',
+        }),
+      );
       await setup.history.attachJournal(recording);
       const started =
         mode === 'direct'

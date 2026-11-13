@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -46,7 +47,10 @@ describe('journal history store mutations', () => {
     session: JournalSession;
     seededCommitSeq: number | undefined;
   }> {
-    const session = await JournalSession.create(path.join(directory(), name));
+    const session = await JournalSession.create(
+      path.join(directory(), name),
+      testJournalOptions(),
+    );
     const { commitSeq } = await session.store.commit([
       {
         kind: 'append',

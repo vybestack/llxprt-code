@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
@@ -8,13 +9,14 @@ import {
   curatedFixtureRow,
   fixtureIncluded,
 } from '../../../../core/src/services/history/__tests__/support/curated-stream-test-helpers.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export type AttemptHook = ConstructorParameters<typeof CompressionHandler>[9];
 
 export class AttemptHistory extends HistoryService {
   private strategiesStarted = false;
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'Compression attempt materialized curated history',

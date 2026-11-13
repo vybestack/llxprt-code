@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { truncate } from 'node:fs/promises';
@@ -15,6 +17,7 @@ import {
   seedRecording,
   textRow,
 } from './__tests__/support/journalRecordingFixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('replacement after resuming an interrupted commit group', () => {
   const directory = useTempDir('replace-crash-journal-');
@@ -31,7 +34,7 @@ describe('replacement after resuming an interrupted commit group', () => {
     const seed = await seedRecording(directory(), 0);
     const id = seed.recording.getSessionId();
     const recording = await JournalRecordingService.open(
-      recordingConfig(directory(), { sessionId: id }),
+      withTestNamedWriters(recordingConfig(directory(), { sessionId: id })),
       seed.filePath,
     );
     const session = await recording.session();
@@ -60,18 +63,20 @@ describe('replacement after resuming an interrupted commit group', () => {
   async function resume(
     id: string,
   ): Promise<{ history: HistoryService; recording: JournalRecordingService }> {
-    const result = await resumeSession({
-      continueRef: id,
-      projectHash: PROJECT_HASH,
-      chatsDir: directory(),
-      currentProvider: 'test',
-      currentModel: 'model',
-      workspaceDirs: [],
-    });
+    const result = await resumeSession(
+      withTestNamedWriters({
+        continueRef: id,
+        projectHash: PROJECT_HASH,
+        chatsDir: directory(),
+        currentProvider: 'test',
+        currentModel: 'model',
+        workspaceDirs: [],
+      }),
+    );
     const boot = requireBoot(result);
     if (!result.ok || !(result.recording instanceof JournalRecordingService))
       throw new Error('Expected journal resume');
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     recordings.push(result.recording);
     histories.push(history);
     await history.adoptResumeBoot(result.recording, boot);

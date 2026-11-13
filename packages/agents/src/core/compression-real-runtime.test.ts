@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 /**
  * Issue #854: real end-to-end compression on a non-Responses provider (OpenAI
@@ -29,6 +30,7 @@ import {
   loggingChatSession,
   readLoggingChatStream,
 } from './__tests__/support/chat-session-logging-fixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const root = sourceRootSetup();
 const MODEL = 'gpt-4o';
@@ -158,19 +160,20 @@ describe('compression through the CLI runtime wiring on OpenAI chat', () => {
       undefined,
       settingsOwner,
     );
-    const factory = configureProviderTokenizer(manager);
+    const factory = configureProviderTokenizer(manager, config.scratchRoots);
     manager.registerProvider(new OpenAIProvider('test-key', baseURL));
     manager.setActiveProvider('openai');
     const provider = manager.getActiveProvider();
     if (provider === undefined) throw new Error('Missing active provider');
 
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.setTokenizerFactory(factory);
     const runtimeId = randomUUID();
     const providerRuntime = createProviderRuntimeContext({
       runtimeId,
     });
     const runtime = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {

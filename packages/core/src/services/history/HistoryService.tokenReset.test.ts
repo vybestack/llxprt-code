@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -15,6 +16,7 @@ import { HistoryService } from './HistoryService.js';
 import { createUserMessage } from './IContent.js';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function createScalingTokenizerFactory(
   _tokenizer: RuntimeTokenizer,
@@ -47,7 +49,7 @@ describe('HistoryService - Token Accounting Reset (provider switch)', () => {
   let service: HistoryService;
 
   beforeEach(() => {
-    service = new HistoryService();
+    service = new HistoryService({ scratchRoots: historyScratchRoots });
   });
 
   describe('resetTokenAccounting', () => {

@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import type { CompressionHandler } from '../../compression/CompressionHandler.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { afterEach as closePolicyFixtures } from 'bun:test';
@@ -28,6 +29,7 @@ import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/c
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -157,6 +159,7 @@ export function buildRuntimeContext(
   historyRoots.add(historyService);
   policyRoots.push(settingsOwner);
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
     prepareProviderInvocation: (name, parameters, signal) =>
       settingsOwner.prepareProviderInvocation(

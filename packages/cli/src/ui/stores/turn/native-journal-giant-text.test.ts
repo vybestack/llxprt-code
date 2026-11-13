@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { open } from 'node:fs/promises';
@@ -38,6 +39,7 @@ describe('giant journal text rows', () => {
   it('projects sliced emoji warnings with distinct identities and pageable positions', async () => {
     const session = await JournalSession.create(
       join(directory(), 'emoji.llxj'),
+      testJournalOptions(),
     );
     try {
       await session.append([
@@ -81,6 +83,7 @@ describe('giant journal text rows', () => {
       'escaped "quote" \\ slash\n🌙漢字\t'.repeat(70000) + 'TAIL_SENTINEL';
     const session = await JournalSession.create(
       join(directory(), 'giant.llxj'),
+      testJournalOptions(),
     );
     try {
       await session.append([

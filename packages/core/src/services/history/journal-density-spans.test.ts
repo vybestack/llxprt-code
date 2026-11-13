@@ -1,9 +1,10 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import * as promises from 'node:fs/promises';
 import { statSync } from 'node:fs';
-import { getScratchRoot } from '../../storage/scratch-root.js';
+
 import { JournalDensitySpans } from './journalDensitySpans.js';
 import { join } from 'node:path';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
@@ -13,11 +14,12 @@ import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import { SPAN_WINDOW_CAPACITY } from './historySpanWindow.js';
 import { openOwnedJournal } from './journalOwnedFixture.js';
 import type { IContent } from './IContent.js';
+const testScratchRoots = createTestScratchOwner();
 
 async function denyIntervalCreation(
   action: () => Promise<void>,
 ): Promise<void> {
-  getScratchRoot();
+  testScratchRoots.getRoot();
   const attempts: string[] = [];
   const denied = (path: unknown): never => {
     attempts.push(String(path));

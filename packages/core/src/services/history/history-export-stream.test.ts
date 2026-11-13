@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
@@ -22,6 +23,7 @@ import {
   sha256,
 } from './export-summary-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function* exportRows(
   size: number,
@@ -130,7 +132,7 @@ describe('history JSON export lifecycle', () => {
   });
 
   it('exports empty history and a valid row larger than 8 MiB', async () => {
-    const empty = new HistoryService();
+    const empty = new HistoryService({ scratchRoots: historyScratchRoots });
     let output = '';
     try {
       await empty.writeJSON(async (chunk) => {

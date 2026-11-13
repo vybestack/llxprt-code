@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -103,7 +104,9 @@ describe('recording bootstrap checkpoint resolution', () => {
 });
 
 async function verifyReturnsTheCheckpointChildBootDirectlyAndKeepsThePrefixIndependent(): Promise<void> {
-  const source = createSessionRecorder(recordingConfig(chatsDir, 'parent'));
+  const source = createSessionRecorder(
+    withTestNamedWriters(recordingConfig(chatsDir, 'parent')),
+  );
   await recordRowsForTest(source, [
     {
       speaker: 'human',
@@ -157,7 +160,7 @@ async function verifyReturnsTheCheckpointChildBootDirectlyAndKeepsThePrefixIndep
 async function verifyReportsAnAmbiguousCheckpointReferenceInsteadOfStartingAFreshSession(): Promise<void> {
   for (const sessionId of ['source-one', 'source-two']) {
     const recording = createSessionRecorder(
-      recordingConfig(chatsDir, sessionId),
+      withTestNamedWriters(recordingConfig(chatsDir, sessionId)),
     );
     try {
       await recordRowsForTest(recording, [

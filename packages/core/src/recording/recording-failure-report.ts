@@ -15,7 +15,7 @@ import {
   recordingFailureDetails,
   type RecordingFailureDetail,
 } from './recording-failure-descriptor.js';
-import { createScratchDirSync } from '../storage/scratch-root.js';
+import type { ScratchRootOwner } from '../storage/scratch-root.js';
 export type { RecordingFailureDetail } from './recording-failure-descriptor.js';
 
 function weakCause(value: unknown): WeakRef<object> | undefined {
@@ -226,12 +226,16 @@ export class RecordingFailureStore {
   private firstGeneration = Infinity;
   private firstCause: WeakRef<object> | undefined;
   private firstMessage = '';
-  constructor(private readonly root?: string) {}
+  constructor(
+    private readonly scratchRoots: ScratchRootOwner,
+    private readonly root?: string,
+  ) {}
   record(generation: number, cause: unknown): void {
     let temporary: string | undefined;
     try {
       this.directory ??=
-        this.root ?? createScratchDirSync('llxprt-recording-failures-');
+        this.root ??
+        this.scratchRoots.createDirSync('llxprt-recording-failures-');
       mkdirSync(this.directory, { recursive: true, mode: 0o700 });
       const file = join(this.directory, `${generation}.jsonl`);
       temporary = `${file}.tmp`;

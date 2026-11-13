@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
@@ -8,6 +9,7 @@ import {
   tokenWeight,
   withSuffixFixture,
 } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('lazy chronological recent journal suffix', () => {
   for (const size of [512, 8192]) {
@@ -41,7 +43,7 @@ describe('lazy chronological recent journal suffix', () => {
   }
 
   it('captures on first next, pins membership, and closes without starting', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       service.add(suffixRow(0));
       const abandoned = service.getRecent(0)[Symbol.asyncIterator]();
@@ -142,7 +144,7 @@ describe('token-budget suffix edge cases', () => {
   });
 
   it('handles both APIs on an empty journal', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       expect(await indices(service.getRecent(0))).toStrictEqual([]);
       expect(

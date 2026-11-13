@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 import { openIndependentJournal } from './__tests__/support/independent-journal.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
@@ -14,6 +17,9 @@ import {
   resumeJournalSession,
   type JournalResumeResult as ResumeResult,
 } from '../../recording/journalResume.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
+
 const PROJECT_HASH = 'persistence-owner';
 
 function row(text: string): IContent {
@@ -48,45 +54,59 @@ let integration: RecordingIntegration;
 let resumed: ResumeResult | undefined;
 
 async function candidate(): Promise<ResumeResult> {
-  const recording = createSessionRecorder({
-    sessionId: 'candidate',
-    projectHash: PROJECT_HASH,
-    chatsDir: directory,
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'candidate',
+      projectHash: PROJECT_HASH,
+      chatsDir: directory,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
+  const seeded = new HistoryService({
+    scratchRoots: recordingScratchRoots,
+    recording,
   });
-  const seeded = new HistoryService({ recording });
   await seeded.addBatch([row('row-0'), row('row-1'), row('row-2')]);
   await seeded.waitForCommit();
   await seeded.dispose();
   await recording.dispose();
-  const result = await resumeJournalSession({
-    continueRef: 'candidate',
-    chatsDir: directory,
-    projectHash: PROJECT_HASH,
-    currentProvider: 'test',
-    currentModel: 'test',
-    workspaceDirs: [],
-  });
+  const result = await resumeJournalSession(
+    withTestNamedWriters({
+      continueRef: 'candidate',
+      chatsDir: directory,
+      projectHash: PROJECT_HASH,
+      currentProvider: 'test',
+      currentModel: 'test',
+      workspaceDirs: [],
+    }),
+  );
   if (!result.ok) throw new Error(result.error);
   resumed = result;
   return result;
 }
 
 describe('journal persistence ownership', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'history-persistence-'));
-    old = createSessionRecorder({
-      sessionId: 'old',
-      projectHash: PROJECT_HASH,
-      chatsDir: directory,
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
+    old = createSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'old',
+        projectHash: PROJECT_HASH,
+        chatsDir: directory,
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
+    history = new HistoryService({
+      scratchRoots: recordingScratchRoots,
+      recording: old,
     });
-    history = new HistoryService({ recording: old });
-    integration = new RecordingIntegration(old);
+    integration = new RecordingIntegration(old, recordingScratchRoots);
     void integration.subscribeToJournal(history);
     history.add(row('old row'));
     await history.waitForCommit();
@@ -173,7 +193,10 @@ async function verifyPreservesAdoptedChronologyThroughIndependentReopenAndAddres
 
 async function verifyDoesNotReattachARejectedRecorderWhenPublicationSubscribesBeforeFailing(): Promise<void> {
   const result = await candidate();
-  const next = new RecordingIntegration(result.recording);
+  const next = new RecordingIntegration(
+    result.recording,
+    recordingScratchRoots,
+  );
   await expect(
     history.adoptResumeBoot(result.recording, result.resumePoint, () => {
       void next.subscribeToJournal(history);
@@ -273,7 +296,7 @@ async function verifyWaitForCommitIncludesAPrecedingAsynchronousSummaryAndSubseq
 
 async function verifyDoesNotDisposeARecorderOwnedByItsCaller(): Promise<void> {
   await history.dispose();
-  const continued = new HistoryService();
+  const continued = new HistoryService({ scratchRoots: recordingScratchRoots });
   await continued.addBatch([row('caller still owns recorder')]);
   await continued.attachJournal(old, true);
   await continued.waitForCommit();
@@ -326,7 +349,10 @@ async function verifyDetachesADisabledIntegrationWithoutStoppingLiveHistoryOrWri
 async function verifyPersistsAddDensityDeletionSyntheticRepairCompressionAndClearOnlyToThe(): Promise<void> {
   const result = await candidate();
   const oldBytes = await readFile(old.getFilePath()!);
-  const next = new RecordingIntegration(result.recording);
+  const next = new RecordingIntegration(
+    result.recording,
+    recordingScratchRoots,
+  );
   await history.adoptResumeBoot(result.recording, result.resumePoint);
   void next.subscribeToJournal(history);
   const check = async (): Promise<void> => {

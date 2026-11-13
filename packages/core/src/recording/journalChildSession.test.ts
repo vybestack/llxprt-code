@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 /**
  * The ephemeral child journal of a subagent on the journal backend. The cases
@@ -60,7 +61,7 @@ describe('child session journal on the journal backend', () => {
 
   it('materializes a locked child journal under its own file', async () => {
     const opts = options();
-    const child = await createJournalChildSession(opts);
+    const child = await createJournalChildSession(withTestNamedWriters(opts));
     await (await child.recording.session()).append([userRow('child work')]);
     await child.recording.flush();
     const filePath = child.recording.getFilePath();
@@ -74,7 +75,7 @@ describe('child session journal on the journal backend', () => {
 
   it('stamps the subagent kind and the parent into the file the creation wrote', async () => {
     const opts = options();
-    const child = await createJournalChildSession(opts);
+    const child = await createJournalChildSession(withTestNamedWriters(opts));
     try {
       const facts = await readJournalFileFacts(
         child.recording.getFilePath() as string,
@@ -88,10 +89,12 @@ describe('child session journal on the journal backend', () => {
   });
 
   it('uses the id the caller allocated', async () => {
-    const child = await createJournalChildSession({
-      ...options(),
-      sessionId: 'allocated-before-runtime',
-    });
+    const child = await createJournalChildSession(
+      withTestNamedWriters({
+        ...options(),
+        sessionId: 'allocated-before-runtime',
+      }),
+    );
     try {
       expect(child.sessionId).toBe('allocated-before-runtime');
       expect(child.recording.getSessionId()).toBe('allocated-before-runtime');
@@ -102,7 +105,7 @@ describe('child session journal on the journal backend', () => {
 
   it('dispose removes the journal file and releases the lock', async () => {
     const opts = options();
-    const child = await createJournalChildSession(opts);
+    const child = await createJournalChildSession(withTestNamedWriters(opts));
     const { sessionId } = child;
     await child.dispose();
     expect(await SessionLockManager.isLocked(opts.chatsDir, sessionId)).toBe(
@@ -113,7 +116,9 @@ describe('child session journal on the journal backend', () => {
   });
 
   it('dispose is idempotent', async () => {
-    const child = await createJournalChildSession(options());
+    const child = await createJournalChildSession(
+      withTestNamedWriters(options()),
+    );
     await child.dispose();
     await expect(child.dispose()).resolves.toBeUndefined();
   });
@@ -122,7 +127,9 @@ describe('child session journal on the journal backend', () => {
     const seams = testJournalSeams({ failWriteAt: 0 });
     let error: unknown = null;
     try {
-      await createJournalChildSession(options({ journal: seams.dependencies }));
+      await createJournalChildSession(
+        withTestNamedWriters(options({ journal: seams.dependencies })),
+      );
     } catch (caught: unknown) {
       error = caught;
     }
@@ -134,7 +141,7 @@ describe('child session journal on the journal backend', () => {
   it('a mid-life write failure still cleans up on dispose', async () => {
     const probe = testJournalSeams();
     const created = await createJournalChildSession(
-      options({ journal: probe.dependencies }),
+      withTestNamedWriters(options({ journal: probe.dependencies })),
     );
     const writesToCreate = probe.events.filter(
       (e) => e.type === 'write',
@@ -143,7 +150,7 @@ describe('child session journal on the journal backend', () => {
 
     const seams = testJournalSeams({ failWriteAt: writesToCreate });
     const child = await createJournalChildSession(
-      options({ journal: seams.dependencies }),
+      withTestNamedWriters(options({ journal: seams.dependencies })),
     );
     child.recording.recordSessionMetadata('fails to write');
     await child.dispose();
@@ -153,19 +160,21 @@ describe('child session journal on the journal backend', () => {
 
   it('the parent journal stays one task group, isolated from children', async () => {
     const opts = options();
-    const parent = await JournalRecordingService.createLocked({
-      sessionId: randomUUID(),
-      projectHash: PROJECT,
-      chatsDir: opts.chatsDir,
-      workspaceDirs: ['/w'],
-      provider: 'anthropic',
-      model: 'claude-4',
-      journal: journalSeams(),
-    });
+    const parent = await JournalRecordingService.createLocked(
+      withTestNamedWriters({
+        sessionId: randomUUID(),
+        projectHash: PROJECT,
+        chatsDir: opts.chatsDir,
+        workspaceDirs: ['/w'],
+        provider: 'anthropic',
+        model: 'claude-4',
+        journal: journalSeams(),
+      }),
+    );
     parents.push(parent);
     await (await parent.session()).append([userRow('parent work')]);
     await parent.flush();
-    const child = await createJournalChildSession(opts);
+    const child = await createJournalChildSession(withTestNamedWriters(opts));
     await (await child.recording.session()).append([userRow('child work')]);
     await child.recording.flush();
     const parentPath = parent.getFilePath();

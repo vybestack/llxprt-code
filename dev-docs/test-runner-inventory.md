@@ -513,9 +513,9 @@ issue #2918 so the patterns are not "corrected" back later.
 - **Partial module mocks use synchronous factories.** Bun's `mock.module` does
   not drain microtasks in an async factory, so a partial mock pre-imports the
   actual value and returns it from a synchronous factory.
-  `packages/core/src/config/config.includeDirectories.test.ts` and
-  `config.initializeBoundary.test.ts` both use this shape; the old
-  async-factory concern is already addressed. No live `importOriginal()` calls
+  `packages/cli/src/cliStartupOrdering.test.ts` and
+  `cliSessionListAndDelete.main.test.ts` use this shape; the old async-factory
+  concern is already addressed. No live `importOriginal()` calls
   remain in `packages/`; the remaining references are explanatory comments.
 - **`vi.clearAllMocks()` resets call history and preserves implementations.**
   Per-test implementation overrides therefore persist. The `beforeEach` in

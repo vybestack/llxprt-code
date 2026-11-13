@@ -1,3 +1,8 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
@@ -18,19 +23,25 @@ import {
   MediaAdmissionService,
 } from './media-admission-service.js';
 import { RequestMediaResolver } from './request-media-resolver.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const directory = tempDirectory('native-media-gate-');
 describe('rollback checkpoint media release', () => {
   it('releases candidate media after restoring and closing the checkpoint', async () => {
-    const recording = JournalRecordingService.create({
-      sessionId: 'rollback-media',
-      projectHash: 'test',
-      chatsDir: join(directory(), 'chats'),
-      workspaceDirs: ['/work'],
-      provider: 'test',
-      model: 'test',
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'rollback-media',
+        projectHash: 'test',
+        chatsDir: join(directory(), 'chats'),
+        workspaceDirs: ['/work'],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
+    const history = new HistoryService({
+      scratchRoots: historyScratchRoots,
+      recording,
     });
-    const history = new HistoryService({ recording });
     await history.waitForCommit();
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'rollback-checkpoint'),
@@ -46,7 +57,9 @@ describe('rollback checkpoint media release', () => {
       mimeType: 'image/png',
       semanticMetadata: {},
     });
-    await history.registerMediaOwner(new HistoryMediaOwnership(media));
+    await history.registerMediaOwner(
+      new HistoryMediaOwnership(media, historyScratchRoots),
+    );
     try {
       await history.detachedValues.replace([
         { speaker: 'human', blocks: [prior] },
@@ -73,6 +86,7 @@ describe('media release while the gate is draining', () => {
   it('drains a newly queued release when its old pin closes before the queue commit returns', async () => {
     const session = await JournalSession.create(
       join(directory(), 'enqueuing-release.llxj'),
+      testJournalOptions(),
     );
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'enqueuing-media'),
@@ -109,6 +123,7 @@ describe('media release while the gate is draining', () => {
   it('finishes a release when the last old pin closes during the busy drain', async () => {
     const session = await JournalSession.create(
       join(directory(), 'busy-release.llxj'),
+      testJournalOptions(),
     );
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'busy-media'),
@@ -209,7 +224,7 @@ describe('version-pinned history media ownership', () => {
     ).rejects.toMatchObject({ errors: [reader, drain] });
   });
   it('rejects same-length corrupt blob bytes at the selected unit with its original verification cause', async () => {
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const root = join(directory(), 'corrupt');
     const media = new LocalMediaStore({
       rootDirectory: root,
@@ -221,7 +236,9 @@ describe('version-pinned history media ownership', () => {
       mimeType: 'image/png',
       semanticMetadata: {},
     });
-    await history.registerMediaOwner(new HistoryMediaOwnership(media));
+    await history.registerMediaOwner(
+      new HistoryMediaOwnership(media, historyScratchRoots),
+    );
     await history.addBatch([
       {
         speaker: 'human',
@@ -264,7 +281,7 @@ describe('version-pinned history media ownership', () => {
     }
   });
   it('retires an in-progress blob reader before releasing its history pin', async () => {
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'paused-read'),
       quotaBytes: 1024,
@@ -274,7 +291,9 @@ describe('version-pinned history media ownership', () => {
       mimeType: 'image/png',
       semanticMetadata: {},
     });
-    await history.registerMediaOwner(new HistoryMediaOwnership(media));
+    await history.registerMediaOwner(
+      new HistoryMediaOwnership(media, historyScratchRoots),
+    );
     await history.addBatch([{ speaker: 'human', blocks: [reference] }]);
     const source = await history.prepareCuratedForProviderSnapshot();
     const row = await source.readAt(0);
@@ -331,7 +350,7 @@ describe('version-pinned history media ownership', () => {
     }
   });
   it('does not remove a fresh history claim when an old pin drains', async () => {
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'readopted'),
       quotaBytes: 1024,
@@ -341,7 +360,9 @@ describe('version-pinned history media ownership', () => {
       mimeType: 'image/png',
       semanticMetadata: {},
     });
-    await history.registerMediaOwner(new HistoryMediaOwnership(media));
+    await history.registerMediaOwner(
+      new HistoryMediaOwnership(media, historyScratchRoots),
+    );
     const row: IContent = { speaker: 'human', blocks: [reference] };
     await history.addBatch([row]);
     const source = await history.prepareCuratedForProviderSnapshot();
@@ -366,7 +387,7 @@ describe('version-pinned history media ownership', () => {
     }
   });
   it('gates admission history releases through the same native owner', async () => {
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'admission'),
       quotaBytes: 1024,
@@ -376,7 +397,7 @@ describe('version-pinned history media ownership', () => {
       mimeType: 'image/png',
       semanticMetadata: {},
     });
-    const owner = new HistoryMediaOwnership(media);
+    const owner = new HistoryMediaOwnership(media, historyScratchRoots);
     await history.registerMediaOwner(owner);
     const admission = new MediaAdmissionService(media);
     admission.bindHistoryRelease((id) => owner.releaseReference(id));
@@ -403,7 +424,7 @@ describe('version-pinned history media ownership', () => {
     }
   });
   it('reserves existing rows before granting a native lease to a newly registered owner', async () => {
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'adopted'),
       quotaBytes: 1024,
@@ -414,7 +435,9 @@ describe('version-pinned history media ownership', () => {
       semanticMetadata: {},
     });
     await history.addBatch([{ speaker: 'human', blocks: [reference] }]);
-    await history.registerMediaOwner(new HistoryMediaOwnership(media));
+    await history.registerMediaOwner(
+      new HistoryMediaOwnership(media, historyScratchRoots),
+    );
     const source = await history.prepareCuratedForProviderSnapshot();
     try {
       expect(source.native?.mediaLease).toBeDefined();
@@ -431,7 +454,7 @@ describe('version-pinned history media ownership', () => {
     }
   });
   it('reads a native historical reference after clear and reclaims after source close', async () => {
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'media'),
       quotaBytes: 1024,
@@ -443,7 +466,9 @@ describe('version-pinned history media ownership', () => {
       semanticMetadata: {},
     });
     const resolver = new RequestMediaResolver(media);
-    await history.registerMediaOwner(new HistoryMediaOwnership(media));
+    await history.registerMediaOwner(
+      new HistoryMediaOwnership(media, historyScratchRoots),
+    );
     await history.addBatch([{ speaker: 'human', blocks: [reference] }]);
     const source = await history.prepareCuratedForProviderSnapshot();
     try {
@@ -504,6 +529,7 @@ describe('version-pinned history media ownership', () => {
   it('holds three real blobs until the last old-version pin closes and then reclaims them', async () => {
     const session = await JournalSession.create(
       join(directory(), 'history.llxj'),
+      testJournalOptions(),
     );
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'media'),

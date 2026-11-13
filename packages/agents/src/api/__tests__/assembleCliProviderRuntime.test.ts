@@ -123,7 +123,7 @@ describe('explicit provider primitives under the owning Agent assembly', () => {
       manager,
       oauth,
       'same-label',
-      createRuntimeTokenizerFactory(),
+      createRuntimeTokenizerFactory(config.scratchRoots),
       undefined,
       process.env.LLXPRT_FAKE_RESPONSES,
     );

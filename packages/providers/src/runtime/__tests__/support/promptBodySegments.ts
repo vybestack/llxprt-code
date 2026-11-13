@@ -1,7 +1,8 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createScratchDirSync } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import {
   Gpt56SourceProjection,
   type Gpt56SourceProjectionOptions,
@@ -12,6 +13,7 @@ import {
   type SegmentWriterOptions,
   type WrittenSegment,
 } from '../../prompt-segment-writers.js';
+const testScratchRoots = createTestScratchOwner();
 
 type Protocol = Gpt56SourceProjectionOptions['protocol'];
 
@@ -66,7 +68,7 @@ export async function projectBodyFromSegments(
   body: Readonly<Record<string, unknown>>,
   model: string,
 ): Promise<Gpt56SourceProjection> {
-  const root = createScratchDirSync('prompt-body-segments-');
+  const root = testScratchRoots.createDirSync('prompt-body-segments-');
   try {
     const costs = join(root, 'image-costs.jsonl');
     writeFileSync(costs, '', { mode: 0o600 });

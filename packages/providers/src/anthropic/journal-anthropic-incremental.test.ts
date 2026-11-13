@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { recordedMessages as emittedCandidate } from './__tests__/wire-reference/support/recorded-wire-oracle.js';
 import { describe, expect, it } from 'bun:test';
@@ -277,7 +278,7 @@ describe('incremental native Anthropic stored summaries', () => {
       ).dependencies;
       const session = await JournalSession.create(
         `${directory()}/scale-${count}.llxj`,
-        {
+        testJournalOptions({
           journal: {
             ...dependencies,
             open: async (path, flags) => {
@@ -298,7 +299,7 @@ describe('incremental native Anthropic stored summaries', () => {
               };
             },
           },
-        },
+        }),
       );
       const rows = Array.from({ length: count }, (_, at) =>
         text(`row-${at}`, at % 2 === 0 ? 'human' : 'ai'),
@@ -366,7 +367,7 @@ describe('incremental native Anthropic stored summaries', () => {
       ).dependencies;
       const session = await JournalSession.create(
         `${directory()}/tool-scale-${count}.llxj`,
-        {
+        testJournalOptions({
           journal: {
             ...dependencies,
             open: async (path, flags) => {
@@ -400,7 +401,7 @@ describe('incremental native Anthropic stored summaries', () => {
               };
             },
           },
-        },
+        }),
       );
       const rows = Array.from({ length: count / 4 }, (_, at) => [
         text(`q-${at}`),
@@ -623,7 +624,7 @@ describe('incremental native Anthropic stored summaries', () => {
     it(`preserves old-emitter bytes for ${scenario.name}`, async () => {
       const session = await JournalSession.create(
         `${directory()}/${scenario.name}.llxj`,
-        { journal: testJournalSeams().dependencies },
+        testJournalOptions({ journal: testJournalSeams().dependencies }),
       );
       try {
         await session.append(scenario.before);

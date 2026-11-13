@@ -170,18 +170,26 @@ function resolveVersion(versionArg: string): string | null {
 /**
  * Downloads the npm tarball and returns the SHA256 checksum and formula content.
  */
-async function downloadAndGenerateFormula(version: string): Promise<string> {
-  const tarballUrl = `https://registry.npmjs.org/@vybestack/llxprt-code/-/llxprt-code-${version}.tgz`;
-  const tmpDir = tmpdir();
-  const tarballPath = join(tmpDir, `llxprt-code-${version}.tgz`);
+async function downloadAndGenerateFormula(
+  version: string,
+  preparedTarball?: string,
+): Promise<string> {
+  let tarballPath = preparedTarball;
+  if (tarballPath === undefined) {
+    const tarballUrl = `https://registry.npmjs.org/@vybestack/llxprt-code/-/llxprt-code-${version}.tgz`;
+    const tmpDir = tmpdir();
+    tarballPath = join(tmpDir, `llxprt-code-${version}.tgz`);
 
-  console.log(`Downloading tarball from ${tarballUrl}...`);
-  try {
-    await downloadFile(tarballUrl, tarballPath);
-    console.log('Tarball downloaded successfully');
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to download tarball: ${message}`);
+    console.log(`Downloading tarball from ${tarballUrl}...`);
+    try {
+      await downloadFile(tarballUrl, tarballPath);
+      console.log('Tarball downloaded successfully');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to download tarball: ${message}`);
+    }
+  } else {
+    console.log(`Using prepared tarball at ${tarballPath}`);
   }
 
   console.log('Calculating SHA256 checksum...');
@@ -192,7 +200,9 @@ async function downloadAndGenerateFormula(version: string): Promise<string> {
   console.log('Generated formula:');
   console.log(formulaContent);
 
-  rmSync(tarballPath, { force: true });
+  if (preparedTarball === undefined) {
+    rmSync(tarballPath, { force: true });
+  }
   return formulaContent;
 }
 
@@ -287,6 +297,7 @@ function commitAndPush(
  */
 async function main(): Promise<void> {
   const versionArg = process.argv[2] ?? '';
+  const preparedTarball = process.argv[3];
   const dryRun = process.env.DRY_RUN === 'true';
   const token = process.env.HOMEBREW_TAP_TOKEN;
 
@@ -302,7 +313,10 @@ async function main(): Promise<void> {
     );
   }
 
-  const formulaContent = await downloadAndGenerateFormula(version);
+  const formulaContent = await downloadAndGenerateFormula(
+    version,
+    preparedTarball,
+  );
 
   if (dryRun) {
     console.log('Dry run mode - skipping git operations');

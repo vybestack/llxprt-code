@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { open } from 'node:fs/promises';
@@ -43,7 +44,11 @@ describe('complete transcript', () => {
 
   it('keeps originals and replacements addressable while membership follows compression, pop, density, purge and clear', async () => {
     const path = join(dir(), 'history.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     try {
       await store.commit([
         {
@@ -128,7 +133,11 @@ describe('complete transcript', () => {
     } finally {
       await store.close();
     }
-    const reopened = await JournalStore.open(path, storeDeps());
+    const reopened = await JournalStore.open(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     await reopened.close();
     expect((await page(path, 'backward')).rows).toStrictEqual([
       'purged',
@@ -146,7 +155,11 @@ describe('complete transcript', () => {
 
   it('records coalesced admissions in caller order even when context inserts before them', async () => {
     const path = join(dir(), 'admission-order.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     try {
       await store.commit([
         { kind: 'append', rows: [draftRow({ text: 'seed' })] },
@@ -173,7 +186,11 @@ describe('complete transcript', () => {
 
   it('records replacement arrays in caller order rather than context label order', async () => {
     const path = join(dir(), 'replacement-order.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     try {
       await store.commit([
         {
@@ -212,7 +229,11 @@ describe('complete transcript', () => {
 
   it('records a pending admission removed before its group publishes context', async () => {
     const path = join(dir(), 'dropped-admission.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     try {
       await store.commit([
         { kind: 'append', rows: [draftRow({ text: 'seed' })] },
@@ -234,7 +255,11 @@ describe('complete transcript', () => {
 
   it('resumes at the newest page with bounded positional reads', async () => {
     const path = join(dir(), 'resume.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     async function* rows() {
       for (let index = 0; index < 4096; index++)
         yield draftRow({ text: `row-${index}` });

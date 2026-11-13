@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /// <reference lib="esnext.array" />
 /**
  * @license
@@ -33,6 +34,7 @@ import {
 } from './__tests__/client-test-helpers.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const realConfigModule = {
   ...(await import('@vybestack/llxprt-code-core/config/config.js')),
@@ -678,7 +680,7 @@ describe('tool-content 400 recovery — history assumption (issue #2722)', () =>
 
   const observeOrphanedToolCallsAreClosedBeforeTheProviderSeesTheRecoveryRequest =
     async () => {
-      const history = new HistoryService();
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       // Seed: an AI turn issued a tool_call whose response was rejected by the
       // provider (HTTP 400), so no tool_response was ever recorded for it.
       const aiTurn: IContent = {

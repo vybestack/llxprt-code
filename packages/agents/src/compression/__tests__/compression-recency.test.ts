@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -39,6 +40,7 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
 import { chatSessionPorts } from '../../core/chatSessionPorts.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
 const retainedHistories: HistoryService[] = [];
@@ -76,7 +78,9 @@ function makeChatSession(
     sessionId: 'test-session-id',
   });
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   retainedHistories.push(historyService);
   vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(100000);
   vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(undefined);
@@ -96,6 +100,7 @@ function makeChatSession(
   invocationOwner.bindTelemetry(runtimeSetup.config);
   retainedInvocationOwners.push(invocationOwner);
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       invocationOwner.prepareProviderInvocation(
         runtimeState.runtimeId,

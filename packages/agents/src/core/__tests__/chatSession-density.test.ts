@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -35,6 +36,7 @@ import {
   makeUserMessage,
   resetCallIds,
 } from './chatSession-density-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 let densityFixture1_historyService: HistoryService;
 
@@ -46,7 +48,9 @@ describe('Density Optimization Orchestration (P19)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetCallIds();
-    densityFixture1_historyService = new HistoryService();
+    densityFixture1_historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     densityFixture2_mockContentGenerator = buildMockContentGenerator();
   });
 

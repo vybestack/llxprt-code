@@ -448,6 +448,7 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
         openBrowser: transport?.openBrowser ?? openBrowserSecurely,
       },
       config: this.#config,
+      requestFetch: this.#providers.manager.fetchNetwork,
       managerFactory: McpClientManager,
       extensionLoader: { kind: 'none' },
       policy: { kind: 'supplied', owner: policyOwner, ownership: 'caller' },

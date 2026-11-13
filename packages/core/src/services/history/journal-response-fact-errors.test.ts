@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from './journalSession.js';
@@ -13,7 +14,7 @@ describe('invalid native response index data', () => {
   it('rejects a real response with no best pointer before emitting a lazy plan', async () => {
     const session = await JournalSession.create(
       `${directory()}/missing-best.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await session.append([

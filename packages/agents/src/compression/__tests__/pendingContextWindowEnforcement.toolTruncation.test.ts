@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -29,6 +30,7 @@ import {
   type PendingContextWindowEnforcerDeps,
 } from '../pendingContextWindowEnforcement.js';
 import { installFixtureCandidate } from './provider-fallback-candidate-fixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function makeLogger(): DebugLogger {
   return {
@@ -134,7 +136,9 @@ let suite1HistoryService: HistoryService;
 describe('PendingContextWindowEnforcer structured overflow on estimator error (issue #1321)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    suite0HistoryService = new HistoryService();
+    suite0HistoryService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
   });
 
   it(
@@ -169,7 +173,9 @@ describe('PendingContextWindowEnforcer structured overflow on estimator error (i
   describe('PendingContextWindowEnforcer fallback rebuild under an active compression lock (#3338)', () => {
     beforeEach(() => {
       vi.clearAllMocks();
-      suite1HistoryService = new HistoryService();
+      suite1HistoryService = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
     });
 
     it(
@@ -368,7 +374,7 @@ async function testBody5(): Promise<void> {
 }
 
 async function testBody6(): Promise<void> {
-  const noOpHistory = new HistoryService();
+  const noOpHistory = new HistoryService({ scratchRoots: historyScratchRoots });
   noOpHistory.add({
     speaker: 'ai',
     blocks: [{ type: 'text', text: 'x'.repeat(10_000) }],

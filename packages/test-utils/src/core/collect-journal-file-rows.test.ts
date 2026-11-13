@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
@@ -22,7 +23,7 @@ describe('collectJournalFileRowsForAssertions', () => {
 
   async function written(...values: string[]): Promise<string> {
     const file = path.join(directory, 'rows.llxj');
-    const session = await JournalSession.create(file);
+    const session = await JournalSession.create(file, testJournalOptions());
     await session.append(values.map(text));
     await session.close();
     return file;
@@ -47,7 +48,7 @@ describe('collectJournalFileRowsForAssertions', () => {
       }),
     ).rejects.toThrow('assertion failed');
     // The file can be opened for its owner again, which a leaked handle on the lock would prevent.
-    const session = await JournalSession.open(file);
+    const session = await JournalSession.open(file, testJournalOptions());
     await session.close();
   });
 });

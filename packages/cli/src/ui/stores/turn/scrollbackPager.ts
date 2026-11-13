@@ -44,13 +44,6 @@ interface ContextWindow {
   lastSeq: number;
 }
 
-let rowItemIdCounter = 0;
-
-function nextRowItemId(): number {
-  rowItemIdCounter += 1;
-  return rowItemIdCounter;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -124,8 +117,12 @@ interface ResumeFloorOffsets {
   firstDisplayOffset: number | null;
 }
 
-function entryToRow(entry: JournalEntry): ScrollbackRow {
-  if (entry.kind === 'boundary') return compressedBoundaryRow(entry);
+function entryToRow(
+  entry: JournalEntry,
+  nextRowItemId: () => number,
+): ScrollbackRow {
+  if (entry.kind === 'boundary')
+    return compressedBoundaryRow(entry, nextRowItemId());
   const identity = entry.item.rowIdentity;
   if (!identity) throw new Error('Missing projected identity');
   return {
@@ -138,7 +135,10 @@ function entryToRow(entry: JournalEntry): ScrollbackRow {
   };
 }
 
-function compressedBoundaryRow(entry: BoundaryEntry): ScrollbackRow {
+function compressedBoundaryRow(
+  entry: BoundaryEntry,
+  id: number,
+): ScrollbackRow {
   const identity: RowIdentity = {
     kind: 'journal',
     offset: entry.offset,
@@ -152,7 +152,7 @@ function compressedBoundaryRow(entry: BoundaryEntry): ScrollbackRow {
     identity,
     offset: entry.offset,
     item: {
-      id: nextRowItemId(),
+      id,
       type: 'info',
       text: compressedBoundaryText(entry.envelope.payload),
     },
@@ -187,6 +187,8 @@ function seqWatermarks(rows: readonly ScrollbackRow[]): {
 }
 
 class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
+  private rowItemIdCounter = 0;
+  private readonly nextRowItemId = (): number => ++this.rowItemIdCounter;
   private readonly filePath: string;
   private readonly viewport: ScrollbackViewportReporter;
   private readonly pageRows: number;
@@ -194,7 +196,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   private readonly chunkBytes: number | undefined;
   private readonly counters: JournalReadCounters | undefined;
 
-  private readonly subscription: JournalPagerSubscription;
+  private readonly subscription: JournalPagerSubscription | undefined;
   private publishedEnd: number | undefined;
   private watermark: JournalCommitWatermark | undefined;
   private orphanBeforeTranscriptId: bigint | undefined;
@@ -254,13 +256,17 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     this.chunkBytes = options.chunkBytes;
     this.counters = options.counters;
     this.orphanBeforeTranscriptId = options.orphanBeforeTranscriptId;
-    this.subscription = new JournalPagerSubscription(
-      this.filePath,
-      (watermark) => this.refreshCommitted(watermark),
-      (error) => {
-        this.error = errorMessage(error);
-      },
-    );
+    this.subscription =
+      options.watermarks === undefined
+        ? undefined
+        : new JournalPagerSubscription(
+            this.filePath,
+            (watermark) => this.refreshCommitted(watermark),
+            (error) => {
+              this.error = errorMessage(error);
+            },
+            options.watermarks,
+          );
   }
 
   private async refreshCommitted(
@@ -460,7 +466,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     }
     const seeded: ScrollbackRow[] = [];
     for (let i = collected.length - 1; i >= 0; i -= 1) {
-      const row = entryToRow(collected[i]);
+      const row = entryToRow(collected[i], this.nextRowItemId);
       seeded.push(row);
     }
     this.pagedRows = seeded;
@@ -513,7 +519,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    this.subscription.close();
+    this.subscription?.close();
     this.listeners.clear();
     this.generation += 1;
     this.controller.abort();
@@ -700,7 +706,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   private absorbBack(entries: readonly JournalEntry[]): void {
     const rows: ScrollbackRow[] = [];
     for (let i = entries.length - 1; i >= 0; i -= 1) {
-      const row = entryToRow(entries[i]);
+      const row = entryToRow(entries[i], this.nextRowItemId);
       rows.push(row);
     }
     this.pagedRows = [...rows, ...this.pagedRows];
@@ -710,7 +716,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   private absorbForward(entries: readonly JournalEntry[]): void {
     const rows: ScrollbackRow[] = [];
     for (const entry of entries) {
-      const row = entryToRow(entry);
+      const row = entryToRow(entry, this.nextRowItemId);
       rows.push(row);
     }
     const merged = new Map(this.pagedRows.map((row) => [row.key, row]));

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
@@ -31,9 +32,12 @@ describe('HistoryStorePort asynchronous reads (journal store)', () => {
 
   async function opened(): Promise<ReadsStore> {
     const store: ReadsStore = new JournalHistoryStore(
-      await JournalSession.create(path.join(directory(), 'reads.llxj'), {
-        journal: testJournalSeams({}).dependencies,
-      }),
+      await JournalSession.create(
+        path.join(directory(), 'reads.llxj'),
+        testJournalOptions({
+          journal: testJournalSeams({}).dependencies,
+        }),
+      ),
     );
     open.push(store);
     return store;

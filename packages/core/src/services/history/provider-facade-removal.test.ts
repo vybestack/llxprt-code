@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
@@ -6,6 +7,7 @@ import { openNativeProviderFixture } from './__tests__/support/native-provider-f
 import type { NativeProviderHistory } from './native-purge-provider-request.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function nativeOverride(
   rows: () => AsyncGenerator<IContent, void, unknown>,
@@ -19,7 +21,7 @@ function nativeOverride(
 
 class CursorOnlyHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(this, 'eager curation');
   }
 }
@@ -30,7 +32,9 @@ describe('provider history stream facade', () => {
   });
 
   it('opens an asynchronous override only on first demand and closes it before emitting normalized rows', async () => {
-    const history = new CursorOnlyHistory();
+    const history = new CursorOnlyHistory({
+      scratchRoots: historyScratchRoots,
+    });
     const events: string[] = [];
     async function* input(): AsyncGenerator<IContent, void, unknown> {
       events.push('open');
@@ -66,7 +70,9 @@ describe('provider history stream facade', () => {
   });
 
   it('propagates an asynchronous override fault without publishing a partial row', async () => {
-    const history = new CursorOnlyHistory();
+    const history = new CursorOnlyHistory({
+      scratchRoots: historyScratchRoots,
+    });
     let closed = false;
     const failure = new Error('override failed');
     async function* input(): AsyncGenerator<IContent, void, unknown> {
@@ -95,7 +101,9 @@ describe('provider history stream facade', () => {
 
 describe('request boundary validation', () => {
   it('rejects conflicting purge identities before producing any request row', async () => {
-    const history = new CursorOnlyHistory();
+    const history = new CursorOnlyHistory({
+      scratchRoots: historyScratchRoots,
+    });
     const input: IContent[] = [{}, {}].map((boundaryId) => ({
       speaker: 'human',
       blocks: [{ type: 'text', text: 'boundary' }],

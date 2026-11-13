@@ -1,3 +1,4 @@
+import { HistoryOriginIds } from './historyOriginId.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalIndependentWrites } from './journalIndependentWrites.js';
 import { journalDisplayCommands } from './journal-display-commands.js';
@@ -89,6 +90,8 @@ export class JournalHistoryStore
   extends JournalHistoryStoreMutations
   implements HistoryStorePort
 {
+  readonly originIds: HistoryOriginIds;
+
   protected get operationStore(): JournalHistoryStore {
     return this;
   }
@@ -302,6 +305,7 @@ export class JournalHistoryStore
     protected readonly options: StoreTypes.JournalHistoryStoreOptions = {},
   ) {
     super();
+    this.originIds = options.originIds ?? new HistoryOriginIds();
     const session = typeof source === 'function' ? source() : source;
     if (session instanceof Promise) {
       this.opened = session.then((opened) => this.install(opened));

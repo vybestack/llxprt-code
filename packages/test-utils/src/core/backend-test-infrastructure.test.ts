@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '../__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { CONTINUE_LATEST, resumeSession } from '@vybestack/llxprt-code-core';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
@@ -14,6 +16,8 @@ import {
   createRecorderForTest,
   recordRowsForTest,
 } from './recorder-for-test.js';
+const historyScratchRoots = createTestScratchOwner();
+
 type HistoryBackend = 'old' | 'journal';
 
 const BACKENDS: readonly HistoryBackend[] = ['journal'];
@@ -56,14 +60,16 @@ describe('test infrastructure on both history backends', () => {
         await recordRowsForTest(recorder, [seed]);
         await recorder.flush();
         await recorder.dispose();
-        const resumed = await resumeSession({
-          continueRef: CONTINUE_LATEST,
-          projectHash: 'test-project',
-          chatsDir,
-          currentProvider: 'test',
-          currentModel: 'test',
-          workspaceDirs: [chatsDir],
-        });
+        const resumed = await resumeSession(
+          withTestNamedWriters({
+            continueRef: CONTINUE_LATEST,
+            projectHash: 'test-project',
+            chatsDir,
+            currentProvider: 'test',
+            currentModel: 'test',
+            workspaceDirs: [chatsDir],
+          }),
+        );
         try {
           if (!resumed.ok) throw new Error(resumed.error);
           const rows = [];
@@ -101,7 +107,9 @@ describe('test infrastructure on both history backends', () => {
       });
 
       it('reads the rows of a history that has no recorder once they are durable', async () => {
-        const service = new HistoryService();
+        const service = new HistoryService({
+          scratchRoots: historyScratchRoots,
+        });
         try {
           service.add(suffixRow(0));
           service.add(suffixRow(1));
@@ -134,7 +142,7 @@ describe('test infrastructure on both history backends', () => {
   }
 
   it('samples committed journal history after its pending append', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       service.add(suffixRow(0));
       await service.waitForCommit();

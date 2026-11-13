@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
@@ -26,6 +27,7 @@ import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
 import { chatSessionPorts, type ChatSessionPorts } from './chatSessionPorts.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('ChatSession hook execution control', () => {
   let mockHookSystem: {
@@ -132,8 +134,11 @@ describe('ChatSession hook execution control', () => {
       sessionId: 'test-session',
     });
 
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       ...createSessionPolicyFixture(
         runtimeSetup.settingsService,
         providerRuntimeSnapshot.runtimeId ?? 'hook-runtime',

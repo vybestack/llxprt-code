@@ -1,3 +1,4 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -26,7 +27,7 @@ describe('arrival process crash', () => {
       reader.releaseLock();
       child.kill('SIGKILL');
       await child.exited;
-      const session = await JournalSession.open(path);
+      const session = await JournalSession.open(path, testJournalOptions());
       await session.close();
       const journal = await openJournalReadOnly(path);
       try {

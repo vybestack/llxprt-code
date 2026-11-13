@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { makeLoadBalancerInvocation } from '../../../../providers/src/__tests__/loadBalancerTestHelpers.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
@@ -61,6 +62,7 @@ import {
 import { prepareAtSendSeam } from '../../core/promptEnvelopeSendSeam.js';
 import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import type { ProviderRequestSource } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const MODEL = 'test-model';
 const HISTORY_MESSAGES = 14;
@@ -355,7 +357,9 @@ function facadeCallback0(): void {
 }
 
 async function facadeCallback1(): Promise<void> {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   seedHistory(historyService);
   await historyService.waitForTokenUpdates();
   const pending = makePending();
@@ -432,7 +436,9 @@ async function facadeCallback1(): Promise<void> {
 }
 
 async function facadeCallback2(): Promise<void> {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   seedHistory(historyService);
   await historyService.waitForTokenUpdates();
   const pending = makePending();
@@ -501,7 +507,9 @@ async function facadeCallback2(): Promise<void> {
 }
 
 async function facadeCallback3(): Promise<void> {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   seedHistory(historyService);
   await historyService.waitForTokenUpdates();
   const pending = makePending();

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { identitySlotSummary } from '@vybestack/llxprt-code-core/journal/summaryComposition.js';
 import { requestFormatSlot } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
@@ -111,10 +112,13 @@ describe('native format registration lifecycle', () => {
     ) => Promise<void>,
   ): Promise<void> {
     const counter = { reads: 0 };
-    const session = await JournalSession.create(`${directory()}/${name}.llxj`, {
-      journal: testJournalSeams({ readCounter: counter }, 1, false)
-        .dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/${name}.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({ readCounter: counter }, 1, false)
+          .dependencies,
+      }),
+    );
     try {
       await consume(session, counter);
     } finally {
@@ -362,7 +366,10 @@ describe('native format registration lifecycle', () => {
       await new OffsetAudit(read.access).walkVersion(read.version);
       await read.close();
       await session.close();
-      const reopened = await JournalSession.open(session.path);
+      const reopened = await JournalSession.open(
+        session.path,
+        testJournalOptions(),
+      );
       expect(await planned(reopened)).toBe(after);
       await reopened.registerRowFormat(plainChatLengthRegistration(SETTINGS));
       await reopened.append([textRow('reopened append')]);
@@ -443,7 +450,10 @@ describe('native format registration lifecycle', () => {
           planStoredChatMessages(pin, failedSettings, 0, ''),
         ).toThrow(/registered/);
         await session.close();
-        const reopened = await JournalSession.open(session.path);
+        const reopened = await JournalSession.open(
+          session.path,
+          testJournalOptions(),
+        );
         try {
           expect(await planned(reopened)).toBe(expected);
           await reopened.registerRowFormat(

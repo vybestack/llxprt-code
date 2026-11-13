@@ -14,48 +14,48 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  createScratchDir,
-  createScratchDirSync,
-  getScratchRoot,
+  ScratchRootOwner,
   removeScratchDir,
-  removeScratchRoot,
   sweepDeadScratchRoots,
 } from './scratch-root.js';
+
+const owner = new ScratchRootOwner();
 
 const MODULE = join(dirname(fileURLToPath(import.meta.url)), 'scratch-root.ts');
 
 describe('process-owned scratch root', () => {
-  afterEach(() => removeScratchRoot());
+  afterEach(() => owner.removeRoot());
 
   it('names the root after this pid under the OS temp dir', () => {
-    const root = getScratchRoot();
+    const root = owner.getRoot();
     expect(dirname(root)).toBe(tmpdir());
     expect(basename(root)).toMatch(
       new RegExp(`^llxprt-scratch-${process.pid}-[A-Za-z0-9]{6}$`),
     );
-    expect(getScratchRoot()).toBe(root);
+    expect(dirname(owner.createDirSync('reused-'))).toBe(root);
   });
 
   it('creates sync and async scratch dirs inside the root', async () => {
-    const a = createScratchDirSync('a-');
-    const b = await createScratchDir('b-');
-    expect(dirname(a)).toBe(getScratchRoot());
-    expect(dirname(b)).toBe(getScratchRoot());
+    const a = owner.createDirSync('a-');
+    const b = await owner.createDir('b-');
+    expect(dirname(a)).toBe(owner.getRoot());
+    expect(dirname(b)).toBe(owner.getRoot());
   });
 
   it('removeScratchRoot deletes everything and a later use creates a fresh root', () => {
-    const first = getScratchRoot();
-    createScratchDirSync('x-');
-    removeScratchRoot();
+    const first = owner.getRoot();
+    owner.createDirSync('x-');
+    owner.removeRoot();
     expect(existsSync(first)).toBe(false);
-    expect(getScratchRoot()).not.toBe(first);
+    expect(dirname(owner.createDirSync('fresh-'))).not.toBe(first);
   });
 
   it('removes the root when the process exits normally', () => {
     const script = `
-      import { createScratchDirSync, getScratchRoot } from ${JSON.stringify(MODULE)};
-      createScratchDirSync('child-');
-      process.stdout.write(getScratchRoot());
+      import { ScratchRootOwner } from ${JSON.stringify(MODULE)};
+      const owner = new ScratchRootOwner();
+      owner.createDirSync('child-');
+      process.stdout.write(owner.getRoot());
     `;
     const result = spawnSync('bun', ['-e', script], {
       encoding: 'utf8',
@@ -134,8 +134,9 @@ describe('sweep at scratch root creation', () => {
     mkdirSync(live);
 
     const script = `
-      import { getScratchRoot } from ${JSON.stringify(MODULE)};
-      getScratchRoot();
+      import { ScratchRootOwner } from ${JSON.stringify(MODULE)};
+      const owner = new ScratchRootOwner();
+      owner.getRoot();
     `;
     const result = runChild(script, tmp);
 
@@ -152,11 +153,12 @@ describe('sweep at scratch root creation', () => {
 
     const script = `
       import { existsSync, mkdirSync } from 'node:fs';
-      import { getScratchRoot, removeScratchRoot } from ${JSON.stringify(MODULE)};
-      getScratchRoot();
-      removeScratchRoot();
+      import { ScratchRootOwner } from ${JSON.stringify(MODULE)};
+      const owner = new ScratchRootOwner();
+      owner.getRoot();
+      owner.removeRoot();
       mkdirSync(${JSON.stringify(late)});
-      getScratchRoot();
+      owner.getRoot();
       process.stdout.write(String(existsSync(${JSON.stringify(late)})));
     `;
     const result = runChild(script, tmp);
@@ -198,10 +200,11 @@ describe('sweep while another process owns a live root', () => {
     const script = `
       import { writeFileSync } from 'node:fs';
       import { join } from 'node:path';
-      import { createScratchDirSync, getScratchRoot } from ${JSON.stringify(MODULE)};
-      const dir = createScratchDirSync('llxprt-resolver-');
+      import { ScratchRootOwner } from ${JSON.stringify(MODULE)};
+      const owner = new ScratchRootOwner();
+      const dir = owner.createDirSync('llxprt-resolver-');
       writeFileSync(join(dir, 'rows'), 'live');
-      process.stdout.write(getScratchRoot() + '\\n');
+      process.stdout.write(owner.getRoot() + '\\n');
       process.stdin.resume();
     `;
     const child = spawn('bun', ['-e', script], {

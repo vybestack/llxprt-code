@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -29,6 +30,7 @@ import {
 import { createCorpus, GoldenRecorder } from './support/wireBodyCorpus.js';
 import { PINNED_CLOCK } from './support/wireBodyFixtures.js';
 import type { HistoryCase } from './support/wireBodyHistories.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const corpus = await createCorpus();
 const recorder = new GoldenRecorder(false);
@@ -71,7 +73,10 @@ async function captureRows(
 function guardedHistory(
   options?: ConstructorParameters<typeof HistoryService>[0],
 ): HistoryService {
-  const history = new HistoryService(options);
+  const history = new HistoryService({
+    ...options,
+    scratchRoots: historyScratchRoots,
+  });
   forbidHistoryMaterializationForTest(
     history,
     'native wire golden materialized history',

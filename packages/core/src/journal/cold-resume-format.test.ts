@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -54,17 +55,26 @@ describe('cold resume format cache', () => {
       const rows = Array.from({ length: size + 3 }, (_, index) =>
         draftRow({ text: `row ${index}` }),
       );
-      const original = await JournalStore.create(path, storeDeps());
+      const original = await JournalStore.create(
+        path,
+        storeDeps(),
+        testNamedWriters,
+      );
       try {
         await original.commit([{ kind: 'replace', rows: rows.slice(0, size) }]);
         await original.commit([{ kind: 'format', registration }]);
       } finally {
         await original.close();
       }
-      const resumed = await JournalStore.open(path, storeDeps());
+      const resumed = await JournalStore.open(
+        path,
+        storeDeps(),
+        testNamedWriters,
+      );
       const cold = await JournalStore.create(
         join(directory(), `cold-${size}.llxj`),
         storeDeps(),
+        testNamedWriters,
       );
       try {
         reads = 0;
@@ -103,6 +113,7 @@ describe('cold resume format cache', () => {
     const store = await JournalStore.create(
       join(directory(), 'native-pin.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     const nativeFacts = {
       scope: 'native-pin',
@@ -142,6 +153,7 @@ describe('cold resume format cache', () => {
     const store = await JournalStore.create(
       join(directory(), 'pinned.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     const registration: RowFormatRegistration = {
       settings,

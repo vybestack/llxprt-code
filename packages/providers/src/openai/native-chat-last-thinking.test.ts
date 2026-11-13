@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -26,6 +28,7 @@ import {
   planRequestChatMessages,
   PLAIN_CHAT_FORMAT_REV,
 } from './journal-chat-length.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const logger = new DebugLogger('native-chat-last-thinking');
 const human = (text: string): IContent => ({
@@ -211,7 +214,7 @@ async function measuredTokens(
     await estimatePromptEnvelope(
       'openai',
       projected,
-      createRuntimeTokenizerFactory(),
+      createRuntimeTokenizerFactory(tokenizerScratchRoots),
     )
   ).estimatedPromptTokens;
 }
@@ -296,7 +299,7 @@ describe('native stored last-thinking policy', () => {
 
   it('carries last-unit ranks through append, old pins, pop, rewrite, clone, compaction and reopen', async () => {
     const path = `${directory()}/lifecycle.llxj`;
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     const settings: RowFormatSettings = {
       formatId: 'openai-chat:plain',
       formatRev: PLAIN_CHAT_FORMAT_REV,
@@ -397,7 +400,7 @@ describe('native stored last-thinking policy', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path);
+    const reopened = await JournalSession.open(path, testJournalOptions());
     try {
       await check(reopened, base.slice(0, 2));
     } finally {

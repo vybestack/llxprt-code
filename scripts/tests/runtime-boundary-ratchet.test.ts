@@ -89,7 +89,7 @@ describe('strict runtime boundary enforcement after ratchet retirement', () => {
       'packages/demo/src/assembly.ts',
       `
       function publishAgentFacade(input: unknown): unknown { return input; }
-      export class ForegroundAgentAssembly {
+      export class ForegroundAssembly {
         publish(): unknown { return publishAgentFacade(() => 1); }
       }
       `,
@@ -214,13 +214,16 @@ describe('strict runtime boundary enforcement after ratchet retirement', () => {
     ).toEqual([{ owner: 'demo', rule: 'runtime-service-bundle' }]);
   });
 
-  it('fails on a new mutable-state finding alongside a bundle', () => {
+  it('fails on a reassigned module binding alongside a bundle', () => {
     put('packages/demo/src/bag.ts', bundleSource);
     expect(audit().exitCode).toBe(1);
-    put('packages/demo/src/runtime/state.ts', 'export let counter = 0;');
+    put(
+      'packages/demo/src/runtime/state.ts',
+      'export let counter = 0; export function advance() { counter += 1; }',
+    );
     const result = audit();
     expect(result.exitCode).toBe(1);
-    expect(result.findings.map((f) => f.rule)).toContain('mutable-state');
+    expect(result.findings.map((f) => f.rule)).toContain('module-mutation');
     expect(result.findings.map((f) => f.rule)).toContain(
       'runtime-service-bundle',
     );
@@ -236,7 +239,7 @@ describe('strict runtime boundary enforcement after ratchet retirement', () => {
     expect(result.findings.map((f) => f.rule)).toEqual(['async-local-storage']);
   });
 
-  it('does not treat writes to ambient platform globals as module state', () => {
+  it('rejects writes to process.env in runtime code', () => {
     put(
       'packages/demo/src/runtime/ambient.d.ts',
       'declare var process: { env: Record<string, string | undefined> };',
@@ -246,9 +249,13 @@ describe('strict runtime boundary enforcement after ratchet retirement', () => {
       '/// <reference path="./ambient.d.ts" />\nexport function configure(project: string): void { process.env.PROJECT = project; }',
     );
     const result = audit();
-    expect(
-      result.findings.filter((finding) => finding.rule === 'module-mutation'),
-    ).toEqual([]);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        file: 'packages/demo/src/runtime/env.ts',
+        rule: 'process-environment-mutation',
+      }),
+    );
+    expect(result.exitCode).toBe(1);
   });
 
   it('fails for writes to globalThis runtime storage', () => {
@@ -319,10 +326,15 @@ describe('strict runtime boundary enforcement after ratchet retirement', () => {
     );
   });
 
-  it('does not retain a committed allowance baseline', () => {
-    expect(
-      existsSync(resolve('scripts/runtime-service-shape-baseline.json')),
-    ).toBe(false);
+  it('keeps only a ratcheted baseline for widened production findings', () => {
+    const path = resolve('scripts/runtime-state-widened-baseline.json');
+    expect(existsSync(path)).toBe(true);
+    const baseline: { purpose: string; findings: unknown[] } = JSON.parse(
+      readFileSync(path, 'utf8'),
+    );
+    expect(baseline.purpose).toContain('#3980');
+    expect(baseline.purpose).toContain('#4037');
+    expect(baseline.findings.length).toBeGreaterThan(0);
   });
 });
 

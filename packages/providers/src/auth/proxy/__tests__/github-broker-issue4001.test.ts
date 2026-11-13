@@ -27,7 +27,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { realpath, writeFile } from 'node:fs/promises';
+import { realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { executeGitHubOp } from '../github-broker.js';
@@ -254,7 +254,9 @@ describe('issue #4001: gh runs in an existing working directory', () => {
 
         it('records the resolved cwd in the failure debug line', async () => {
           const shim = await newShim({ failWith: 'gh blew up 4001' });
-          const workspace = await newDir('gh4001-workspace-');
+          const workspaceTarget = await newDir('gh4001-workspace-');
+          const workspace = join(workspaceTarget, 'workspace-alias');
+          await symlink(workspaceTarget, workspace);
           const { lines, error } = await captureBrokerDebugLines(() =>
             withGhOnPath(shim.binDir, () =>
               executeGitHubOp(

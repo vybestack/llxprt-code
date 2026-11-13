@@ -70,7 +70,10 @@ describe('explicit child runtime loader inputs', () => {
       credentials().authority,
       settingsOwner,
     );
-    const tokenizerFactory = configureProviderTokenizer(manager);
+    const tokenizerFactory = configureProviderTokenizer(
+      manager,
+      config.scratchRoots,
+    );
     const contentGeneratorFactory = createRuntimeContentGeneratorFactory();
     const state = createAgentRuntimeState({
       runtimeId: 'explicit-child',

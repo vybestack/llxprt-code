@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
@@ -43,7 +44,7 @@ describe('journal store scalars and last rows', () => {
   async function created(): Promise<JournalHistoryStore> {
     const session = await JournalSession.create(
       path.join(directory(), 'scalars.llxj'),
-      { journal: testJournalSeams({}).dependencies },
+      testJournalOptions({ journal: testJournalSeams({}).dependencies }),
     );
     const store = new JournalHistoryStore(session);
     open.push(store);

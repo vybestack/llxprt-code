@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { testJournalSeams } from '../../../../core/src/journal/__tests__/support/journalFixtures.js';
 import { describe, expect, it } from 'bun:test';
@@ -57,7 +58,7 @@ describe('native read/write versioned facts', () => {
     const policy = readWritePolicy(() => {
       measured++;
     });
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     try {
       await session.append([toolRow('r', 'read_file', 'a'), resultRow('r')]);
       await session.store.commit([{ kind: 'densityFiles', policy }]);
@@ -128,7 +129,7 @@ describe('native read/write versioned facts', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path);
+    const reopened = await JournalSession.open(path, testJournalOptions());
     try {
       const bytes = (await stat(path)).size;
       const calls = measured;
@@ -149,6 +150,7 @@ describe('native read/write versioned facts', () => {
   it('preserves a producer error at row 65, policy generation and same-writer continuation', async () => {
     const session = await JournalSession.create(
       join(directory(), 'fault.llxj'),
+      testJournalOptions(),
     );
     const good = readWritePolicy();
     const failure = new Error('read/write producer failed at 65');
@@ -206,7 +208,7 @@ describe('native read/write versioned facts', () => {
     const seams = testJournalSeams({ failFlushAt: 2 });
     const session = await JournalSession.create(
       join(directory(), 'physical-fault.llxj'),
-      { journal: seams.dependencies },
+      testJournalOptions({ journal: seams.dependencies }),
     );
     const policy = readWritePolicy();
     try {

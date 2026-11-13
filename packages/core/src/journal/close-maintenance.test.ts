@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -25,25 +26,33 @@ describe('closing automatic maintenance', () => {
     const entered = gate();
     const resume = gate();
     let copies = 0;
-    const store = await JournalStore.create(file, {
-      ...storeDeps({ seams, compactionDue: () => true }),
-      journal: {
-        ...seams.dependencies,
-        open: async (path, flags) => {
-          if (path.endsWith('.compact') && flags === 'wx+' && ++copies === 1) {
-            entered.release();
-            await resume.promise;
-          }
-          return seams.dependencies.open(path, flags);
+    const store = await JournalStore.create(
+      file,
+      {
+        ...storeDeps({ seams, compactionDue: () => true }),
+        journal: {
+          ...seams.dependencies,
+          open: async (path, flags) => {
+            if (
+              path.endsWith('.compact') &&
+              flags === 'wx+' &&
+              ++copies === 1
+            ) {
+              entered.release();
+              await resume.promise;
+            }
+            return seams.dependencies.open(path, flags);
+          },
         },
       },
-    });
+      testNamedWriters,
+    );
     try {
       await store.commit([
         { kind: 'append', rows: [draftRow({ text: 'first' })] },
       ]);
       await entered.promise;
-      const acquiring = suspendJournalMaintenance();
+      const acquiring = suspendJournalMaintenance(store.maintenanceScope);
       resume.release();
       const release = await acquiring;
       try {
@@ -65,6 +74,7 @@ describe('closing automatic maintenance', () => {
     const reopened = await JournalStore.open(
       file,
       storeDeps({ compactionDue: () => false }),
+      testNamedWriters,
     );
     try {
       const texts: string[] = [];
@@ -88,6 +98,7 @@ describe('closing automatic maintenance', () => {
           return true;
         },
       }),
+      testNamedWriters,
     );
     await store.commit([
       { kind: 'append', rows: [draftRow({ text: 'kept' })] },
@@ -104,29 +115,33 @@ describe('closing automatic maintenance', () => {
     const resume = gate();
     let copying = false;
     let candidateReads = 0;
-    const store = await JournalStore.create(file, {
-      ...storeDeps({ seams, compactionDue: () => true }),
-      journal: {
-        ...seams.dependencies,
-        open: async (path, flags) => {
-          const handle = await seams.dependencies.open(path, flags);
-          if (path.endsWith('.compact')) {
-            copying = true;
-            entered.release();
-          }
-          return {
-            ...handle,
-            read: async (...args) => {
-              if (copying) {
-                candidateReads++;
-                await resume.promise;
-              }
-              return handle.read(...args);
-            },
-          };
+    const store = await JournalStore.create(
+      file,
+      {
+        ...storeDeps({ seams, compactionDue: () => true }),
+        journal: {
+          ...seams.dependencies,
+          open: async (path, flags) => {
+            const handle = await seams.dependencies.open(path, flags);
+            if (path.endsWith('.compact')) {
+              copying = true;
+              entered.release();
+            }
+            return {
+              ...handle,
+              read: async (...args) => {
+                if (copying) {
+                  candidateReads++;
+                  await resume.promise;
+                }
+                return handle.read(...args);
+              },
+            };
+          },
         },
       },
-    });
+      testNamedWriters,
+    );
     await store.commit([
       {
         kind: 'append',
@@ -145,6 +160,7 @@ describe('closing automatic maintenance', () => {
     const reopened = await JournalStore.open(
       file,
       storeDeps({ compactionDue: () => false }),
+      testNamedWriters,
     );
     try {
       expect(reopened.published?.selfOffset).toBe(version?.selfOffset);

@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
@@ -8,20 +10,26 @@ import { MIB } from '../journal/__tests__/support/streamedBody.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { HistoryService } from '../services/history/HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const TITLE_LENGTH = 120;
 const RETAINED_BOUND = 4 * MIB;
 
 async function recordLargeMessage(dir: string): Promise<string> {
-  const recording = JournalRecordingService.create({
-    sessionId: 'large-first-message',
-    projectHash: 'retention',
-    chatsDir: dir,
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
+  const recording = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: 'large-first-message',
+      projectHash: 'retention',
+      chatsDir: dir,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
+  const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
+    recording,
   });
-  const history = new HistoryService({ recording });
   try {
     await history.addBatch([
       { speaker: 'human', blocks: [{ type: 'text', text: bigText(12 * MIB) }] },

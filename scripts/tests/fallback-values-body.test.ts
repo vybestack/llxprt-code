@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '../../packages/core/src/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { appendBodyEvidence } from '../../packages/test-utils/src/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
@@ -12,6 +13,7 @@ import { withValueTransformFixture } from '../../packages/core/src/services/hist
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function compareBodies(
   history: HistoryService,
@@ -72,7 +74,7 @@ async function compareBodies(
 
 async function verifyBody(size: number, bytes: number): Promise<number> {
   return withValueTransformFixture(async ({ history }) => {
-    const rows = new DetachedHistoryJournal();
+    const rows = new DetachedHistoryJournal(historyScratchRoots);
     try {
       for (let index = 0; index < size; index++)
         rows.append(suffixRow(index, bytes));

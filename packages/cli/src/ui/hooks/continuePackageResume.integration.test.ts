@@ -1,5 +1,13 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { testNamedWriters } from '../../__tests__/support/named-writer-owner.js';
+import {
+  afterAll as afterRecordingTests,
+  afterEach,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
 import type { SessionControl } from '../../../../agents/src/api/control/sessionControl.js';
-import { afterEach, describe, expect, it } from 'bun:test';
 
 import { createCapturedSessionOwner } from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
 import type { CommandHandlerFixture as SlashCommandHandlerDeps } from './slash-command-handler-deps-test-helpers.js';
@@ -91,6 +99,8 @@ import {
   runExitCleanup,
   registerCleanup,
 } from '../../utils/cleanup.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 interface ActiveRecordingState {
   recording: SessionRecordingPort | null;
@@ -238,7 +248,10 @@ async function createConfig(
     config,
   );
   const client = createAgentClient(history, store, config, manager);
-  const factoriesTokenizer = configureProviderTokenizer(manager);
+  const factoriesTokenizer = configureProviderTokenizer(
+    manager,
+    history.scratchRoots,
+  );
   const factoriesContent = createRuntimeContentGeneratorFactory();
   const sessionClient = await createCapturedSessionOwner(
     config,
@@ -448,13 +461,15 @@ async function readHistoryText(history: HistoryService): Promise<string> {
 }
 
 describe('continue package perform_resume integration', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   afterEach(() => {
     fixtureFilesystem = undefined;
   });
 
   it('publishes the validated package and assigns it only after real resume activation succeeds', async () => {
     const root = await mkdtemp(join(tmpdir(), 'continue-package-resume-'));
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: recordingScratchRoots });
     history.add({
       speaker: 'human',
       blocks: [{ type: 'text', text: 'prior session history' }],
@@ -479,7 +494,11 @@ describe('continue package perform_resume integration', () => {
         projectRoot: config.getProjectRoot(),
         chatsDir: config.projectChatsDir,
       },
-      { mediaStore: requireMediaStore(built.client) },
+      {
+        namedWriters: testNamedWriters,
+        scratchRoots: recordingScratchRoots,
+        mediaStore: requireMediaStore(built.client),
+      },
     );
     Object.defineProperty(config, 'createSessionPersistenceService', {
       value: () => {
@@ -549,7 +568,7 @@ describe('continue package perform_resume integration', () => {
 
   it('rolls back only new import artifacts when real resume activation fails', async () => {
     const root = await mkdtemp(join(tmpdir(), 'continue-package-rollback-'));
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: recordingScratchRoots });
     history.add({
       speaker: 'human',
       blocks: [{ type: 'text', text: 'original active history' }],
@@ -593,7 +612,11 @@ describe('continue package perform_resume integration', () => {
         projectRoot: config.getProjectRoot(),
         chatsDir: config.projectChatsDir,
       },
-      { mediaStore: requireMediaStore(built.client) },
+      {
+        namedWriters: testNamedWriters,
+        scratchRoots: recordingScratchRoots,
+        mediaStore: requireMediaStore(built.client),
+      },
     );
 
     try {
@@ -666,7 +689,7 @@ describe('continue package perform_resume integration', () => {
       manifestPath,
       JSON.stringify({ ...manifest, recording: 'session.jsonl' }),
     );
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: recordingScratchRoots });
     history.add({
       speaker: 'human',
       blocks: [{ type: 'text', text: 'keep current history' }],
@@ -680,7 +703,11 @@ describe('continue package perform_resume integration', () => {
         projectRoot: config.getProjectRoot(),
         chatsDir: config.projectChatsDir,
       },
-      { mediaStore: store },
+      {
+        namedWriters: testNamedWriters,
+        scratchRoots: recordingScratchRoots,
+        mediaStore: store,
+      },
     );
     const state: ActiveRecordingState = {
       recording: null,
@@ -732,7 +759,7 @@ describe('continue package perform_resume integration', () => {
     const first = await createConfig(
       workspace,
       randomUUID(),
-      new HistoryService(),
+      new HistoryService({ scratchRoots: recordingScratchRoots }),
     );
     const projectTemp = first.config.projectTempDir;
     let resumed: Awaited<ReturnType<typeof createConfig>> | undefined;
@@ -768,7 +795,7 @@ describe('continue package perform_resume integration', () => {
       resumed = await createConfig(
         workspace,
         randomUUID(),
-        new HistoryService(),
+        new HistoryService({ scratchRoots: recordingScratchRoots }),
         sessionId,
       );
       registerCleanup(() => resumed?.session.dispose());

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
@@ -11,6 +12,7 @@ import {
 } from './compression-locking-test-helpers.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
 import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function committedRows() {
   await legacySuite0_historyService.waitForCommit();
@@ -714,7 +716,9 @@ function legacyTest25() {
   expect(reports).toStrictEqual([2, 2]);
 }
 const legacyHook0 = () => {
-  legacySuite0_historyService = new HistoryService({});
+  legacySuite0_historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
 };
 async function disposeHistory(): Promise<void> {
   await legacySuite0_historyService.dispose();

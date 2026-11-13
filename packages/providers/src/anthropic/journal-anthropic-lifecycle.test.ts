@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { VersionEdit } from '@vybestack/llxprt-code-core/journal/groupEdits.js';
@@ -91,7 +92,7 @@ describe('stored Anthropic generations and pinned lifetime', () => {
   it('bounds live auxiliary metadata to the three generation slots while preserving old pins', async () => {
     const session = await JournalSession.create(
       `${directory()}/generations.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await session.append([
@@ -153,7 +154,7 @@ describe('stored Anthropic generations and pinned lifetime', () => {
   it('refuses history edits for an unsupported incremental format before changing an acknowledged measured version', async () => {
     let session = await JournalSession.create(
       `${directory()}/unsupported-edits.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await session.append([
@@ -163,9 +164,9 @@ describe('stored Anthropic generations and pinned lifetime', () => {
       await session.close();
       session = await JournalSession.open(
         `${directory()}/unsupported-edits.llxj`,
-        {
+        testJournalOptions({
           journal: testJournalSeams().dependencies,
-        },
+        }),
       );
       await session.registerRowFormat({
         ...anthropicLengthRegistration(settings),
@@ -209,7 +210,10 @@ describe('stored Anthropic generations and pinned lifetime', () => {
   it('permits detached appends after reopen while refusing stale measured lengths until refill', async () => {
     const path = `${directory()}/detached-append.llxj`;
     const options = { journal: testJournalSeams().dependencies };
-    let session = await JournalSession.create(path, options);
+    let session = await JournalSession.create(
+      path,
+      testJournalOptions(options),
+    );
     try {
       await session.append([
         { speaker: 'human', blocks: [{ type: 'text', text: 'before' }] },
@@ -220,7 +224,7 @@ describe('stored Anthropic generations and pinned lifetime', () => {
       );
       expect(await bytes(session)).toBe(measured);
       await session.close();
-      session = await JournalSession.open(path, options);
+      session = await JournalSession.open(path, testJournalOptions(options));
       const old = await session.store.snapshot();
       try {
         await session.append([
@@ -260,9 +264,12 @@ describe('stored Anthropic generations and pinned lifetime', () => {
   });
   it('disposes the native iterator and preserves the original finish failure and acknowledgement', async () => {
     const path = `${directory()}/failure.llxj`;
-    const session = await JournalSession.create(path, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     await session.append([
       { speaker: 'human', blocks: [{ type: 'text', text: 'before' }] },
     ]);
@@ -304,9 +311,12 @@ describe('stored Anthropic generations and pinned lifetime', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path, {
-      journal: testJournalSeams().dependencies,
-    });
+    const reopened = await JournalSession.open(
+      path,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await register(reopened);
       expect(await bytes(reopened)).toBeGreaterThan(0);
@@ -316,9 +326,12 @@ describe('stored Anthropic generations and pinned lifetime', () => {
   });
   it('preserves stored correction lengths through reopen, fork and physical compaction', async () => {
     const path = `${directory()}/lifetime.llxj`;
-    const session = await JournalSession.create(path, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     await session.append([
       { speaker: 'human', blocks: [{ type: 'text', text: 'q' }] },
       {
@@ -337,9 +350,12 @@ describe('stored Anthropic generations and pinned lifetime', () => {
     await register(session);
     const expected = await bytes(session);
     await session.close();
-    const reopened = await JournalSession.open(path, {
-      journal: testJournalSeams().dependencies,
-    });
+    const reopened = await JournalSession.open(
+      path,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       expect(await bytes(reopened)).toBe(expected);
       expect(await reopened.store.compact()).toBe('swapped');

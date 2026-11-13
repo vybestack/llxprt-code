@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -6,10 +7,11 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
 import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('top-down sealed token accounting', () => {
   it('subtracts an old row using its blocks instead of hydrating the row for counting', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const rows: IContent[] = Array.from({ length: 4 }, (_, index) => ({
       speaker: 'human',
       blocks: [{ type: 'text', text: `row${index} `.repeat(20000) }],

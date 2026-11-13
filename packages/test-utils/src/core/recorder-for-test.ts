@@ -1,9 +1,12 @@
+import { NamedWriterOwnership } from '@vybestack/llxprt-code-core';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { createSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
 import type { SessionRecordingServiceConfig } from '@vybestack/llxprt-code-core/recording/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
+const testNamedWriters = new NamedWriterOwnership();
 
 export type RecorderTestConfig = Partial<SessionRecordingServiceConfig> &
   Pick<SessionRecordingServiceConfig, 'chatsDir'>;
@@ -24,6 +27,10 @@ export function createRecorderForTest(
     provider: 'test',
     model: 'test',
     ...config,
+    journal: {
+      ...config.journal,
+      namedWriters: config.journal?.namedWriters ?? testNamedWriters,
+    },
   });
 }
 

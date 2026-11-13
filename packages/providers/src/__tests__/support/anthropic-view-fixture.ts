@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from './named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -5,6 +7,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { JournalProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/journal-provider-request.js';
 import { nativeRequestResources } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
 import { mkdirSync, mkdtempSync } from 'node:fs';
+const historyScratchRoots = new ScratchRootOwner();
 
 export async function anthropicViewFixture(
   rows: Iterable<IContent>,
@@ -16,15 +19,20 @@ export async function anthropicViewFixture(
 }> {
   const parent = `${import.meta.dir}/../../../../../tmp/anthropic-views/fixtures`;
   mkdirSync(parent, { recursive: true });
-  const recording = JournalRecordingService.create({
-    sessionId: 'anthropic-view',
-    projectHash: 'anthropic-view',
-    chatsDir: mkdtempSync(`${parent}/session-`),
-    workspaceDirs: [],
-    provider: 'anthropic',
-    model: 'claude-opus-5',
+  const recording = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: 'anthropic-view',
+      projectHash: 'anthropic-view',
+      chatsDir: mkdtempSync(`${parent}/session-`),
+      workspaceDirs: [],
+      provider: 'anthropic',
+      model: 'claude-opus-5',
+    }),
+  );
+  const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
+    recording,
   });
-  const history = new HistoryService({ recording });
   try {
     await history.addBatch(Array.from(rows));
     await history.waitForCommit();

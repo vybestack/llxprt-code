@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { waitForConditionOnEventLoop } from '../test-utils/eventLoop.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
@@ -62,14 +63,16 @@ describe('production response arrival', () => {
             metadata: { finishReason: 'stop' },
           };
         };
-        const recording = createSessionRecorder({
-          sessionId: 'prefetch',
-          projectHash: 'prefetch',
-          chatsDir: root(),
-          workspaceDirs: [],
-          provider: 'test',
-          model: 'gpt-5.6',
-        });
+        const recording = createSessionRecorder(
+          withTestNamedWriters({
+            sessionId: 'prefetch',
+            projectHash: 'prefetch',
+            chatsDir: root(),
+            workspaceDirs: [],
+            provider: 'test',
+            model: 'gpt-5.6',
+          }),
+        );
         await setup.history.attachJournal(recording);
         if (retry) vi.useFakeTimers();
         const sending = setup.processor.makeApiCallAndProcessStream(

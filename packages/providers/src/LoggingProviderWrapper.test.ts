@@ -33,7 +33,6 @@ import { SettingsService as SettingsServiceImpl } from '@vybestack/llxprt-code-s
 import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 // P06: intentional core deep import — verifies shim re-exports storage symbols correctly
 import { getConversationFileWriter as getFromCore } from '@vybestack/llxprt-code-core/storage/ConversationFileWriter.js';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
@@ -103,7 +102,6 @@ async function disposeSettingsRoots(): Promise<void> {
 }
 
 describe('LoggingProviderWrapper behavioral JSONL: group 1', () => {
-  afterEach(resetConversationFileWriterForTesting);
   afterEach(disposeSettingsRoots);
   it('writes request and response JSONL entries to disk', async () => {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lpw-jsonl-test-'));
@@ -199,18 +197,12 @@ describe('LoggingProviderWrapper behavioral JSONL: group 1', () => {
 });
 
 describe('LoggingProviderWrapper behavioral JSONL: group 2', () => {
-  afterEach(resetConversationFileWriterForTesting);
-  it('core shim and storage return the same singleton instance', () => {
-    const storageWriter = getConversationFileWriter();
-    const coreWriter = getFromCore();
-
-    // Strict identity: both paths resolve to the same object
-    expect(coreWriter).toBe(storageWriter);
+  it('core shim re-exports the storage writer factory', () => {
+    expect(getFromCore).toBe(getConversationFileWriter);
   });
 });
 
 describe('LoggingProviderWrapper behavioral JSONL: group 3', () => {
-  afterEach(resetConversationFileWriterForTesting);
   it('logs error to observable array when write fails', async () => {
     const errors: Array<{ message: string; context?: unknown }> = [];
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lpw-error-test-'));
@@ -239,7 +231,6 @@ describe('LoggingProviderWrapper behavioral JSONL: group 3', () => {
 });
 
 describe('LoggingProviderWrapper behavioral JSONL: group 4', () => {
-  afterEach(resetConversationFileWriterForTesting);
   afterEach(disposeSettingsRoots);
   it('keeps request logging failures observable while allowing provider response', async () => {
     const tmpDir = await fs.mkdtemp(
@@ -303,7 +294,6 @@ describe('LoggingProviderWrapper behavioral JSONL: group 4', () => {
 });
 
 describe('LoggingProviderWrapper behavioral JSONL: group 5', () => {
-  afterEach(resetConversationFileWriterForTesting);
   it('redacts credential file paths without an ESLint regex exception', () => {
     const redactor = new ConfigBasedRedactor({
       redactApiKeys: false,
@@ -327,7 +317,6 @@ describe('LoggingProviderWrapper behavioral JSONL: group 5', () => {
 });
 
 describe('LoggingProviderWrapper behavioral JSONL: group 6', () => {
-  afterEach(resetConversationFileWriterForTesting);
   it('preserves bearer and absolute-path redaction semantics without ESLint regex exceptions', () => {
     const credentialRedactor = new ConfigBasedRedactor({
       redactApiKeys: false,
@@ -363,7 +352,6 @@ describe('LoggingProviderWrapper behavioral JSONL: group 6', () => {
 });
 
 describe('LoggingProviderWrapper behavioral JSONL: group 7', () => {
-  afterEach(resetConversationFileWriterForTesting);
   it('preserves punctuation-delimited redaction semantics without regex disables', () => {
     const fileRedactor = new ConfigBasedRedactor({
       redactApiKeys: false,

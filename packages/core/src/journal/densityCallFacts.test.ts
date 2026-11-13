@@ -1,3 +1,5 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -84,7 +86,7 @@ describe('versioned source-row density call lookup', () => {
   const directory = useTempDir('density-call-facts-');
   it('tracks exact raw IDs, first-call order and last tool response through mutation and old pins', async () => {
     const file = join(directory(), 'mutations.llxj');
-    const session = await JournalSession.create(file);
+    const session = await JournalSession.create(file, testJournalOptions());
     try {
       await session.append(
         Array.from({ length: 18 }, (_, index) => row(index)),
@@ -154,7 +156,7 @@ describe('versioned source-row density call lookup', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(file);
+    const reopened = await JournalSession.open(file, testJournalOptions());
     try {
       await assertFacts(reopened.store);
       await reopened.store.commit([{ kind: 'clear' }]);
@@ -178,6 +180,7 @@ describe('versioned source-row density call lookup', () => {
             return cache;
           },
         }),
+        testNamedWriters,
       );
       try {
         await store.commit([
@@ -240,20 +243,24 @@ describe('versioned source-row density call lookup', () => {
   it('fills an absent namespace on open once and preserves current row identity', async () => {
     const file = join(directory(), 'absent.llxj');
     const deps = storeDeps();
-    const old = await JournalStore.create(file, {
-      ...deps,
-      idDeps: {
-        ...deps.idDeps,
-        hasher: (namespace, key) =>
-          sha256KeyHash(
-            namespace,
-            namespace === ID_NS.densityCall ||
-              new TextDecoder().decode(key) === DENSITY_CALL_INDEX_READY
-              ? new Uint8Array([...key, 0])
-              : key,
-          ),
+    const old = await JournalStore.create(
+      file,
+      {
+        ...deps,
+        idDeps: {
+          ...deps.idDeps,
+          hasher: (namespace, key) =>
+            sha256KeyHash(
+              namespace,
+              namespace === ID_NS.densityCall ||
+                new TextDecoder().decode(key) === DENSITY_CALL_INDEX_READY
+                ? new Uint8Array([...key, 0])
+                : key,
+            ),
+        },
       },
-    });
+      testNamedWriters,
+    );
     await old.commit([
       {
         kind: 'append',
@@ -265,14 +272,14 @@ describe('versioned source-row density call lookup', () => {
     ]);
     const sequence = old.published?.commitSeq ?? 0;
     await old.close();
-    const opened = await JournalSession.open(file);
+    const opened = await JournalSession.open(file, testJournalOptions());
     try {
       expect(opened.store.published?.commitSeq).toBe(sequence + 1);
       await assertFacts(opened.store);
     } finally {
       await opened.close();
     }
-    const warm = await JournalSession.open(file);
+    const warm = await JournalSession.open(file, testJournalOptions());
     try {
       expect(warm.store.published?.commitSeq).toBe(sequence + 1);
       await assertFacts(warm.store);

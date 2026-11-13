@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 import { checkpointBindings } from '../../__tests__/recording-checkpoint-fixture.js';
 /**
  * @license
@@ -107,15 +108,17 @@ describe('interactive /chat command registry', () => {
   it('keeps the raw recording handler by default', async () => {
     const root = await mkdtemp(join(tmpdir(), 'chat-raw-route-'));
     const projectHash = 'chat-raw-route';
-    const recording = await createLockedSessionRecorder({
-      sessionId: crypto.randomUUID(),
-      projectHash,
-      chatsDir: join(root, 'chats'),
-      workspaceDirs: [root],
-      cwd: root,
-      provider: 'fake',
-      model: 'fake-model',
-    });
+    const recording = await createLockedSessionRecorder(
+      withTestNamedWriters({
+        sessionId: crypto.randomUUID(),
+        projectHash,
+        chatsDir: join(root, 'chats'),
+        workspaceDirs: [root],
+        cwd: root,
+        provider: 'fake',
+        model: 'fake-model',
+      }),
+    );
     try {
       await recordRowsForTest(recording, [
         {

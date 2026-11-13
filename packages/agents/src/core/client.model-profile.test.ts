@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -37,6 +38,7 @@ import {
   setupAgentClient,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(() =>
@@ -296,7 +298,9 @@ function verifyProfileInvalidation(): {
   historyService: HistoryService;
   contentGenerator: ContentGenerator;
 } {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
 
   const mockChat: Partial<ChatSession> = {
     getHistoryService: vi.fn().mockReturnValue(historyService),
@@ -331,7 +335,9 @@ async function verifyDeferredInvalidation(): Promise<{
   executeSpy: unknown;
   historyService: HistoryService;
 }> {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
 
   const mockChat: Partial<ChatSession> = {
     getHistoryService: vi.fn().mockReturnValue(historyService),
@@ -370,7 +376,7 @@ async function verifyLiveHistory(): Promise<{ liveHistory: IContent[] }> {
     speaker: 'ai',
     blocks: [{ type: 'text', text: 'new committed turn' }],
   });
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const root = mkdtempSync(join(tmpdir(), 'model-profile-stream-'));
   Object.assign(client['config'], {
     getTokenizerFactory: () => undefined,
@@ -636,7 +642,9 @@ async function verifyContinuationStableProvider(): Promise<{
 }
 
 function setupContinuationChat(): void {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   routedModel = 'test-model';
   vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
     true,

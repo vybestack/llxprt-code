@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { join } from 'node:path';
@@ -27,6 +28,7 @@ describe('compression token selections', () => {
   it('counts a pinned disk selection and individual rows without hydrating rows', async () => {
     const session = await JournalSession.create(
       join(directory(), 'session.llxj'),
+      testJournalOptions(),
     );
     try {
       await session.append(rows);

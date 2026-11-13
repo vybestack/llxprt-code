@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import { getScratchRoot } from '../../../../core/src/storage/scratch-root.js';
+
 import { withNativeFallbackFixture } from './support/native-fallback-fixture.js';
 import { operationFileCreates } from './support/operation-file-creates.js';
 import {
@@ -77,7 +77,7 @@ describe('native high-density compression allocations', () => {
           undefined,
           { contextLimit: limit },
         );
-        getScratchRoot();
+        history.scratchRoots.getRoot();
         const receipt = await operationFileCreates(async () => {
           expect(await handler.performCompression('native-density-input')).toBe(
             PerformCompressionResult.COMPRESSED,

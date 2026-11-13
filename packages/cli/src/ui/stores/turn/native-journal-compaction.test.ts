@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -15,6 +16,7 @@ describe('journal compaction display positions', () => {
   it('keeps new tool calls live when compaction moves them before the old resume byte boundary', async () => {
     const session = await JournalSession.create(
       join(directory(), 'compaction.llxj'),
+      testJournalOptions(),
     );
     try {
       for (let index = 0; index < 40; index++) {

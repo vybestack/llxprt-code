@@ -1,10 +1,17 @@
+import {
+  afterAll as afterRecordingTests,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import { ScratchRootOwner } from '../../../../../../core/src/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'bun:test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -14,7 +21,11 @@ import {
 import { renderHook } from '../../../../__tests__/render.js';
 import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 describe('interactive recording resources', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   it('does not expose raw swap resources for an Agent-owned mount', () => {
     const { result, unmount } = renderHook(() =>
       useRecordingInfrastructure(undefined, undefined, undefined, 'agent'),
@@ -32,16 +43,26 @@ describe('interactive recording resources', () => {
       provider: 'fake',
       model: 'fake-model',
     };
-    const first = createSessionRecorder({
-      ...options,
-      sessionId: 'raw-first',
-    });
-    const second = createSessionRecorder({
-      ...options,
-      sessionId: 'raw-second',
-    });
-    const firstIntegration = new RecordingIntegration(first);
-    const secondIntegration = new RecordingIntegration(second);
+    const first = createSessionRecorder(
+      withTestNamedWriters({
+        ...options,
+        sessionId: 'raw-first',
+      }),
+    );
+    const second = createSessionRecorder(
+      withTestNamedWriters({
+        ...options,
+        sessionId: 'raw-second',
+      }),
+    );
+    const firstIntegration = new RecordingIntegration(
+      first,
+      recordingScratchRoots,
+    );
+    const secondIntegration = new RecordingIntegration(
+      second,
+      recordingScratchRoots,
+    );
     const { result, rerender, unmount } = renderHook(() =>
       useRecordingInfrastructure(first, firstIntegration),
     );

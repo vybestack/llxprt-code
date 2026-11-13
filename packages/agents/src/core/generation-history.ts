@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -58,6 +59,7 @@ export async function appendGenerationHistory(
 }
 
 export class ChatHistoryAdmissions {
+  constructor(private readonly scratchRoots: ScratchRootOwner) {}
   all: readonly AgentHistoryAdmission[] = [];
   private sequence = 0;
 
@@ -71,6 +73,7 @@ export class ChatHistoryAdmissions {
       history,
       media,
       `set-history:${this.sequence}`,
+      this.scratchRoots,
     );
     this.all = [...this.all, ownership];
     return ownership;

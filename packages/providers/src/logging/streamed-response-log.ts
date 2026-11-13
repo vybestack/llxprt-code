@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
+import type { ConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { ConversationResponseEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import type { ConversationLogContext } from './conversationResponseLogger.js';
@@ -7,7 +7,7 @@ import type { RequestLoggingPolicy } from './requestLoggingPolicy.js';
 import { StreamingRedactor } from './streaming-redactor.js';
 
 type ArtifactStream = Awaited<
-  ReturnType<ReturnType<typeof getConversationFileWriter>['openResponseStream']>
+  ReturnType<ConversationFileWriter['openResponseStream']>
 >;
 
 export class StreamedResponseLog {
@@ -31,9 +31,9 @@ export class StreamedResponseLog {
   }
 
   private async open(): Promise<ArtifactStream> {
-    this.stream ??= await getConversationFileWriter(
-      this.config.conversationLogPath,
-    ).openResponseStream(this.context.providerName);
+    this.stream ??= await this.config.conversationFileWriter.openResponseStream(
+      this.context.providerName,
+    );
     return this.stream;
   }
 

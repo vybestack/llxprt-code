@@ -25,7 +25,6 @@ import { RetryOrchestrator } from '@vybestack/llxprt-code-providers';
 import { LoggingProviderWrapper } from '../../../../../providers/src/LoggingProviderWrapper.js';
 import { LOGICAL_REQUEST_ID_KEY } from '@vybestack/llxprt-code-providers/logging/attemptLifecycle.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { assembleStrictBase } from './source-strict-logger-fixture.js';
 import {
   barrier,
@@ -337,7 +336,9 @@ export async function correlatedProbe(
       performance: input.wrapper.getPerformanceMetrics(),
       closed: [input.fixture.state.closed, second.state.closed],
       activeReaders: input.fixture.state.active + second.state.active,
-      activeBodies: activeRequestBodyCount(),
+      activeBodies: activeRequestBodyCount(
+        input.setup.provider.requestBodyCensus,
+      ),
     };
     return receipt;
   } finally {
@@ -346,6 +347,5 @@ export async function correlatedProbe(
     await input.http.server.stop(true);
     await input.cleanup();
     await input.setup.config.dispose();
-    resetConversationFileWriterForTesting();
   }
 }

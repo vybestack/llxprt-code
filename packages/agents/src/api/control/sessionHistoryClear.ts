@@ -133,9 +133,11 @@ async function rewriteClientHistory(
       options?.signal,
     );
   }
-  const rows = new HistoryDensityRows();
+  const history = client.getHistoryService();
+  if (history == null) throw new Error('History service is required for clear');
+  const rows = new HistoryDensityRows(history.scratchRoots);
   const media: ClearMediaScope = {
-    references: new HistoryMediaIndex(),
+    references: new HistoryMediaIndex(history.scratchRoots),
     store,
     owner: `clear-snapshot:${randomUUID()}`,
   };

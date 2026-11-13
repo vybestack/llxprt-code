@@ -159,7 +159,7 @@ function acquireProviders(
     release,
     files,
     manager,
-    tokenizer: configureProviderTokenizer(manager),
+    tokenizer: configureProviderTokenizer(manager, config.scratchRoots),
     oauth,
   };
 }

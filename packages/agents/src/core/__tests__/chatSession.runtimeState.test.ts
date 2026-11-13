@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
@@ -41,6 +42,7 @@ import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import { chatSessionPorts } from '../chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -103,6 +105,7 @@ function createTestRuntimeContext(
     metadata: { source: 'chatSession.runtimeState.test' },
   });
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     state: runtimeState,
     settings: root.settingsOwner.readRuntimePolicy(),
     provider: createProviderAdapterFromManager(undefined),

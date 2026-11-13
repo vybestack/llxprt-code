@@ -36,7 +36,7 @@ export function observeRequestRepresentation<T>(
   return value;
 }
 import { deserialize, serialize } from 'node:v8';
-import { createScratchDirSync } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 /** Any object graph handed to a provider SDK as a request body. */
 type BodyGraph = Record<string, unknown>;
@@ -77,7 +77,22 @@ export interface RequestScopedBody<T> {
   release(): Promise<void>;
 }
 
-const activeLeases = new Set<object>();
+/** Lease census owned by a provider runtime and shared with its probes. */
+export class RequestBodyCensus {
+  private readonly leases = new Set<object>();
+
+  acquire(lease: object): void {
+    this.leases.add(lease);
+  }
+
+  release(lease: object): void {
+    this.leases.delete(lease);
+  }
+
+  get activeCount(): number {
+    return this.leases.size;
+  }
+}
 
 class RequestScopedBodyLease<T> implements RequestScopedBody<T> {
   readonly provider: string;
@@ -86,11 +101,15 @@ class RequestScopedBodyLease<T> implements RequestScopedBody<T> {
   private released = false;
   private payload: T | undefined;
 
-  constructor(provider: string, payload: T) {
+  constructor(
+    provider: string,
+    payload: T,
+    private readonly census: RequestBodyCensus,
+  ) {
     this.provider = provider;
     this.payload = payload;
     this.byteLength = computeByteLength(payload);
-    activeLeases.add(this);
+    census.acquire(this);
   }
 
   get value(): T {
@@ -109,7 +128,7 @@ class RequestScopedBodyLease<T> implements RequestScopedBody<T> {
     const current = this.payload;
     if (current !== undefined) spliceOwnedArrays(current);
     this.payload = undefined;
-    activeLeases.delete(this);
+    this.census.release(this);
     return Promise.resolve();
   }
 }
@@ -123,8 +142,9 @@ class RequestScopedBodyLease<T> implements RequestScopedBody<T> {
 export function acquireRequestScopedBody<T>(
   provider: string,
   value: T,
+  census: RequestBodyCensus,
 ): RequestScopedBody<T> {
-  return new RequestScopedBodyLease(provider, value);
+  return new RequestScopedBodyLease(provider, value, census);
 }
 
 /**
@@ -137,8 +157,9 @@ export async function withRequestScopedBody<T, R>(
   provider: string,
   build: () => T,
   consume: (body: RequestScopedBody<T>) => Promise<R>,
+  census: RequestBodyCensus,
 ): Promise<R> {
-  const body = acquireRequestScopedBody(provider, build());
+  const body = acquireRequestScopedBody(provider, build(), census);
   try {
     return await consume(body);
   } finally {
@@ -146,9 +167,9 @@ export async function withRequestScopedBody<T, R>(
   }
 }
 
-/** Global count of currently-acquired leases (in-flight bound probe). */
-export function activeRequestBodyCount(): number {
-  return activeLeases.size;
+/** Count of currently-acquired leases in the supplied provider runtime. */
+export function activeRequestBodyCount(census: RequestBodyCensus): number {
+  return census.activeCount;
 }
 
 /**
@@ -175,6 +196,7 @@ class ProgressiveRequestContents implements RequestScopedContents {
 
   constructor(
     private readonly source: AsyncIterable<IContent>,
+    private readonly scratchRoots: ScratchRootOwner,
     private readonly signal?: AbortSignal,
   ) {}
 
@@ -197,7 +219,7 @@ class ProgressiveRequestContents implements RequestScopedContents {
 
   private ensureStorage(): { root: string; path: string; fd: number } {
     if (this.storage !== undefined) return this.storage;
-    const root = createScratchDirSync('responses-request-snapshot-');
+    const root = this.scratchRoots.createDirSync('responses-request-snapshot-');
     const path = join(root, 'rows');
     try {
       this.storage = { root, path, fd: openSync(path, 'w+', 0o600) };
@@ -291,7 +313,8 @@ function transferRowBytes(
 
 export function requestScopedContents(
   source: AsyncIterable<IContent>,
+  scratchRoots: ScratchRootOwner,
   signal?: AbortSignal,
 ): RequestScopedContents {
-  return new ProgressiveRequestContents(source, signal);
+  return new ProgressiveRequestContents(source, scratchRoots, signal);
 }

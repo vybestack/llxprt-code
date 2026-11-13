@@ -1,3 +1,4 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -15,6 +16,7 @@ describe('tool rewrite stored marker invalidation facts', () => {
   it('tracks stored markers without a selectable Responses parent, including empty rows and appends', async () => {
     const session = await JournalSession.create(
       join(directory(), 'history.llxj'),
+      testJournalOptions(),
     );
     try {
       await session.append([

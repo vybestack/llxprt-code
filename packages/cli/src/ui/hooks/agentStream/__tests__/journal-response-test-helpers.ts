@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -10,6 +12,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../../../types.js';
 import { NativeJournalCursor } from '../../../stores/turn/native-journal-cursor.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 type History = HistoryService;
 export type Arrival = Awaited<ReturnType<History['openResponseArrival']>>;
@@ -24,15 +27,17 @@ export async function withJournalResponse(
   run: (fixture: JournalResponseFixture) => Promise<void>,
 ): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), 'journal-response-test-'));
-  const recording = createSessionRecorder({
-    chatsDir: directory,
-    projectHash: 'journal-response-test',
-    sessionId: crypto.randomUUID(),
-    workspaceDirs: [directory],
-    provider: 'test',
-    model: 'test',
-  });
-  const history = new HistoryService();
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      chatsDir: directory,
+      projectHash: 'journal-response-test',
+      sessionId: crypto.randomUUID(),
+      workspaceDirs: [directory],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const origin = {};
   await history.attachJournal(recording, true, undefined, origin);
   try {

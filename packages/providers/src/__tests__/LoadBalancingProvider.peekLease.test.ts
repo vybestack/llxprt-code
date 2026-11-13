@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
 import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
@@ -32,6 +33,7 @@ import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFa
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 import { streamCallOptions } from './streamCallOptions.js';
 import { projectAnthropicPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 /**
  * A projection over a leased legacy body: the prompt graph is derived from
@@ -52,7 +54,7 @@ function leasedBodyProjection(
   });
 }
 
-const factory = createRuntimeTokenizerFactory();
+const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 const sourceFactory = factory;
 
 const rows: readonly IContent[] = [

@@ -1,5 +1,8 @@
+import { EncodingCache } from './neutral-long-piece.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterAll, describe, expect, it } from 'bun:test';
+
+const encodings = new EncodingCache();
 import { encoding_for_model } from '@dqbd/tiktoken';
 import { NeutralMergeQueue } from './neutral-merge-queue.js';
 import { estimateTokens } from './toolOutputLimiter.js';
@@ -38,10 +41,14 @@ describe('neutral token counting', () => {
   it('batches short pieces into one encoder call at exact boundaries', () => {
     const text = 'cold payload 雪 '.repeat(1800);
     let calls = 0;
-    const count = countLongNeutralText(text, (piece) => {
-      calls++;
-      return oracle.encode(piece).length;
-    });
+    const count = countLongNeutralText(
+      text,
+      (piece) => {
+        calls++;
+        return oracle.encode(piece).length;
+      },
+      encodings,
+    );
     expect(count).toBe(oracle.encode(text).length);
     expect(calls).toBeLessThanOrEqual(1);
   });

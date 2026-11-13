@@ -1,10 +1,10 @@
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   createLockedSessionRecorder,
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/historyOriginId.js';
 import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
 import { describe, expect, it } from 'bun:test';
 import {
@@ -23,14 +23,16 @@ async function attachOwner(
   root: string,
   owner: object,
 ): Promise<SessionRecordingPort> {
-  const recorder = await createLockedSessionRecorder({
-    sessionId: crypto.randomUUID(),
-    projectHash: 'cli-native-prefix',
-    chatsDir: `${root}/owned-chats`,
-    workspaceDirs: [root],
-    provider: 'fake',
-    model: 'fake-model',
-  });
+  const recorder = await createLockedSessionRecorder(
+    withTestNamedWriters({
+      sessionId: crypto.randomUUID(),
+      projectHash: 'cli-native-prefix',
+      chatsDir: `${root}/owned-chats`,
+      workspaceDirs: [root],
+      provider: 'fake',
+      model: 'fake-model',
+    }),
+  );
   await history.attachJournal(recorder, true, undefined, owner);
   return recorder;
 }
@@ -47,7 +49,7 @@ async function assertOwners(
       owners.push(await view.originAt(index));
     expect(owners).toStrictEqual(
       Array.from({ length: cut }, (_, index) =>
-        historyOriginId(index % 2 === 0 ? a : b),
+        history.originIds.get(index % 2 === 0 ? a : b),
       ),
     );
   });
@@ -124,7 +126,7 @@ describe('actual native CLI prefix original owners and owner-filtered mirrors', 
           store.changeOwnersOf(
             Array.from({ length: size }, (_, position) => ({
               position,
-              origin: historyOriginId(position % 2 === 0 ? a : b),
+              origin: history.originIds.get(position % 2 === 0 ? a : b),
             })),
           );
           await history.waitForCommit();

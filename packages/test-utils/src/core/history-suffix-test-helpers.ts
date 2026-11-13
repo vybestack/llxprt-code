@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type {} from 'bun';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -11,6 +12,7 @@ import {
   type HistoryServiceJournalOptions,
 } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export function suffixRow(index: number, payloadBytes = 0): IContent {
   return {
@@ -162,6 +164,7 @@ export async function withSuffixFixture<T>(
       const ownership = new RowOwnership();
       const counters = createRowCounters();
       const service = createService({
+        scratchRoots: historyScratchRoots,
         recording,
         attachmentCounters: { ...counters.counters, ownership },
         mutationOwnership,

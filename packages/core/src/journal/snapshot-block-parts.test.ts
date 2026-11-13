@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
@@ -42,6 +43,7 @@ describe('snapshot bounded block parts', () => {
       storeDeps({
         seams: testJournalSeams({ readCounter: counter }, 1, false),
       }),
+      testNamedWriters,
     );
     const recorder = new JournalArrivalRecorder(store);
     const payload = new TextEncoder().encode('streamed payload');
@@ -75,6 +77,7 @@ describe('snapshot bounded block parts', () => {
     const store = await JournalStore.create(
       join(directory(), 'ordinary.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     const text = 'ordinary 🌙 quote"\n'.repeat(20000);
     await store.commit([{ kind: 'append', rows: [draftRow({ text })] }]);
@@ -94,6 +97,7 @@ describe('snapshot bounded block parts', () => {
     const store = await JournalStore.create(
       join(directory(), 'arrival.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     const recorder = new JournalArrivalRecorder(store);
     const chunk = 'arriving \u{1f319} quote"\n'.repeat(40);
@@ -126,6 +130,7 @@ describe('snapshot bounded block parts', () => {
     const store = await JournalStore.create(
       join(directory(), 'closed.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     await store.commit([
       { kind: 'append', rows: [draftRow({ text: 'x'.repeat(200000) })] },
@@ -148,7 +153,11 @@ describe('snapshot bounded block parts', () => {
 
   it('rejects corruption in an ordinary block after checking its streamed checksum', async () => {
     const path = join(directory(), 'corrupt.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     await store.commit([
       { kind: 'append', rows: [draftRow({ text: 'x'.repeat(200000) })] },
     ]);

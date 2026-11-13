@@ -1,3 +1,4 @@
+import { testNamedWriters } from './namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
@@ -81,14 +82,22 @@ export async function rigWithMirrors(
   options: RigOptions = {},
 ): Promise<MirrorRig> {
   const primaryFile = path.join(directory, 'primary.llxj');
-  const primary = await JournalStore.create(primaryFile, storeDeps());
+  const primary = await JournalStore.create(
+    primaryFile,
+    storeDeps(),
+    testNamedWriters,
+  );
   const fanout = new MirrorFanout(primary);
   const mirrors = new Map<number, JournalStore>();
   const files = new Map<number, string>();
   for (const owner of owners) {
     const file = path.join(directory, `mirror-${owner}.llxj`);
     const seams = testJournalSeams(options.failures?.get(owner));
-    const store = await JournalStore.create(file, storeDeps({ seams }));
+    const store = await JournalStore.create(
+      file,
+      storeDeps({ seams }),
+      testNamedWriters,
+    );
     mirrors.set(owner, store);
     files.set(owner, file);
     if (options.attach !== false) await fanout.attach(store, owner);

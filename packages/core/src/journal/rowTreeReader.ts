@@ -32,18 +32,14 @@ interface CachedNode {
   readonly node: RowTreeNode;
 }
 
-const readPaths = new WeakMap<RecordAccess, Map<number, CachedNode>>();
+export type RowTreeReadPath = Map<number, CachedNode>;
 
 /** Reads and decodes the `RTNODE` at `offset`; the frame CRC is checked by the access. */
 export async function readRowTreeNode(
   access: RecordAccess,
   offset: number,
 ): Promise<RowTreeNode> {
-  let path = readPaths.get(access);
-  if (path === undefined) {
-    path = new Map();
-    readPaths.set(access, path);
-  }
+  const path = access.rowTreePath;
   for (const cached of path.values()) {
     if (cached.offset === offset) return cached.node;
   }

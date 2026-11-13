@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import * as fsp from 'node:fs/promises';
@@ -57,9 +58,11 @@ describe('SessionTransitionService.forkFromCheckpoint forks journal checkpoints'
     });
     const target = await journalTarget(chats);
 
-    const result = await new SessionTransitionService({
-      journal: journalSeams(),
-    }).forkFromCheckpoint(target, chats, PROJECT, 'openai', 'gpt-x', ['/w']);
+    const result = await new SessionTransitionService(
+      withTestNamedWriters({
+        journal: journalSeams(),
+      }),
+    ).forkFromCheckpoint(target, chats, PROJECT, 'openai', 'gpt-x', ['/w']);
 
     if (!result.ok) throw new Error(result.error);
     try {
@@ -101,9 +104,11 @@ describe('SessionTransitionService.forkFromCheckpoint forks journal checkpoints'
       sequence: checkpoint.sequence,
     };
 
-    const result = await new SessionTransitionService({
-      journal: journalSeams(),
-    }).forkFromCheckpoint(target, chats, PROJECT, 'openai', 'gpt-x', ['/w']);
+    const result = await new SessionTransitionService(
+      withTestNamedWriters({
+        journal: journalSeams(),
+      }),
+    ).forkFromCheckpoint(target, chats, PROJECT, 'openai', 'gpt-x', ['/w']);
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected a refusal');

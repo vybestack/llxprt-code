@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { checkpointRows } from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -22,6 +23,7 @@ import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { shouldRetryCompressionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 
 export async function replacedSpan(
+  scratchRoots: ScratchRootOwner,
   previous: HistoryDumpSource,
   candidate: CompressionIndexedRows,
   start: number,
@@ -51,7 +53,7 @@ export async function replacedSpan(
       signal,
     );
   }
-  const index = new CompressionSpanIndex();
+  const index = new CompressionSpanIndex(scratchRoots.getRoot());
   let fromSeq = Number.POSITIVE_INFINITY;
   let toSeq = Number.NEGATIVE_INFINITY;
   let itemCount = 0;
@@ -113,11 +115,16 @@ function annotateCandidateRow(
   return { ...row, metadata };
 }
 
+type CandidateHistory = Pick<
+  HistoryService,
+  | 'scratchRoots'
+  | 'detachedValues'
+  | 'setCacheAnchorSeq'
+  | 'resetCacheAnchorSeq'
+>;
+
 export async function publishCandidate(
-  history: Pick<
-    HistoryService,
-    'detachedValues' | 'setCacheAnchorSeq' | 'resetCacheAnchorSeq'
-  >,
+  history: CandidateHistory,
   previous: HistoryDumpSource,
   curated: CompressionIndexedRows,
   start: number,
@@ -139,6 +146,7 @@ export async function publishCandidate(
   )
     throw new Error('Preserved cache-anchor entry has no valid chronology seq');
   const { span, frontier, hasFrontier } = await replacedSpan(
+    history.scratchRoots,
     previous,
     curated,
     start,
@@ -237,7 +245,10 @@ export async function runDiskTruncation(
       );
       return { outcome: 'applied', summary };
     }
-    const curated = await curatedCandidate(checkpointRows(previous));
+    const curated = await curatedCandidate(
+      history.scratchRoots,
+      checkpointRows(previous),
+    );
     try {
       const result = await compress(curated);
       if (result.kind === 'noop') return { outcome: 'noop' };

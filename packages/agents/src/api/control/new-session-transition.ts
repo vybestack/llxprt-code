@@ -54,8 +54,12 @@ export async function startNewSessionTransition(
           model: deps.getModel(),
         }),
         mediaStore: deps.mediaStore,
+        journal: { namedWriters: deps.paths.namedWriters },
       });
-      integration = new RecordingIntegration(recording);
+      integration = new RecordingIntegration(
+        recording,
+        deps.paths.scratchRoots,
+      );
       await candidate.attachRecording(integration, state.owner);
     }
     retirementStarted = true;

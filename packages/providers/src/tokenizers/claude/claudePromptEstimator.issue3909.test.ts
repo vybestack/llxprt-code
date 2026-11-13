@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -18,6 +19,7 @@ import { LocalTokenizationError } from '@vybestack/llxprt-code-core/utils/errors
 import { createRuntimeTokenizerFactory } from '../../composition/runtimeTokenizerFactory.js';
 import { ModelPromptEstimatorError } from '../ModelPromptEstimatorError.js';
 import type { TiktokenModuleLoader } from '../o200kBaseCounter.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const MODEL = 'claude-opus-5';
 
@@ -39,10 +41,10 @@ function failingEncodeLoader(failure: Error): TiktokenModuleLoader {
 }
 
 function claudeTokenizer(loadModule: TiktokenModuleLoader) {
-  const tokenizer = createRuntimeTokenizerFactory(loadModule).getTokenizer(
-    'claudecode',
-    MODEL,
-  );
+  const tokenizer = createRuntimeTokenizerFactory(
+    tokenizerScratchRoots,
+    loadModule,
+  ).getTokenizer('claudecode', MODEL);
   if (tokenizer === undefined) {
     throw new Error(`no runtime tokenizer is registered for ${MODEL}`);
   }
@@ -162,7 +164,7 @@ describe('ModelPromptEstimatorError classification and causal detail (issue #390
   });
 
   it('states the cause detail once in the message for a GPT-5.6 readiness failure', async () => {
-    const factory = createRuntimeTokenizerFactory(() =>
+    const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots, () =>
       Promise.reject(new Error('codec initialization exploded')),
     );
     const prepareTokenizer = factory.prepareTokenizer;
@@ -179,7 +181,7 @@ describe('ModelPromptEstimatorError classification and causal detail (issue #390
   });
 
   it('keeps remediation free of the cause so callers can show them separately', async () => {
-    const factory = createRuntimeTokenizerFactory(() =>
+    const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots, () =>
       Promise.reject(new Error('codec initialization exploded')),
     );
     const prepareTokenizer = factory.prepareTokenizer;

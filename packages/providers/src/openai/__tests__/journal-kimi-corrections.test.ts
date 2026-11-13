@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
@@ -21,6 +23,7 @@ import {
   streamChatMessages,
   type ChatMessageItem,
 } from '../OpenAIChatBodyBuilder.js';
+const testScratchRoots = createTestScratchOwner();
 
 function writtenIds(item: ChatMessageItem): string[] {
   if (item.kind !== 'message') return [];
@@ -61,6 +64,7 @@ async function actualConversion(units: IContent[]): Promise<WireFacts> {
       },
     },
     {
+      scratchRoots: testScratchRoots,
       toolFormat: 'kimi',
       toolIdStore: store,
       reasoning: { invocation: { ephemerals: {} } },
@@ -122,9 +126,12 @@ async function conversionFacts(
 describe('native Kimi corrections against actual chat conversion', () => {
   const directory = useTempDir('kimi-wire-corrections-');
   it('matches converter written uses, dropped fallback responses and mapped digits over collisions and ordinal boundaries', async () => {
-    const session = await JournalSession.create(`${directory()}/wire.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/wire.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     const cases: ReadonlyArray<readonly IContent[]> = [
       [{ speaker: 'tool', blocks: [{ ...response('x'), toolName: '' }] }],
       [

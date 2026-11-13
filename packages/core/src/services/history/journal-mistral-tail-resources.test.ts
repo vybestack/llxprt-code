@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { appendFile, readFile, readdir } from 'node:fs/promises';
@@ -33,7 +34,9 @@ describe('request Mistral read budgets', () => {
     it(`continues a fixed pending input over ${size} rows and ${calls} calls without a history scan`, async () => {
       const session = await JournalSession.create(
         `${directory()}/${size}.llxj`,
-        { journal: testJournalSeams({}, size, false).dependencies },
+        testJournalOptions({
+          journal: testJournalSeams({}, size, false).dependencies,
+        }),
       );
       try {
         function* rows(): Generator<RowDraft> {
@@ -102,9 +105,12 @@ describe('request Mistral read budgets', () => {
 
   it('creates no operation files and leaves persistent bytes unchanged during pending queries', async () => {
     const file = `${directory()}/unchanged.llxj`;
-    const session = await JournalSession.create(file, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      file,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.store.commit([{ kind: 'mistral', slot: 0 }]);
       await session.append([{ speaker: 'ai', blocks: [call('4SftZvDMX')] }]);

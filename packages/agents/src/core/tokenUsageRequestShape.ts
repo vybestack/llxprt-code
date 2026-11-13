@@ -71,27 +71,29 @@ interface StaticTokenCount {
 }
 
 // Keep only two digest/count pairs per live counter, never schema or prompt text.
-const staticTokenCounts = new WeakMap<
-  TokenCountFn,
-  { instructions?: StaticTokenCount; tools?: StaticTokenCount }
->();
+export class StaticTokenCountCache {
+  private readonly counts = new WeakMap<
+    TokenCountFn,
+    { instructions?: StaticTokenCount; tools?: StaticTokenCount }
+  >();
 
-function countStaticText(
-  text: string,
-  countTokens: TokenCountFn,
-  kind: 'instructions' | 'tools',
-): number {
-  let counts = staticTokenCounts.get(countTokens);
-  if (counts === undefined) {
-    counts = {};
-    staticTokenCounts.set(countTokens, counts);
+  count(
+    text: string,
+    countTokens: TokenCountFn,
+    kind: 'instructions' | 'tools',
+  ): number {
+    let counts = this.counts.get(countTokens);
+    if (counts === undefined) {
+      counts = {};
+      this.counts.set(countTokens, counts);
+    }
+    const digest = createHash('sha256').update(text).digest('hex');
+    const prior = counts[kind];
+    if (prior?.digest === digest) return prior.tokens;
+    const tokens = countTokens(text);
+    counts[kind] = { digest, tokens };
+    return tokens;
   }
-  const digest = createHash('sha256').update(text).digest('hex');
-  const prior = counts[kind];
-  if (prior?.digest === digest) return prior.tokens;
-  const tokens = countTokens(text);
-  counts[kind] = { digest, tokens };
-  return tokens;
 }
 
 class RequestShapeAccumulator {
@@ -101,7 +103,11 @@ class RequestShapeAccumulator {
   private readonly toolCalls: ToolCallAttribution[] = [];
   private newToolResultTokens = 0;
   private carriedToolResultTokens = 0;
-  fingerprintBudget = FINGERPRINT_PREFIX_CHAR_BUDGET;
+  private fingerprintConsumed = 0;
+
+  get fingerprintBudget(): number {
+    return FINGERPRINT_PREFIX_CHAR_BUDGET - this.fingerprintConsumed;
+  }
   sequence = 0n;
   private readonly fingerprint = createHash('sha256');
   private readonly toolsJson: string;
@@ -110,6 +116,7 @@ class RequestShapeAccumulator {
   constructor(
     private readonly input: Omit<RequestShapeInput, 'requestContents'>,
     private readonly toolCallNames: ToolCallNames,
+    private readonly staticCounts: StaticTokenCountCache,
   ) {
     this.callerLineage =
       input.callerOwned === true
@@ -124,7 +131,7 @@ class RequestShapeAccumulator {
     this.callerLineage?.observe(content);
     const measurement = measureRequestRow(content, this.input.countTokens);
     let part: FingerprintContribution | null = null;
-    if (this.fingerprintBudget > 0) {
+    if (this.fingerprintConsumed < FINGERPRINT_PREFIX_CHAR_BUDGET) {
       if (measurement.fingerprintKey !== null) {
         const text = `C#${measurement.fingerprintKey}`;
         part = { text, consumed: text.length };
@@ -176,7 +183,7 @@ class RequestShapeAccumulator {
     if (sequence > this.sequence) this.sequence = sequence;
     if (part !== null) {
       this.fingerprint.update(`\u0000${part.text}`);
-      this.fingerprintBudget -= part.consumed;
+      this.fingerprintConsumed += part.consumed;
     }
   }
 
@@ -190,7 +197,7 @@ class RequestShapeAccumulator {
       .slice(0, FINGERPRINT_HEX_LENGTH);
     return {
       instructionsTokens: this.input.instructionsText
-        ? countStaticText(
+        ? this.staticCounts.count(
             this.input.instructionsText,
             this.input.countTokens,
             'instructions',
@@ -199,7 +206,11 @@ class RequestShapeAccumulator {
       toolsSchemaTokens:
         this.toolsJson === 'null' || this.toolsJson.length <= 2
           ? 0
-          : countStaticText(this.toolsJson, this.input.countTokens, 'tools'),
+          : this.staticCounts.count(
+              this.toolsJson,
+              this.input.countTokens,
+              'tools',
+            ),
       historyTokens: this.historyTokens,
       mediaTokens: this.mediaTokens,
       injectedTokens: this.injectedTokens,
@@ -221,13 +232,17 @@ export function computeRequestShape(
   return arrayShape(input).shape;
 }
 
-function arrayShape(input: RequestShapeInput): {
+function arrayShape(
+  input: RequestShapeInput,
+  staticCounts = new StaticTokenCountCache(),
+): {
   readonly shape: RequestShapeResult;
   readonly callerLineage: CallerLineageState | undefined;
 } {
   const accumulator = new RequestShapeAccumulator(
     input,
     fullRequestToolCallNames(input.requestContents),
+    staticCounts,
   );
   input.requestContents.forEach((content, index) =>
     accumulator.add(content, BigInt(index + 1)),
@@ -244,7 +259,10 @@ export interface SourceRequestShapeInput
   readonly signal?: AbortSignal;
 }
 
-async function sourceShape(input: SourceRequestShapeInput): Promise<{
+async function sourceShape(
+  input: SourceRequestShapeInput,
+  staticCounts = new StaticTokenCountCache(),
+): Promise<{
   readonly shape: RequestShapeResult;
   readonly sequence: bigint;
   readonly callerLineage: CallerLineageState | undefined;
@@ -252,6 +270,7 @@ async function sourceShape(input: SourceRequestShapeInput): Promise<{
   const accumulator = new RequestShapeAccumulator(
     input,
     new BoundedToolCallNames(2000),
+    staticCounts,
   );
   const native = input.requestRows.native;
   if (native !== undefined) {
@@ -302,6 +321,8 @@ export class RequestShapeTracker {
   private lastFp: string | undefined;
   private lastCallerLineage: CallerLineageState | undefined;
 
+  constructor(private readonly staticCounts = new StaticTokenCountCache()) {}
+
   snapshot(): {
     readonly sequence: bigint;
     readonly fingerprint: string | undefined;
@@ -310,13 +331,16 @@ export class RequestShapeTracker {
   }
 
   recordRequestShape(input: ShapeOptions): RequestShapeResult {
-    const result = arrayShape({
-      ...input,
-      lastSendSequence: this.lastSequence,
-      previousFingerprint: this.lastFp,
-      callerOwned: true,
-      previousCallerLineage: this.lastCallerLineage,
-    });
+    const result = arrayShape(
+      {
+        ...input,
+        lastSendSequence: this.lastSequence,
+        previousFingerprint: this.lastFp,
+        callerOwned: true,
+        previousCallerLineage: this.lastCallerLineage,
+      },
+      this.staticCounts,
+    );
     this.lastSequence = BigInt(input.requestContents.length);
     this.lastFp = result.shape.prefixFingerprint;
     this.lastCallerLineage = result.callerLineage;
@@ -326,13 +350,16 @@ export class RequestShapeTracker {
   async recordSourceRequestShape(
     input: SourceShapeOptions,
   ): Promise<RequestShapeResult> {
-    const result = await sourceShape({
-      ...input,
-      lastSendSequence: this.lastSequence,
-      previousFingerprint: this.lastFp,
-      callerOwned: input.requestRows.callerOwned === true,
-      previousCallerLineage: this.lastCallerLineage,
-    });
+    const result = await sourceShape(
+      {
+        ...input,
+        lastSendSequence: this.lastSequence,
+        previousFingerprint: this.lastFp,
+        callerOwned: input.requestRows.callerOwned === true,
+        previousCallerLineage: this.lastCallerLineage,
+      },
+      this.staticCounts,
+    );
     if (
       input.requestRows.callerOwned === true ||
       result.sequence > this.lastSequence

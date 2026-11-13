@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
@@ -93,7 +94,11 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: preserves any 
               });
 
               result = await resumeSession(
-                makeResumeRequest(localChatsDir, { journal: propertyJournal }),
+                withTestNamedWriters(
+                  makeResumeRequest(localChatsDir, {
+                    journal: propertyJournal,
+                  }),
+                ),
               );
 
               const okResult = expectOk(result);
@@ -157,11 +162,13 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: detects provid
               });
 
               result = await resumeSession(
-                makeResumeRequest(localChatsDir, {
-                  journal: propertyJournal,
-                  currentProvider,
-                  currentModel: 'model-b',
-                }),
+                withTestNamedWriters(
+                  makeResumeRequest(localChatsDir, {
+                    journal: propertyJournal,
+                    currentProvider,
+                    currentModel: 'model-b',
+                  }),
+                ),
               );
 
               const okResult = expectOk(result);
@@ -222,7 +229,11 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: sequence is mo
               });
 
               result = await resumeSession(
-                makeResumeRequest(localChatsDir, { journal: propertyJournal }),
+                withTestNamedWriters(
+                  makeResumeRequest(localChatsDir, {
+                    journal: propertyJournal,
+                  }),
+                ),
               );
 
               const okResult = expectOk(result);
@@ -299,7 +310,11 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resume always 
               });
 
               result = await resumeSession(
-                makeResumeRequest(localChatsDir, { journal: propertyJournal }),
+                withTestNamedWriters(
+                  makeResumeRequest(localChatsDir, {
+                    journal: propertyJournal,
+                  }),
+                ),
               );
 
               const okResult = expectOk(result);
@@ -349,10 +364,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: compression + 
                 sessionId,
                 projectHash: PROJECT_HASH,
               });
-              const svc = JournalRecordingService.create({
-                ...config,
-                journal: propertyJournal,
-              });
+              const svc = JournalRecordingService.create(
+                withTestNamedWriters({
+                  ...config,
+                  journal: propertyJournal,
+                }),
+              );
 
               try {
                 const session = await svc.session();
@@ -391,7 +408,11 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: compression + 
               }
 
               result = await resumeSession(
-                makeResumeRequest(localChatsDir, { journal: propertyJournal }),
+                withTestNamedWriters(
+                  makeResumeRequest(localChatsDir, {
+                    journal: propertyJournal,
+                  }),
+                ),
               );
 
               const okResult = expectOk(result);
@@ -446,7 +467,11 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resume succeed
               });
 
               result = await resumeSession(
-                makeResumeRequest(localChatsDir, { journal: propertyJournal }),
+                withTestNamedWriters(
+                  makeResumeRequest(localChatsDir, {
+                    journal: propertyJournal,
+                  }),
+                ),
               );
 
               const okResult = expectOk(result);

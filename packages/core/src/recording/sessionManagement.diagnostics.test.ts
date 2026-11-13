@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -32,14 +33,16 @@ describe('deleteSessionWithDiagnostics (issue #3839)', () => {
   });
 
   async function writeHealthySession(sessionId: string): Promise<string> {
-    const recording = JournalRecordingService.create({
-      chatsDir,
-      sessionId,
-      projectHash: PROJECT_HASH,
-      workspaceDirs: ['/test/workspace'],
-      provider: 'anthropic',
-      model: 'claude-4',
-    });
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        chatsDir,
+        sessionId,
+        projectHash: PROJECT_HASH,
+        workspaceDirs: ['/test/workspace'],
+        provider: 'anthropic',
+        model: 'claude-4',
+      }),
+    );
     try {
       await (
         await recording.session()

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createRequire } from 'node:module';
@@ -17,6 +18,7 @@ import {
   StreamingSummaryTransport,
   valueGate,
 } from './compression-value-fixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const { gcAndSweep }: { gcAndSweep: () => void } = createRequire(
   import.meta.url,
@@ -197,7 +199,9 @@ function lifetime(size: number, bytes: number): Promise<number> {
         quotaBytes: 1024,
       });
       try {
-        await history.registerMediaOwner(new HistoryMediaOwnership(media));
+        await history.registerMediaOwner(
+          new HistoryMediaOwnership(media, historyScratchRoots),
+        );
         return await exercise(history, owners, size, bytes);
       } finally {
         await media.close();

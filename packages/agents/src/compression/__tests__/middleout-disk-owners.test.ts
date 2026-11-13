@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
@@ -14,6 +15,7 @@ import {
   middleoutRow,
   MiddleoutDiskHistory,
 } from './middleout-disk-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class RetainingHistory extends MiddleoutDiskHistory {
   readonly retained: IContent[] = [];
@@ -52,8 +54,11 @@ async function charge(size: number): Promise<number> {
         undefined,
         undefined,
       );
-      const source = new HistoryDensityRows();
-      const candidate = new HistoryDensityRows(candidateOwners);
+      const source = new HistoryDensityRows(historyScratchRoots);
+      const candidate = new HistoryDensityRows(
+        historyScratchRoots,
+        candidateOwners,
+      );
       const snapshot = await history.openDumpSnapshot();
       try {
         for await (const row of snapshot.rows())

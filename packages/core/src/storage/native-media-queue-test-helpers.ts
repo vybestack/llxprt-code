@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { testJournalOptions } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { join } from 'node:path';
 import { strict as assert } from 'node:assert';
@@ -12,6 +14,7 @@ import type {
   IContent,
   MediaReferenceBlock,
 } from '../services/history/IContent.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 interface DeferredMediaFixture {
   readonly session: JournalSession;
@@ -27,7 +30,10 @@ export async function deferredMediaFixture(
   directory: string,
   retainCheckpoint = false,
 ): Promise<DeferredMediaFixture> {
-  const session = await JournalSession.create(join(directory, 'history.llxj'));
+  const session = await JournalSession.create(
+    join(directory, 'history.llxj'),
+    testJournalOptions(),
+  );
   await session.store.commit([
     {
       kind: 'setState',
@@ -66,7 +72,7 @@ export async function deferredMediaFixture(
     await session.store.commit([
       { kind: 'checkpoint', id: 'media', name: 'media', createdAtMs: 1 },
     ]);
-  const owner = new HistoryMediaOwnership(media);
+  const owner = new HistoryMediaOwnership(media, historyScratchRoots);
   owner.adopt([row]);
   await owner.bindNativeMedia(session.store);
   const request = await JournalProviderRequestSnapshot.create(

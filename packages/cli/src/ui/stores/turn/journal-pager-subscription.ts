@@ -2,6 +2,7 @@
 import {
   subscribeJournalCommits,
   type JournalCommitWatermark,
+  type JournalWatermarks,
 } from '@vybestack/llxprt-code-core';
 
 /** One refresh runs at a time; arrivals replace a scalar rather than queue reads. */
@@ -16,11 +17,16 @@ export class JournalPagerSubscription {
       watermark: JournalCommitWatermark,
     ) => Promise<void>,
     private readonly failed: (error: unknown) => void,
+    watermarks: Pick<JournalWatermarks, 'subscribe'>,
   ) {
-    this.unsubscribe = subscribeJournalCommits(path, (watermark) => {
-      this.latest = watermark;
-      if (!this.running) void this.drain();
-    });
+    this.unsubscribe = subscribeJournalCommits(
+      path,
+      (watermark) => {
+        this.latest = watermark;
+        if (!this.running) void this.drain();
+      },
+      watermarks,
+    );
   }
   private async drain(): Promise<void> {
     this.running = true;

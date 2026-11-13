@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdir } from 'node:fs/promises';
@@ -30,9 +31,12 @@ describe('native source normalization facts', () => {
   });
 
   it('indexes split part positions through append, fill and header-only rebuild, preserving ownership and content', async () => {
-    const session = await JournalSession.create(`${directory()}/facts.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/facts.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([split], { owner: 7 });
       const before = await session.store.idFacts();
@@ -81,9 +85,12 @@ describe('native source normalization facts', () => {
   });
 
   it('keeps C separate from Ca, accepts human-row results, chooses better duplicates and skips uncurated facts', async () => {
-    const session = await JournalSession.create(`${directory()}/cross.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/cross.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([
         { speaker: 'human', blocks: [{ type: 'text', text: 'q' }, call('a')] },

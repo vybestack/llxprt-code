@@ -5,16 +5,19 @@ interface LookupCache {
   readonly root: number;
   readonly values: Map<string, Uint8Array | undefined>;
 }
-const caches = new WeakMap<object, LookupCache>();
+export class MapLookupCache {
+  private current: LookupCache | undefined;
+
+  atRoot(root: number): LookupCache {
+    if (this.current?.root === root) return this.current;
+    this.current = { root, values: new Map<string, Uint8Array | undefined>() };
+    return this.current;
+  }
+}
 
 /** A small versioned memo of metadata, including absent feature flags. */
 export function mapLookups(cache: IdNodeCache, root: number): LookupCache {
-  const identity = cache.lookupCacheIdentity ?? cache;
-  const current = caches.get(identity);
-  if (current?.root === root) return current;
-  const created = { root, values: new Map<string, Uint8Array | undefined>() };
-  caches.set(identity, created);
-  return created;
+  return cache.mapLookupCache.atRoot(root);
 }
 
 export function rememberMapLookup(

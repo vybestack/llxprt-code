@@ -4,7 +4,7 @@ The plan accounts for every feedback item, but it is not ready for task-by-task 
 
 **Findings: 5 high, 8 medium, 1 low.**
 
-Reviewed against worktree HEAD `3984a8773ee78c4614d1922da8cb917f6bdb1834`, branch `issue2616-consumer-closure-combined`, and the local `origin/main` reference `85fdd73b1d09671b5ce11bbfce72080a662d5ac4`. Paths below are relative to `/Volumes/XS1000/acoliver/projects/llxprt/branch-2/llxprt-code/tmp/w2616k`. Plan references mean `project-plans/issue2616/pr3911-review-fix/PLAN.md`; companion references are in that directory.
+Reviewed against worktree HEAD `3984a8773ee78c4614d1922da8cb917f6bdb1834`, branch `issue2616-consumer-closure-combined`, and the local `origin/main` reference `85fdd73b1d09671b5ce11bbfce72080a662d5ac4`. Paths below are relative to `W`. Plan references mean `project-plans/issue2616/pr3911-review-fix/PLAN.md`; companion references are in that directory.
 
 ## Numbered findings
 

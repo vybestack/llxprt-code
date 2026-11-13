@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterAll, describe, expect, it } from 'bun:test';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
@@ -20,6 +21,7 @@ import {
   nativePrompt,
   nativeRows,
 } from './__tests__/native-responses-fixture.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const context = {
   includeReasoningInContext: false,
@@ -29,7 +31,7 @@ const context = {
 };
 const scratch = mkdtempSync(join(tmpdir(), 'source-families-'));
 
-const factory = createRuntimeTokenizerFactory();
+const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 const sourceFactory = withGpt56DiskSources(factory, scratch);
 const instructions = 'Be exact. 雪 \\ " \ud800';
 const tools = [{ name: 'inspect', parameters: { path: '雪' } }];

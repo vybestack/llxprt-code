@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { join } from 'node:path';
@@ -6,6 +8,7 @@ import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }], metadata: {} };
@@ -15,15 +18,20 @@ describe('HistoryService journal disposal', () => {
   const directory = useTempDir('history-startup-disposal-');
 
   it('cancels recorder attachment when disposed immediately after construction', async () => {
-    const recorder = JournalRecordingService.create({
-      sessionId: 'startup-disposal',
-      projectHash: 'project',
-      chatsDir: join(directory(), 'chats'),
-      workspaceDirs: ['/work'],
-      provider: 'test',
-      model: 'test',
+    const recorder = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'startup-disposal',
+        projectHash: 'project',
+        chatsDir: join(directory(), 'chats'),
+        workspaceDirs: ['/work'],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
+    const history = new HistoryService({
+      scratchRoots: historyScratchRoots,
+      recording: recorder,
     });
-    const history = new HistoryService({ recording: recorder });
     try {
       await expect(history.dispose()).resolves.toBeUndefined();
       await expect(history.openDumpSnapshot()).rejects.toThrow('disposed');
@@ -33,7 +41,7 @@ describe('HistoryService journal disposal', () => {
   });
 
   it('rejects with the journal disposal failure', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.add(row('seed'));
     await history.waitForCommit();
     await history.waitForOwnershipSettlement();
@@ -54,7 +62,7 @@ describe('HistoryService journal disposal', () => {
   });
 
   it('shares one disposal between repeated calls', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.add(row('seed'));
     await history.waitForCommit();
     const entered = Promise.withResolvers<void>();
@@ -92,7 +100,7 @@ describe('HistoryService journal disposal', () => {
   });
 
   it('resolves when the journal is disposed', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.add(row('seed'));
     await history.waitForCommit();
     await history.waitForOwnershipSettlement();

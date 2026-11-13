@@ -1,3 +1,14 @@
+import { testNamedWriters } from './__tests__/support/named-writer-owner.js';
+import {
+  afterAll as afterRecordingTests,
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+} from 'bun:test';
+import { ScratchRootOwner } from '../../core/src/storage/scratch-root.js';
 import { CliSessionPersistence } from './cliSessionPersistence.js';
 /**
  * @license
@@ -10,7 +21,6 @@ const makeRenderAgent = installCommandOwners();
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -20,6 +30,8 @@ import { inkRenderOptions } from './ui/inkRenderOptions.js';
 import { __setRenderForTesting } from './session/interactiveUI.js';
 
 import { LoadedSettings } from './config/settings.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 const createFakeAgent = async (_config: Config): Promise<Agent> =>
   makeRenderAgent(crypto.randomUUID());
@@ -84,6 +96,8 @@ const createLoadedSettings = () =>
 const startupOwners: SessionSettingsOwner[] = [];
 
 describe('startInteractiveUI ink render options', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   afterEach(async () => {
     for (const owner of startupOwners.splice(0)) await owner.dispose();
   });
@@ -211,6 +225,8 @@ function rawPersistence(root: string): CliSessionPersistence {
   return new CliSessionPersistence(
     { projectRoot: root, chatsDir: path.join(root, 'chats') },
     {
+      namedWriters: testNamedWriters,
+      scratchRoots: recordingScratchRoots,
       mediaStore: new LocalMediaStore({
         rootDirectory: path.join(root, 'media'),
         quotaBytes: 1024,

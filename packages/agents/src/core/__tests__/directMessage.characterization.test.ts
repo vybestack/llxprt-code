@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
@@ -61,6 +62,7 @@ import {
   visibleText,
 } from './helpers/directMessageObservers.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -148,7 +150,7 @@ function createDirectHarness(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, config.scratchRoots);
 
   const provider: IProvider = {
     name: 'stub',
@@ -165,9 +167,12 @@ function createDirectHarness(
     model: config.getModel(),
     sessionId: config.getSessionId(),
   });
-  const historyService = options?.historyService ?? new HistoryService();
+  const historyService =
+    options?.historyService ??
+    new HistoryService({ scratchRoots: historyScratchRoots });
   const requestRuntime = providerRuntime;
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     state: runtimeState,
     history: historyService,
     settings: {
@@ -286,7 +291,9 @@ describe('P12: blocking BeforeModel hook (characterization)', () => {
       makeProviderStream([textTerminalIContent('unused')]),
     ) as Mock<() => AsyncIterableIterator<IContent>>;
     const baseConfig = new Config(createConfigParams(new SettingsService()));
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     const harness = createDirectHarness(mock, {
       historyService,
       hookOwner: configWithHooks(baseConfig, {

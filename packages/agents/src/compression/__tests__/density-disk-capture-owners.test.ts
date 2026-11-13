@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
@@ -11,6 +12,7 @@ import {
   digestRows,
   densityOracle,
 } from './density-disk-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('density candidate source ownership', () => {
   it('charges the actual decoded original throughout each addressed decision', async () => {
@@ -22,7 +24,11 @@ describe('density candidate source ownership', () => {
         let minimum = Number.POSITIVE_INFINITY;
         let decisions = 0;
         await history.optimizeDensityRows((source) => {
-          const result = optimizeDiskDensity(source, densityConfig());
+          const result = optimizeDiskDensity(
+            source,
+            densityConfig(),
+            historyScratchRoots,
+          );
           return {
             metadata: result.metadata,
             removalCount: result.removalCount,

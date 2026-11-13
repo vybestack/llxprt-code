@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   buildRuntimeContext,
@@ -49,6 +50,7 @@ import {
   setClient,
   chatDisposalHistory,
 } from './__tests__/support/client.sendMessageStream-overflow-compression-fixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2755) — deferred enforcement', () => {
   beforeEach(initializeClient);
@@ -464,7 +466,9 @@ describe('incoming finalized-envelope recovery scenarios', () => {
       ENFORCEMENT_TOKEN_LIMIT,
     );
 
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     const fillText = 'x'.repeat(12_000);
     historyService.add(makeUserMessage(fillText), 'test-model');
     historyService.add(makeAiText(fillText), 'test-model');

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { open } from 'node:fs/promises';
@@ -72,9 +73,12 @@ describe('replacement physical body reuse', () => {
     it(`does not encode new physical bodies for ${size} unchanged rows`, async () => {
       const file = join(directory(), `${size}.llxj`);
       const seams = testJournalSeams();
-      const session = await JournalSession.create(file, {
-        journal: seams.dependencies,
-      });
+      const session = await JournalSession.create(
+        file,
+        testJournalOptions({
+          journal: seams.dependencies,
+        }),
+      );
       const history = new JournalHistoryStore(session);
       try {
         await history.replaceFrom(detachedRows(size), size);
@@ -109,7 +113,7 @@ describe('replacement physical body reuse', () => {
   }
   it('writes a changed row and preserves reordered unchanged bodies', async () => {
     const file = join(directory(), 'changed.llxj');
-    const session = await JournalSession.create(file);
+    const session = await JournalSession.create(file, testJournalOptions());
     const history = new JournalHistoryStore(session);
     const rows = [];
     for await (const row of detachedRows(3)) rows.push(row);

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
@@ -12,7 +13,7 @@ describe('request Kimi query pin ownership', () => {
   it('holds the selected pin across asynchronous callback use after both openers close', async () => {
     const session = await JournalSession.create(
       `${directory()}/callback.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await session.append([{ speaker: 'ai', blocks: [call('a')] }]);
@@ -42,7 +43,7 @@ describe('request Kimi query pin ownership', () => {
     it(`preserves the primary ${abort ? 'abort' : 'callback'} error if final release fails`, async () => {
       const session = await JournalSession.create(
         `${directory()}/failure-${abort}.llxj`,
-        { journal: testJournalSeams().dependencies },
+        testJournalOptions({ journal: testJournalSeams().dependencies }),
       );
       try {
         await session.store.commit([{ kind: 'kimi' }]);
@@ -75,9 +76,12 @@ describe('request Kimi query pin ownership', () => {
     });
 
   it('preserves a failed preparation read when final release fails', async () => {
-    const session = await JournalSession.create(`${directory()}/read.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/read.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([{ speaker: 'ai', blocks: [call('a')] }]);
       await session.store.commit([{ kind: 'kimi' }]);

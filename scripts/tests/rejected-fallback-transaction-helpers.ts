@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -27,6 +28,7 @@ import { buildRuntimeContext } from '../../packages/agents/src/core/__tests__/ch
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { PerformCompressionResult } from '../../packages/core/src/core/turn.js';
 import { captureCuratedBody } from './provider-curated-body-gemini.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 interface RawState {
   rows: IContent[];
@@ -116,6 +118,7 @@ async function createFixture(): Promise<TransactionFixture> {
   });
   const owners = new RowOwnership();
   const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
     recording: recorder,
     mutationOwnership: owners,
   });
@@ -124,7 +127,7 @@ async function createFixture(): Promise<TransactionFixture> {
     rootDirectory: join(root, 'media'),
     quotaBytes: 1024,
   });
-  const owner = new HistoryMediaOwnership(store);
+  const owner = new HistoryMediaOwnership(store, historyScratchRoots);
   await history.registerMediaOwner(owner);
   const prior = await store.admit({
     bytes: new Uint8Array([1]),
@@ -137,7 +140,7 @@ async function createFixture(): Promise<TransactionFixture> {
     semanticMetadata: {},
   });
   await seedOriginal(history, owner, prior);
-  const candidate = new DetachedHistoryJournal(owners);
+  const candidate = new DetachedHistoryJournal(historyScratchRoots, owners);
   candidate.append({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'candidate' }, next],

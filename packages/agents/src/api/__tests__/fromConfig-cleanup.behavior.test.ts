@@ -4,12 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it, spyOn } from 'bun:test';
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
@@ -56,6 +58,37 @@ function mediaFailureConfig(directory: string): Config {
 describe('adoption cleanup with explicit close operations', () => {
   useFakeResponsesReplay('plain-text.jsonl');
   const credentials = useOwnedCredentials();
+
+  it('closes the shared root network when MCP construction fails before provider acquisition', async () => {
+    await mkdir(join(process.cwd(), '../../tmp/lane'), { recursive: true });
+    const directory = await mkdtemp(
+      join(process.cwd(), '../../tmp/lane/adoption-network-'),
+    );
+    const config = mediaFailureConfig(directory);
+    const primary = new Error('MCP workspace construction failed');
+    const captured: { fetch?: NetworkFetch } = {};
+    const construction = spyOn(McpRuntimeOwner, 'create').mockImplementation(
+      async (acquisition) => {
+        captured.fetch = acquisition.requestFetch;
+        throw primary;
+      },
+    );
+    try {
+      await expect(
+        fromConfig(config, new SettingsService(), {}, credentials().authority),
+      ).rejects.toBe(primary);
+      const requestFetch = captured.fetch;
+      if (requestFetch === undefined)
+        throw new Error('MCP construction did not acquire its network');
+      await expect(requestFetch('http://127.0.0.1:1')).rejects.toThrow(
+        'Root fetch is closed',
+      );
+    } finally {
+      construction.mockRestore();
+      await config.dispose();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 
   it('retains agent workspace ownership when media acquisition fails before provider acquisition', async () => {
     const directory = await realpath(
@@ -204,7 +237,7 @@ describe('adoption cleanup with explicit close operations', () => {
       mcp.workspacePaths,
       settingsOwner,
       createRuntimeContentGeneratorFactory(),
-      configureProviderTokenizer(manager),
+      configureProviderTokenizer(manager, config.scratchRoots),
     );
     const file = join(directory, 'missing-remote-file');
     await writeFile(file, 'remote upload');

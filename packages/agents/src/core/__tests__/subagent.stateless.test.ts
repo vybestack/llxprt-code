@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createSubagentScope } from './helpers/create-subagent-scope.js';
 import {
@@ -52,6 +53,7 @@ import type {
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class StatelessConfig extends Config {
   setModel(): never {
@@ -566,7 +568,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
           throw new Error('Test provider adapter has no key storage');
         },
       };
-      const history = new HistoryService();
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       const fixture = createRunnableRuntimeBundle({ history, providerAdapter });
       const runtimeContext: AgentRuntimeContext = Object.freeze({
         ...fixture.runtimeContext,

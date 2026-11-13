@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import type {
   GeminiContent as Content,
   GeminiContentPart as Part,
@@ -30,6 +31,7 @@ import {
   waitForStatus,
   MockEditTool,
 } from './__tests__/coreToolScheduler-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('CoreToolScheduler edit cancellation', () => {
   it('should preserve diff when an edit is cancelled', facadeCallback0);
@@ -186,7 +188,9 @@ async function cancelledEditHistory(
   request: { callId: string; name: string; args: Record<string, unknown> },
   responseParts: Part[],
 ): Promise<IContent[]> {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const turnKey = historyService.generateTurnKey();
   const idGenerator = historyService.getIdGeneratorCallback(turnKey);
 

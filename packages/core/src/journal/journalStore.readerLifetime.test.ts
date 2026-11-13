@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { fstatSync } from 'node:fs';
@@ -27,23 +28,27 @@ describe('journal reader ownership across writer retirement', () => {
     let fd = -1;
     let armed = false;
     const deps = storeDeps({ seams, compactionDue: () => armed });
-    const store = await JournalStore.create(join(directory(), 'history.llxj'), {
-      ...deps,
-      journal: {
-        ...deps.journal,
-        open: async (file, flags) => {
-          const handle = await deps.journal.open(file, flags);
-          fd = handle.fd;
-          return {
-            ...handle,
-            close: async () => {
-              await handle.close();
-              if (closeFailure !== undefined) throw closeFailure;
-            },
-          };
+    const store = await JournalStore.create(
+      join(directory(), 'history.llxj'),
+      {
+        ...deps,
+        journal: {
+          ...deps.journal,
+          open: async (file, flags) => {
+            const handle = await deps.journal.open(file, flags);
+            fd = handle.fd;
+            return {
+              ...handle,
+              close: async () => {
+                await handle.close();
+                if (closeFailure !== undefined) throw closeFailure;
+              },
+            };
+          },
         },
       },
-    });
+      testNamedWriters,
+    );
     await store.commit([
       {
         kind: 'append',
@@ -105,6 +110,7 @@ describe('journal reader ownership across writer retirement', () => {
     const mirror = await JournalStore.create(
       join(directory(), 'mirror.llxj'),
       storeDeps({ seams }),
+      testNamedWriters,
     );
     const fanout = new MirrorFanout(store);
     try {

@@ -134,7 +134,7 @@ async function run(
         eventName: hook.eventName,
         config: { command: hook.name },
       })),
-      activeBodies: activeRequestBodyCount(),
+      activeBodies: activeRequestBodyCount(setup.provider.requestBodyCensus),
       ...observedHook(root),
     };
   } finally {

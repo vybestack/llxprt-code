@@ -262,6 +262,7 @@ export class SemanticMediaPurgeStreamCoordinator {
       }
     }
     const base = await captureSemanticPurgeRows(
+      this.history.scratchRoots,
       this.history.streamRawHistory(signal),
       this.configuration.ownership,
       signal,

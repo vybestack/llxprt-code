@@ -28,22 +28,3 @@ export interface IGitStatsService {
     newContent: string,
   ): Promise<GitStats | null>;
 }
-
-/**
- * Global git stats service instance
- */
-let gitStatsService: IGitStatsService | null = null;
-
-/**
- * Set the git stats service implementation
- */
-export function setGitStatsService(service: IGitStatsService | null): void {
-  gitStatsService = service;
-}
-
-/**
- * Get the current git stats service
- */
-export function getGitStatsService(): IGitStatsService | null {
-  return gitStatsService;
-}

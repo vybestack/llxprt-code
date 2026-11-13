@@ -7,10 +7,9 @@ import { exactTokenizer } from '../../../../core/src/services/history/chronology
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { withToolResponseRanking } from '../toolResponseDiskRanking.js';
 import { toolRankingRow, toolScore } from './tool-truncation-stream-helpers.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
-function roots(): string[] {
-  return readdirSync(getScratchRoot())
+function roots(history: HistoryService): string[] {
+  return readdirSync(history.scratchRoots.getRoot())
     .filter((name) => name.startsWith('tool-response-ranking-'))
     .sort();
 }
@@ -18,10 +17,10 @@ describe('pinned ranking source and returned consumers', () => {
   it.each([65])(
     'keeps %i-row rank membership pinned across clear and releases early-return consumer copies',
     async (size) => {
-      const before = roots();
       await withSuffixFixture(
         size,
         async (history, ownership) => {
+          const before = roots(history);
           history.setTokenizerFactory(exactTokenizer());
           let cleared = false;
           const consumer = new RowOwnership();
@@ -66,17 +65,17 @@ describe('pinned ranking source and returned consumers', () => {
             consumer.snapshot().liveRows,
             ownership.snapshot().liveRows,
           ]).toStrictEqual([0, 0]);
+          const after = roots(history);
+          expect({
+            added: after.filter((name) => !before.includes(name)).length,
+            removed: before.filter((name) => !after.includes(name)).length,
+          }).toStrictEqual({ added: 0, removed: 0 });
         },
         2048,
         toolRankingRow,
         undefined,
         (options) => new HistoryService(options),
       );
-      const after = roots();
-      expect({
-        added: after.filter((name) => !before.includes(name)).length,
-        removed: before.filter((name) => !after.includes(name)).length,
-      }).toStrictEqual({ added: 0, removed: 0 });
     },
     120000,
   );
@@ -84,10 +83,10 @@ describe('pinned ranking source and returned consumers', () => {
 
 describe('ranking consumer failures', () => {
   it('closes the disk index when its returned consumer throws', async () => {
-    const before = roots();
     await withSuffixFixture(
       512,
       async (history, ownership) => {
+        const before = roots(history);
         await expect(
           withToolResponseRanking(history, [], toolScore, async (ranked) => {
             for (const candidate of ranked) {
@@ -97,14 +96,14 @@ describe('ranking consumer failures', () => {
           }),
         ).rejects.toThrow('consumer failed');
         expect(ownership.snapshot().liveRows).toBe(0);
+        const after = roots(history);
+        expect({
+          added: after.filter((name) => !before.includes(name)).length,
+          removed: before.filter((name) => !after.includes(name)).length,
+        }).toStrictEqual({ added: 0, removed: 0 });
       },
       2048,
       toolRankingRow,
     );
-    const after = roots();
-    expect({
-      added: after.filter((name) => !before.includes(name)).length,
-      removed: before.filter((name) => !after.includes(name)).length,
-    }).toStrictEqual({ added: 0, removed: 0 });
   });
 });

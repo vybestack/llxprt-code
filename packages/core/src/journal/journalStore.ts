@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { DeferredMaintenance } from './deferred-maintenance.js';
+import {
+  DeferredMaintenance,
+  JournalMaintenanceScope,
+} from './deferred-maintenance.js';
 import { rootRef } from './groupSegments.js';
 import type { ArrivalStore } from './arrival-group.js';
 import {
@@ -15,18 +18,13 @@ import { openStoreIdFacts } from './store-id-facts.js';
 import { CommittedIdNodes } from './committed-id-nodes.js';
 import { writtenLabelsOf, type SpineEntry } from './journal-store-state.js';
 import { JournalAdmissions } from './row-admission.js';
-import type { NeutralRowFactRegistration } from './neutralRowFacts.js';
-import { retainNamedWriter } from './named-writer-ownership.js';
+import type { NamedWriterOwnership } from './named-writer-ownership.js';
 import { journalLabelSorter } from './ordered-labels.js';
 import {
   finishStoreFormats,
   nativeFactRegistration,
 } from './store-format-fill.js';
-import {
-  readContextSpans,
-  type ContextSpan,
-  type ContextSpanPolicy,
-} from './contextSpanFacts.js';
+import { readContextSpans, type ContextSpan } from './contextSpanFacts.js';
 import { pinnedRequestPreparation } from './pinned-format-fill.js';
 import {
   warmToolRanking,
@@ -35,7 +33,6 @@ import {
 } from './tool-ranking-fill.js';
 import { warmDensityFiles, densityFilePolicy } from './density-file-fill.js';
 import type { DensityFilePolicy } from './density-file-facts.js';
-import type { RecencyFactPolicy } from './recencyFacts.js';
 import { warmNativeFacts } from './nativeFactFill.js';
 import type { NativeFactIndexRegistration } from './nativeFactIndex.js';
 import {
@@ -59,7 +56,7 @@ import {
 } from './compactionSwap.js';
 import { mapReader, type BuildContext, type BuiltGroup } from './groupBuild.js';
 import type { CommitEffect } from './commitEffect.js';
-import type { OccurrencePlanner, VersionEdit } from './groupEdits.js';
+import type { VersionEdit } from './groupEdits.js';
 import type { RecordAppender } from './groupAppender.js';
 import type { JournalFileHandle } from './positionalFile.js';
 import {
@@ -68,7 +65,6 @@ import {
 } from './transcript-group.js';
 import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
 import type { CommitAck, JournalGroupWriter } from './groupWriter.js';
-import type { IdFactDeps } from './idFactQueries.js';
 import { BoundedIdNodeCache, type IdNodeCache } from './idTrieCache.js';
 import {
   createJournal,
@@ -87,7 +83,7 @@ import { PinLease, PinnedRead } from './pinLease.js';
 import { JournalMediaPins } from './journalMediaPins.js';
 import type { PinnedIdFacts } from './pinnedIdFacts.js';
 import type { RowEntry } from './rowEntry.js';
-import type { RightSpine, RowTreeAlgebra } from './rowTreeBuilder.js';
+import type { RightSpine } from './rowTreeBuilder.js';
 import { iterateRowEntries, loadRightSpine } from './rowTreeReader.js';
 import {
   readRowIds,
@@ -102,31 +98,14 @@ import {
   writeUnlinkedCompactionCandidate,
   transcriptCompactionDue,
 } from './storeCompaction.js';
-import type { SlotKinds } from './aggregateComposition.js';
 import {
   type fillRowFormats,
   warmRowFormat,
   type RegisteredRowFormat,
 } from './formatFill.js';
 
-/** What the store is built from: the file seams, the hash, the two normalizers and the planner. */
-export interface JournalStoreDependencies {
-  readonly journal: JournalOpenDependencies;
-  readonly idDeps: IdFactDeps;
-  readonly planOccurrences: OccurrencePlanner;
-  readonly recencyFactPolicy?: RecencyFactPolicy;
-  readonly contextSpanPolicy?: ContextSpanPolicy;
-  readonly neutralRowFacts?: NeutralRowFactRegistration;
-  readonly eagerNeutralRowFacts?: boolean;
-  /** The aggregate algebra of the row tree for a slot table. */
-  readonly algebra: (kinds: SlotKinds) => RowTreeAlgebra;
-  /** One capped cache each for the id trie, the meta map and the state map. */
-  readonly createCache?: () => IdNodeCache;
-  /** The rename, close and open of the compaction swap (design 4.11); the real ones by default. */
-  readonly fileOperations?: FileOperations;
-  /** Whether the file has outgrown its version (design 4.11); a test lowers the floor through it. */
-  readonly compactionDue?: (version: Version, notBefore: number) => boolean;
-}
+export type { JournalStoreDependencies } from './journal-store-dependencies.js';
+import type { JournalStoreDependencies } from './journal-store-dependencies.js';
 
 /** What a store with no file name is called in its errors. */
 export const UNLINKED_JOURNAL_LABEL = '(unlinked journal)';
@@ -181,10 +160,8 @@ export class JournalStore {
   /** The file size below which the trigger is not evaluated, set after a refused swap. */
   private rearmAt = 0;
   /** The compaction in progress; a pin or a read waits for it (design 10.1). */
-  private readonly maintenance = new DeferredMaintenance(
-    () => (this.tail = this.tail.then(() => this.compactWhenIdle())),
-    (error) => (this.compactionFailure = { error }),
-  );
+  readonly maintenanceScope: JournalMaintenanceScope;
+  private readonly maintenance: DeferredMaintenance;
   private readonly automaticCompaction = new AutomaticCompaction();
   private compactionFailure: { readonly error: unknown } | undefined;
   private readonly fileOperations: FileOperations;
@@ -197,7 +174,15 @@ export class JournalStore {
     /** The file has no name: `path` is a label, and a compaction swaps descriptors instead of renaming. */
     private readonly unlinked = false,
     private readonly releaseNamedWriter?: () => void,
+    readonly watermarks = deps.journal.watermarks,
   ) {
+    this.maintenanceScope =
+      deps.maintenanceScope ?? new JournalMaintenanceScope();
+    this.maintenance = new DeferredMaintenance(
+      this.maintenanceScope,
+      () => (this.tail = this.tail.then(() => this.compactWhenIdle())),
+      (error) => (this.compactionFailure = { error }),
+    );
     this.admissions = new JournalAdmissions(
       writer,
       () => !this.closing && this.automaticCompaction.running === undefined,
@@ -214,8 +199,9 @@ export class JournalStore {
   static async create(
     path: string,
     deps: JournalStoreDependencies,
+    namedWriters: NamedWriterOwnership,
   ): Promise<JournalStore> {
-    const release = await retainNamedWriter(path, true);
+    const release = await namedWriters.retain(path, true);
     try {
       return new JournalStore(
         path,
@@ -268,7 +254,11 @@ export class JournalStore {
   async cloneUnlinked(
     open: JournalOpenDependencies['open'],
   ): Promise<JournalStore> {
-    const deps = { ...this.deps, journal: { ...this.deps.journal, open } };
+    const deps = {
+      ...this.deps,
+      maintenanceScope: this.maintenanceScope,
+      journal: { ...this.deps.journal, open },
+    };
     const candidate = await this.whilePinned(() =>
       writeUnlinkedCompactionCandidate(
         UNLINKED_JOURNAL_LABEL,
@@ -306,8 +296,9 @@ export class JournalStore {
   static async open(
     path: string,
     deps: JournalStoreDependencies,
+    namedWriters: NamedWriterOwnership,
   ): Promise<JournalStore> {
-    const release = await retainNamedWriter(path, false);
+    const release = await namedWriters.retain(path, false);
     try {
       await removeStaleCompaction(path);
       const { writer } = await openJournalForOwner(path, deps.journal);

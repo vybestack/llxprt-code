@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -42,7 +43,7 @@ describe('cancelled tool presentation', () => {
   const directory = useTempDir('journal-cancelled-display-');
   it('preserves the tool label and cancellation result without a display override', async () => {
     const path = join(directory(), 'cancelled.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     try {
       await session.append([
         {
@@ -98,7 +99,7 @@ describe('cancelled tool presentation', () => {
     'keeps a %s approval pending until its tool result arrives',
     async (status) => {
       const path = join(directory(), 'scheduled.llxj');
-      const session = await JournalSession.create(path);
+      const session = await JournalSession.create(path, testJournalOptions());
       try {
         await session.append([
           {

@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
 import { mkdir, mkdtemp } from 'node:fs/promises';
@@ -20,6 +23,8 @@ import { RecordingIntegration } from '../../RecordingIntegration.js';
 import type { SessionRecordingPort } from '../../recordingPort.js';
 import { resumeSession } from '../../resumeSession.js';
 import type { SessionMetadata } from '../../types.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 export const PROJECT = 'w21-exact-replay';
 
@@ -128,9 +133,14 @@ export class ExactReplayFixture {
       provider: 'test',
       model: 'model-1',
     };
-    this.history = new HistoryService({});
-    this.recording = JournalRecordingService.create(config);
-    this.integration = new RecordingIntegration(this.recording);
+    this.history = new HistoryService({ scratchRoots: recordingScratchRoots });
+    this.recording = JournalRecordingService.create(
+      withTestNamedWriters(config),
+    );
+    this.integration = new RecordingIntegration(
+      this.recording,
+      recordingScratchRoots,
+    );
   }
 
   path(): string {
@@ -157,18 +167,26 @@ export class ExactReplayFixture {
     provider = 'test',
     model = 'model-1',
   ): Promise<void> {
-    const resumed = await resumeSession({
-      continueRef: this.sessionId,
-      projectHash: PROJECT,
-      chatsDir: this.chats,
-      currentProvider: provider,
-      currentModel: model,
-      workspaceDirs: ['/resume/default'],
-      ...(mediaStore === undefined ? {} : { mediaStore }),
-    });
+    const resumed = await resumeSession(
+      withTestNamedWriters({
+        continueRef: this.sessionId,
+        projectHash: PROJECT,
+        chatsDir: this.chats,
+        currentProvider: provider,
+        currentModel: model,
+        workspaceDirs: ['/resume/default'],
+        ...(mediaStore === undefined ? {} : { mediaStore }),
+      }),
+    );
     if (!resumed.ok) throw new Error(resumed.error);
-    const history = new HistoryService({});
-    const integration = new RecordingIntegration(resumed.recording);
+    const history = new HistoryService({
+      scratchRoots: recordingScratchRoots,
+      originIds: this.history.originIds,
+    });
+    const integration = new RecordingIntegration(
+      resumed.recording,
+      recordingScratchRoots,
+    );
     try {
       await history.adoptResumeBoot(resumed.recording, resumed.boot);
       await integration.subscribeToJournal(history);
@@ -183,3 +201,5 @@ export class ExactReplayFixture {
     }
   }
 }
+
+afterRecordingTests(() => recordingScratchRoots.removeRoot());

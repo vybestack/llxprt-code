@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { statSync } from 'node:fs';
@@ -52,10 +53,13 @@ describe('native compression source-range selection', () => {
     async (size) => {
       const counter = { reads: 0 };
       const file = join(directory(), 'ranges.llxj');
-      const session = await JournalSession.create(file, {
-        journal: testJournalSeams({ readCounter: counter }, 1, false)
-          .dependencies,
-      });
+      const session = await JournalSession.create(
+        file,
+        testJournalOptions({
+          journal: testJournalSeams({ readCounter: counter }, 1, false)
+            .dependencies,
+        }),
+      );
       const rows = Array.from({ length: size }, (_, index) => row(index));
       await session.append(rows);
       const dump = new JournalDumpSnapshot(await session.store.snapshot());
@@ -101,6 +105,7 @@ describe('native compression source-range selection', () => {
   it('matches distinct-sequence array annotation across nonmonotonic markers and uncurated holes', async () => {
     const session = await JournalSession.create(
       join(directory(), 'oracle.llxj'),
+      testJournalOptions(),
     );
     const rows = Array.from({ length: 65 }, (_, index) => row(index));
     await session.append(rows);
@@ -127,7 +132,7 @@ describe('native compression source-range selection', () => {
 
   it('keeps old source ordinals and queries across pop, append, clone and compaction', async () => {
     const file = join(directory(), 'versions.llxj');
-    const session = await JournalSession.create(file);
+    const session = await JournalSession.create(file, testJournalOptions());
     const rows = Array.from({ length: 65 }, (_, index) => row(index));
     await session.append(rows);
     const old = new JournalDumpSnapshot(await session.store.snapshot());
@@ -182,7 +187,7 @@ describe('native compression source-range selection', () => {
       await old.close();
       await session.close();
     }
-    const reopened = await JournalSession.open(file);
+    const reopened = await JournalSession.open(file, testJournalOptions());
     try {
       const current = new JournalDumpSnapshot(await reopened.store.snapshot());
       try {
@@ -211,6 +216,7 @@ describe('native compression source-range selection', () => {
   it('uses the pinned generation when equal curated ranks have different raw ordinals after a rewrite', async () => {
     const session = await JournalSession.create(
       join(directory(), 'same-rank.llxj'),
+      testJournalOptions(),
     );
     await session.append(Array.from({ length: 65 }, (_, index) => row(index)));
     const snapshot = await session.store.snapshot();

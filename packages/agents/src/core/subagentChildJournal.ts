@@ -67,6 +67,7 @@ export async function openChildSessionJournal(params: {
   const inputs = resolveRecordingInputs(params.config, params.workspaceDirs);
   return createChildSessionJournal({
     sessionId: params.childSessionId,
+    journal: { namedWriters: params.config.namedWriters },
     parentSessionId: params.parentSessionId,
     projectHash: inputs.projectHash,
     chatsDir: inputs.chatsDir,

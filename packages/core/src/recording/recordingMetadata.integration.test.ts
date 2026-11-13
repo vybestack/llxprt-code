@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -45,7 +46,9 @@ describe('recording metadata and committed journal history', () => {
   }
 
   function recorder(): JournalRecordingService {
-    const recording = JournalRecordingService.create(config());
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters(config()),
+    );
     recordings.add(recording);
     return recording;
   }
@@ -193,7 +196,9 @@ describe('recording metadata and committed journal history', () => {
     );
     const target = targets.find((candidate) => candidate.kind === 'checkpoint');
     if (target?.kind !== 'checkpoint') throw new Error('Missing checkpoint');
-    const result = await new SessionTransitionService().forkFromCheckpoint(
+    const result = await new SessionTransitionService(
+      withTestNamedWriters({}),
+    ).forkFromCheckpoint(
       target,
       directory(),
       PROJECT_HASH,
@@ -347,7 +352,9 @@ describe('recording metadata and committed journal history', () => {
 
   it('holds a full-session-ID lock until recorder disposal', async () => {
     const options = config();
-    const recording = await JournalRecordingService.createLocked(options);
+    const recording = await JournalRecordingService.createLocked(
+      withTestNamedWriters(options),
+    );
     recordings.add(recording);
     await recordRowsForTest(recording, [content('A')]);
     expect(

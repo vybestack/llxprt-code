@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
@@ -10,6 +11,7 @@ import {
   withNativeFallbackFixture,
   reachesGate,
 } from './support/native-fallback-fixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function mediaRollback(size: number): Promise<void> {
   await withNativeFallbackFixture(async (fixture) => {
@@ -34,7 +36,7 @@ async function mediaRollback(size: number): Promise<void> {
     );
     const failure = new Error('reject fallback media finalization');
     await fixture.pauseFinalization(failure);
-    const rows = new DetachedHistoryJournal(owners);
+    const rows = new DetachedHistoryJournal(historyScratchRoots, owners);
     rows.append(suffixRow(size));
     const operation = rejectedValue(
       publishProviderFallbackCandidate(

@@ -1,10 +1,12 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('incremental tool argument arrival', () => {
   it('preserves provider-normalized JSON when replacing raw arguments', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const arrival = await history.openResponseArrival({
       id: 'replace',
       submissionId: 'prompt',
@@ -40,7 +42,7 @@ describe('incremental tool argument arrival', () => {
     }
   });
   it('assembles interleaved source arguments into their original blocks', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       const arrival = await history.openResponseArrival({
         id: 'attempt',
@@ -87,7 +89,7 @@ describe('incremental tool argument arrival', () => {
     }
   });
   it('retains invalid raw arguments outside context and rejects completion', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       const arrival = await history.openResponseArrival({
         id: 'attempt',
@@ -114,7 +116,7 @@ describe('incremental tool argument arrival', () => {
     }
   });
   it('keeps abandoned internal attempts out of the completed response', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       const arrival = await history.openResponseArrival({
         id: 'outer',
@@ -152,7 +154,7 @@ describe('incremental tool argument arrival', () => {
     }
   });
   it('allows a text-only retry after abandoned tool arguments', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       const arrival = await history.openResponseArrival({
         id: 'outer',

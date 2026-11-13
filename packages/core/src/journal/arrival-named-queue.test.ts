@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -32,7 +33,11 @@ describe('named arrival queue', () => {
   const directory = useTempDir('named-queue-');
   it('charges named fragments and coalesces them until the shared timer publishes progress', async () => {
     const path = join(directory(), 'queue.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     try {
       const row = await recorder.beginRow(
@@ -79,6 +84,7 @@ describe('named arrival queue', () => {
     const store = await JournalStore.create(
       join(directory(), 'slow.llxj'),
       storeDeps({ seams }),
+      testNamedWriters,
     );
     const recorder = new JournalArrivalRecorder(store);
     try {
@@ -114,6 +120,7 @@ describe('named arrival queue', () => {
     const store = await JournalStore.create(
       join(directory(), 'mode.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     const recorder = new JournalArrivalRecorder(store);
     try {

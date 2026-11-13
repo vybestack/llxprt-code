@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -6,6 +7,7 @@ import { HistoryMediaOwnership } from '../../../../storage/history-media-ownersh
 import { LocalMediaStore } from '../../../../storage/local-media-store.js';
 import type { RowOwnership } from '../../../../recording/rowOwnership.js';
 import type { PreparedHistoryBatchEffect } from '../../historyBatchContracts.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 type References = Parameters<
   HistoryMediaOwnership['prepareReferenceReplacement']
@@ -48,7 +50,7 @@ export async function withDetachedMedia(
 ): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'detached-media-'));
   const store = new LocalMediaStore({ rootDirectory: root, quotaBytes: 1024 });
-  const owner = new DetachedMediaOwner(store);
+  const owner = new DetachedMediaOwner(store, historyScratchRoots);
   try {
     await action(store, owner);
   } finally {

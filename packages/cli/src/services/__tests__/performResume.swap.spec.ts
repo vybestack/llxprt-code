@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -39,6 +41,7 @@ import {
   type LockHandle,
   type SessionRecordingPort,
 } from './performResume-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 let chatsDir: string;
 let lockHandles: LockHandle[];
@@ -132,7 +135,7 @@ async function testSwapPhaseOne(): Promise<void> {
     sessionId: 'old-current-session',
     projectHash: PROJECT_HASH,
   });
-  const oldRecording = createSessionRecorder(oldConfig);
+  const oldRecording = createSessionRecorder(withTestNamedWriters(oldConfig));
   await recordRowsForTest(oldRecording, [makeContent('old message')]);
   await oldRecording.flush();
   const oldFilePath = oldRecording.getFilePath()!;
@@ -153,7 +156,7 @@ async function testSwapPhaseOne(): Promise<void> {
     currentRecording: oldRecording,
   });
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
   expect(result.ok).toBe(false);
 
   await recordRowsForTest(oldRecording, [
@@ -170,7 +173,7 @@ async function testSwapOldFileClosed(): Promise<void> {
     sessionId: 'old-session-to-close',
     projectHash: PROJECT_HASH,
   });
-  const oldRecording = createSessionRecorder(oldConfig);
+  const oldRecording = createSessionRecorder(withTestNamedWriters(oldConfig));
   await recordRowsForTest(oldRecording, [makeContent('old message')]);
   await oldRecording.flush();
   const oldFilePath = oldRecording.getFilePath()!;
@@ -189,7 +192,7 @@ async function testSwapOldFileClosed(): Promise<void> {
 
   const oldEventCountBefore = await countFileEvents(oldFilePath);
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
   expect(result.ok).toBe(true);
 
   await expect(
@@ -211,7 +214,7 @@ async function testSwapNewFileEvents(): Promise<void> {
     currentSessionId: 'some-other-session',
   });
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
   expect(result.ok).toBe(true);
 
   assertResumeOk(result);
@@ -258,7 +261,7 @@ async function testSwapOldLockReleased(): Promise<void> {
 
   expect(await SessionLockManager.isLocked(chatsDir, oldSessionId)).toBe(true);
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
   expect(result.ok).toBe(true);
 
   expect(await SessionLockManager.isLocked(chatsDir, oldSessionId)).toBe(false);
@@ -279,7 +282,7 @@ async function testSwapNullLock(): Promise<void> {
     currentLockHandle: null,
   });
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
 
   expect(result.ok).toBe(true);
 
@@ -310,7 +313,7 @@ async function testSwapOldEventCount(): Promise<void> {
 
   const eventCountBefore = await countFileEvents(oldFilePath);
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
   expect(result.ok).toBe(true);
 
   const eventCountAfter = await countFileEvents(oldFilePath);
@@ -349,7 +352,7 @@ async function testSwapLockReleaseFailure(): Promise<void> {
     currentLockHandle: oldLock,
   });
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
 
   expect(result.ok).toBe(true);
   assertResumeOk(result);
@@ -375,7 +378,9 @@ async function verifyRestoresExactPriorHistoryWhenAReplacementListenerThrows() {
     makeContent('previous first'),
     makeContent('previous second', 'ai'),
   ];
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   historiesToDispose.push(historyService);
   historyService.addAll(previousHistory);
   await historyService.waitForTokenUpdates();
@@ -395,7 +400,7 @@ async function verifyRestoresExactPriorHistoryWhenAReplacementListenerThrows() {
       integration.subscribeToJournal(historyService),
   };
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
 
   return { result, historyService, previousHistory, targetId };
 }
@@ -425,7 +430,9 @@ async function testSwapRollbackFailures(): Promise<void> {
     sessionId: targetId,
     contents: [makeContent('replacement history')],
   });
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   historiesToDispose.push(historyService);
   historyService.add(makeContent('previous history'));
   const context = makeResumeContext(chatsDir, {
@@ -454,7 +461,7 @@ async function testSwapRollbackFailures(): Promise<void> {
     });
 
   try {
-    const result = await performResume(targetId, context);
+    const result = await performResume(targetId, withTestNamedWriters(context));
 
     expect(result).toStrictEqual({
       ok: false,
@@ -487,7 +494,9 @@ async function verifyCleansThePreparedRecordingWhenRollbackHistoryRestorationThr
     contents: [makeContent('replacement history')],
   });
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   historiesToDispose.push(historyService);
   historyService.add(makeContent('previous history'));
   const adoptJournal = JournalHistoryStore.prototype.adoptJournal;
@@ -516,7 +525,7 @@ async function verifyCleansThePreparedRecordingWhenRollbackHistoryRestorationThr
   };
 
   try {
-    const result = await performResume(targetId, context);
+    const result = await performResume(targetId, withTestNamedWriters(context));
     return { result, historyService, targetId };
   } finally {
     rollbackFailure.mockRestore();
@@ -564,7 +573,7 @@ async function testLatestAllLocked(): Promise<void> {
     currentSessionId: 'different-session',
   });
 
-  const result = await performResume('latest', context);
+  const result = await performResume('latest', withTestNamedWriters(context));
 
   expect(result.ok).toBe(false);
   assertResumeError(result);
@@ -576,14 +585,14 @@ async function testLatestAllEmpty(): Promise<void> {
   const emptySessionId2 = 'empty-session-2';
 
   const emptyConfig1 = makeConfig(chatsDir, { sessionId: emptySessionId1 });
-  const emptySvc1 = createSessionRecorder(emptyConfig1);
+  const emptySvc1 = createSessionRecorder(withTestNamedWriters(emptyConfig1));
   await recordRowsForTest(emptySvc1, []);
   emptySvc1.recordSessionEvent('info', 'session started');
   await emptySvc1.flush();
   await emptySvc1.dispose();
 
   const emptyConfig2 = makeConfig(chatsDir, { sessionId: emptySessionId2 });
-  const emptySvc2 = createSessionRecorder(emptyConfig2);
+  const emptySvc2 = createSessionRecorder(withTestNamedWriters(emptyConfig2));
   await recordRowsForTest(emptySvc2, []);
   emptySvc2.recordSessionEvent('info', 'session started');
   await emptySvc2.flush();
@@ -593,7 +602,7 @@ async function testLatestAllEmpty(): Promise<void> {
     currentSessionId: 'different-session',
   });
 
-  const result = await performResume('latest', context);
+  const result = await performResume('latest', withTestNamedWriters(context));
 
   expect(result.ok).toBe(false);
   assertResumeError(result);
@@ -614,7 +623,7 @@ async function testLatestSkipsCurrent(): Promise<void> {
     currentSessionId,
   });
 
-  const result = await performResume('latest', context);
+  const result = await performResume('latest', withTestNamedWriters(context));
 
   expect(result.ok).toBe(true);
   assertResumeOk(result);

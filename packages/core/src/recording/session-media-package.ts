@@ -1,3 +1,4 @@
+import type { JournalSessionOptions } from '../services/history/journalSession.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -161,6 +162,7 @@ function importPublication(
   recordingPath: string,
   projectHash: string,
   sessionId: string,
+  journal: JournalSessionOptions,
 ): ImportPublication {
   return {
     destinationChatsDirectory,
@@ -171,6 +173,7 @@ function importPublication(
         outputPath,
         projectHash,
         sessionId,
+        journal,
       ),
     persistedStates: validated.persistedStates.map((state, index) => ({
       fileName: importedStateFileName(sessionId, index),
@@ -279,6 +282,8 @@ export function importSessionMediaPackage(
   destinationChatsDirectory: string,
   projectHash: string,
   mediaStore: LocalMediaStore,
+  activate?: undefined,
+  journal?: JournalSessionOptions,
 ): Promise<ImportedSessionMediaPackage>;
 export function importSessionMediaPackage<T>(
   packageSource: string | ValidatedSessionMediaPackage,
@@ -286,6 +291,7 @@ export function importSessionMediaPackage<T>(
   projectHash: string,
   mediaStore: LocalMediaStore,
   activate: (imported: ImportedSessionMediaPackage) => Promise<T>,
+  journal?: JournalSessionOptions,
 ): Promise<T>;
 export async function importSessionMediaPackage<T>(
   packageSource: string | ValidatedSessionMediaPackage,
@@ -293,6 +299,7 @@ export async function importSessionMediaPackage<T>(
   projectHash: string,
   mediaStore: LocalMediaStore,
   activate?: (imported: ImportedSessionMediaPackage) => Promise<T>,
+  journal: JournalSessionOptions = {},
 ): Promise<T | ImportedSessionMediaPackage> {
   const validated = await selectedPackage(packageSource);
   await mediaStore.preflightObjects(validated.objects);
@@ -336,6 +343,7 @@ export async function importSessionMediaPackage<T>(
         recordingPath,
         projectHash,
         importedSessionId,
+        journal,
       ),
     );
     const releaseFailures = await releaseImportReservations(

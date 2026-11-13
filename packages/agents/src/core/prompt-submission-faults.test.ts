@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { requireJournalRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
@@ -22,23 +23,25 @@ async function faultFixture(failFlush: boolean) {
   );
   const seams = testJournalSeams({}, 1, false);
   let fail = false;
-  const recording = createSessionRecorder({
-    sessionId: 'prompt-fault',
-    projectHash: 'prompt-fault',
-    chatsDir: root(),
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'gpt-5.6',
-    journal: {
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'prompt-fault',
+      projectHash: 'prompt-fault',
+      chatsDir: root(),
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'gpt-5.6',
       journal: {
-        ...seams.dependencies,
-        flush: (fd) => {
-          if (fail) throw new Error('prompt disk unavailable');
-          return seams.dependencies.flush(fd);
+        journal: {
+          ...seams.dependencies,
+          flush: (fd) => {
+            if (fail) throw new Error('prompt disk unavailable');
+            return seams.dependencies.flush(fd);
+          },
         },
       },
-    },
-  });
+    }),
+  );
   await setup.history.attachJournal(recording);
   await requireJournalRecorder(recording).session();
   await setup.history.waitForCommit();

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -33,6 +34,7 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function makeTempLogPath(): string {
   return path.join(
@@ -103,7 +105,9 @@ function registerIdentityCases(fixture: UsageFixture): void {
         subagentName: 'coder',
       });
 
-      const historyService = new HistoryService();
+      const historyService = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
       // Add a user message so the chronology has a marker
       historyService.add(
         {
@@ -140,7 +144,9 @@ function registerIdentityCases(fixture: UsageFixture): void {
         sessionId: 'main-session',
       });
 
-      const historyService = new HistoryService();
+      const historyService = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
       historyService.add(
         {
           speaker: 'human',
@@ -177,7 +183,9 @@ function registerBoundaryCases(fixture: UsageFixture): void {
       });
 
       // No history items — no chronology marker exists
-      const historyService = new HistoryService();
+      const historyService = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
 
       // findCurrentTurnMarker must return null for empty history
       expect(
@@ -224,7 +232,9 @@ function registerBoundaryCases(fixture: UsageFixture): void {
         sessionId: 'disabled-session',
       });
 
-      const historyService = new HistoryService();
+      const historyService = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
 
       await recordTurnJoinContext(
         disabledLogger,

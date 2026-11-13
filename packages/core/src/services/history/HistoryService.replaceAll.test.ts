@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /**
  * Copyright 2026 Vybestack LLC
@@ -21,8 +22,8 @@ import { createUserMessage, type IContent } from './IContent.js';
 import { HistoryService } from './HistoryService.js';
 import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
 import { JournalOwners } from './journalOwners.js';
-import { historyOriginId } from './historyOriginId.js';
 import { decodeStoredRow } from './journalRowCodec.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function createBlockedTokenizerFactory(): {
   factory: RuntimeTokenizerFactory;
@@ -138,7 +139,7 @@ async function expectQueuedValues(
 
 describe('HistoryService replaceAll serialization', () => {
   it('applies an add after an in-flight replacement without losing its tokens', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     const blocked = createBlockedTokenizerFactory();
     service.setTokenizerFactory(blocked.factory);
     const replacement = createUserMessage('replacement');
@@ -158,7 +159,7 @@ describe('HistoryService replaceAll serialization', () => {
   });
 
   it('applies clear after an in-flight replacement', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     const blocked = createBlockedTokenizerFactory();
     service.setTokenizerFactory(blocked.factory);
     const estimationStarted = blocked.blockNext();
@@ -177,7 +178,7 @@ describe('HistoryService replaceAll serialization', () => {
   });
 
   it('rolls back an add when a content listener rejects it', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     service.on('contentAdded', () => {
       throw new Error('listener failed');
     });
@@ -191,7 +192,7 @@ describe('HistoryService replaceAll serialization', () => {
   });
 
   it('reports every initial and queued listener failure', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     service.on('contentAdded', createQueuedFailureListener(service));
 
     let thrown: unknown;
@@ -264,7 +265,7 @@ describe('HistoryService replaceAll serialization', () => {
           );
           expect(
             await new JournalOwners(session.store).originOf(entry.owner),
-          ).toBe(historyOriginId(origin));
+          ).toBe(service.originIds.get(origin));
         } finally {
           await restored.close();
         }

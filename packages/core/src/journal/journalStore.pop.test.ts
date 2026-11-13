@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
@@ -33,7 +34,7 @@ async function referenceStore(
   file: string,
   count: number,
 ): Promise<JournalStore> {
-  const store = await JournalStore.create(file, storeDeps());
+  const store = await JournalStore.create(file, storeDeps(), testNamedWriters);
   await appendEach(store, scenarioDrafts().slice(0, count));
   return store;
 }
@@ -43,7 +44,11 @@ describe('pop', () => {
   const file = (name: string) => path.join(directory(), name);
 
   it('inside a group re-appends the kept rows of that group and writes no row record again', async () => {
-    const store = await JournalStore.create(file('inside.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('inside.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     const drafts = scenarioDrafts();
     const model = new ArrayModel();
     await appendEach(store, drafts.slice(0, 1));
@@ -86,7 +91,11 @@ describe('pop', () => {
   });
 
   it('inside one group removes rows that were never written', async () => {
-    const store = await JournalStore.create(file('same.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('same.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     const drafts = scenarioDrafts();
     await appendEach(store, drafts.slice(0, 1));
     const model = new ArrayModel();
@@ -108,7 +117,11 @@ describe('pop', () => {
   });
 
   it('below a lineage start rebuilds in a new lineage and never reaches an older one', async () => {
-    const store = await JournalStore.create(file('below.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('below.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     const drafts = scenarioDrafts();
     const model = new ArrayModel();
     await appendEach(store, drafts.slice(0, 2));
@@ -151,7 +164,11 @@ describe('pop', () => {
   });
 
   it('after a self-merge removes exactly the rows from the second row of a shared chronology seq (defect 2)', async () => {
-    const store = await JournalStore.create(file('merge.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('merge.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     const drafts = [
       draftRow({ text: 'a', chronologySeq: 5n }),
       draftRow({ text: 'b', chronologySeq: 7n }),
@@ -186,7 +203,11 @@ describe('pop', () => {
   });
 
   it('restores the meta map of the version it lands on and keeps the state map (checkpoint survives)', async () => {
-    const store = await JournalStore.create(file('meta.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('meta.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     const drafts = scenarioDrafts();
     await appendEach(store, drafts.slice(0, 4));
     const model = new ArrayModel();
@@ -245,7 +266,11 @@ describe('pop', () => {
   });
 
   it('refuses a pop whose expected count is wrong and leaves the store usable', async () => {
-    const store = await JournalStore.create(file('wrong.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('wrong.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     await appendEach(store, scenarioDrafts().slice(0, 3));
     const model = new ArrayModel();
     const labels = model.append(3);
@@ -262,7 +287,11 @@ describe('pop', () => {
   });
 
   it('clear, then append, then pop returns to the cleared version and never reuses a label', async () => {
-    const store = await JournalStore.create(file('clear.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('clear.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     const drafts = scenarioDrafts();
     const model = new ArrayModel();
     await appendEach(store, drafts.slice(0, 3));

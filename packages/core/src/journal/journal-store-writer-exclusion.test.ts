@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -25,11 +26,15 @@ describe('named journal writer exclusion', () => {
         },
       },
     };
-    await expect(JournalStore.create(file, failing)).rejects.toBe(failure);
-    const first = await JournalStore.create(file, deps);
+    await expect(
+      JournalStore.create(file, failing, testNamedWriters),
+    ).rejects.toBe(failure);
+    const first = await JournalStore.create(file, deps, testNamedWriters);
     await first.close();
-    await expect(JournalStore.open(file, failing)).rejects.toBe(failure);
-    const second = await JournalStore.open(file, deps);
+    await expect(
+      JournalStore.open(file, failing, testNamedWriters),
+    ).rejects.toBe(failure);
+    const second = await JournalStore.open(file, deps, testNamedWriters);
     await second.close();
   });
 
@@ -37,22 +42,22 @@ describe('named journal writer exclusion', () => {
     const file = join(directory(), 'aliases.llxj');
     const alias = join(directory(), 'alias.llxj');
     const deps = storeDeps();
-    const first = await JournalStore.create(file, deps);
+    const first = await JournalStore.create(file, deps, testNamedWriters);
     await symlink(file, alias);
-    await expect(JournalStore.open(alias, deps)).rejects.toThrow(
-      'already has a writer',
-    );
-    await expect(JournalStore.create(file, deps)).rejects.toThrow(
-      'already has a writer',
-    );
+    await expect(
+      JournalStore.open(alias, deps, testNamedWriters),
+    ).rejects.toThrow('already has a writer');
+    await expect(
+      JournalStore.create(file, deps, testNamedWriters),
+    ).rejects.toThrow('already has a writer');
     await first.close();
-    const second = await JournalStore.open(alias, deps);
+    const second = await JournalStore.open(alias, deps, testNamedWriters);
     await first.close();
-    await expect(JournalStore.open(file, deps)).rejects.toThrow(
-      'already has a writer',
-    );
+    await expect(
+      JournalStore.open(file, deps, testNamedWriters),
+    ).rejects.toThrow('already has a writer');
     await second.close();
-    const third = await JournalStore.open(file, deps);
+    const third = await JournalStore.open(file, deps, testNamedWriters);
     await third.close();
   });
 
@@ -62,23 +67,27 @@ describe('named journal writer exclusion', () => {
     const real = realFileOperations(deps.journal.open);
     const reached = Promise.withResolvers<void>();
     const resume = Promise.withResolvers<void>();
-    const store = await JournalStore.create(file, {
-      ...deps,
-      fileOperations: {
-        ...real,
-        rename: async (from, to): Promise<void> => {
-          reached.resolve();
-          await resume.promise;
-          await real.rename(from, to);
+    const store = await JournalStore.create(
+      file,
+      {
+        ...deps,
+        fileOperations: {
+          ...real,
+          rename: async (from, to): Promise<void> => {
+            reached.resolve();
+            await resume.promise;
+            await real.rename(from, to);
+          },
         },
       },
-    });
+      testNamedWriters,
+    );
     await store.commit([{ kind: 'append', rows: [draftRow()] }]);
     const compacting = store.compact();
     await reached.promise;
     try {
       const before = await stat(compactionCandidatePath(file));
-      const second = JournalStore.open(file, deps);
+      const second = JournalStore.open(file, deps, testNamedWriters);
       await expect(second).rejects.toThrow('already has a writer');
       await expect(stat(compactionCandidatePath(file))).resolves.toMatchObject({
         size: before.size,
@@ -91,7 +100,7 @@ describe('named journal writer exclusion', () => {
       await compacting;
       await store.close();
     }
-    const reopened = await JournalStore.open(file, deps);
+    const reopened = await JournalStore.open(file, deps, testNamedWriters);
     expect(reopened.published?.rows).toBe(1);
     await reopened.close();
   });

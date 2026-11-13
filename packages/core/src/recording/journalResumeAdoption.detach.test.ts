@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -54,19 +58,22 @@ describe('stopping the recording that is the adopted primary (D-ORCH-11)', () =>
   ): Promise<{ store: JournalHistoryStore; result: JournalResumeResult }> {
     const chats = chatsDirIn(directory());
     await recordJournal(chats, 'session-a', { rows });
-    const result = await resumeJournalSession({
-      continueRef: 'session-a',
-      projectHash: PROJECT,
-      chatsDir: chats,
-      currentProvider: 'anthropic',
-      currentModel: 'model-1',
-      workspaceDirs: ['/work/a'],
-      journal: journalSeams(),
-    });
+    const result = await resumeJournalSession(
+      withTestNamedWriters({
+        continueRef: 'session-a',
+        projectHash: PROJECT,
+        chatsDir: chats,
+        currentProvider: 'anthropic',
+        currentModel: 'model-1',
+        workspaceDirs: ['/work/a'],
+        journal: journalSeams(),
+      }),
+    );
     if (!result.ok) throw new Error(result.error);
     resumed.push(result);
     const primary = await JournalSession.create(
       path.join(directory(), 'primary.llxj'),
+      testJournalOptions(),
     );
     sessions.push(primary);
     const store = new JournalHistoryStore(primary);
@@ -110,15 +117,17 @@ describe('stopping the recording that is the adopted primary (D-ORCH-11)', () =>
 
   it('keeps a recorder of another origin bound, and it receives the later rows', async () => {
     const { store, result } = await adoptedStore([userRow('ask')]);
-    const other = JournalRecordingService.create({
-      sessionId: 'session-other',
-      projectHash: PROJECT,
-      chatsDir: chatsDirIn(directory()),
-      workspaceDirs: ['/work/a'],
-      provider: 'anthropic',
-      model: 'model-1',
-      journal: journalSeams(),
-    });
+    const other = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'session-other',
+        projectHash: PROJECT,
+        chatsDir: chatsDirIn(directory()),
+        workspaceDirs: ['/work/a'],
+        provider: 'anthropic',
+        model: 'model-1',
+        journal: journalSeams(),
+      }),
+    );
     others.push(other);
     await store.attachJournal(other, true, undefined, 'agent-b');
 

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 import { createHistoryRuntimeFixture } from '../../core/__tests__/history-runtime-fixture.js';
 /**
@@ -35,6 +36,7 @@ import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.
 import { CompressionHandler } from '../CompressionHandler.js';
 import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const MODEL = 'test-model';
 const COMPRESSION_THRESHOLD = 0.8;
@@ -80,7 +82,9 @@ interface Harness {
  * reduction stage.
  */
 async function buildHarness(): Promise<Harness> {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const runtimeContext = buildRuntimeContext(historyService);
   for (let i = 0; i < 12; i++) {
     historyService.add(

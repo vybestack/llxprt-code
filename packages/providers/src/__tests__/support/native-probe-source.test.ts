@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,6 +20,7 @@ import {
   sendThroughRoute,
   WIRE_ROUTES,
 } from './wireBodyCapture.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const history = {
   id: 'native-probe-forwarding',
@@ -194,7 +196,7 @@ describe('native send probe capability forwarding', () => {
         new SettingsService(),
         handle.selection,
       );
-      const factory = createRuntimeTokenizerFactory();
+      const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
       await factory.prepareTokenizer?.(provider.name, sink.route.model);
       let count = 0;
       const observed = observeNativeRoute();

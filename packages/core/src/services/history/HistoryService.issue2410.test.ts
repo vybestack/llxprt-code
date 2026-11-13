@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /**
  * Copyright 2025 Vybestack LLC
@@ -25,6 +26,7 @@ import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 let service: HistoryService;
 async function assertRejectedEmpty0(): Promise<void> {
@@ -68,7 +70,7 @@ async function assertRejectedEmpty2(): Promise<void> {
 
 describe('issue #2410 – HistoryService rejects zero-block turns', () => {
   beforeEach(() => {
-    service = new HistoryService();
+    service = new HistoryService({ scratchRoots: historyScratchRoots });
   });
   afterEach(async () => {
     await service.dispose();

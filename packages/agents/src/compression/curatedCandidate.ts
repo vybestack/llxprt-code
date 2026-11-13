@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
@@ -12,9 +13,10 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
  * row it comes from. The caller closes the journal.
  */
 export async function curatedCandidate(
+  scratchRoots: ScratchRootOwner,
   rows: AsyncIterable<IContent>,
 ): Promise<DetachedHistoryJournal> {
-  const curated = new DetachedHistoryJournal();
+  const curated = new DetachedHistoryJournal(scratchRoots);
   try {
     let ordinal = 0;
     for await (const row of rows) {
@@ -35,9 +37,10 @@ export async function curatedCandidate(
  * closes the result.
  */
 export async function curatedDensityRows(
+  scratchRoots: ScratchRootOwner,
   rows: AsyncIterable<IContent>,
 ): Promise<HistoryDensityRows> {
-  const curated = new HistoryDensityRows();
+  const curated = new HistoryDensityRows(scratchRoots);
   try {
     let ordinal = 0;
     for await (const row of rows) {

@@ -10,6 +10,7 @@ import type { PerformResumeActionReturn } from './ui/commands/types.js';
  * SPDX-License-Identifier: Apache-2.0
  */
 import {
+  type NamedWriterOwnership,
   createCheckpointService,
   SessionDiscovery,
   SessionLockManager,
@@ -40,6 +41,8 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
       readonly chatsDir: string;
     },
     private readonly options: {
+      readonly scratchRoots: ResumeContext['scratchRoots'];
+      readonly namedWriters: NamedWriterOwnership;
       readonly mediaStore?: LocalMediaStore;
       readonly maxQueueBytes?: number;
       readonly counters?: JournalReadCounters;
@@ -53,7 +56,7 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
 
   readonly resumeRecording = async (
     action: PerformResumeActionReturn,
-    context: Omit<ResumeContext, 'mediaStore'>,
+    context: Omit<ResumeContext, 'mediaStore' | 'scratchRoots'>,
     resume: typeof performResume = performResume,
   ): Promise<PerformResumeResult> => {
     this.assertOpen();
@@ -61,6 +64,8 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
     if (!mediaStore) throw new Error('CLI session media store is unavailable');
     const ownedContext: ResumeContext = {
       ...context,
+      scratchRoots: this.options.scratchRoots,
+      journal: { namedWriters: this.options.namedWriters },
       mediaStore,
       maxQueueBytes: this.options.maxQueueBytes,
       counters: this.options.counters,
@@ -77,6 +82,7 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
         if (!result.ok) throw new Error(result.error);
         return result;
       },
+      { namedWriters: this.options.namedWriters },
     );
   };
 
@@ -95,12 +101,9 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
     overwrite: boolean,
   ): Promise<void> => {
     this.assertOpen();
-    await createCheckpointService().createCheckpoint(
-      recording,
-      recording.getProjectHash(),
-      name,
-      overwrite,
-    );
+    await createCheckpointService({
+      namedWriters: this.options.namedWriters,
+    }).createCheckpoint(recording, recording.getProjectHash(), name, overwrite);
   };
 
   readonly deleteBrowserTarget = async (
@@ -109,7 +112,9 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
   ): Promise<void> => {
     this.assertOpen();
     if (target.kind === 'checkpoint') {
-      const checkpoints = createCheckpointService();
+      const checkpoints = createCheckpointService({
+        namedWriters: this.options.namedWriters,
+      });
       if (recording?.getSessionId() === target.source.sessionId) {
         await checkpoints.deleteCheckpoint(
           recording,
@@ -149,7 +154,9 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
     overwrite: boolean,
   ): Promise<void> => {
     this.assertOpen();
-    const checkpoints = createCheckpointService();
+    const checkpoints = createCheckpointService({
+      namedWriters: this.options.namedWriters,
+    });
     if (recording?.getSessionId() === target.source.sessionId) {
       await checkpoints.renameCheckpoint(
         recording,
@@ -177,12 +184,9 @@ export class CliSessionPersistence implements CliSessionPersistencePort {
     overwrite: boolean,
   ): Promise<void> => {
     this.assertOpen();
-    await createCheckpointService().setSessionName(
-      recording,
-      recording.getProjectHash(),
-      name,
-      overwrite,
-    );
+    await createCheckpointService({
+      namedWriters: this.options.namedWriters,
+    }).setSessionName(recording, recording.getProjectHash(), name, overwrite);
   };
 
   private assertOpen(): void {

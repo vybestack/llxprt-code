@@ -1,12 +1,14 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { atomicRig, atomicRow } from './__tests__/support/service-atomicity.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('sealed token recovery', () => {
   it('restores token accounting after rejected clear without streaming hydrated rows', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       const retained = [atomicRow('A'), atomicRow('B')];
       await history.addBatch(retained);

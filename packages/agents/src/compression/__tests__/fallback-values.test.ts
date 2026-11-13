@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { publishProviderFallbackCandidate } from '../providerFallbackCandidate.js';
@@ -24,6 +25,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
 import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function* expectedRows(
   size: number,
@@ -52,7 +54,7 @@ async function candidate(size: number, rollback: boolean): Promise<number> {
       ),
     );
     const before = await detachedDigest(expectedRows(size));
-    const rows = new DetachedHistoryJournal(owners);
+    const rows = new DetachedHistoryJournal(historyScratchRoots, owners);
     try {
       for (let index = 0; index < size; index++)
         rows.append(suffixRow(index, 2048));
@@ -225,7 +227,7 @@ describe('fallback disk value callers', () => {
   }
   it('preserves a complete valid candidate larger than nine MiB', async () => {
     await withValueTransformFixture(async ({ history, recorder }) => {
-      const rows = new DetachedHistoryJournal();
+      const rows = new DetachedHistoryJournal(historyScratchRoots);
       try {
         const bytes = 9 * 1024 * 1024 + 1;
         rows.append(suffixRow(0, bytes));

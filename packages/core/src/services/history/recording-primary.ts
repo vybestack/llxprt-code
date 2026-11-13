@@ -40,7 +40,9 @@ export class RecordingPrimary {
       this.admission = session;
       return;
     }
-    this.admission ??= await JournalSession.createUnlinked();
+    this.admission ??= await JournalSession.createUnlinked({
+      maintenanceScope: session.store.maintenanceScope,
+    });
     await session.close();
   }
 

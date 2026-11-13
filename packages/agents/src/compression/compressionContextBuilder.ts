@@ -137,6 +137,7 @@ function strategyRuntime(
   runtimeContext: CompressionHandlerRuntime,
 ): CompressionStrategyRuntime {
   return {
+    scratchRoots: runtimeContext.history.scratchRoots,
     ephemerals: runtimeContext.ephemerals,
     providerRuntime: runtimeContext.providerRuntime,
   };

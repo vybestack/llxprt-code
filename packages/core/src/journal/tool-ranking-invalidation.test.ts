@@ -1,3 +1,4 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -66,6 +67,7 @@ describe('native tool ranking invalidation', () => {
   it('rebuilds a policy requested in the same group as rewritten rows and a pop while old pins stay unchanged', async () => {
     const session = await JournalSession.create(
       join(directory(), 'mixed.llxj'),
+      testJournalOptions(),
     );
     const registration = policy('mixed:1');
     try {

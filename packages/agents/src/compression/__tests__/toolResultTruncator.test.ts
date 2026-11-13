@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -31,6 +32,7 @@ import {
   CONTEXT_TRUNCATION_MARKER,
   fallbackEstimateBlockTokens,
 } from '../toolResultTruncator.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const densityFixture1_observeRanksByModelDependentTokenizationWhenEstimatorVariesByModel =
   async () => {
@@ -324,7 +326,9 @@ describe('rankToolResponses', () => {
 
 describe('truncateLargestToolResponses', () => {
   beforeEach(() => {
-    densityFixture2_historyService = new HistoryService();
+    densityFixture2_historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
   });
 
   it('recovers by truncating the fattest tool response under the limit', async () => {
@@ -399,7 +403,9 @@ describe('truncateLargestToolResponses', () => {
 
 describe('truncateOversizedToolResponsesUnified — pending + history (issue #1321)', () => {
   beforeEach(() => {
-    densityFixture4_historyService = new HistoryService();
+    densityFixture4_historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
   });
 
   it('truncates a pending-only tool response when history is empty (turn-1)', async () => {

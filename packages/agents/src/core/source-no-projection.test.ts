@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -33,6 +34,7 @@ import {
   diskSource,
   sourceRootSetup,
 } from './__tests__/support/prompt-envelope-source-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const root = sourceRootSetup();
 const originalFetch = globalThis.fetch;
@@ -73,7 +75,7 @@ describe('providers without prompt-envelope projection on the source route', () 
   it('estimates from the request rows exactly as the contents estimator does', async () => {
     const fixture = await diskSource(root(), 12);
     const rows = await readRows(fixture.source);
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const model = 'model-a';
     const fallbackSources: Array<
       [string, HistoryService, () => Promise<number>]
@@ -101,7 +103,7 @@ describe('providers without prompt-envelope projection on the source route', () 
 
   it('prepares a non-projecting provider with a null envelope estimate and the fallback count', async () => {
     const fixture = await diskSource(root(), 4);
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const provider = { name: 'gemini' } as unknown as RuntimeProvider;
     const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
       provider,
@@ -186,7 +188,7 @@ describe('unflagged end-to-end send through non-projecting providers', () => {
       contents: { async *[Symbol.asyncIterator]() {} },
       resolved: { streaming: true },
     });
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
       provider,
       source: fixture.source,
@@ -248,7 +250,7 @@ describe('unflagged end-to-end send through non-projecting providers', () => {
       contents: { async *[Symbol.asyncIterator]() {} },
       ephemerals: { streaming: 'enabled' },
     });
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
       provider: provider as unknown as RuntimeProvider,
       source: fixture.source,

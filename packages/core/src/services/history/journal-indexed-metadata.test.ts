@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
@@ -34,6 +35,7 @@ async function measured(session: JournalSession): Promise<{
   const stats = { heads: 0, blocks: 0, bodies: 0, rows: new Set<number>() };
   const raw = read.access;
   const access: RecordAccess = {
+    rowTreePath: raw.rowTreePath,
     recordError: raw.recordError,
     readRecordHead(offset, what, prefetch) {
       stats.heads++;
@@ -115,10 +117,10 @@ describe('indexed metadata native mutation and read bounds', () => {
       const reads = { reads: 0 };
       const session = await JournalSession.create(
         `${directory()}/append-${size}.llxj`,
-        {
+        testJournalOptions({
           journal: testJournalSeams({ readCounter: reads }, size, false)
             .dependencies,
-        },
+        }),
       );
       try {
         function* rows(): Generator<RowDraft> {
@@ -152,9 +154,9 @@ describe('indexed metadata native mutation and read bounds', () => {
   it('reads a selected self unit without opening its successor source row', async () => {
     const session = await JournalSession.create(
       `${directory()}/self-unit.llxj`,
-      {
+      testJournalOptions({
         journal: testJournalSeams().dependencies,
-      },
+      }),
     );
     const rows: readonly IContent[] = [
       {
@@ -189,9 +191,12 @@ describe('indexed metadata native mutation and read bounds', () => {
   });
 
   it('represents an empty uncommitted journal without a row read', async () => {
-    const session = await JournalSession.create(`${directory()}/empty.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/empty.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       const native = await session.store.snapshot();
       const indexed = await IndexedJournalRequestSnapshot.create(native);
@@ -213,7 +218,7 @@ describe('indexed metadata native mutation and read bounds', () => {
   it('preserves counts across append, pop, owner, fill, purge, density, compression, clone and compaction', async () => {
     const session = await JournalSession.create(
       `${directory()}/mutation.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await session.append([{ speaker: 'human', blocks: [call('a')] }], {
@@ -319,7 +324,9 @@ describe('indexed metadata native mutation and read bounds', () => {
     it(`queries ${size} rows with bounded metadata reads and no block/body reads`, async () => {
       const session = await JournalSession.create(
         `${directory()}/${size}.llxj`,
-        { journal: testJournalSeams({}, size, false).dependencies },
+        testJournalOptions({
+          journal: testJournalSeams({}, size, false).dependencies,
+        }),
       );
       try {
         function* rows(): Generator<RowDraft> {
@@ -374,9 +381,12 @@ describe('indexed metadata native mutation and read bounds', () => {
   }
 
   it('owns the tail and holds the native pin until close without persisting pending input', async () => {
-    const session = await JournalSession.create(`${directory()}/pin.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/pin.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([{ speaker: 'ai', blocks: [call('a')] }]);
       const native = await session.store.snapshot();

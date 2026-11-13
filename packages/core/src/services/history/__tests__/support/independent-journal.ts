@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach } from 'bun:test';
 import { randomUUID } from 'node:crypto';
@@ -15,5 +16,5 @@ export async function openIndependentJournal(
   const copy = `${file}.inspection-${randomUUID()}`;
   await copyFile(file, copy);
   copies.push(copy);
-  return JournalSession.open(copy);
+  return JournalSession.open(copy, testJournalOptions());
 }

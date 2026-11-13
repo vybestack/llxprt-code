@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
@@ -7,6 +8,7 @@ import { createRowCounters } from '../../recording/journalCounters.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent, ToolCallBlock } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function call(id: string, name = `tool-${id}`): ToolCallBlock {
   return { type: 'tool_call', id, name, parameters: { value: id } };
@@ -30,7 +32,7 @@ async function collect(
 
 describe('unmatched tool call cursor', () => {
   it('suppresses duplicate response IDs and yields first unmatched calls in block order across speakers', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await service.addBatch([
         response('future'),
@@ -62,6 +64,7 @@ describe('unmatched tool call cursor ownership', () => {
       const ownership = new RowOwnership();
       const counters = createRowCounters();
       const service = new HistoryService({
+        scratchRoots: historyScratchRoots,
         attachmentCounters: { ...counters.counters, ownership },
       });
       try {
@@ -104,7 +107,7 @@ describe('unmatched tool call cursor ownership', () => {
 
 describe('unmatched tool call cursor snapshot', () => {
   it('does not yield a call matched by the last row and fixes the snapshot at first next', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await service.addBatch([
         calls(call('late'), call('open')),
@@ -128,7 +131,7 @@ describe('unmatched tool call cursor lifecycle', () => {
   it('closes disk state and output owners on early return and consumer failure', async () => {
     const root = mkdtempSync(join(tmpdir(), 'pairing-test-'));
     const ownership = new RowOwnership();
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await service.addBatch([calls(call('a'), call('b'))]);
       const cursor = service.findUnmatchedToolCalls({ root, ownership });
@@ -173,6 +176,7 @@ describe('unmatched tool call cursor failures', () => {
     const ownership = new RowOwnership();
     let reads = 0;
     const service = new HistoryService({
+      scratchRoots: historyScratchRoots,
       attachmentCounters: {
         recordDecoded: () => {},
         rowDecoded: () => {

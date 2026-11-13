@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -117,7 +118,7 @@ describe('native compression density call lookup lifetime', () => {
   const directory = useTempDir('density-lookup-');
   it('reads the first source block from its pinned version across rewrite, pop, clone, checkpoint and compaction', async () => {
     const file = join(directory(), 'lookup.llxj');
-    const session = await JournalSession.create(file);
+    const session = await JournalSession.create(file, testJournalOptions());
     try {
       await session.append([
         call('/first'),
@@ -173,7 +174,7 @@ describe('native compression density call lookup lifetime', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(file);
+    const reopened = await JournalSession.open(file, testJournalOptions());
     try {
       await checkLookup(reopened, '/replacement', false);
     } finally {
@@ -185,7 +186,7 @@ describe('native compression density call lookup lifetime', () => {
     const seams = testJournalSeams(failures, 1, false);
     const session = await JournalSession.create(
       join(directory(), 'pending.llxj'),
-      { journal: seams.dependencies },
+      testJournalOptions({ journal: seams.dependencies }),
     );
     try {
       await session.append([call('/first'), response()]);
@@ -232,9 +233,12 @@ describe('native compression density call lookup lifetime', () => {
   it('does not publish tentative lookup facts after a streamed producer fails and continues on the same writer', async () => {
     const file = join(directory(), 'producer.llxj');
     const seams = testJournalSeams();
-    const session = await JournalSession.create(file, {
-      journal: seams.dependencies,
-    });
+    const session = await JournalSession.create(
+      file,
+      testJournalOptions({
+        journal: seams.dependencies,
+      }),
+    );
     try {
       await session.append([call('/first'), response()]);
       const beforeBytes = (await stat(file)).size;
@@ -269,7 +273,7 @@ describe('native compression density call lookup lifetime', () => {
 
   it('reuses structural facts without a new group or file growth on repeated lookups', async () => {
     const file = join(directory(), 'reuse.llxj');
-    const session = await JournalSession.create(file);
+    const session = await JournalSession.create(file, testJournalOptions());
     try {
       await session.append([call('/first'), response()]);
       const coldBytes = (await stat(file)).size;

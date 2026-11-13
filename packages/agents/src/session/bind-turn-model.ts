@@ -11,6 +11,7 @@ import type { AgenticLoopOptions } from '../core/agenticLoop/types.js';
 import { recordCompletedToolHistory } from '../core/agenticLoop/loopHelpers.js';
 
 interface TurnModelExecution {
+  readonly maintenanceScope: AgenticLoopOptions['maintenanceScope'];
   readonly streamModel: AgenticLoopOptions['streamModel'];
   readonly recordToolHistory: AgenticLoopOptions['recordToolHistory'];
   readonly recordToolPresentations: AgenticLoopOptions['recordToolPresentations'];
@@ -19,6 +20,7 @@ interface TurnModelExecution {
 
 export function bindTurnModel(client: AgentClientContract): TurnModelExecution {
   return {
+    maintenanceScope: client.getHistoryService()?.maintenanceScope,
     recordToolPresentations: (calls, origin) =>
       persistToolPresentations(calls, client.getHistoryService(), origin),
     persistApproval: (record, origin) =>

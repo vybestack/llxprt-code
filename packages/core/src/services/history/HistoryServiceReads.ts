@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 
 import type { IContent, ToolCallBlock } from './IContent.js';
-import { historyOriginId } from './historyOriginId.js';
 import type { JournalDisplayHandle } from './journal-display-commands.js';
 import type { JournalDisplayDescriptor } from '../../journal/display-recording.js';
 import { HistoryServiceCore } from './HistoryServiceCore.js';
@@ -29,7 +28,9 @@ export abstract class HistoryServiceReads extends HistoryServiceCore {
           await this.journal.appendDisplay(
             descriptor,
             source,
-            origin === undefined ? undefined : historyOriginId(origin),
+            origin === undefined
+              ? undefined
+              : this.journal.originIds.get(origin),
           ),
         );
       }).catch(reject);
@@ -144,7 +145,7 @@ export abstract class HistoryServiceReads extends HistoryServiceCore {
     return findUnmatchedToolCallsHelper(
       this.logger,
       this.journal.streamRows(),
-      options,
+      { ...options, scratchRoots: this.scratchRoots },
     );
   }
 

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -48,7 +49,7 @@ const { createScrollbackPagerStore } = await import(
 );
 
 async function writeJournal(filePath: string): Promise<void> {
-  const session = await JournalSession.create(filePath);
+  const session = await JournalSession.create(filePath, testJournalOptions());
   try {
     await session.append(
       Array.from({ length: 32 }, (_, seq) => ({
@@ -180,7 +181,7 @@ describe('standard transcript residency', () => {
   it('releases emitted batches while retaining new output until it is printed', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'standard-output-residency-'));
     const filePath = join(dir, 'session.llxj');
-    const session = await JournalSession.create(filePath);
+    const session = await JournalSession.create(filePath, testJournalOptions());
     const viewport = {
       visibleKeys: [],
       viewportLines: 8,
@@ -188,6 +189,7 @@ describe('standard transcript residency', () => {
     };
     const store = createScrollbackPagerStore({
       filePath,
+      watermarks: session.store.watermarks,
       viewport,
       pageRows: 16,
       settings: {

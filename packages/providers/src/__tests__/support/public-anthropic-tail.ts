@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -21,9 +22,10 @@ import {
   type AnthropicCapturedRequest,
 } from './anthropic-journal-case.js';
 import { rowsSelection, buildHistoryCallOptions } from './wireBodyCapture.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import { journalSendFixture } from './journal-send-fixture.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 class ObservedAnthropicProvider extends AnthropicProvider {
   readonly changedSources: number[] = [];
@@ -72,9 +74,10 @@ export function publicChat(
   });
   const owner = new SessionSettingsOwner(settings);
   const runtime = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     mediaResolver,
     mediaStore,
-    promptEstimator: createRuntimeTokenizerFactory(),
+    promptEstimator: createRuntimeTokenizerFactory(historyScratchRoots),
     readRuntimeSettings: () => owner.readRuntimePolicy(),
     prepareProviderInvocation: (name, parameters, signal) =>
       owner.prepareProviderInvocation(
@@ -174,13 +177,13 @@ export async function publicAnthropicTailCase(
     | undefined;
   try {
     let output = '';
-    getScratchRoot();
+    historyScratchRoots.getRoot();
     const created = await operationFileCreates(async () => {
       projection = await provider.projectPromptEnvelope(options);
       await estimatePromptEnvelope(
         provider.name,
         projection,
-        createRuntimeTokenizerFactory(),
+        createRuntimeTokenizerFactory(historyScratchRoots),
       );
       output = await textOutput(
         provider.generateChatCompletion({

@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -133,7 +134,7 @@ describe('a2a executor discards abandoned output publications on Retry (issue 30
   let eventBus: ExecutionEventBus;
 
   beforeEach(() => {
-    executor = new CoderAgentExecutor();
+    executor = new CoderAgentExecutor(scratchRoots);
     eventBus = createRecordingEventBus();
   });
 
@@ -219,3 +220,5 @@ describe('a2a executor discards abandoned output publications on Retry (issue 30
     expect(publishedStates[publishedStates.length - 1]).toBe('input-required');
   });
 });
+
+const scratchRoots = new ScratchRootOwner();

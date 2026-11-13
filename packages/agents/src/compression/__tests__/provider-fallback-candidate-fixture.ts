@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -5,6 +6,7 @@ import type { ProviderFallbackCandidate } from '../providerFallbackCandidate.js'
 
 import type { FallbackTransactionDeps } from '../providerFallbackTransaction.js';
 import { makeUserMessage } from '../../core/__tests__/chatSession-density-helpers.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export const installRestoredFixture: FallbackTransactionDeps['performFallbackCompression'] =
   async (_prompt, install): Promise<boolean> => {
@@ -20,7 +22,7 @@ export async function installFixtureCandidate(
   install: (candidate: ProviderFallbackCandidate) => Promise<void>,
   values: readonly IContent[],
 ): Promise<void> {
-  const rows = new HistoryDensityRows();
+  const rows = new HistoryDensityRows(historyScratchRoots);
   try {
     for (const row of values) rows.appendSanitized(row);
     await install({ rows, start: 0, hasPendingRows: true });

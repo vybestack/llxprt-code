@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from './journalSession.js';
@@ -181,7 +182,7 @@ describe('indexed existing-call response units', () => {
       const expected = frozenUnits(input);
       const session = await JournalSession.create(
         `${directory()}/${input.id}.llxj`,
-        { journal: testJournalSeams().dependencies },
+        testJournalOptions({ journal: testJournalSeams().dependencies }),
       );
       try {
         await session.append(input.rows);
@@ -204,9 +205,12 @@ describe('indexed existing-call response units', () => {
   }
 
   it('holds the version through asynchronous consumption after the opener closes it', async () => {
-    const session = await JournalSession.create(`${directory()}/pin.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/pin.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     const original: readonly IContent[] = [
       { speaker: 'ai', blocks: [call('a')] },
       { speaker: 'tool', blocks: [response('a')] },

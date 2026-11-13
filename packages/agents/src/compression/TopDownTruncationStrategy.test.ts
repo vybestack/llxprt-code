@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -29,6 +30,7 @@ import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/p
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
 import { compressTopDownViaDisk } from './__tests__/support/topdown-disk-adapter.js';
+const historyScratchRoots = createTestScratchOwner();
 
 // ---------------------------------------------------------------------------
 // Helpers — build realistic IContent messages
@@ -745,7 +747,7 @@ describe('TopDownTruncationStrategy image token accounting', () => {
   function realEstimator(
     provider: string,
   ): (contents: readonly IContent[]) => Promise<number> {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.setActiveTokenizationTarget('claude-sonnet-4-20250514', provider);
     return (contents) =>
       history.estimateTokensForContents(contents as IContent[]);

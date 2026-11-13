@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { testJournalSeams } from '@vybestack/llxprt-code-core/journal/__tests__/support/journalFixtures.js';
@@ -10,6 +12,9 @@ import { describe, expect, it } from 'bun:test';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { projectOpenAIChatPromptEnvelopeFromSource } from '../runtime/promptEnvelopeProjections.js';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
+const tokenizerScratchRoots = createTestScratchOwner();
+
+const historyScratchRoots = createTestScratchOwner();
 
 const payload = 'fixed native cold payload 雪 '.repeat(32);
 const logger = new DebugLogger('native-chat-cold-cost');
@@ -26,7 +31,7 @@ async function estimatePrepared(
   const result = await estimatePromptEnvelope(
     'openai',
     projection,
-    createRuntimeTokenizerFactory(),
+    createRuntimeTokenizerFactory(tokenizerScratchRoots),
   );
   return result.estimatedPromptTokens;
 }
@@ -38,19 +43,24 @@ describe('cold native Chat storage cost', () => {
     'prepares and estimates %s rows with bounded physical reads per row',
     async (size) => {
       const counter = { reads: 0 };
-      const recording = JournalRecordingService.create({
-        sessionId: `cost-${size}`,
-        projectHash: 'cold-cost',
-        chatsDir: directory(),
-        workspaceDirs: [],
-        provider: 'openai',
-        model: 'gpt-4o',
-        journal: {
-          journal: testJournalSeams({ readCounter: counter }, 1, false)
-            .dependencies,
-        },
+      const recording = JournalRecordingService.create(
+        withTestNamedWriters({
+          sessionId: `cost-${size}`,
+          projectHash: 'cold-cost',
+          chatsDir: directory(),
+          workspaceDirs: [],
+          provider: 'openai',
+          model: 'gpt-4o',
+          journal: {
+            journal: testJournalSeams({ readCounter: counter }, 1, false)
+              .dependencies,
+          },
+        }),
+      );
+      const history = new HistoryService({
+        scratchRoots: historyScratchRoots,
+        recording,
       });
-      const history = new HistoryService({ recording });
       try {
         for (let index = 0; index < size; index++)
           await history.addBatch([

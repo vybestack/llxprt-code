@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,14 +15,16 @@ export async function recordStartupSession(
   root: string,
 ): Promise<{ path: string; id: string }> {
   const id = crypto.randomUUID();
-  const recording = createSessionRecorder({
-    sessionId: id,
-    projectHash: getProjectHash(root),
-    chatsDir: new Storage(root).getProjectChatsDir(),
-    workspaceDirs: [root],
-    provider: 'fake',
-    model: 'fake-model',
-  });
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: id,
+      projectHash: getProjectHash(root),
+      chatsDir: new Storage(root).getProjectChatsDir(),
+      workspaceDirs: [root],
+      provider: 'fake',
+      model: 'fake-model',
+    }),
+  );
   await seedSessionRows(recording, [
     {
       speaker: 'human',

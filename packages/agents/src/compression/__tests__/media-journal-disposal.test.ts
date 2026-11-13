@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -6,6 +7,7 @@ import { join } from 'node:path';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('compression media journal lifecycle', () => {
   it('settles deferred media releases before closing the history journal', async () => {
@@ -14,14 +16,16 @@ describe('compression media journal lifecycle', () => {
       rootDirectory: root,
       quotaBytes: 1024,
     });
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       const reference = await store.admit({
         bytes: new Uint8Array([1]),
         mimeType: 'application/octet-stream',
         semanticMetadata: {},
       });
-      await history.registerMediaOwner(new HistoryMediaOwnership(store));
+      await history.registerMediaOwner(
+        new HistoryMediaOwnership(store, historyScratchRoots),
+      );
       await history.detachedValues.replace([
         { speaker: 'human', blocks: [reference] },
       ]);

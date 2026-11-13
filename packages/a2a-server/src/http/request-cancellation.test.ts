@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -41,6 +42,7 @@ function createHarness() {
   );
   const store = new InMemoryTaskStore();
   const executor = new CoderAgentExecutor(
+    scratchRoots,
     store,
     async (taskId, contextId, _settings, eventBus) => {
       const entry = entries.get(contextId);
@@ -221,3 +223,5 @@ describe('A2A request cancellation ownership', () => {
     }
   });
 });
+
+const scratchRoots = new ScratchRootOwner();

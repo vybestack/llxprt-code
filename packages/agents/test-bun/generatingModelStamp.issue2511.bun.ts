@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
@@ -53,6 +54,7 @@ import { ChatSession } from '../src/core/chatSession.js';
 import { chatSessionPorts } from '../src/core/chatSessionPorts.js';
 import { TestRuntimeProviderManager } from '../src/test-utils/runtimeProviderManager.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -106,7 +108,7 @@ function buildConversationManager(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, historyScratchRoots);
 
   const provider: IProvider = {
     name: 'stub',
@@ -131,8 +133,11 @@ function buildConversationManager(
     model: runtimeModel,
     sessionId: config.getSessionId(),
   });
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     state: runtimeState,
     history: historyService,
     settings: {
@@ -277,7 +282,7 @@ function buildChatSessionWithLiveProvider(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, historyScratchRoots);
 
   const provider: IProvider = {
     name: 'stub',
@@ -310,8 +315,11 @@ function buildChatSessionWithLiveProvider(
     sessionId: config.getSessionId(),
   });
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     state: runtimeState,
     history: historyService,
     settings: {

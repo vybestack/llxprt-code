@@ -3,6 +3,7 @@ import type {
   IContent,
   EmojiFilterMode,
   RowOwnership,
+  ScratchRootOwner,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../types.js';
 import type { RowSource } from './rowIdentity.js';
@@ -18,6 +19,7 @@ export class HistoryProjection {
   private id = -1;
 
   constructor(
+    private readonly scratchRoots: ScratchRootOwner,
     private readonly mode?: EmojiFilterMode,
     private readonly ownership?: RowOwnership,
     private readonly temporaryRoot?: string,
@@ -36,6 +38,7 @@ export class HistoryProjection {
         this.ownership?.retain(row);
       } else {
         this.responses ??= new ToolResponseIndex(
+          this.scratchRoots,
           this.temporaryRoot,
           this.ownership,
         );
@@ -99,6 +102,7 @@ export class HistoryProjection {
   suspend(): void {
     if (!this.opener) return;
     this.responses ??= new ToolResponseIndex(
+      this.scratchRoots,
       this.temporaryRoot,
       this.ownership,
     );

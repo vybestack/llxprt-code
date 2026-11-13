@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -14,6 +15,7 @@ describe('arrival block boundary', () => {
       const store = await JournalStore.create(
         join(directory(), 'boundary.llxj'),
         storeDeps(),
+        testNamedWriters,
       );
       const recorder = new JournalArrivalRecorder(store);
       try {

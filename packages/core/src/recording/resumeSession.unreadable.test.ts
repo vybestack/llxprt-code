@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { utimes, writeFile } from 'node:fs/promises';
@@ -106,14 +107,16 @@ describe('resumeSession isolates unreadable recordings', () => {
     provider = 'anthropic',
     model = 'claude-4',
   ): Promise<string> {
-    const recording = JournalRecordingService.create({
-      sessionId,
-      projectHash: PROJECT_HASH,
-      chatsDir: directory(),
-      workspaceDirs: ['/test/workspace'],
-      provider,
-      model,
-    });
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId,
+        projectHash: PROJECT_HASH,
+        chatsDir: directory(),
+        workspaceDirs: ['/test/workspace'],
+        provider,
+        model,
+      }),
+    );
     try {
       await (
         await recording.session()
@@ -137,14 +140,16 @@ describe('resumeSession isolates unreadable recordings', () => {
   }
 
   function resume(continueRef: string): ReturnType<typeof resumeSession> {
-    return resumeSession({
-      continueRef,
-      projectHash: PROJECT_HASH,
-      chatsDir: directory(),
-      currentProvider: 'claudecode',
-      currentModel: 'claude-opus-5-5',
-      workspaceDirs: ['/test/workspace'],
-    });
+    return resumeSession(
+      withTestNamedWriters({
+        continueRef,
+        projectHash: PROJECT_HASH,
+        chatsDir: directory(),
+        currentProvider: 'claudecode',
+        currentModel: 'claude-opus-5-5',
+        workspaceDirs: ['/test/workspace'],
+      }),
+    );
   }
 
   async function resumeOk(continueRef: string): Promise<ResumeResult> {

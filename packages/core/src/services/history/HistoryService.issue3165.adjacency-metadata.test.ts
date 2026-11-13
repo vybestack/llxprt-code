@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /// <reference lib="esnext.array" />
 /**
@@ -11,6 +12,8 @@ import { DebugLogger } from '../../debug/index.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent, MediaBlock, ToolResponseBlock } from './IContent.js';
 import { createUserMessage } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
+
 let service: HistoryService;
 
 describe('HistoryService issue #3165 adjacency and metadata', () => {
@@ -84,7 +87,7 @@ describe('HistoryService issue #3165 adjacency and metadata', () => {
 });
 
 function facadeCallback0(): void {
-  service = new HistoryService();
+  service = new HistoryService({ scratchRoots: historyScratchRoots });
 }
 
 async function facadeCallback1(): Promise<void> {

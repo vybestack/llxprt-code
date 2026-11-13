@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -23,6 +24,7 @@ import { createRuntimeTokenizerFactory } from '../../composition/runtimeTokenize
 import { OpenAIProvider } from '../OpenAIProvider.js';
 import { streamCallOptions as createProviderCallOptions } from '../../__tests__/streamCallOptions.js';
 import { PROJECTION_REVISION } from '../../runtime/promptEnvelopeProjections.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 void vi.mock('openai', () => {
   class FakeOpenAI {
@@ -72,7 +74,7 @@ function buildCallOptions(
   });
 }
 
-const factory = createRuntimeTokenizerFactory();
+const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 const unsent: PromptEnvelopeProjection[] = [];
 
 /** Projects and keeps the projection so its files are released after the test. */

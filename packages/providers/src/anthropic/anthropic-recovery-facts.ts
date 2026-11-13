@@ -21,7 +21,7 @@ import {
   flushAnthropicMeasurementFacts,
 } from './anthropic-measurement-facts.js';
 import {
-  estimatePieceFact,
+  AnthropicEstimateFacts,
   type EstimatePieceFact,
 } from './anthropic-estimate-facts.js';
 import type { AnthropicRequestRepairIndex } from './anthropic-repair-index.js';
@@ -232,6 +232,7 @@ export async function writeAnthropicRecoveryFacts(
   finalize?: (message: RepairMessage, ordinal: number) => Promise<void>,
 ): Promise<void> {
   let count = 0;
+  const estimator = new AnthropicEstimateFacts();
   const windows =
     measurementsFrom === undefined
       ? await AnthropicCacheWindowWriter.create(writer)
@@ -258,7 +259,7 @@ export async function writeAnthropicRecoveryFacts(
     for await (const piece of atom.openPieces(false)) {
       const fact = numericRepairPiece(piece, atom.role);
       kept.push(fact);
-      estimates.push(await estimatePieceFact(piece, atom.role));
+      estimates.push(await estimator.estimatePieceFact(piece, atom.role));
       thinking ||=
         typeof piece !== 'string' &&
         piece.some(
@@ -276,7 +277,9 @@ export async function writeAnthropicRecoveryFacts(
     if (thinking) {
       for await (const piece of atom.openPieces(true)) {
         stripped.push(numericRepairPiece(piece, atom.role));
-        strippedEstimates.push(await estimatePieceFact(piece, atom.role));
+        strippedEstimates.push(
+          await estimator.estimatePieceFact(piece, atom.role),
+        );
       }
     }
     await persistMeasurement({

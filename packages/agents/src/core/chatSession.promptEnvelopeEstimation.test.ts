@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
@@ -51,6 +52,7 @@ import { waitForCondition } from '../test-utils/eventLoop.js';
 
 import { ChatSession } from './chatSession.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
+const historyScratchRoots = createTestScratchOwner();
 
 /**
  * A fake provider that implements projectPromptEnvelope by serializing the
@@ -203,7 +205,9 @@ function createTestFixture(provider: IProvider): TestFixture {
     sessionId: 'test-session-id',
   });
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
 
   return {
     runtimeSetup,
@@ -218,6 +222,7 @@ function createTestFixture(provider: IProvider): TestFixture {
 
 function buildChatSession(fixture: TestFixture): ChatSession {
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     ...createSessionPolicyFixture(
       fixture.runtimeSetup.settingsService,
       fixture.providerRuntimeSnapshot.runtimeId,

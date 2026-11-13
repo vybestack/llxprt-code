@@ -60,7 +60,10 @@ async function writeCompressionValues(
 export async function applyCompressionValuesWithAnchor(
   history: Pick<
     HistoryService,
-    'detachedValues' | 'setCacheAnchorSeq' | 'resetCacheAnchorSeq'
+    | 'scratchRoots'
+    | 'detachedValues'
+    | 'setCacheAnchorSeq'
+    | 'resetCacheAnchorSeq'
   >,
   previous: HistoryDumpSource,
   candidate: CompressionOutputRows,
@@ -81,7 +84,12 @@ export async function applyCompressionValuesWithAnchor(
     (anchor === undefined || !Number.isInteger(anchor) || anchor <= 0)
   )
     throw new Error('Preserved cache-anchor entry has no valid chronology seq');
-  const annotation = await replacedSpan(previous, candidate, start);
+  const annotation = await replacedSpan(
+    history.scratchRoots,
+    previous,
+    candidate,
+    start,
+  );
   let summary: IContent | undefined;
   let marked = false;
   const selectSummary = (row: IContent): void => {

@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -19,6 +20,7 @@ import { middleoutRow, middleoutSetup } from './middleout-disk-helpers.js';
 import { pausedWriter } from './support/native-fallback-fixture.js';
 import { nativeFileRows } from './support/native-file-rows.js';
 import { PendingPublicationOwner } from './support/pending-publication-owner.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export function pendingGate(): { promise: Promise<void>; resolve: () => void } {
   let resolve = (): void => {
@@ -41,7 +43,7 @@ export class PendingDiskHistory extends HistoryService {
     return super.getTotalTokens();
   }
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
+    super({ ...options, scratchRoots: historyScratchRoots });
     forbidHistoryMaterializationForTest(
       this,
       'eager pending-window raw preparation reached',
@@ -128,6 +130,7 @@ function pendingHistory(
   );
   try {
     return new PendingDiskHistory({
+      scratchRoots: historyScratchRoots,
       recording: recorder,
       mutationOwnership: owners,
       attachmentCounters: { ...reads.counters, ownership: owners },

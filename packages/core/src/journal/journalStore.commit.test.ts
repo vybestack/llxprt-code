@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -30,7 +31,11 @@ describe('commit groups', () => {
 
   it('append rows with their id facts, and reopen to the same version', async () => {
     const target = file('append.llxj');
-    const store = await JournalStore.create(target, storeDeps());
+    const store = await JournalStore.create(
+      target,
+      storeDeps(),
+      testNamedWriters,
+    );
     const model = new ArrayModel();
     await appendEach(store, scenarioDrafts());
     model.append(6);
@@ -51,7 +56,11 @@ describe('commit groups', () => {
     }
     await store.close();
 
-    const reopened = await JournalStore.open(target, storeDeps());
+    const reopened = await JournalStore.open(
+      target,
+      storeDeps(),
+      testNamedWriters,
+    );
     expect(published(reopened).commitSeq).toBe(version.commitSeq);
     expect(published(reopened).groupTag).toBe(version.groupTag);
     expect(await labelsOf(reopened)).toStrictEqual([...model.liveLabels]);
@@ -69,7 +78,11 @@ describe('commit groups', () => {
   it('does not publish a version before its trailer is acked (defect 1)', async () => {
     const target = file('ack.llxj');
     const seams = testJournalSeams({ gateTrailerAt: 1, recordKinds: true });
-    const store = await JournalStore.create(target, storeDeps({ seams }));
+    const store = await JournalStore.create(
+      target,
+      storeDeps({ seams }),
+      testNamedWriters,
+    );
     await store.commit([{ kind: 'append', rows: [draftRow()] }]);
     const first = published(store);
     const model = new ArrayModel();
@@ -111,6 +124,7 @@ describe('commit groups', () => {
     const store = await JournalStore.create(
       file('flush.llxj'),
       storeDeps({ seams }),
+      testNamedWriters,
     );
     await store.commit([{ kind: 'append', rows: [draftRow()] }]);
     const first = published(store);
@@ -129,7 +143,11 @@ describe('commit groups', () => {
     const sizes: number[] = [];
     for (const rows of [20, 600]) {
       const target = file(`ckpt-${rows}.llxj`);
-      const store = await JournalStore.create(target, storeDeps());
+      const store = await JournalStore.create(
+        target,
+        storeDeps(),
+        testNamedWriters,
+      );
       const drafts = Array.from({ length: rows }, () => draftRow());
       for (let at = 0; at < drafts.length; at += 50) {
         await store.commit([
@@ -168,7 +186,11 @@ describe('commit groups', () => {
   });
 
   it('refuses a checkpoint in a group that also changes rows', async () => {
-    const store = await JournalStore.create(file('mixed.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('mixed.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     await store.commit([{ kind: 'append', rows: [draftRow()] }]);
     await expect(
       store.commit([
@@ -181,7 +203,11 @@ describe('commit groups', () => {
   });
 
   it('restore takes the roots of a saved version and the current state map, in a new lineage', async () => {
-    const store = await JournalStore.create(file('restore.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('restore.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     const drafts = scenarioDrafts();
     const model = new ArrayModel();
     await appendEach(store, drafts.slice(0, 3));
@@ -219,7 +245,11 @@ describe('commit groups', () => {
   });
 
   it('refuses to restore a version that is not the one in the file', async () => {
-    const store = await JournalStore.create(file('forged.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('forged.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     await appendEach(store, scenarioDrafts().slice(0, 2));
     const real = published(store);
     await expect(
@@ -232,7 +262,11 @@ describe('commit groups', () => {
   });
 
   it('refuses an empty group and a group that both clears and restores', async () => {
-    const store = await JournalStore.create(file('shape.llxj'), storeDeps());
+    const store = await JournalStore.create(
+      file('shape.llxj'),
+      storeDeps(),
+      testNamedWriters,
+    );
     await store.commit([{ kind: 'append', rows: [draftRow()] }]);
     const saved = published(store);
     await expect(store.commit([])).rejects.toThrow(/at least one edit/);

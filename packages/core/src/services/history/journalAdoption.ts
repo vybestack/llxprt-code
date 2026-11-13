@@ -92,6 +92,7 @@ export async function adoptOnto(
       'A history with mirrors that are not recorders cannot adopt a resumed journal',
     );
   }
+  await previous.session.store.maintenanceScope.join(recorder.maintenanceScope);
   const next = await recorder.session();
   assertAtPoint(next, point);
   const retired = [...previous.mirrors.retirementListeners];
@@ -130,6 +131,7 @@ export async function adoptAttachedRecorder(
   recorder: JournalRecordingService,
 ): Promise<JournalAdoption> {
   const previous = host.state();
+  await previous.session.store.maintenanceScope.join(recorder.maintenanceScope);
   const next = await recorder.session();
   const moved = await previous.mirrors.unbindRecorders();
   const owners = new JournalOwners(next.store);

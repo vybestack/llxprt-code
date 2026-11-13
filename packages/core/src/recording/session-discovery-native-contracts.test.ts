@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdir, symlink, utimes, writeFile } from 'node:fs/promises';
@@ -139,18 +143,22 @@ describe('native discovery behavioral contracts', () => {
       checkpoints: ['closed-point'],
     });
     await writeFile(join(chats, 'session-broken.llxj'), 'invalid');
-    const live = await JournalRecordingService.createLocked({
-      sessionId: 'live',
-      projectHash: PROJECT,
-      chatsDir: chats,
-      workspaceDirs: ['/live'],
-      provider: 'p',
-      model: 'm',
-      journal: journalSeams(),
-    });
+    const live = await JournalRecordingService.createLocked(
+      withTestNamedWriters({
+        sessionId: 'live',
+        projectHash: PROJECT,
+        chatsDir: chats,
+        workspaceDirs: ['/live'],
+        provider: 'p',
+        model: 'm',
+        journal: journalSeams(),
+      }),
+    );
     try {
       await (await live.session()).append([userRow('live')]);
-      const service = new JournalCheckpointService(journalSeams());
+      const service = new JournalCheckpointService(
+        testJournalOptions(journalSeams()),
+      );
       await service.setSessionName(live, PROJECT, 'live-name');
       await service.createCheckpoint(live, PROJECT, 'live-point');
       expect(
@@ -190,16 +198,18 @@ describe('native discovery behavioral contracts', () => {
 
   it('keeps latest provider, directories, title and name facts separate from immutable session start facts', async () => {
     const chats = chatsDirIn(await discoveryDirectory('facts'));
-    const recorder = JournalRecordingService.create({
-      sessionId: 'facts',
-      projectHash: PROJECT,
-      chatsDir: chats,
-      workspaceDirs: ['/start/雪'],
-      cwd: '/start',
-      provider: 'original',
-      model: 'first',
-      journal: journalSeams(),
-    });
+    const recorder = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'facts',
+        projectHash: PROJECT,
+        chatsDir: chats,
+        workspaceDirs: ['/start/雪'],
+        cwd: '/start',
+        provider: 'original',
+        model: 'first',
+        journal: journalSeams(),
+      }),
+    );
     let filePath: string;
     try {
       await (await recorder.session()).append([userRow('one')]);

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -98,7 +99,10 @@ describe('Property-based tests #3', () => {
               projectHash: PROJECT_HASH,
               messages: [{ speaker: 'user', text: 'test content' }],
             });
-            const result = await performResume(ref, context);
+            const result = await performResume(
+              ref,
+              withTestNamedWriters(context),
+            );
             expectDiscriminatedResumeResult(result);
           } finally {
             try {

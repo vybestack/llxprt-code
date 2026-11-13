@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 import { bindTurnModel } from '../../../session/bind-turn-model.js';
 import { TurnToolExecutionOwner } from '../../../session/turn-tool-execution-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
@@ -22,6 +24,7 @@ import {
   createToolRegistryForTest,
   finishedEvent,
 } from './agenticLoop-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class FailingDisplayHistory extends HistoryService {
   override appendDisplay(): ReturnType<HistoryService['appendDisplay']> {
@@ -119,7 +122,9 @@ describe('agentic loop journal tool presentation', () => {
   const directory = useTempDir('loop-tool-display-');
 
   it('propagates display write failure without emitting completion or continuing', async () => {
-    const history = new FailingDisplayHistory();
+    const history = new FailingDisplayHistory({
+      scratchRoots: historyScratchRoots,
+    });
     try {
       const loop = loopFor(history, await recordedRequest(history));
       let completionSeen = false;
@@ -139,7 +144,7 @@ describe('agentic loop journal tool presentation', () => {
   });
 
   it('completes tools on the unlinked primary when recording is disabled', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       const loop = loopFor(history, await recordedRequest(history));
       let completions = 0;
@@ -158,15 +163,17 @@ describe('agentic loop journal tool presentation', () => {
     }
   });
   it('persists distinct result presentation before exposing tool completion', async () => {
-    const recording = createSessionRecorder({
-      sessionId: 'display',
-      projectHash: 'display',
-      chatsDir: directory(),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
-    const history = new HistoryService();
+    const recording = createSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'display',
+        projectHash: 'display',
+        chatsDir: directory(),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     await history.attachJournal(recording, true);
     try {
       const request = await recordedRequest(history);

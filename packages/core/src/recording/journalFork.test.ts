@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import * as fsp from 'node:fs/promises';
@@ -72,7 +73,9 @@ describe('fork from a checkpoint on the journal (design 4.9)', () => {
     const before = await fsp.readFile(source.filePath);
     const target = await checkpointTarget(chats, 'cp');
 
-    const result = await forkJournalFromCheckpoint(request(chats, target));
+    const result = await forkJournalFromCheckpoint(
+      withTestNamedWriters(request(chats, target)),
+    );
 
     if (!result.ok) throw new Error(result.error);
     try {
@@ -124,7 +127,9 @@ describe('fork from a checkpoint on the journal (design 4.9)', () => {
     });
     const target = await checkpointTarget(chats, 'cp');
 
-    const result = await forkJournalFromCheckpoint(request(chats, target));
+    const result = await forkJournalFromCheckpoint(
+      withTestNamedWriters(request(chats, target)),
+    );
 
     if (!result.ok) throw new Error(result.error);
     try {
@@ -162,7 +167,9 @@ describe('fork from a checkpoint on the journal (design 4.9)', () => {
     };
     const files = await fsp.readdir(chats);
 
-    const result = await forkJournalFromCheckpoint(request(chats, stale));
+    const result = await forkJournalFromCheckpoint(
+      withTestNamedWriters(request(chats, stale)),
+    );
 
     expect(result).toStrictEqual({
       ok: false,
@@ -180,7 +187,9 @@ describe('fork from a checkpoint on the journal (design 4.9)', () => {
     const target = await checkpointTarget(chats, 'cp');
     const held = await SessionLockManager.acquire(chats, 'src');
     try {
-      const result = await forkJournalFromCheckpoint(request(chats, target));
+      const result = await forkJournalFromCheckpoint(
+        withTestNamedWriters(request(chats, target)),
+      );
       expect(result.ok).toBe(false);
       expect(!result.ok && result.error).toContain('Source session is in use');
     } finally {

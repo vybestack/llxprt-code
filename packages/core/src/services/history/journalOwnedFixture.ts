@@ -1,3 +1,4 @@
+import { NamedWriterOwnership } from '../../journal/named-writer-ownership.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { OwnerDictionary } from '../../journal/ownerDictionary.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
@@ -28,11 +29,14 @@ export async function openOwnedJournal(
   file: string,
   seed: readonly SeedRow[],
   extras: {
+    readonly namedWriters?: NamedWriterOwnership;
     readonly mediaOwner?: HistoryMediaOwner;
     readonly ownership?: RowOwnership;
   } = {},
 ): Promise<OwnedJournal> {
-  const session = await JournalSession.create(file);
+  const session = await JournalSession.create(file, {
+    namedWriters: extras.namedWriters ?? new NamedWriterOwnership(),
+  });
   const store = new JournalHistoryStore(session);
   const stamper = new ChronologyStamper(() => 0);
   for (const [index, { content, origin }] of seed.entries()) {

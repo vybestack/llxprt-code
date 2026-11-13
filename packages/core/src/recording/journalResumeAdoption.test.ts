@@ -1,3 +1,7 @@
+import {
+  testJournalOptions,
+  withTestNamedWriters,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
@@ -59,6 +63,7 @@ describe('adopting a resumed journal on the history store', () => {
   async function freshStore(): Promise<JournalHistoryStore> {
     const primary = await JournalSession.create(
       path.join(directory(), 'primary.llxj'),
+      testJournalOptions(),
     );
     sessions.push(primary);
     const store = new JournalHistoryStore(primary);
@@ -73,15 +78,17 @@ describe('adopting a resumed journal on the history store', () => {
   ): Promise<JournalResumeResult> {
     const chats = chatsDirIn(directory());
     await recordJournal(chats, 'session-a', { rows });
-    const result = await resumeJournalSession({
-      continueRef: 'session-a',
-      projectHash: PROJECT,
-      chatsDir: chats,
-      currentProvider: 'anthropic',
-      currentModel: 'model-1',
-      workspaceDirs: ['/work/a'],
-      journal: journalSeams(),
-    });
+    const result = await resumeJournalSession(
+      withTestNamedWriters({
+        continueRef: 'session-a',
+        projectHash: PROJECT,
+        chatsDir: chats,
+        currentProvider: 'anthropic',
+        currentModel: 'model-1',
+        workspaceDirs: ['/work/a'],
+        journal: journalSeams(),
+      }),
+    );
     if (!result.ok) throw new Error(result.error);
     resumed.push(result);
     return result;
@@ -259,6 +266,7 @@ describe('adopting a resumed journal on the history store', () => {
     const store = await freshStore();
     const mirror = await JournalSession.create(
       path.join(directory(), 'mirror.llxj'),
+      testJournalOptions(),
     );
     sessions.push(mirror);
     await store.mirrors.attach(mirror, 'agent-a');

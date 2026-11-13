@@ -1,3 +1,4 @@
+import { testJournalOptions } from './named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -41,7 +42,10 @@ function* sourceRows(job: ProbeJob): Generator<IContent> {
 async function probeJournal(job: ProbeJob): Promise<JournalSendFixture> {
   const directory = join(job.directory, 'journal');
   mkdirSync(directory, { recursive: true });
-  const session = await JournalSession.create(join(directory, 'session.llxj'));
+  const session = await JournalSession.create(
+    join(directory, 'session.llxj'),
+    testJournalOptions(),
+  );
   try {
     await session.store.commit([
       { kind: 'replace', rows: encodedRows(sourceRows(job), 0) },

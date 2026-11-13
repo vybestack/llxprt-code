@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
@@ -16,9 +17,12 @@ describe('native Kimi ordinal commit contracts', () => {
     const failures: Failures = {};
     const seams = testJournalSeams(failures);
     const path = `${directory()}/failure.llxj`;
-    const session = await JournalSession.create(path, {
-      journal: seams.dependencies,
-    });
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions({
+        journal: seams.dependencies,
+      }),
+    );
     try {
       const before = await session.append([
         { speaker: 'ai', blocks: [call('x')] },
@@ -45,9 +49,12 @@ describe('native Kimi ordinal commit contracts', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path, {
-      journal: testJournalSeams().dependencies,
-    });
+    const reopened = await JournalSession.open(
+      path,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await reopened.store.commit([{ kind: 'kimi' }]);
       const snapshot = await reopened.store.snapshot();
@@ -62,9 +69,12 @@ describe('native Kimi ordinal commit contracts', () => {
   });
 
   it('rejects mixed activation before consuming a stream and makes clear require a fresh fill', async () => {
-    const session = await JournalSession.create(`${directory()}/fill.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/fill.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     let consumed = false;
     function* rows(): Generator<ReturnType<typeof encodeContentRow>> {
       consumed = true;
@@ -106,10 +116,13 @@ describe('native Kimi ordinal commit contracts', () => {
 
   it('keeps unique-id append, response arrival and an uncached ordinal lookup within positional-read budgets at 4000 rows', async () => {
     const counter = { reads: 0 };
-    const session = await JournalSession.create(`${directory()}/bounded.llxj`, {
-      journal: testJournalSeams({ readCounter: counter }, 1, false)
-        .dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/bounded.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({ readCounter: counter }, 1, false)
+          .dependencies,
+      }),
+    );
     function* rows(): Generator<ReturnType<typeof encodeContentRow>> {
       for (let index = 0; index < 4000; index++)
         yield encodeContentRow(

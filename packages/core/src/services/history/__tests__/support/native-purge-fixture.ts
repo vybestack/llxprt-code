@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { testJournalOptions } from '../../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
@@ -15,6 +17,7 @@ import { exactTokenizer } from '../../chronology-rollback-test-helpers.js';
 import type { HistoryMediaOwner } from '../../historyBatchContracts.js';
 import { historyMutationFailure } from '../../historyMutationEffects.js';
 import type { IContent } from '../../IContent.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 type ReferenceSource = Parameters<
   NonNullable<HistoryMediaOwner['prepareReferenceReplacement']>
@@ -69,12 +72,13 @@ export async function withNativePurgeFixture(
 ): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'native-purge-'));
   const primary = join(root, 'primary.llxj');
-  const session = await JournalSession.create(primary);
+  const session = await JournalSession.create(primary, testJournalOptions());
   const opener = spyOn(JournalSession, 'createUnlinked').mockImplementation(
     async () => session,
   );
   const owners = new RowOwnership();
   const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
     mutationOwnership: owners,
   });
   opener.mockRestore();
@@ -87,7 +91,7 @@ export async function withNativePurgeFixture(
     rootDirectory: join(root, 'media'),
     quotaBytes: 1024,
   });
-  const owner = new PurgePublicationOwner(store);
+  const owner = new PurgePublicationOwner(store, historyScratchRoots);
   const failures: unknown[] = [];
   try {
     history.setTokenizerFactory(exactTokenizer());

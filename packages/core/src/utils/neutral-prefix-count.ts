@@ -1,16 +1,19 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { countBpePiece, encodingBpeRanks } from './neutral-long-piece.js';
+import { countBpePiece } from './neutral-long-piece.js';
 import { NeutralPieceStream } from './neutral-piece-stream.js';
-
-const prefixes = new Map<string, number>();
+import type { NeutralStreamCache } from './neutral-stream-cache.js';
 export class NeutralPrefixCount {
   private prefix = '';
   private stream: NeutralPieceStream | undefined;
+  constructor(private readonly cache: NeutralStreamCache) {}
   shortPrefix(): string | undefined {
     return this.stream === undefined ? this.prefix : undefined;
   }
-  static fromPrefix(prefix: string): NeutralPrefixCount {
-    const counter = new NeutralPrefixCount();
+  static fromPrefix(
+    prefix: string,
+    cache: NeutralStreamCache,
+  ): NeutralPrefixCount {
+    const counter = new NeutralPrefixCount(cache);
     counter.prefix = prefix;
     return counter;
   }
@@ -21,7 +24,7 @@ export class NeutralPrefixCount {
     }
     this.prefix += Buffer.from(bytes).toString('latin1');
     if (this.prefix.length > 512) {
-      this.stream = new NeutralPieceStream();
+      this.stream = new NeutralPieceStream(this.cache);
       this.stream.append(Buffer.from(this.prefix, 'latin1'));
       this.prefix = '';
     }
@@ -29,13 +32,14 @@ export class NeutralPrefixCount {
   get count(): number {
     if (this.stream !== undefined) return this.stream.count;
     if (this.prefix.length === 0) return 0;
-    const known = prefixes.get(this.prefix);
+    const known = this.cache.prefixes.get(this.prefix);
     if (known !== undefined) return known;
     const count = countBpePiece(
       Buffer.from(this.prefix, 'latin1'),
-      encodingBpeRanks('o200k_base'),
+      this.cache.ranks,
     );
-    if (prefixes.size < 256) prefixes.set(this.prefix, count);
+    if (this.cache.prefixes.size < 256)
+      this.cache.prefixes.set(this.prefix, count);
     return count;
   }
 }

@@ -29,32 +29,43 @@ export async function prefetchResponseArrival(
       throw new EmptyStreamError(
         'Model stream ended immediately with no content.',
       );
-    const prepared = await prepare?.(first.value);
-    pending.historyChunk = prepared?.historyChunk ?? first.value;
+    let prefetchedChunk: ModelStreamChunk | undefined = first.value;
+    const prepared = await prepare?.(prefetchedChunk);
+    pending.historyChunk = prepared?.historyChunk ?? prefetchedChunk;
     pending.release = prepared?.release;
     await appendResponseChunk(arrival, pending.historyChunk, includeThoughts);
-    prefetched.set(first.value, pending);
     const stream = prependAsyncGenerator(first.value, converted);
-    bindResponseArrival(stream, {
-      get identity() {
-        return arrival.identity;
+    return bindResponseArrival(
+      stream,
+      {
+        get identity() {
+          return arrival.identity;
+        },
+        selectAttempt: (id, source) => arrival.selectAttempt(id, source),
+        appendToolArguments: (delta) => arrival.appendToolArguments(delta),
+        replaceAfcHistory: (contents) => arrival.replaceAfcHistory(contents),
+        append: (block) => arrival.append(block),
+        seal: (...args) => arrival.seal(...args),
+        interrupt: async (outcome) => {
+          try {
+            await arrival.interrupt(outcome);
+          } finally {
+            await pending.release?.();
+            pending.historyChunk = undefined;
+            pending.release = undefined;
+            prefetchedChunk = undefined;
+          }
+        },
       },
-      selectAttempt: (id, source) => arrival.selectAttempt(id, source),
-      appendToolArguments: (delta) => arrival.appendToolArguments(delta),
-      replaceAfcHistory: (contents) => arrival.replaceAfcHistory(contents),
-      append: (block) => arrival.append(block),
-      seal: (...args) => arrival.seal(...args),
-      interrupt: async (outcome) => {
-        try {
-          await arrival.interrupt(outcome);
-        } finally {
-          await pending.release?.();
-          pending.historyChunk = undefined;
-          pending.release = undefined;
-        }
+      (chunk) => {
+        if (chunk !== prefetchedChunk) return undefined;
+        prefetchedChunk = undefined;
+        const historyChunk = pending.historyChunk;
+        pending.historyChunk = undefined;
+        pending.release = undefined;
+        return historyChunk;
       },
-    });
-    return stream;
+    );
   } catch (error) {
     try {
       await arrival.interrupt('error');
@@ -84,12 +95,17 @@ export function appendResponseChunk(
   bindToolIdentities(arrival, chunk);
 }
 
-const toolIdentities = new WeakMap<ToolCallBlock, ResponseJournalIdentity>();
+const TOOL_IDENTITY = Symbol('responseToolIdentity');
+
+class ToolIdentity {
+  constructor(readonly value: ResponseJournalIdentity) {}
+}
 
 export function responseToolIdentity(
   block: ToolCallBlock,
 ): ResponseJournalIdentity | undefined {
-  return toolIdentities.get(block);
+  const identity = TOOL_IDENTITY in block ? block[TOOL_IDENTITY] : undefined;
+  return identity instanceof ToolIdentity ? identity.value : undefined;
 }
 
 function bindToolIdentities(
@@ -97,7 +113,11 @@ function bindToolIdentities(
   chunk: ModelStreamChunk,
 ): void {
   for (const block of chunk.content.blocks)
-    if (block.type === 'tool_call') toolIdentities.set(block, arrival.identity);
+    if (block.type === 'tool_call')
+      Object.defineProperty(block, TOOL_IDENTITY, {
+        value: new ToolIdentity(arrival.identity),
+        configurable: true,
+      });
 }
 
 function appendResponseChunkBlocks(
@@ -143,33 +163,57 @@ interface PrefetchedArrival {
   historyChunk?: ModelStreamChunk;
   release?: () => Promise<void>;
 }
-const prefetched = new WeakMap<ModelStreamChunk, PrefetchedArrival>();
+type TakePrefetched = (chunk: ModelStreamChunk) => ModelStreamChunk | undefined;
+
+class ResponseArrivalStream implements AsyncGenerator<ModelStreamChunk> {
+  constructor(
+    private readonly source: AsyncGenerator<ModelStreamChunk>,
+    readonly arrival: ResponseArrival,
+    readonly takePrefetched: TakePrefetched,
+  ) {}
+
+  next(...args: [] | [unknown]): Promise<IteratorResult<ModelStreamChunk>> {
+    return this.source.next(...args);
+  }
+
+  return(value: unknown): Promise<IteratorResult<ModelStreamChunk>> {
+    return this.source.return(value);
+  }
+
+  throw(error: unknown): Promise<IteratorResult<ModelStreamChunk>> {
+    return this.source.throw(error);
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    await this.source.return(undefined);
+  }
+
+  [Symbol.asyncIterator](): AsyncGenerator<ModelStreamChunk> {
+    return this;
+  }
+}
+
 export function takePrefetchedArrival(
+  stream: AsyncGenerator<ModelStreamChunk>,
   chunk: ModelStreamChunk,
 ): ModelStreamChunk | undefined {
-  const pending = prefetched.get(chunk);
-  prefetched.delete(chunk);
-  const historyChunk = pending?.historyChunk;
-  if (pending !== undefined) {
-    pending.historyChunk = undefined;
-    pending.release = undefined;
-  }
-  return historyChunk;
+  return stream instanceof ResponseArrivalStream
+    ? stream.takePrefetched(chunk)
+    : undefined;
 }
-const arrivals = new WeakMap<
-  AsyncGenerator<ModelStreamChunk>,
-  ResponseArrival
->();
+
 export function responseArrivalFor(
   stream: AsyncGenerator<ModelStreamChunk>,
 ): ResponseArrival | undefined {
-  return arrivals.get(stream);
+  return stream instanceof ResponseArrivalStream ? stream.arrival : undefined;
 }
+
 export function bindResponseArrival(
   stream: AsyncGenerator<ModelStreamChunk>,
   arrival: ResponseArrival,
-): void {
-  arrivals.set(stream, arrival);
+  takePrefetched: TakePrefetched = () => undefined,
+): AsyncGenerator<ModelStreamChunk> {
+  return new ResponseArrivalStream(stream, arrival, takePrefetched);
 }
 export function openResponseArrival(
   history: HistoryService,

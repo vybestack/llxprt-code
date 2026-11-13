@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -28,6 +29,7 @@ import {
   RequestMediaResolutionError,
 } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { PendingMediaBudgetError } from '../pendingMediaBudgetError.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const MODEL = 'test-model';
 const BYTE_BUDGET = 1000;
@@ -276,7 +278,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
     }
 
     it('shares the single bounded compression pass with media overflow', async () => {
-      const history = new HistoryService();
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       const h = harness(summarizeHistory, bodyEstimate(history));
       seedImages(h.history);
       await h.history.waitForTokenUpdates();
@@ -287,7 +289,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
     });
 
     it('retires every historical image when compression changes nothing and the body stays over the cap (issue #4000)', async () => {
-      const history = new HistoryService();
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       const h = harness(
         () => Promise.resolve(PerformCompressionResult.NOOP),
         bodyEstimate(history),
@@ -304,7 +306,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
     });
 
     it('surfaces the typed body error unlabelled when compression changes nothing and only non-image media remains', async () => {
-      const history = new HistoryService();
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       const h = harness(
         () => Promise.resolve(PerformCompressionResult.NOOP),
         bodyEstimate(history),
@@ -608,7 +610,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
             ),
           0,
         );
-      const history = new HistoryService();
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       const h = harness(
         async (target) => {
           const kept = (await readCurated(target)).filter((content) =>

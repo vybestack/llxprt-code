@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { adaptGenerator } from './__tests__/chatSession-thinking-toolcalls-helpers.js';
@@ -47,6 +48,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-thinking-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -91,7 +93,7 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
   });
 
   it(
@@ -121,7 +123,9 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
 });
 
 async function testSplitCase1(): Promise<void> {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
 
   // Simulate what recordHistory does: add an AI message with thinking + tool calls
   historyService.add({
@@ -264,6 +268,7 @@ function createThinkingChat(
     sessionId: config.getSessionId(),
   });
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         {
@@ -313,7 +318,9 @@ async function testSplitCase2(): Promise<void> {
 
   const provider = createRoundTripProvider(callState, capturedContents);
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const chat = createThinkingChat(
     provider,
     'runtime-issue1150-multiturn-repro',
@@ -459,7 +466,9 @@ async function testSplitCase4(): Promise<void> {
     generateChatCompletion: adaptGenerator(generateChatCompletionMock),
   };
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const chat = createThinkingChat(
     provider,
     'runtime-actual-bug',
@@ -528,7 +537,9 @@ function makeSimulatedBlocks(): ContentBlock[] {
 }
 
 async function testSplitCase5(): Promise<void> {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   // Simulate the neutral ContentBlock[] that recordHistory would receive:
   const simulatedBlocks = makeSimulatedBlocks();
   const thoughtBlocks = simulatedBlocks.filter(

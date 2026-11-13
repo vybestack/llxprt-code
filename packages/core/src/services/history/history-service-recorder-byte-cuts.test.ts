@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
@@ -85,7 +86,7 @@ async function verifyImage(
   }
   expect((await stat(file)).size).toBe(image.length);
   const owner = await JournalRecordingService.open(
-    { ...recorder.config, journal: undefined },
+    withTestNamedWriters({ ...recorder.config, journal: undefined }),
     file,
   );
   try {
@@ -105,7 +106,7 @@ async function corruptedRead(
   file: string,
 ): Promise<unknown> {
   return JournalRecordingService.open(
-    { ...recorder.config, journal: undefined },
+    withTestNamedWriters({ ...recorder.config, journal: undefined }),
     file,
   )
     .then(async (opened) => {

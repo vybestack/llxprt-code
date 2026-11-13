@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { rawHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /**
@@ -24,12 +25,13 @@ import {
   type SemanticPurgeStreamTransaction,
 } from './semantic-purge-stream.js';
 import type { SemanticPurgeRowSource } from './semantic-purge-disk-rows.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const histories: HistoryService[] = [];
 const transactions: SemanticPurgeStreamTransaction[] = [];
 
 function trackedHistory(): HistoryService {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   histories.push(history);
   return history;
 }

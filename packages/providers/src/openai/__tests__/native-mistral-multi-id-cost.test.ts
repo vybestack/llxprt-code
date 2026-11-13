@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { appendFileSync } from 'node:fs';
@@ -38,37 +39,40 @@ describe('Mistral multi-ID warm physical reads', () => {
       let rowlens = 0;
       let holders = 0;
       let unaffected = 0;
-      const session = await JournalSession.create(`${directory()}/cost.llxj`, {
-        journal: {
-          ...seams.dependencies,
-          open: async (path, flags) => {
-            const file = await seams.dependencies.open(path, flags);
-            return {
-              ...file,
-              read: async (buffer, offset, length, position) => {
-                const result = await file.read(
-                  buffer,
-                  offset,
-                  length,
-                  position,
-                );
-                if (enabled) {
-                  preads++;
-                  bytes += result.bytesRead;
-                  if (
-                    result.bytesRead >= 20 &&
-                    buffer[offset] === RECORD_KIND.LENS &&
-                    buffer[offset + 2] === 0 &&
-                    buffer[offset + 3] === 0
-                  )
-                    rowlens++;
-                }
-                return result;
-              },
-            };
+      const session = await JournalSession.create(
+        `${directory()}/cost.llxj`,
+        testJournalOptions({
+          journal: {
+            ...seams.dependencies,
+            open: async (path, flags) => {
+              const file = await seams.dependencies.open(path, flags);
+              return {
+                ...file,
+                read: async (buffer, offset, length, position) => {
+                  const result = await file.read(
+                    buffer,
+                    offset,
+                    length,
+                    position,
+                  );
+                  if (enabled) {
+                    preads++;
+                    bytes += result.bytesRead;
+                    if (
+                      result.bytesRead >= 20 &&
+                      buffer[offset] === RECORD_KIND.LENS &&
+                      buffer[offset + 2] === 0 &&
+                      buffer[offset + 3] === 0
+                    )
+                      rowlens++;
+                  }
+                  return result;
+                },
+              };
+            },
           },
-        },
-      });
+        }),
+      );
       async function measure(messages: readonly unknown[]): Promise<number> {
         const text = JSON.stringify(messages);
         if (text.includes('reason-')) holders++;

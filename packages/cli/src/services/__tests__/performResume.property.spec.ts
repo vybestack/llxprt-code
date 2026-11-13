@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -142,7 +143,7 @@ async function testValidationHistory(): Promise<void> {
     currentSessionId: 'other-session',
   });
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
 
   expect(result.ok).toBe(true);
   assertResumeOk(result);
@@ -174,7 +175,7 @@ async function testValidationMetadata(): Promise<void> {
     currentSessionId: 'other-session',
   });
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
 
   expect(result.ok).toBe(true);
   assertResumeOk(result);
@@ -195,7 +196,7 @@ async function testValidationWarnings(): Promise<void> {
     currentSessionId: 'other-session',
   });
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
 
   expect(result.ok).toBe(true);
   assertResumeOk(result);
@@ -216,7 +217,7 @@ async function testValidationCleanWarnings(): Promise<void> {
     currentSessionId: 'other-session',
   });
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
 
   expect(result.ok).toBe(true);
   assertResumeOk(result);
@@ -237,7 +238,7 @@ async function testValidationNewRecording(): Promise<void> {
     currentSessionId: 'other-session',
   });
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
 
   expect(result.ok).toBe(true);
   assertResumeOk(result);
@@ -270,7 +271,7 @@ async function testValidationNewLock(): Promise<void> {
     currentSessionId: 'other-session',
   });
 
-  const result = await performResume(targetId, context);
+  const result = await performResume(targetId, withTestNamedWriters(context));
 
   expect(result.ok).toBe(true);
   assertResumeOk(result);
@@ -314,7 +315,10 @@ async function testPropertyDiscriminated(): Promise<void> {
             contents: [makeContent('test content')],
           });
 
-          const result = await performResume(ref, context);
+          const result = await performResume(
+            ref,
+            withTestNamedWriters(context),
+          );
 
           expect(typeof result.ok).toBe('boolean');
           expect(result).toHaveProperty('ok');
@@ -357,7 +361,10 @@ async function testPropertyError(): Promise<void> {
 
           const unmatchableRef = `unmatchable-${badRef}-${crypto.randomUUID()}`;
 
-          const result = await performResume(unmatchableRef, context);
+          const result = await performResume(
+            unmatchableRef,
+            withTestNamedWriters(context),
+          );
 
           assertResumeError(result);
           expect(typeof result.error).toBe('string');
@@ -407,7 +414,10 @@ async function testPropertySuccess(): Promise<void> {
             contents,
           });
 
-          const result = await performResume(sessionId, context);
+          const result = await performResume(
+            sessionId,
+            withTestNamedWriters(context),
+          );
 
           assertResumeOk(result);
           const restoredRows = await collectResumeRows(result.history);
@@ -453,7 +463,10 @@ async function testPropertySameSession(): Promise<void> {
             contents: [makeContent('content')],
           });
 
-          const result = await performResume(sanitizedId, context);
+          const result = await performResume(
+            sanitizedId,
+            withTestNamedWriters(context),
+          );
 
           expect(result.ok).toBe(false);
           assertResumeError(result);
@@ -503,7 +516,10 @@ async function testPropertyRoundtrip(): Promise<void> {
             contents,
           });
 
-          const result = await performResume(sessionId, context);
+          const result = await performResume(
+            sessionId,
+            withTestNamedWriters(context),
+          );
 
           expect(result.ok).toBe(true);
           assertResumeOk(result);
@@ -555,7 +571,10 @@ async function testPropertyIndex(): Promise<void> {
 
           const validIndex = (indexSeed % sessionCount) + 1;
 
-          const result = await performResume(String(validIndex), context);
+          const result = await performResume(
+            String(validIndex),
+            withTestNamedWriters(context),
+          );
 
           expect(result.ok).toBe(true);
 
@@ -597,7 +616,10 @@ async function testPropertyMetadata(): Promise<void> {
             contents: [makeContent('content')],
           });
 
-          const result = await performResume(sessionId, context);
+          const result = await performResume(
+            sessionId,
+            withTestNamedWriters(context),
+          );
 
           expect(result.ok).toBe(true);
           assertResumeOk(result);
@@ -642,7 +664,10 @@ async function testPropertyLocked(): Promise<void> {
 
           lock = await SessionLockManager.acquire(localChatsDir, sessionId);
 
-          const result = await performResume(sessionId, context);
+          const result = await performResume(
+            sessionId,
+            withTestNamedWriters(context),
+          );
 
           expect(result.ok).toBe(false);
           assertResumeError(result);

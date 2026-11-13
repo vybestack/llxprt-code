@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 import {
   captureResponsesTestRequest,
   executeResponsesTestRequest,
@@ -116,14 +117,16 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
    * replayed marker survive and this test sends the dead parent.
    */
   it('sends no previous_response_id for a history replayed from a session recording', async () => {
-    const recording = JournalRecordingService.create({
-      sessionId: 'resumed-session-0001',
-      projectHash: PROJECT_HASH,
-      chatsDir: tempDir,
-      workspaceDirs: [tempDir],
-      provider: 'openai-responses',
-      model: 'gpt-5.6-sol',
-    });
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'resumed-session-0001',
+        projectHash: PROJECT_HASH,
+        chatsDir: tempDir,
+        workspaceDirs: [tempDir],
+        provider: 'openai-responses',
+        model: 'gpt-5.6-sol',
+      }),
+    );
     try {
       await (
         await recording.session()
@@ -144,14 +147,16 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
     } finally {
       await recording.dispose();
     }
-    const resumed = await resumeSession({
-      continueRef: 'resumed-session-0001',
-      projectHash: PROJECT_HASH,
-      chatsDir: tempDir,
-      currentProvider: 'openai-responses',
-      currentModel: 'gpt-5.6-sol',
-      workspaceDirs: [tempDir],
-    });
+    const resumed = await resumeSession(
+      withTestNamedWriters({
+        continueRef: 'resumed-session-0001',
+        projectHash: PROJECT_HASH,
+        chatsDir: tempDir,
+        currentProvider: 'openai-responses',
+        currentModel: 'gpt-5.6-sol',
+        workspaceDirs: [tempDir],
+      }),
+    );
     expect(resumed.ok).toBe(true);
     if (!resumed.ok) throw new Error(resumed.error);
     const restored: IContent[] = [];

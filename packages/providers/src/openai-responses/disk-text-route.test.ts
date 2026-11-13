@@ -19,7 +19,6 @@ import {
   diskTextFixture as projectionDiskRows,
   diskTextWireOracle as projectionWireOracle,
 } from './__tests__/support/disk-text-fixture.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 async function gcRows(
   references: ReadonlyArray<WeakRef<object>>,
@@ -32,7 +31,7 @@ describe('explicit actual provider disk text route', () => {
     const disk = projectionDiskRows(false, false);
     const native = await nativeDiskRows(disk);
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
-    const before = new Set(readdirSync(getScratchRoot()));
+    const before = new Set(readdirSync(setup.config.scratchRoots.getRoot()));
     try {
       const rows = native.selection;
       const projection = await setup.provider.projectPromptEnvelope({
@@ -49,7 +48,7 @@ describe('explicit actual provider disk text route', () => {
       ).toHaveLength(0);
       await projection.releaseIfUnsent?.();
       expect(
-        readdirSync(getScratchRoot()).filter(
+        readdirSync(setup.config.scratchRoots.getRoot()).filter(
           (name) =>
             name.startsWith('responses-prompt-keys-') && !before.has(name),
         ),
@@ -142,7 +141,10 @@ describe('actual source pinned estimate', () => {
       const estimate = await estimatePromptEnvelope(
         setup.provider.name,
         projection,
-        withGpt56DiskSources(setup.factory, getScratchRoot()),
+        withGpt56DiskSources(
+          setup.factory,
+          setup.config.scratchRoots.getRoot(),
+        ),
       );
       expect(estimate).toStrictEqual(oracle);
     } finally {

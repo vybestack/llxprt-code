@@ -1,9 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import type { ConversationResponseEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
@@ -21,6 +21,7 @@ function diagnostics(
   return {
     conversationLoggingEnabled: true,
     conversationLogPath: path,
+    conversationFileWriter: getConversationFileWriter(path),
     requestBodyLoggingEnabled: true,
     redaction: {
       redactApiKeys: true,
@@ -49,7 +50,6 @@ function diagnostics(
 describe('response logging stream integration', () => {
   const directories: string[] = [];
   afterEach(async () => {
-    resetConversationFileWriterForTesting();
     for (const directory of directories.splice(0))
       await fs.rm(directory, { recursive: true, force: true });
   });

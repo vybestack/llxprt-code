@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -26,8 +27,9 @@ import {
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { PROJECTION_REVISION } from '../runtime/promptEnvelopeProjections.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
-const factory = createRuntimeTokenizerFactory();
+const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 
 async function estimatedTokens(
   provider: AnthropicProvider,

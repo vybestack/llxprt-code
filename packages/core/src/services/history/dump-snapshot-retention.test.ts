@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { describe, expect, it } from 'bun:test';
@@ -7,6 +8,7 @@ import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type { IContent } from './IContent.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { createRowCounters } from '../../recording/journalCounters.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function valueRow(index: number, bytes: number): IContent {
   return {
@@ -35,6 +37,7 @@ function capture(
   const ownership = new RowOwnership();
   const counters = createRowCounters();
   const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
     attachmentCounters: { ...counters.counters, ownership },
   });
   const probes: Array<WeakRef<IContent>> = [];

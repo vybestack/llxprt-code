@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs/promises';
@@ -17,6 +18,7 @@ import { buildProviderDumpBody } from './__tests__/support/arrayDumpBody.js';
 import { dumpRequestContext, dumpRequestContextStream } from './dumpContext.js';
 import { streamPrettyJson } from './streamPrettyJson.js';
 import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dump-stream-contract-'));
 const row = (index: number): IContent => ({
@@ -178,6 +180,7 @@ async function expectScale(
   const ownership = new RowOwnership();
   const counters = createRowCounters();
   const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
     attachmentCounters: { ...counters.counters, ownership },
   });
   try {
@@ -241,7 +244,7 @@ async function expectVaried(
   providerName: string,
   policy: string,
 ): Promise<{ actual: string; expected: string }> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   try {
     history.addAll(structuredClone(varied));
     const snapshot = await history.openDumpSnapshot();
@@ -294,7 +297,7 @@ describe('bounded dump provider contract', () => {
     }
   }
   it('pins body and chronology membership across later mutation', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       history.add(row(0));
       const snapshot = await history.openDumpSnapshot();

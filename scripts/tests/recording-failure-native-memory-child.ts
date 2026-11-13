@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from './named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { gcAndSweep, heapSize } from 'bun:jsc';
 import { randomBytes } from 'node:crypto';
@@ -9,6 +11,8 @@ import { JournalRecordingService } from '../../packages/core/src/recording/journ
 import { RecordingIntegration } from '../../packages/core/src/recording/RecordingIntegration.js';
 import { RecordingFailureReport } from '../../packages/core/src/recording/recording-failure-report.js';
 import { testJournalSeams } from '../../packages/core/src/journal/__tests__/support/journalFixtures.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 async function settled(): Promise<{ heap: number; external: number }> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -54,31 +58,40 @@ const seams = testJournalSeams({}, 1, false);
 let fail = false;
 const row = { text: randomBytes(1536).toString('base64') };
 const original = new Error('native failed write', { cause: { row } });
-const recording = JournalRecordingService.create({
-  sessionId: 'memory-native',
-  projectHash: 'memory-native',
-  chatsDir: join(root, 'chats'),
-  provider: 'test',
-  model: 'test',
-  workspaceDirs: [],
-  journal: {
+const recording = JournalRecordingService.create(
+  withTestNamedWriters({
+    sessionId: 'memory-native',
+    projectHash: 'memory-native',
+    chatsDir: join(root, 'chats'),
+    provider: 'test',
+    model: 'test',
+    workspaceDirs: [],
     journal: {
-      ...seams.dependencies,
-      open: async (path, flags) => {
-        const handle = await seams.dependencies.open(path, flags);
-        return {
-          ...handle,
-          writev: (buffers, position) => {
-            if (fail) return Promise.reject(original);
-            return handle.writev(buffers, position);
-          },
-        };
+      journal: {
+        ...seams.dependencies,
+        open: async (path, flags) => {
+          const handle = await seams.dependencies.open(path, flags);
+          return {
+            ...handle,
+            writev: (buffers, position) => {
+              if (fail) return Promise.reject(original);
+              return handle.writev(buffers, position);
+            },
+          };
+        },
       },
     },
-  },
+  }),
+);
+const history = new HistoryService({
+  scratchRoots: recordingScratchRoots,
+  backend: 'journal',
 });
-const history = new HistoryService({ backend: 'journal' });
-const integration = new RecordingIntegration(recording, join(root, 'reports'));
+const integration = new RecordingIntegration(
+  recording,
+  recordingScratchRoots,
+  join(root, 'reports'),
+);
 try {
   await integration.subscribeToJournal(history);
   history.add({

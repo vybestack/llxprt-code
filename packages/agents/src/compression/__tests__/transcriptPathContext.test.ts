@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { CompressionHandler } from '../CompressionHandler.js';
 import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 /**
@@ -42,6 +43,7 @@ import { OneShotStrategy } from '../OneShotStrategy.js';
 import { SummaryTransport } from './middleout-disk-helpers.js';
 import type { CompressionAttemptContext } from '../compressionContextBuilder.js';
 import { regressionHistory } from './compression-regression-fixtures.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const observedContexts = new WeakMap<
   CompressionHandler,
@@ -150,7 +152,7 @@ const created: SessionRecordingPort[] = [];
 describe('CompressionHandler transcriptPath wiring (#2933)', () => {
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'issue2933-'));
-    historyService = new HistoryService();
+    historyService = new HistoryService({ scratchRoots: historyScratchRoots });
     handler = makeHandler(historyService);
     installed = undefined;
   });
@@ -254,7 +256,9 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
   });
 
   it('a path installed on the chat reaches the strategy that builds the summary', async () => {
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     const runtimeContext = buildRuntimeContext(historyService, {
       compressionStrategy: 'one-shot',
       contextLimit: 200_000,
@@ -295,7 +299,7 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
   });
 
   it('compresses an unbound chat without publishing a sibling transcript', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const runtime = buildRuntimeContext(history, {
       compressionStrategy: 'one-shot',
       contextLimit: 200_000,

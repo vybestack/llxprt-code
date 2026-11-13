@@ -1,3 +1,5 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { IdTrieReader } from './idTrieReader.js';
 import { encodeIdTrieNode } from './idTrieNode.js';
@@ -68,7 +70,7 @@ describe('native continuous recency facts', () => {
   const directory = useTempDir('native-recency-facts-');
   it('keeps ordinal and bucket identity across append, density, insert, pop, restore, clone, compaction and reopen', async () => {
     const file = join(directory(), 'mutations.llxj');
-    const session = await JournalSession.create(file);
+    const session = await JournalSession.create(file, testJournalOptions());
     try {
       await session.append(
         Array.from({ length: 8 }, (_, index) => response(index)),
@@ -155,7 +157,7 @@ describe('native continuous recency facts', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(file);
+    const reopened = await JournalSession.open(file, testJournalOptions());
     try {
       expect(await counts(reopened)).toStrictEqual([1, 1, 1]);
       await reopened.store.commit([{ kind: 'clear' }]);
@@ -168,25 +170,29 @@ describe('native continuous recency facts', () => {
   it('fills missing revision once on open, rejects a wrong revision and reuses warm facts without writes', async () => {
     const file = join(directory(), 'fill.llxj');
     const deps = storeDeps();
-    const old = await JournalStore.create(file, {
-      ...deps,
-      idDeps: {
-        ...deps.idDeps,
-        hasher: (namespace, key) =>
-          sha256KeyHash(
-            namespace,
-            new TextDecoder().decode(key) === RECENCY_INDEX_READY
-              ? new Uint8Array([...key, 0])
-              : key,
-          ),
+    const old = await JournalStore.create(
+      file,
+      {
+        ...deps,
+        idDeps: {
+          ...deps.idDeps,
+          hasher: (namespace, key) =>
+            sha256KeyHash(
+              namespace,
+              new TextDecoder().decode(key) === RECENCY_INDEX_READY
+                ? new Uint8Array([...key, 0])
+                : key,
+            ),
+        },
       },
-    });
+      testNamedWriters,
+    );
     await old.commit([
       { kind: 'append', rows: [encodeContentRow(response(0), { owner: 0 })] },
     ]);
     const before = old.published?.commitSeq ?? 0;
     await old.close();
-    const session = await JournalSession.open(file);
+    const session = await JournalSession.open(file, testJournalOptions());
     const sequence = session.store.published?.commitSeq;
     expect(sequence).toBe(before + 1);
     try {
@@ -203,7 +209,7 @@ describe('native continuous recency facts', () => {
       await session.close();
     }
     const bytes = (await stat(file)).size;
-    const warm = await JournalSession.open(file);
+    const warm = await JournalSession.open(file, testJournalOptions());
     try {
       expect(warm.store.published?.commitSeq).toBe(sequence);
       for (let index = 0; index < 40; index++)
@@ -219,17 +225,21 @@ describe('native continuous recency facts', () => {
     async (size) => {
       const counter = { reads: 0 };
       const caches: BoundedIdNodeCache[] = [];
-      const store = await JournalStore.create(join(directory(), 'cost.llxj'), {
-        ...storeDeps({
-          seams: testJournalSeams({ readCounter: counter }, 1, false),
-          createCache: () => {
-            const cache = new BoundedIdNodeCache();
-            caches.push(cache);
-            return cache;
-          },
-        }),
-        recencyFactPolicy: densityRecencyFactPolicy,
-      });
+      const store = await JournalStore.create(
+        join(directory(), 'cost.llxj'),
+        {
+          ...storeDeps({
+            seams: testJournalSeams({ readCounter: counter }, 1, false),
+            createCache: () => {
+              const cache = new BoundedIdNodeCache();
+              caches.push(cache);
+              return cache;
+            },
+          }),
+          recencyFactPolicy: densityRecencyFactPolicy,
+        },
+        testNamedWriters,
+      );
       try {
         await store.commit([
           {
@@ -302,6 +312,7 @@ describe('native continuous recency facts', () => {
           },
         },
       },
+      testNamedWriters,
     );
     try {
       await store.commit([
@@ -329,6 +340,7 @@ describe('native continuous recency facts', () => {
   it('drops tentative facts after a streamed producer failure and continues on the same writer', async () => {
     const session = await JournalSession.create(
       join(directory(), 'producer.llxj'),
+      testJournalOptions(),
     );
     const primary = new Error('recency producer rejected');
     try {

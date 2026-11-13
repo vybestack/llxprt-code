@@ -1,8 +1,10 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import type { ProviderRequestSelection } from './provider-request-snapshot.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function blockCounts(
   view: ProviderRequestSelection,
@@ -19,7 +21,7 @@ async function blockCounts(
 
 describe('sparse journal request block overlays', () => {
   it('recomputes an earlier call unit when retirement rewrites media beside its response', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     await history.addBatch([
       {
         speaker: 'ai',
@@ -83,7 +85,7 @@ describe('sparse journal request block overlays', () => {
     }
   });
   it('replaces historical pixels in native plans without rewriting durable rows or pending media', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const image: IContent = {
       speaker: 'human',
       blocks: [
@@ -157,7 +159,7 @@ describe('sparse journal request block overlays', () => {
     }
   });
   it('applies sparse retirement after a selected-row purge after the original pin closes', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const row: IContent = {
       speaker: 'human',
       blocks: [
@@ -205,7 +207,7 @@ describe('sparse journal request block overlays', () => {
     }
   });
   it('invalidates stored response parents in a pending tail after historical retirement', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     await history.addBatch([
       { speaker: 'human', blocks: [{ type: 'text', text: 'old' }] },
     ]);

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
@@ -31,7 +32,9 @@ describe('bounded native checkpoint continuation', () => {
       });
       if (source.target === undefined) throw new Error('Missing checkpoint');
       probe().reset();
-      const result = await new SessionTransitionService().forkFromCheckpoint(
+      const result = await new SessionTransitionService(
+        withTestNamedWriters({}),
+      ).forkFromCheckpoint(
         source.target,
         directory(),
         PROJECT_HASH,
@@ -68,9 +71,11 @@ describe('bounded native checkpoint continuation', () => {
     const target = source.target;
     if (target === undefined) throw new Error('Missing checkpoint');
     const recorder = await JournalRecordingService.open(
-      recordingConfig(directory(), {
-        sessionId: source.recording.getSessionId(),
-      }),
+      withTestNamedWriters(
+        recordingConfig(directory(), {
+          sessionId: source.recording.getSessionId(),
+        }),
+      ),
       source.filePath,
     );
     try {
@@ -79,7 +84,9 @@ describe('bounded native checkpoint continuation', () => {
       await recorder.dispose();
     }
     probe().reset();
-    const result = await new SessionTransitionService().forkFromCheckpoint(
+    const result = await new SessionTransitionService(
+      withTestNamedWriters({}),
+    ).forkFromCheckpoint(
       target,
       directory(),
       PROJECT_HASH,

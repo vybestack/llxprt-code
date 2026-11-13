@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
@@ -62,7 +63,10 @@ describe('persisted Kimi fallback prefix changes', () => {
   it('preserves nonzero prefixes through owner, reopen, fork, compaction, density, pop and compression', async () => {
     const path = `${directory()}/lifecycle.llxj`;
     const options = { journal: testJournalSeams().dependencies };
-    const session = await JournalSession.create(path, options);
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions(options),
+    );
     const row = (id: string): ReturnType<typeof encodeContentRow> =>
       encodeContentRow(
         {
@@ -83,7 +87,10 @@ describe('persisted Kimi fallback prefix changes', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path, options);
+    const reopened = await JournalSession.open(
+      path,
+      testJournalOptions(options),
+    );
     try {
       const old = await reopened.store.snapshot();
       try {
@@ -134,9 +141,12 @@ describe('persisted Kimi fallback prefix changes', () => {
     }
   });
   it('replaces every earlier fallback holder and other IDs row ranks when an append first maps an ID', async () => {
-    const session = await JournalSession.create(`${directory()}/append.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/append.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.store.commit([{ kind: 'kimi' }]);
       await session.append([
@@ -191,7 +201,7 @@ describe('persisted Kimi fallback prefix changes', () => {
   it('keeps a response-only pending update in its earlier unit without changing counter prefixes', async () => {
     const session = await JournalSession.create(
       `${directory()}/response.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await session.append([

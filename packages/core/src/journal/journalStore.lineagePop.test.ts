@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
@@ -78,7 +79,11 @@ describe('a pop never crosses a lineage start (design 4.3 and 4.10)', () => {
   async function run(primitive: Primitive, seed: number): Promise<Run> {
     const file = path.join(directory(), `${primitive}-${seed}.llxj`);
     const model = new StoreModel(new SeededRandom(seed));
-    const store = await JournalStore.create(file, storeDeps());
+    const store = await JournalStore.create(
+      file,
+      storeDeps(),
+      testNamedWriters,
+    );
     const commit = async (step: Step): Promise<void> => {
       await store.commit(step.edits);
       model.endGroup(step);
@@ -121,7 +126,11 @@ describe('a pop never crosses a lineage start (design 4.3 and 4.10)', () => {
     await expectStoreMatchesModel(store, model);
 
     await store.close();
-    const reopened = await JournalStore.open(file, storeDeps());
+    const reopened = await JournalStore.open(
+      file,
+      storeDeps(),
+      testNamedWriters,
+    );
     await expectStoreMatchesModel(reopened, model);
     await reopened.close();
 
@@ -147,7 +156,11 @@ describe('a pop never crosses a lineage start (design 4.3 and 4.10)', () => {
     const file = (name: string) => path.join(directory(), name);
 
     async function sixRows(name: string): Promise<JournalStore> {
-      const store = await JournalStore.create(file(name), storeDeps());
+      const store = await JournalStore.create(
+        file(name),
+        storeDeps(),
+        testNamedWriters,
+      );
       await appendEach(
         store,
         scenarioDrafts().map((draft) => ({ ...draft, owner: 1 })),

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { tmpdir } from 'node:os';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /**
@@ -22,6 +23,7 @@ import {
   withRequestContentsSnapshot,
   type RequestContentsSnapshot,
 } from './streamRequestHelpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function snapshotHistoryRow(index: number): IContent {
   return {
@@ -245,7 +247,7 @@ async function collectRequestRows(
 
 describe('request cursor cancellation', () => {
   it('rejects a cancelled request before preparing any provider contents', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const controller = new AbortController();
     controller.abort(new Error('request cancelled'));
     try {
@@ -266,14 +268,16 @@ describe('request cursor cancellation', () => {
 describe('request snapshot history override', () => {
   class CursorOnlyRequestHistory extends HistoryService {
     constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-      super(options);
+      super({ ...options, scratchRoots: historyScratchRoots });
       forbidHistoryMaterializationForTest(this, 'eager request preparation');
     }
   }
 
   describe('request preparation from a journal cursor', () => {
     it('prepares actual request rows without either eager history getter', async () => {
-      const history = new CursorOnlyRequestHistory();
+      const history = new CursorOnlyRequestHistory({
+        scratchRoots: historyScratchRoots,
+      });
       try {
         history.add({
           speaker: 'human',
@@ -297,7 +301,7 @@ describe('request snapshot history override', () => {
   });
 
   it('curates an isolated provider copy with complete adjacent tool responses', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const override: IContent[] = [
       {
         speaker: 'human',

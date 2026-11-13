@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   DeferredMaintenance,
+  JournalMaintenanceScope,
   suspendJournalMaintenance,
 } from './deferred-maintenance.js';
 
@@ -18,22 +19,108 @@ function fail(error: unknown): never {
 }
 
 describe('deferred journal maintenance', () => {
+  it('keeps unrelated histories independent', async () => {
+    const suspended = new JournalMaintenanceScope();
+    const independent = new JournalMaintenanceScope();
+    const release = await suspendJournalMaintenance(suspended);
+    let runs = 0;
+    const maintenance = new DeferredMaintenance(
+      independent,
+      async () => {
+        runs++;
+      },
+      fail,
+    );
+    try {
+      maintenance.request();
+      await maintenance.settle();
+      expect(runs).toBe(1);
+    } finally {
+      release();
+    }
+  });
+
+  it('shares overlapping requests with a journal attached after suspension', async () => {
+    const primary = new JournalMaintenanceScope();
+    const mirror = new JournalMaintenanceScope();
+    const releasePrimary = await suspendJournalMaintenance(primary);
+    const releaseMirror = await suspendJournalMaintenance(mirror);
+    await primary.join(mirror);
+    let runs = 0;
+    const maintenance = new DeferredMaintenance(
+      mirror,
+      async () => {
+        runs++;
+      },
+      fail,
+    );
+    maintenance.request();
+    releasePrimary();
+    await maintenance.settle();
+    expect(runs).toBe(0);
+    releaseMirror();
+    await maintenance.settle();
+    expect(runs).toBe(1);
+  });
+
+  it('drains active maintenance when an existing journal joins a suspended history', async () => {
+    const primary = new JournalMaintenanceScope();
+    const mirror = new JournalMaintenanceScope();
+    const entered = gate();
+    const finish = gate();
+    let runs = 0;
+    const maintenance = new DeferredMaintenance(
+      mirror,
+      async () => {
+        entered.release();
+        await finish.promise;
+        runs++;
+      },
+      fail,
+    );
+    maintenance.request();
+    await entered.promise;
+    const release = await suspendJournalMaintenance(primary);
+    let joined = false;
+    const joining = primary.join(mirror).then(() => {
+      joined = true;
+    });
+    await Promise.resolve();
+    expect(joined).toBe(false);
+    finish.release();
+    await joining;
+    maintenance.request();
+    await maintenance.settle();
+    expect(runs).toBe(1);
+    release();
+    await maintenance.settle();
+    expect(runs).toBe(2);
+  });
   it('drains active maintenance and defers every journal until the request closes', async () => {
+    const scope = new JournalMaintenanceScope();
     const entered = gate();
     const resume = gate();
     const events: string[] = [];
-    const first = new DeferredMaintenance(async () => {
-      entered.release();
-      await resume.promise;
-      events.push('first');
-    }, fail);
-    const second = new DeferredMaintenance(async () => {
-      events.push('second');
-    }, fail);
+    const first = new DeferredMaintenance(
+      scope,
+      async () => {
+        entered.release();
+        await resume.promise;
+        events.push('first');
+      },
+      fail,
+    );
+    const second = new DeferredMaintenance(
+      scope,
+      async () => {
+        events.push('second');
+      },
+      fail,
+    );
     first.request();
     await entered.promise;
     let acquired = false;
-    const acquiring = suspendJournalMaintenance().then((release) => {
+    const acquiring = suspendJournalMaintenance(scope).then((release) => {
       acquired = true;
       return release;
     });
@@ -55,12 +142,17 @@ describe('deferred journal maintenance', () => {
   });
 
   it('keeps maintenance deferred until the last overlapping request closes', async () => {
+    const scope = new JournalMaintenanceScope();
     let runs = 0;
-    const maintenance = new DeferredMaintenance(async () => {
-      runs++;
-    }, fail);
-    const releaseFirst = await suspendJournalMaintenance();
-    const releaseSecond = await suspendJournalMaintenance();
+    const maintenance = new DeferredMaintenance(
+      scope,
+      async () => {
+        runs++;
+      },
+      fail,
+    );
+    const releaseFirst = await suspendJournalMaintenance(scope);
+    const releaseSecond = await suspendJournalMaintenance(scope);
     maintenance.request();
     releaseFirst();
     await maintenance.settle();
@@ -71,10 +163,15 @@ describe('deferred journal maintenance', () => {
   });
 
   it('coalesces requests without entering maintenance in the current turn', async () => {
+    const scope = new JournalMaintenanceScope();
     let runs = 0;
-    const maintenance = new DeferredMaintenance(async () => {
-      runs++;
-    }, fail);
+    const maintenance = new DeferredMaintenance(
+      scope,
+      async () => {
+        runs++;
+      },
+      fail,
+    );
     maintenance.request();
     maintenance.request();
     await Promise.resolve();
@@ -84,14 +181,19 @@ describe('deferred journal maintenance', () => {
   });
 
   it('settles requests received while maintenance is running', async () => {
+    const scope = new JournalMaintenanceScope();
     const entered = gate();
     const resume = gate();
     let runs = 0;
-    const maintenance = new DeferredMaintenance(async () => {
-      runs++;
-      entered.release();
-      await resume.promise;
-    }, fail);
+    const maintenance = new DeferredMaintenance(
+      scope,
+      async () => {
+        runs++;
+        entered.release();
+        await resume.promise;
+      },
+      fail,
+    );
     maintenance.request();
     await entered.promise;
     maintenance.request();
@@ -101,15 +203,20 @@ describe('deferred journal maintenance', () => {
   });
 
   it('does not repeat work that consumed requests queued before it began', async () => {
+    const scope = new JournalMaintenanceScope();
     const entered = gate();
     const resume = gate();
     let runs = 0;
-    const maintenance = new DeferredMaintenance(async () => {
-      entered.release();
-      await resume.promise;
-      maintenance.consumeRequests();
-      runs++;
-    }, fail);
+    const maintenance = new DeferredMaintenance(
+      scope,
+      async () => {
+        entered.release();
+        await resume.promise;
+        maintenance.consumeRequests();
+        runs++;
+      },
+      fail,
+    );
     maintenance.request();
     await entered.promise;
     maintenance.request();
@@ -119,9 +226,11 @@ describe('deferred journal maintenance', () => {
   });
 
   it('reports an asynchronous maintenance failure to its owner', async () => {
+    const scope = new JournalMaintenanceScope();
     const failure = new Error('candidate copy failed');
     const failures: unknown[] = [];
     const maintenance = new DeferredMaintenance(
+      scope,
       async () => {
         throw failure;
       },

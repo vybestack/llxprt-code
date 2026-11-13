@@ -376,7 +376,9 @@ export function createAgentRuntimeContext(
 ): AgentRuntimeContext {
   validateRequiredOptions(options);
 
-  const history = options.history ?? new HistoryService();
+  const history =
+    options.history ??
+    new HistoryService({ scratchRoots: options.scratchRoots });
 
   const getLiveSetting = createGetLiveSetting(options);
 
@@ -388,6 +390,7 @@ export function createAgentRuntimeContext(
   const providerRuntime = freezeProviderRuntime(options.providerRuntime);
 
   const context: AgentRuntimeContext = {
+    scratchRoots: history.scratchRoots,
     readPromptPolicy: () =>
       options.readRuntimeSettings?.().promptPolicy ??
       options.settings.promptPolicy ??

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
@@ -31,9 +32,12 @@ const settings: RowFormatSettings = {
 describe('native Anthropic detached request format fill', () => {
   const directory = useTempDir('native-anthropic-pinned-');
   it('fills repair facts and lengths on a held pin without replacing live history or creating files', async () => {
-    const session = await JournalSession.create(`${directory()}/history.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/history.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([
         { speaker: 'human', blocks: [{ type: 'text', text: 'snow 雪' }] },

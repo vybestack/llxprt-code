@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   JournalResumeBoot,
@@ -26,6 +28,7 @@ import {
   toolResult,
   type RequestFacts,
 } from './service-tool-runtime.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export async function proveToolResume(
   directory: string,
@@ -33,16 +36,18 @@ export async function proveToolResume(
   expected: readonly DiskToolRow[],
 ): Promise<void> {
   const config = recordingConfig(directory, name);
-  const result = await resumeJournalSession({
-    continueRef: name,
-    projectHash,
-    chatsDir: config.chatsDir,
-    currentProvider: providerName,
-    currentModel: modelName,
-    workspaceDirs: ['/work'],
-  });
+  const result = await resumeJournalSession(
+    withTestNamedWriters({
+      continueRef: name,
+      projectHash,
+      chatsDir: config.chatsDir,
+      currentProvider: providerName,
+      currentModel: modelName,
+      workspaceDirs: ['/work'],
+    }),
+  );
   if (!result.ok) throw new Error(result.error);
-  const history = new HistoryService({});
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   let captured: RequestFacts | undefined;
   const provider = localProvider((options) =>
     (async function* () {

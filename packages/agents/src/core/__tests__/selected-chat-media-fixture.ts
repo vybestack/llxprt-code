@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 
@@ -33,6 +34,7 @@ import { collectHistoryFixture } from './support/collect-history-test-fixture.js
 import { ChatSession } from '../chatSession.js';
 import { chatSessionPorts } from '../chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -103,7 +105,7 @@ export function createMediaHistoryChat(
 ): ChatSession {
   const provider = createMediaHistoryProvider(onRequest);
   const setup = createChatSessionRuntime({ provider });
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const store = new LocalMediaStore({
     rootDirectory: join(directory, 'media'),
     quotaBytes: limits.quotaBytes ?? 1024 * 1024,
@@ -117,6 +119,7 @@ export function createMediaHistoryChat(
   const invocationOwner = new SessionSettingsOwner(setup.settingsService);
   retainedInvocationOwners.push(invocationOwner);
   const runtime = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       invocationOwner.prepareProviderInvocation(
         state.runtimeId,

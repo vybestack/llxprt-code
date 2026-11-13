@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
@@ -49,7 +50,7 @@ describe('HistoryStorePort.stageProfileReplacement (journal store)', () => {
     const store: ReplacementStore = new JournalHistoryStore(
       await JournalSession.create(
         path.join(directory(), `profile-${counter++}.llxj`),
-        { journal: testJournalSeams({}).dependencies },
+        testJournalOptions({ journal: testJournalSeams({}).dependencies }),
       ),
     );
     open.push(store);
@@ -137,9 +138,12 @@ describe('journal profile replacement failure', () => {
 
   async function liveWithTwoRows(): Promise<JournalHistoryStore> {
     const live = new JournalHistoryStore(
-      await JournalSession.create(path.join(directory(), 'live.llxj'), {
-        journal: testJournalSeams({}).dependencies,
-      }),
+      await JournalSession.create(
+        path.join(directory(), 'live.llxj'),
+        testJournalOptions({
+          journal: testJournalSeams({}).dependencies,
+        }),
+      ),
     );
     live.apply({ kind: 'content', content: row('human', 'one', 1) });
     live.apply({ kind: 'content', content: row('ai', 'two', 2) });

@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { testJournalSeams } from '@vybestack/llxprt-code-core/journal/__tests__/support/journalFixtures.js';
@@ -31,6 +33,9 @@ import {
   prepareRequestBody,
   readPreparedChatBody,
 } from './__tests__/support/prepareRequestBody.js';
+const tokenizerScratchRoots = createTestScratchOwner();
+
+const historyScratchRoots = createTestScratchOwner();
 
 const logger = new DebugLogger('native-chat-estimate-test');
 const textRow = (text: string): IContent => ({
@@ -61,7 +66,9 @@ async function estimate(
   rows: ProviderRequestSelection,
   model = 'gpt-4o',
   ephemerals: Record<string, unknown> = {},
-  factory: RuntimeTokenizerFactory = createRuntimeTokenizerFactory(),
+  factory: RuntimeTokenizerFactory = createRuntimeTokenizerFactory(
+    tokenizerScratchRoots,
+  ),
   fixed: Pick<
     NormalizedGenerateChatOptions,
     'tools' | 'systemInstruction'
@@ -124,19 +131,24 @@ describe('stored native Chat estimates through production preparation', () => {
     ) => Promise<void>,
   ): Promise<void> {
     const counter = { reads: 0 };
-    const recording = JournalRecordingService.create({
-      sessionId: 'estimate',
-      projectHash: 'estimate',
-      chatsDir: directory(),
-      workspaceDirs: [],
-      provider: 'openai',
-      model: 'gpt-4o',
-      journal: {
-        journal: testJournalSeams({ readCounter: counter }, 1, false)
-          .dependencies,
-      },
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'estimate',
+        projectHash: 'estimate',
+        chatsDir: directory(),
+        workspaceDirs: [],
+        provider: 'openai',
+        model: 'gpt-4o',
+        journal: {
+          journal: testJournalSeams({ readCounter: counter }, 1, false)
+            .dependencies,
+        },
+      }),
+    );
+    const history = new HistoryService({
+      scratchRoots: historyScratchRoots,
+      recording,
     });
-    const history = new HistoryService({ recording });
     try {
       await suffixSeeder(history)(rows);
       await consume(history, counter);
@@ -188,7 +200,7 @@ describe('stored native Chat estimates through production preparation', () => {
         'reasoning.includeInContext': true,
         'reasoning.stripFromContext': strip,
       };
-      const factory = createRuntimeTokenizerFactory();
+      const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
       async function count(messages: readonly unknown[]): Promise<number> {
         const projection = projectOpenAIChatPromptEnvelope({ model, messages });
         return (await estimatePromptEnvelope('openai', projection, factory))
@@ -287,7 +299,7 @@ describe('stored native Chat estimates through production preparation', () => {
       const holders = base.filter((row) => row.speaker === 'ai').length;
       await withHistory(base, async (history) => {
         let projections: string[] = [];
-        const actual = createRuntimeTokenizerFactory();
+        const actual = createRuntimeTokenizerFactory(history.scratchRoots);
         const factory = withGpt56DiskSources(
           {
             ...actual,
@@ -471,7 +483,7 @@ describe('stored native Chat estimates through production preparation', () => {
             selected,
             'mistral-large-latest',
             policy,
-            createRuntimeTokenizerFactory(),
+            createRuntimeTokenizerFactory(history.scratchRoots),
             fixed,
           );
           expect(tokens).toBeGreaterThan(0);
@@ -639,7 +651,7 @@ describe('stored native Chat estimates through production preparation', () => {
           [],
           {},
         );
-        const factory = createRuntimeTokenizerFactory();
+        const factory = createRuntimeTokenizerFactory(history.scratchRoots);
         try {
           const before = await estimate(selected, 'gpt-4o', {}, factory);
           counter.reads = 0;
@@ -693,7 +705,7 @@ describe('stored native Chat estimates through production preparation', () => {
             selected,
             'gpt-4o',
             policy,
-            createRuntimeTokenizerFactory(),
+            createRuntimeTokenizerFactory(history.scratchRoots),
             fixed,
           );
           expect(tokens).toBeGreaterThan(0);
@@ -756,7 +768,7 @@ describe('stored native Chat estimates through production preparation', () => {
               releaseIfUnsent: async () => undefined,
             },
           );
-          const base = createRuntimeTokenizerFactory();
+          const base = createRuntimeTokenizerFactory(history.scratchRoots);
           const factory =
             mode === 'tokenizer-failure'
               ? withGpt56DiskSources(

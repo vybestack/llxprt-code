@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import * as fsp from 'node:fs/promises';
@@ -32,17 +36,20 @@ describe('session discovery on the journal backend', () => {
     sessionId: string,
     texts: readonly string[],
   ): Promise<string> {
-    const recorder = JournalRecordingService.create({
-      sessionId,
-      projectHash: PROJECT,
-      chatsDir: chats,
-      workspaceDirs: ['/work/a'],
-      provider: 'anthropic',
-      model: 'model-1',
-      journal: journalSeams(),
-    });
+    const recorder = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId,
+        projectHash: PROJECT,
+        chatsDir: chats,
+        workspaceDirs: ['/work/a'],
+        provider: 'anthropic',
+        model: 'model-1',
+        journal: journalSeams(),
+      }),
+    );
     const primary = await JournalSession.create(
       path.join(directory(), `${sessionId}-primary.llxj`),
+      testJournalOptions(),
     );
     const store = new JournalHistoryStore(primary);
     cleanups.push(async () => {
@@ -107,7 +114,7 @@ describe('session discovery on the journal backend', () => {
 
     expect(await SessionDiscovery.readFirstUserMessage(file)).toBe('one');
     const reopened = await JournalRecordingService.open(
-      {
+      withTestNamedWriters({
         sessionId: 'session-a',
         projectHash: PROJECT,
         chatsDir: chats,
@@ -115,7 +122,7 @@ describe('session discovery on the journal backend', () => {
         provider: 'anthropic',
         model: 'model-1',
         journal: journalSeams(),
-      },
+      }),
       file,
     );
     reopened.recordFirstUserPreview('other');

@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
@@ -23,6 +25,7 @@ import {
   type ResumeResult,
 } from '../../recording/resumeSession.js';
 import type { TextBlock } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 let root: string;
 
@@ -38,14 +41,16 @@ function adoptedPath(result: ResumeResult): string {
 
 async function candidate(): Promise<ResumeResult> {
   const fixture = await createResumableSession(root, { rows: 3 });
-  const result = await resumeSession({
-    continueRef: fixture.sessionId,
-    chatsDir: root,
-    projectHash: PROJECT_HASH,
-    currentProvider: 'anthropic',
-    currentModel: 'claude-4',
-    workspaceDirs: [],
-  });
+  const result = await resumeSession(
+    withTestNamedWriters({
+      continueRef: fixture.sessionId,
+      chatsDir: root,
+      projectHash: PROJECT_HASH,
+      currentProvider: 'anthropic',
+      currentModel: 'claude-4',
+      workspaceDirs: [],
+    }),
+  );
   if (!result.ok) throw new Error(result.error);
   resumed = result;
   return result;
@@ -54,7 +59,7 @@ async function candidate(): Promise<ResumeResult> {
 describe('history resume adoption', () => {
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'history-boot-'));
-    service = new HistoryService();
+    service = new HistoryService({ scratchRoots: historyScratchRoots });
     service.add({
       speaker: 'human',
       blocks: [{ type: 'text', text: 'prior' }],

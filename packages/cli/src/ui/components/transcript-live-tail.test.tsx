@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
@@ -45,6 +46,7 @@ describe('journal-driven Ink transcript', () => {
     const directory = await mkdtemp(join(tmpdir(), 'ink-transcript-tail-'));
     const session = await JournalSession.create(
       join(directory, 'session.llxj'),
+      testJournalOptions(),
     );
     const recorder = new JournalArrivalRecorder(session.store);
     const viewport = {
@@ -54,6 +56,7 @@ describe('journal-driven Ink transcript', () => {
     };
     const pager = createScrollbackPagerStore({
       filePath: session.path,
+      watermarks: session.store.watermarks,
       pageRows: 4,
       viewport,
       settings: {

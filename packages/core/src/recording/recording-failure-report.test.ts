@@ -1,3 +1,5 @@
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { ScratchRootOwner } from '../storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -8,11 +10,16 @@ import {
   RecordingFailureReport,
 } from './recording-failure-report.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 const directories: string[] = [];
 function fixture(): { root: string; store: RecordingFailureStore } {
   const root = mkdtempSync(join(tmpdir(), 'recording-failure-contract-'));
   directories.push(root);
-  return { root, store: new RecordingFailureStore(root) };
+  return {
+    root,
+    store: new RecordingFailureStore(recordingScratchRoots, root),
+  };
 }
 
 async function generations(report: RecordingFailureReport): Promise<number[]> {
@@ -28,6 +35,8 @@ function cleanup(): void {
     rmSync(directory, { recursive: true, force: true });
 }
 describe('disk-backed recording failure contract', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   afterEach(cleanup);
   it('closing a suspended cursor terminates it without yielding buffered records', async () => {
     const { root, store } = fixture();
@@ -89,6 +98,8 @@ describe('disk-backed recording failure contract', () => {
   });
 });
 describe('failure cursor terminal ownership', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   afterEach(cleanup);
   it('rejects a missing owned diagnostic file instead of silently dropping a failure', async () => {
     const { root, store } = fixture();

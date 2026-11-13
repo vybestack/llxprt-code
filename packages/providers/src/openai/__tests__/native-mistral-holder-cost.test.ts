@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { VersionSnapshot } from '../../../../core/src/journal/versionSnapshot.js';
@@ -202,9 +203,12 @@ describe('Mistral physical holder correction costs', () => {
     'charges every positional read for $size rows all=$all id=$historicalId',
     async ({ size, all, historicalId }) => {
       const audit = physicalAudit();
-      const session = await JournalSession.create(`${directory()}/cost.llxj`, {
-        journal: audit.dependencies,
-      });
+      const session = await JournalSession.create(
+        `${directory()}/cost.llxj`,
+        testJournalOptions({
+          journal: audit.dependencies,
+        }),
+      );
       const rows: IContent[] = Array.from({ length: size }, (_, index) =>
         all || index < 3
           ? {

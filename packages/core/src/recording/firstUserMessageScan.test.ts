@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
@@ -7,6 +9,7 @@ import { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('first user message preview', () => {
   const directory = useTempDir('first-user-preview-');
@@ -16,16 +19,21 @@ describe('first user message preview', () => {
     contents: readonly IContent[],
     kind: 'main' | 'subagent' = 'main',
   ): Promise<string> {
-    const recording = JournalRecordingService.create({
-      sessionId,
-      chatsDir: directory(),
-      projectHash: 'hash',
-      workspaceDirs: ['/w'],
-      provider: 'anthropic',
-      model: 'claude',
-      kind,
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId,
+        chatsDir: directory(),
+        projectHash: 'hash',
+        workspaceDirs: ['/w'],
+        provider: 'anthropic',
+        model: 'claude',
+        kind,
+      }),
+    );
+    const history = new HistoryService({
+      scratchRoots: historyScratchRoots,
+      recording,
     });
-    const history = new HistoryService({ recording });
     try {
       await recording.session();
       for (const content of contents) history.add(content);

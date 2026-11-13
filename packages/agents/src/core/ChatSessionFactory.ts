@@ -358,7 +358,8 @@ async function buildAdmittedChatSession(
     generateContentConfig,
     todoContinuationService,
     toolRegistry,
-    createHistoryService = () => new HistoryService(),
+    createHistoryService = () =>
+      new HistoryService({ scratchRoots: config.scratchRoots }),
     createChatSessionInstance = (...args) => new ChatSession(...args),
   } = deps;
   const logger = new DebugLogger('llxprt:client:start');

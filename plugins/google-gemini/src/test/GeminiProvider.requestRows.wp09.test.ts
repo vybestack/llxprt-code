@@ -18,7 +18,10 @@ import {
   type ProviderRequestSelection,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { GenerateChatOptions } from '@vybestack/llxprt-code-providers/IProvider.js';
-import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
+import {
+  activeRequestBodyCount,
+  RequestBodyCensus,
+} from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import {
   GeminiProvider,
   type CreateGeminiApiClient,
@@ -28,6 +31,7 @@ import { createGeminiApiClient } from '../gemini/geminiApiClientFactory.js';
 const originalFetch = globalThis.fetch;
 
 interface FakeSdkState {
+  census: RequestBodyCensus;
   /** JSON of each request, captured at call time (before lease release). */
   sent: string[];
   /** Request objects as handed to the SDK, to inspect after release. */
@@ -39,6 +43,7 @@ interface FakeSdkState {
 }
 
 const sdk: FakeSdkState = {
+  census: new RequestBodyCensus(),
   sent: [],
   requests: [],
   leasesDuringSend: [],
@@ -46,6 +51,7 @@ const sdk: FakeSdkState = {
 };
 
 function resetSdk(): void {
+  sdk.census = new RequestBodyCensus();
   sdk.sent = [];
   sdk.requests = [];
   sdk.leasesDuringSend = [];
@@ -55,7 +61,7 @@ function resetSdk(): void {
   globalThis.fetch = Object.assign(
     async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       sdk.sent.push(await new Response(init?.body).text());
-      sdk.leasesDuringSend.push(activeRequestBodyCount());
+      sdk.leasesDuringSend.push(activeRequestBodyCount(sdk.census));
       sdk.onSend?.();
       if (sdk.failure !== undefined) throw sdk.failure;
       if (String(input).includes('streamGenerateContent')) {
@@ -100,7 +106,7 @@ function createTestProvider(): GeminiProvider {
   return new GeminiProvider(
     'test-key',
     undefined,
-    undefined,
+    { requestBodyCensus: sdk.census },
     fakeClientFactory,
   );
 }
@@ -405,12 +411,12 @@ describe('Gemini transport-owned request rows body (WP09)', () => {
     const probe = probeRows(scenario.rows);
     const options = rowsOptions(scenario, probe);
     const wrong = { ...options, requestRows: { ...probe.selection, count: 3 } };
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(provider.requestBodyCensus);
     await expect(drain(provider.generateChatCompletion(wrong))).rejects.toThrow(
       'Provider request row index is out of range',
     );
     expect(sdk.sent).toHaveLength(0);
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(provider.requestBodyCensus)).toBe(before);
   });
 });
 
@@ -432,10 +438,10 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
   it('holds exactly one SDK body lease during send and releases its arrays afterwards', async () => {
     const provider = createTestProvider();
     const probe = probeRows(scenario.rows);
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(provider.requestBodyCensus);
     await drain(provider.generateChatCompletion(rowsOptions(scenario, probe)));
     expect(sdk.leasesDuringSend).toStrictEqual([before + 1]);
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(provider.requestBodyCensus)).toBe(before);
     expect(probe.opened()).toBe(1);
     expect(sdk.requests[0].contents).toHaveLength(0);
   });
@@ -443,24 +449,24 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
   it('reads the rows again for a retried call and sends the same request', async () => {
     const provider = createTestProvider();
     const probe = probeRows(scenario.rows);
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(provider.requestBodyCensus);
     sdk.failure = new Error('transient transport failure');
     await expect(
       drain(provider.generateChatCompletion(rowsOptions(scenario, probe))),
     ).rejects.toThrow('transient transport failure');
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(provider.requestBodyCensus)).toBe(before);
     sdk.failure = undefined;
     await drain(provider.generateChatCompletion(rowsOptions(scenario, probe)));
     expect(probe.opened()).toBe(2);
     expect(probe.returned()).toBe(2);
     expect(sdk.sent).toHaveLength(2);
     expect(sdk.sent[1]).toBe(sdk.sent[0]);
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(provider.requestBodyCensus)).toBe(before);
   });
 
   it('releases the body when the send fails', async () => {
     const provider = createTestProvider();
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(provider.requestBodyCensus);
     sdk.failure = new Error('transport exploded');
     await expect(
       drain(
@@ -469,7 +475,7 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
         ),
       ),
     ).rejects.toThrow('transport exploded');
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(provider.requestBodyCensus)).toBe(before);
     expect(sdk.requests[0].contents).toHaveLength(0);
   });
 
@@ -479,21 +485,21 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
       { candidates: [{ content: { parts: [{ text: 'one' }] } }] },
       { candidates: [{ content: { parts: [{ text: 'two' }] } }] },
     ];
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(provider.requestBodyCensus);
     const iterator = provider.generateChatCompletion(
       rowsOptions(scenario, probeRows(scenario.rows)),
     );
     const first = await iterator.next();
     expect(first.done).toBe(false);
-    expect(activeRequestBodyCount()).toBe(before + 1);
+    expect(activeRequestBodyCount(provider.requestBodyCensus)).toBe(before + 1);
     await iterator.return?.();
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(provider.requestBodyCensus)).toBe(before);
   });
 
   it('releases the body when the request is aborted during the call', async () => {
     const provider = createTestProvider();
     const controller = new AbortController();
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(provider.requestBodyCensus);
     sdk.failure = new Error('aborted mid call');
     sdk.onSend = () => controller.abort(sdk.failure);
     await expect(
@@ -503,7 +509,7 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
         ),
       ),
     ).rejects.toThrow('aborted mid call');
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(provider.requestBodyCensus)).toBe(before);
   });
 
   it('never opens the rows when cancelled before the first pull', async () => {
@@ -511,7 +517,7 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
     const controller = new AbortController();
     controller.abort(new Error('cancelled early'));
     const probe = probeRows(scenario.rows);
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(provider.requestBodyCensus);
     await expect(
       drain(
         provider.generateChatCompletion(
@@ -521,7 +527,7 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
     ).rejects.toThrow('cancelled early');
     expect(probe.pulled()).toBe(0);
     expect(sdk.sent).toHaveLength(0);
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(provider.requestBodyCensus)).toBe(before);
   });
 
   it('closes the reader and sends nothing when cancelled after the first chunk', async () => {
@@ -530,7 +536,7 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
     const probe = probeRows(scenario.rows, () => {
       controller.abort(new Error('cancelled after first chunk'));
     });
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(provider.requestBodyCensus);
     await expect(
       drain(
         provider.generateChatCompletion(
@@ -541,7 +547,7 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
     expect(probe.pulled()).toBe(1);
     expect(probe.returned()).toBe(1);
     expect(sdk.sent).toHaveLength(0);
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(provider.requestBodyCensus)).toBe(before);
   });
 
   it('releases an unsent preparation when the client cannot be created', async () => {
@@ -554,13 +560,13 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
       }
     })();
     const probe = probeRows(scenario.rows);
-    const before = activeRequestBodyCount();
+    const before = activeRequestBodyCount(provider.requestBodyCensus);
     await expect(
       drain(provider.generateChatCompletion(rowsOptions(scenario, probe))),
     ).rejects.toThrow('client unavailable');
     expect(probe.opened()).toBe(0);
     expect(probe.returned()).toBe(0);
     expect(sdk.sent).toHaveLength(0);
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeRequestBodyCount(provider.requestBodyCensus)).toBe(before);
   });
 });

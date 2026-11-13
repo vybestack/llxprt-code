@@ -1,8 +1,10 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import { OneShotStrategy } from '../../OneShotStrategy.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export type OneShotDiskOutcome =
   | { readonly kind: 'applied'; readonly newHistory: IContent[] }
@@ -16,8 +18,8 @@ export type OneShotDiskOutcome =
 export async function compressOneShotViaDisk(
   context: CompressionContext,
 ): Promise<OneShotDiskOutcome> {
-  const source = new HistoryDensityRows();
-  const candidate = new HistoryDensityRows();
+  const source = new HistoryDensityRows(historyScratchRoots);
+  const candidate = new HistoryDensityRows(historyScratchRoots);
   try {
     for (const row of context.history) source.append(row);
     const result = await new OneShotStrategy(

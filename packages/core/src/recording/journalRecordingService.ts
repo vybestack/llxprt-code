@@ -1,3 +1,4 @@
+import { JournalMaintenanceScope } from '../journal/deferred-maintenance.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdir, rm } from 'node:fs/promises';
 import * as path from 'node:path';
@@ -82,6 +83,7 @@ function ignore(): void {
  * a checkpoint), so a session that never says anything leaves no file.
  */
 export class JournalRecordingService implements SessionRecordingPort {
+  readonly maintenanceScope: JournalMaintenanceScope;
   private journalSession: JournalSession | undefined;
   private mediaOwner: RecordingMediaOwner | undefined;
   private materialization: Promise<JournalSession> | undefined;
@@ -103,6 +105,8 @@ export class JournalRecordingService implements SessionRecordingPort {
     private readonly config: JournalRecordingConfig,
     private filePath: string | null,
   ) {
+    this.maintenanceScope =
+      config.journal?.maintenanceScope ?? new JournalMaintenanceScope();
     this.provider = config.provider;
     this.model = config.model;
     this.directories = [...config.workspaceDirs];
@@ -132,7 +136,10 @@ export class JournalRecordingService implements SessionRecordingPort {
     filePath: string,
   ): Promise<JournalRecordingService> {
     const recording = new JournalRecordingService(config, filePath);
-    const session = await JournalSession.open(filePath, config.journal);
+    const session = await JournalSession.open(filePath, {
+      ...config.journal,
+      maintenanceScope: recording.maintenanceScope,
+    });
     try {
       await recording.adoptOpened(session);
     } catch (error) {
@@ -209,6 +216,10 @@ export class JournalRecordingService implements SessionRecordingPort {
 
   getFilePath(): string | null {
     return this.filePath;
+  }
+
+  getJournalWatermarks(): JournalSession['store']['watermarks'] | undefined {
+    return this.journalSession?.store.watermarks;
   }
 
   getSessionId(): string {
@@ -486,6 +497,7 @@ export class JournalRecordingService implements SessionRecordingPort {
     try {
       session = await JournalSession.create(filePath, {
         ...this.config.journal,
+        maintenanceScope: this.maintenanceScope,
         journal: {
           ...journal,
           open: async (target, flags) => {

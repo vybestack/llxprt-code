@@ -1,11 +1,13 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('history response arrival', () => {
   it('publishes one sealed response with ordinary chronology and token accounting', async () => {
-    const history = new HistoryService();
-    const ordinary = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
+    const ordinary = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       const arrival = await history.openResponseArrival({
         id: 'attempt',

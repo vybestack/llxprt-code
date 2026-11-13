@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { statSync } from 'node:fs';
@@ -24,6 +26,7 @@ import {
   legacyUnitTokens,
 } from './__tests__/support/mistral-unit-token-oracle.js';
 import { observeRowFormat } from './__tests__/support/observeRowFormat.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const settings: RowFormatSettings = {
   formatId: 'openai-chat:mistral',
@@ -73,9 +76,12 @@ async function body(
 describe('failed native Mistral fused fill', () => {
   const directory = useTempDir('mistral-failed-fill-');
   it('does not publish or cache a format after the tokenizer fails in the second unit', async () => {
-    const session = await JournalSession.create(`${directory()}/failure.llxj`, {
-      journal: testJournalSeams({}, 1, false).dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/failure.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({}, 1, false).dependencies,
+      }),
+    );
     const oldSettings: RowFormatSettings = {
       ...settings,
       formatId: 'openai-chat:plain',
@@ -95,7 +101,7 @@ describe('failed native Mistral fused fill', () => {
         const beforeSize = statSync(session.path).size;
         const oldBody = await body(pin, oldSettings);
         const failure = new Error('tokenizer failed in second normalized unit');
-        const factory = createRuntimeTokenizerFactory();
+        const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
         let calls = 0;
         const tokenized = await chatTokenRegistration(
           settings,
@@ -138,9 +144,12 @@ describe('failed native Mistral fused fill', () => {
         await pin.close();
       }
       await session.close();
-      const reopened = await JournalSession.open(session.path);
+      const reopened = await JournalSession.open(
+        session.path,
+        testJournalOptions(),
+      );
       try {
-        const factory = createRuntimeTokenizerFactory();
+        const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
         let estimates = 0;
         let measuredUnits = 0;
         let countCalls = 0;

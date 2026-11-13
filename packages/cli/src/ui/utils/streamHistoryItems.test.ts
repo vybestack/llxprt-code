@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core';
@@ -40,7 +41,11 @@ describe('streamed resume projection', () => {
       yield { speaker: 'ai', blocks: [{ type: 'text', text: 'done' }] };
     }
     const items = [];
-    for await (const item of streamHistoryItems(rows(), 'allowed'))
+    for await (const item of streamHistoryItems(
+      scratchRoots,
+      rows(),
+      'allowed',
+    ))
       items.push(item);
     expect(items.map((item) => item.type)).toStrictEqual([
       'user',
@@ -61,3 +66,5 @@ describe('streamed resume projection', () => {
     ).toBe(3);
   });
 });
+
+const scratchRoots = new ScratchRootOwner();

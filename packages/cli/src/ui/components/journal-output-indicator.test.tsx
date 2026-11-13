@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
@@ -21,7 +22,10 @@ const { createScrollbackPagerStore } = await import(
 );
 
 async function fixture(directory: string) {
-  const session = await JournalSession.create(join(directory, 'session.llxj'));
+  const session = await JournalSession.create(
+    join(directory, 'session.llxj'),
+    testJournalOptions(),
+  );
   for (let index = 0; index < 12; index++) {
     await session.append([
       { speaker: 'human', blocks: [{ type: 'text', text: `anchor-${index}` }] },
@@ -35,6 +39,7 @@ async function fixture(directory: string) {
   };
   const pager = createScrollbackPagerStore({
     filePath: session.path,
+    watermarks: session.store.watermarks,
     pageRows: 4,
     viewport,
     settings: { marginViewports: 1, byteFloorBytes: 65536, purgeDebounceMs: 0 },

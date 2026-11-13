@@ -263,7 +263,10 @@ async function openFixtureClient(
     files,
     messageBus,
   } = stack;
-  const tokenizerFactory = configureProviderTokenizer(providerManager);
+  const tokenizerFactory = configureProviderTokenizer(
+    providerManager,
+    config.scratchRoots,
+  );
   const contentGeneratorFactory =
     overrides.contentGeneratorFactory ?? createRuntimeContentGeneratorFactory();
   const media = new SessionMediaOwner(

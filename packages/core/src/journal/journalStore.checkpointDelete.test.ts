@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
@@ -33,7 +34,11 @@ describe('checkpoint delete (design 4.9, 4.11)', () => {
   const file = (name: string) => path.join(directory(), name);
 
   async function withCheckpoints(name: string): Promise<JournalStore> {
-    const store = await JournalStore.create(file(name), storeDeps());
+    const store = await JournalStore.create(
+      file(name),
+      storeDeps(),
+      testNamedWriters,
+    );
     await appendEach(store, [draftRow(), draftRow(), draftRow()]);
     await store.commit([
       { kind: 'checkpoint', id: 'a', name: 'first', createdAtMs: 1 },

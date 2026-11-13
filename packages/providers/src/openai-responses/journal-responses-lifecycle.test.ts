@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalWriterPoisonedError } from '@vybestack/llxprt-code-core/journal/errors.js';
@@ -141,12 +142,15 @@ describe('native Responses format lifecycle', () => {
       journal: testJournalSeams({ readCounter: counter }, 1, false)
         .dependencies,
     };
-    let session = await JournalSession.create(path, options);
+    let session = await JournalSession.create(
+      path,
+      testJournalOptions(options),
+    );
     try {
       if (seed !== undefined) {
         await session.append(seed);
         await session.close();
-        session = await JournalSession.open(path, options);
+        session = await JournalSession.open(path, testJournalOptions(options));
       }
       await consume(session, counter);
     } finally {
@@ -414,7 +418,10 @@ describe('native Responses format lifecycle', () => {
           session.append([textRow('unacknowledged')]),
         ).rejects.toBeInstanceOf(JournalWriterPoisonedError);
         await session.close();
-        const reopened = await JournalSession.open(session.path);
+        const reopened = await JournalSession.open(
+          session.path,
+          testJournalOptions(),
+        );
         try {
           await verify(reopened);
           await reopened.registerRowFormat(

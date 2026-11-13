@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { join } from 'node:path';
@@ -14,6 +17,8 @@ import type { IContent } from './IContent.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
 import { JournalSession } from './journalSession.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 function row(text: string): IContent {
   return { speaker: 'ai', blocks: [{ type: 'text', text }] };
 }
@@ -25,6 +30,8 @@ async function rows(session: JournalSession): Promise<IContent[]> {
 }
 
 describe('recording as the native primary', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const directory = useTempDir('recording-primary-');
   const cleanup: Array<() => Promise<void>> = [];
   afterEach(async () => {
@@ -64,16 +71,18 @@ describe('recording as the native primary', () => {
     id: string,
     seams?: ReturnType<typeof testJournalSeams>,
   ): JournalRecordingService {
-    return JournalRecordingService.create({
-      sessionId: id,
-      projectHash: 'project',
-      chatsDir: join(directory(), 'chats'),
-      workspaceDirs: ['/work'],
-      provider: 'fake',
-      model: 'fake',
-      journal:
-        seams === undefined ? undefined : { journal: seams.dependencies },
-    });
+    return JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: id,
+        projectHash: 'project',
+        chatsDir: join(directory(), 'chats'),
+        workspaceDirs: ['/work'],
+        provider: 'fake',
+        model: 'fake',
+        journal:
+          seams === undefined ? undefined : { journal: seams.dependencies },
+      }),
+    );
   }
 
   it('writes an accepted group only to the recorder and keeps empty attachment lazy', async () => {
@@ -345,8 +354,11 @@ describe('recording as the native primary', () => {
 
   it('uses real history and integration attachment for foreground selection', async () => {
     const recorder = recording('integration');
-    const history = new HistoryService({});
-    const integration = new RecordingIntegration(recorder);
+    const history = new HistoryService({ scratchRoots: recordingScratchRoots });
+    const integration = new RecordingIntegration(
+      recorder,
+      recordingScratchRoots,
+    );
     cleanup.push(
       () => recorder.dispose(),
       () => history.dispose(),

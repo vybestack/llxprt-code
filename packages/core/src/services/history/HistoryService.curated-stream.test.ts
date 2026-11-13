@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
@@ -6,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { createRowCounters } from '../../recording/journalCounters.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const human = (text: string): IContent => ({
   speaker: 'human',
@@ -25,6 +27,7 @@ describe('bounded curated journal queries', () => {
     it(`matches the independent eager oracle for ${size} rows`, async () => {
       const counters = createRowCounters();
       const service = new HistoryService({
+        scratchRoots: historyScratchRoots,
         attachmentCounters: counters.counters,
       });
       try {
@@ -74,6 +77,7 @@ describe('curated journal query cursor ownership', () => {
     const counters = createRowCounters();
     let activeRows = 0;
     const service = new HistoryService({
+      scratchRoots: historyScratchRoots,
       attachmentCounters: {
         ...counters.counters,
         rowDecoded: () => {
@@ -118,6 +122,7 @@ describe('curated journal query failure and eager-read guards', () => {
     let activeRows = 0;
     let decoded = 0;
     const service = new HistoryService({
+      scratchRoots: historyScratchRoots,
       attachmentCounters: {
         recordDecoded: () => {},
         rowDecoded: () => {

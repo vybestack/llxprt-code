@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -39,6 +40,7 @@ describe('arrival recording physical read cost', () => {
           seams: testJournalSeams({ readCounter: counter }, 1, false),
           compactionDue: () => false,
         }),
+        testNamedWriters,
       );
       const recorder = new JournalArrivalRecorder(store);
       const payload = new TextEncoder().encode('arrival payload');

@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -24,7 +25,7 @@ describe('journal presentation projection', () => {
 
   it('pages UI-only notices with their classification and omits retracted notices', async () => {
     const path = join(directory(), 'notices.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     try {
       const writer = new JournalDisplayWriter(session.store);
       const transient = await writer.append({ type: 'info' }, 'temporary');
@@ -53,7 +54,7 @@ describe('journal presentation projection', () => {
 
   it('keeps an acknowledged failed shell prefix readable', async () => {
     const path = join(directory(), 'failed-shell.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     const source = (async function* () {
       yield 'shell prefix before failure';
       throw new Error('shell source failed');
@@ -78,7 +79,7 @@ describe('journal presentation projection', () => {
 
   it('renders a completed tool presentation before its model response is committed', async () => {
     const path = join(directory(), 'presentation-before-response.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     try {
       await session.append([
         {
@@ -134,7 +135,7 @@ describe('journal presentation projection', () => {
 
   it('joins a distinct tool presentation through the disk relation without rendering a second row', async () => {
     const path = join(directory(), 'tools.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     try {
       await session.append([
         {

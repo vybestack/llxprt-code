@@ -113,7 +113,7 @@ function runtime(baseURL: string, retries = 2) {
     model: 'o3-mini',
     debugMode: false,
   });
-  const tokenizerFactory = createRuntimeTokenizerFactory();
+  const tokenizerFactory = createRuntimeTokenizerFactory(config.scratchRoots);
   const provider = new OpenAIResponsesProvider('test-key', baseURL);
   const context = { config, settingsService: settings, runtimeId: root() };
   const invocation = captureProviderInvocation(
@@ -211,7 +211,7 @@ async function runOracle(large: boolean): Promise<number> {
     expect(http.bodies).toStrictEqual([expected, expected]);
     expect(fixture.state.closed).toBe(1);
     expect(fixture.state.active).toBe(0);
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
     return enforcedTokens;
   } finally {
     await stream?.return?.();
@@ -306,7 +306,7 @@ async function testActualSeamRetry(): Promise<void> {
       expectedDigest(64, false, retryInstructions),
     ]);
     expect(fixture.state.closed).toBe(1);
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
   } finally {
     await stream?.return?.();
     await http.server.stop(true);
@@ -359,7 +359,7 @@ async function actualResponseCancellation(
     }
     expect(fixture.state.closed).toBe(1);
     expect(fixture.state.active).toBe(0);
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
     return outcome;
   } finally {
     await stream?.return?.();

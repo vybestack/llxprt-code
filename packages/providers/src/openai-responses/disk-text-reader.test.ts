@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { requestSelection } from './__tests__/support/request-selection.js';
 import { NativeResponsesEstimateProjection } from './native-responses-estimate.js';
@@ -14,7 +14,7 @@ describe('actual prepared native reader ownership', () => {
   it('propagates source I/O failure and releases the body lease without creating prompt segments', async () => {
     const disk = diskTextFixture(false, false);
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
-    const before = new Set(readdirSync(getScratchRoot()));
+    const before = new Set(readdirSync(setup.config.scratchRoots.getRoot()));
     const options = setup.options(requestSelection(disk.rows));
     const projection = await setup.provider.projectPromptEnvelope(options);
     const savedFetch = globalThis.fetch;
@@ -46,10 +46,12 @@ describe('actual prepared native reader ownership', () => {
         estimatePromptEnvelope(setup.provider.name, projection, setup.factory),
       ).rejects.toThrow('closed');
       expect(
-        readdirSync(getScratchRoot()).filter((name) => !before.has(name)),
+        readdirSync(setup.config.scratchRoots.getRoot()).filter(
+          (name) => !before.has(name),
+        ),
       ).toStrictEqual([]);
       expect(disk.state.active).toBe(0);
-      expect(activeRequestBodyCount()).toBe(0);
+      expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
     } finally {
       globalThis.fetch = savedFetch;
       await projection.releaseIfUnsent?.();

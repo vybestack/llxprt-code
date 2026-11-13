@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
@@ -25,6 +26,7 @@ import {
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { ConversationManager } from './ConversationManager.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const modelTools = installModelToolFixture();
 
@@ -36,7 +38,7 @@ function managerFor(history: HistoryService): ConversationManager {
   });
   const providers = new TestRuntimeProviderManager(providerRuntime);
   providers.setConfig(config);
-  configureProviderTokenizer(providers);
+  configureProviderTokenizer(providers, history.scratchRoots);
   providers.registerProvider({
     name: 'pairing',
     isDefault: true,
@@ -47,6 +49,7 @@ function managerFor(history: HistoryService): ConversationManager {
   return new ConversationManager(
     history,
     createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {
@@ -97,6 +100,7 @@ describe('ConversationManager tool pairing cursor', () => {
       const ownership = new RowOwnership();
       const counters = createRowCounters();
       const history = new HistoryService({
+        scratchRoots: historyScratchRoots,
         attachmentCounters: { ...counters.counters, ownership },
       });
       try {
@@ -138,6 +142,7 @@ describe('ConversationManager neutral tool recording', () => {
   it('leaves neutral tool response IDs and blocks intact without prematurely opening a matcher', async () => {
     const counters = createRowCounters();
     const history = new HistoryService({
+      scratchRoots: historyScratchRoots,
       attachmentCounters: counters.counters,
     });
     try {
@@ -182,7 +187,7 @@ describe('ConversationManager neutral tool recording', () => {
 
 describe('ConversationManager tool cursor exhaustion', () => {
   it('does not pair a call responded to at the end of history and returns done on exhaustion', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.addBatch([
         callRow(0),
@@ -218,7 +223,7 @@ describe('ConversationManager tool cursor cleanup', () => {
   it('applies backpressure and releases both owners and disk state when a consumer throws', async () => {
     const root = mkdtempSync(join(tmpdir(), 'matcher-test-'));
     const ownership = new RowOwnership();
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.addBatch([callRow(0), callRow(1)]);
       const manager = managerFor(history);

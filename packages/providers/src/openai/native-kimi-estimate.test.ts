@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
@@ -16,6 +17,7 @@ import {
 import { prepareRequest } from './OpenAIRequestPreparation.js';
 import { prepareRequestBody } from './__tests__/support/prepareRequestBody.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const logger = new DebugLogger('native-kimi-estimate-test');
 const model = 'unregistered-kimi-compatible';
@@ -98,7 +100,7 @@ describe('native Kimi estimates through production preparation', () => {
           const actual = await estimatePromptEnvelope(
             'openai',
             projection,
-            createRuntimeTokenizerFactory(),
+            createRuntimeTokenizerFactory(tokenizerScratchRoots),
           );
           expect(actual.estimatedPromptTokens).toBe(expected);
         } finally {

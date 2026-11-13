@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
@@ -33,7 +34,7 @@ describe('request-only Kimi mappings', () => {
   it('counts split-row fallbacks only before their cumulative native unit', async () => {
     const session = await JournalSession.create(
       `${directory()}/split-fallback.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     const rows: readonly IContent[] = [
       { speaker: 'ai', blocks: [call('known', 'read')] },
@@ -62,9 +63,9 @@ describe('request-only Kimi mappings', () => {
   it('overrides two earlier calls with a named pending duplicate without changing the pin', async () => {
     const session = await JournalSession.create(
       `${directory()}/duplicate.llxj`,
-      {
+      testJournalOptions({
         journal: testJournalSeams().dependencies,
-      },
+      }),
     );
     const rows: readonly IContent[] = [
       { speaker: 'ai', blocks: [call('x', 'first')] },
@@ -107,7 +108,7 @@ describe('request-only Kimi mappings', () => {
   it('continues the pinned mapping through append, native removal rebuild and prefix pop', async () => {
     const session = await JournalSession.create(
       `${directory()}/mutations.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     const rows: readonly IContent[] = [
       { speaker: 'ai', blocks: [call('x', 'first')] },
@@ -160,9 +161,9 @@ describe('request-only Kimi mappings', () => {
   it('uses emitted reconstructed units and their positions rather than raw pending order', async () => {
     const session = await JournalSession.create(
       `${directory()}/reconstruction.llxj`,
-      {
+      testJournalOptions({
         journal: testJournalSeams().dependencies,
-      },
+      }),
     );
     const rows: readonly IContent[] = [
       {

@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '../storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import * as fs from 'node:fs';
@@ -26,7 +27,7 @@ function updatedRow(index: number): NumericRow {
 }
 
 function withDirectory(run: (directory: MutableRowDirectory) => void): void {
-  const directory = new MutableRowDirectory();
+  const directory = new MutableRowDirectory(scratchRoots.getRoot());
   try {
     run(directory);
   } finally {
@@ -142,3 +143,5 @@ describe('row replacement I/O failures', () => {
     });
   }
 });
+
+const scratchRoots = new ScratchRootOwner();

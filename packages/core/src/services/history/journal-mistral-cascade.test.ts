@@ -1,3 +1,4 @@
+import { testNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { appendFileSync } from 'node:fs';
@@ -27,17 +28,21 @@ describe('Mistral historical collision cascades', () => {
   it.each([2, 129])(
     'walks %s changed historical IDs from one pending identity without replay',
     async (count) => {
-      const store = await JournalStore.create(`${directory()}/cascade.llxj`, {
-        journal: testJournalSeams({}, 1, false).dependencies,
-        idDeps: {
-          hasher: sha256KeyHash,
-          occurrenceSpace: 'source-with-normalized',
-          normalizers: { openai: (id) => id, anthropic: (id) => id },
-          mistralCandidate: candidate,
+      const store = await JournalStore.create(
+        `${directory()}/cascade.llxj`,
+        {
+          journal: testJournalSeams({}, 1, false).dependencies,
+          idDeps: {
+            hasher: sha256KeyHash,
+            occurrenceSpace: 'source-with-normalized',
+            normalizers: { openai: (id) => id, anthropic: (id) => id },
+            mistralCandidate: candidate,
+          },
+          planOccurrences: planSourceRowOccurrences,
+          algebra: rowAlgebra,
         },
-        planOccurrences: planSourceRowOccurrences,
-        algebra: rowAlgebra,
-      });
+        testNamedWriters,
+      );
       const ids = Array.from(
         { length: count },
         (_, index) => `historical-raw-${index}`,

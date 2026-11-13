@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 /**
  * Test to reproduce duplicate tool call IDs during compression
@@ -16,10 +17,12 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { ContentConverters } from '../services/history/ContentConverters.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { encodeForProvider } from './__tests__/support/compression-wire-fixture.js';
+const historyScratchRoots = createTestScratchOwner();
+
 const histories: HistoryService[] = [];
 
 function createHistory(): HistoryService {
-  const history = new HistoryService({});
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   histories.push(history);
   return history;
 }

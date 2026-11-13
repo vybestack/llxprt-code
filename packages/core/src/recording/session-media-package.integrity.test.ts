@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -214,6 +215,8 @@ describe('session media package integrity and cancellation', () => {
       join(tempDirectory, 'digest-destination', 'chats'),
       PROJECT_HASH,
       store,
+      undefined,
+      testJournalOptions(),
     );
     for (const bytes of [FIRST_BYTES, SECOND_BYTES]) {
       const stored = await readFile(
@@ -261,7 +264,14 @@ describe('session media package integrity and cancellation', () => {
     const chats = join(tempDirectory, 'cancel-reserve', 'chats');
 
     await expect(
-      importSessionMediaPackage(exported.directory, chats, PROJECT_HASH, store),
+      importSessionMediaPackage(
+        exported.directory,
+        chats,
+        PROJECT_HASH,
+        store,
+        undefined,
+        testJournalOptions(),
+      ),
     ).rejects.toMatchObject({ name: 'AbortError' });
 
     await expectUntouchedDestination(store, exported.references, chats);
@@ -282,6 +292,7 @@ describe('session media package integrity and cancellation', () => {
         async () => {
           throw abortError();
         },
+        testJournalOptions(),
       ),
     ).rejects.toMatchObject({ name: 'AbortError' });
 
@@ -298,7 +309,14 @@ describe('session media package integrity and cancellation', () => {
     const chats = join(tempDirectory, 'missing-blob', 'chats');
 
     await expect(
-      importSessionMediaPackage(exported.directory, chats, PROJECT_HASH, store),
+      importSessionMediaPackage(
+        exported.directory,
+        chats,
+        PROJECT_HASH,
+        store,
+        undefined,
+        testJournalOptions(),
+      ),
     ).rejects.toThrow(missing);
 
     await expectUntouchedDestination(store, exported.references, chats);
@@ -315,7 +333,14 @@ describe('session media package integrity and cancellation', () => {
     const chats = join(tempDirectory, 'corrupt-blob', 'chats');
 
     await expect(
-      importSessionMediaPackage(exported.directory, chats, PROJECT_HASH, store),
+      importSessionMediaPackage(
+        exported.directory,
+        chats,
+        PROJECT_HASH,
+        store,
+        undefined,
+        testJournalOptions(),
+      ),
     ).rejects.toThrow(/corrupt/);
 
     await expectUntouchedDestination(store, exported.references, chats);
@@ -332,7 +357,14 @@ describe('session media package integrity and cancellation', () => {
     const chats = join(tempDirectory, 'late-corrupt', 'chats');
 
     await expect(
-      importSessionMediaPackage(validated, chats, PROJECT_HASH, store),
+      importSessionMediaPackage(
+        validated,
+        chats,
+        PROJECT_HASH,
+        store,
+        undefined,
+        testJournalOptions(),
+      ),
     ).rejects.toThrow(/changed during publication/);
 
     await expectUntouchedDestination(store, exported.references, chats);

@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -15,21 +18,28 @@ import {
   userRow,
 } from './__tests__/support/recordedJournals.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 async function recordedHistory(
   chats: string,
   rows: readonly IContent[],
 ): Promise<string> {
-  const history = new HistoryService({});
-  const recording = JournalRecordingService.create({
-    sessionId: 'extension',
-    projectHash: PROJECT,
-    chatsDir: chats,
-    workspaceDirs: ['/work'],
-    provider: 'unknown',
-    model: '',
-    journal: journalSeams(),
-  });
-  const integration = new RecordingIntegration(recording);
+  const history = new HistoryService({ scratchRoots: recordingScratchRoots });
+  const recording = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: 'extension',
+      projectHash: PROJECT,
+      chatsDir: chats,
+      workspaceDirs: ['/work'],
+      provider: 'unknown',
+      model: '',
+      journal: journalSeams(),
+    }),
+  );
+  const integration = new RecordingIntegration(
+    recording,
+    recordingScratchRoots,
+  );
   try {
     await integration.subscribeToJournal(history);
     for (const row of rows) history.add(row);
@@ -45,6 +55,8 @@ async function recordedHistory(
 }
 
 describe('native discovery extension behavior through real recording', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   it('selects the first nonempty human text and concatenates its text blocks without media or assistant text', async () => {
     const chats = join(await discoveryDirectory('preview-parts'), 'chats');
     const file = await recordedHistory(chats, [

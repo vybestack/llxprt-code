@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 import { checkpointBindings } from '../../__tests__/recording-checkpoint-fixture.js';
 /**
  * @license
@@ -32,6 +34,7 @@ import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
 import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 import { createCompletionHandler } from './schema/index.js';
 import type { SlashCommand } from './types.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const PROJECT_HASH = 'chat-command-checkpoints';
 
@@ -58,7 +61,7 @@ let mutationHistory: HistoryService | undefined;
 let displayed: unknown[];
 
 async function installHistory(rows: readonly IContent[]): Promise<void> {
-  mutationHistory = new HistoryService();
+  mutationHistory = new HistoryService({ scratchRoots: historyScratchRoots });
   const history = mutationHistory;
   await history.replaceBatch(rows);
   displayed = [];
@@ -173,15 +176,17 @@ async function chatCommandCase0(): Promise<void> {
     rootDirectory: join(root, 'media'),
     quotaBytes: 1024 * 1024,
   });
-  recording = await createLockedSessionRecorder({
-    sessionId: crypto.randomUUID(),
-    projectHash: PROJECT_HASH,
-    chatsDir,
-    workspaceDirs: [root],
-    cwd: root,
-    provider: 'fake',
-    model: 'fake-model',
-  });
+  recording = await createLockedSessionRecorder(
+    withTestNamedWriters({
+      sessionId: crypto.randomUUID(),
+      projectHash: PROJECT_HASH,
+      chatsDir,
+      workspaceDirs: [root],
+      cwd: root,
+      provider: 'fake',
+      model: 'fake-model',
+    }),
+  );
   await recordRowsForTest(recording, [content('human', 'A')]);
   await recordRowsForTest(recording, [content('ai', 'B')]);
   await recording.flush();
@@ -380,15 +385,17 @@ function chatCommandCase12(): void {
   describe('reports an error when saving an empty recording', () => {
     it('reports an error when saving an empty recording', async () => {
       await recording.dispose();
-      recording = await createLockedSessionRecorder({
-        sessionId: crypto.randomUUID(),
-        projectHash: PROJECT_HASH,
-        chatsDir,
-        workspaceDirs: [root],
-        cwd: root,
-        provider: 'fake',
-        model: 'fake-model',
-      });
+      recording = await createLockedSessionRecorder(
+        withTestNamedWriters({
+          sessionId: crypto.randomUUID(),
+          projectHash: PROJECT_HASH,
+          chatsDir,
+          workspaceDirs: [root],
+          cwd: root,
+          provider: 'fake',
+          model: 'fake-model',
+        }),
+      );
 
       expect(await command('save').action?.(context, 'empty')).toStrictEqual({
         type: 'message',

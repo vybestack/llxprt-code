@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { RecordingIntegration } from '../../recording/RecordingIntegration.js';
@@ -8,9 +11,12 @@ import {
   persistedMutationRows,
   useServiceRecorderMutations,
 } from './__tests__/support/service-recorder-mutations.js';
-import { historyOriginId } from './historyOriginId.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 describe('recorded HistoryService repeat-sequence pop', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const fixture = useServiceRecorderMutations();
 
   it('self-merges A B then durably pops only the final B and A across real resume', async () => {
@@ -22,7 +28,7 @@ describe('recorded HistoryService repeat-sequence pop', () => {
     await integration.flushAtTurnBoundary();
     const initial = await persistedMutationRows(recording);
     expect(initial.map(({ origin: owner }) => owner)).toStrictEqual([
-      historyOriginId(origin),
+      history.originIds.get(origin),
       undefined,
     ]);
     expect(initial.map(({ content }) => content.blocks)).toStrictEqual([
@@ -57,17 +63,25 @@ describe('recorded HistoryService repeat-sequence pop', () => {
     await history.dispose();
     await recording.dispose();
 
-    const resumed = await resumeSession({
-      continueRef: recording.getSessionId(),
-      projectHash: recording.getProjectHash(),
-      chatsDir: recording.getChatsDir(),
-      currentProvider: 'anthropic',
-      currentModel: 'model-1',
-      workspaceDirs: ['/work'],
-    });
+    const resumed = await resumeSession(
+      withTestNamedWriters({
+        continueRef: recording.getSessionId(),
+        projectHash: recording.getProjectHash(),
+        chatsDir: recording.getChatsDir(),
+        currentProvider: 'anthropic',
+        currentModel: 'model-1',
+        workspaceDirs: ['/work'],
+      }),
+    );
     if (!resumed.ok) throw new Error(resumed.error);
-    const restored = new HistoryService({});
-    const resumedIntegration = new RecordingIntegration(resumed.recording);
+    const restored = new HistoryService({
+      scratchRoots: recordingScratchRoots,
+      originIds: history.originIds,
+    });
+    const resumedIntegration = new RecordingIntegration(
+      resumed.recording,
+      recordingScratchRoots,
+    );
     try {
       await restored.adoptResumeBoot(resumed.recording, resumed.boot);
       await resumedIntegration.subscribeToJournal(restored, origin);

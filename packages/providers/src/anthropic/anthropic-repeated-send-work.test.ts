@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { NativeAnthropicEstimateProjection } from './native-anthropic-estimate.js';
 import { getO200kBaseEncoder } from '../tokenizers/o200kBaseCounter.js';
@@ -61,9 +62,9 @@ describe('Anthropic repeated atom conversion', () => {
       const physical = { reads: 0, bytes: 0 };
       const session = await JournalSession.create(
         `${directory()}/work-${count}.llxj`,
-        {
+        testJournalOptions({
           journal: testJournalSeams({ readCounter: physical }).dependencies,
-        },
+        }),
       );
       function* rows(): Generator<
         import('@vybestack/llxprt-code-core/services/history/IContent.js').IContent
@@ -168,9 +169,12 @@ describe('Anthropic repeated atom conversion', () => {
     }, 180000);
   }
   it('reuses a topology seek while replaying the same merged run', async () => {
-    const session = await JournalSession.create(`${directory()}/seek.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/seek.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     await session.append(
       Array.from(
         { length: 40 },
@@ -221,9 +225,12 @@ describe('Anthropic repeated atom conversion', () => {
     }
   });
   it('decodes a source row once for repeated descriptions and redaction passes', async () => {
-    const session = await JournalSession.create(`${directory()}/rows.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/rows.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     await session.append([
       { speaker: 'ai', blocks: [{ type: 'text', text: 'payload 雪' }] },
     ]);

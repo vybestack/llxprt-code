@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import {
   noopLogger,
   convertOptions,
@@ -514,7 +515,9 @@ function facadeCallback9(): void {
 }
 
 async function facadeCallback10(): Promise<void> {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const toolCallId = 'tool_anchor_1';
   const contents: IContent[] = [
     human('do the thing'),
@@ -815,3 +818,4 @@ import {
   prepare,
   countRequestCacheControls,
 } from './__tests__/support/anthropic-anchor-cache-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();

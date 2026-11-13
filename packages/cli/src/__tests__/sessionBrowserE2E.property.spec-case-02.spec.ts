@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -78,7 +79,10 @@ describe('Property-based tests #2', () => {
             });
 
             // Use the unique prefix "unique-"
-            const result = await performResume('unique-', context);
+            const result = await performResume(
+              'unique-',
+              withTestNamedWriters(context),
+            );
 
             expect(result.ok).toBe(true);
             assertTruthy(result.ok);

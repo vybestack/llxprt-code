@@ -1,3 +1,5 @@
+import { afterAll as afterRequestTests } from 'bun:test';
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
@@ -15,7 +17,8 @@ import {
   cancellableSerialization,
   withSerializationCleanup,
 } from './responses-serialization-lifecycle.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
+const requestScratchRoots = new ScratchRootOwner();
 
 const context = {
   includeReasoningInContext: false,
@@ -45,13 +48,13 @@ async function checkpoint<T>(promise: Promise<T>): Promise<T | 'pending'> {
 }
 
 function workspace(before: ReadonlySet<string>): string[] {
-  return readdirSync(getScratchRoot())
+  return readdirSync(requestScratchRoots.getRoot())
     .filter((name) => !before.has(name))
-    .map((name) => join(getScratchRoot(), name));
+    .map((name) => join(requestScratchRoots.getRoot(), name));
 }
 
 async function blockedSerialization(failure?: Error): Promise<number> {
-  const before = new Set(readdirSync(getScratchRoot()));
+  const before = new Set(readdirSync(requestScratchRoots.getRoot()));
   const started = gate();
   const blocked = gate();
   const controller = new AbortController();
@@ -77,7 +80,11 @@ async function blockedSerialization(failure?: Error): Promise<number> {
       closed = true;
     }
   }
-  const pending = readOwnedSource(contents(), controller.signal);
+  const pending = readOwnedSource(
+    contents(),
+    requestScratchRoots,
+    controller.signal,
+  );
   const observed = pending.then(
     (prompt) => {
       bodies.push(prompt);
@@ -116,6 +123,8 @@ async function blockedSerialization(failure?: Error): Promise<number> {
 }
 
 describe('Responses pending-source abort ownership', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('rejects the request before source settlement and cleans after manual unblock', async () => {
     expect(await blockedSerialization()).toBe(0);
   });
@@ -127,6 +136,8 @@ describe('Responses pending-source abort ownership', () => {
 });
 
 describe('Responses aborted history fencing', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('fences new readers before the pending source settles', async () => {
     const started = gate();
     const blocked = gate();
@@ -142,6 +153,7 @@ describe('Responses aborted history fencing', () => {
           yield row;
         },
       },
+      requestScratchRoots,
       controller.signal,
     );
     const reader = owner.stream()[Symbol.asyncIterator]();
@@ -177,6 +189,8 @@ describe('Responses aborted history fencing', () => {
 });
 
 describe('Responses external source cleanup failure', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('preserves source and iterator-return failures rather than replacing either', async () => {
     const started = gate();
     const blocked = gate();
@@ -198,7 +212,11 @@ describe('Responses external source cleanup failure', () => {
         };
       },
     };
-    const pending = readOwnedSource(contents, controller.signal);
+    const pending = readOwnedSource(
+      contents,
+      requestScratchRoots,
+      controller.signal,
+    );
     const observed = pending.then(
       () => 'resolved',
       (error: unknown) => error,
@@ -222,8 +240,10 @@ describe('Responses external source cleanup failure', () => {
 });
 
 describe('Responses delayed iterator-return cleanup', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('returns the source only after its pending pull settles and waits for return settlement', async () => {
-    const before = new Set(readdirSync(getScratchRoot()));
+    const before = new Set(readdirSync(requestScratchRoots.getRoot()));
     const nextStarted = gate();
     const unblockNext = gate();
     const returnStarted = gate();
@@ -248,7 +268,11 @@ describe('Responses delayed iterator-return cleanup', () => {
         };
       },
     };
-    const pending = readOwnedSource(contents, controller.signal);
+    const pending = readOwnedSource(
+      contents,
+      requestScratchRoots,
+      controller.signal,
+    );
     const observed = pending.then(
       () => 'resolved',
       (error: unknown) => error,
@@ -277,8 +301,10 @@ describe('Responses delayed iterator-return cleanup', () => {
 });
 
 describe('Responses stateful cancellation ownership', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('cleans the sealed base and blocked incremental workspace after manual unblock', async () => {
-    const before = new Set(readdirSync(getScratchRoot()));
+    const before = new Set(readdirSync(requestScratchRoots.getRoot()));
     const started = gate();
     const blocked = gate();
     const controller = new AbortController();
@@ -298,6 +324,7 @@ describe('Responses stateful cancellation ownership', () => {
           async () => {
             const incrementalRead = readOwnedSource(
               incremental(),
+              requestScratchRoots,
               controller.signal,
             );
             try {

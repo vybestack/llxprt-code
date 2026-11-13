@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from './journalSession.js';
@@ -44,21 +45,24 @@ describe('lazy native normalization block references', () => {
   it('holds only references for relocated responses until one block is consumed', async () => {
     const lengths: number[] = [];
     const base = testJournalSeams({}, 1, false).dependencies;
-    const session = await JournalSession.create(`${directory()}/lazy.llxj`, {
-      journal: {
-        ...base,
-        open: async (path, flags) => {
-          const handle = await base.open(path, flags);
-          return {
-            ...handle,
-            read: async (buffer, offset, length, position) => {
-              lengths.push(length);
-              return handle.read(buffer, offset, length, position);
-            },
-          };
+    const session = await JournalSession.create(
+      `${directory()}/lazy.llxj`,
+      testJournalOptions({
+        journal: {
+          ...base,
+          open: async (path, flags) => {
+            const handle = await base.open(path, flags);
+            return {
+              ...handle,
+              read: async (buffer, offset, length, position) => {
+                lengths.push(length);
+                return handle.read(buffer, offset, length, position);
+              },
+            };
+          },
         },
-      },
-    });
+      }),
+    );
     const ids = ['a', 'b', 'c'];
     try {
       await session.append([
@@ -98,9 +102,12 @@ describe('lazy native normalization block references', () => {
     }
   });
   it('fails on invalid block coordinates and mismatched response identities', async () => {
-    const session = await JournalSession.create(`${directory()}/invalid.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/invalid.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([{ speaker: 'tool', blocks: [response('a')] }]);
       const snapshot = await session.store.snapshot();

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { appendFile, utimes, writeFile } from 'node:fs/promises';
@@ -34,15 +35,17 @@ describe('bounded native journal resume', () => {
   async function resume(
     overrides: Partial<ResumeRequest> = {},
   ): ReturnType<typeof resumeSession> {
-    const result = await resumeSession({
-      continueRef: CONTINUE_LATEST,
-      projectHash: PROJECT_HASH,
-      chatsDir: directory(),
-      currentProvider: 'test',
-      currentModel: 'model',
-      workspaceDirs: ['/test/workspace'],
-      ...overrides,
-    });
+    const result = await resumeSession(
+      withTestNamedWriters({
+        continueRef: CONTINUE_LATEST,
+        projectHash: PROJECT_HASH,
+        chatsDir: directory(),
+        currentProvider: 'test',
+        currentModel: 'model',
+        workspaceDirs: ['/test/workspace'],
+        ...overrides,
+      }),
+    );
     if (result.ok) recordings.push(result.recording);
     return result;
   }

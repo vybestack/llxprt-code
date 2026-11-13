@@ -508,8 +508,8 @@ Result: every proposed contract passes the real analyzer. The guard reports a `r
 How it was run. `W/tmp/pr3911-plan/b6-probe.ts` builds the agents program (`packages/agents/tsconfig.noemit.json`, non-test files) plus one in-memory probe file at `packages/agents/src/api/pr3911-plan-probe.ts`, resolves the ten root symbols from `productionPolicy.services` the way `check-runtime-state-boundary.ts` does, and prints `serviceAnalyzer`'s result for every `Probe_*` declaration; it then runs `scanRuntimeServiceProgram` on the probe file. No source file is written. The CLI contracts use the same script with `packages/cli/tsconfig.noemit.json` and a virtual path under `packages/cli/src/config/`.
 
 ```
-exec < /dev/null; cd /Volumes/XS1000/acoliver/projects/llxprt/branch-2/llxprt-code/tmp/w2616k && bun tmp/pr3911-plan/b6-probe.ts tmp/pr3911-plan/probe-final.ts
-exec < /dev/null; cd /Volumes/XS1000/acoliver/projects/llxprt/branch-2/llxprt-code/tmp/w2616k && bun tmp/pr3911-plan/b6-probe.ts tmp/pr3911-plan/probe-cli-final.ts packages/cli/tsconfig.noemit.json packages/cli/src/config/pr3911-plan-probe.ts
+exec < /dev/null; cd W && bun tmp/pr3911-plan/b6-probe.ts tmp/pr3911-plan/probe-final.ts
+exec < /dev/null; cd W && bun tmp/pr3911-plan/b6-probe.ts tmp/pr3911-plan/probe-cli-final.ts packages/cli/tsconfig.noemit.json packages/cli/src/config/pr3911-plan-probe.ts
 ```
 
 Each probe interface uses the exact member lists written in the sections above, with named types. The first probe run in the previous draft typed most B6 members as `Parameters<F>[n]`; the analyzer does not see tuple elements, so those results were empty for the wrong reason and are discarded. Coders re-run the probe (or, once the interface exists in source, `npm run check:runtime-boundary`) in the task that writes each interface.

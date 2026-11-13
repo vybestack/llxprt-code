@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -16,7 +17,9 @@ async function seedTextRows(
   config: JournalRecordingConfig,
   rows: number,
 ): Promise<void> {
-  const recording = JournalRecordingService.create(config);
+  const recording = JournalRecordingService.create(
+    withTestNamedWriters(config),
+  );
   try {
     await (
       await recording.session()
@@ -38,13 +41,15 @@ async function readResumedTextRows(
   config: JournalRecordingConfig,
   rows: number,
 ): Promise<void> {
-  const resumed = await resumeSession({
-    ...config,
-    continueRef: config.sessionId,
-    currentProvider: config.provider,
-    currentModel: config.model,
-    counters: createRowCounters().counters,
-  });
+  const resumed = await resumeSession(
+    withTestNamedWriters({
+      ...config,
+      continueRef: config.sessionId,
+      currentProvider: config.provider,
+      currentModel: config.model,
+      counters: createRowCounters().counters,
+    }),
+  );
   if (!resumed.ok) throw new Error(resumed.error);
   try {
     let streamed = 0;

@@ -156,6 +156,8 @@ export class SessionClientOwner {
         storageRoot: this.environment.config.storageRoot,
         projectTempDir: this.environment.config.projectTempDir,
         projectChatsDir: this.environment.config.projectChatsDir,
+        namedWriters: this.environment.config.namedWriters,
+        scratchRoots: this.environment.config.scratchRoots,
         projectRoot: this.environment.config.getProjectRoot(),
         persistenceQueueBytes:
           this.environment.config.getSessionPersistenceQueueByteLimit(),
@@ -253,7 +255,7 @@ export class SessionClientOwner {
   readonly closeImageAdmission = this.images.close.bind(this.images);
 
   readonly operations: Agent['sessionClient'] = {
-    fetch: (input, init) => this.clients.fetch(input, init),
+    fetch: (input, init) => this.clients.fetchWithLifetime(input, init),
     refreshAuth: (method) => this.clients.refreshAuth(method),
     publishTools: () => this.clients.publishTools(),
     runImageOperation: (input) => this.runImageOperation(input),

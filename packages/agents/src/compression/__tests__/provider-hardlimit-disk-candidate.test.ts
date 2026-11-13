@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
@@ -7,6 +8,7 @@ import {
 } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { publishProviderFallbackCandidate } from '../providerFallbackCandidate.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('disk provider candidate pending publication', () => {
   it('publishes a detached provider candidate with correct durable values', async () => {
@@ -15,7 +17,7 @@ describe('disk provider candidate pending publication', () => {
       const adding = history.addBatch([caller]);
       releaseWriter();
       await adding;
-      const rows = new HistoryDensityRows();
+      const rows = new HistoryDensityRows(historyScratchRoots);
       try {
         rows.appendSanitized(caller);
         await publishProviderFallbackCandidate(
@@ -36,7 +38,7 @@ describe('disk provider candidate pending publication', () => {
     await withRollbackFixture(async (history) => {
       const original = rollbackRow(0);
       await history.addBatch([original]);
-      const rows = new HistoryDensityRows();
+      const rows = new HistoryDensityRows(historyScratchRoots);
       try {
         rows.append(rollbackRow(1));
         await expect(

@@ -28,7 +28,10 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { suspendJournalMaintenance } from '@vybestack/llxprt-code-core/journal/deferred-maintenance.js';
+import {
+  suspendJournalMaintenance,
+  JournalMaintenanceScope,
+} from '@vybestack/llxprt-code-core/journal/deferred-maintenance.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -155,6 +158,7 @@ export class AgenticLoop {
   private readonly config: AgenticLoopOptions['config'];
   private readonly tools: AgenticLoopOptions['tools'];
   private readonly displayCallbacks: AgenticLoopOptions['displayCallbacks'];
+  private readonly maintenanceScope: JournalMaintenanceScope;
   private retired = false;
 
   retire(): void {
@@ -172,6 +176,8 @@ export class AgenticLoop {
   private pendingSteer: string[] = [];
 
   constructor(options: AgenticLoopOptions) {
+    this.maintenanceScope =
+      options.maintenanceScope ?? new JournalMaintenanceScope();
     this.streamModel = options.streamModel;
     this.recordToolHistory = options.recordToolHistory;
     this.recordToolPresentations = options.recordToolPresentations;
@@ -273,7 +279,9 @@ export class AgenticLoop {
     let primary: unknown;
     try {
       unsubscribe = this.tools.begin();
-      resumeMaintenance = await suspendJournalMaintenance();
+      resumeMaintenance = await suspendJournalMaintenance(
+        this.maintenanceScope,
+      );
       let currentMessage = message;
       const initialPromptId = promptId ?? this.generateInitialPromptId();
       let currentPromptId = initialPromptId;

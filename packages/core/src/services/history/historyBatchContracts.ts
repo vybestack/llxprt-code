@@ -1,3 +1,6 @@
+import type { ScratchRootOwner } from '../../storage/scratch-root.js';
+import type { HistoryOriginIds } from './historyOriginId.js';
+import type { JournalMaintenanceScope } from '../../journal/deferred-maintenance.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -38,6 +41,9 @@ import type {
 } from './historyEventTypes.js';
 
 export interface HistoryServiceJournalOptions {
+  readonly scratchRoots: ScratchRootOwner;
+  readonly originIds?: HistoryOriginIds;
+  readonly maintenanceScope?: JournalMaintenanceScope;
   readonly recording?: SessionRecordingPort;
   readonly attachmentCounters?: JournalReadCounters;
   readonly mutationOwnership?: RowOwnership;

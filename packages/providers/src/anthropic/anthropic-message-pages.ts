@@ -11,7 +11,17 @@ interface MessagePage {
   dirty: boolean;
 }
 // One numeric page per reader/writer, independent of the history length.
-const pages = new WeakMap<ScalarFacts, MessagePage>();
+const MESSAGE_PAGE = Symbol('anthropicMessagePage');
+class MessagePages {
+  current: MessagePage | undefined;
+}
+function pagesFor(facts: ScalarFacts): MessagePages {
+  if (MESSAGE_PAGE in facts && facts[MESSAGE_PAGE] instanceof MessagePages)
+    return facts[MESSAGE_PAGE];
+  const pages = new MessagePages();
+  Object.defineProperty(facts, MESSAGE_PAGE, { value: pages });
+  return pages;
+}
 
 async function save(facts: ScalarFacts, page: MessagePage): Promise<void> {
   if (!page.dirty) return;
@@ -29,7 +39,7 @@ async function pageAt(
   facts: ScalarFacts,
   ordinal: number,
 ): Promise<MessagePage> {
-  const current = pages.get(facts);
+  const current = pagesFor(facts).current;
   if (current?.ordinal === ordinal) return current;
   if (current !== undefined) await save(facts, current);
   const bytes = await facts.getBytes(['message-page', ordinal]);
@@ -46,7 +56,7 @@ async function pageAt(
       values.push(view.getUint32(at, true));
   }
   const page = { ordinal, values, dirty: false };
-  pages.set(facts, page);
+  pagesFor(facts).current = page;
   return page;
 }
 
@@ -87,6 +97,6 @@ export async function writeMessageScalars(
 export async function flushMessagePages(
   writer: NativeFactIndexWriter,
 ): Promise<void> {
-  const page = pages.get(writer);
+  const page = pagesFor(writer).current;
   if (page !== undefined) await save(writer, page);
 }

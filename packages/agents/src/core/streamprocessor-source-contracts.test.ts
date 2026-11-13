@@ -287,7 +287,9 @@ describe('actual source response ownership', () => {
         if (mode === 'abort') controller.abort(new Error('source abort'));
         await stream.return(undefined);
         expect(setup.history.owners.every((owner) => owner.closed)).toBe(true);
-        expect(activeRequestBodyCount()).toBe(0);
+        expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(
+          0,
+        );
       } finally {
         await dispose(setup, http);
       }

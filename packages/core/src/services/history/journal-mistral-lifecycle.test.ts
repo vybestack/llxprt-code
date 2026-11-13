@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { getToolIdStrategy } from '@vybestack/llxprt-code-tools';
@@ -37,7 +38,10 @@ describe('native Mistral mapping lifecycle', () => {
     const rows: readonly IContent[] = [
       { speaker: 'ai', blocks: [call('4SftZvDMX'), call('toolu_alpha-1')] },
     ];
-    const session = await JournalSession.create(path, options);
+    const session = await JournalSession.create(
+      path,
+      testJournalOptions(options),
+    );
     try {
       await session.append(rows);
       await session.store.commit([{ kind: 'mistral', slot: 2 }]);
@@ -53,7 +57,10 @@ describe('native Mistral mapping lifecycle', () => {
     } finally {
       await session.close();
     }
-    const reopened = await JournalSession.open(path, options);
+    const reopened = await JournalSession.open(
+      path,
+      testJournalOptions(options),
+    );
     try {
       const next: IContent = { speaker: 'ai', blocks: [call('third long id')] };
       await reopened.append([next]);
@@ -68,9 +75,9 @@ describe('native Mistral mapping lifecycle', () => {
   it('keeps mapping activation when pop crosses the fill boundary or rebuilds a partial group', async () => {
     const session = await JournalSession.create(
       `${directory()}/pop-fill.llxj`,
-      {
+      testJournalOptions({
         journal: testJournalSeams().dependencies,
-      },
+      }),
     );
     const first: IContent = { speaker: 'ai', blocks: [call('first long id')] };
     const second: IContent = {
@@ -118,7 +125,7 @@ describe('native Mistral mapping lifecycle', () => {
       );
       const session = await JournalSession.create(
         `${directory()}/seed-${seed}.llxj`,
-        options,
+        testJournalOptions(options),
       );
       try {
         await session.store.commit([{ kind: 'mistral', slot: 0 }]);
@@ -139,10 +146,13 @@ describe('native Mistral mapping lifecycle', () => {
 
   it('keeps response append and pinned mapping reads bounded after 4000 distinct calls', async () => {
     const counter = { reads: 0 };
-    const session = await JournalSession.create(`${directory()}/bounded.llxj`, {
-      journal: testJournalSeams({ readCounter: counter }, 1, false)
-        .dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/bounded.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({ readCounter: counter }, 1, false)
+          .dependencies,
+      }),
+    );
     try {
       await session.store.commit([{ kind: 'mistral', slot: 0 }]);
       function* rows(): Generator<ReturnType<typeof encodeContentRow>> {

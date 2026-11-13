@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { appendFileSync } from 'node:fs';
@@ -5,6 +6,7 @@ import { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
 import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function recordOwners(
   size: number,
@@ -68,8 +70,8 @@ describe('disk candidate repeatable async cursor and row writer', () => {
   for (const size of [512, 8192]) {
     it(`replaces, appends and removes rows from the full ${size}-row source without retaining the candidate`, async () => {
       const ownership = new RowOwnership();
-      const source = new HistoryDensityRows(ownership);
-      const target = new HistoryDensityRows(ownership);
+      const source = new HistoryDensityRows(historyScratchRoots, ownership);
+      const target = new HistoryDensityRows(historyScratchRoots, ownership);
       try {
         populate(source, size);
         await transformRows(source, target, size);
@@ -99,7 +101,7 @@ describe('disk candidate repeatable async cursor and row writer', () => {
 describe('disk candidate cursor lifecycle', () => {
   it('releases a cancelled row and leaves both membership and retry cursor intact', async () => {
     const ownership = new RowOwnership();
-    const candidate = new HistoryDensityRows(ownership);
+    const candidate = new HistoryDensityRows(historyScratchRoots, ownership);
     const controller = new AbortController();
     const reason = new Error('candidate cancelled');
     try {
@@ -121,7 +123,7 @@ describe('disk candidate cursor lifecycle', () => {
 
   it('rejects a pre-aborted traversal before acquiring a row', async () => {
     const ownership = new RowOwnership();
-    const candidate = new HistoryDensityRows(ownership);
+    const candidate = new HistoryDensityRows(historyScratchRoots, ownership);
     const reason = new Error('pre-aborted candidate');
     try {
       populate(candidate, 512);
@@ -137,7 +139,7 @@ describe('disk candidate cursor lifecycle', () => {
 
   it('does not chase appends to the cursor source and releases on early return', async () => {
     const ownership = new RowOwnership();
-    const candidate = new HistoryDensityRows(ownership);
+    const candidate = new HistoryDensityRows(historyScratchRoots, ownership);
     try {
       populate(candidate, 3);
       let visited = 0;
@@ -161,7 +163,7 @@ describe('disk candidate cursor lifecycle', () => {
 describe('disk candidate detached value ownership', () => {
   it('serializes a sanitized value and neither pins nor aliases the caller row', () => {
     const ownership = new RowOwnership();
-    const candidate = new HistoryDensityRows(ownership);
+    const candidate = new HistoryDensityRows(historyScratchRoots, ownership);
     const original = ownerFixtureRow(0, 2048);
     try {
       candidate.append(original);
@@ -182,7 +184,7 @@ describe('disk candidate detached value ownership', () => {
 
   it('rejects writes and fresh cursors after closure without reacquiring an identity owner', async () => {
     const ownership = new RowOwnership();
-    const candidate = new HistoryDensityRows(ownership);
+    const candidate = new HistoryDensityRows(historyScratchRoots, ownership);
     candidate.append(ownerFixtureRow(0, 2048));
     candidate.close();
     expect(() => candidate.appendSanitized(ownerFixtureRow(1, 2048))).toThrow(
@@ -199,7 +201,7 @@ describe('disk candidate detached value ownership', () => {
 
   it('rejects a deliberately retained 8192-row control rather than hiding pins as borrowed rows', () => {
     const ownership = new RowOwnership();
-    const candidate = new HistoryDensityRows(ownership);
+    const candidate = new HistoryDensityRows(historyScratchRoots, ownership);
     const retained: IContent[] = [];
     try {
       for (let index = 0; index < 8192; index++) {

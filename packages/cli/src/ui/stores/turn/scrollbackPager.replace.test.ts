@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
@@ -33,7 +34,7 @@ function row(seq: number): IContent {
 }
 
 async function replace(seqs: readonly number[]): Promise<void> {
-  const session = await JournalSession.open(file);
+  const session = await JournalSession.open(file, testJournalOptions());
   try {
     await session.store.commit([
       {
@@ -60,7 +61,7 @@ async function stagedReplacement(
   const before = (await stat(file)).size;
   await replace(seqs);
   const bytes = await readFile(file);
-  const session = await JournalSession.open(file);
+  const session = await JournalSession.open(file, testJournalOptions());
   const ends: number[] = [];
   try {
     for await (const entry of session.store.rows())
@@ -178,7 +179,7 @@ describe('production pager applies replace transactions', () => {
     expect(await shown()).toStrictEqual(['row-1', 'row-2']);
   });
   it('shows the prior rows when the transaction is aborted', async () => {
-    const session = await JournalSession.open(file);
+    const session = await JournalSession.open(file, testJournalOptions());
     async function* abortedRows(): AsyncGenerator<
       ReturnType<typeof encodeContentRow>
     > {
@@ -203,7 +204,7 @@ describe('production pager applies replace transactions', () => {
   });
   it('abandons the unfinished transaction on a later native mutation', async () => {
     await stagedReplacement([4], 'after the first row');
-    const session = await JournalSession.open(file);
+    const session = await JournalSession.open(file, testJournalOptions());
     try {
       await session.store.commit([
         { kind: 'setState', key: 'fixture', value: new Uint8Array([1]) },

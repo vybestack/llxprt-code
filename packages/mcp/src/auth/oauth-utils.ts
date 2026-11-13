@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { NetworkFetch } from '@vybestack/llxprt-code-auth/network-fetch.js';
 
 import { type MCPOAuthConfig } from './oauth-provider.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-tools/utils/errors.js';
@@ -54,11 +55,16 @@ export interface OAuthProtectedResourceMetadata {
 export const FIVE_MIN_BUFFER_MS = 5 * 60 * 1000;
 
 async function tryAuthServerDiscovery(
+  requestFetch: NetworkFetch,
   authServerUrl: string,
   signal?: AbortSignal,
 ): Promise<MCPOAuthConfig | null> {
   const authServerMetadata =
-    await OAuthUtils.discoverAuthorizationServerMetadata(authServerUrl, signal);
+    await OAuthUtils.discoverAuthorizationServerMetadata(
+      requestFetch,
+      authServerUrl,
+      signal,
+    );
 
   if (authServerMetadata) {
     const config = OAuthUtils.metadataToOAuthConfig(authServerMetadata);
@@ -121,12 +127,13 @@ export class OAuthUtils {
    * @returns The protected resource metadata or null if not available
    */
   static async fetchProtectedResourceMetadata(
+    requestFetch: NetworkFetch,
     resourceMetadataUrl: string,
     signal?: AbortSignal,
   ): Promise<OAuthProtectedResourceMetadata | null> {
     try {
       const response = await awaitOAuthOperation(signal, () =>
-        fetch(resourceMetadataUrl, { signal }),
+        requestFetch(resourceMetadataUrl, { signal }),
       );
       if (!response.ok) {
         return null;
@@ -151,12 +158,13 @@ export class OAuthUtils {
    * @returns The authorization server metadata or null if not available
    */
   static async fetchAuthorizationServerMetadata(
+    requestFetch: NetworkFetch,
     authServerMetadataUrl: string,
     signal?: AbortSignal,
   ): Promise<OAuthAuthorizationServerMetadata | null> {
     try {
       const response = await awaitOAuthOperation(signal, () =>
-        fetch(authServerMetadataUrl, { signal }),
+        requestFetch(authServerMetadataUrl, { signal }),
       );
       if (!response.ok) {
         return null;
@@ -198,6 +206,7 @@ export class OAuthUtils {
    * @returns The authorization server metadata or null if not found
    */
   static async discoverAuthorizationServerMetadata(
+    requestFetch: NetworkFetch,
     authServerUrl: string,
     signal?: AbortSignal,
   ): Promise<OAuthAuthorizationServerMetadata | null> {
@@ -249,6 +258,7 @@ export class OAuthUtils {
 
     for (const endpoint of endpointsToTry) {
       const authServerMetadata = await this.fetchAuthorizationServerMetadata(
+        requestFetch,
         endpoint,
         signal,
       );
@@ -270,6 +280,7 @@ export class OAuthUtils {
    * @returns The discovered OAuth configuration or null if not available
    */
   static async discoverOAuthConfig(
+    requestFetch: NetworkFetch,
     serverUrl: string,
     signal?: AbortSignal,
   ): Promise<MCPOAuthConfig | null> {
@@ -279,6 +290,7 @@ export class OAuthUtils {
 
       // Try to get the protected resource metadata at root
       let resourceMetadata = await this.fetchProtectedResourceMetadata(
+        requestFetch,
         wellKnownUrls.protectedResource,
         signal,
       );
@@ -289,6 +301,7 @@ export class OAuthUtils {
         if (url.pathname && url.pathname !== '/') {
           const pathBasedUrls = this.buildWellKnownUrls(serverUrl, true);
           resourceMetadata = await this.fetchProtectedResourceMetadata(
+            requestFetch,
             pathBasedUrls.protectedResource,
             signal,
           );
@@ -313,7 +326,11 @@ export class OAuthUtils {
       ) {
         // Use the first authorization server
         const authServerUrl = resourceMetadata.authorization_servers[0];
-        const config = await tryAuthServerDiscovery(authServerUrl, signal);
+        const config = await tryAuthServerDiscovery(
+          requestFetch,
+          authServerUrl,
+          signal,
+        );
         if (config) {
           return config;
         }
@@ -322,6 +339,7 @@ export class OAuthUtils {
       // Fallback: try well-known endpoints at the base URL
       debugLogger.debug(`Trying OAuth discovery fallback at ${serverUrl}`);
       const authServerMetadata = await this.discoverAuthorizationServerMetadata(
+        requestFetch,
         serverUrl,
         signal,
       );
@@ -373,6 +391,7 @@ export class OAuthUtils {
    * @returns The discovered OAuth configuration or null if not available
    */
   static async discoverOAuthFromWWWAuthenticate(
+    requestFetch: NetworkFetch,
     wwwAuthenticate: string,
     mcpServerUrl?: string,
     signal?: AbortSignal,
@@ -384,6 +403,7 @@ export class OAuthUtils {
     }
 
     const resourceMetadata = await this.fetchProtectedResourceMetadata(
+      requestFetch,
       resourceMetadataUri,
       signal,
     );
@@ -407,6 +427,7 @@ export class OAuthUtils {
 
     const authServerUrl = resourceMetadata.authorization_servers[0];
     const authServerMetadata = await this.discoverAuthorizationServerMetadata(
+      requestFetch,
       authServerUrl,
       signal,
     );

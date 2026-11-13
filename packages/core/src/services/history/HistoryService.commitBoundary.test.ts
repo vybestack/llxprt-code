@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
@@ -9,6 +11,7 @@ import type { ContextRange } from './historyEventTypes.js';
 
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function textRow(speaker: 'human' | 'ai', text: string): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
@@ -70,7 +73,7 @@ describe.each(['journal'] as const)(
       for (const history of created.splice(0)) await history.dispose();
     });
     function service(): HistoryService {
-      const history = new HistoryService();
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       created.push(history);
       return history;
     }
@@ -193,17 +196,22 @@ describe('HistoryService commit boundary with a journal recorder', () => {
   it('does not resolve waitForCommit until the recorder file holds the rows', async () => {
     const failures: { gateWriteAt?: number } = {};
     const seams = testJournalSeams(failures);
-    const recorder = JournalRecordingService.create({
-      sessionId: 'session-aaaaaaaa-1111',
-      projectHash: 'project',
-      chatsDir: path.join(directory(), 'chats'),
-      workspaceDirs: ['/work'],
-      provider: 'anthropic',
-      model: 'model-1',
-      journal: { journal: seams.dependencies },
-    });
+    const recorder = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'session-aaaaaaaa-1111',
+        projectHash: 'project',
+        chatsDir: path.join(directory(), 'chats'),
+        workspaceDirs: ['/work'],
+        provider: 'anthropic',
+        model: 'model-1',
+        journal: { journal: seams.dependencies },
+      }),
+    );
     recorders.push(recorder);
-    const history = new HistoryService({ recording: recorder });
+    const history = new HistoryService({
+      scratchRoots: historyScratchRoots,
+      recording: recorder,
+    });
     histories.push(history);
     history.add(textRow('human', 'first'));
     await history.waitForCommit();
@@ -239,7 +247,7 @@ describe('HistoryService commit boundary with a journal recorder', () => {
   });
 
   it('removes only the last row when a merged row repeats a chronology number', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     histories.push(history);
     const marked = (text: string, seq: number): IContent => ({
       ...textRow('human', text),

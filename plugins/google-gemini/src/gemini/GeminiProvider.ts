@@ -324,7 +324,7 @@ export class GeminiProvider extends BaseProvider {
   override isPaidMode(): boolean {
     const settingsService = this.captureGoogleAuthPolicy();
     return (
-      !!process.env.GEMINI_API_KEY ||
+      !!getNonEmptySetting(settingsService, 'GEMINI_API_KEY') ||
       !!getNonEmptySetting(settingsService, 'GOOGLE_API_KEY') ||
       hasVertexAICredentials(settingsService)
     );
@@ -399,6 +399,19 @@ export class GeminiProvider extends BaseProvider {
                 settingsService,
                 'GOOGLE_APPLICATION_CREDENTIALS',
               ),
+              Object.fromEntries(
+                [
+                  'HOME',
+                  'APPDATA',
+                  'GCE_METADATA_IP',
+                  'GCE_METADATA_HOST',
+                  'METADATA_SERVER_DETECTION',
+                  'GOOGLE_CLOUD_QUOTA_PROJECT',
+                ].flatMap((key) => {
+                  const value = settingsService[key];
+                  return typeof value === 'string' ? [[key, value]] : [];
+                }),
+              ),
             ),
           }
         : {}),
@@ -451,9 +464,11 @@ export class GeminiProvider extends BaseProvider {
         transportContents(effectiveOptions, mediaInput, mediaRequest);
       // The SDK `Content[]` is the one body this request needs; it is
       // released once the call settles on any outcome (issue #854 WP09).
-      const sdkBody = acquireRequestScopedBody('gemini', {
-        contents: setup.contentsWithSignatures,
-      });
+      const sdkBody = acquireRequestScopedBody(
+        'gemini',
+        { contents: setup.contentsWithSignatures },
+        this.requestBodyCensus,
+      );
       mediaRequest.registerCleanup(() => {
         void sdkBody.release();
       });

@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
@@ -12,6 +14,7 @@ import { resumeSession } from '../../recording/resumeSession.js';
 import type { IContent } from './IContent.js';
 import type { ContextSummaryInfo } from './historyEventTypes.js';
 import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 // Historical eager projection, kept separate from the streaming implementation.
 function eagerOracle(rows: readonly IContent[]): ContextSummaryInfo[] {
@@ -63,14 +66,16 @@ function row(index: number, summary = false): IContent {
 }
 
 function recorder(root: string): SessionRecordingPort {
-  return createSessionRecorder({
-    sessionId: 'context-summary-stream',
-    projectHash: 'context-summary-stream',
-    chatsDir: root,
-    workspaceDirs: [root],
-    provider: 'test',
-    model: 'test',
-  });
+  return createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'context-summary-stream',
+      projectHash: 'context-summary-stream',
+      chatsDir: root,
+      workspaceDirs: [root],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
 }
 
 async function withJournal(
@@ -137,6 +142,7 @@ describe('context summary return migration', () => {
         const ownership = new RowOwnership();
         const read = createRowCounters();
         const service = new HistoryService({
+          scratchRoots: historyScratchRoots,
           recording,
           attachmentCounters: { ...read.counters, ownership },
         });
@@ -165,6 +171,7 @@ describe('context summary cancellation and resume', () => {
       const ownership = new RowOwnership();
       const read = createRowCounters();
       const service = new HistoryService({
+        scratchRoots: historyScratchRoots,
         recording,
         attachmentCounters: { ...read.counters, ownership },
       });
@@ -206,7 +213,10 @@ describe('context summary cancellation and resume', () => {
     const summary = row(40, true);
     let resumed: Awaited<ReturnType<typeof resumeSession>> | undefined;
     try {
-      const originalHistory = new HistoryService({ recording: original });
+      const originalHistory = new HistoryService({
+        scratchRoots: historyScratchRoots,
+        recording: original,
+      });
       try {
         for (let i = 0; i < 3; i++) originalHistory.add(row(i));
         originalHistory.startCompression();
@@ -219,16 +229,18 @@ describe('context summary cancellation and resume', () => {
         await originalHistory.dispose();
         await original.dispose();
       }
-      resumed = await resumeSession({
-        continueRef: 'context-summary-stream',
-        projectHash: 'context-summary-stream',
-        chatsDir: root,
-        currentProvider: 'test',
-        currentModel: 'test',
-        workspaceDirs: [root],
-      });
+      resumed = await resumeSession(
+        withTestNamedWriters({
+          continueRef: 'context-summary-stream',
+          projectHash: 'context-summary-stream',
+          chatsDir: root,
+          currentProvider: 'test',
+          currentModel: 'test',
+          workspaceDirs: [root],
+        }),
+      );
       if (!resumed.ok) throw new Error(resumed.error);
-      const service = new HistoryService();
+      const service = new HistoryService({ scratchRoots: historyScratchRoots });
       try {
         await service.adoptResumeBoot(resumed.recording, resumed.boot);
         expect(

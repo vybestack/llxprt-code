@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { makeRuntimeContext } from './__tests__/structural-history-fixture.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
@@ -52,6 +53,7 @@ import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/promp
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('session-owned runtime policy', () => {
   it('assembles compression settings from the supplied store', () => {
@@ -336,7 +338,9 @@ describe('createChatSession stored history', () => {
     const config = makeConfig();
     const runtimeState = makeRuntimeState();
     const todoContinuationService = makeTodoContinuationService();
-    const existingHistoryService = new HistoryService();
+    const existingHistoryService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     const clearFn = vi.fn();
 
     await createChatSession({
@@ -372,7 +376,9 @@ describe('createChatSession stored history', () => {
     // extraHistory into a stored service, and a real service proves the
     // restored turn is actually retained (not silently dropped).
     const { HistoryService: RealHistoryService } = realHistoryServiceModule;
-    const storedHistoryService = new RealHistoryService();
+    const storedHistoryService = new RealHistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     expect(storedHistoryService.isEmpty()).toBe(true);
 
     const config = makeConfig();
@@ -453,7 +459,9 @@ describe('createChatSession new history', () => {
     const runtimeState = makeRuntimeState();
     const todoContinuationService = makeTodoContinuationService();
     const clearFn = vi.fn();
-    const createHistoryService = vi.fn(() => new HistoryService());
+    const createHistoryService = vi.fn(
+      () => new HistoryService({ scratchRoots: historyScratchRoots }),
+    );
 
     await createChatSession({
       instructions: instructionFixture(

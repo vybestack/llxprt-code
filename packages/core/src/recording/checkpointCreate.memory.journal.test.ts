@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
@@ -20,14 +21,16 @@ let root: string;
 let recording: JournalRecordingService;
 
 async function recordLargeSession(): Promise<string> {
-  recording = JournalRecordingService.create({
-    sessionId: 'checkpoint-memory-session',
-    projectHash: PROJECT_HASH,
-    chatsDir: path.join(root, 'chats'),
-    workspaceDirs: [root],
-    provider: 'test',
-    model: 'test',
-  });
+  recording = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: 'checkpoint-memory-session',
+      projectHash: PROJECT_HASH,
+      chatsDir: path.join(root, 'chats'),
+      workspaceDirs: [root],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
   const session = await recording.session();
   for (let index = 0; index < ROWS; index += 1)
     await session.append([

@@ -1,7 +1,9 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const prompt: IContent = {
   speaker: 'human',
@@ -10,7 +12,7 @@ const prompt: IContent = {
 
 describe('durable prompt submissions', () => {
   it('publishes a prompt once across repeated submissions before opening its request', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.submitPrompt('submission-one', [prompt]);
       const first = await history.prepareCuratedForProviderSnapshot();
@@ -30,7 +32,7 @@ describe('durable prompt submissions', () => {
   });
 
   it('serializes concurrent retries without duplicating their prompt', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await Promise.all([
         history.submitPrompt('same', [prompt]),
@@ -44,7 +46,7 @@ describe('durable prompt submissions', () => {
   });
 
   it('aborts the entire submission when an injected row is invalid', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await expect(
         history.submitPrompt('invalid', [

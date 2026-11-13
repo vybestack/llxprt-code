@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import express from 'express';
@@ -71,7 +72,7 @@ describe('A2A execution socket lifetime', () => {
             await createRequestCancellationUser(req),
           ),
         );
-        await new CompletedTurnExecutor().execute(
+        await new CompletedTurnExecutor(scratchRoots).execute(
           context,
           new DefaultExecutionEventBus(),
         );
@@ -111,3 +112,5 @@ describe('A2A execution socket lifetime', () => {
     }
   });
 });
+
+const scratchRoots = new ScratchRootOwner();

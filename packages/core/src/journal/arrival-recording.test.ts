@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -54,7 +55,11 @@ describe('arrival recording', () => {
 
   it('publishes bounded pieces before source exhaustion and seals without rewriting payload', async () => {
     const path = join(directory(), 'progress.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     try {
       const row = await recorder.beginRow(seed(), {
@@ -103,7 +108,11 @@ describe('arrival recording', () => {
 
   it('rejects a completion-only accumulator at the unfinished-source disk gate', async () => {
     const path = join(directory(), 'deferred-control.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const retained: Uint8Array[] = [];
     try {
       await store.commit([{ kind: 'append', rows: [] }]);
@@ -124,7 +133,11 @@ describe('arrival recording', () => {
 
   it('flushes a stalled source on the timer', async () => {
     const path = join(directory(), 'timer.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     try {
       const row = await recorder.beginRow(seed(), {
@@ -145,7 +158,11 @@ describe('arrival recording', () => {
 
   it('preserves cancelled output and gives retry a new transcript identity', async () => {
     const path = join(directory(), 'cancel.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     try {
       const first = await recorder.beginRow(seed(), {
@@ -175,7 +192,11 @@ describe('arrival recording', () => {
 
   it('marks orphaned acknowledged prefixes interrupted on owner resume', async () => {
     const path = join(directory(), 'resume.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     const row = await recorder.beginRow(seed(), {
       id: 'orphan',
@@ -186,7 +207,11 @@ describe('arrival recording', () => {
     await recorder.flush();
     await recorder.close();
     await store.close();
-    const reopened = await JournalStore.open(path, storeDeps());
+    const reopened = await JournalStore.open(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     try {
       const tail = await readTail(path);
       expect(tail.entries[0].status).toBe(4);
@@ -199,7 +224,11 @@ describe('arrival recording', () => {
 
   it('retains chunk payload through compaction without retaining old trailers', async () => {
     const path = join(directory(), 'compact.llxj');
-    const store = await JournalStore.create(path, storeDeps());
+    const store = await JournalStore.create(
+      path,
+      storeDeps(),
+      testNamedWriters,
+    );
     const recorder = new JournalArrivalRecorder(store);
     try {
       const row = await recorder.beginRow(seed(), {

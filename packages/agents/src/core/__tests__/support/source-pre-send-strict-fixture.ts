@@ -9,7 +9,6 @@ import {
   initializeTelemetry,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
-import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { LOGICAL_REQUEST_ID_KEY } from '@vybestack/llxprt-code-providers/logging/attemptLifecycle.js';
 import { assembleStrict } from './source-strict-logger-fixture.js';
 import {
@@ -173,13 +172,14 @@ export async function mixedPreSendProbe(
       sourceClosed: input.fixture.state.closed,
       eagerClosed: disk.state.closed,
       activeReaders: input.fixture.state.active + disk.state.active,
-      activeBodies: activeRequestBodyCount(),
+      activeBodies: activeRequestBodyCount(
+        input.setup.provider.requestBodyCensus,
+      ),
     };
     return receipt;
   } finally {
     await input.http.server.stop(true);
     await input.cleanup();
     await input.setup.config.dispose();
-    resetConversationFileWriterForTesting();
   }
 }

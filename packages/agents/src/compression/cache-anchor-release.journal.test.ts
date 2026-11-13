@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -9,6 +11,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyCompressionWithAnchor } from './__tests__/support/cacheAnchor.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(speaker: 'human' | 'ai', text: string): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
@@ -97,11 +100,12 @@ describe('native cache-anchor publication under a compression lock (#3338)', () 
     const directory = mkdtempSync(join(tmpdir(), 'cache-anchor-release-'));
     const session = await JournalSession.create(
       join(directory, 'primary.llxj'),
+      testJournalOptions(),
     );
     const opener = spyOn(JournalSession, 'createUnlinked').mockImplementation(
       async () => session,
     );
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     opener.mockRestore();
     try {
       expect(await assertRelease(history, session)).toBe(2);

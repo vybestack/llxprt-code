@@ -1,3 +1,7 @@
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -134,14 +138,16 @@ describe('media-session-lifecycle', () => {
           { turnId: 'turn-media', source: 'clipboard' },
         );
         const chatsDir = join(tempDirectory(), 'chats');
-        const recording = JournalRecordingService.create({
-          sessionId: 'session-media',
-          projectHash: 'project-hash',
-          chatsDir,
-          workspaceDirs: [],
-          provider: 'test',
-          model: 'test',
-        });
+        const recording = JournalRecordingService.create(
+          withTestNamedWriters({
+            sessionId: 'session-media',
+            projectHash: 'project-hash',
+            chatsDir,
+            workspaceDirs: [],
+            provider: 'test',
+            model: 'test',
+          }),
+        );
         try {
           await (await recording.session()).append([admitted]);
           await recording.flush();
@@ -195,14 +201,16 @@ describe('media-session-lifecycle', () => {
           },
           { turnId: 'turn-private-recording', source: 'at-command' },
         );
-        const recording = JournalRecordingService.create({
-          sessionId: 'session-private-media',
-          projectHash: 'project-hash',
-          chatsDir: join(tempDirectory(), 'chats-private'),
-          workspaceDirs: [],
-          provider: 'test',
-          model: 'test',
-        });
+        const recording = JournalRecordingService.create(
+          withTestNamedWriters({
+            sessionId: 'session-private-media',
+            projectHash: 'project-hash',
+            chatsDir: join(tempDirectory(), 'chats-private'),
+            workspaceDirs: [],
+            provider: 'test',
+            model: 'test',
+          }),
+        );
 
         try {
           await (await recording.session()).append([admitted]);
@@ -233,9 +241,9 @@ describe('media-session-lifecycle', () => {
             payload: { content: inlineContent() },
           }) + '\n',
         );
-        await expect(JournalSession.open(filePath)).rejects.toThrow(
-          retiredJournalMessage(filePath),
-        );
+        await expect(
+          JournalSession.open(filePath, testJournalOptions()),
+        ).rejects.toThrow(retiredJournalMessage(filePath));
       });
 
       it('reads native inline media without a media store', async () => {
@@ -404,14 +412,16 @@ describe('media-session-lifecycle', () => {
           mimeType: 'application/octet-stream',
           semanticMetadata: {},
         });
-        const recording = JournalRecordingService.create({
-          sessionId: 'aggregate-replay',
-          projectHash: 'project-hash',
-          chatsDir: join(tempDirectory(), 'aggregate-replay-chats'),
-          workspaceDirs: [],
-          provider: 'test',
-          model: 'test',
-        });
+        const recording = JournalRecordingService.create(
+          withTestNamedWriters({
+            sessionId: 'aggregate-replay',
+            projectHash: 'project-hash',
+            chatsDir: join(tempDirectory(), 'aggregate-replay-chats'),
+            workspaceDirs: [],
+            provider: 'test',
+            model: 'test',
+          }),
+        );
 
         try {
           await (
@@ -514,14 +524,16 @@ async function nativeFixture(
   id: string,
   content: IContent,
 ): Promise<JournalRecordingService> {
-  const recording = JournalRecordingService.create({
-    sessionId: id,
-    projectHash: 'project-hash',
-    chatsDir: join(directory, id),
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
-  });
+  const recording = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: id,
+      projectHash: 'project-hash',
+      chatsDir: join(directory, id),
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
   await (await recording.session()).append([content]);
   return recording;
 }
@@ -533,7 +545,7 @@ async function nativeRows(
   const file = await readJournalFileFacts(filePath);
   if (file === undefined) throw new Error('Missing session facts');
   const recording = await JournalRecordingService.open(
-    {
+    withTestNamedWriters({
       sessionId: file.facts.sessionId,
       projectHash: 'project-hash',
       chatsDir: join(filePath, '..'),
@@ -541,7 +553,7 @@ async function nativeRows(
       provider: 'test',
       model: 'test',
       mediaStore,
-    },
+    }),
     filePath,
   );
   try {

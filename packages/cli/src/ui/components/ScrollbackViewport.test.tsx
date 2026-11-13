@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -102,7 +103,7 @@ interface Fixture {
 async function useJournalFixture(): Promise<Fixture> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'scrollback-viewport-'));
   const filePath = path.join(dir, 'session-under-test.llxj');
-  const session = await JournalSession.create(filePath);
+  const session = await JournalSession.create(filePath, testJournalOptions());
   return {
     filePath,
     async addUser(seq: number): Promise<void> {

@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { requestScopedContents } from '../../utils/requestScopedBody.js';
@@ -9,9 +10,10 @@ import {
 
 export function readOwnedSource(
   contents: AsyncIterable<IContent>,
+  scratchRoots: ScratchRootOwner,
   signal?: AbortSignal,
 ): ResponsesSerialization<number> {
-  const owner = requestScopedContents(contents, signal);
+  const owner = requestScopedContents(contents, scratchRoots, signal);
   return cancellableSerialization(
     () =>
       withSerializationCleanup(

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -92,10 +93,12 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = JournalRecordingService.create({
-    ...config,
-    journal: journalSeams(),
-  });
+  const svc = JournalRecordingService.create(
+    withTestNamedWriters({
+      ...config,
+      journal: journalSeams(),
+    }),
+  );
   await (await svc.session()).append([makeContent('hello')]);
   await svc.flush();
   const filePath = svc.getFilePath()!;
@@ -463,7 +466,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
     it('lists live checkpoint blockers instead of deleting their source', async () => {
       const sessionId = 'checkpoint-source-session';
       const recording = JournalRecordingService.create(
-        makeConfig(chatsDir, { sessionId }),
+        withTestNamedWriters(makeConfig(chatsDir, { sessionId })),
       );
       await (
         await recording.session()

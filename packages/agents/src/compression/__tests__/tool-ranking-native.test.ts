@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import { truncateToolResponsesInOnePass } from '../toolResponseOnePass.js';
 import {
   createTruncationStub,
@@ -153,7 +153,7 @@ describe('native global tool-response ranking', () => {
         .map((candidate) =>
           createTruncationStub(candidate.block, candidate.estimatedTokens),
         );
-      getScratchRoot();
+      history.scratchRoots.getRoot();
       let replaced = 0;
       const files = await operationFileCreates(async () => {
         const result = await truncateToolResponsesInOnePass(

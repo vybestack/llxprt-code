@@ -1,8 +1,12 @@
+import { afterAll as afterRequestTests } from 'bun:test';
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { collectContents } from './collectContents.js';
 import { requestScopedContents } from './requestScopedBody.js';
+
+const requestScratchRoots = new ScratchRootOwner();
 
 function source() {
   let pulls = 0;
@@ -23,9 +27,11 @@ function source() {
 }
 
 describe('request-owned progressive history', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('replays a cancelled upload prefix then resumes its one-shot source', async () => {
     const history = source();
-    const owner = requestScopedContents(history.rows);
+    const owner = requestScopedContents(history.rows, requestScratchRoots);
     const first = owner.stream()[Symbol.asyncIterator]();
     expect(history.state()).toStrictEqual({ pulls: 0, closed: false });
     const head = await first.next();
@@ -47,7 +53,7 @@ describe('request-owned progressive history', () => {
 
   it('closes the underlying producer and forbids reopening after disposal', async () => {
     const history = source();
-    const owner = requestScopedContents(history.rows);
+    const owner = requestScopedContents(history.rows, requestScratchRoots);
     const reader = owner.stream()[Symbol.asyncIterator]();
     await reader.next();
     await owner.dispose();
@@ -63,21 +69,26 @@ describe('request-owned progressive history', () => {
 });
 
 describe('request history failure and concurrent readers', () => {
+  afterRequestTests(() => requestScratchRoots.removeRoot());
+
   it('propagates producer failure without retrying an exhausted source', async () => {
     let closed = false;
-    const owner = requestScopedContents({
-      async *[Symbol.asyncIterator]() {
-        try {
-          yield {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'prefix' }],
-          };
-          throw new Error('history read failed');
-        } finally {
-          closed = true;
-        }
+    const owner = requestScopedContents(
+      {
+        async *[Symbol.asyncIterator]() {
+          try {
+            yield {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'prefix' }],
+            };
+            throw new Error('history read failed');
+          } finally {
+            closed = true;
+          }
+        },
       },
-    });
+      requestScratchRoots,
+    );
     const attempts = await Promise.allSettled([
       collectContents(owner.stream()),
       collectContents(owner.stream()),
@@ -91,7 +102,7 @@ describe('request history failure and concurrent readers', () => {
   });
   it('shares in-flight source reads between two readers', async () => {
     const history = source();
-    const owner = requestScopedContents(history.rows);
+    const owner = requestScopedContents(history.rows, requestScratchRoots);
     const reader = owner.stream()[Symbol.asyncIterator]();
     const [head, rows] = await Promise.all([
       reader.next(),

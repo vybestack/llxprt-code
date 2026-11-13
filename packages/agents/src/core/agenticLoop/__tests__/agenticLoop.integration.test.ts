@@ -1,7 +1,10 @@
 import { bindTurnModel } from '../../../session/bind-turn-model.js';
 import { TurnToolExecutionOwner } from '../../../session/turn-tool-execution-owner.js';
 import { CoreToolScheduler } from '../../coreToolScheduler.js';
-import { DeferredMaintenance } from '@vybestack/llxprt-code-core/journal/deferred-maintenance.js';
+import {
+  DeferredMaintenance,
+  JournalMaintenanceScope,
+} from '@vybestack/llxprt-code-core/journal/deferred-maintenance.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -48,9 +51,11 @@ void vi.mock('@vybestack/llxprt-code-tools', () => {
 
 describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
   it('ProceedOnce continues the loop and the tool executes (side effect observable)', async () => {
+    const maintenanceScope = new JournalMaintenanceScope();
     let maintenanceRuns = 0;
     let toolMaintenanceRuns: number | undefined;
     const maintenance = new DeferredMaintenance(
+      maintenanceScope,
       async () => {
         maintenanceRuns++;
       },
@@ -100,6 +105,7 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     const loop = new AgenticLoop({
       config,
       ...bindTurnModel(client),
+      maintenanceScope,
       tools: new TurnToolExecutionOwner(
         messageBus,
         approvalHandler,

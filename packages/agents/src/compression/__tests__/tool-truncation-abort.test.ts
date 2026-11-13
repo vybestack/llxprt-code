@@ -10,10 +10,9 @@ import {
   digestRows,
   expectedToolDigest,
 } from './tool-truncation-stream-helpers.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
-function rankingFiles(): string[] {
-  return readdirSync(getScratchRoot())
+function rankingFiles(history: HistoryService): string[] {
+  return readdirSync(history.scratchRoots.getRoot())
     .filter((name) => name.startsWith('tool-response-ranking-'))
     .sort();
 }
@@ -22,10 +21,10 @@ describe('caller cancellation of tool ranking', () => {
   it.each([65])(
     'observes timer abort for %i rows before any replacement and closes source/index',
     async (size) => {
-      const before = rankingFiles();
       await withSuffixFixture(
         size,
         async (history, ownership) => {
+          const before = rankingFiles(history);
           const controller = new AbortController();
           let scheduled = false;
           const deps = {
@@ -49,25 +48,25 @@ describe('caller cancellation of tool ranking', () => {
             expectedToolDigest(size, 0),
           );
           expect(ownership.snapshot().liveRows).toBe(0);
+          const after = rankingFiles(history);
+          expect({
+            added: after.filter((name) => !before.includes(name)).length,
+            removed: before.filter((name) => !after.includes(name)).length,
+          }).toStrictEqual({ added: 0, removed: 0 });
         },
         2048,
         toolRankingRow,
         undefined,
         (options) => new HistoryService(options),
       );
-      const after = rankingFiles();
-      expect({
-        added: after.filter((name) => !before.includes(name)).length,
-        removed: before.filter((name) => !after.includes(name)).length,
-      }).toStrictEqual({ added: 0, removed: 0 });
     },
     120000,
   );
   it('rejects a pre-aborted call before estimating or opening ranking scratch', async () => {
-    const before = rankingFiles();
     await withSuffixFixture(
       1,
       async (history) => {
+        const before = rankingFiles(history);
         const controller = new AbortController();
         controller.abort(new Error('already aborted'));
         const deps = {
@@ -80,14 +79,14 @@ describe('caller cancellation of tool ranking', () => {
         expect(await digestRows(history.streamRawHistory())).toBe(
           expectedToolDigest(1, 0),
         );
+        const after = rankingFiles(history);
+        expect({
+          added: after.filter((name) => !before.includes(name)).length,
+          removed: before.filter((name) => !after.includes(name)).length,
+        }).toStrictEqual({ added: 0, removed: 0 });
       },
       2048,
       toolRankingRow,
     );
-    const after = rankingFiles();
-    expect({
-      added: after.filter((name) => !before.includes(name)).length,
-      removed: before.filter((name) => !after.includes(name)).length,
-    }).toStrictEqual({ added: 0, removed: 0 });
   });
 });

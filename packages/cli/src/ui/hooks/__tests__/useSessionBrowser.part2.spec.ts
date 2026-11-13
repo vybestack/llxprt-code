@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -107,7 +108,7 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = createSessionRecorder(config);
+  const svc = createSessionRecorder(withTestNamedWriters(config));
 
   const contents = opts.contents ?? [makeContent('hello')];
   for (const content of contents) {
@@ -651,7 +652,9 @@ function registerSearchName1(): void {
        */
       it('search filters by session name', async () => {
         const namedSvc = createSessionRecorder(
-          makeConfig(chatsDir, { sessionId: 'named-session' }),
+          withTestNamedWriters(
+            makeConfig(chatsDir, { sessionId: 'named-session' }),
+          ),
         );
         await seedSessionRows(namedSvc, [makeContent('hello')]);
         await namedSvc.setSessionName('my-unique-project-name');
@@ -697,7 +700,9 @@ function registerSearchName2(): void {
        */
       it('search filters by checkpoint name', async () => {
         const recording = await createLockedSessionRecorder(
-          makeConfig(chatsDir, { sessionId: 'checkpoint-source' }),
+          withTestNamedWriters(
+            makeConfig(chatsDir, { sessionId: 'checkpoint-source' }),
+          ),
         );
         await seedSessionRows(recording, [makeContent('checkpoint body')]);
         await recording.createCheckpoint('release-cut-branch');
@@ -778,7 +783,9 @@ function registerSearchName3(): void {
        */
       it('search matches session names case-insensitively', async () => {
         const mixedSvc = createSessionRecorder(
-          makeConfig(chatsDir, { sessionId: 'case-named-session' }),
+          withTestNamedWriters(
+            makeConfig(chatsDir, { sessionId: 'case-named-session' }),
+          ),
         );
         await seedSessionRows(mixedSvc, [makeContent('hello')]);
         await mixedSvc.setSessionName('QuantumKernelBuild');

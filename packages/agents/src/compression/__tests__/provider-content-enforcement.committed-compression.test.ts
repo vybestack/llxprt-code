@@ -1,3 +1,6 @@
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { ScratchRootOwner } from '../../../../core/src/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -34,6 +37,8 @@ import {
   useReliefConversation,
 } from './media-relief-fixtures.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 const SUMMARY = 'COMMITTED AND JOURNALED COMPRESSION SUMMARY';
 const PARTIAL = 'UNCOMMITTED PARTIAL REWRITE';
 const LATER_FAILURE = 'token settlement failed after the compression committed';
@@ -57,6 +62,8 @@ function errorName(error: unknown): string {
 }
 
 describe('a committed compression survives a later failure (issue #4000 CodeRabbit round 3 R1)', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const conversation = useReliefConversation('llxprt-issue4000-cr3-r1-');
   let journalDirectory = '';
   let recording: JournalRecordingService | undefined;
@@ -77,15 +84,17 @@ describe('a committed compression survives a later failure (issue #4000 CodeRabb
   async function journalHistory(
     history: HistoryService,
   ): Promise<JournalRecordingService> {
-    const service = JournalRecordingService.create({
-      sessionId: 'issue4000-committed-0001',
-      projectHash: PROJECT_HASH,
-      chatsDir: journalDirectory,
-      workspaceDirs: ['/workspace/project'],
-      provider: 'anthropic',
-      model: 'claude-sonnet-4',
-    });
-    const subscriber = new RecordingIntegration(service);
+    const service = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'issue4000-committed-0001',
+        projectHash: PROJECT_HASH,
+        chatsDir: journalDirectory,
+        workspaceDirs: ['/workspace/project'],
+        provider: 'anthropic',
+        model: 'claude-sonnet-4',
+      }),
+    );
+    const subscriber = new RecordingIntegration(service, recordingScratchRoots);
     await subscriber.subscribeToJournal(history);
     recording = service;
     integration = subscriber;
@@ -100,15 +109,17 @@ describe('a committed compression survives a later failure (issue #4000 CodeRabb
     await integration?.flushAtTurnBoundary();
     await integration?.dispose();
     await service.dispose();
-    const replay = await resumeSession({
-      continueRef: 'issue4000-committed-0001',
-      projectHash: PROJECT_HASH,
-      chatsDir: journalDirectory,
-      currentProvider: 'anthropic',
-      currentModel: 'claude-sonnet-4',
-      workspaceDirs: ['/workspace/project'],
-      mediaStore,
-    });
+    const replay = await resumeSession(
+      withTestNamedWriters({
+        continueRef: 'issue4000-committed-0001',
+        projectHash: PROJECT_HASH,
+        chatsDir: journalDirectory,
+        currentProvider: 'anthropic',
+        currentModel: 'claude-sonnet-4',
+        workspaceDirs: ['/workspace/project'],
+        mediaStore,
+      }),
+    );
     if (!replay.ok) throw new Error(replay.error);
     const texts: string[] = [];
     try {

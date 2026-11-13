@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { appendFile } from 'node:fs/promises';
@@ -37,7 +38,10 @@ describe('persisted selected Mistral conversion facts', () => {
 
   it('retains filled selection facts across compaction and reopen without rescanning selected ids', async () => {
     const path = `${directory()}/reuse.llxj`;
-    let session = await JournalSession.create(path, options);
+    let session = await JournalSession.create(
+      path,
+      testJournalOptions(options),
+    );
     try {
       await session.store.commit([{ kind: 'mistral', slot: 0 }]);
       await session.append([
@@ -58,7 +62,7 @@ describe('persisted selected Mistral conversion facts', () => {
       await selected(session);
       expect(session.store.published?.commitSeq).toBe(3);
       await session.close();
-      session = await JournalSession.open(path, options);
+      session = await JournalSession.open(path, testJournalOptions(options));
       await selected(session);
       expect(session.store.published?.commitSeq).toBe(3);
     } finally {
@@ -69,7 +73,7 @@ describe('persisted selected Mistral conversion facts', () => {
   it('invalidates conversion scopes when an index-preserving purge changes emitted units', async () => {
     const session = await JournalSession.create(
       `${directory()}/purge.llxj`,
-      options,
+      testJournalOptions(options),
     );
     try {
       await session.store.commit([{ kind: 'mistral', slot: 0 }]);
@@ -117,7 +121,9 @@ describe('persisted selected Mistral conversion facts', () => {
     const readCounter = { reads: 0 };
     const session = await JournalSession.create(
       `${directory()}/responses.llxj`,
-      { journal: testJournalSeams({ readCounter }, 1, false).dependencies },
+      testJournalOptions({
+        journal: testJournalSeams({ readCounter }, 1, false).dependencies,
+      }),
     );
     const rows: IContent[] = [];
     for (let index = 0; index < 2000; index++)

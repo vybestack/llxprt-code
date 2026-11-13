@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readAtOf } from '../__tests__/requestRowsTestSupport.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -9,7 +10,6 @@ import type { GenerateChatOptions } from '../IProvider.js';
 import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 import { requestSelection } from './__tests__/support/request-selection.js';
 import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const completed =
   'data: {"type":"response.output_text.delta","delta":"ok"}\n\n' +
@@ -49,9 +49,9 @@ function rowsOf(list: readonly IContent[]): ProviderRequestRows {
   };
 }
 
-function promptDirs(): Set<string> {
+function promptDirs(scratchRoots: ScratchRootOwner): Set<string> {
   return new Set(
-    readdirSync(getScratchRoot()).filter((name) =>
+    readdirSync(scratchRoots.getRoot()).filter((name) =>
       name.startsWith('responses-prompt-keys-'),
     ),
   );
@@ -85,7 +85,6 @@ describe('Responses source route cancellation cleanup', () => {
 
   beforeEach(async () => {
     bodies = 0;
-    before = promptDirs();
     server = Bun.serve({
       hostname: '127.0.0.1',
       port: 0,
@@ -101,6 +100,7 @@ describe('Responses source route cancellation cleanup', () => {
       `http://127.0.0.1:${server.port}/v1`,
       process.cwd(),
     );
+    before = promptDirs(setup.config.scratchRoots);
   });
 
   afterEach(async () => {
@@ -109,10 +109,12 @@ describe('Responses source route cancellation cleanup', () => {
   });
 
   function released(): void {
-    expect(activeRequestBodyCount()).toBe(0);
-    expect([...promptDirs()].filter((name) => !before.has(name))).toHaveLength(
-      0,
-    );
+    expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
+    expect(
+      [...promptDirs(setup.config.scratchRoots)].filter(
+        (name) => !before.has(name),
+      ),
+    ).toHaveLength(0);
   }
 
   for (const [name, ephemerals] of Object.entries(scenarios)) {

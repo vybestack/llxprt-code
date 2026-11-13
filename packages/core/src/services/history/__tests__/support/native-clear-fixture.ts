@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { testJournalOptions } from '../../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { expect, spyOn } from 'bun:test';
@@ -13,6 +15,7 @@ import { HistoryService } from '../../HistoryService.js';
 import type { IContent } from '../../IContent.js';
 import { JournalSession } from '../../journalSession.js';
 import { batchGate } from './addbatch-stream-test-helpers.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export interface NativeClearFixture {
   readonly history: HistoryService;
@@ -54,9 +57,13 @@ export async function withNativeClearFixture(
     };
   };
   const opener = spyOn(JournalSession, 'createUnlinked').mockImplementation(
-    () => JournalSession.create(path, { journal: { open: openHeld } }),
+    () =>
+      JournalSession.create(
+        path,
+        testJournalOptions({ journal: { open: openHeld } }),
+      ),
   );
-  const history = new HistoryService({});
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   opener.mockRestore();
   history.setTokenizerFactory(exactTokenizer());
   try {
@@ -94,7 +101,7 @@ export async function withNativeClearMediaFixture(
   try {
     await withNativeClearFixture(async (fixture) => {
       await fixture.history.registerMediaOwner(
-        new HistoryMediaOwnership(store),
+        new HistoryMediaOwnership(store, historyScratchRoots),
       );
       try {
         await action(fixture, store);

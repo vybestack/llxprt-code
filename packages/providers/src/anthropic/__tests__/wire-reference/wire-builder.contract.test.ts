@@ -1,12 +1,12 @@
+import { registerScratchInspection } from '../../../__tests__/support/scratch-inspection.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { readdirSync } from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   inMemoryRequestSelection,
   type ProviderRequestRows,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
 import type { MediaStage } from '../../native-anthropic-media-stage.js';
 import { CURRENT_MODEL } from './support/wireBuilderCorpus.js';
 import {
@@ -23,6 +23,7 @@ import {
   oracleJson,
   type WireSettings,
 } from './support/wireBuilderHarness.js';
+const scratchEntries = registerScratchInspection();
 
 async function build(
   rows: ProviderRequestRows,
@@ -114,7 +115,7 @@ describe('wire builder reads', () => {
   });
 
   it('fails on an aborted request without leaving scratch behind', async () => {
-    const before = readdirSync(getScratchRoot()).length;
+    const before = scratchEntries().length;
     const controller = new AbortController();
     controller.abort(new Error('stop'));
     await expect(
@@ -124,7 +125,7 @@ describe('wire builder reads', () => {
         { signal: controller.signal },
       ),
     ).rejects.toThrow('stop');
-    expect(readdirSync(getScratchRoot()).length).toBe(before);
+    expect(scratchEntries().length).toBe(before);
   });
 });
 

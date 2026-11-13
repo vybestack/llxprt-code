@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
@@ -12,9 +13,9 @@ describe('normalized request query pin ownership', () => {
   it('holds the filled fact version separately from the request source version', async () => {
     const session = await JournalSession.create(
       `${directory()}/fact-pin.llxj`,
-      {
+      testJournalOptions({
         journal: testJournalSeams().dependencies,
-      },
+      }),
     );
     try {
       await session.append([
@@ -49,9 +50,9 @@ describe('normalized request query pin ownership', () => {
   it('retains an independent request view after its opener and original query close', async () => {
     const session = await JournalSession.create(
       `${directory()}/retained.llxj`,
-      {
+      testJournalOptions({
         journal: testJournalSeams().dependencies,
-      },
+      }),
     );
     try {
       await session.append([
@@ -89,9 +90,12 @@ describe('normalized request query pin ownership', () => {
   });
 
   it('uses an older published root and its own tail after a newer append', async () => {
-    const session = await JournalSession.create(`${directory()}/old.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/old.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([{ speaker: 'human', blocks: [call('a')] }]);
       const snapshot = await session.store.snapshot();
@@ -122,7 +126,7 @@ describe('normalized request query pin ownership', () => {
   it('preserves a preparation read error when the final release also fails', async () => {
     const session = await JournalSession.create(
       `${directory()}/prepare-failure.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await session.append([{ speaker: 'ai', blocks: [call('a')] }]);
@@ -149,7 +153,7 @@ describe('normalized request query pin ownership', () => {
   it('holds the query pin through asynchronous callback consumption after opener close', async () => {
     const session = await JournalSession.create(
       `${directory()}/callback.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await session.append([{ speaker: 'ai', blocks: [call('a')] }]);
@@ -173,7 +177,7 @@ describe('normalized request query pin ownership', () => {
   it('holds an iterator until explicit return after opener close', async () => {
     const session = await JournalSession.create(
       `${directory()}/iterator.llxj`,
-      { journal: testJournalSeams().dependencies },
+      testJournalOptions({ journal: testJournalSeams().dependencies }),
     );
     try {
       await session.append([{ speaker: 'ai', blocks: [call('a'), call('a')] }]);
@@ -196,7 +200,7 @@ describe('normalized request query pin ownership', () => {
     it(`preserves the primary ${abort ? 'abort' : 'callback error'} when release also fails`, async () => {
       const session = await JournalSession.create(
         `${directory()}/failure-${abort}.llxj`,
-        { journal: testJournalSeams().dependencies },
+        testJournalOptions({ journal: testJournalSeams().dependencies }),
       );
       try {
         await session.append([{ speaker: 'ai', blocks: [call('a')] }]);
@@ -231,9 +235,12 @@ describe('normalized request query pin ownership', () => {
     });
 
   it('preserves an iterator abort when its final release fails', async () => {
-    const session = await JournalSession.create(`${directory()}/abort.llxj`, {
-      journal: testJournalSeams().dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/abort.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams().dependencies,
+      }),
+    );
     try {
       await session.append([{ speaker: 'ai', blocks: [call('a'), call('a')] }]);
       const primary = new Error('abort reason');

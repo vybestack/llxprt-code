@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -67,6 +69,7 @@ import {
   rowTreeRootOf,
 } from '../../journal/rowTreeReader.js';
 import { decodeStoredRow } from '../../services/history/journalRowCodec.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const PROJECT_HASH = 'p05b3-provider-stream-hash';
 
@@ -123,14 +126,16 @@ const histories: HistoryService[] = [];
 const recordings: JournalRecordingService[] = [];
 
 function makeRecorder(id: string): JournalRecordingService {
-  const recorder = JournalRecordingService.create({
-    sessionId: `p05b3-stream-${id}`,
-    projectHash: PROJECT_HASH,
-    chatsDir: tempDir,
-    workspaceDirs: [tempDir],
-    provider: 'test-provider',
-    model: 'test-model',
-  });
+  const recorder = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: `p05b3-stream-${id}`,
+      projectHash: PROJECT_HASH,
+      chatsDir: tempDir,
+      workspaceDirs: [tempDir],
+      provider: 'test-provider',
+      model: 'test-model',
+    }),
+  );
   recordings.push(recorder);
   return recorder;
 }
@@ -138,7 +143,7 @@ function makeRecorder(id: string): JournalRecordingService {
 async function resumedHistory(
   recorder: JournalRecordingService,
 ): Promise<HistoryService> {
-  const service = new HistoryService({});
+  const service = new HistoryService({ scratchRoots: historyScratchRoots });
   histories.push(service);
   await service.adoptResumeBoot(
     recorder,

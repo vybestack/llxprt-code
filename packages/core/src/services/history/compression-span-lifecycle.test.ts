@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
@@ -15,6 +16,7 @@ import {
 } from './__tests__/support/token-accounting-stream-test-helpers.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function summary(): IContent {
   return { speaker: 'ai', blocks: [], metadata: { isSummary: true } };
@@ -49,6 +51,7 @@ describe('raw compression cursor lifetime', () => {
         const ledger = [readdirSync(root).length];
         const candidate = [summary(), suffixRow(511)];
         const operation = annotateCompressionSpanStream(suspend(), candidate, {
+          scratchRoots: historyScratchRoots,
           root,
         });
         await entered.promise;
@@ -90,6 +93,7 @@ describe('raw compression cursor failure cleanup', () => {
         }
         await expect(
           annotateCompressionSpanStream(source(), [summary()], {
+            scratchRoots: historyScratchRoots,
             root,
             signal: controller.signal,
           }),
@@ -113,7 +117,11 @@ describe('raw compression cursor failure cleanup', () => {
           annotateCompressionSpanStream(
             history.streamRawHistory(controller.signal),
             [summary()],
-            { root, signal: controller.signal },
+            {
+              scratchRoots: historyScratchRoots,
+              root,
+              signal: controller.signal,
+            },
           ),
         ).rejects.toThrow('annotation pre-abort');
         expect({

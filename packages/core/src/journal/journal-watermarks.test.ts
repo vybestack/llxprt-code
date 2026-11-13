@@ -1,7 +1,9 @@
+import { testJournalOptions } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
 import { JournalSession } from '../services/history/journalSession.js';
+import { JournalWatermarks } from './journal-watermarks.js';
 import {
   subscribeJournalCommits,
   type JournalCommitWatermark,
@@ -13,14 +15,40 @@ import { NativeJournalPageReader } from './native-journal-page-reader.js';
 
 describe('session-wide journal watermarks', () => {
   const directory = useTempDir('journal-watermarks-');
+  it('isolates owners and coalesces a subscriber to its newest scalar watermark', async () => {
+    const first = new JournalWatermarks();
+    const second = new JournalWatermarks();
+    const observed: number[] = [];
+    const unsubscribe = first.subscribe('shared.llxj', (mark) =>
+      observed.push(mark.commitSeq),
+    );
+    const publish = first.publisher('shared.llxj');
+    const other = second.publisher('shared.llxj');
+    try {
+      other({ commitSeq: 99, durableEnd: 99, groupTag: 0n });
+      await Promise.resolve();
+      expect(observed).toStrictEqual([]);
+      for (const commitSeq of [1, 2, 3])
+        publish({ commitSeq, durableEnd: commitSeq, groupTag: 0n });
+      expect(observed).toStrictEqual([]);
+      await Promise.resolve();
+      expect(observed).toStrictEqual([3]);
+    } finally {
+      unsubscribe();
+    }
+  });
   it('publishes history, in-progress recording and context mutations on one subscription', async () => {
     const path = join(directory(), 'session.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     const recorder = new JournalArrivalRecorder(session.store);
     let latest: JournalCommitWatermark | undefined;
-    const unsubscribe = subscribeJournalCommits(path, (watermark) => {
-      latest = watermark;
-    });
+    const unsubscribe = subscribeJournalCommits(
+      path,
+      (watermark) => {
+        latest = watermark;
+      },
+      session.store.watermarks,
+    );
     try {
       const prompt = await session.append([
         { speaker: 'human', blocks: [{ type: 'text', text: 'prompt' }] },
@@ -56,7 +84,7 @@ describe('session-wide journal watermarks', () => {
   });
   it('opens exactly the acknowledged watermark instead of a newer physical tail', async () => {
     const path = join(directory(), 'pinned.llxj');
-    const session = await JournalSession.create(path);
+    const session = await JournalSession.create(path, testJournalOptions());
     try {
       const first = await session.append([
         { speaker: 'human', blocks: [{ type: 'text', text: 'first' }] },

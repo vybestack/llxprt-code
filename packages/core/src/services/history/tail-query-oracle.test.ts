@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
@@ -48,9 +49,12 @@ describe('normalized request-tail frozen differential', () => {
       .trimEnd()
       .split('\n');
     expect(lines.length).toBe(UNIT_CASE_COUNT);
-    const session = await JournalSession.create(`${directory()}/oracle.llxj`, {
-      journal: testJournalSeams({}, 1, false).dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/oracle.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({}, 1, false).dependencies,
+      }),
+    );
     try {
       for (let seed = 0; seed < UNIT_CASE_COUNT; seed++) {
         const input = unitCase(seed);

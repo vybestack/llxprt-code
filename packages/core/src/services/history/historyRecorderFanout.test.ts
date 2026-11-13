@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -5,9 +7,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import { journalRows } from '../../recording/__tests__/support/journal-read-test-helpers.js';
-import { historyOriginId } from './historyOriginId.js';
+import { HistoryOriginIds } from './historyOriginId.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 let dir: string;
 const recorders: JournalRecordingService[] = [];
@@ -15,14 +18,16 @@ const histories: HistoryService[] = [];
 
 let counter = 0;
 function recorder(id: string): JournalRecordingService {
-  const created = JournalRecordingService.create({
-    sessionId: `fanout-${id}-${counter++}`,
-    projectHash: 'fanout',
-    chatsDir: dir,
-    workspaceDirs: [dir],
-    provider: 'test',
-    model: 'test',
-  });
+  const created = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: `fanout-${id}-${counter++}`,
+      projectHash: 'fanout',
+      chatsDir: dir,
+      workspaceDirs: [dir],
+      provider: 'test',
+      model: 'test',
+    }),
+  );
   recorders.push(created);
   return created;
 }
@@ -32,7 +37,7 @@ function row(text: string): IContent {
 }
 
 function history(): HistoryService {
-  const created = new HistoryService();
+  const created = new HistoryService({ scratchRoots: historyScratchRoots });
   histories.push(created);
   return created;
 }
@@ -44,12 +49,21 @@ async function recorded(service: JournalRecordingService): Promise<string> {
 }
 
 describe('origin id', () => {
-  it('is stable per object, distinct across objects and small', () => {
-    const a = {};
-    const b = {};
-    expect(historyOriginId(a)).toBe(historyOriginId(a));
-    expect(historyOriginId(a)).not.toBe(historyOriginId(b));
-    expect(historyOriginId(a).length).toBeLessThanOrEqual(12);
+  it('is stable per frozen object, distinct across objects and small', () => {
+    const ids = new HistoryOriginIds();
+    const a = Object.freeze({});
+    const b = Object.freeze({});
+    expect(ids.get(a)).toBe(ids.get(a));
+    expect(ids.get(a)).not.toBe(ids.get(b));
+    expect(ids.get(a).length).toBeLessThanOrEqual(12);
+    expect(Reflect.ownKeys(a)).toStrictEqual([]);
+  });
+
+  it('keeps independent history owners isolated', () => {
+    const a = new HistoryOriginIds();
+    const b = new HistoryOriginIds();
+    const origin = Object.freeze({});
+    expect(a.get(origin)).not.toBe(b.get(origin));
   });
 });
 

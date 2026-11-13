@@ -1,3 +1,4 @@
+import type { JournalSessionOptions } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -64,11 +65,12 @@ export function bindRawBrowserTargetDelete(
   chatsDir: string,
   projectHash: string,
   readRecording: () => SessionRecordingPort | null,
+  journal: JournalSessionOptions,
 ): BrowserTargetDeleter {
   return async (target) => {
     if (target.kind === 'checkpoint') {
       const recording = readRecording();
-      const checkpoints = createCheckpointService();
+      const checkpoints = createCheckpointService(journal);
       if (recording?.getSessionId() === target.source.sessionId) {
         await checkpoints.deleteCheckpoint(
           recording,

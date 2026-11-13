@@ -9,7 +9,7 @@ import type {
 } from '../services/history/IContent.js';
 import { LocalMediaStore } from './local-media-store.js';
 import type { MediaLifecycleMetrics } from './media-lifecycle-metrics.js';
-import { getScratchRoot } from './scratch-root.js';
+import { ScratchRootOwner } from './scratch-root.js';
 
 export class StreamMetricHistory extends HistoryService {}
 
@@ -97,6 +97,7 @@ export function metricSources(
   return {
     store,
     history,
+    scratchRoots: testMetricScratch,
     requestResolver: { accounting: () => ({ materializedNormalizedBytes: 0 }) },
     recording: { getPendingByteCount: () => 0 },
     persistence: { getPendingByteCount: () => 0 },
@@ -105,7 +106,7 @@ export function metricSources(
 }
 
 export function metricScratch(): string[] {
-  return readdirSync(getScratchRoot())
+  return readdirSync(testMetricScratch.getRoot())
     .filter((name) => name.startsWith('llxprt-media-metric-index-'))
     .sort();
 }
@@ -120,3 +121,5 @@ export function metricScratchChanges(before: readonly string[]): {
     removed: before.filter((path) => !after.includes(path)),
   };
 }
+
+export const testMetricScratch = new ScratchRootOwner();

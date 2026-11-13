@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
@@ -15,6 +17,7 @@ import {
   seedRecording,
   textRow,
 } from './__tests__/support/journalRecordingFixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('forkFromCheckpoint with replacement versions', () => {
   const sourceDir = useTempDir('fork-replace-source-');
@@ -34,9 +37,11 @@ describe('forkFromCheckpoint with replacement versions', () => {
         checkpointAfter: placement === 'before' ? 1 : undefined,
       });
       const parent = await JournalRecordingService.open(
-        recordingConfig(sourceDir(), {
-          sessionId: seed.recording.getSessionId(),
-        }),
+        withTestNamedWriters(
+          recordingConfig(sourceDir(), {
+            sessionId: seed.recording.getSessionId(),
+          }),
+        ),
         seed.filePath,
       );
       recordings.push(parent);
@@ -74,7 +79,9 @@ describe('forkFromCheckpoint with replacement versions', () => {
             >[0]);
       if (target === undefined) throw new Error('Missing checkpoint');
       await parent.dispose();
-      const result = await new SessionTransitionService().forkFromCheckpoint(
+      const result = await new SessionTransitionService(
+        withTestNamedWriters({}),
+      ).forkFromCheckpoint(
         target,
         childDir(),
         PROJECT_HASH,
@@ -90,7 +97,7 @@ describe('forkFromCheckpoint with replacement versions', () => {
       expect(rowTexts(await Array.fromAsync(boot.streamRows()))).toStrictEqual([
         placement === 'before' ? 'row-0' : 'parent replacement',
       ]);
-      const history = new HistoryService();
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       histories.push(history);
       await history.adoptResumeBoot(child, boot);
       await history.replaceAll([textRow('child replacement')]);
@@ -107,14 +114,16 @@ describe('forkFromCheckpoint with replacement versions', () => {
       ).toStrictEqual(['parent replacement']);
       await history.dispose();
       await child.dispose();
-      const resumed = await resumeSession({
-        continueRef: result.metadata.sessionId,
-        projectHash: PROJECT_HASH,
-        chatsDir: childDir(),
-        currentProvider: 'test',
-        currentModel: 'model',
-        workspaceDirs: [],
-      });
+      const resumed = await resumeSession(
+        withTestNamedWriters({
+          continueRef: result.metadata.sessionId,
+          projectHash: PROJECT_HASH,
+          chatsDir: childDir(),
+          currentProvider: 'test',
+          currentModel: 'model',
+          workspaceDirs: [],
+        }),
+      );
       const resumedBoot = requireBoot(resumed);
       if (!resumed.ok) throw new Error(resumed.error);
       try {

@@ -1,7 +1,9 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryDensityRows } from './historyDensityRows.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function row(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -9,7 +11,7 @@ function row(text: string): IContent {
 
 describe('HistoryDensityRows source ordinals', () => {
   it('returns the ordinal a row was appended with and undefined for a row appended without one', () => {
-    const rows = new HistoryDensityRows();
+    const rows = new HistoryDensityRows(historyScratchRoots);
     try {
       rows.append(row('a'), 7);
       rows.append(row('summary'));
@@ -24,7 +26,7 @@ describe('HistoryDensityRows source ordinals', () => {
   });
 
   it('keeps the ordinal of a row that is rewritten in place', () => {
-    const rows = new HistoryDensityRows();
+    const rows = new HistoryDensityRows(historyScratchRoots);
     try {
       rows.append(row('a'), 4);
       rows.append(row('b'), 5);
@@ -38,7 +40,7 @@ describe('HistoryDensityRows source ordinals', () => {
   });
 
   it('refuses an index outside the appended rows', () => {
-    const rows = new HistoryDensityRows();
+    const rows = new HistoryDensityRows(historyScratchRoots);
     try {
       rows.append(row('a'), 1);
       expect(() => rows.sourceOrdinalAt(1)).toThrow('ordinal is invalid');

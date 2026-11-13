@@ -1,3 +1,5 @@
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { ScratchRootOwner } from '../storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import * as fs from 'node:fs';
@@ -8,7 +10,11 @@ import {
   RecordingFailureStorageError,
 } from './recording-failure-report.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 describe('failure reporting write and descriptor cleanup faults', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   it('preserves a failed report write before the descriptor close error', () => {
     const root = fs.mkdtempSync(join(tmpdir(), 'recording-write-close-'));
     const original = new Error('persistence failed');
@@ -24,7 +30,10 @@ describe('failure reporting write and descriptor cleanup faults', () => {
     });
     let failure: unknown;
     try {
-      new RecordingFailureStore(root).record(1, original);
+      new RecordingFailureStore(recordingScratchRoots, root).record(
+        1,
+        original,
+      );
     } catch (error: unknown) {
       failure = error;
     } finally {

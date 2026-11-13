@@ -5,6 +5,7 @@
  */
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { diskAssets, type DiskAssets } from './o200k-disk-assets.js';
 import { countPiece } from './o200k-disk-bpe.js';
 import {
   checkpoint,
@@ -19,23 +20,32 @@ export interface O200kDiskSource {
 }
 
 export interface O200kDiskCountOptions {
+  readonly assets?: DiskAssets;
   readonly workspaceDirectory: string;
   readonly signal?: AbortSignal;
 }
 
 async function countNormalized(
+  assets: DiskAssets,
   source: string,
   directory: string,
   signal?: AbortSignal,
 ): Promise<number> {
-  const reader = new DiskCharacters(source);
+  const reader = new DiskCharacters(source, assets.classify);
   try {
     let position = 0;
     let count = 0;
     let pieces = 0;
     while (reader.at(position)) {
       const end = await nextPiece(reader, position, signal);
-      count += await countPiece(source, directory, position, end, signal);
+      count += await countPiece(
+        source,
+        directory,
+        position,
+        end,
+        signal,
+        assets,
+      );
       position = end;
       if (++pieces % 256 === 0) await checkpoint(signal);
     }
@@ -64,7 +74,12 @@ export async function countO200kBaseTokensFromDiskSource(
       source.encoding ?? 'utf8',
       options.signal,
     );
-    return await countNormalized(normalized, directory, options.signal);
+    return await countNormalized(
+      options.assets ?? diskAssets(),
+      normalized,
+      directory,
+      options.signal,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

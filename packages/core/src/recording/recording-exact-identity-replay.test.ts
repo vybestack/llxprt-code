@@ -1,7 +1,9 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
-import { historyOriginId } from '../services/history/historyOriginId.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { JournalResumeBoot, resumePointOf } from './journalResume.js';
@@ -18,6 +20,8 @@ import {
   rowsOf,
 } from './__tests__/support/exact-replay-fixture.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 async function expectDistinctNativeRows(
   fixture: ExactReplayFixture,
   expected: readonly IContent[],
@@ -31,6 +35,8 @@ async function expectDistinctNativeRows(
 }
 
 describe('exact replay identity contracts', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const backend = 'journal';
   it(`rebuilds distinct equal-text unstamped disk rows without duplication on ${backend}`, async () => {
     const fixture = new ExactReplayFixture(
@@ -166,21 +172,29 @@ describe('exact replay identity contracts', () => {
       const original = await diskRows(fixture.path());
       expect(original.map((row) => row.origin)).toStrictEqual([
         undefined,
-        historyOriginId(foreign),
-        historyOriginId(selected),
+        fixture.history.originIds.get(foreign),
+        fixture.history.originIds.get(selected),
       ]);
       await fixture.close();
       await fixture.resume(async (history) => {
-        const mirror = JournalRecordingService.create({
-          sessionId: 'selected-mirror',
-          projectHash: PROJECT,
-          chatsDir: join(directory, 'mirror'),
-          workspaceDirs: [],
-          provider: 'test',
-          model: 'model-1',
+        const mirror = JournalRecordingService.create(
+          withTestNamedWriters({
+            sessionId: 'selected-mirror',
+            projectHash: PROJECT,
+            chatsDir: join(directory, 'mirror'),
+            workspaceDirs: [],
+            provider: 'test',
+            model: 'model-1',
+          }),
+        );
+        const integration = new RecordingIntegration(
+          mirror,
+          recordingScratchRoots,
+        );
+        const replacement = new HistoryService({
+          scratchRoots: recordingScratchRoots,
+          originIds: history.originIds,
         });
-        const integration = new RecordingIntegration(mirror);
-        const replacement = new HistoryService({});
         try {
           await integration.subscribeToJournal(history, selected);
           await integration.flushAtTurnBoundary();
@@ -193,7 +207,7 @@ describe('exact replay identity contracts', () => {
           );
           expect(seeded.map((row) => row.origin)).toStrictEqual([
             undefined,
-            historyOriginId(selected),
+            fixture.history.originIds.get(selected),
           ]);
           expect(seeded[1].owner).toBe(original[2].owner);
           replacement.add(structuredClone(expected[0]));
@@ -206,7 +220,9 @@ describe('exact replay identity contracts', () => {
             remapped.map((row) => row.content),
             expected,
           );
-          expect(remapped[1].origin).toBe(historyOriginId(selected));
+          expect(remapped[1].origin).toBe(
+            fixture.history.originIds.get(selected),
+          );
           expect(remapped[1].owner).not.toBe(seeded[1].owner);
           replacement.add(exactRow('foreign-late', 4), undefined, foreign);
           const accepted = exactRow('selected-late', 5);

@@ -1,9 +1,16 @@
+import {
+  afterAll as afterRecordingTests,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import { ScratchRootOwner } from '../../../core/src/storage/scratch-root.js';
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -22,7 +29,11 @@ import {
   makeResumeContext,
 } from './sessionBrowserE2E.helpers.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 describe('resume example ownership', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   it.each([
     { ref: 'latest', ok: true },
     { ref: '999', ok: false },
@@ -33,11 +44,16 @@ describe('resume example ownership', () => {
         path.join(os.tmpdir(), 'resume-example-ownership-'),
       );
       const recording = createSessionRecorder(
-        makeConfig(chatsDir, { sessionId: 'current-session' }),
+        withTestNamedWriters(
+          makeConfig(chatsDir, { sessionId: 'current-session' }),
+        ),
       );
       const context = makeResumeContext(chatsDir, {
         currentRecording: recording,
-        currentIntegration: new RecordingIntegration(recording),
+        currentIntegration: new RecordingIntegration(
+          recording,
+          recordingScratchRoots,
+        ),
       });
       try {
         await seedSessionRows(recording, [makeContent('current content')]);
@@ -56,7 +72,7 @@ describe('resume example ownership', () => {
           messages: [{ speaker: 'user', text: 'target content' }],
         });
 
-        const result = await performResume(ref, context);
+        const result = await performResume(ref, withTestNamedWriters(context));
         expect(result.ok).toBe(ok);
         const current = context.recordingCallbacks.getCurrentRecording();
         if (current === null) throw new Error('Missing current recording');

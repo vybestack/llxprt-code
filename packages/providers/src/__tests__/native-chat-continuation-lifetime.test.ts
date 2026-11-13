@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
@@ -24,6 +25,7 @@ import {
   installFakeTransport,
   type CapturedWireRequest,
 } from './support/wireBodyCapture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const route = WIRE_ROUTES.find((value) => value.id === 'openai-chat-plain');
 if (route === undefined) throw new Error('Missing plain Chat route');
@@ -196,8 +198,10 @@ describe('native continuation second HTTP body ownership', () => {
         restore();
       }
       expect(expected).toHaveLength(2);
-      const history = new HistoryService({});
-      await history.registerMediaOwner(new HistoryMediaOwnership(store));
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
+      await history.registerMediaOwner(
+        new HistoryMediaOwnership(store, historyScratchRoots),
+      );
       await history.addBatch(rows);
       const ownership = new RowOwnership();
       const selection = await history.prepareCuratedForProviderSnapshot([], {

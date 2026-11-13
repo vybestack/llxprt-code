@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -6,9 +7,13 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import fs from 'node:fs';
 import * as tiktoken from '@dqbd/tiktoken';
-import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import {
+  estimateTokens,
+  neutralEncodingCache,
+} from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { NeutralTextStream } from '@vybestack/llxprt-code-core/utils/neutral-text-stream.js';
 import { createRuntimeTokenizerFactory } from './runtimeTokenizerFactory.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 describe('runtime neutral tokenizer readiness', () => {
   it('prepares history and usage counters before an unsupported provider becomes ready', async () => {
@@ -19,7 +24,7 @@ describe('runtime neutral tokenizer readiness', () => {
       'Read "the instructions" and complete the operation. '.repeat(40);
     const expectedPrompt = oracle.encode(prompt).length;
     oracle.free();
-    const factory = createRuntimeTokenizerFactory();
+    const factory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
     await factory.prepareTokenizer?.('fake', 'fake-model');
     const encoder = spyOn(tiktoken, 'encoding_for_model').mockImplementation(
       () => {
@@ -32,7 +37,7 @@ describe('runtime neutral tokenizer readiness', () => {
     try {
       expect(estimateTokens(text)).toBe(expected);
       expect(estimateTokens(prompt)).toBe(expectedPrompt);
-      const stream = new NeutralTextStream();
+      const stream = new NeutralTextStream(neutralEncodingCache());
       stream.append(Buffer.from(text));
       expect(stream.finish()).toBe(expected);
       expect(factory.getTokenizer('fake', 'fake-model')).toBeUndefined();

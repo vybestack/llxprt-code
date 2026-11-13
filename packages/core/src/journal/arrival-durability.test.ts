@@ -1,3 +1,4 @@
+import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -18,6 +19,7 @@ describe('arrival writer durability and backpressure', () => {
     const store = await JournalStore.create(
       join(directory(), 'slow.llxj'),
       storeDeps({ seams }),
+      testNamedWriters,
     );
     const recorder = new JournalArrivalRecorder(store);
     try {
@@ -56,6 +58,7 @@ describe('arrival writer durability and backpressure', () => {
     const store = await JournalStore.create(
       join(directory(), 'push.llxj'),
       storeDeps(),
+      testNamedWriters,
     );
     const recorder = new JournalArrivalRecorder(store);
     try {
@@ -82,6 +85,7 @@ describe('arrival writer durability and backpressure', () => {
     const store = await JournalStore.create(
       join(directory(), 'flush.llxj'),
       storeDeps({ seams }),
+      testNamedWriters,
     );
     const recorder = new JournalArrivalRecorder(store);
     try {
@@ -109,6 +113,7 @@ describe('arrival writer durability and backpressure', () => {
     const store = await JournalStore.create(
       join(directory(), 'failed.llxj'),
       storeDeps({ seams }),
+      testNamedWriters,
     );
     const recorder = new JournalArrivalRecorder(store);
     try {

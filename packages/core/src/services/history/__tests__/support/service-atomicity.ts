@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdir, mkdtemp } from 'node:fs/promises';
 import type { LocalMediaStore } from '../../../../storage/local-media-store.js';
@@ -30,6 +32,8 @@ import {
   persistedMutationRows,
   type PersistedMutationRow,
 } from './service-recorder-mutations.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 export async function persistedEntries(file: string): Promise<RowEntry[]> {
   const reader = await openJournalReadOnly(file);
@@ -90,7 +94,9 @@ export async function atomicRecorder(
       },
     },
   };
-  const recording = JournalRecordingService.create(config);
+  const recording = JournalRecordingService.create(
+    withTestNamedWriters(config),
+  );
   return { failures, seams, config, recording };
 }
 
@@ -134,7 +140,7 @@ export async function atomicRig(name: string): Promise<AtomicRig> {
   const directory = await atomicDirectory(name);
   const primary = await atomicRecorder(directory, 'primary');
   const mirror = await atomicRecorder(directory, 'mirror');
-  const history = new HistoryService({});
+  const history = new HistoryService({ scratchRoots: recordingScratchRoots });
   await history.adoptResumeBoot(
     primary.recording,
     new JournalResumeBoot(
@@ -142,7 +148,10 @@ export async function atomicRig(name: string): Promise<AtomicRig> {
       await resumePointOf(primary.recording),
     ),
   );
-  const integration = new RecordingIntegration(mirror.recording);
+  const integration = new RecordingIntegration(
+    mirror.recording,
+    recordingScratchRoots,
+  );
   const origin = {};
   await integration.subscribeToJournal(history, origin);
   let closed = false;
@@ -184,10 +193,14 @@ export async function reopenedRows(
   mediaStore?: LocalMediaStore,
 ): Promise<PersistedMutationRow[]> {
   const recording = await JournalRecordingService.open(
-    { ...recorder.config, journal: undefined, mediaStore },
+    withTestNamedWriters({
+      ...recorder.config,
+      journal: undefined,
+      mediaStore,
+    }),
     fileOf(recorder.recording),
   );
-  const history = new HistoryService({});
+  const history = new HistoryService({ scratchRoots: recordingScratchRoots });
   try {
     await history.adoptResumeBoot(
       recording,

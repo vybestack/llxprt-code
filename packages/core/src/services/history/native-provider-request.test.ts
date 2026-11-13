@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '../../debug/index.js';
@@ -8,6 +9,7 @@ import type { IContent } from './IContent.js';
 import { JournalProviderRequestSnapshot } from './journal-provider-request.js';
 import { buildProviderContent } from './historyProviderPipeline.js';
 import type { ProviderRequestRows } from './provider-request-snapshot.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function collect(rows: ProviderRequestRows): Promise<IContent[]> {
   const result: IContent[] = [];
@@ -26,7 +28,7 @@ describe('native backend provider normalization', () => {
   )(
     'detects call ownership without changing the selected history: %j',
     async ({ speaker, pending, padding }) => {
-      const history = new HistoryService({});
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       const rows: IContent[] = [
         ...Array.from(
           { length: padding },
@@ -83,7 +85,7 @@ describe('native backend provider normalization', () => {
     },
   );
   it('uses the indexed request and overlays pending results without publishing them', async () => {
-    const history = new HistoryService({});
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.setTokenizerFactory(exactTokenizer());
     const tail: IContent[] = [
       {

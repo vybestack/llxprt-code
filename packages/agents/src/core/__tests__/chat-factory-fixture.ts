@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
@@ -149,6 +150,7 @@ import { createChatSession } from '../ChatSessionFactory.js';
 import { createOwnerPolicyFixture } from './session-policy-fixture.js';
 import { observeStoredHistoryReuse } from './chat-session-factory-history-test-observation.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -251,7 +253,9 @@ export const observeReusedHistory = async () => {
   // or the conversation would be duplicated. This pins the isEmpty()
   // discriminator's other branch.
   const { HistoryService: RealHistoryService } = realHistoryServiceModule;
-  const storedHistoryService = new RealHistoryService();
+  const storedHistoryService = new RealHistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   // Pre-seed the stored service so it is non-empty (simulating a live conv).
   storedHistoryService.add(
     {

@@ -15,7 +15,6 @@ import {
   ApiResponseEvent,
   ConversationResponseEvent,
 } from '@vybestack/llxprt-code-core/telemetry/types.js';
-import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import type { TokenCounts } from './tokenCounts.js';
 import type { RequestLoggingPolicy } from './requestLoggingPolicy.js';
 
@@ -195,7 +194,7 @@ export async function writeConversationLog(
     error: error != null ? String(error) : undefined,
   };
   if (policy?.strictDurableResponse === true) {
-    const fileWriter = getConversationFileWriter(config.conversationLogPath);
+    const fileWriter = config.conversationFileWriter;
     await fileWriter.writeEntryAcknowledged({
       type: 'response',
       provider: ctx.providerName,
@@ -213,7 +212,7 @@ export async function writeConversationLog(
     return () => config.recordConversationResponse(event);
   }
   config.recordConversationResponse(event);
-  const fileWriter = getConversationFileWriter(config.conversationLogPath);
+  const fileWriter = config.conversationFileWriter;
   await fileWriter.writeResponse(ctx.providerName, redactedContent, metadata);
   return undefined;
 }

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -45,14 +46,16 @@ describe('journal resume stateful-chain stripping @issue:3160', () => {
     summary?: IContent,
   ): Promise<string> {
     const sessionId = crypto.randomUUID();
-    const recorder = JournalRecordingService.create({
-      sessionId,
-      projectHash: PROJECT_HASH,
-      chatsDir,
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
+    const recorder = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId,
+        projectHash: PROJECT_HASH,
+        chatsDir,
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
     try {
       const session = await recorder.session();
       for (let index = 0; index < rows.length; index++) {
@@ -93,14 +96,9 @@ describe('journal resume stateful-chain stripping @issue:3160', () => {
     );
     if (target?.kind !== 'checkpoint')
       throw new Error('Missing native checkpoint');
-    return new SessionTransitionService().forkFromCheckpoint(
-      target,
-      chatsDir,
-      PROJECT_HASH,
-      'test',
-      'test',
-      [],
-    );
+    return new SessionTransitionService(
+      withTestNamedWriters({}),
+    ).forkFromCheckpoint(target, chatsDir, PROJECT_HASH, 'test', 'test', []);
   }
 
   async function restoredRows(
@@ -109,14 +107,16 @@ describe('journal resume stateful-chain stripping @issue:3160', () => {
   ): Promise<{ history: IContent[] }> {
     const resumed = checkpoint
       ? await checkpointResume(sessionId)
-      : await resumeSession({
-          continueRef: sessionId,
-          projectHash: PROJECT_HASH,
-          chatsDir,
-          currentProvider: 'test',
-          currentModel: 'test',
-          workspaceDirs: [],
-        });
+      : await resumeSession(
+          withTestNamedWriters({
+            continueRef: sessionId,
+            projectHash: PROJECT_HASH,
+            chatsDir,
+            currentProvider: 'test',
+            currentModel: 'test',
+            workspaceDirs: [],
+          }),
+        );
     expect(resumed.ok).toBe(true);
     if (!resumed.ok) throw new Error(resumed.error);
     try {

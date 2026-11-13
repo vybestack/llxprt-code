@@ -1,3 +1,5 @@
+import { testJournalOptions } from '../journal/__tests__/support/namedWriterOwner.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
@@ -45,14 +47,16 @@ describe('checkpoint service factory', () => {
   for (const [backend, serviceClass] of backends) {
     describe(`backend ${backend}`, () => {
       async function active(sessionId = 'live'): Promise<SessionRecordingPort> {
-        const recorder = await createLockedSessionRecorder({
-          sessionId,
-          projectHash: PROJECT,
-          chatsDir: path.join(directory(), 'chats'),
-          workspaceDirs: ['/work/a'],
-          provider: 'anthropic',
-          model: 'model-1',
-        });
+        const recorder = await createLockedSessionRecorder(
+          withTestNamedWriters({
+            sessionId,
+            projectHash: PROJECT,
+            chatsDir: path.join(directory(), 'chats'),
+            workspaceDirs: ['/work/a'],
+            provider: 'anthropic',
+            model: 'model-1',
+          }),
+        );
         live.add(recorder);
         await recordRows(recorder, [row('one'), row('two')]);
         await recorder.flush();
@@ -60,12 +64,14 @@ describe('checkpoint service factory', () => {
       }
 
       it('builds that backend’s service', () => {
-        expect(createCheckpointService()).toBeInstanceOf(serviceClass);
+        expect(createCheckpointService(testJournalOptions())).toBeInstanceOf(
+          serviceClass,
+        );
       });
 
       it('creates, renames, lists and deletes a checkpoint of a live recorder through one interface', async () => {
         const recorder = await active();
-        const service = createCheckpointService();
+        const service = createCheckpointService(testJournalOptions());
         const created = await service.createCheckpoint(
           recorder,
           PROJECT,
@@ -106,7 +112,7 @@ describe('checkpoint service factory', () => {
 
       it('rejects duplicate names and overwrites only after confirmation', async () => {
         const recorder = await active();
-        const service = createCheckpointService();
+        const service = createCheckpointService(testJournalOptions());
         const first = await service.createCheckpoint(
           recorder,
           PROJECT,
@@ -137,7 +143,7 @@ describe('checkpoint service factory', () => {
 
       it('coordinates checkpoint and session names across closed sessions', async () => {
         const other = await active('other');
-        const service = createCheckpointService();
+        const service = createCheckpointService(testJournalOptions());
         await service.createCheckpoint(other, PROJECT, 'taken');
         await other.flush();
         await other.dispose();
@@ -188,7 +194,7 @@ describe('checkpoint service factory', () => {
 
       it('blocks session deletion until its live checkpoints are deleted', async () => {
         const recorder = await active();
-        const service = createCheckpointService();
+        const service = createCheckpointService(testJournalOptions());
         const checkpoint = await service.createCheckpoint(
           recorder,
           PROJECT,
@@ -230,7 +236,7 @@ describe('checkpoint service factory', () => {
         const chats = recorder.getChatsDir();
         await recorder.dispose();
         live.delete(recorder);
-        const service = createCheckpointService();
+        const service = createCheckpointService(testJournalOptions());
         const created = await service.createCheckpointClosed(
           file,
           PROJECT,
@@ -284,6 +290,8 @@ describe('checkpoint service factory', () => {
   }
 
   it('creates the journal service without backend selection', () => {
-    expect(createCheckpointService()).toBeInstanceOf(JournalCheckpointService);
+    expect(createCheckpointService(testJournalOptions())).toBeInstanceOf(
+      JournalCheckpointService,
+    );
   });
 });

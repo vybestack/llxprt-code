@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -77,6 +78,7 @@ import {
   type SendPeakSource,
   type ShapeCounts,
 } from './sendPeakMeasurement.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const sampleLog = openSendPeakSampleLog(process.env.SEND_PEAK_LOG);
 if (sampleLog !== undefined) process.once('exit', () => sampleLog.close());
@@ -316,7 +318,7 @@ function nativeSelection(
   return nativeSources.handle(job, sampler, activeTrap);
 }
 
-const tokenizerFactory = createRuntimeTokenizerFactory();
+const tokenizerFactory = createRuntimeTokenizerFactory(tokenizerScratchRoots);
 
 /**
  * Estimates the projected prompt while the sampler watches, so a copy of the

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -39,14 +40,16 @@ describe('useSessionBrowser with an unreadable recording present (issue #3732)',
   });
 
   it('lists the healthy session and logs the skipped file with its reason', async () => {
-    const recording = createSessionRecorder({
-      sessionId: 'browser-healthy-session',
-      projectHash: PROJECT_HASH,
-      chatsDir,
-      workspaceDirs: [chatsDir],
-      provider: 'test-provider',
-      model: 'test-model',
-    });
+    const recording = createSessionRecorder(
+      withTestNamedWriters({
+        sessionId: 'browser-healthy-session',
+        projectHash: PROJECT_HASH,
+        chatsDir,
+        workspaceDirs: [chatsDir],
+        provider: 'test-provider',
+        model: 'test-model',
+      }),
+    );
     await seedSessionRows(recording, [
       {
         speaker: 'human',

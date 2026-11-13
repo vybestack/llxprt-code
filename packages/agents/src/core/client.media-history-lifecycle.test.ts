@@ -799,7 +799,7 @@ describe('AgentClient (client.ts)', () => {
       selectedOwner,
     );
     ownerManager = manager;
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
     settingsService.set('activeProvider', 'gemini');
     const ctx = await setupAgentClient(
       { mockChatCreateFn, mockGenerateContentFn, mockEmbedContentFn },

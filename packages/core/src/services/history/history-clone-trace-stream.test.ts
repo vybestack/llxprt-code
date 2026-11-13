@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
@@ -13,10 +14,11 @@ import {
   traversalMeasurement,
   type Exit,
 } from './__tests__/support/history-clone-trace-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('clone sanitization and independent objects', () => {
   it('preserves the eager sanitization transform, media and tool shape, and independent objects', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       const input = mixedRow();
       service.add(input);
@@ -58,7 +60,7 @@ describe('clone sanitization and independent objects', () => {
 
 describe('chronology projection parity', () => {
   it('matches the eager chronology projection without leaking private payloads', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       service.add(mixedRow());
       service.add(suffixRow(9));

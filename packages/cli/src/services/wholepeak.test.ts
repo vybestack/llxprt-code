@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
@@ -30,14 +32,14 @@ async function observedReader(
   counters: JournalReadCounters,
 ): Promise<{ recording: JournalRecordingService; boot: JournalResumeBoot }> {
   const recording = await JournalRecordingService.open(
-    {
+    withTestNamedWriters({
       sessionId: 'wholememory',
       projectHash: MEMORY_PROJECT,
       chatsDir: dirname(path),
       workspaceDirs: [],
       provider: 'test',
       model: 'test',
-    },
+    }),
     path,
   );
   return {
@@ -92,14 +94,16 @@ describe('overlapping readers', () => {
 describe('consumer retention control', () => {
   it('observes consumer retention after real resolver exhaustion and detects the peak', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'peak-consumer-'));
-    const recording = JournalRecordingService.create({
-      sessionId: 'wholememory',
-      projectHash: MEMORY_PROJECT,
-      chatsDir: directory,
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'wholememory',
+        projectHash: MEMORY_PROJECT,
+        chatsDir: directory,
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
     await (
       await recording.session()
     ).append(
@@ -171,9 +175,12 @@ describe('projection backpressure', () => {
         ],
       },
     ];
-    const iterator = streamHistoryItems(rows, undefined, ownership)[
-      Symbol.asyncIterator
-    ]();
+    const iterator = streamHistoryItems(
+      scratchRoots,
+      rows,
+      undefined,
+      ownership,
+    )[Symbol.asyncIterator]();
     const first = await iterator.next();
     expect(first.done).toBe(false);
     expect(first.value?.type).toBe('tool_group');
@@ -194,7 +201,12 @@ describe('projection failure', () => {
       throw new Error('upstream failed');
     }
     const consume = async (): Promise<void> => {
-      for await (const item of streamHistoryItems(rows(), undefined, ownership))
+      for await (const item of streamHistoryItems(
+        scratchRoots,
+        rows(),
+        undefined,
+        ownership,
+      ))
         void item;
     };
     await expect(consume()).rejects.toThrow('upstream failed');
@@ -206,14 +218,16 @@ describe('projection failure', () => {
 describe('admitted workspace metadata', () => {
   it('persists every directory accepted by workspace admission', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'peak-metadata-'));
-    const recording = JournalRecordingService.create({
-      sessionId: 'wholememory',
-      projectHash: MEMORY_PROJECT,
-      chatsDir: directory,
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'wholememory',
+        projectHash: MEMORY_PROJECT,
+        chatsDir: directory,
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
     try {
       const directories = await wideWorkspaceDirectories(directory);
       expect(directories).toHaveLength(513);
@@ -289,3 +303,5 @@ describe('continuation ownership measurements', () => {
     }
   }, 600000);
 });
+
+const scratchRoots = new ScratchRootOwner();

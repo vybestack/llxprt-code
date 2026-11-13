@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { randomUUID } from 'node:crypto';
 import { failureAfterDisposal } from './historyDisposalFailure.js';
@@ -59,6 +60,7 @@ async function appendAdmittedRows(
 
 /** Owners a deferred history journal needs; supplied by the client, never read from Config. */
 export interface DeferredHistoryDeps {
+  readonly scratchRoots: ScratchRootOwner;
   readonly mediaStore: LocalMediaStore;
   readonly historyTokenization?: RuntimeTokenizerFactory['getTokenizer'];
 }
@@ -79,6 +81,9 @@ export async function prepareDeferredHistorySource(
   options: DeferredHistorySourceOptions,
 ): Promise<{ journal: HistoryService; release: () => Promise<void> }> {
   const journal = new HistoryService({
+    scratchRoots: deps.scratchRoots,
+    originIds: stored?.originIds,
+    maintenanceScope: stored?.maintenanceScope,
     mutationOwnership: options.ownership,
     attachmentCounters: options.counters,
   });
@@ -109,7 +114,7 @@ export function admitDeferredHistorySource(
 ): Promise<() => Promise<void>> {
   const admission = new MediaAdmissionService(store);
   const scope = `deferred-source:${randomUUID()}`;
-  const references = new HistoryMediaIndex();
+  const references = new HistoryMediaIndex(journal.scratchRoots);
   // Every indexed content id was admitted and reserved under this scope, so
   // later rows that repeat it need no further store round trips.
   const context = {

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -22,6 +23,7 @@ import {
   projectOpenAIChatPromptEnvelopeFromSource,
 } from '../../../providers/src/runtime/promptEnvelopeProjections.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 async function withPendingMedia(
   admission: MediaAdmissionService,
@@ -76,7 +78,7 @@ async function assertPreparedSend(
       await estimatePromptEnvelope(
         'openai',
         projected,
-        createRuntimeTokenizerFactory(),
+        createRuntimeTokenizerFactory(tokenizerScratchRoots),
       )
     ).estimatedPromptTokens;
     expect(tokens).toBeGreaterThan(0);

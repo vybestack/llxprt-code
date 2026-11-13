@@ -86,7 +86,7 @@ function requestFacts(input: RetainedSetup) {
     bodies: input.http.bodies,
     expected: input.expected,
     largestRowBytes: input.largestRowBytes,
-    activeBodies: activeRequestBodyCount(),
+    activeBodies: activeRequestBodyCount(setup.provider.requestBodyCensus),
     demand: input.observer.state,
     requests: setup.requests,
     telemetryEnabled: setup.config.getTelemetryEnabled(),

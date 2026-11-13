@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -90,14 +91,16 @@ async function writeSessionFile(
   sessionId: string,
   startTime?: string,
 ): Promise<string> {
-  const recording = JournalRecordingService.create({
-    sessionId,
-    projectHash: 'test-hash',
-    chatsDir: dir,
-    workspaceDirs: ['/test'],
-    provider: 'test',
-    model: 'test-model',
-  });
+  const recording = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId,
+      projectHash: 'test-hash',
+      chatsDir: dir,
+      workspaceDirs: ['/test'],
+      provider: 'test',
+      model: 'test-model',
+    }),
+  );
   try {
     await recording.session();
     await recording.flush();

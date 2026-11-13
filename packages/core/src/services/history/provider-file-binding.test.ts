@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -12,10 +13,11 @@ import type {
   ProviderFileReferenceMetadata,
 } from './IContent.js';
 import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const services: HistoryService[] = [];
 function createService(): HistoryService {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   services.push(history);
   return history;
 }

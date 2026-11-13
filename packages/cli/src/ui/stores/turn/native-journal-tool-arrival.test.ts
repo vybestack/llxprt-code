@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -70,6 +71,7 @@ describe('transcript opening during tool arrival', () => {
   it('defers an unfinished tool response without losing the completed result', async () => {
     const session = await JournalSession.create(
       join(directory(), 'response.llxj'),
+      testJournalOptions(),
     );
     const recorder = new JournalArrivalRecorder(session.store);
     try {
@@ -131,6 +133,7 @@ describe('transcript opening during tool arrival', () => {
     it(`defers unfinished tool blocks and publishes completed calls (named=${named})`, async () => {
       const session = await JournalSession.create(
         join(directory(), `${named}.llxj`),
+        testJournalOptions(),
       );
       const recorder = new JournalArrivalRecorder(session.store);
       try {

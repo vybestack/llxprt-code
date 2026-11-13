@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from '../../../../core/src/services/history/journalSession.js';
@@ -19,9 +20,12 @@ import {
 describe('native Kimi frozen actual converter differential', () => {
   const directory = useTempDir('kimi-native-frozen-');
   it('keeps all 5000 frozen inputs unchanged and compares complete conversion and each unit counter without exclusions', async () => {
-    const session = await JournalSession.create(`${directory()}/all.llxj`, {
-      journal: testJournalSeams({}, 1, false).dependencies,
-    });
+    const session = await JournalSession.create(
+      `${directory()}/all.llxj`,
+      testJournalOptions({
+        journal: testJournalSeams({}, 1, false).dependencies,
+      }),
+    );
     let converted = 0;
     try {
       await session.store.commit([{ kind: 'kimi' }]);

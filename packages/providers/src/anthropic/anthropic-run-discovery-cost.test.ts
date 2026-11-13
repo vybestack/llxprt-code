@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { AnthropicRepairIndex } from './anthropic-repair-index.js';
@@ -41,7 +42,10 @@ describe('Anthropic unmerged run discovery', () => {
       speaker: index % 2 === 0 ? 'human' : 'ai',
       blocks: [{ type: 'text', text: `row ${index}` }],
     }));
-    const session = await JournalSession.create(`${directory()}/${count}.llxj`);
+    const session = await JournalSession.create(
+      `${directory()}/${count}.llxj`,
+      testJournalOptions(),
+    );
     try {
       await session.append(rows);
       await session.store.commit([

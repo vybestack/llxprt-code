@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -39,6 +40,8 @@ import {
   sendOwned,
   streamOwned,
 } from './__tests__/support/chatSession.media-history-harness.js';
+const historyScratchRoots = createTestScratchOwner();
+
 const priorTokenLimits = {
   ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
 };
@@ -659,7 +662,7 @@ async function testMediaHistory18(): Promise<void> {
   const staged = await rawRows(detached);
   // The journal facade adopts only a candidate whose journal matches the live
   // one, so the live service is seeded with the same rows before adoption.
-  const live = new HistoryService();
+  const live = new HistoryService({ scratchRoots: historyScratchRoots });
   await live.addBatch(structuredClone(staged), 'media-history-model');
   const rebind = fixture.chat.prepareHistoryRebind(live);
   const adopt = await live.prepareProfileAdoption(detached);

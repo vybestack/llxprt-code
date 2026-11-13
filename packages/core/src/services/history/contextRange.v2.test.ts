@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -34,6 +35,7 @@ import type {
   DensityResult,
   DensityResultMetadata,
 } from '../../core/compression/types.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function textContent(speaker: 'human' | 'ai', text: string): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
@@ -137,7 +139,7 @@ function expectWellFormedInterior(range: ContextRange): void {
 
 describe('HistoryService context range v2', () => {
   it('emits contextRangeChanged once when the first entry lands in an empty history', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     const events = captureRanges(service);
     service.add(textContent('human', 'one'));
     expect(events).toHaveLength(1);
@@ -152,7 +154,7 @@ describe('HistoryService context range v2', () => {
   });
 
   it('reports the compressed interior span between preserved head and tail', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     for (const text of [
       'one',
       'two',
@@ -193,7 +195,7 @@ describe('HistoryService context range v2', () => {
   });
 
   it('reports density-replaced and density-removed spans with their seqs', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     for (const text of ['one', 'two', 'three', 'four', 'five']) {
       service.add(textContent('human', text));
     }
@@ -215,7 +217,7 @@ describe('HistoryService context range v2', () => {
 
 describe('HistoryService context range v2 membership changes', () => {
   it('coalesces adjacent same-reason spans and keeps different reasons separate', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     for (const text of ['one', 'two', 'three', 'four', 'five']) {
       service.add(textContent('human', text));
     }
@@ -240,7 +242,7 @@ describe('HistoryService context range v2 membership changes', () => {
   });
 
   it('reports a rewound span when the history is truncated to a seq prefix', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     for (const text of ['one', 'two', 'three', 'four', 'five']) {
       service.add(textContent('human', text));
     }
@@ -271,7 +273,7 @@ describe('HistoryService context range v2 membership changes', () => {
   });
 
   it('reports the full span as cleared on clear', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     for (const text of ['one', 'two', 'three']) {
       service.add(textContent('human', text));
     }
@@ -290,7 +292,7 @@ describe('HistoryService context range v2 membership changes', () => {
 
 describe('HistoryService context range v2 combined changes and projections', () => {
   it('keeps compressed and density spans disjoint and ordered, and the snapshot matches the last event', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({ scratchRoots: historyScratchRoots });
     for (const text of [
       'one',
       'two',

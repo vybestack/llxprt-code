@@ -1,3 +1,4 @@
+import type { JournalSessionOptions } from '../services/history/journalSession.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -409,6 +410,7 @@ export interface RecordingWriterObservation {
  * Shared session identity and retired JSONL writer configuration.
  */
 export interface SessionRecordingServiceConfig {
+  readonly journal?: JournalSessionOptions;
   sessionId: string;
   projectHash: string;
   chatsDir: string;

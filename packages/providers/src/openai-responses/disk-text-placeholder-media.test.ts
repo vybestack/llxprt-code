@@ -57,7 +57,7 @@ describe('Responses source route placeholder-supported media', () => {
 
   for (const { name, rows, ephemerals } of cases) {
     it(`projects and estimates ${name} like the array route`, async () => {
-      const before = promptDirs();
+      const before = promptDirs(harness.setup.config.scratchRoots);
       const baseline = await harness.project(
         harness.arrayOptions(rows, ephemerals),
       );
@@ -73,7 +73,9 @@ describe('Responses source route placeholder-supported media', () => {
       await source.releaseIfUnsent?.();
       await baseline.releaseIfUnsent?.();
       expect(
-        [...promptDirs()].filter((entry) => !before.has(entry)),
+        [...promptDirs(harness.setup.config.scratchRoots)].filter(
+          (entry) => !before.has(entry),
+        ),
       ).toHaveLength(0);
     }, 60000);
 

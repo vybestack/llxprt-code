@@ -753,7 +753,7 @@ export class StreamProcessor {
             allowedToolNames,
           ),
         };
-        const prefetchedChunk = takePrefetchedArrival(chunk);
+        const prefetchedChunk = takePrefetchedArrival(streamResponse, chunk);
         const historyChunk =
           prefetchedChunk ??
           (await admitStreamChunkForHistory(

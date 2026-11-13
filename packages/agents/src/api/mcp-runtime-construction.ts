@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { createMcpApprovalPolicy } from '@vybestack/llxprt-code-core/policy/mcp-approval.js';
 import { persistPolicyToToml } from '@vybestack/llxprt-code-core/policy/config.js';
 import type { McpApprovalPolicy } from '@vybestack/llxprt-code-mcp';
@@ -112,6 +113,7 @@ export function handoffOwnership<Owner>(
  * absence is a named variant, so no caller writes runs of `undefined`.
  */
 export interface McpRuntimeAcquisition {
+  readonly requestFetch: NetworkFetch;
   readonly oauth: McpOAuthBinding;
   readonly config: Config;
   readonly managerFactory: typeof McpClientManager;

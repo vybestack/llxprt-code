@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
+import { readdirSync } from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { projectionEndpoint } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
@@ -85,6 +86,8 @@ export async function ladderAttempt(
   const stages: string[] = [];
   traceStages(setup.compression, stages);
   const before = await ladderHistoryDigest(setup);
+  const scratchRoots = setup.history.scratchRoots;
+  const scratchBefore = readdirSync(scratchRoots.getRoot());
   let error: unknown;
   const output: unknown[] = [];
   try {
@@ -104,6 +107,8 @@ export async function ladderAttempt(
     disk,
     large,
     before,
+    scratchRoots,
+    scratchBefore,
     after: await ladderHistoryDigest(setup),
     historyTokens: setup.history.getTotalTokens(),
     estimate: setup.processor.getPromptEnvelopeEstimate(),
@@ -111,7 +116,7 @@ export async function ladderAttempt(
     output,
     owners: setup.history.owners,
     projections: setup.provider.tokens.length,
-    activeBodies: activeRequestBodyCount(),
+    activeBodies: activeRequestBodyCount(setup.provider.requestBodyCensus),
     cooldown: setup.compression.isCompressionInCooldown(),
     error: failureMessage(error),
     errorName: failureName(error),

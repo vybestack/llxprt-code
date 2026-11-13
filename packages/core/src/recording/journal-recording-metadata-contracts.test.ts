@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
@@ -26,7 +27,7 @@ describe('native direct metadata lifecycle', () => {
   it('returns distinct saved sequences for concurrent checkpoints and preserves their timestamps through rename and delete', async () => {
     const chats = await remainderDirectory('checkpoint-metadata');
     const recorder = JournalRecordingService.create(
-      remainderConfig(chats, 'metadata'),
+      withTestNamedWriters(remainderConfig(chats, 'metadata')),
     );
     try {
       const session = await recorder.session();
@@ -88,7 +89,7 @@ describe('native direct metadata lifecycle', () => {
   it('materializes a name before rows, clears only that name and leaves the title and later rows intact', async () => {
     const chats = await remainderDirectory('name-materialization');
     const recorder = JournalRecordingService.create(
-      remainderConfig(chats, 'named'),
+      withTestNamedWriters(remainderConfig(chats, 'named')),
     );
     try {
       await recorder.setSessionName('  before-first-turn  ');
@@ -116,7 +117,7 @@ describe('native direct metadata lifecycle', () => {
   it('refuses missing and inactive checkpoint operations without poisoning a usable recorder or changing closed bytes', async () => {
     const chats = await remainderDirectory('metadata-refusals');
     const recorder = JournalRecordingService.create(
-      remainderConfig(chats, 'refusals'),
+      withTestNamedWriters(remainderConfig(chats, 'refusals')),
     );
     try {
       await expect(
@@ -192,7 +193,7 @@ describe('native public deletion after discovery', () => {
       false,
     );
     const recorder = await JournalRecordingService.open(
-      remainderConfig(chats, 'delete-target'),
+      withTestNamedWriters(remainderConfig(chats, 'delete-target')),
       target.filePath,
     );
     try {

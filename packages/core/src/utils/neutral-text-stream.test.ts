@@ -1,5 +1,8 @@
+import { EncodingCache } from './neutral-long-piece.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterAll, describe, expect, it } from 'bun:test';
+
+const encodings = new EncodingCache();
 import { encoding_for_model } from '@dqbd/tiktoken';
 import { NeutralTextStream } from './neutral-text-stream.js';
 import { countSimpleTextStream } from './simple-text-stream.js';
@@ -7,7 +10,7 @@ import { simpleTokenEstimateForText } from '../services/history/historyTokenEsti
 
 const oracle = encoding_for_model('gpt-4o');
 function streamed(text: string, size: number): number {
-  const stream = new NeutralTextStream();
+  const stream = new NeutralTextStream(encodings);
   const bytes = Buffer.from(text);
   for (let offset = 0; offset < bytes.length; offset += size)
     stream.append(bytes.subarray(offset, offset + size));

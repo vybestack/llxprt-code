@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { IContent, ChronologyMarker } from './IContent.js';
 import { isRecord, isSpeakerContent } from './historyJournalGuards.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
-import { createScratchDirSync } from '../../storage/scratch-root.js';
+import type { ScratchRootOwner } from '../../storage/scratch-root.js';
 import { TailBufferedFile } from './tailBufferedFile.js';
 import type { HistoryRowOrigins } from './historyRowOrigins.js';
 
@@ -41,8 +41,11 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
   private closed = false;
   private rowOrigins: HistoryRowOrigins | undefined;
 
-  constructor(private readonly ownership?: RowOwnership) {
-    this.root = createScratchDirSync('history-detached-');
+  constructor(
+    scratchRoots: ScratchRootOwner,
+    private readonly ownership?: RowOwnership,
+  ) {
+    this.root = scratchRoots.createDirSync('history-detached-');
     const opened: number[] = [];
     try {
       opened.push(openSync(join(this.root, 'rows'), 'w+'));

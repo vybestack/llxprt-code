@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
@@ -11,6 +12,7 @@ import { DumpScratch } from './dumpScratch.js';
 import { buildProviderDumpBodyStream } from './providerRequestConversion.js';
 import { dumpRequestContextStream } from './dumpContext.js';
 import { streamPrettyJson } from './streamPrettyJson.js';
+const testScratchRoots = createTestScratchOwner();
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dump-lifecycle-'));
 
@@ -57,7 +59,7 @@ async function exhaust(value: unknown): Promise<void> {
 }
 describe('stream dump cleanup and cancellation', () => {
   it('does not publish a scratch slot after a failed write', () => {
-    const scratch = new DumpScratch<number>();
+    const scratch = new DumpScratch<number>(testScratchRoots);
     const write = spyOn(fs, 'writeSync').mockImplementation(() => {
       throw new Error('disk write failed');
     });
@@ -243,7 +245,9 @@ describe('scratch construction cleanup', () => {
         },
       );
       try {
-        expect(() => new DumpScratch()).toThrow('index failure');
+        expect(() => new DumpScratch(testScratchRoots)).toThrow(
+          'index failure',
+        );
         expect(watch.directories.filter(fs.existsSync)).toStrictEqual([]);
         expect(() => fs.fstatSync(descriptor)).toThrow(/EBADF/);
       } finally {

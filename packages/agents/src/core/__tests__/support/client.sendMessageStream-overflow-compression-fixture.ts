@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import type { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 export let metricSource: UiTelemetryService;
 /**
@@ -18,6 +19,7 @@ import {
   setupAgentClient,
   type MockResponseShape,
 } from '../client-test-helpers.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 // Mock clientToolGovernance module so tests can control tool name/governance returns
 const realClientToolGovernance = {
@@ -278,7 +280,7 @@ export function chatDisposalHistory(): Pick<
   ChatSession,
   'clearHistoryForDisposal' | 'getHistoryService'
 > {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   return {
     clearHistoryForDisposal: () => history.clear(),
     getHistoryService: () => history,

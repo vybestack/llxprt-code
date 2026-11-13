@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -62,6 +63,7 @@ import {
   defaultModelConfig,
   defaultRunConfig,
 } from './__tests__/subagent-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const realNonInteractiveToolExecutorModule = {
   ...(await import('./nonInteractiveToolExecutor.js')),
@@ -299,7 +301,7 @@ async function createHarness(params: {
     providerAdapter,
     toolRegistry,
     toolsView,
-    history: new HistoryService(),
+    history: new HistoryService({ scratchRoots: historyScratchRoots }),
     settings,
   });
   const hookOwner = createHookExecution(

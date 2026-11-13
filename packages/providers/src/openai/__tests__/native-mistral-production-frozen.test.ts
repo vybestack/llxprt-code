@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../../../core/src/journal/versionSnapshot.js';
 import { describe, expect, it } from 'bun:test';
@@ -96,9 +97,12 @@ describe('Mistral production stored planner and native emitter', () => {
         .trimEnd()
         .split('\n');
       expect(lines.length).toBe(UNIT_CASE_COUNT);
-      const session = await JournalSession.create(`${directory()}/all.llxj`, {
-        journal: testJournalSeams({}, 1, false).dependencies,
-      });
+      const session = await JournalSession.create(
+        `${directory()}/all.llxj`,
+        testJournalOptions({
+          journal: testJournalSeams({}, 1, false).dependencies,
+        }),
+      );
       let accepted = 0;
       try {
         await session.store.commit([

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import {
   collectRowsForAssertions,
   collectJournalRowsForAssertions,
@@ -6,10 +7,11 @@ import {
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { createUserMessage } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('history journal marked-prefix mutations', () => {
   it('persists changes to retained metadata when appending and after the journal commits', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.add(createUserMessage('head'));
     await collectRowsForAssertions(history.streamRawHistory(), async (rows) => {
       const retained = rows[0];
@@ -30,7 +32,7 @@ describe('history journal marked-prefix mutations', () => {
   });
 
   it('persists changes to retained metadata when truncating and after the journal commits', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.add(createUserMessage('head'));
     history.add(createUserMessage('tail'));
     await collectRowsForAssertions(history.streamRawHistory(), async (rows) => {

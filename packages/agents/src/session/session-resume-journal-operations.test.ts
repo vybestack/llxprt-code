@@ -1,3 +1,6 @@
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { ScratchRootOwner } from '../../../core/src/storage/scratch-root.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
@@ -9,22 +12,31 @@ import { PROJECT_HASH } from '../../../core/src/recording/__tests__/support/p05d
 import { openRouteAAgent } from '../api/__tests__/helpers/route-a-agent.js';
 import { useFakeResponsesReplay } from '../api/__tests__/helpers/fake-responses-replay.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 describe('session journal resume publication', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   useFakeResponsesReplay('plain-text.jsonl');
 
   it('attaches recording from the adoption publication callback without deadlocking and preserves rollback', async () => {
     const route = await openRouteAAgent();
     const fixture = await createResumableSession(route.directory, { rows: 3 });
-    const resumed = await resumeSession({
-      continueRef: fixture.sessionId,
-      projectHash: PROJECT_HASH,
-      chatsDir: route.directory,
-      currentProvider: 'fake',
-      currentModel: 'fake-model',
-      workspaceDirs: [],
-    });
+    const resumed = await resumeSession(
+      withTestNamedWriters({
+        continueRef: fixture.sessionId,
+        projectHash: PROJECT_HASH,
+        chatsDir: route.directory,
+        currentProvider: 'fake',
+        currentModel: 'fake-model',
+        workspaceDirs: [],
+      }),
+    );
     if (!resumed.ok) throw new Error(resumed.error);
-    const integration = new RecordingIntegration(resumed.recording);
+    const integration = new RecordingIntegration(
+      resumed.recording,
+      recordingScratchRoots,
+    );
     try {
       const session = route.agent.session;
       await expect(

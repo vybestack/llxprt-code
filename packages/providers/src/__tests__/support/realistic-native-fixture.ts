@@ -1,3 +1,4 @@
+import { testJournalOptions } from './named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { copyFile, mkdtemp, open, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -164,7 +165,7 @@ export async function seedNativeJournal(
   file: string,
   stateful: boolean,
 ): Promise<void> {
-  const session = await JournalSession.create(file);
+  const session = await JournalSession.create(file, testJournalOptions());
   try {
     await seedNativeSession(session, {}, stateful);
   } finally {
@@ -192,21 +193,24 @@ export async function realisticNativeFixture(
   if (seed !== undefined) await copyFile(seed, file);
   const openSession =
     seed === undefined ? JournalSession.create : JournalSession.open;
-  const session = await openSession(file, {
-    journal: {
-      open: observedJournalOpen(async (bytes): Promise<void> => {
-        if (!kimiFilling) return;
-        kimiReadBytes += bytes;
-        if (
-          kimiReadBytes >= nextKimiCheckpoint &&
-          nextKimiCheckpoint <= 48 * 1024 * 1024
-        ) {
-          nextKimiCheckpoint += 16 * 1024 * 1024;
-          await activeProbe?.checkpoint('conversion');
-        }
-      }),
-    },
-  });
+  const session = await openSession(
+    file,
+    testJournalOptions({
+      journal: {
+        open: observedJournalOpen(async (bytes): Promise<void> => {
+          if (!kimiFilling) return;
+          kimiReadBytes += bytes;
+          if (
+            kimiReadBytes >= nextKimiCheckpoint &&
+            nextKimiCheckpoint <= 48 * 1024 * 1024
+          ) {
+            nextKimiCheckpoint += 16 * 1024 * 1024;
+            await activeProbe?.checkpoint('conversion');
+          }
+        }),
+      },
+    }),
+  );
   if (seed === undefined) await seedNativeSession(session, options, stateful);
   const snapshot = await session.store.snapshot();
   const selection = await JournalProviderRequestSnapshot.create(

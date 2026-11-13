@@ -1,8 +1,10 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 /**
  * The journal twin of history-profile-adoption.test.ts (WIRING G3). A journal
@@ -30,8 +32,8 @@ describe('profile history adoption on the journal store', () => {
     liveRows: IContent[],
     candidateRows: IContent[],
   ): Promise<{ live: HistoryService; candidate: HistoryService }> {
-    const live = new HistoryService();
-    const candidate = new HistoryService();
+    const live = new HistoryService({ scratchRoots: historyScratchRoots });
+    const candidate = new HistoryService({ scratchRoots: historyScratchRoots });
     created.push(live, candidate);
     await live.addBatch(liveRows);
     await candidate.addBatch(structuredClone(await rawHistory(live)));
@@ -92,8 +94,8 @@ describe('profile history adoption on the journal store', () => {
   });
 
   it('uses the candidate tokenizer and target for accounting after commit', async () => {
-    const live = new HistoryService();
-    const candidate = new HistoryService();
+    const live = new HistoryService({ scratchRoots: historyScratchRoots });
+    const candidate = new HistoryService({ scratchRoots: historyScratchRoots });
     created.push(live, candidate);
     candidate.setTokenizerFactory({
       getTokenizer(provider, model) {

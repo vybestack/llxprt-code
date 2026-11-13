@@ -1,15 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { countBpePiece, encodingBpeRanks } from './neutral-long-piece.js';
-
-let maxBytes: number | undefined;
-function vocabularyWidth(): number {
-  if (maxBytes !== undefined) return maxBytes;
-  let width = 0;
-  for (const key of encodingBpeRanks('o200k_base').keys())
-    width = Math.max(width, key.length);
-  maxBytes = width;
-  return width;
-}
+import { countBpePiece } from './neutral-long-piece.js';
+import type { NeutralStreamCache } from './neutral-stream-cache.js';
 
 /**
  * Counts one pre-tokenizer piece; callers own regex and special-token state.
@@ -19,16 +10,23 @@ function vocabularyWidth(): number {
  * token length. This never re-tokenizes an assumed fixed overlap of the input.
  */
 export class NeutralPieceStream {
-  private readonly ranks = encodingBpeRanks('o200k_base');
-  private readonly width = vocabularyWidth();
-  private readonly counts = new Float64Array(this.width + 1);
-  private readonly tails = Array.from({ length: this.width + 1 }, () => '');
+  private readonly ranks: ReadonlyMap<string, number>;
+  private readonly width: number;
+  private readonly counts: Float64Array;
+  private readonly tails: string[];
   private readonly pairs = new Map<string, boolean>();
   private readonly suffixes = new Map<string, readonly string[]>();
   private bytes = '';
   private length = 0;
   private total = 0;
   private finished = false;
+
+  constructor(cache: NeutralStreamCache) {
+    this.ranks = cache.ranks;
+    this.width = cache.width;
+    this.counts = new Float64Array(this.width + 1);
+    this.tails = Array.from({ length: this.width + 1 }, () => '');
+  }
 
   append(part: Uint8Array): void {
     if (this.finished) throw new Error('Neutral BPE piece is finished');

@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '../../storage/scratch-root.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
@@ -12,8 +13,11 @@ export interface SemanticPurgeRowSource {
 export class SemanticPurgeDiskRows extends HistoryDensityRows {
   private released = false;
 
-  constructor(private readonly rowCensus?: RowOwnership) {
-    super(rowCensus);
+  constructor(
+    readonly scratchRoots: ScratchRootOwner,
+    private readonly rowCensus?: RowOwnership,
+  ) {
+    super(scratchRoots, rowCensus);
   }
 
   override readRow(index: number): IContent {
@@ -49,11 +53,12 @@ export class SemanticPurgeDiskRows extends HistoryDensityRows {
 }
 
 export async function captureSemanticPurgeRows(
+  scratchRoots: ScratchRootOwner,
   source: AsyncIterable<IContent>,
   ownership?: RowOwnership,
   signal?: AbortSignal,
 ): Promise<SemanticPurgeDiskRows> {
-  const rows = new SemanticPurgeDiskRows(ownership);
+  const rows = new SemanticPurgeDiskRows(scratchRoots, ownership);
   try {
     signal?.throwIfAborted();
     for await (const row of source) {

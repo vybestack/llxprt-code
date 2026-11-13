@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
@@ -13,14 +15,20 @@ import {
   rowTexts,
   textRow,
 } from './__tests__/support/journalRecordingFixture.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('durable native mutations preserve membership and chronology', () => {
   const directory = useTempDir('durable-native-');
   let history: HistoryService;
   let recording: JournalRecordingService;
   beforeEach(() => {
-    recording = JournalRecordingService.create(recordingConfig(directory()));
-    history = new HistoryService({ recording });
+    recording = JournalRecordingService.create(
+      withTestNamedWriters(recordingConfig(directory())),
+    );
+    history = new HistoryService({
+      scratchRoots: historyScratchRoots,
+      recording,
+    });
   });
   afterEach(async () => {
     await history.dispose();

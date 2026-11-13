@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -22,6 +23,7 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
 import { emitCompressionLifecycleEvent } from '../compression/compressionLifecycleTelemetry.js';
+const historyScratchRoots = createTestScratchOwner();
 
 for (const size of [65]) {
   describe(`compression chronology over ${size} journal rows`, () => {
@@ -44,6 +46,7 @@ for (const size of [65]) {
             );
             invocationOwner.bindTelemetry(setup.config);
             const context = createAgentRuntimeContext({
+              scratchRoots: historyScratchRoots,
               prepareProviderInvocation: (name, parameters, signal) =>
                 invocationOwner.prepareProviderInvocation(
                   state.runtimeId,

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
@@ -19,6 +20,7 @@ import type {
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { applyPendingWindowFallback } from '../pendingWindowFallback.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function mediaDeps(
   history: Parameters<
@@ -58,7 +60,7 @@ async function* mediaRows(
 async function run(size: number, rollback: boolean): Promise<number> {
   const root = await mkdtemp(join(tmpdir(), 'fallback-media-'));
   const store = new LocalMediaStore({ rootDirectory: root, quotaBytes: 1024 });
-  const owner = new HistoryMediaOwnership(store);
+  const owner = new HistoryMediaOwnership(store, historyScratchRoots);
   try {
     const prior = await store.admit({
       bytes: new Uint8Array([1]),
@@ -76,7 +78,7 @@ async function run(size: number, rollback: boolean): Promise<number> {
       await history.detachedValues.replace(mediaRows(size, prior));
       const before = await detachedDigest(mediaRows(size, prior));
       const expected = await detachedDigest(mediaRows(size, next));
-      const rows = new DetachedHistoryJournal(owners);
+      const rows = new DetachedHistoryJournal(historyScratchRoots, owners);
       const ready = batchGate();
       const release = batchGate();
       const failure = new Error('fallback media rollback');

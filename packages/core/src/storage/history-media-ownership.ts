@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from './scratch-root.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -59,15 +60,21 @@ function throwOwnershipFailures(failures: readonly unknown[]): void {
 }
 
 export class HistoryMediaOwnership implements HistoryMediaOwner {
-  private owned = new HistoryMediaIndex();
-  private readonly reserved = new HistoryMediaIndex();
+  private owned: HistoryMediaIndex;
+  private readonly reserved: HistoryMediaIndex;
   private pending: HistoryMediaIndex | undefined;
   private retired: HistoryMediaIndex | undefined;
   private ownership: RowOwnership | undefined;
 
   private releaseGate: HistoryMediaReleaseGate | undefined;
 
-  constructor(private readonly store: LocalMediaStore) {}
+  constructor(
+    private readonly store: LocalMediaStore,
+    private readonly scratchRoots: ScratchRootOwner,
+  ) {
+    this.owned = new HistoryMediaIndex(scratchRoots);
+    this.reserved = new HistoryMediaIndex(scratchRoots);
+  }
 
   async bindNativeMedia(journal: JournalStore): Promise<void> {
     if (this.releaseGate !== undefined)
@@ -134,7 +141,7 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
       throw new Error('Unsettled media replacement');
     this.ownership = ownership;
     const previous = this.owned;
-    const next = new HistoryMediaIndex();
+    const next = new HistoryMediaIndex(this.scratchRoots);
     this.pending = next;
     return {
       publish: async () => {
@@ -181,7 +188,7 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
     ownership?: RowOwnership,
   ): PreparedHistoryBatchEffect {
     // Only what this effect reserved: media the history already holds is not its to release.
-    const added = new HistoryMediaIndex();
+    const added = new HistoryMediaIndex(this.scratchRoots);
     return {
       publish: async () => {
         for await (const reference of references) {
@@ -248,7 +255,7 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
   }
 
   async releaseAll(): Promise<void> {
-    const empty = new HistoryMediaIndex();
+    const empty = new HistoryMediaIndex(this.scratchRoots);
     for (const index of [this.pending, this.retired]) {
       if (index === undefined) continue;
       await this.releaseDifference(index, empty);
@@ -274,7 +281,7 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
     previous: Iterable<IContent>,
   ): Promise<void> {
     const failures: unknown[] = [];
-    const previousIds = new HistoryMediaIndex();
+    const previousIds = new HistoryMediaIndex(this.scratchRoots);
     for (const { reference } of reservationsOf(previous))
       previousIds.set(reference);
     for (const reservation of adopted) {
@@ -293,7 +300,7 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
     next: Iterable<IContent>,
     ownership?: RowOwnership,
   ): HistoryMediaIndex {
-    const target = new HistoryMediaIndex();
+    const target = new HistoryMediaIndex(this.scratchRoots);
     try {
       for (const { reference } of reservationsOf(next)) {
         ownership?.retain(reference);

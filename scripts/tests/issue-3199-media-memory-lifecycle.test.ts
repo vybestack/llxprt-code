@@ -1,3 +1,8 @@
+import { createTestScratchOwner } from '../../packages/core/src/storage/__tests__/support/scratch-owner.js';
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from './named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -30,6 +35,7 @@ import {
   settleOperation,
   type MediaProbeResources,
 } from '../issue-3199-media-memory-lifecycle.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function errorMessages(error: unknown): string[] {
   if (error instanceof AggregateError) {
@@ -199,7 +205,7 @@ describe('issue 3199 media memory lifecycle', () => {
         quotaBytes: 1024,
       });
       resources.store = store;
-      const history = new HistoryService();
+      const history = new HistoryService({ scratchRoots: historyScratchRoots });
       resources.history = history;
       history.add({
         speaker: 'human',
@@ -207,16 +213,18 @@ describe('issue 3199 media memory lifecycle', () => {
       });
       const resolver = new RequestMediaResolver(store);
       resources.resolver = resolver;
-      const recording = createSessionRecorder({
-        sessionId: 'initialization-probe',
-        projectHash: 'initialization-probe',
-        chatsDir: join(directory, 'recording'),
-        workspaceDirs: [directory],
-        provider: 'probe',
-        model: 'probe',
-        mediaStore: store,
-        journal: recordingProbe.options,
-      });
+      const recording = createSessionRecorder(
+        withTestNamedWriters({
+          sessionId: 'initialization-probe',
+          projectHash: 'initialization-probe',
+          chatsDir: join(directory, 'recording'),
+          workspaceDirs: [directory],
+          provider: 'probe',
+          model: 'probe',
+          mediaStore: store,
+          journal: recordingProbe.options,
+        }),
+      );
       resources.recording = recording;
       await (
         await requireJournalRecorder(recording).session()
@@ -229,7 +237,7 @@ describe('issue 3199 media memory lifecycle', () => {
       const persistence = new NativeRecordingProbe();
       const persistedSession = await JournalSession.create(
         join(directory, 'persisted.llxj'),
-        persistence.options,
+        testJournalOptions(persistence.options),
       );
       resources.persistence = persistence;
       resources.persistedSession = persistedSession;

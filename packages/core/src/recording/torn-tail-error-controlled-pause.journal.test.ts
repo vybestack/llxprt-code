@@ -1,3 +1,7 @@
+import {
+  testJournalOptions,
+  withTestNamedWriters,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
@@ -32,7 +36,7 @@ async function withDirectory(
 async function verifyCoreScan(): Promise<void> {
   await withDirectory(async (dir) => {
     const file = join(dir, 'journal.llxj');
-    const session = await JournalSession.create(file);
+    const session = await JournalSession.create(file, testJournalOptions());
     await session.append(
       ['one', 'two'].map((text, index) => ({
         speaker: 'human',
@@ -137,45 +141,47 @@ async function verifyAppendFault(code: string): Promise<void> {
         pendingBytes -= bytes;
       }
     };
-    const service = JournalRecordingService.create({
-      sessionId: `append-${code}`,
-      projectHash: 'p',
-      chatsDir: dir,
-      workspaceDirs: [],
-      cwd: dir,
-      provider: 'test',
-      model: 'test',
-      journal: {
+    const service = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: `append-${code}`,
+        projectHash: 'p',
+        chatsDir: dir,
+        workspaceDirs: [],
+        cwd: dir,
+        provider: 'test',
+        model: 'test',
         journal: {
-          open: async (path, flags) => {
-            const handle = await open(path, flags);
-            return {
-              fd: handle.fd,
-              read: (buffer, offset, length, position) =>
-                handle.read(buffer, offset, length, position),
-              stat: () => handle.stat(),
-              truncate: (length) => handle.truncate(length),
-              close: () => handle.close(),
-              write: (buffer, offset, length, position) =>
-                write(length, () =>
-                  handle.write(buffer, offset, length, position),
-                ),
-              writev: (buffers, position) =>
-                write(
-                  buffers.reduce(
-                    (bytes, buffer) => bytes + buffer.byteLength,
-                    0,
+          journal: {
+            open: async (path, flags) => {
+              const handle = await open(path, flags);
+              return {
+                fd: handle.fd,
+                read: (buffer, offset, length, position) =>
+                  handle.read(buffer, offset, length, position),
+                stat: () => handle.stat(),
+                truncate: (length) => handle.truncate(length),
+                close: () => handle.close(),
+                write: (buffer, offset, length, position) =>
+                  write(length, () =>
+                    handle.write(buffer, offset, length, position),
                   ),
-                  async () => ({
-                    bytesWritten: (await handle.writev(buffers, position))
-                      .bytesWritten,
-                  }),
-                ),
-            };
+                writev: (buffers, position) =>
+                  write(
+                    buffers.reduce(
+                      (bytes, buffer) => bytes + buffer.byteLength,
+                      0,
+                    ),
+                    async () => ({
+                      bytesWritten: (await handle.writev(buffers, position))
+                        .bytesWritten,
+                    }),
+                  ),
+              };
+            },
           },
         },
-      },
-    });
+      }),
+    );
     await service.session();
     armed = true;
     service.onCommitAck(() => {

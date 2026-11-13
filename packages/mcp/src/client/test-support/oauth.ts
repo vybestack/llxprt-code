@@ -35,5 +35,8 @@ export function createTestOAuthBinding(): McpOAuthBinding {
 }
 
 export function createTestOAuthCapabilities(): McpOAuthCapabilities {
-  return bindMcpOAuthCapabilities(createTestOAuthBinding());
+  return bindMcpOAuthCapabilities(
+    (input, init) => globalThis.fetch(input, init),
+    createTestOAuthBinding(),
+  );
 }

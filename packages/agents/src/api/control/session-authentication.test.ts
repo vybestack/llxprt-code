@@ -5,10 +5,28 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  OAuthManager,
+  type OAuthToken,
+} from '@vybestack/llxprt-code-providers/auth.js';
 import { MemoryTokenStore } from '../__tests__/helpers/provider-auth-fixtures.js';
 import { assembleSessionAuthentication } from './session-authentication.js';
 
+function gate(): { promise: Promise<void>; release: () => void } {
+  let release = (): void => {};
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+}
+
+function track(promise: Promise<unknown>): { isSettled: () => boolean } {
+  let settled = false;
+  void promise.finally(() => {
+    settled = true;
+  });
+  return { isSettled: () => settled };
+}
 describe('assembleSessionAuthentication', () => {
   it('keeps detached bucket operations bound to their own OAuth owner', async () => {
     const left = new OAuthManager(new MemoryTokenStore());
@@ -73,6 +91,64 @@ describe('assembleSessionAuthentication', () => {
       });
     } finally {
       await oauth.dispose();
+    }
+  });
+
+  it('rejects OAuth status, logout, and bucket operations after disposal starts', async () => {
+    const oauth = new OAuthManager(new MemoryTokenStore());
+    await oauth.dispose();
+    await expect(oauth.getAuthStatus()).rejects.toThrow(
+      'OAuth manager is disposed',
+    );
+    await expect(oauth.logout('codex', 'work')).rejects.toThrow(
+      'OAuth manager is disposed',
+    );
+    await expect(oauth.listBuckets('codex')).rejects.toThrow(
+      'OAuth manager is disposed',
+    );
+    expect(() => oauth.getSessionBucket('codex')).toThrow(
+      'OAuth manager is disposed',
+    );
+  });
+
+  it('rejects stored token reads after OAuth disposal starts', async () => {
+    const oauth = new OAuthManager(new MemoryTokenStore());
+    const authentication = assembleSessionAuthentication(oauth, () => {});
+    await oauth.dispose();
+    await expect(
+      authentication.readStoredTokenSummary('codex', 'work'),
+    ).rejects.toThrow('OAuth manager is disposed');
+  });
+
+  it('joins a stored-token read accepted before OAuth disposal', async () => {
+    const entered = gate();
+    const release = gate();
+    const tokens = new (class extends MemoryTokenStore {
+      override async getToken(
+        provider: string,
+        bucket?: string,
+      ): Promise<OAuthToken | null> {
+        entered.release();
+        await release.promise;
+        return super.getToken(provider, bucket);
+      }
+    })();
+    const oauth = new OAuthManager(tokens);
+    const authentication = assembleSessionAuthentication(oauth, () => {});
+    const read = authentication.readStoredTokenSummary('codex', 'work');
+    await entered.promise;
+    const disposing = oauth.dispose();
+    const disposal = track(disposing);
+    try {
+      await Promise.resolve();
+      expect(disposal.isSettled()).toBe(false);
+      release.release();
+      expect(await read).toBeNull();
+      await disposing;
+      expect(disposal.isSettled()).toBe(true);
+    } finally {
+      release.release();
+      await disposing;
     }
   });
 });

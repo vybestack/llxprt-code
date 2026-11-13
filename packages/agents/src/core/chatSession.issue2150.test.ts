@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
@@ -70,6 +71,7 @@ import { createConfigParams } from './chatSession-runtime-helpers.js';
 
 import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -95,7 +97,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
   });
 
   function buildChatSession(history?: HistoryService): ChatSession {
@@ -106,6 +108,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       sessionId: config.getSessionId(),
     });
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {
@@ -123,7 +126,8 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       // Use the caller-supplied HistoryService when provided so tests can
       // assert on the exact instance the session records into; otherwise
       // create a fresh one.
-      history: history ?? new HistoryService(),
+      history:
+        history ?? new HistoryService({ scratchRoots: historyScratchRoots }),
       settings: {
         compressionThreshold: 0.8,
         contextLimit: 128000,
@@ -607,7 +611,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
   });
 
   it('records only the successful attempt in history after a discard-and-restart', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,

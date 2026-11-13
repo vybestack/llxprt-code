@@ -1,9 +1,12 @@
+import { EncodingCache } from './neutral-long-piece.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it, spyOn } from 'bun:test';
+
+const encodings = new EncodingCache();
 import { encoding_for_model, Tiktoken } from '@dqbd/tiktoken';
 import { encodingLongTextCounter } from './neutral-long-piece.js';
 import { estimateTokens } from './toolOutputLimiter.js';
@@ -106,7 +109,7 @@ describe('neutral token counting short-piece batches', () => {
     let encodes = 0;
     let largest = 0;
     try {
-      const tokens = encodingLongTextCounter('o200k_base')(
+      const tokens = encodingLongTextCounter('o200k_base', encodings)(
         text,
         (piece) => {
           encodes++;

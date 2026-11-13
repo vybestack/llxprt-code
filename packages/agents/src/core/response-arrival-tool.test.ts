@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -123,14 +124,16 @@ describe('production tool argument recording', () => {
           },
         );
       };
-      const recording = createSessionRecorder({
-        sessionId: 'tool-arrival',
-        projectHash: 'tool-arrival',
-        chatsDir: root(),
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'gpt-5.6',
-      });
+      const recording = createSessionRecorder(
+        withTestNamedWriters({
+          sessionId: 'tool-arrival',
+          projectHash: 'tool-arrival',
+          chatsDir: root(),
+          workspaceDirs: [],
+          provider: 'test',
+          model: 'gpt-5.6',
+        }),
+      );
       await setup.history.attachJournal(recording);
       const stream = await setup.processor.makeApiCallAndProcessStream(
         { message: 'test', config: {} },

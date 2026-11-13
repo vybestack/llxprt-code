@@ -1,9 +1,11 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { vi } from 'bun:test';
 import { JournalDumpSnapshot } from './journalDumpSnapshot.js';
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { createUserMessage, type IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 async function texts(history: HistoryService): Promise<string[]> {
   const result: string[] = [];
@@ -30,7 +32,7 @@ async function replaceFirst(history: HistoryService): Promise<void> {
 
 describe('selective journal compensation', () => {
   it('does not scan history or publish another version for an untouched attempt', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.addBatch([createUserMessage('original')]);
       const current = history.historyMutationGuard();
@@ -60,7 +62,7 @@ describe('selective journal compensation', () => {
   });
 
   it('compensates a journal-sized source without a dump or history collector', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       async function* rows(): AsyncGenerator<IContent> {
         for (let index = 0; index < 2048; index++)
@@ -103,7 +105,7 @@ describe('selective journal compensation', () => {
   });
 
   it('restores the saved version while retaining independent appends on either side of a rewrite', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.addBatch([createUserMessage('original')]);
       await history.detachedValues.withRollbackCheckpoint(async (restore) => {
@@ -125,7 +127,7 @@ describe('selective journal compensation', () => {
   });
 
   it('retains an independent row replacement removed by the speculative rewrite', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.addBatch([createUserMessage('original')]);
       await history.detachedValues.withRollbackCheckpoint(async (restore) => {
@@ -142,7 +144,7 @@ describe('selective journal compensation', () => {
   });
 
   it('does not resurrect a batch whose own publication rolled back', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     try {
       await history.addBatch([createUserMessage('original')]);
       await history.detachedValues.withRollbackCheckpoint(async (restore) => {

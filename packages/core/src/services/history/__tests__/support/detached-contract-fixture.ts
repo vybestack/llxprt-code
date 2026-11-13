@@ -1,3 +1,4 @@
+import { testJournalOptions } from '../../../../journal/__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect, spyOn } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -67,15 +68,17 @@ function fileDigest(path: string): ReturnType<typeof detachedDigest> {
   return detachedDigest(fileRows(path));
 }
 
-async function heldSession(
-  root: string,
-  io: DetachedIOFaults,
-): Promise<{
+interface HeldSession {
   session: JournalSession;
   paused: Promise<void>;
   arm(rows?: number): void;
   release(): void;
-}> {
+}
+
+async function heldSession(
+  root: string,
+  io: DetachedIOFaults,
+): Promise<HeldSession> {
   const entered = batchGate();
   const gate = batchGate();
   let armed = false;
@@ -85,57 +88,60 @@ async function heldSession(
     entered.resolve();
     await gate.promise;
   };
-  const session = await JournalSession.create(join(root, 'primary.llxj'), {
-    journal: {
-      open: async (path, flags) => {
-        const handle = await open(path, flags);
-        return {
-          fd: handle.fd,
-          read: async (...args) => {
-            const result = io.read()
-              ? { bytesRead: 0 }
-              : await handle.read(...args);
-            io.recordRead(result.bytesRead);
-            return result;
-          },
-          stat: () => handle.stat(),
-          truncate: (length) => handle.truncate(length),
-          close: () => handle.close(),
-          write: async (...args) => {
-            if (targetRows === undefined) await wait();
-            else {
-              const [buffer, offset, length, position] = args;
-              if (
-                length === TRAILER_RECORD_BYTES &&
-                buffer[offset] === RECORD_KIND.TRAILER
-              ) {
-                const trailer = decodeTrailerHeader(
-                  decodeFrameStart(
-                    buffer.subarray(offset, offset + length),
-                    position,
-                  ).kindHeader,
-                );
-                await wait(trailer.rootAggregate.rows);
+  const session = await JournalSession.create(
+    join(root, 'primary.llxj'),
+    testJournalOptions({
+      journal: {
+        open: async (path, flags) => {
+          const handle = await open(path, flags);
+          return {
+            fd: handle.fd,
+            read: async (...args) => {
+              const result = io.read()
+                ? { bytesRead: 0 }
+                : await handle.read(...args);
+              io.recordRead(result.bytesRead);
+              return result;
+            },
+            stat: () => handle.stat(),
+            truncate: (length) => handle.truncate(length),
+            close: () => handle.close(),
+            write: async (...args) => {
+              if (targetRows === undefined) await wait();
+              else {
+                const [buffer, offset, length, position] = args;
+                if (
+                  length === TRAILER_RECORD_BYTES &&
+                  buffer[offset] === RECORD_KIND.TRAILER
+                ) {
+                  const trailer = decodeTrailerHeader(
+                    decodeFrameStart(
+                      buffer.subarray(offset, offset + length),
+                      position,
+                    ).kindHeader,
+                  );
+                  await wait(trailer.rootAggregate.rows);
+                }
               }
-            }
-            const result = io.write('trailer')
-              ? { bytesWritten: 0 }
-              : await handle.write(...args);
-            io.recordWrite(result.bytesWritten);
-            return result;
-          },
-          writev: async (...args) => {
-            await wait();
-            const result = io.write('records')
-              ? { bytesWritten: 0 }
-              : await handle.writev(...args);
-            io.recordWrite(result.bytesWritten);
-            return result;
-          },
-        };
+              const result = io.write('trailer')
+                ? { bytesWritten: 0 }
+                : await handle.write(...args);
+              io.recordWrite(result.bytesWritten);
+              return result;
+            },
+            writev: async (...args) => {
+              await wait();
+              const result = io.write('records')
+                ? { bytesWritten: 0 }
+                : await handle.writev(...args);
+              io.recordWrite(result.bytesWritten);
+              return result;
+            },
+          };
+        },
       },
-    },
-  });
+    }),
+  );
   return {
     session,
     paused: entered.promise,

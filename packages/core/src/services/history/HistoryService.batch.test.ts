@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /**
  * Copyright 2026 Vybestack LLC
@@ -21,6 +22,7 @@ import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTok
 import { readBatch } from './batch-event-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
 import { createUserMessage, type IContent } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function textOf(content: IContent): string {
   const block = content.blocks[0];
@@ -60,7 +62,7 @@ function controlledTokenizerFactory(): {
 }
 
 async function batchCase1(): Promise<number | undefined> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   history.setTokenizerFactory({
     getTokenizer: () => ({
       fallbackPolicy: 'deny',
@@ -94,7 +96,7 @@ async function batchCase1(): Promise<number | undefined> {
 }
 
 async function batchCase2(): Promise<unknown> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   let invocation = 0;
   history.setTokenizerFactory({
     getTokenizer: () => ({
@@ -122,7 +124,7 @@ async function batchCase2(): Promise<unknown> {
 }
 
 async function batchCase3(): Promise<string[]> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const externalRecords: string[] = [];
   await history.registerMediaOwner({
     adopt: () => undefined,
@@ -162,7 +164,7 @@ async function batchCase3(): Promise<string[]> {
 }
 
 async function batchCase4(): Promise<string[][]> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const reads: Array<Promise<string[]>> = [];
   history.on('contentBatchAdded', (contents) => {
     reads.push(readBatch(contents, textOf));
@@ -186,7 +188,7 @@ async function batchCase5(
     baseline: IContent;
   }) => void,
 ): Promise<void> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const baseline = createUserMessage('baseline');
   await history.addBatch([baseline]);
   let stored: IContent | undefined;
@@ -220,7 +222,7 @@ async function batchCase6(): Promise<{
   tokenDelta: number | undefined;
   totalTokens: number;
 }> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const reads: Array<Promise<string[]>> = [];
   const tokenDeltas: number[] = [];
   history.on('contentBatchAdded', (contents) => {
@@ -247,7 +249,7 @@ async function batchCase6(): Promise<{
 }
 
 async function batchCase7(): Promise<HistoryService> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const tokenizer = controlledTokenizerFactory();
   history.setTokenizerFactory(tokenizer.factory);
   const batch = history.addBatch([
@@ -268,7 +270,7 @@ async function batchCase7(): Promise<HistoryService> {
 }
 
 async function batchCase8(): Promise<number> {
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   const tokenizer = controlledTokenizerFactory();
   history.setTokenizerFactory(tokenizer.factory);
   const batch = history.addBatch([
@@ -313,7 +315,7 @@ describe('HistoryService atomic batch publication', () => {
     expect(result.tokenDelta).toBe(result.totalTokens);
   });
   it('announces a published batch that is then reverted, with the same entries', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const published: Array<Promise<string[]>> = [];
     const reverted: Array<Promise<string[]>> = [];
     history.on('contentBatchAdded', (contents) => {
@@ -352,7 +354,7 @@ describe('HistoryService atomic batch publication', () => {
   });
 
   it('announces no reversion for a batch that never published or that committed', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     const reverted: Array<Promise<string[]>> = [];
     history.on('contentBatchRolledBack', (contents) => {
       reverted.push(readBatch(contents, textOf));
@@ -385,7 +387,7 @@ describe('HistoryService atomic batch publication', () => {
   });
 
   it('keeps the original failure when a reversion listener fails', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.on('contentBatchRolledBack', () => {
       throw new Error('reversion listener failed');
     });
