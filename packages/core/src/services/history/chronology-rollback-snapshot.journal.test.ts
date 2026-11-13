@@ -192,11 +192,19 @@ describe('native rollback snapshot serialization and lifetime', () => {
         history.setTokenizerFactory(exactTokenizer());
         const following = rollbackRow(2);
         await history.addBatch([following]);
-        expect((await rowsOf(history))[0].metadata?.chronology).toMatchObject({
-          seq: 1,
-          userTurn: 0,
-          step: 1,
-        });
+        expect(await rowsOf(history)).toStrictEqual([
+          {
+            ...following,
+            metadata: {
+              chronology: {
+                seq: 1,
+                userTurn: 0,
+                step: 1,
+                recordedAt: expect.any(Number),
+              },
+            },
+          },
+        ]);
         expect(following.metadata).toBeUndefined();
         expect((await durable()).count).toBe(1);
       },
@@ -249,10 +257,30 @@ describe('native rollback snapshot serialization and lifetime', () => {
         appended.blocks,
         last.blocks,
       ]);
-      expect(rows.map((row) => row.metadata?.chronology)).toMatchObject([
-        { seq: 1, userTurn: 1, step: 1 },
-        { seq: 2, userTurn: 1, step: 2 },
-        { seq: 3, userTurn: 2, step: 1 },
+      expect(rows).toStrictEqual([
+        baseline,
+        {
+          ...appended,
+          metadata: {
+            chronology: {
+              seq: 2,
+              userTurn: 1,
+              step: 2,
+              recordedAt: expect.any(Number),
+            },
+          },
+        },
+        {
+          ...last,
+          metadata: {
+            chronology: {
+              seq: 3,
+              userTurn: 2,
+              step: 1,
+              recordedAt: expect.any(Number),
+            },
+          },
+        },
       ]);
       expect(failed.metadata).toBeUndefined();
       expect(appended.metadata).toBeUndefined();

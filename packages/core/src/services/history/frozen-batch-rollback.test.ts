@@ -78,11 +78,20 @@ describe('frozen pending batch rollback', () => {
         await history.addBatch([following]);
         expect(following.metadata).toBeUndefined();
         const stored = await rowsOf(history);
-        expect(stored[1].metadata?.chronology).toMatchObject({
-          seq: 2,
-          userTurn: 1,
-          step: 2,
-        });
+        expect(stored).toStrictEqual([
+          baseline,
+          {
+            ...following,
+            metadata: {
+              chronology: {
+                seq: 2,
+                userTurn: 1,
+                step: 2,
+                recordedAt: expect.any(Number),
+              },
+            },
+          },
+        ]);
       });
     });
   }
@@ -93,6 +102,7 @@ describe('frozen pending rollback queue ordering', () => {
     await withRollbackFixture(async (history, recorder, releaseWriter) => {
       const baseline = rollbackRow(0);
       await history.addBatch([baseline]);
+      const saved = await rowsOf(history);
       freezeStampedRow(baseline);
       const primary = new Error('frozen observer failure');
       const failed = rollbackRow(1);
@@ -113,10 +123,30 @@ describe('frozen pending rollback queue ordering', () => {
           appended.blocks,
           last.blocks,
         ]);
-        expect(rows.map((row) => row.metadata?.chronology)).toMatchObject([
-          { seq: 1, userTurn: 1, step: 1 },
-          { seq: 2, userTurn: 1, step: 2 },
-          { seq: 3, userTurn: 2, step: 1 },
+        expect(rows).toStrictEqual([
+          ...saved,
+          {
+            ...appended,
+            metadata: {
+              chronology: {
+                seq: 2,
+                userTurn: 1,
+                step: 2,
+                recordedAt: expect.any(Number),
+              },
+            },
+          },
+          {
+            ...last,
+            metadata: {
+              chronology: {
+                seq: 3,
+                userTurn: 2,
+                step: 1,
+                recordedAt: expect.any(Number),
+              },
+            },
+          },
         ]);
       });
       expect(failed.metadata).toBeUndefined();

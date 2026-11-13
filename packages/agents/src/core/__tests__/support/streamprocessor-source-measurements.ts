@@ -47,6 +47,7 @@ export async function measureSourceUpload(
   http: ReturnType<typeof projectionEndpoint>,
   observer: ReturnType<typeof observeDiskBody>,
   history: ObservedHistory,
+  sampleHeap: () => Promise<number> = sourceHeap,
 ) {
   await Promise.race([
     observer.first.wait,
@@ -54,7 +55,7 @@ export async function measureSourceUpload(
       throw new Error('No actual BODY demand');
     }),
   ]);
-  const firstHeap = await sourceHeap();
+  const firstHeap = await sampleHeap();
   const liveFirst = history.references.filter(
     (row) => row.deref() !== undefined,
   ).length;
@@ -65,11 +66,11 @@ export async function measureSourceUpload(
   const firstDemand = { ...observer.state };
   observer.resume.release();
   await http.arrived.wait;
-  const receiverHeap = await sourceHeap();
+  const receiverHeap = await sampleHeap();
   http.readBody.release();
   await http.uploaded.wait;
   await observer.last.wait;
-  const lastHeap = await sourceHeap();
+  const lastHeap = await sampleHeap();
   const liveLast = history.references.filter(
     (row) => row.deref() !== undefined,
   ).length;
@@ -85,7 +86,7 @@ export async function measureSourceUpload(
         block.type === 'text' ? [block.text] : [],
       ),
     );
-  const finalHeap = await sourceHeap();
+  const finalHeap = await sampleHeap();
   return {
     firstHeap,
     receiverHeap,

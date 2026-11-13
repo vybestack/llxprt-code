@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { sourceApplicationHeap } from './__tests__/support/source-application-heap.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
@@ -16,7 +17,6 @@ import {
   largestSourceRowBytes,
 } from './__tests__/support/streamprocessor-source-fixture.js';
 import {
-  sourceHeap,
   warmSourceProcessor,
   measureSourceUpload,
 } from './__tests__/support/streamprocessor-source-measurements.js';
@@ -65,8 +65,7 @@ async function acceptance(large: boolean) {
   );
   const oracle = await nativeEstimate(setup, large);
   const observer = observeDiskBody();
-  // Collect before the weak-reference census; the heap size is not asserted.
-  await sourceHeap();
+  const baseline = await sourceApplicationHeap();
   const idleLive = setup.history.references.filter(
     (row) => row.deref() !== undefined,
   ).length;
@@ -88,11 +87,13 @@ async function acceptance(large: boolean) {
       http,
       observer,
       setup.history,
+      sourceApplicationHeap,
     );
     const facts = {
       large,
       oracle,
       estimate: setup.processor.getPromptEnvelopeEstimate(),
+      baseline,
       idleLive,
       idleInputLive,
       ...measurements,
@@ -147,6 +148,14 @@ function assertAcceptance(facts: Awaited<ReturnType<typeof acceptance>>): void {
   expect(
     facts.requests.some((request) => request.requestText !== undefined),
   ).toBe(false);
+  expect(
+    Math.max(
+      facts.firstHeap,
+      facts.receiverHeap,
+      facts.lastHeap,
+      facts.finalHeap,
+    ) - facts.baseline,
+  ).toBeLessThanOrEqual(1024 * 1024);
   expect(facts.ownersFinal.every((owner) => owner.closed)).toBe(true);
   expect(facts.activeBodies).toBe(0);
   expect(facts.requests.map((event) => event.promptId)).toStrictEqual([

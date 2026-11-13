@@ -5,7 +5,7 @@ import * as positional from '../../../../core/src/journal/positionalFile.js';
 import { TRAILER_WINDOW_BYTES } from '../../../../core/src/journal/trailerSearch.js';
 import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
 import { buildAgent } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
-import { collectAgentHistory } from '../../../../agents/src/api/__tests__/helpers/collect-agent-history.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 import { createClearCommand } from './clearCommand.js';
@@ -91,7 +91,9 @@ describe('clearCommand native allocations', () => {
         expect(readBytes).toBeLessThanOrEqual(TRAILER_WINDOW_BYTES);
         expect(largestRead).toBeLessThanOrEqual(TRAILER_WINDOW_BYTES);
         expect(Buffer.compare(before, readFileSync(oldPath))).toBe(0);
-        expect(await collectAgentHistory(agent)).toStrictEqual([]);
+        await collectRowsForAssertions(agent.streamHistory(), (rows) => {
+          expect(rows).toStrictEqual([]);
+        });
         await expect(history.getLastContent()).rejects.toThrow('disposed');
       } finally {
         await cleanup();

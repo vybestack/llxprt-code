@@ -95,10 +95,9 @@ describe('suspended comprehensive retained growth', () => {
       const estimate = pairedEstimate(
         await pairedMeasurements(false, compressed),
       );
-      expect(estimate.median.heap).toBeLessThanOrEqual(
-        RETAINED_ALLOWANCE_BYTES,
-      );
-      expect(estimate.median.external).toBeLessThanOrEqual(
+      expect(estimate.pass).toBe(true);
+      expect(estimate.bound.heap).toBeLessThanOrEqual(RETAINED_ALLOWANCE_BYTES);
+      expect(estimate.bound.external).toBeLessThanOrEqual(
         RETAINED_ALLOWANCE_BYTES,
       );
     }, 300_000);
@@ -106,6 +105,7 @@ describe('suspended comprehensive retained growth', () => {
       const estimate = pairedEstimate(
         await pairedMeasurements(true, compressed),
       );
+      expect(estimate.pass).toBe(false);
       expect(estimate.median.heap).toBeGreaterThan(RETAINED_ALLOWANCE_BYTES);
     }, 300_000);
   }
