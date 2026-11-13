@@ -2,13 +2,19 @@ import { testNamedWriters } from './__tests__/support/namedWriterOwner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
+import { median } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import {
   ageOutIdleCode,
   FLATNESS_BOUND_BYTES,
   medianSettledHeap,
   PerVersionBuilders,
+  RETAINED_BOUND_BYTES,
   sessionWithCheckpoints,
 } from './__tests__/support/compactionMemory.js';
+import { DEFAULT_BATCH_BYTES } from './groupAppender.js';
+import { ID_TRIE_MAX_DEPTH, ID_TRIE_PREFETCH_BYTES } from './idTrieNode.js';
+import { ROW_TREE_ARITY, ROW_TREE_MAX_FRAME_BYTES } from './rowTreeNode.js';
+import { iterateRowEntries } from './rowTreeReader.js';
 import { JournalStore } from './journalStore.js';
 import { storeDeps } from './__tests__/support/storeFixtures.js';
 import { testJournalSeams } from './__tests__/support/journalFixtures.js';
@@ -42,11 +48,63 @@ describe('store compaction memory with growing checkpoint counts (design 13.6)',
     return store;
   }
 
-  /** Settled heap growth caused by `work`, as the median of three readings either side. */
+  /** Match the application-memory census used by the send allowance ledger. */
+  function applicationBytes(): number {
+    const snapshot = Bun.generateHeapSnapshot();
+    if (snapshot.version !== 3 || snapshot.nodes.length % 4 !== 0)
+      throw new Error('Unsupported JSC heap snapshot layout');
+    const engineCode =
+      /CodeBlock|Executable|^Structure(?:RareData)?$|^JSSourceCode$|^SourceCode$|^SymbolTable$|^PropertyTable$/;
+    let bytes = 0;
+    for (let at = 4; at < snapshot.nodes.length; at += 4) {
+      const name = snapshot.nodeClassNames[snapshot.nodes[at + 2]];
+      if (!engineCode.test(name)) bytes += snapshot.nodes[at + 1];
+    }
+    return bytes;
+  }
+
+  async function settledApplicationBytes(label: string): Promise<number> {
+    const readings: number[] = [];
+    for (let reading = 0; reading < 3; reading++) {
+      await medianSettledHeap(label);
+      readings.push(applicationBytes());
+    }
+    return median(readings);
+  }
+
+  /** One serial version walk, one pending batch and the largest fixture row. */
+  async function oneVersionAllowance(store: JournalStore): Promise<number> {
+    const read = await store.openRead();
+    try {
+      const version = read.version;
+      if (version === undefined) throw new Error('missing published version');
+      let largestRow = 0;
+      for await (const entry of iterateRowEntries(read.access, {
+        offset: version.roots.rowRoot,
+        rows: version.rows,
+      }))
+        largestRow = Math.max(largestRow, entry.recordLength);
+      const rowDepth = Math.max(
+        1,
+        Math.ceil(Math.log(version.rows) / Math.log(ROW_TREE_ARITY)),
+      );
+      const allowance =
+        DEFAULT_BATCH_BYTES +
+        rowDepth * ROW_TREE_MAX_FRAME_BYTES +
+        ID_TRIE_MAX_DEPTH * ID_TRIE_PREFETCH_BYTES +
+        largestRow;
+      expect(allowance).toBeLessThanOrEqual(RETAINED_BOUND_BYTES);
+      return allowance;
+    } finally {
+      await read.close();
+    }
+  }
+
+  /** Application growth preserves negative deltas without engine-code aging offsets. */
   async function growthOf(work: () => Promise<void>): Promise<number> {
-    const before = await medianSettledHeap('before the compaction');
+    const before = await settledApplicationBytes('before the compaction');
     await work();
-    return (await medianSettledHeap('after the compaction')) - before;
+    return (await settledApplicationBytes('after the compaction')) - before;
   }
 
   it(
@@ -56,6 +114,9 @@ describe('store compaction memory with growing checkpoint counts (design 13.6)',
       const stores = new Map<number, JournalStore>();
       for (const count of COUNTS)
         stores.set(count, await build(count, `n${count}`));
+      const largest = stores.get(COUNTS[COUNTS.length - 1]);
+      if (largest === undefined) throw new Error('missing largest store');
+      const allowance = await oneVersionAllowance(largest);
       await ageOutIdleCode();
       expect(await warm.compact()).toBe('swapped');
 
@@ -72,8 +133,12 @@ describe('store compaction memory with growing checkpoint counts (design 13.6)',
       }
 
       process.stdout
-        .write(`STORE_COMPACTION_MEMORY ${JSON.stringify({ counts: COUNTS, growth })}
+        .write(`STORE_COMPACTION_MEMORY ${JSON.stringify({ counts: COUNTS, allowance, growth })}
 `);
+      for (const retained of growth) expect(retained).toBeLessThan(allowance);
+      expect(Math.max(...growth) - Math.min(...growth)).toBeLessThan(
+        FLATNESS_BOUND_BYTES,
+      );
       for (const retained of growth.slice(1))
         expect(retained - growth[0]).toBeLessThan(FLATNESS_BOUND_BYTES);
     },
@@ -90,6 +155,7 @@ describe('store compaction memory with growing checkpoint counts (design 13.6)',
         new PerVersionBuilders(small),
         new PerVersionBuilders(large),
       ];
+      const allowance = await oneVersionAllowance(large);
       await ageOutIdleCode();
       expect(await warm.compact()).toBe('swapped');
 
@@ -112,8 +178,9 @@ describe('store compaction memory with growing checkpoint counts (design 13.6)',
 
       expect(traps.map((trap) => trap.held)).toStrictEqual([1, WARMUP]);
       process.stdout
-        .write(`STORE_COMPACTION_CONTROL ${JSON.stringify({ counts: [1, WARMUP], growth })}
+        .write(`STORE_COMPACTION_CONTROL ${JSON.stringify({ counts: [1, WARMUP], allowance, growth })}
 `);
+      expect(growth[1]).toBeGreaterThanOrEqual(3 * allowance);
       expect(growth[1] - growth[0]).toBeGreaterThan(FLATNESS_BOUND_BYTES);
     },
     LONG_TEST_MS,
