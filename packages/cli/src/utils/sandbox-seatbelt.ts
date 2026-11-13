@@ -23,6 +23,7 @@ import {
   isSandboxDebugModeEnabled,
 } from './sandbox-env.js';
 import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
+import { forwardSignalsToSandboxProcess } from './sandbox-signal-forwarding.js';
 import {
   awaitSandboxProxyReady,
   resolveSandboxProxyUrl,
@@ -35,6 +36,9 @@ export function normalizeExitCode(
 ): number {
   if (typeof code === 'number') {
     return code;
+  }
+  if (signal === 'SIGHUP') {
+    return 129;
   }
   if (signal === 'SIGINT') {
     return 130;
@@ -77,6 +81,7 @@ export async function runSeatbeltSandbox(
   );
   const { sandboxEnv, proxyProcess, proxyCommand } = await setupSeatbeltProxy();
   const sandboxProcess = spawnSeatbeltProcess(config, args, sandboxEnv);
+  forwardSignalsToSandboxProcess(sandboxProcess);
   wireSeatbeltProxyCloseHandler(proxyProcess, sandboxProcess, proxyCommand);
 
   // Restore parent stdin mode/state after the sandbox exits.

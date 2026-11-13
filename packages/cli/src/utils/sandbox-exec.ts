@@ -55,6 +55,7 @@ import {
 } from './sandbox-ssh.js';
 import { setupPortForwardingPodmanMacOS } from './sandbox-podman.js';
 import { normalizeExitCode } from './sandbox-seatbelt.js';
+import { forwardSignalsToSandboxProcess } from './sandbox-signal-forwarding.js';
 import {
   getContainerPath,
   isSandboxDebugModeEnabled,
@@ -457,6 +458,7 @@ async function executeContainerSandbox(
 
   const { stdinWasPaused, stdinHadRawMode } = handleStdinForSandbox();
   const sandboxProcess = spawn(config.command, args, { stdio: 'inherit' });
+  forwardSignalsToSandboxProcess(sandboxProcess);
   lifecycle.own('main-container', `main container ${containerName}`, () => {
     sandboxProcess.kill('SIGTERM');
   });
