@@ -24,6 +24,8 @@ import {
   type PreparedContentBatch,
   type SessionRecordingService,
 } from './SessionRecordingService.js';
+import type { RefusalPayload } from './refusalPayload.js';
+import type { RefusalRewritePayload } from './refusalRewritePayload.js';
 import type {
   PreparedPersistenceSave,
   SessionPersistenceService,
@@ -199,8 +201,8 @@ export class RecordingIntegration {
     if (failures.length > 1) throw new AggregateError(failures, message);
   }
 
-  private async prepareBatch(
-    publication: HistoryBatchPublication,
+  private async trackBatch(
+    prepare: () => Promise<PreparedHistoryBatchEffect>,
   ): Promise<PreparedHistoryBatchEffect> {
     let releaseBatch: () => void = () => undefined;
     const pending = new Promise<void>((resolve) => {
@@ -212,7 +214,7 @@ export class RecordingIntegration {
       releaseBatch();
     };
     try {
-      const effect = await this.prepareBatchEffect(publication);
+      const effect = await prepare();
       return {
         publish: () => effect.publish(),
         rollback: async () => {
@@ -222,9 +224,14 @@ export class RecordingIntegration {
             release();
           }
         },
-        finalize: async () => {
-          await effect.finalize?.();
-          release();
+        finalize: () => effect.finalize?.(),
+        // A committed batch is joined until its cleanup ran, success or not.
+        settle: async () => {
+          try {
+            await effect.settle?.();
+          } finally {
+            release();
+          }
         },
       };
     } catch (error: unknown) {
@@ -295,11 +302,72 @@ export class RecordingIntegration {
           throw new AggregateError(failures, 'History batch rollback failed');
         }
       },
+      // The durable journal append is the commit point; the persisted
+      // session stays reversible until it succeeds.
       finalize: async () => {
-        await persistence?.finalize();
         await recording?.finalize();
       },
+      settle: async () => {
+        await persistence?.finalize();
+      },
     };
+  }
+
+  /**
+   * Prepares the `refusal_rewrite` record and the persisted snapshot of the
+   * resulting history as one effect of a history commit (issue #4036). If the
+   * commit fails anywhere the record is withdrawn again.
+   */
+  prepareRefusalRewrite(
+    payload: RefusalRewritePayload,
+  ): Promise<PreparedHistoryBatchEffect> {
+    return this.trackBatch(async () => {
+      await this.recording.flush();
+      if (!this.recording.isActive()) {
+        throw new Error(
+          'Cannot journal refusal rewrite: recording is not active',
+        );
+      }
+      const persistence = await this.persistence?.prepareSave(
+        payload.resultingHistory,
+      );
+      let recording: PreparedContentBatch<void | Promise<void>>;
+      try {
+        recording = this.recording.prepareRefusalRewrite(payload);
+      } catch (error: unknown) {
+        await persistence?.rollback();
+        throw error;
+      }
+      return {
+        publish: async () => {
+          recording.publish();
+          await persistence?.publish();
+        },
+        rollback: async () => {
+          // Both rollbacks run even if the first fails, so a journal cleanup
+          // error cannot leave the rewritten snapshot persisted.
+          const failures: unknown[] = [];
+          try {
+            recording.rollback();
+          } catch (error: unknown) {
+            failures.push(error);
+          }
+          try {
+            await persistence?.rollback();
+          } catch (error: unknown) {
+            failures.push(error);
+          }
+          this.throwFailures(failures, 'Refusal rewrite rollback failed');
+        },
+        finalize: async () => {
+          await recording.finalize();
+          this.rememberRecordedHistory(payload.resultingHistory);
+        },
+        settle: async () => {
+          await persistence?.finalize();
+        },
+      };
+    });
   }
 
   /**
@@ -359,7 +427,7 @@ export class RecordingIntegration {
     const unregisterBatchParticipant = historyService.registerBatchParticipant(
       (publication) =>
         acceptsOrigin(owner, publication.origin)
-          ? this.prepareBatch(publication)
+          ? this.trackBatch(() => this.prepareBatchEffect(publication))
           : { publish: () => undefined, rollback: () => undefined },
     );
     this.historySubscription = () =>
@@ -496,6 +564,16 @@ export class RecordingIntegration {
       return;
     }
     this.recording.recordSessionEvent(severity, message);
+  }
+
+  /**
+   * Audit-only record of a refused provider attempt (issue #4036).
+   */
+  recordRefusal(payload: RefusalPayload): void {
+    if (this.disposed) {
+      return;
+    }
+    this.recording.recordRefusal(payload);
   }
 
   /**

@@ -29,6 +29,11 @@ import type { SessionNativeHistory } from './session-history-observation.js';
  */
 
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core';
+import type {
+  RefusalPayload,
+  RefusalRewritePayload,
+} from '@vybestack/llxprt-code-core';
+import type { PreparedHistoryBatchEffect } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   CONTINUE_LATEST,
   CheckpointService,
@@ -76,6 +81,7 @@ import {
   readRecordingState,
   readSessionInfo,
   resolveCheckpointTarget,
+  type SessionRecordingPaths,
 } from './sessionControlInfo.js';
 import {
   SessionRecordingLifetime,
@@ -112,13 +118,6 @@ function logger(): DebugLogger {
  * @requirement:REQ-010
  */
 
-export interface SessionRecordingPaths {
-  readonly storageRoot: string;
-  readonly projectTempDir: string;
-  readonly projectChatsDir: string;
-  readonly projectRoot: string;
-  readonly persistenceQueueBytes: number;
-}
 export class SessionControl implements AgentSessionControl {
   private readonly recordingLifetime: SessionRecordingLifetime;
   /**
@@ -482,6 +481,15 @@ export class SessionControl implements AgentSessionControl {
     });
 
   recordRecordingEvent = this.flushRecording;
+
+  /** Internal refusal journaling (issue #4036); not on the public surface. */
+  recordRefusal = (refusal: RefusalPayload): Promise<void> =>
+    this.recordingLifetime.recordRefusal(refusal);
+
+  prepareRefusalRewrite = (
+    rewrite: RefusalRewritePayload,
+  ): Promise<PreparedHistoryBatchEffect | undefined> =>
+    this.recordingLifetime.prepareRefusalRewrite(rewrite);
 
   async createCheckpoint(
     name: string,

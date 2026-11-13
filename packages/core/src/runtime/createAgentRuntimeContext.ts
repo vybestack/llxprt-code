@@ -144,6 +144,85 @@ function resolveSemanticMediaPurgeSetting(
 }
 
 /**
+ * Reads a refusal setting live, falling back to the registry default when the
+ * live value is absent or fails the registry validator.
+ */
+function readRefusalSetting<T extends number | boolean>(
+  key:
+    | 'refusal.retries'
+    | 'refusal.backoff-ms'
+    | 'refusal.rewrite'
+    | 'refusal.max-rewrites',
+  live: unknown,
+  accepts: (value: unknown) => value is T,
+): T {
+  const validation = validateSetting(key, live);
+  if (live !== undefined && validation.success && accepts(validation.value)) {
+    return validation.value;
+  }
+  const fallback = getSettingSpec(key)?.default;
+  if (!accepts(fallback)) throw new Error(`Missing default for ${key}`);
+  return fallback;
+}
+
+const isNumber = (value: unknown): value is number => typeof value === 'number';
+const isBoolean = (value: unknown): value is boolean =>
+  typeof value === 'boolean';
+
+/**
+ * Build the refusal recovery accessors (issue #4036). A value that fails the
+ * registry validator is ignored in favour of the default, so a corrupt
+ * profile cannot turn recovery into an unbounded loop.
+ */
+function buildRefusalEphemerals(
+  getLiveSetting: ReturnType<typeof createGetLiveSetting>,
+  options: AgentRuntimeContextFactoryOptions,
+): AgentRuntimeContext['ephemerals']['refusal'] {
+  return {
+    retries: () =>
+      readRefusalSetting(
+        'refusal.retries',
+        getLiveSetting('refusal.retries', options.settings['refusal.retries']),
+        isNumber,
+      ),
+    backoffMs: () =>
+      readRefusalSetting(
+        'refusal.backoff-ms',
+        getLiveSetting(
+          'refusal.backoff-ms',
+          options.settings['refusal.backoff-ms'],
+        ),
+        isNumber,
+      ),
+    rewrite: () =>
+      readRefusalSetting(
+        'refusal.rewrite',
+        getLiveSetting('refusal.rewrite', options.settings['refusal.rewrite']),
+        isBoolean,
+      ),
+    reviewProfile: () => {
+      const live = getLiveSetting(
+        'refusal.review-profile',
+        options.settings['refusal.review-profile'],
+      );
+      return live !== undefined &&
+        validateSetting('refusal.review-profile', live).success
+        ? live.trim()
+        : undefined;
+    },
+    maxRewrites: () =>
+      readRefusalSetting(
+        'refusal.max-rewrites',
+        getLiveSetting(
+          'refusal.max-rewrites',
+          options.settings['refusal.max-rewrites'],
+        ),
+        isNumber,
+      ),
+  };
+}
+
+/**
  * Build compression-related ephemeral accessors.
  */
 function buildCompressionEphemerals(
@@ -371,6 +450,7 @@ export function createAgentRuntimeContext(
   const ephemerals = {
     ...buildCompressionEphemerals(getLiveSetting, options),
     reasoning: buildReasoningEphemerals(getLiveSetting, options),
+    refusal: buildRefusalEphemerals(getLiveSetting, options),
   };
 
   const providerRuntime = freezeProviderRuntime(options.providerRuntime);

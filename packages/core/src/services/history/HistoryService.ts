@@ -43,6 +43,8 @@ import {
 import { HistoryServiceCore } from './HistoryServiceCore.js';
 import { notifyObservers } from './historyMutationFailure.js';
 import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
+import { validateHistoryBatch } from './history-batch-validation.js';
+import type { HistoryEffectFactory } from './HistoryServiceCore.js';
 
 export type {
   CompressionConfig,
@@ -50,9 +52,62 @@ export type {
   HistoryBatchParticipant,
   HistoryBatchPublication,
   HistoryMediaOwner,
+  HistoryEffectFactory,
   HistoryOwnedMediaReservation,
   PreparedHistoryBatchEffect,
 } from './HistoryServiceCore.js';
+
+/** A guarded whole-history rewrite; see {@link HistoryService.replaceIfUnchanged}. */
+export interface HistoryRewriteRequest {
+  /** The history the rewrite was decided from; compared entry by entry. */
+  readonly expected: readonly IContent[];
+  /** Maps the live history to its replacement. Runs inside the mutation queue. */
+  readonly rewrite: (current: readonly IContent[]) => readonly IContent[];
+  readonly modelName?: string;
+  /** A caller-owned effect that commits together with the history. */
+  readonly prepareEffect?: HistoryEffectFactory;
+  /**
+   * Commit the prepared effect even when the rewrite changes no entry, for a
+   * rewrite whose substance lies outside the history (and is journaled).
+   */
+  readonly commitUnchanged?: boolean;
+  /**
+   * Cancels the rewrite until its commit point. The signal is checked after
+   * every awaited step and right before the effect finalizers (the last of
+   * which, the caller-owned effect, is the commit point); an abort before then
+   * rolls the rewrite back and rejects with the abort reason. Once the commit
+   * point is passed the rewrite stays committed.
+   */
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * `stale`: the history is no longer the expected one and nothing changed.
+ * `unchanged`: the rewrite returned the same entries and nothing was committed
+ * (unless the request asked to commit the unchanged history with its effect).
+ */
+export type HistoryRewriteOutcome = 'applied' | 'stale' | 'unchanged';
+
+function sameEntries(
+  left: readonly IContent[],
+  right: readonly IContent[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((entry, index) => entry === right[index])
+  );
+}
+
+function firstDifference(
+  before: readonly IContent[],
+  after: readonly IContent[],
+): number | undefined {
+  const shared = Math.min(before.length, after.length);
+  for (let index = 0; index < shared; index += 1) {
+    if (before[index] !== after[index]) return index;
+  }
+  return before.length === after.length ? undefined : shared;
+}
 
 /**
  * Provider-neutral conversation history service.
@@ -198,6 +253,69 @@ export class HistoryService extends HistoryServiceCore {
       this.emit('toolResponseReplaced', oldHistory, this.history),
     );
     return true;
+  }
+
+  /**
+   * Replaces the history in one queued commit, but only when it is still the
+   * history the caller decided from. Entries committed by anyone else since
+   * `expected` was read make the call a no-op reporting `stale`, so a rewrite
+   * can never overwrite a concurrent write. A rewrite that touches content
+   * retained by a stored Responses parent drops those parent markers, and one
+   * that reaches the cache-anchored head resets the anchor. The optional
+   * effect (for example a journal record) is part of the same commit and rolls
+   * the history back if it fails.
+   */
+  async replaceIfUnchanged(
+    request: HistoryRewriteRequest,
+  ): Promise<HistoryRewriteOutcome> {
+    let outcome: HistoryRewriteOutcome = 'stale';
+    await this.enqueueAsynchronousHistoryMutation(async () => {
+      outcome = await this.replaceIfUnchangedInQueue(request);
+    });
+    return outcome;
+  }
+
+  private async replaceIfUnchangedInQueue(
+    request: HistoryRewriteRequest,
+  ): Promise<HistoryRewriteOutcome> {
+    request.signal?.throwIfAborted();
+    const current = this.history;
+    if (!sameEntries(current, request.expected)) return 'stale';
+    const rewritten = [...request.rewrite([...current])];
+    validateHistoryBatch(rewritten);
+    const firstChanged = firstDifference(current, rewritten);
+    if (firstChanged === undefined && request.commitUnchanged !== true) {
+      return 'unchanged';
+    }
+    const anchorIndex = current.findIndex(
+      (entry) => entry.metadata?.chronology?.seq === this.cacheAnchorSeq,
+    );
+    const nextHistory =
+      firstChanged === undefined
+        ? rewritten
+        : invalidateRetainedRewrite(rewritten, firstChanged);
+    await this.waitForTokenUpdates();
+    request.signal?.throwIfAborted();
+    const nextHistoryTokens = await this.estimateTokensForContents(
+      nextHistory,
+      request.modelName,
+    );
+    request.signal?.throwIfAborted();
+    await this.commitHistoryMutation({
+      nextHistory,
+      nextHistoryTokens,
+      options: {},
+      prepareEffect: request.prepareEffect,
+      signal: request.signal,
+    });
+    if (
+      firstChanged !== undefined &&
+      this.cacheAnchorSeq > 0 &&
+      anchorIndex >= firstChanged
+    ) {
+      this.cacheAnchorSeq = 0;
+    }
+    return 'applied';
   }
 
   /**

@@ -189,6 +189,13 @@ function createStatelessRuntimeBundle(options?: {
       contextLimit: () => 60_000,
       preserveThreshold: () => 0.2,
       toolFormatOverride: () => undefined,
+      refusal: {
+        retries: () => 2,
+        backoffMs: () => 15_000,
+        rewrite: () => true,
+        reviewProfile: () => undefined,
+        maxRewrites: () => 1,
+      },
     },
     telemetry: telemetryAdapter,
     provider: providerAdapter,

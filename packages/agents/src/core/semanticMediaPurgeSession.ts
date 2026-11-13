@@ -167,6 +167,17 @@ export class SemanticMediaPurgeAttempt {
     this.release();
   }
 
+  /**
+   * Gives the purge up without committing it, for a send whose history was
+   * rewritten after this attempt froze its request (a refusal rewrite). The
+   * commit would find the history changed, and the next request must be built
+   * from the rewritten history rather than from this attempt's copy.
+   */
+  retire(): void {
+    this.completed = true;
+    this.release();
+  }
+
   async rollbackCommitted(): Promise<void> {
     if (!this.committed) return;
     await this.coordinator.rollback(this.transaction);

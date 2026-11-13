@@ -35,6 +35,8 @@ import {
 } from './replayCheckpointMetadata.js';
 export { foldCheckpointMetadata } from './replayCheckpointMetadata.js';
 import { readBoundedFirstLine } from './boundedHeaderReader.js';
+import { RefusalPayloadSchema } from './refusalPayload.js';
+import { RefusalRewritePayloadSchema } from './refusalRewritePayload.js';
 import { formatReplayDiagnostic } from './replayErrorFormatting.js';
 import {
   INVALID_SESSION_START_MESSAGE,
@@ -468,6 +470,45 @@ function handleSemanticMediaPurge(
   };
 }
 
+/**
+ * issue #4036: refusal is an audit-only record. It is validated so a corrupt
+ * line is reported, but it never touches history.
+ */
+function handleRefusal(
+  payload: Record<string, unknown>,
+  acc: ReplayAccumulators,
+  lineNumber: number,
+): void {
+  if (!RefusalPayloadSchema.safeParse(payload).success) {
+    acc.malformedCount++;
+    acc.warnings.push(`Line ${lineNumber}: malformed refusal event, skipping`);
+  }
+}
+
+/**
+ * issue #4036: a refusal rewrite installs the recorded resulting history. The
+ * original text of the changed entries stays in the record, outside history.
+ */
+function handleRefusalRewrite(
+  payload: Record<string, unknown>,
+  acc: ReplayAccumulators,
+  lineNumber: number,
+): void {
+  const history = payload['resultingHistory'];
+  if (
+    !RefusalRewritePayloadSchema.safeParse(payload).success ||
+    !Array.isArray(history) ||
+    !history.every(isSpeakerContent)
+  ) {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: malformed refusal_rewrite event, skipping`,
+    );
+    return;
+  }
+  acc.history = [...history];
+}
+
 function applyParsedEvent(
   parsed: Record<string, unknown> | null,
   acc: ReplayAccumulators,
@@ -621,6 +662,12 @@ function dispatchEvent(
       break;
     case 'semantic_media_purge':
       handleSemanticMediaPurge(payload, acc, lineNumber);
+      break;
+    case 'refusal':
+      handleRefusal(payload, acc, lineNumber);
+      break;
+    case 'refusal_rewrite':
+      handleRefusalRewrite(payload, acc, lineNumber);
       break;
     case 'directories_changed':
       handleDirectoriesChanged(payload, acc, lineNumber);

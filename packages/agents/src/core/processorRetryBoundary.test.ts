@@ -10,6 +10,7 @@ import { describe, expect, it } from 'bun:test';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import { TurnProcessor } from './TurnProcessor.js';
+import { createRefusalRecovery } from '../refusal/index.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
 
 function terminalError(): Error & {
@@ -161,6 +162,14 @@ describe('agent processor retry boundaries', () => {
       streamProcessor: {
         releasePromptTurnIdentity: () => undefined,
       },
+      compressionHandler: { tokenUsageLogger: null },
+      refusalRecovery: createRefusalRecovery({
+        retries: () => 2,
+        backoffMs: () => 15_000,
+        rewrite: () => true,
+        reviewProfile: () => undefined,
+        maxRewrites: () => 1,
+      }),
       async *_runStreamAttempt() {
         attempts++;
         releaseAttempt();

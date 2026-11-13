@@ -28,6 +28,12 @@ export interface ApiAttemptRecord {
   model: string;
   provider: string;
   isError: boolean;
+  /**
+   * True when the attempt ended with the canonical finish reason `refusal`
+   * (issue #4036). A refusal is an HTTP success, not an error: its tokens and
+   * latency count like any other attempt.
+   */
+  isRefusal?: boolean;
   /** True when the provider reported valid usage data for this attempt.
    * Requests without usage must not contribute to rate numerators or
    * denominators. */
@@ -54,6 +60,7 @@ export interface ApiAttemptRecord {
 export interface ModelBreakdown {
   totalRequests: number;
   totalErrors: number;
+  totalRefusals: number;
   totalInputTokens: number;
   totalOutputTokens: number;
   totalCachedTokens: number;
@@ -65,6 +72,7 @@ export interface ModelBreakdown {
 export interface SessionMetricsSnapshot {
   totalApiRequests: number;
   totalApiErrors: number;
+  totalRefusals: number;
   totalInputTokens: number;
   totalOutputTokens: number;
   totalCachedTokens: number;
@@ -202,6 +210,7 @@ export class SessionMetricsAggregator {
 
   private totalApiRequests = 0;
   private totalApiErrors = 0;
+  private totalRefusals = 0;
   private totalInputTokens = 0;
   private totalOutputTokens = 0;
   private totalCachedTokens = 0;
@@ -248,6 +257,12 @@ export class SessionMetricsAggregator {
     null,
   ) as Record<string, ModelBreakdown>;
 
+  private countOutcome(record: ApiAttemptRecord): void {
+    this.totalApiRequests++;
+    if (record.isError) this.totalApiErrors++;
+    if (record.isRefusal === true) this.totalRefusals++;
+  }
+
   recordApiAttempt(record: ApiAttemptRecord): boolean {
     if (this.seenAttemptIds.has(record.attemptId)) {
       return false;
@@ -279,10 +294,7 @@ export class SessionMetricsAggregator {
         ? rawLastToken
         : null;
 
-    this.totalApiRequests++;
-    if (record.isError) {
-      this.totalApiErrors++;
-    }
+    this.countOutcome(record);
 
     this.totalInputTokens += inputTokens;
     this.totalOutputTokens += outputTokens;
@@ -333,7 +345,7 @@ export class SessionMetricsAggregator {
       );
     }
 
-    this.updateModelBreakdown(record.model, record.isError, {
+    this.updateModelBreakdown(record, {
       inputTokens,
       outputTokens,
       cachedTokens,
@@ -457,8 +469,7 @@ export class SessionMetricsAggregator {
   }
 
   private updateModelBreakdown(
-    model: string,
-    isError: boolean,
+    { model, isError, isRefusal }: ApiAttemptRecord,
     tokens: {
       inputTokens: number;
       outputTokens: number;
@@ -472,6 +483,7 @@ export class SessionMetricsAggregator {
     const breakdown: ModelBreakdown = existing ?? {
       totalRequests: 0,
       totalErrors: 0,
+      totalRefusals: 0,
       totalInputTokens: 0,
       totalOutputTokens: 0,
       totalCachedTokens: 0,
@@ -484,6 +496,7 @@ export class SessionMetricsAggregator {
     }
     breakdown.totalRequests++;
     if (isError) breakdown.totalErrors++;
+    if (isRefusal === true) breakdown.totalRefusals++;
     breakdown.totalInputTokens += tokens.inputTokens;
     breakdown.totalOutputTokens += tokens.outputTokens;
     breakdown.totalCachedTokens += tokens.cachedTokens;
@@ -557,6 +570,7 @@ export class SessionMetricsAggregator {
     return {
       totalApiRequests: this.totalApiRequests,
       totalApiErrors: this.totalApiErrors,
+      totalRefusals: this.totalRefusals,
       totalInputTokens: this.totalInputTokens,
       totalOutputTokens: this.totalOutputTokens,
       totalCachedTokens: this.totalCachedTokens,
@@ -684,6 +698,7 @@ export class SessionMetricsAggregator {
     this.activeIntervals.clear();
     this.totalApiRequests = 0;
     this.totalApiErrors = 0;
+    this.totalRefusals = 0;
     this.totalInputTokens = 0;
     this.totalOutputTokens = 0;
     this.totalCachedTokens = 0;

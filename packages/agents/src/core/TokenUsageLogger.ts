@@ -14,6 +14,7 @@ import {
   type TokenUsageActualInput,
   type TokenUsageLifecycleEvent,
   type TokenUsageCompressionEvent,
+  type TokenUsageRefusalReviewEvent,
   type TokenUsageProviderSwitchEvent,
   type TokenUsageModelSwitchEvent,
   type TokenUsageSessionResumeEvent,
@@ -65,13 +66,17 @@ export interface TokenUsageRecord extends PendingTokenEstimate {
 export const PENDING_CAP = 100;
 
 /**
- * True for the outcomes that are followed by another billed attempt for the
- * same prompt. Any other outcome ends the turn.
+ * True for the outcomes that may be followed by another billed attempt for the
+ * same prompt. Any other outcome ends the turn. A refusal keeps the pending
+ * state because recovery can resend the same request; a terminal stop ends it
+ * through {@link TokenUsageLogger.finalizePrompt}.
  */
 function isRetriedOutcome(
   outcome: TokenUsageAttemptOutcome | undefined,
 ): boolean {
-  return outcome === 'abandoned' || outcome === 'error';
+  return (
+    outcome === 'abandoned' || outcome === 'error' || outcome === 'refusal'
+  );
 }
 
 /**
@@ -394,9 +399,20 @@ export class TokenUsageLogger {
         retryReason: actual.retryReason,
         httpStatus: actual.httpStatus,
         backendProfile: actual.backendProfile,
+        finishReason: actual.finishReason,
+        rawStopReason: actual.rawStopReason,
       },
     };
     await this._writeTurnRecord(record);
+  }
+
+  /**
+   * Ends a prompt whose last attempt kept its pending state alive for a retry
+   * that will not come (a terminal refusal). Later completions for the prompt
+   * are dropped instead of being matched against stale state.
+   */
+  finalizePrompt(promptId: string): void {
+    this.pending.delete(promptId);
   }
 
   /**
@@ -611,6 +627,12 @@ export class TokenUsageLogger {
       ...(extras.backendProfile !== undefined && {
         backend_profile: extras.backendProfile,
       }),
+      ...(extras.finishReason !== undefined && {
+        finish_reason: extras.finishReason,
+      }),
+      ...(extras.rawStopReason !== undefined && {
+        raw_stop_reason: extras.rawStopReason,
+      }),
     };
   }
 
@@ -620,6 +642,8 @@ export class TokenUsageLogger {
     switch (event.type) {
       case 'compression':
         return this._toCompressionRecord(event);
+      case 'refusal_review':
+        return this._toRefusalReviewRecord(event);
       case 'provider_switch':
         return this._toProviderSwitchRecord(event);
       case 'model_switch':
@@ -654,6 +678,32 @@ export class TokenUsageLogger {
       }),
       ...(event.compressionOutputTokens !== undefined && {
         compression_output_tokens: event.compressionOutputTokens,
+      }),
+    };
+  }
+
+  private _toRefusalReviewRecord(
+    event: TokenUsageRefusalReviewEvent,
+  ): SerializedTokenUsageLifecycleRecord {
+    return {
+      record_type: 'refusal_review',
+      schema_version: TOKEN_USAGE_SCHEMA_VERSION,
+      ts: event.ts ?? new Date().toISOString(),
+      session_id: event.sessionId,
+      turn_id: event.turnId ?? null,
+      prompt_id: event.promptId,
+      purpose: 'refusal-review',
+      provider: event.provider,
+      model: event.model,
+      verdict: event.verdict,
+      ...(event.promptTokens !== undefined && {
+        prompt_tokens: event.promptTokens,
+      }),
+      ...(event.outputTokens !== undefined && {
+        output_tokens: event.outputTokens,
+      }),
+      ...(event.finishReason !== undefined && {
+        finish_reason: event.finishReason,
       }),
     };
   }

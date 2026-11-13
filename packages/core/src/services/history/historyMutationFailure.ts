@@ -45,25 +45,61 @@ export function combineMutationFailures(
 }
 
 /**
- * Runs every prepared effect's finalizer, collecting failures so one bad
- * finalizer cannot hide the others.
+ * Runs the prepared effects' finalizers in order and stops at the first
+ * failure. A finalizer is an effect's commit step, so none may run once an
+ * earlier one failed: the mutation is about to be rolled back, and only
+ * effects that never finalized can still be rolled back cleanly.
+ *
+ * A cancelled `signal` is honored immediately before each finalizer, so the
+ * last finalizer (the caller-owned effect that holds the commit point) never
+ * starts for a request that was already cancelled. Nothing is checked after
+ * it: once it succeeds the mutation is committed.
  */
 export async function finalizeMutationEffects(
   effects: readonly PreparedHistoryBatchEffect[],
+  signal?: AbortSignal,
 ): Promise<void> {
+  for (const effect of effects) {
+    signal?.throwIfAborted();
+    await effect.finalize?.();
+  }
+}
+
+/**
+ * Runs the cleanup of a mutation that has committed. Every effect settles
+ * even if an earlier one failed; the failures are returned for the caller to
+ * log, because nothing may be undone after the commit point.
+ */
+export async function settleMutationEffects(
+  effects: readonly PreparedHistoryBatchEffect[],
+): Promise<unknown[]> {
   const failures: unknown[] = [];
   for (const effect of effects) {
-    if (effect.finalize === undefined) continue;
     try {
-      await effect.finalize();
+      await effect.settle?.();
     } catch (error: unknown) {
       failures.push(error);
     }
   }
-  if (failures.length === 1) throw failures[0];
-  if (failures.length > 1) {
-    throw new AggregateError(failures, 'History mutation finalization failed');
+  return failures;
+}
+
+/**
+ * Rolls prepared effects back in reverse order and returns the failures, so
+ * one failing rollback cannot stop the others.
+ */
+export async function rollbackMutationEffects(
+  effects: readonly PreparedHistoryBatchEffect[],
+): Promise<unknown[]> {
+  const failures: unknown[] = [];
+  for (const effect of [...effects].reverse()) {
+    try {
+      await effect.rollback();
+    } catch (error: unknown) {
+      failures.push(error);
+    }
   }
+  return failures;
 }
 
 /**
@@ -81,4 +117,20 @@ export function notifyObservers(
   } catch (error: unknown) {
     logger.debug(`${event} listener failed`, error);
   }
+}
+
+/**
+ * Rolls every effect back after a failed mutation and throws the failure that
+ * caused it, together with any rollback failures.
+ */
+export async function rollbackAndRethrow(
+  effects: readonly PreparedHistoryBatchEffect[],
+  error: unknown,
+): Promise<never> {
+  const rollbackFailures = await rollbackMutationEffects(effects);
+  if (rollbackFailures.length === 0) throw error;
+  throw new AggregateError(
+    [error, ...rollbackFailures],
+    'History mutation and rollback failed',
+  );
 }

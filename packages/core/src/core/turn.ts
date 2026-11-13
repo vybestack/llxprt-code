@@ -16,6 +16,7 @@ import type {
   ToolResultDisplay,
   ToolErrorType,
 } from '@vybestack/llxprt-code-tools';
+import type { SystemNoticeSource } from './chatSessionTypes.js';
 import type { ThoughtSummary } from '../utils/thoughtUtils.js';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../utils/streamIdleTimeout.js';
 import type { ToolDeclaration } from '../llm-types/index.js';
@@ -164,6 +165,8 @@ export type ServerContentEvent = {
 export type ServerSystemNoticeEvent = {
   type: AgentEventType.SystemNotice;
   value: string;
+  /** Present when a host should render the notice itself. */
+  source?: SystemNoticeSource;
 };
 
 export type ServerThoughtEvent = {

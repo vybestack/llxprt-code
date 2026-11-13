@@ -21,7 +21,8 @@ export type TokenUsageAttemptOutcome =
   | 'success'
   | 'error'
   | 'aborted'
-  | 'abandoned';
+  | 'abandoned'
+  | 'refusal';
 
 // ---------------------------------------------------------------------------
 // Serialized turn record
@@ -38,6 +39,7 @@ const AttemptOutcomeSchema = z.enum([
   'error',
   'aborted',
   'abandoned',
+  'refusal',
 ]);
 
 const ToolCallEntrySchema = z.object({
@@ -102,6 +104,9 @@ export const SerializedTokenUsageTurnRecordSchema = z.object({
   retry_reason: z.string().optional(),
   http_status: z.number().optional(),
   backend_profile: z.string().optional(),
+  // --- #4036 terminal finish reasons of the attempt (canonical and raw) ---
+  finish_reason: z.string().optional(),
+  raw_stop_reason: z.string().optional(),
   // --- AC-5 tool attribution ---
   tool_calls: z.array(ToolCallEntrySchema).optional(),
   new_tool_result_tokens: z.number().optional(),
@@ -190,10 +195,39 @@ const SerializedContextTruncationRecordSchema = z.object({
   reason: z.string().nullable(),
 });
 
+/**
+ * One call to a refusal reviewer model (issue #4036). It is a lifecycle
+ * record, not a turn record: the reviewer's usage is tagged with its purpose
+ * and never counts as an attempt of the request it reviews.
+ */
+const SerializedRefusalReviewRecordSchema = z.object({
+  record_type: z.literal('refusal_review'),
+  schema_version: z.number(),
+  ts: z.string(),
+  session_id: z.string(),
+  turn_id: z.string().nullable(),
+  prompt_id: z.string(),
+  purpose: z.literal('refusal-review'),
+  provider: z.string(),
+  model: z.string(),
+  verdict: z.enum([
+    'rewrite',
+    'disallowed',
+    'no_change',
+    'invalid',
+    'refused',
+    'error',
+  ]),
+  prompt_tokens: z.number().optional(),
+  output_tokens: z.number().optional(),
+  finish_reason: z.string().optional(),
+});
+
 export const SerializedTokenUsageLifecycleRecordSchema = z.discriminatedUnion(
   'record_type',
   [
     SerializedCompressionRecordSchema,
+    SerializedRefusalReviewRecordSchema,
     SerializedProviderSwitchRecordSchema,
     SerializedModelSwitchRecordSchema,
     SerializedSessionResumeRecordSchema,
@@ -214,6 +248,7 @@ export const SerializedTokenUsageLogRecordSchema = z.discriminatedUnion(
   [
     SerializedTokenUsageTurnRecordSchema,
     SerializedCompressionRecordSchema,
+    SerializedRefusalReviewRecordSchema,
     SerializedProviderSwitchRecordSchema,
     SerializedModelSwitchRecordSchema,
     SerializedSessionResumeRecordSchema,
@@ -333,6 +368,9 @@ export interface TokenUsageActualInput {
   retryReason?: string;
   httpStatus?: number;
   backendProfile?: string;
+  // #4036 terminal finish reasons of the attempt
+  finishReason?: string;
+  rawStopReason?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -394,8 +432,29 @@ export interface TokenUsageContextTruncationEvent {
   reason?: string | null;
 }
 
+export interface TokenUsageRefusalReviewEvent {
+  type: 'refusal_review';
+  ts?: string;
+  sessionId: string;
+  turnId?: string | null;
+  promptId: string;
+  provider: string;
+  model: string;
+  verdict:
+    | 'rewrite'
+    | 'disallowed'
+    | 'no_change'
+    | 'invalid'
+    | 'refused'
+    | 'error';
+  promptTokens?: number;
+  outputTokens?: number;
+  finishReason?: string;
+}
+
 export type TokenUsageLifecycleEvent =
   | TokenUsageCompressionEvent
+  | TokenUsageRefusalReviewEvent
   | TokenUsageProviderSwitchEvent
   | TokenUsageModelSwitchEvent
   | TokenUsageSessionResumeEvent

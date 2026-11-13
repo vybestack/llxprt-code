@@ -259,3 +259,35 @@ export function readProviderStreamResponse(
     },
   });
 }
+
+/** Warns about an empty tool list and logs the provider call about to start. */
+export function logToolDiagnostics(
+  logger: {
+    debug: (fn: () => string, data?: unknown) => void;
+    warn: (fn: () => string, data?: unknown) => void;
+  },
+  call: {
+    readonly provider: { readonly name: string };
+    readonly tools: readonly unknown[] | undefined;
+    readonly baseUrl: string | undefined;
+    readonly model: string;
+  },
+): void {
+  const { provider, tools, baseUrl, model } = call;
+  if (Array.isArray(tools) && tools.length === 0) {
+    logger.warn(
+      () =>
+        `[TurnProcessor] Tools array exists but has 0 function declarations!`,
+      { tools, provider: provider.name },
+    );
+  }
+  logger.debug(
+    () => '[TurnProcessor] Calling provider.generateChatCompletion',
+    {
+      providerName: provider.name,
+      model,
+      toolCount: Array.isArray(tools) ? tools.length : 0,
+      baseUrl,
+    },
+  );
+}

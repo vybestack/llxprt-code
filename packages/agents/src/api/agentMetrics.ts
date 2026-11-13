@@ -28,6 +28,8 @@ export interface SessionStats {
   readonly turnCount: number;
   readonly apiRequests: number;
   readonly apiErrors: number;
+  /** Attempts the model refused (canonical finish reason `refusal`); not errors. */
+  readonly apiRefusals: number;
   readonly toolCalls: number;
   readonly toolSuccesses: number;
   readonly toolFailures: number;

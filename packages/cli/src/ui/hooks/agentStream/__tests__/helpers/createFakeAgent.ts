@@ -64,6 +64,7 @@ function createStubStats(): Agent['getStats'] {
     turnCount: 0,
     apiRequests: 0,
     apiErrors: 0,
+    apiRefusals: 0,
     toolCalls: 0,
     toolSuccesses: 0,
     toolFailures: 0,

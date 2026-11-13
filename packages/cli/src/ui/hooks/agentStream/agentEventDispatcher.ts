@@ -299,6 +299,25 @@ function dispatchDoneEvent(
 }
 
 /**
+ * Refusal-recovery notices (retry progress, the summary when recovery gives
+ * up) are shown as info items. Notices without a source, such as an MCP
+ * discovery failure, are informational and keep rendering nothing here.
+ * Visible text from the refused attempt is committed first so the notice
+ * lands after it.
+ */
+function dispatchNoticeEvent(
+  event: Extract<AgentEvent, { type: 'notice' }>,
+  deps: AgentEventDeps,
+  agentMessageBuffer: string,
+  userMessageTimestamp: number,
+): DispatchResult {
+  if (event.source !== 'refusal-recovery') return { agentMessageBuffer };
+  flushPendingAiContent(deps, userMessageTimestamp);
+  deps.addItem({ type: 'info', text: event.message }, userMessageTimestamp);
+  return { agentMessageBuffer: '' };
+}
+
+/**
  * Dispatches a single public AgentEvent to the appropriate React state update.
  */
 export function dispatchAgentEvent(
@@ -323,6 +342,7 @@ export function dispatchAgentEvent(
     case 'compression':
     case 'context-warning':
     case 'citation':
+    case 'notice':
       return dispatchInformationalEvent(
         event,
         deps,
@@ -372,7 +392,6 @@ export function dispatchAgentEvent(
     case 'tool-confirmation':
     case 'tool-status':
     case 'invalid-stream':
-    case 'notice':
       // No state change — display flows through displayCallbacks or is
       // handled by the loop internally.
       return { agentMessageBuffer };
@@ -406,12 +425,27 @@ function dispatchAttemptBoundary(
 function dispatchInformationalEvent(
   event: Extract<
     AgentEvent,
-    { type: 'model-info' | 'compression' | 'context-warning' | 'citation' }
+    {
+      type:
+        | 'model-info'
+        | 'compression'
+        | 'context-warning'
+        | 'citation'
+        | 'notice';
+    }
   >,
   deps: AgentEventDeps,
   agentMessageBuffer: string,
   userMessageTimestamp: number,
 ): DispatchResult {
+  if (event.type === 'notice') {
+    return dispatchNoticeEvent(
+      event,
+      deps,
+      agentMessageBuffer,
+      userMessageTimestamp,
+    );
+  }
   if (event.type === 'model-info') {
     handleModelInfoEvent(deps, event.info, userMessageTimestamp);
     return { agentMessageBuffer };

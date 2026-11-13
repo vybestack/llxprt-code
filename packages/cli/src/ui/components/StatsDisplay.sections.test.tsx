@@ -212,7 +212,12 @@ describe('<StatsDisplay /> sections', () => {
       const metrics = withTokenTracking({
         models: {
           'gemini-2.5-pro': {
-            api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
+            api: {
+              totalRequests: 1,
+              totalErrors: 0,
+              totalRefusals: 0,
+              totalLatencyMs: 100,
+            },
             tokens: {
               input: 50,
               prompt: 100,
@@ -287,7 +292,12 @@ describe('<StatsDisplay /> sections', () => {
       const metrics = withTokenTracking({
         models: {
           'gemini-2.5-pro': {
-            api: { totalRequests: 5, totalErrors: 0, totalLatencyMs: 1000 },
+            api: {
+              totalRequests: 5,
+              totalErrors: 0,
+              totalRefusals: 0,
+              totalLatencyMs: 1000,
+            },
             tokens: {
               input: 600,
               prompt: 1000,
@@ -327,7 +337,12 @@ describe('<StatsDisplay /> sections', () => {
       const metrics = withTokenTracking({
         models: {
           'gemini-2.5-pro': {
-            api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
+            api: {
+              totalRequests: 1,
+              totalErrors: 0,
+              totalRefusals: 0,
+              totalLatencyMs: 100,
+            },
             tokens: {
               input: 500,
               prompt: 1000,
@@ -368,7 +383,12 @@ describe('<StatsDisplay /> sections', () => {
       const metrics = withTokenTracking({
         models: {
           'gemini-2.5-pro': {
-            api: { totalRequests: 2, totalErrors: 0, totalLatencyMs: 2500 },
+            api: {
+              totalRequests: 2,
+              totalErrors: 0,
+              totalRefusals: 0,
+              totalLatencyMs: 2500,
+            },
             tokens: {
               input: 600,
               prompt: 900,
@@ -424,7 +444,12 @@ describe('<StatsDisplay /> sections', () => {
       const metrics = withTokenTracking({
         models: {
           'gemini-2.5-pro': {
-            api: { totalRequests: 2, totalErrors: 0, totalLatencyMs: 2500 },
+            api: {
+              totalRequests: 2,
+              totalErrors: 0,
+              totalRefusals: 0,
+              totalLatencyMs: 2500,
+            },
             tokens: {
               input: 600,
               prompt: 900,
@@ -583,6 +608,7 @@ describe('<StatsDisplay /> sections', () => {
             api: {
               totalRequests: 5,
               totalErrors: 1,
+              totalRefusals: 0,
               totalLatencyMs: 10000,
             },
             tokens: {
@@ -599,6 +625,7 @@ describe('<StatsDisplay /> sections', () => {
             api: {
               totalRequests: 3,
               totalErrors: 0,
+              totalRefusals: 0,
               totalLatencyMs: 6000,
             },
             tokens: {

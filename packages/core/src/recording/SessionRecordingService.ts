@@ -49,14 +49,23 @@ import {
   type SessionStartPayload,
   type RecordingCheckpointInfo,
   type SessionForkedPayload,
+  type RefusalPayload,
+  type RefusalRewritePayload,
 } from './types.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { replaySession } from './ReplayEngine.js';
 import { RecordingBatchCompletions } from './recording-batch-completion.js';
+import { describeDrainFailure } from './recording-drain-failure.js';
 import {
+  type HeaderRebind,
+  type PreparedContentBatch,
   type PendingRecord,
+  type PendingSessionStart,
+  type QueueSnapshot,
+  replacesHistory,
   toPendingRecord,
   toContentBatchRecords,
+  toEventRecord,
   totalRecordBytes,
   recordingVersion,
 } from './recording-pending-record.js';
@@ -75,6 +84,8 @@ const MATERIALIZING_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
   'session_metadata',
   'session_named',
   'semantic_media_purge',
+  'refusal',
+  'refusal_rewrite',
 ]);
 
 type RecordingLifecycle =
@@ -83,27 +94,7 @@ type RecordingLifecycle =
   | { readonly status: 'failure-reported' }
   | { readonly status: 'disposed' };
 
-/** The session_start line as built at construction, before any rebinding. */
-interface PendingSessionStart {
-  readonly line: SessionRecordLine;
-  readonly payload: SessionStartPayload;
-  readonly record: PendingRecord;
-}
-
-/** A session_start header rebuilt for the provider/model at materialization. */
-interface HeaderRebind {
-  readonly record: PendingRecord;
-  /** Byte growth of the rebuilt header over the buffered one. */
-  readonly growth: number;
-}
-
-export interface PreparedContentBatch<
-  Completion extends void | Promise<void> = void,
-> {
-  publish(): void;
-  rollback(): void;
-  finalize(): Completion;
-}
+export type { PreparedContentBatch };
 
 /**
  * Core service for recording session events to a JSONL file.
@@ -123,6 +114,12 @@ export class SessionRecordingService {
   private lifecycle: RecordingLifecycle = { status: 'active' };
   private draining: boolean = false;
   private drainPromise: Promise<void> | null = null;
+  /**
+   * First record of each published-but-uncommitted batch. Nothing from a held
+   * record onward is written until the batch is finalized or rolled back, so a
+   * concurrent drain cannot put an uncommitted record in the journal.
+   */
+  private readonly heldBatchHeads = new Set<PendingRecord>();
   private readonly batchCompletions = new RecordingBatchCompletions();
   private readonly sessionId: string;
   private readonly projectHash: string;
@@ -259,7 +256,7 @@ export class SessionRecordingService {
     payload: unknown,
   ): SessionRecordLine {
     return {
-      v: type === 'semantic_media_purge' ? 2 : recordingVersion(payload),
+      v: replacesHistory(type) ? 2 : recordingVersion(payload),
       seq: this.seq + 1,
       ts: new Date().toISOString(),
       type,
@@ -406,31 +403,9 @@ export class SessionRecordingService {
     if (this.draining) return;
     this.draining = true;
     this.drainPromise = this.drain().catch((error: unknown) => {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'ENOENT') {
-        const diag = this.diagnoseMissingPath();
-        debugLogger.error(
-          `[SessionRecording] ENOENT writing session file — recording stopped.
-` +
-            `  filePath: ${this.filePath}
-` +
-            `  chatsDir exists: ${diag.chatsDirExists}
-` +
-            `  parentDir exists: ${diag.parentDirExists} (${diag.parentDir})
-` +
-            `  grandparentDir exists: ${diag.grandparentDirExists} (${diag.grandparentDir})
-` +
-            `  This directory was removed mid-session by an external process or AI shell command.`,
-        );
-      } else {
-        debugLogger.error(
-          `[SessionRecording] Unexpected error writing session file — recording stopped.
-` +
-            `  filePath: ${this.filePath}
-` +
-            `  error: ${error}`,
-        );
-      }
+      debugLogger.error(
+        describeDrainFailure(error, this.filePath, this.chatsDir),
+      );
       this.transitionToFailure(error);
     });
   }
@@ -444,8 +419,9 @@ export class SessionRecordingService {
    */
   private async drain(): Promise<void> {
     try {
-      while (this.queue.length > 0) {
-        const batch = [...this.queue];
+      for (;;) {
+        const batch = this.drainableRecords();
+        if (batch.length === 0) return;
         const lines = batch.map((record) => record.json).join('\n') + '\n';
         const shouldContinue = await this.writeBatchToFile(lines);
         if (!shouldContinue) {
@@ -461,6 +437,14 @@ export class SessionRecordingService {
     } finally {
       this.draining = false;
     }
+  }
+
+  /** The queued records that precede the first held (uncommitted) batch. */
+  private drainableRecords(): PendingRecord[] {
+    const holdAt = this.queue.findIndex((record) =>
+      this.heldBatchHeads.has(record),
+    );
+    return holdAt === -1 ? [...this.queue] : this.queue.slice(0, holdAt);
   }
 
   /**
@@ -664,27 +648,6 @@ export class SessionRecordingService {
   }
 
   /**
-   * Diagnose which directory level is missing when ENOENT occurs.
-   */
-  private diagnoseMissingPath(): {
-    chatsDirExists: boolean;
-    parentDir: string;
-    parentDirExists: boolean;
-    grandparentDir: string;
-    grandparentDirExists: boolean;
-  } {
-    const parentDir = path.dirname(this.chatsDir);
-    const grandparentDir = path.dirname(parentDir);
-    return {
-      chatsDirExists: existsSync(this.chatsDir),
-      parentDir,
-      parentDirExists: existsSync(parentDir),
-      grandparentDir,
-      grandparentDirExists: existsSync(grandparentDir),
-    };
-  }
-
-  /**
    * Watch the chatsDir for rename/deletion events.
    * When the directory is removed mid-session, this fires and logs the
    * exact timestamp so it can be correlated with the shell command log.
@@ -774,6 +737,32 @@ export class SessionRecordingService {
     contents: readonly IContent[],
     mode?: 'appended',
   ): PreparedContentBatch<void | Promise<void>> {
+    return this.prepareRecordBatch(
+      (expectedSeq) => toContentBatchRecords(contents, expectedSeq),
+      mode,
+    );
+  }
+
+  /**
+   * Prepares a `refusal_rewrite` record to commit together with the history
+   * it describes (issue #4036). Publishing queues the record, rolling back
+   * removes it again, and finalizing lets it drain to disk.
+   */
+  prepareRefusalRewrite(
+    payload: RefusalRewritePayload,
+  ): PreparedContentBatch<void | Promise<void>> {
+    return this.prepareRecordBatch(
+      (expectedSeq) => [
+        toEventRecord('refusal_rewrite', payload, expectedSeq, 2),
+      ],
+      'appended',
+    );
+  }
+
+  private prepareRecordBatch(
+    buildRecords: (expectedSeq: number) => PendingRecord[],
+    mode: 'appended' | undefined,
+  ): PreparedContentBatch<void | Promise<void>> {
     if (this.lifecycle.status !== 'active') {
       throw new Error('Cannot record content batch: recording is not active');
     }
@@ -784,21 +773,16 @@ export class SessionRecordingService {
     }
 
     const expectedSeq = this.seq;
-    const records = toContentBatchRecords(contents, expectedSeq);
+    const records = buildRecords(expectedSeq);
     const batchBytes = totalRecordBytes(records);
     this.reserveQueueBytes(
       batchBytes + (this.materialized ? 0 : this.planHeaderGrowth()),
     );
 
-    const queueBefore = this.queue;
-    const queueBytesBefore = this.queueBytes;
-    const preContentBefore = this.preContentBuffer;
-    const preContentBytesBefore = this.preContentBytes;
-    const materializedBefore = this.materialized;
-    const filePathBefore = this.filePath;
-    const watcherBefore = this.chatsDirWatcher;
+    const before = this.snapshotQueueState();
     let published = false;
     let finalized = false;
+    let heldHead: PendingRecord | undefined;
     let completion: Promise<void> | undefined;
 
     return {
@@ -820,25 +804,29 @@ export class SessionRecordingService {
           this.preContentBuffer = [];
           this.preContentBytes = 0;
           this.materialized = true;
+          heldHead = this.queue[0];
         } else {
           this.queue = [...this.queue, ...records];
           this.queueBytes += batchBytes;
+          heldHead = records[0];
         }
+        this.heldBatchHeads.add(heldHead);
         this.seq = expectedSeq + records.length;
         this.reportHighWater();
       },
       rollback: () => {
         if (!published || finalized) return;
-        this.rollbackMaterialization(materializedBefore, watcherBefore);
-        this.queue = queueBefore;
-        this.queueBytes = queueBytesBefore;
-        this.preContentBuffer = preContentBefore;
-        this.preContentBytes = preContentBytesBefore;
-        this.materialized = materializedBefore;
-        this.filePath = filePathBefore;
-        this.chatsDirWatcher = watcherBefore;
-        this.seq = expectedSeq;
-        published = false;
+        this.releaseHold(heldHead);
+        try {
+          this.rollbackMaterialization(before.materialized, before.watcher);
+        } finally {
+          // Queue state is restored even when removing the new file fails.
+          this.restoreQueueState(before, records, batchBytes);
+          if (this.seq === expectedSeq + records.length) {
+            this.seq = expectedSeq;
+          }
+          published = false;
+        }
       },
       finalize: () => {
         if (!published) {
@@ -846,6 +834,7 @@ export class SessionRecordingService {
         }
         if (finalized) return completion;
         finalized = true;
+        this.releaseHold(heldHead);
         if (mode === 'appended') {
           completion = this.batchCompletions.waitFor(records);
         }
@@ -853,6 +842,43 @@ export class SessionRecordingService {
         return completion;
       },
     };
+  }
+
+  private snapshotQueueState(): QueueSnapshot {
+    return {
+      queue: this.queue,
+      queueBytes: this.queueBytes,
+      preContent: this.preContentBuffer,
+      preContentBytes: this.preContentBytes,
+      materialized: this.materialized,
+      filePath: this.filePath,
+      watcher: this.chatsDirWatcher,
+    };
+  }
+
+  private restoreQueueState(
+    before: QueueSnapshot,
+    records: readonly PendingRecord[],
+    batchBytes: number,
+  ): void {
+    if (before.materialized) {
+      // Earlier records may have drained since prepare, so remove only this
+      // batch instead of restoring a stale snapshot of the queue.
+      this.queue = this.queue.filter((record) => !records.includes(record));
+      this.queueBytes -= batchBytes;
+    } else {
+      this.queue = before.queue;
+      this.queueBytes = before.queueBytes;
+    }
+    this.preContentBuffer = before.preContent;
+    this.preContentBytes = before.preContentBytes;
+    this.materialized = before.materialized;
+    this.filePath = before.filePath;
+    this.chatsDirWatcher = before.watcher;
+  }
+
+  private releaseHold(head: PendingRecord | undefined): void {
+    if (head !== undefined) this.heldBatchHeads.delete(head);
   }
 
   private rollbackMaterialization(
@@ -872,6 +898,15 @@ export class SessionRecordingService {
     frontier: { readonly contentIndex: number; readonly blockIndex: number },
   ): void {
     this.enqueue('semantic_media_purge', { history, frontier });
+  }
+
+  /**
+   * Record an audit-only refusal event (issue #4036). Like content, it
+   * materializes the file so a refusal on the first request still leaves a
+   * transcript; it never changes replayed history.
+   */
+  recordRefusal(payload: RefusalPayload): void {
+    this.enqueue('refusal', payload);
   }
 
   /**

@@ -29,15 +29,11 @@ import type {
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import { resolveGeneratingModel } from './generatingModelResolver.js';
-import {
-  filterAfcByHookRestrictions,
-  filterHookRestrictedBlocks,
-} from './hookToolRestrictions.js';
+import { applyHookToolFiltering } from './hookToolRestrictions.js';
 import { normalizeToolInteractionInput } from './MessageConverter.js';
 import {
   bindPreparedTransportSignal,
@@ -46,6 +42,7 @@ import {
   prepareAtSendSeam,
 } from './promptEnvelopeSendSeam.js';
 import { withRetryRequestState } from './retry-request-state.js';
+import { SendRequestState } from './sendRequestState.js';
 import type { StreamProcessor } from './StreamProcessor.js';
 import { withReportedUsage } from './streamRequestHelpers.js';
 import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
@@ -56,13 +53,11 @@ import {
   shouldRetryStreamAttempt,
 } from './turnAbortHelpers.js';
 
-import {
-  AgentExecutionBlockedError,
-  AgentExecutionStoppedError,
-} from './chatSession.js';
+import { hookControlStreamEvents } from './turnHookControl.js';
 import {
   createProviderSendTiming,
   logModelOutputResponse,
+  logToolDiagnostics,
   readProviderStreamResponse,
   turnTelemetryPorts,
   validateProviderForSend,
@@ -93,6 +88,19 @@ import {
 } from './turnMediaAdmissionLifecycle.js';
 import { enforceTurnMediaRequestContents } from './turnMediaRequest.js';
 import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
+import {
+  ModelRefusalSignal,
+  advanceAfterAttempt,
+  announceRefusalSettlement,
+  keepRequestForNextAttempt,
+  rewroteCommittedHistory,
+  refusalNotice,
+  settleRefusal,
+  turnForNextAttempt,
+  type AttemptCounters,
+  type RefusalRecovery,
+  type StreamAttemptOutcome,
+} from '../refusal/index.js';
 
 type SemanticMediaPurgeFactory = () => Promise<
   SemanticMediaPurgeAttempt | undefined
@@ -174,6 +182,7 @@ export class TurnProcessor {
     private readonly resolveProviderBaseUrl: (
       provider: IProvider,
     ) => string | undefined,
+    private readonly refusalRecovery: RefusalRecovery,
   ) {}
 
   /**
@@ -323,29 +332,52 @@ export class TurnProcessor {
     onDone: () => void,
   ): AsyncGenerator<StreamEvent> {
     const requestParams = withRetryRequestState(params);
+    // The refusal policy and retry budget belong to the logical request, which
+    // spans every send made under this prompt id.
+    this.refusalRecovery.admit(prompt_id);
     let primaryFailure: { readonly error: unknown } | undefined;
     try {
       let lastError: unknown = new Error('Request failed after all retries.');
-      let attempt = 0;
+      // `contentAttempt` drives the retry temperature and the content-retry
+      // budget. `requestAttempt` numbers every request sent for this turn,
+      // whatever caused the resend, so token-log attempt indexes stay unique.
+      const attempt: AttemptCounters = {
+        contentAttempt: 0,
+        requestAttempt: this.refusalRecovery.allocateAttempt(prompt_id),
+        announceRetry: false,
+      };
+      // A reviewer may rewrite the tool results this turn carries; the
+      // rewritten turn is then what is resent and finally committed.
+      let turn = prepared;
+      let attemptPurge = semanticMediaPurge;
+      const sendState = new SendRequestState();
       let retrying = true;
-      while (retrying && attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts) {
+      while (
+        retrying &&
+        attempt.contentAttempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts
+      ) {
         const outcome = yield* this._runStreamAttempt(
           requestParams,
           prompt_id,
-          prepared,
+          turn,
           attempt,
-          semanticMediaPurge,
+          attemptPurge,
+          sendState,
         );
         lastError = outcome.error;
-        if (outcome.action !== 'retry') {
-          retrying = false;
-        } else {
-          await delay(
-            INVALID_CONTENT_RETRY_OPTIONS.initialDelayMs * (attempt + 1),
-            requestParams.config?.abortSignal,
-          );
-          attempt++;
+        turn = turnForNextAttempt(turn, outcome);
+        keepRequestForNextAttempt(sendState, outcome);
+        if (rewroteCommittedHistory(outcome)) {
+          // The next request is built from the rewritten history.
+          attemptPurge?.retire();
+          attemptPurge = undefined;
         }
+        retrying = await advanceAfterAttempt(outcome, attempt, {
+          recovery: this.refusalRecovery,
+          usageLogger: this.compressionHandler.tokenUsageLogger,
+          promptId: prompt_id,
+          signal: requestParams.config?.abortSignal,
+        });
       }
       if (lastError != null) throw lastError;
     } catch (error: unknown) {
@@ -379,66 +411,74 @@ export class TurnProcessor {
     params: SendMessageParams,
     prompt_id: string,
     prepared: PreparedUserTurn,
-    attempt: number,
+    attempt: AttemptCounters,
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
-  ): AsyncGenerator<StreamEvent, { error: unknown; action: 'retry' | 'stop' }> {
-    if (attempt > 0) {
+    sendState: SendRequestState,
+  ): AsyncGenerator<StreamEvent, StreamAttemptOutcome> {
+    if (attempt.announceRetry) {
       yield { type: StreamEventType.RETRY };
     }
 
     let hasYieldedChunk = false;
     let attemptUsage: UsageStats | undefined;
     try {
-      const currentParams = applyRetryTemperature(params, attempt);
+      const currentParams = applyRetryTemperature(
+        params,
+        attempt.contentAttempt,
+      );
       const stream = await this.streamProcessor.makeApiCallAndProcessStream(
         currentParams,
         prompt_id,
         prepared,
-        attempt,
+        attempt.requestAttempt,
         semanticMediaPurge,
+        sendState,
       );
       for await (const chunk of stream) {
         hasYieldedChunk ||= chunkHasVisibleOutput(chunk);
         attemptUsage = chunk.usage ?? attemptUsage;
         yield wrapChunk(chunk);
       }
+      const recovered = this.refusalRecovery.recovered(prompt_id);
+      if (recovered !== undefined) yield refusalNotice(recovered);
       return { error: null, action: 'stop' };
     } catch (error) {
-      // Hook execution control errors are yielded then stop the loop.
-      if (error instanceof AgentExecutionStoppedError) {
-        yield {
-          type: StreamEventType.AGENT_EXECUTION_STOPPED,
-          reason: error.reason,
-          systemMessage: error.systemMessage,
-          contextCleared: error.contextCleared,
-        };
-        return { error: null, action: 'stop' };
+      // A refusal is a typed outcome, decided before any generic retry
+      // classification: it never reaches the temperature-changing content
+      // retry below (issue #4036).
+      if (error instanceof ModelRefusalSignal) {
+        const route = params.modelParameters?.route;
+        const settlement = await settleRefusal(
+          {
+            recovery: this.refusalRecovery,
+            usageLogger: this.compressionHandler.tokenUsageLogger,
+            provider: () =>
+              route?.provider.name ?? this.providerResolver('stream').name,
+            model: () => route?.model ?? this.ports.state.model,
+            execution: params.recordingExecution,
+            pending: prepared,
+            modelParameters: params.modelParameters,
+            signal: params.config?.abortSignal,
+          },
+          error,
+          prompt_id,
+          attempt.requestAttempt,
+        );
+        return yield* announceRefusalSettlement(settlement);
       }
-      if (error instanceof AgentExecutionBlockedError) {
-        yield {
-          type: StreamEventType.AGENT_EXECUTION_BLOCKED,
-          reason: error.reason,
-          systemMessage: error.systemMessage,
-          contextCleared: error.contextCleared,
-        };
-        if (error.blockedOutput) {
-          // P13: blockedOutput is now a neutral ModelOutput (was syntheticResponse).
-          yield {
-            type: StreamEventType.CHUNK,
-            value: error.blockedOutput,
-          };
-        }
+      // Hook execution control errors are yielded then stop the loop.
+      if (yield* hookControlStreamEvents(error)) {
         return { error: null, action: 'stop' };
       }
       if (
-        shouldRetryStreamAttempt(error, params, attempt, {
+        shouldRetryStreamAttempt(error, params, attempt.contentAttempt, {
           hasYieldedOutput: hasYieldedChunk,
         })
       ) {
         await recordAbandonedStreamAttempt(
           this.compressionHandler.tokenUsageLogger,
           prompt_id,
-          attempt,
+          attempt.requestAttempt,
           hasYieldedChunk,
           attemptUsage,
           this.compressionHandler.lastPromptTokenCount,
@@ -653,7 +693,12 @@ export class TurnProcessor {
   ): Promise<ModelOutput> {
     const tools = toolSelection.tools;
     const allowedFunctionNames = toolSelection.allowedFunctionNames;
-    this._logToolDiagnostics(provider, tools, providerBaseUrl);
+    logToolDiagnostics(this.logger, {
+      provider,
+      tools,
+      baseUrl: providerBaseUrl,
+      model: this.ports.state.model,
+    });
     const timeoutController = new AbortController();
     const upstreamAbortSignal = params.config?.abortSignal;
     const onAbort = () => timeoutController.abort();
@@ -704,7 +749,7 @@ export class TurnProcessor {
         upstreamAbortSignal,
       );
       const output = toModelStreamChunk(lastResponse);
-      this._applyHookToolFiltering(output, lastResponse, allowedFunctionNames);
+      applyHookToolFiltering(output, allowedFunctionNames);
       return output;
     } catch (error) {
       this.currentPromptEnvelopeEstimate = null;
@@ -712,30 +757,6 @@ export class TurnProcessor {
     } finally {
       timeoutController.abort();
       upstreamAbortSignal?.removeEventListener('abort', onAbort);
-    }
-  }
-
-  private _applyHookToolFiltering(
-    output: ModelStreamChunk,
-    _lastResponse: IContent,
-    allowedFunctionNames: string[] | undefined,
-  ): void {
-    if (allowedFunctionNames === undefined) return;
-    output.content = {
-      ...output.content,
-      blocks: filterHookRestrictedBlocks(
-        output.content.blocks,
-        allowedFunctionNames,
-      ),
-    };
-    // P13 AFC boundary: toModelStreamChunk already extracted AFC into
-    // output.afcHistory and stripped it from providerMetadata. Apply
-    // hook-restriction filtering to the first-class afcHistory field only.
-    if (output.afcHistory !== undefined) {
-      output.afcHistory = filterAfcByHookRestrictions(
-        output.afcHistory,
-        allowedFunctionNames,
-      );
     }
   }
 
@@ -859,31 +880,6 @@ export class TurnProcessor {
       allowedNames.has(canonicalizeToolName(decl.name)),
     );
     return { tools: filteredTools, allowedFunctionNames: allowedFunctions };
-  }
-
-  private _logToolDiagnostics(
-    provider: IProvider,
-    tools: ToolDeclaration[] | undefined,
-    baseUrl: string | undefined,
-  ): void {
-    if (Array.isArray(tools)) {
-      const total = tools.length;
-      if (total === 0)
-        this.logger.warn(
-          () =>
-            `[TurnProcessor] Tools array exists but has 0 function declarations!`,
-          { tools, provider: provider.name },
-        );
-    }
-    this.logger.debug(
-      () => '[TurnProcessor] Calling provider.generateChatCompletion',
-      {
-        providerName: provider.name,
-        model: this.ports.state.model,
-        toolCount: Array.isArray(tools) ? tools.length : 0,
-        baseUrl,
-      },
-    );
   }
 
   /**

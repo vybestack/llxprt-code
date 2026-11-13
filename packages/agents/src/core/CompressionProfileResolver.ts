@@ -36,10 +36,48 @@ import type { CompressionLoadBalancerCandidate } from './CompressionLoadBalancin
 import { deriveCompressionInteractionMode } from '../compression/compressionSystemPrompt.js';
 
 /**
+ * What an isolated auxiliary profile is for. Compression and refusal review
+ * (issue #4036) resolve a saved profile the same way: its own settings
+ * service and runtime id, request-scoped fetch, the session's identity and
+ * load-balancer members. Only the labels differ.
+ */
+export interface AuxiliaryProfilePurpose {
+  /** The setting that names the profile, for actionable errors. */
+  readonly setting: string;
+  /** Runtime id suffix: `<runtimeId>::<runtimeSegment>:<profile>`. */
+  readonly runtimeSegment: string;
+  /** `metadata.source` of requests resolved for this purpose. */
+  readonly source: string;
+  /** Metadata keys that name the profile and its provider. */
+  readonly profileKey: string;
+  readonly providerKey: string;
+  /** The error for a profile that cannot be used. */
+  readonly notFound: (profileName: string, cause?: string) => Error;
+}
+
+export const COMPRESSION_PROFILE_PURPOSE: AuxiliaryProfilePurpose = {
+  setting: 'compression.profile',
+  runtimeSegment: 'compression-profile',
+  source: 'ChatSession.resolveCompressionProvider',
+  profileKey: 'compressionProfile',
+  providerKey: 'compressionProvider',
+  notFound: (profileName, cause) =>
+    new CompressionProfileNotFoundError(profileName, cause),
+};
+
+function purposeOf(
+  ctx: CompressionProfileResolverContext,
+): AuxiliaryProfilePurpose {
+  return ctx.purpose ?? COMPRESSION_PROFILE_PURPOSE;
+}
+
+/**
  * Callbacks and runtime state required to resolve a compression profile
  * into a concrete provider + runtime context. ChatSession supplies these.
  */
 export interface CompressionProfileResolverContext {
+  /** Defaults to compression; refusal review passes its own purpose. */
+  readonly purpose?: AuxiliaryProfilePurpose;
   readonly profileDefinitions?: Pick<ProfileDefinitionReads, 'loadProfile'>;
   /** The base provider-runtime snapshot (runtimeId, metadata). */
   readonly providerRuntime: ProviderRequestCollaborators;
@@ -374,12 +412,13 @@ export async function resolveStandardCompressionProvider(
 
   applyCompressionProfileSettings(profileSettings, profileName, profile);
 
-  const runtimeId = `${ctx.providerRuntime.runtimeId}::compression-profile:${profileName}`;
+  const purpose = purposeOf(ctx);
+  const runtimeId = `${ctx.providerRuntime.runtimeId}::${purpose.runtimeSegment}:${profileName}`;
   const metadata = {
     ...(ctx.providerRuntime.metadata ?? {}),
-    source: 'ChatSession.resolveCompressionProvider',
-    compressionProfile: profileName,
-    compressionProvider: profile.provider,
+    source: purpose.source,
+    [purpose.profileKey]: profileName,
+    [purpose.providerKey]: profile.provider,
     runtimeId,
     provider: profile.provider,
     model: profile.model,
@@ -432,7 +471,7 @@ export async function buildCompressionLoadBalancerCandidates(
   for (const subProfileName of profile.profiles) {
     const subProfile = await profileManager.loadProfile(subProfileName);
     if (isLoadBalancerProfile(subProfile)) {
-      throw new CompressionProfileNotFoundError(
+      throw purposeOf(ctx).notFound(
         profileName,
         `load-balanced compression profile references nested load-balanced profile '${subProfileName}'`,
       );
@@ -446,7 +485,7 @@ export async function buildCompressionLoadBalancerCandidates(
       profile.ephemeralSettings as Record<string, unknown>,
     );
     if (!candidate.invocation) {
-      throw new CompressionProfileNotFoundError(
+      throw purposeOf(ctx).notFound(
         profileName,
         `failed to build invocation context for subprofile '${subProfileName}'`,
       );
@@ -510,7 +549,8 @@ export async function resolveLoadBalancedCompressionProvider(
     providerFileBindings,
     providerFileLifecycle,
   );
-  const runtimeId = `${ctx.providerRuntime.runtimeId}::compression-profile:${profileName}`;
+  const purpose = purposeOf(ctx);
+  const runtimeId = `${ctx.providerRuntime.runtimeId}::${purpose.runtimeSegment}:${profileName}`;
   const settings = compressionLoadBalancerSettings(
     profileName,
     profile,
@@ -518,9 +558,9 @@ export async function resolveLoadBalancedCompressionProvider(
   );
   const metadata = {
     ...(ctx.providerRuntime.metadata ?? {}),
-    source: 'ChatSession.resolveCompressionProvider',
-    compressionProfile: profileName,
-    compressionProvider: 'load-balancer',
+    source: purpose.source,
+    [purpose.profileKey]: profileName,
+    [purpose.providerKey]: 'load-balancer',
     runtimeId,
     provider: 'load-balancer',
     model: settings.get('model'),
@@ -580,7 +620,7 @@ export async function resolveCompressionProvider(
 
   const profileManager = ctx.profileDefinitions;
   if (!profileManager) {
-    throw new CompressionProfileNotFoundError(
+    throw purposeOf(ctx).notFound(
       profileName,
       'profile manager is unavailable',
     );
@@ -590,7 +630,7 @@ export async function resolveCompressionProvider(
   try {
     profile = await profileManager.loadProfile(profileName);
   } catch (error) {
-    throw new CompressionProfileNotFoundError(
+    throw purposeOf(ctx).notFound(
       profileName,
       error instanceof Error ? error.message : String(error),
     );

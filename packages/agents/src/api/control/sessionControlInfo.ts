@@ -160,3 +160,12 @@ export function readRecordingState(
     format,
   );
 }
+
+/** Where a session's recording, persistence queue and project files live. */
+export interface SessionRecordingPaths {
+  readonly storageRoot: string;
+  readonly projectTempDir: string;
+  readonly projectChatsDir: string;
+  readonly projectRoot: string;
+  readonly persistenceQueueBytes: number;
+}

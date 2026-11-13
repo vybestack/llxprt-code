@@ -17,7 +17,9 @@
 import { validateHistoryBatch } from './history-batch-validation.js';
 import {
   finalizeMutationEffects,
+  settleMutationEffects,
   notifyObservers,
+  rollbackAndRethrow,
 } from './historyMutationFailure.js';
 import { retainContentOrigins } from './historyOrigin.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
@@ -65,14 +67,38 @@ import {
   type MutationFailure,
   combineMutationFailures,
 } from './historyMutationFailure.js';
+import { prepareMutationEffects } from './historyMutationEffects.js';
 
 type HistoryTokenizerSelection = Pick<RuntimeTokenizerFactory, 'getTokenizer'>;
 
 export interface PreparedHistoryBatchEffect {
   publish(): void | Promise<void>;
   rollback(): void | Promise<void>;
+  /**
+   * The effect's commit step, run after the history is published. A failure
+   * reverts the whole mutation, so everything that must still be reversible
+   * belongs after this point, not in it.
+   */
   finalize?(): void | Promise<void>;
+  /**
+   * Cleanup that runs only after every effect finalized: the mutation is
+   * committed, so a failure here is logged and never reverts the history.
+   */
+  settle?(): void | Promise<void>;
 }
+
+/**
+ * Builds a caller-owned effect for one history commit, given the history that
+ * is about to be committed. It joins the commit like a batch participant: it
+ * is published before the history, finalized after it, and rolled back if the
+ * commit fails anywhere. Returning undefined opts out of the effect.
+ */
+export type HistoryEffectFactory = (
+  nextHistory: readonly IContent[],
+) =>
+  | PreparedHistoryBatchEffect
+  | undefined
+  | Promise<PreparedHistoryBatchEffect | undefined>;
 
 export type HistoryBatchParticipant = (
   publication: HistoryBatchPublication,
@@ -893,48 +919,14 @@ export abstract class HistoryServiceCore
     }
   }
 
-  private async prepareMutationEffects(
-    effects: PreparedHistoryBatchEffect[],
-    publication: HistoryBatchPublication | undefined,
-    previousHistory: readonly IContent[],
-    nextHistory: readonly IContent[],
-    adopted: readonly HistoryOwnedMediaReservation[],
-  ): Promise<void> {
-    if (this.mediaOwner !== undefined) {
-      effects.push(
-        await this.mediaOwner.prepareReplacement({
-          previous: previousHistory,
-          next: nextHistory,
-          adopted,
-        }),
-      );
-    }
-    if (publication !== undefined) {
-      for (const participant of this.batchParticipants) {
-        effects.push(await participant(publication));
-      }
-    }
-  }
-
-  private async rollbackMutationEffects(
-    effects: readonly PreparedHistoryBatchEffect[],
-  ): Promise<unknown[]> {
-    const failures: unknown[] = [];
-    for (const effect of [...effects].reverse()) {
-      try {
-        await effect.rollback();
-      } catch (error: unknown) {
-        failures.push(error);
-      }
-    }
-    return failures;
-  }
-
-  private async commitHistoryMutation(input: {
+  protected async commitHistoryMutation(input: {
     readonly nextHistory: readonly IContent[];
     readonly nextHistoryTokens: number;
     readonly publishedContents?: readonly IContent[];
     readonly options: HistoryBatchOptions;
+    readonly prepareEffect?: HistoryEffectFactory;
+    /** Aborting before the finalizers run rolls the mutation back. */
+    readonly signal?: AbortSignal;
   }): Promise<void> {
     const previousHistory = this.history;
     const previousTokens = this.totalTokens;
@@ -955,15 +947,19 @@ export abstract class HistoryServiceCore
     const effects: PreparedHistoryBatchEffect[] = [];
     let historyPublished = false;
     try {
-      await this.prepareMutationEffects(
-        effects,
+      await prepareMutationEffects(effects, {
+        mediaOwner: this.mediaOwner,
+        participants: this.batchParticipants,
         publication,
         previousHistory,
         nextHistory,
-        input.options.adoptedOwners ?? [],
-      );
+        adopted: input.options.adoptedOwners ?? [],
+        prepareEffect: input.prepareEffect,
+        signal: input.signal,
+      });
       for (const effect of effects) {
         await effect.publish();
+        input.signal?.throwIfAborted();
       }
 
       this.invalidatePendingSyncs();
@@ -977,7 +973,7 @@ export abstract class HistoryServiceCore
         contentId: null,
       });
       await input.options.afterPublication?.();
-      await finalizeMutationEffects(effects);
+      await finalizeMutationEffects(effects, input.signal);
       this.contentOrigins = retainContentOrigins(
         this.contentOrigins,
         nextHistory,
@@ -997,12 +993,10 @@ export abstract class HistoryServiceCore
         }
       }
       this.restoreChronology(chronology);
-      const rollbackFailures = await this.rollbackMutationEffects(effects);
-      if (rollbackFailures.length === 0) throw error;
-      throw new AggregateError(
-        [error, ...rollbackFailures],
-        'History mutation and rollback failed',
-      );
+      await rollbackAndRethrow(effects, error);
+    }
+    for (const failure of await settleMutationEffects(effects)) {
+      this.logger.warn('History mutation cleanup failed after commit', failure);
     }
   }
 

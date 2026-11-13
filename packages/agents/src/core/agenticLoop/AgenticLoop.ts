@@ -43,6 +43,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgenticLoopEvent, AgenticLoopOptions } from './types.js';
 import { AgenticEventQueue } from './agenticEventQueue.js';
 import { buildToolResponses, classifyCompletedTools } from './loopHelpers.js';
+import { isRefusalFinishReason } from '../../refusal/refusalDetection.js';
 
 const logger = new DebugLogger('llxprt:agents:agentic-loop');
 
@@ -441,18 +442,26 @@ export class AgenticLoop {
       modelParameters,
     );
     let shouldScheduleTools = true;
+    let refused = false;
     for await (const event of stream) {
       yield { kind: 'stream', event };
       if (event.type === AgentEventType.ToolCallRequest) {
-        toolCallRequests.push(event.value);
+        if (!refused) toolCallRequests.push(event.value);
       } else if (event.type === AgentEventType.Retry) {
         toolCallRequests.length = 0;
+        refused = false;
       } else if (isTerminalStreamOutcome(event.type)) {
         toolCallRequests.length = 0;
         shouldScheduleTools = false;
+      } else if (
+        event.type === AgentEventType.Finished &&
+        isRefusalFinishReason(event.value.reason)
+      ) {
+        toolCallRequests.length = 0;
+        refused = true;
       }
     }
-    return { shouldScheduleTools };
+    return { shouldScheduleTools: shouldScheduleTools && !refused };
   }
 
   /**

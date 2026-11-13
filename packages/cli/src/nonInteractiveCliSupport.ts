@@ -572,6 +572,23 @@ function writeHookBlockedWarning(info: {
   process.stderr.write(`[WARNING] ${blockMessage}\n`);
 }
 
+/**
+ * Refusal-recovery notices go to stderr in text mode and become a warning
+ * event in stream-json. Plain JSON keeps stdout to the single result object,
+ * and --quiet suppresses them. Notices without a source stay ignored.
+ */
+function writeRecoveryNotice(
+  event: Extract<AgentEvent, { type: 'notice' }>,
+  context: StreamConsumerContext,
+): void {
+  if (event.source !== 'refusal-recovery' || context.quiet) return;
+  if (context.streamFormatter !== null) {
+    emitStreamError(context.streamFormatter, 'warning', event.message);
+  } else if (!context.jsonOutput) {
+    process.stderr.write(`${event.message}\n`);
+  }
+}
+
 function dispatchAgentEvent(
   event: AgentEvent,
   state: StreamState,
@@ -631,6 +648,9 @@ function dispatchAgentEvent(
       return;
     case 'hook-blocked':
       writeHookBlockedWarning(event.info);
+      return;
+    case 'notice':
+      writeRecoveryNotice(event, context);
       return;
     case 'idle-timeout':
       if (context.quiet) throw reconstructError(event.error);
