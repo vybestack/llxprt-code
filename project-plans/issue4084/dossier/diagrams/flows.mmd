@@ -1,0 +1,25 @@
+flowchart TB
+ classDef parent fill:#164e63,color:#fff,stroke:#083344;
+ classDef local fill:#f0fdf4,stroke:#86efac,color:#14532d;
+ subgraph D[Classic tool calling]
+ direction TB
+ D0[Parent model: chooses tool arguments]:::parent --> D1[Host tools]
+ D1 --> D2[Raw bounded results enter parent context]:::parent
+ D2 --> D3[Parent infers next dependent calls]:::parent
+ D3 --> D4[Final summary]:::parent
+ end
+ subgraph C[Code mode]
+ direction TB
+ C0[Parent model: writes program]:::parent --> C1[Guest calls host broker]:::local
+ C1 --> C2[Host tools return intermediate data to guest]:::local
+ C2 --> C3[Program filters and groups]:::local
+ C3 --> C4[Program and selected JSON enter parent context]:::parent
+ end
+ subgraph S[Cheap subagent]
+ direction TB
+ S0[Parent model: delegation prompt]:::parent --> S1[Child model chooses tools]
+ S1 --> S2[Raw tool results enter child context]
+ S2 --> S3[Child interprets and emits evidence]
+ S3 --> S4[Task prompt and child report enter parent context]:::parent
+ end
+

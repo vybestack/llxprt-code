@@ -1,0 +1,37 @@
+sequenceDiagram
+ autonumber
+ participant Parent as Parent model
+ participant Task as TaskToolInvocation
+ participant Orchestrator as SubagentOrchestrator
+ participant Assembly as ChildAgentAssembly
+ participant Scope as SubAgentScope
+ participant Child as Cheap child model
+ participant Scheduler as Child scheduler lease
+ participant Tools as Host tools
+ participant Outputs as self_emitvalue
+ Parent->>Task: task(subagent_name, goal_prompt, whitelist, expected_outputs)
+ Task->>Orchestrator: launchChild(request)
+ Orchestrator->>Orchestrator: load subagent and explicitly cheaper profile
+ Orchestrator->>Assembly: assembleChild(config, runtime identity)
+ Assembly->>Scope: fresh chat, admitted tools, cancellation and budgets
+ Scope->>Child: goal and child tool declarations
+ Child->>Scheduler: run_shell_command resolve HEAD and ten commits
+ Scheduler->>Tools: normal policy, approval and execution
+ Tools-->>Child: commit IDs in child context
+ Child->>Scheduler: batched diff-tree calls for commit paths
+ Tools-->>Child: changed paths in child context
+ Child->>Scheduler: read_file on deduplicated paths
+ Tools-->>Child: file contents in child context
+ Child->>Scheduler: run_shell_command blame for TODO lines
+ Tools-->>Child: authors and line evidence in child context
+ Child->>Child: group, inspect omissions and coverage
+ Child->>Outputs: summary and evidence outputs
+ Outputs-->>Scope: collected output variables
+ Scope-->>Task: emitted outputs, final text, termination metadata
+ Task-->>Parent: one task result
+ Note over Scope,Parent: Child transcript stays separate, child inference still contributes to total usage
+ opt composition
+ Child->>Scheduler: execute_tool_script for mechanical gathering
+ Scheduler-->>Child: selected JSON before child interpretation
+ end
+

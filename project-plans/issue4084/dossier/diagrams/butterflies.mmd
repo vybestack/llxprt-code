@@ -1,0 +1,13 @@
+flowchart LR
+classDef center fill:#164e63,color:#fff,stroke:#083344,stroke-width:3px;
+classDef caller fill:#eef2ff,color:#172554,stroke:#818cf8;
+classDef callee fill:#f0fdf4,color:#14532d,stroke:#86efac;
+L0["Turn.emitFunctionCallRequests"]:::caller
+C["Turn.handlePendingFunctionCall<br/>packages/agents/src/core/turn.ts"]:::center
+R0["createSyntheticFunctionCallId (when absent)"]:::callee
+R1["resolveRawToolName"]:::callee
+R2["Append request and construct event (local action)"]:::callee
+L0 --> C
+C --> R0
+C --> R1
+C --> R2

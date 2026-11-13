@@ -1,0 +1,50 @@
+classDiagram
+ direction LR
+ class ShellToolInvocation {
+  +execute(signal, output, columns, rows, setPid) Promise
+  -executeForeground()
+ }
+ class IShellToolHost {
+  <<interface>>
+  +executeShellCommand()
+ }
+ class CoreShellToolHostAdapter {
+  +executeShellCommand()
+ }
+ class ShellExecutionService {
+  +execute()$
+  +terminatePty()$
+  +destroyAllPtys()$
+  +sanitizeEnvironment()$
+ }
+ class ProxyProviderKeyStorage {
+  -client ProxySocketClient
+  +getKey(name) Promise
+  +listKeys() Promise
+ }
+ class ProxySocketClient {
+  -socketPath string
+  -capabilityToken string
+  -pendingRequests Map
+  +ensureConnected() Promise
+  +request(operation, payload, options) Promise
+  +cancel(id)
+  +close()
+ }
+ class CredentialProxyServer {
+  -server Server
+  -handlers Map
+  +start() Promise
+  +stop() Promise
+  -handleGetApiKey()
+ }
+ class FrameDecoder {
+  +feed(data)
+ }
+ ShellToolInvocation ..> IShellToolHost
+ IShellToolHost <|.. CoreShellToolHostAdapter
+ CoreShellToolHostAdapter ..> ShellExecutionService
+ ProxyProviderKeyStorage ..> ProxySocketClient : borrows
+ ProxySocketClient *-- FrameDecoder
+ ProxySocketClient ..> CredentialProxyServer : authenticated IPC
+

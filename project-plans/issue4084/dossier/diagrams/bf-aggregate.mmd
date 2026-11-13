@@ -1,0 +1,13 @@
+flowchart LR
+classDef center fill:#164e63,color:#fff,stroke:#083344,stroke-width:3px;
+classDef caller fill:#eef2ff,color:#172554,stroke:#818cf8;
+classDef callee fill:#f0fdf4,color:#14532d,stroke:#86efac;
+L0["CoreToolScheduler.publishBufferedResults"]:::caller
+L1["ResultAggregator follow-up callback"]:::caller
+C["ResultAggregator.publishBufferedResults<br/>packages/agents/src/scheduler/result-aggregator.ts"]:::center
+R0["publishBufferedResultsPass"]:::callee
+R1["scheduleFollowUpIfNeeded"]:::callee
+L0 --> C
+L1 --> C
+C --> R0
+C --> R1

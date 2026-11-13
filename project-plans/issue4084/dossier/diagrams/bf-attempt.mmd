@@ -1,0 +1,19 @@
+flowchart LR
+classDef center fill:#164e63,color:#fff,stroke:#083344,stroke-width:3px;
+classDef caller fill:#eef2ff,color:#172554,stroke:#818cf8;
+classDef callee fill:#f0fdf4,color:#14532d,stroke:#86efac;
+L0["CoreToolScheduler._schedule"]:::caller
+L1["ConfirmationCoordinator execution callback"]:::caller
+C["CoreToolScheduler.attemptExecutionOfScheduledCalls<br/>packages/agents/src/core/coreToolScheduler.ts"]:::center
+R0["ResultAggregator.beginBatch"]:::callee
+R1["launchCallsWithSamePathOrdering"]:::callee
+R2["launchToolExecution (ordering callback)"]:::callee
+R3["awaitBatchOrAbort"]:::callee
+R4["Abort finalization"]:::callee
+L0 --> C
+L1 --> C
+C --> R0
+C --> R1
+C --> R2
+C --> R3
+C --> R4

@@ -1,0 +1,13 @@
+flowchart LR
+classDef center fill:#164e63,color:#fff,stroke:#083344,stroke-width:3px;
+classDef caller fill:#eef2ff,color:#172554,stroke:#818cf8;
+classDef callee fill:#f0fdf4,color:#14532d,stroke:#86efac;
+L0["SessionSchedulerOwner lease callback"]:::caller
+C["CoreToolScheduler.schedule<br/>packages/agents/src/core/coreToolScheduler.ts"]:::center
+R0["isRunning"]:::callee
+R1["Queue request (busy branch)"]:::callee
+R2["CoreToolScheduler._schedule"]:::callee
+L0 --> C
+C --> R0
+C --> R1
+C --> R2

@@ -1,0 +1,65 @@
+classDiagram
+ direction TB
+ class TaskTool {
+  +Name task
+  #createInvocation(params) TaskToolInvocation
+ }
+ class TaskToolInvocation {
+  -deps TaskToolInvocationDeps
+  -createLaunchRequest(timeoutMs)
+  -attemptLaunch()
+  +execute(signal, updateOutput) Promise
+ }
+ class TaskToolInvocationDeps {
+  +launchChild Function
+  +taskLaunchOwner TaskLaunchOwner
+ }
+ class SubagentOrchestrator {
+  -options SubagentOrchestratorOptions
+  -idFactory Function
+  +launch(request, signal) Promise
+  -loadSubagentConfig(name) Promise
+  -createLaunchData()
+ }
+ class ChildAgentAssembly {
+  -providers AcquisitionRelease
+  -acquired Function[]
+  +assemble() Promise
+  -acquireWorkspace()
+  -acquireProviders(workspace)
+  -rollback() Promise
+ }
+ class SubAgentScope {
+  +name string
+  +output OutputObject
+  -activeAbortController AbortController
+  -activeRun Promise
+  +create(launch, runtime, operations) Promise
+  +runInteractive(context, options) Promise
+  +runNonInteractive(context) Promise
+  +cancel(reason)
+  +dispose() Promise
+ }
+ class TaskLaunchOwner {
+  -launches Map
+  -ids Set
+  +start(work)
+  +closeAdmissionAndAbort()
+  +join() Promise
+  +getTask(id)
+  +cancelTask(id) boolean
+ }
+ class ChildToolDisplay {
+  +open() AgentDisplayCallbacks
+  +subscribe(observer) Function
+  +clear()
+ }
+ TaskTool ..> TaskToolInvocation : creates
+ TaskToolInvocation ..> TaskToolInvocationDeps : borrows
+ TaskToolInvocationDeps ..> SubagentOrchestrator : launchChild callback
+ SubagentOrchestrator ..> ChildAgentAssembly : injected assembleChild
+ ChildAgentAssembly ..> SubAgentScope : creates and transfers
+ TaskLaunchOwner *-- SubAgentScope : accepted async launch lifetime
+ TaskToolInvocation ..> TaskLaunchOwner : async handoff
+ TaskToolInvocation ..> ChildToolDisplay : scoped callbacks
+

@@ -1,0 +1,19 @@
+flowchart LR
+classDef center fill:#164e63,color:#fff,stroke:#083344,stroke-width:3px;
+classDef caller fill:#eef2ff,color:#172554,stroke:#818cf8;
+classDef callee fill:#f0fdf4,color:#14532d,stroke:#86efac;
+L0["CoreToolScheduler.evaluateToolCall"]:::caller
+C["ConfirmationCoordinator.evaluateAndRoute<br/>packages/agents/src/scheduler/confirmation-coordinator.ts"]:::center
+R0["evaluatePolicyDecision"]:::callee
+R1["approveInternal"]:::callee
+R2["handlePolicyDenial"]:::callee
+R3["invocation.shouldConfirmExecute (ASK)"]:::callee
+R4["Allowed-tool comparison (local action)"]:::callee
+R5["setupConfirmationPrompt"]:::callee
+L0 --> C
+C --> R0
+C --> R1
+C --> R2
+C --> R3
+C --> R4
+C --> R5

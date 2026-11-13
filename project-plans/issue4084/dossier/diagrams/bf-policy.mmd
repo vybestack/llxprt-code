@@ -1,0 +1,21 @@
+flowchart LR
+classDef center fill:#164e63,color:#fff,stroke:#083344,stroke-width:3px;
+classDef caller fill:#eef2ff,color:#172554,stroke:#818cf8;
+classDef callee fill:#f0fdf4,color:#14532d,stroke:#86efac;
+L0["WorkspacePolicyOwner.evaluate"]:::caller
+L1["PolicyEngine.evaluateCompoundCommand"]:::caller
+L2["PolicyEngine.validateDefaultShellSubcommands"]:::caller
+C["PolicyEngine.evaluate<br/>packages/policy/src/policy-engine.ts"]:::center
+R0["validateServerName"]:::callee
+R1["Destructive-command check"]:::callee
+R2["findMatchingRule"]:::callee
+R3["evaluateMatchingRule"]:::callee
+R4["evaluateDefault"]:::callee
+L0 --> C
+L1 --> C
+L2 --> C
+C --> R0
+C --> R1
+C --> R2
+C --> R3
+C --> R4

@@ -1,0 +1,91 @@
+classDiagram
+ direction TB
+ class ToolSchedulerContract {
+  <<interface>>
+  +schedule(request, signal, hookOwner) Promise
+  +cancelAll()
+  +joinExecutions() Promise
+ }
+ class CoreToolScheduler {
+  -toolDispatcher ToolDispatcher
+  -confirmationCoordinator ConfirmationCoordinator
+  -toolExecutor ToolExecutor
+  -resultAggregator ResultAggregator
+  +schedule(request, signal, hookOwner) Promise
+  +cancelAll()
+  +joinExecutions() Promise
+  +dispose()
+ }
+ class ToolDispatcher {
+  -toolRegistry ToolLookup
+  -config Config
+  +resolveAndValidate(requests, governance, interactiveMode) ToolCall[]
+  +buildInvocation(tool, args)
+ }
+ class ConfirmationCoordinator {
+  +registerSignal(callId, signal)
+  +tryFastApprove(toolCall) boolean
+  +evaluateAndRoute(toolCall, signal) Promise
+ }
+ class ToolExecutor {
+  +execute(context) Promise
+ }
+ class ResultAggregator {
+  -pendingResults Map
+  -nextPublishIndex number
+  +beginBatch(size)
+  +bufferResult(callId, name, call, result, index)
+  +publishBufferedResults(signal) Promise
+ }
+ class SessionSchedulerOwner {
+  -lifetime Lifetime
+  -disposed boolean
+  +acquire() SchedulerLease
+  +hasPendingWork() boolean
+  +dispose() Promise
+ }
+ class SchedulerLease {
+  <<interface>>
+  +ready Promise
+  +schedule(request, signal, hookOwner) Promise
+  +release() Promise
+ }
+ class TurnToolExecutionOwner {
+  -run ToolRun
+  -retired boolean
+  +begin() Function
+  +acquire(callbacks) SchedulerLease
+  +retire()
+ }
+ class ToolRun {
+  +callIds Set
+  +active boolean
+  +release()
+ }
+ class AgenticLoop {
+  -scheduleAndAwait()
+  -buildNextMessage()
+ }
+ class MessageBus {
+  +evaluate(toolName, args, serverName)
+  +respondToConfirmation(correlationId, outcome, payload)
+ }
+ class HookExecutionOwner {
+  +signal AbortSignal
+  +beforeTool(name, input, context, signal) Promise
+  +afterTool(name, input, response, context, signal) Promise
+ }
+ ToolSchedulerContract <|.. CoreToolScheduler
+ CoreToolScheduler *-- ToolDispatcher
+ CoreToolScheduler *-- ConfirmationCoordinator
+ CoreToolScheduler *-- ToolExecutor
+ CoreToolScheduler *-- ResultAggregator
+ SessionSchedulerOwner *-- CoreToolScheduler : lazy lifetime
+ SessionSchedulerOwner ..> SchedulerLease : issues
+ TurnToolExecutionOwner *-- ToolRun
+ TurnToolExecutionOwner ..> SessionSchedulerOwner : creates through factory
+ TurnToolExecutionOwner ..> MessageBus : borrows approval channel
+ ConfirmationCoordinator ..> MessageBus : borrows
+ ToolExecutor ..> HookExecutionOwner : per-call hook owner
+ AgenticLoop o-- TurnToolExecutionOwner : owned reference
+

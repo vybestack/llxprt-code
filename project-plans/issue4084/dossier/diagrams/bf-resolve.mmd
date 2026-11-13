@@ -1,0 +1,21 @@
+flowchart LR
+classDef center fill:#164e63,color:#fff,stroke:#083344,stroke-width:3px;
+classDef caller fill:#eef2ff,color:#172554,stroke:#818cf8;
+classDef callee fill:#f0fdf4,color:#14532d,stroke:#86efac;
+L0["CoreToolScheduler._schedule"]:::caller
+C["ToolDispatcher.resolveAndValidate<br/>packages/agents/src/scheduler/tool-dispatcher.ts"]:::center
+R0["isRequestBlockedByHookRestriction"]:::callee
+R1["isToolBlocked"]:::callee
+R2["config.getSessionId"]:::callee
+R3["toolRegistry.getTool"]:::callee
+R4["setToolContext"]:::callee
+R5["buildInvocation"]:::callee
+R6["Error and suggestion construction"]:::callee
+L0 --> C
+C --> R0
+C --> R1
+C --> R2
+C --> R3
+C --> R4
+C --> R5
+C --> R6

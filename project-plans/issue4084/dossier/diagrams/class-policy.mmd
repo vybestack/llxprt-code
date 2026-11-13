@@ -1,0 +1,61 @@
+classDiagram
+ direction LR
+ class PolicyEngine {
+  -baseRules PolicyRule[]
+  -defaultDecision PolicyDecision
+  -currentMode ApprovalMode
+  +evaluate(toolName, args, serverName, evaluation) PolicyDecision
+  +getRules() PolicyRule[]
+  +addRule(rule)
+  +setApprovalMode(mode)
+ }
+ class PolicyDecisionPort {
+  <<interface>>
+  +evaluate(toolName, args, serverName) PolicyDecision
+ }
+ class MessageBus {
+  -emitter EventEmitter
+  -policyEngine PolicyDecisionPort
+  +evaluate(toolName, args, serverName)
+  +publish(message)
+  +subscribe(type, listener)
+  +requestConfirmation(toolCall, args, serverName) Promise
+  +respondToConfirmation(correlationId, outcome, payload)
+  +cancelPendingConfirmations()
+ }
+ class WorkspacePolicyOwner {
+  -engine PolicyEngine
+  +operations WorkspacePolicyOperations
+  +evaluate(toolName, args, serverName, mode, rules)
+  +refreshTrust()
+  +closeAdmission()
+  +dispose()
+ }
+ class SessionPolicyOwner {
+  -rules PolicyRule[]
+  +decisions PolicyDecisionPort
+  +messageBus MessageBus
+  +confirmation SessionConfirmationOperations
+  +closeAdmission()
+  +dispose() Promise
+ }
+ class RuntimePolicyOwner {
+  +workspace WorkspacePolicyOwner
+  +session SessionPolicyOwner
+  -ownsWorkspace boolean
+  +closeAdmission()
+  +dispose() Promise
+ }
+ class EventEmitter {
+  +emit(type, message)
+  +on(type, listener)
+ }
+ WorkspacePolicyOwner *-- PolicyEngine
+ SessionPolicyOwner ..> WorkspacePolicyOwner : borrows
+ SessionPolicyOwner o-- MessageBus : creates or borrows
+ SessionPolicyOwner ..> PolicyDecisionPort : exposes closure
+ MessageBus ..> PolicyDecisionPort : borrows
+ MessageBus *-- EventEmitter
+ RuntimePolicyOwner *-- SessionPolicyOwner
+ RuntimePolicyOwner o-- WorkspacePolicyOwner : ownership depends on constructor
+
