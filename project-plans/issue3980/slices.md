@@ -2,33 +2,37 @@
 
 Plan: PLAN-20261112-AGENT-API. Target milestone: 0.12.0. Parent: #3980. Boundary burn-down: #4037.
 
-Each numbered section below is a complete issue body, beginning with its proposed issue title. File paths marked **new** do not exist yet. Magnitudes include production and behavior-test additions/changes; deletions are listed separately and are not scope caps. No issue numbers have been allocated by this planning task.
+Each numbered section below is a complete issue body, beginning with its proposed issue title. P01 records delivered files in merged PR #4076; other file paths marked **new** are planned additions. Magnitudes include production and behavior-test additions/changes; deletions are listed separately and are not scope caps. P01 is issue #4039 / PR #4076; no further issue numbers have been allocated by this planning task.
 
 Every issue inherits the verification and PR rules in `adaptation-plan.md`: test-first Bun tests, real boundary behavior, no weakened checks, short-lived branch from main, one slice per PR, `Refs #3980`, `Refs #4037` when retiring baseline sites, and `Fixes #<slice-issue>` only after its exit criteria pass. The parent closes only after the final deletion slice.
 
-The 28 slices and their dependencies/magnitudes match the roadmap. D14-D18 and the policy translation matrix in the plan are inherited contracts; Q1-Q3 gate only affected release behavior. P23-P26 merge independently before the atomic P27 Ink switch.
+The 30 slices (completed P01 plus 29 remaining) and their dependencies/magnitudes match the roadmap. Start with P01a, then P02-P04, P05a, P05b and P06-P28; P01 is delivery history, not reopened work. Total 50,400-81,300 LoC includes P01's historical estimate; remaining planned work is 49,000-79,100 authored LoC. Relocation is separate: P05a 4,600-6,000 and P26 2,000-5,000, totaling 6,600-11,000 LoC. D14-D19, the policy translation matrix and approved offline import in the plan are inherited contracts; Q1/Q4 gate affected release behavior; Q5 remains open and is required before P05b implements decision/dispatch integration. P01a, P02 and pure P05a can proceed without choosing Q4/Q5. Q2 and Q3 are decided. P23-P26 merge independently before the atomic P27 Ink switch.
 
 ## P01: Create agent-core contracts and enforce its import boundary
 
-**Plan:** PLAN-20261112-AGENT-API.P01. **Dependencies:** none; confirm main/nightly prerequisite. **Magnitude:** 1,400-2,200 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P01. **Status:** implemented and merged in PR #4076 (branch `issue4039`, issue #4039). **Dependencies:** none; historical implementation scope below. **Magnitude:** 1,400-2,200 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
 
 ### Scope
 
+This section records the delivered pre-D19 scope, not new work. Its magnitude is the original estimate, not a measured PR diff. Do not reopen P01 or recreate its package, boundary guard or contracts. P01a owns the subsequent policy/shell and import contract amendments.
+
 Create the pure package and closed definition schemas. Complete the HTML value types, typed errors and fake ports without importing legacy core. Register the package in build, test discovery, packaging and CI from the first commit. This slice exports contracts and validation, not a stub createAgent pretending to be usable.
 
-Freeze D14-D18 from Design amendments before any runtime slice. This includes replay scope/envelopes and transcript part IDs, cumulative UsageReport and dispatch certainty, ModelRecovery plus journal records, PreparedShell facts, and AfterTurnView. Keep PolicyDocument unchanged; Q3 does not authorize a regex matcher.
+P01 delivered the then-approved D14-D18 contracts before runtime work. This includes replay scope/envelopes and transcript part IDs, cumulative UsageReport and dispatch certainty, ModelRecovery plus journal records, PreparedShell facts, and AfterTurnView. The delivered PolicyDocument, PolicyRule, PolicyMatch, ArgMatcher and PreparedShell are the pre-D19 shapes. Regex support and the later shell-fact changes belong to P01a and P05a.
 
 ### Packages and files
 
-**New:** packages/agent-core/package.json, index.ts, tsconfig.json, src/definition.ts, src/ports.ts, src/types.ts, src/testing/fake-ports.ts, src/definition.test.ts; scripts/check-agent-core-import-boundary.ts; scripts/tests/agent-core-import-boundary.test.ts. **Modify:** package.json, package-lock.json, bun.lock, tsconfig.json, scripts/test-shards.ts, scripts/affected-test-shards.data.json, scripts/runtime-entry-manifest.ts, scripts/check-runtime-state-boundary.ts, .github/workflows/ci.yml. Check scripts/build.ts and scripts/prepare-workspace-build.ts discovery rather than duplicating their workspace list.
+**Delivered:** packages/agent-core/package.json, index.ts, tsconfig.json, src/definition.ts, src/plain-data.ts, src/errors.ts, src/ports.ts, src/types.ts, src/types-contracts.ts, src/types-events.ts, src/testing/fake-ports.ts, src/definition.test.ts, src/definition-boundary.test.ts, src/fake-ports.test.ts, type-fixtures/invalid-contract.ts; scripts/check-agent-core-import-boundary.ts; scripts/tests/agent-core-import-boundary.test.ts. **Registration/guard integration delivered:** package.json, package-lock.json, bun.lock, tsconfig.json, scripts/test-shards.ts, scripts/affected-test-shards.data.json, scripts/runtime-entry-manifest.ts, scripts/check-runtime-state-boundary.ts, .github/workflows/ci.yml. Check scripts/build.ts and scripts/prepare-workspace-build.ts discovery rather than duplicating their workspace list.
 
 ### Public contract
 
 AgentDefinition, AgentHost, Agent, AgentCommand, AgentEvent, AgentSnapshot, Turn, TurnResult, ContentPart, ContextItem, ModelPort, ToolCatalog, DecisionPort, SessionStore, Clock, DiagnosticSink, Interceptors and their value/error types; validateDefinition; ScriptedModel, MemoryTools, ScriptedDecisions, FakeClock, MemorySessionStore under a testing export.
 
-Explicit additions: ReplayScope, ProviderReplayData, TranscriptPart/TranscriptEntry, UsageReport, ModelRecovery, PreparedShell/ShellSegment and AfterTurnView. Complete accounting event values alongside the existing event value types, separating measured Usage from conservative budget charges.
+Delivered additions: PolicyDocument, PolicyRule, PolicyMatch, ArgMatcher, ReplayScope, ProviderReplayData, TranscriptPart/TranscriptEntry, UsageReport, ModelRecovery, PreparedShell/ShellSegment and AfterTurnView. Complete accounting event values alongside the existing event value types, separating measured Usage from conservative budget charges.
 
 ### Tests first
+
+The following describes the delivered P01 test contract. PR #4076 records its verification; this documentation correction does not rerun that implementation suite.
 
 Closed definition rejects unknown fields, functions and missing required selection; reports all definition problems before any port effect. Authority allow is rejected. Invalid budgets/ratios/caps fail. Import fixtures reject direct, relative, aliased, barrel, type-only, dynamic and transitive forbidden dependencies and I/O globals. A permitted pure fixture builds and runs. No fake return value is the assertion target.
 
@@ -38,7 +42,7 @@ Schema and negative-type fixtures reject non-JSON replay/recovery data, unknown 
 
 Package builds and has passing runtime schema and negative compilation fixtures. CI invokes the graph guard on every PR, including this first one; runtime scanner discovers the new package. No new baseline findings.
 
-P03 can implement failed-attempt accounting and replay using published contracts without inventing another data channel. P05 and P17 have the preparation/continuation facts they need; all D14-D18 contracts appear in emitted declarations.
+P03 can implement failed-attempt accounting and replay using published contracts without inventing another data channel. P05a/P05b and P17 have the preparation/continuation facts they need; all D14-D18 contracts appear in emitted declarations.
 
 ### Deletions
 
@@ -58,11 +62,58 @@ No #4037 entries retire. Add the stricter core graph rule; preserve every existi
 
 ### PR
 
-One short-lived PR from current main. Implement the numbered pseudocode range above after the failing integration and behavior tests. Record red/green evidence and the semantic result. Title/body: `Refs #3980`; body: `Fixes #<this-slice-issue>`. Use `Refs #4037` when changing its baseline. Do not merge failing intermediate commits or close #3980 here.
+Completed by [PR #4076](https://github.com/vybestack/llxprt-code/pull/4076), branch `issue4039`, closing #4039. No new P01 issue or PR. The parent #3980 remains open for the later slices.
+
+## P01a: Amend the delivered contracts for policy parity and offline import
+
+**Plan:** PLAN-20261112-AGENT-API.P01a. **Dependencies:** completed P01 / merged PR #4076. **Magnitude:** 800-1,300 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
+
+### Scope
+
+Amend the existing package in place before P02. Preserve delivered D14-D17 contracts and the import boundary. Replace the pre-D19 policy/shell shapes and their fixtures with the approved shapes, without a compatibility union, parallel schema or facade. Add approved Q2 import value contracts; importer behavior remains P14. This slice supplies native regex compilation/definition validation, not a runtime permission evaluator.
+
+### Packages and files
+
+**Modify delivered files:** packages/agent-core/src/types-contracts.ts, src/types-events.ts, src/types.ts, src/ports.ts, src/errors.ts, src/definition.ts, src/testing/fake-ports.ts, src/definition.test.ts, src/definition-boundary.test.ts, src/fake-ports.test.ts, type-fixtures/invalid-contract.ts and index.ts as needed for exports. **New:** packages/agent-core/src/policy-regex.ts and src/policy-regex.test.ts for the shared native compiler/validation helper; src/policy-source-stack.ts and src/policy-source-stack.test.ts for pure source-stack derivation and validation. No new dependency, package setup or import-guard relaxation.
+
+### Public contract
+
+PolicyDocument gains approvalMode, independent RestrictionRule authority and paired sourceStacks; PolicyRule gains priority/order/provenance and allowRedirection; PolicyMatch gains sourceTool, modes and unless; ArgMatcher gains serializedArgs: PolicyRegex. Add ApprovalMode, PolicyRegex with required PolicyRegexInput path/input evidence, PolicyProvenance, RestrictionRule and PolicySourceStack. Export pure normalizePolicyRegex(input: PolicyRegexInput): PolicyRegex and derivePolicySourceStack(id: string, preferences: readonly PolicyLayer[]): PolicySourceStack; definition/command validators verify pairs against that derivation. Neither helper returns permission outcomes. PreparedShell gains exact raw command, whole-command redirection and policySplit text/facts separate from parsed argv/failure. Add required ToolDescriptor.policyIdentity: { readonly name: string; readonly server?: string }; validate a closed shape with a nonempty name and optional string server when descriptors are pinned. Core checks nonempty server prefixes before policy/dispatch; absent or empty server retains the current no-server-check behavior. Source identity is never reconstructed from qualified/versioned ToolId. Update set-preferences with atomic independently editable layers/approvalMode, set-authority with independent restrictions only, add atomic set-source-stacks for paired source-owned copies, and give Grant stable order. Add ImportNotice, imported-history and StoreError import-required. Compile plain-data patterns with native RegExp during definition validation, retaining existing flavor, flags, source validation and subject semantics; instances remain private, never definition data.
+
+### Tests first
+
+1. Round-trip every added plain-data form and reject RegExp instances/callbacks, malformed predicates, nonfinite priorities and authority allow. Preserve literal source names and inactive mode filters.
+2. Native compilation rejects invalid syntax, duplicate/unknown flags and u+v with rule/field provenance before effects, including inactive and unless patterns. Exercise every path in the Regex decision validation table, its 1,024/1,025 checks and adjacent-quantifier heuristic at the specified stage. A 1,024-unit commandRegex passes directory validation but fails its 1,035-unit single-file wrapper check; 513 forward slashes pass authored validation and single-file loading but fail directory native-source validation at 1,026 units. Test prefix expansion boundaries, no new cap on direct/utils-prefix paths, malformed path evidence and effective source/flags mismatch.
+3. Replace pre-D19 policy and shell fixtures in the same PR. Negative type fixtures reject the superseded shapes; positive fixtures exercise mode changes, shell facts and remembered-grant ordering without starting a runtime.
+4. Imported-history round-trips without live capabilities or restored grants. Store errors retain import-required guidance. Existing replay, accounting, recovery and boundary assertions remain unchanged in strength.
+5. Update all fake descriptors and positive/negative type fixtures for required policyIdentity. Pure descriptor validation and negative type fixtures reject missing identity, missing/empty name and non-string server; original names, literal stars and exact-or-prefix forms round-trip. No dispatch implementation is required in P01a. P05b owns real prepared-call matching/server-mismatch tests; P12/P13 populate trusted adapter identities.
+6. Source-stack pairs validate against pure derivation, including cross-file ties and modes; missing/stale predicates, duplicate group IDs and mismatched source-rule copies fail. Amended command fixtures distinguish paired replacement from independent authority/preferences. P02 owns reducer installation tests; no decisions, evaluator or loop implementation is required here.
+
+### Exit criteria
+
+All emitted declarations, closed schemas, fakes and fixtures use one amended shape. Definition validation compiles every regex with provenance and no port effects. P02 can consume the amended command shape and P05a can reuse the native compiler. G0 passes independently with no host switched and no placeholder runtime.
+
+### Deletions
+
+Replace superseded policy/shell fixture shapes; retain their behavioral assertions. No old host or public runtime is removed here.
+
+### Risks
+
+Retrofitting D19 into the completed P01 would misstate delivery and leave schema/type drift. Change types, validators and fixtures together. Preserve source-path validation differences, including the single-file generated-pattern check and directory native-source check; a universal authored or effective cap changes accepted inputs.
+
+### Verification and boundary retirement
+
+Shared G0 commands, scenario IDs and numbered pseudocode are specified in `project-plans/issue3980/adaptation-plan.md` under Verification and PR protocol, Required behavioral fixtures, and Numbered integration algorithm. G0 includes full test/lint/typecheck/format/build, existing plus new boundary checks, test-audit/property/mutation gates and the lunahigh smoke.
+
+G0 + Bun definition, fake-port and policy-regex suites, negative compilation fixtures, declaration export checks and the unchanged agent-core boundary guard. No #4037 entries retire. Pseudocode 01.
+
+### PR
+
+One short-lived PR from current main. Write failing behavior and integration tests first, then implement the numbered pseudocode. Record red/green evidence. Use `Refs #3980` and `Fixes #<this-slice-issue>`; retain every existing check and merge only after G0 passes. Never merge without Andrew's explicit instruction.
 
 ## P02: Implement synchronous mailbox admission and command timing
 
-**Plan:** PLAN-20261112-AGENT-API.P02. **Dependencies:** P01. **Magnitude:** 1,100-1,700 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P02. **Dependencies:** P01a. **Magnitude:** 1,300-2,000 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
 
 ### Scope
 
@@ -77,6 +128,8 @@ Implement the actor mailbox and legal state transitions with explicit applicatio
 BusyError, ClosedError, NotRunningError, CommandResult and the submit/steer/cancel/command contracts. Mailbox and reducer remain package-private.
 
 ### Tests first
+
+Use the real mailbox/reducer only, driving explicit policy/boundary/turn-end application points without a loop, evaluator or DecisionPort. D19 set-preferences installs independently editable layers and approvalMode in one immutable snapshot/revision. set-source-stacks installs both validated source-owned copies and removals together, preserving independent authority/preferences/mode; invalid updates leave the snapshot unchanged. Assert snapshots and CommandResult ordering at idle, the policy point, turn end without a policy point, cancel settlement and close rejection. Do not require waiting-decision or compound evaluation behavior here: P05b owns those integration tests after P03/P05a exist.
 
 S16.2 competing commands: two same-tick submits reserve only one turn; ClosedError precedes BusyError; steer idle fails; cancel idle is a no-op. Policy, boundary and turn-end commands apply at distinct points. Rewind/clear reject while running. A blocked external operation cannot prevent cancel/close admission. Queued commands settle on close; no promise remains orphaned.
 
@@ -162,7 +215,7 @@ One short-lived PR from current main. Implement the numbered pseudocode range ab
 
 ### Scope
 
-Add tool preparation, committed-call dispatch, immutable per-turn catalogs, ordered parallel/exclusive segments, revocation and output limits. Use the real scheduling component and in-memory tools; integrate policy in P05. Cross-agent resource locks stay in host executors.
+Add tool preparation, committed-call dispatch, immutable per-turn catalogs, ordered parallel/exclusive segments, revocation and output limits. Use the real scheduling component and in-memory tools; integrate evaluation in P05a and permission/dispatch lifecycle in P05b. Cross-agent resource locks stay in host executors.
 
 ### Packages and files
 
@@ -200,61 +253,121 @@ No baseline entries retire. Pseudocode 05, 08, 10-12.
 
 One short-lived PR from current main. Implement the numbered pseudocode range above after the failing integration and behavior tests. Record red/green evidence and the semantic result. Title/body: `Refs #3980`; body: `Fixes #<this-slice-issue>`. Use `Refs #4037` when changing its baseline. Do not merge failing intermediate commits or close #3980 here.
 
-## P05: Evaluate authority, preferences and typed decisions in agent-core
+## P05a: Implement policy matching and evaluation with parity on every form
 
-**Plan:** PLAN-20261112-AGENT-API.P05. **Dependencies:** P04. **Magnitude:** 2,600-4,000 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P05a. **Dependencies:** P04; P01a amended contracts and native compiler. **Magnitude:** 2,600-4,000 LoC authored additions/changes, including tests, plus 4,600-6,000 LoC mechanical relocation counted separately. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
 
 ### Scope
 
-Implement the fixed authority/grant/preference ordering, decision lifecycle, edited/stale approval, plan mode and built-in ask_user/propose_plan. Add constrained interceptor execution at policy-sensitive points; host hook translation comes later.
+Implement every core-owned form in the Policy source translation matrix: serialized regex, source identity, priority/ties, authority-owned exceptions, mode filters, parsed-prefix matching, exact shell branches/exemptions and destructive hard deny. Reuse P01a's native RegExp compiler and the existing subject handling. P16 loads/translates sources; no ToolHandle calls PolicyEngine. Q4 conflict fixtures remain explicit release conditions; Q5 is a prerequisite of P05b. Neither permits removal of forms, and this pure slice selects neither outcome.
 
-Implement the Policy source translation and rejection matrix core responsibilities: destructive hard deny as built-in shell authority, parsed-prefix matching, per-segment compound evaluation and redirection/parse-failure ask floors. Source loading and Q3 decisions remain P16. No PolicyEngine call in a ToolHandle.
+Keep this slice independently green as a pure evaluator exercised through package-local behavior tests. Do not switch a host or dispatch tools through an incomplete permission path. P05b integrates its typed results with decisions, grants and dispatch; no temporary allow stub or second evaluator is permitted.
 
 ### Packages and files
 
-**New:** packages/agent-core/src/policy.ts, src/decisions.ts, src/interceptors.ts, src/policy.test.ts, src/decisions.test.ts, src/testing/turn-scenarios.ts. **Modify:** src/loop.ts, src/tools.ts, src/mailbox.ts under packages/agent-core. **Read:** packages/core/src/policy/policy-owner.ts, packages/policy/src/policy-engine.ts, packages/policy/src/confirmation-bus/message-bus.ts.
+**New:** packages/agent-core/src/policy.ts, src/policy.test.ts and src/shell-policy.test.ts. **Reuse/modify:** src/policy-regex.ts and src/policy-regex.test.ts delivered by P01a. **Read:** packages/core/src/policy/policy-owner.ts and packages/policy/src/policy-engine.ts.
 
-**Move pure behavior into new core modules:** packages/policy/src/destructive-commands.ts, destructive-credentials.ts and destructive-forkbomb.ts with their regression cases; update the old policy engine to import the one shared pure classifier through an explicit agent-core safety export, not a re-export shim. **Read:** packages/policy/src/types.ts, toml-loader.ts, utils.ts and utils/shell-utils.ts. Add packages/agent-core/src/shell-policy.test.ts; document the narrow pure safety export in public-surface checks.
+**Move pure behavior into new core modules:** packages/policy/src/destructive-commands.ts, destructive-credentials.ts and destructive-forkbomb.ts with their regression cases; move stable-stringify.ts and the shell splitting/redirection helpers too, exposing a narrow pure shell-facts helper usable by host preparation but no permission evaluator; update the old policy engine to import the one shared pure classifier through an explicit agent-core safety export, not a re-export shim. **Read:** packages/policy/src/types.ts, toml-loader.ts, utils.ts and utils/shell-utils.ts. Add packages/agent-core/src/shell-policy.test.ts; document the narrow pure safety export in public-surface checks.
+
+**Relocation evidence:** the five existing source files total 2,601 lines (1,098 destructive commands, 309 credentials, 852 fork-bomb, 183 stable stringify, 159 shell helpers). The four destructive suites total 1,982 lines: destructive-commands.test.ts (871), destructive-commands.redirect-forkbomb.test.ts (682), destructive-commands.dd-of-credential.test.ts (54), destructive-disabled-list.test.ts (375). Move all four without reducing their assertions. The measured baseline is 4,583 relocated lines at e3c1782b96d0a968f12a09401c04671cc29cacb9; budget 4,600-6,000 for this and additional helper fixture moves found at preflight. Count relocated content once, not as both deletion and addition. Import edits, test-port changes, the new evaluator and new behavior tests belong to the separate 2,600-4,000 authored range. P05a's combined magnitude is 7,200-10,000 LoC; it does not consume P26's relocation budget.
 
 ### Public contract
 
-PolicyDocument, PolicyLayer, PolicyRule, Grant, GrantScope, DecisionRequest, ResponseFor, Unavailable, DecidedBy; policy commands and built-in interaction tools, without extra Agent methods.
+Consume the P01a PolicyDocument, PolicyLayer, PolicyRule, PolicyMatch, ArgMatcher, RestrictionRule, PolicySourceStack and PreparedShell contracts. The package-private evaluator accepts prepared facts and one immutable policy revision/mode, returning allow/ask/deny with matched provenance and shell traversal facts. No human prompt or tool effect occurs here. Invalid definitions fail validation before evaluation.
 
 ### Tests first
 
-Complete S9.1, S9.2 and S9.3 plus S16.1 authority against grants and S16.4 stale previews. Realpath and parsed command-prefix matching cannot be bypassed by text prefixes or missing args. Edited approval prepares and checks again without an approval loop; stale execute requires a fresh ask. Headless tools absent and denied at dispatch; plan mode rejects headless. Policy changes re-evaluate waiting decisions; turn/session grant expiration differs. Interceptor timeout reports continue as specified; patch revalidates and redaction preserves audit raw data when store supports blobs.
+Tests assert real evaluator outcomes for every form; all denied/error fixtures perform no tool execution:
 
-Table-driven/property tests cover every matrix row that core evaluates: restrictive authority beats admin/user allows and YOLO; ordered preference ties; deny in later compound/pipeline segments; whole-token prefixes; directory preservation; redirection ask; parse-error ask; missing shell facts fail fast; edits re-prepare. Reuse destructive classifier regressions as pure input tests, never execute those commands. Invalid source features are P16 tests rather than a second runtime evaluator.
+1. Stable sorted JSON argsPattern matching, directory-loader dot-star behavior versus direct patterns, commandRegex anchors/alternation/JSON escaping, exact/prefix/literal-star identities and missing arguments.
+2. Default/user/admin tiers, missing priority zero, overlapping equal-priority rules, base-before-overlay ties, later rule insertion and preference/grant priority 2.95. High admin allow/ask over lower admin deny; high admin ask over lower user deny; an independent authority restriction survives all exceptions/preferences/grants. Assert that editing ordinary preferences cannot change source-owned unless predicates, and evaluate successive complete source-stack revisions, including removals; never accept a mismatched pair. Include Q4's code-derived old allow versus independent-authority restriction as an explicit conflict fixture.
+3. default/autoEdit/yolo filters including absent/empty/multiple modes, restriction and exception activation, evaluations against successive revisions and one immutable revision across all compound segments. Invalid inactive patterns fail creation too. P05b adds mid-turn/waiting-decision changes and grant lifecycle tests.
+4. Compound/pipeline/background commands with mixed allow/ask/deny; whole-call matches versus no match; fallback ask retained despite all-allow segments; unchanged dir_path; quoted separators; empty split and unmatched quotes with the actual lightweight splitter. Assert Q5's whole-call ask short circuit separately from post-approval dispatch safety.
+5. Redirection omitted/false/true on competing winning rules, non-inheritance of an outer exemption, quotes versus real redirects, pipes not redirects, simple fallback allow exemption and explicit camel-case versus loaded YOLO behavior. Destructive inputs always evaluate to deny under YOLO, simulated remembered approvals and allowRedirection true; P05b proves dispatch is prevented. Never execute classifier fixture commands.
+6. Native regex syntax/flags, lookahead/lookbehind, backreferences, Unicode classes/sets and repeated g/y matching with reset lastIndex. Use benign source/subject fixtures and compare existing engine outcomes; preserve each loader's flags and subject transforms.
+7. Reuse P01a's complete path-specific validation table and boundary fixtures, including single-file generated-pattern checks and the directory native-source check, inactive/exception patterns and provenance. No invalid pattern selects a later permissive rule. Test paths with no length/heuristic check without inventing a cap.
+
+Realpath/new parsed argv matchers retain bypass tests for text prefixes, missing args and segment boundaries. Missing trusted shell facts fail fast. File loading is P16's responsibility, never a second evaluator.
 
 ### Exit criteria
 
-All three decision scenarios produce ordered audit events, consistent tool results and correct outcomes. Authority denial never reaches execute under any preference mode or child grant.
-
-Non-bypassable restrictions apply even after set-authority, exact grants and user-mode changes. Audit events identify the built-in shell restriction and the matched source rule. Existing authority ordering remains unchanged.
+Every matrix form has a passing pure evaluator fixture. Non-bypassable effective restrictions survive priority exceptions, YOLO and simulated remembered-approval rules. Audit facts identify provenance, mode/revision, selected priority and authority exceptions. Native compilation and subject parity pass before P16 adopts them. G0 passes with no new host/runtime route; Q4/Q5 remain explicitly recorded conflicts.
 
 ### Deletions
 
-No old policy bus removal yet; new handles must not delegate decisions to it.
+Move the shared pure classifier and helpers once and update legacy imports without re-export shims. No policy bus or old runtime removal yet.
 
 ### Risks
 
-Grants broader than offered scopes; mixing credential prompts with tool decisions; treating unavailable as ordinary denial; reentrant port callbacks.
+Catastrophic backtracking behaves as today and is outside this plan; see the possible follow-up issue in the regex decision. Never test catastrophic native workloads. Source-path transforms, stable ties and authority-owned exceptions need separate fixtures to avoid false parity claims.
 
 ### Verification and boundary retirement
 
 Shared G0 commands, scenario IDs and numbered pseudocode are specified in `project-plans/issue3980/adaptation-plan.md` under Verification and PR protocol, Required behavioral fixtures, and Numbered integration algorithm. G0 includes full test/lint/typecheck/format/build, existing plus new boundary checks, test-audit/property/mutation gates and the lunahigh smoke.
 
-G0 + bun test packages/agent-core/src/policy.test.ts packages/agent-core/src/decisions.test.ts packages/agent-core/src/shell-policy.test.ts; all completed S9/S16 cases and generated authority/grant combinations.
+G0 + bun test packages/agent-core/src/policy.test.ts packages/agent-core/src/shell-policy.test.ts packages/agent-core/src/policy-regex.test.ts; parity fixtures for every matrix form and generated authority/priority combinations.
 
-No baseline entries retire until legacy policyComposition is deleted P28. Pseudocode 08-12.
+No baseline entries retire until legacy policyComposition is deleted P28. Pseudocode 08, pure evaluation portion. P05b owns the dispatch integration and remaining S9/S16 scenarios.
 
 ### PR
 
-One short-lived PR from current main. Implement the numbered pseudocode range above after the failing integration and behavior tests. Record red/green evidence and the semantic result. Title/body: `Refs #3980`; body: `Fixes #<this-slice-issue>`. Use `Refs #4037` when changing its baseline. Do not merge failing intermediate commits or close #3980 here.
+One short-lived PR from current main. Write failing behavior and integration tests first, then implement the numbered pseudocode. Record red/green evidence. Use `Refs #3980` and `Fixes #<this-slice-issue>`; retain every existing check and merge only after G0 passes. Never merge without Andrew's explicit instruction.
+
+## P05b: Integrate typed decisions, grants and headless behavior
+
+**Plan:** PLAN-20261112-AGENT-API.P05b. **Dependencies:** P05a and a recorded Q5 disposition before implementing this slice's chosen decision/dispatch behavior. Q5 remains open in this plan; no option is assumed. **Magnitude:** 2,000-3,200 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
+
+### Scope
+
+Wire P05a's sole evaluator into the prepared-tool loop. Implement decision lifecycle, typed replies, edited/stale approval, grant ranking/expiration/revalidation, plan mode and built-in ask_user/propose_plan. Add constrained interceptor execution at policy-sensitive points; host hook translation comes later. No compatibility path or executor-side evaluator.
+
+Complete policy command timing with P02: set-preferences changes independently editable layers and approvalMode atomically; set-source-stacks replaces paired restrictions/ranked source copies and removals in one revision while preserving independent authority. Only after installation may pending decisions and grants be re-evaluated against that revision before dispatch. Apply the recorded Q5 disposition to approval of compound calls without weakening destructive deny or independent authority.
+
+### Packages and files
+
+**New:** packages/agent-core/src/decisions.ts, src/interceptors.ts, src/decisions.test.ts and src/testing/turn-scenarios.ts. **Modify:** src/loop.ts, src/tools.ts, src/mailbox.ts and src/policy.test.ts under packages/agent-core. **Read:** packages/core/src/policy/policy-owner.ts and packages/policy/src/confirmation-bus/message-bus.ts.
+
+### Public contract
+
+Grant, GrantScope, DecisionRequest, Resolution, ToolApproval, PlanApproval and DecisionPort use the amended P01a types. Decision replies are request-scoped and abortable; grants cannot exceed offered scopes or override effective authority. Interceptor patches revalidate and re-prepare before P05a evaluation.
+
+### Tests first
+
+1. Complete S9.1-S9.3, S16.1 authority against grants and S16.4 stale previews through the real loop. Denied calls never execute; approval produces ordered audit events and actual settled results.
+2. Edited approval re-prepares and rechecks without an approval loop. Stale execute requires a fresh ask. Exact/prefix grants cover the prepared call and every allowed segment, expire by turn/session and rank at 2.95 without bypassing higher restrictions.
+3. Through the real mailbox/loop/evaluator, test authority and approval-mode changes in both directions while decisions wait and between compound evaluations. Recheck stale approvals/grants, use one revision across segments and re-evaluate before dispatch after any revision change. Include turn-end application without another evaluation, cancel settlement, close rejection and already dispatched effects settling unchanged. Move an admin exception from operation A to B while an independent ask keeps calls pending, then remove its source rule/group. Assert exactly the complete old or complete new outcome, never a hybrid evaluation or irreversible decision settlement. An invalid replacement changes neither revision nor pending requests; independent authority still applies.
+4. Headless human tools are absent and denied at dispatch; plan mode rejects headless. Exercise onAsk deny/fail/explicit approve through a real DecisionPort adapter fixture, comparing completed denial with today's nonInteractive behavior rather than confusing ask with denial.
+5. Interceptor timeout reports continue as specified; patches revalidate and redaction preserves raw audit data when the store supports blobs. Credential prompts stay outside tool decisions.
+6. Keep Q4's old-result/authority-conflict fixture distinct from parity without selecting its still-open release disposition. Q5 must be recorded before implementing this slice: assert the selected timing (initial ask then pre-dispatch segment check, or deny before asking) against the old short circuit in separate contract tests. A compound call with any denied segment cannot dispatch after approval; no tool is executed to discover whether it is safe.
+7. Through pinned descriptors and prepared calls, use catalog IDs different from policyIdentity.name and assert original-name exact matching, literal stars, exact OR prefix matching, and rejection of a nonempty mismatched server identity before any execute. Model arguments/description cannot override the pinned identity; edited approval retains the same trusted descriptor.
+
+### Exit criteria
+
+All decision scenarios produce ordered audit events, consistent tool results and correct outcomes. Effective authority denial never reaches execute under any mode, exact/session grant or child grant. The full core path uses P05a exactly once per required evaluation, with no host policy callback. G0 passes independently before P06; no host switch occurs here.
+
+### Deletions
+
+No old policy bus removal yet; new handles never delegate decisions to it.
+
+### Risks
+
+Grants broader than offered scopes; confusing credential prompts with tool decisions; treating unavailable as ordinary denial; reentrant port callbacks; dispatch using facts or revision from an obsolete approval.
+
+### Verification and boundary retirement
+
+Shared G0 commands, scenario IDs and numbered pseudocode are specified in `project-plans/issue3980/adaptation-plan.md` under Verification and PR protocol, Required behavioral fixtures, and Numbered integration algorithm. G0 includes full test/lint/typecheck/format/build, existing plus new boundary checks, test-audit/property/mutation gates and the lunahigh smoke.
+
+G0 + bun test packages/agent-core/src/decisions.test.ts packages/agent-core/src/policy.test.ts packages/agent-core/src/shell-policy.test.ts; all completed S9/S16 cases and generated authority/grant combinations through the loop.
+
+No baseline entries retire until legacy policyComposition is deleted P28. Pseudocode 08-12, integrating P05a evaluation with approval and dispatch.
+
+### PR
+
+One short-lived PR from current main. Write failing behavior and integration tests first, then implement the numbered pseudocode. Record red/green evidence. Use `Refs #3980` and `Fixes #<this-slice-issue>`; retain every existing check and merge only after G0 passes. Never merge without Andrew's explicit instruction.
 
 ## P06: Publish ordered events, atomic snapshots and replay cursors
 
-**Plan:** PLAN-20261112-AGENT-API.P06. **Dependencies:** P05. **Magnitude:** 1,000-1,600 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P06. **Dependencies:** P05b. **Magnitude:** 1,000-1,600 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
 
 ### Scope
 
@@ -298,7 +411,7 @@ One short-lived PR from current main. Implement the numbered pseudocode range ab
 
 ## P07: Journal turns and recover without repeating uncertain effects
 
-**Plan:** PLAN-20261112-AGENT-API.P07. **Dependencies:** P06. **Magnitude:** 2,000-3,200 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P07. **Dependencies:** P06. **Magnitude:** 2,200-3,500 LoC added/changed, including tests. **Requirements:** REQ-CORE, REQ-VERIFY; preserve REQ-PORTS and REQ-DELETE.
 
 ### Scope
 
@@ -316,6 +429,8 @@ JournalRecord and durable metadata, CheckpointId, TranscriptEntry, StoreError; A
 
 ### Tests first
 
+A valid imported-history record plus imported terminal/indeterminate results resumes without dispatch, has no restored grants and preserves uncertainty notices. Reject an old recording at the store boundary with import-required rather than accepting it as empty new history. No synthetic tool-started proof is required or invented for imported content.
+
 S16.5 crash after tool-started becomes indeterminate without repeated file effects. Unfinished turn closes cancelled/closing; pending decision is not reissued. Restore session grants only under current authority, drop turn grants. Failed append prevents dispatch and ends the turn failed; creation load/corruption fails typed. Rewind never creates unmatched calls; compacted-range rewind rejects; fork preserves source and yields independent identity. Resume increases event sequence above persisted watermark. No-store resume/fork fails explicitly.
 
 Resume/fork/rewind preserve replay targets and bytes at retained checkpoints; compaction does not inherit signatures. Crash after reservation settles it conservatively without resend. Duplicate usage records cannot inflate totals. A rejected parent recorded before retry stays invalid after restart. A discarded attempt contributes accounting but neither transcript content nor replay.
@@ -332,7 +447,7 @@ None yet; do not reuse old RecordingIntegration as the journal.
 
 ### Risks
 
-Persisting every event versus reserving sequence ranges has different write costs; choose and test a durable watermark strategy. Legacy transcript migration remains Q2.
+Persisting every event versus reserving sequence ranges has different write costs; choose and test a durable watermark strategy. Approved offline import is implemented in P14; core recovery reads only new journals.
 
 ### Verification and boundary retirement
 
@@ -542,7 +657,7 @@ One short-lived PR from current main. Write failing integration/conformance test
 
 ## P12: Adapt builtin tools with effect-free preparation and resource locks
 
-**Plan:** PLAN-20261112-AGENT-API.P12. **Dependencies:** P11. **Magnitude:** 2,500-4,000 LoC added/changed, including tests. **Requirements:** REQ-PORTS, REQ-VERIFY; preserve REQ-CORE and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P12. **Dependencies:** P11. **Magnitude:** 2,700-4,300 LoC added/changed, including tests. **Requirements:** REQ-PORTS, REQ-VERIFY; preserve REQ-CORE and REQ-DELETE.
 
 ### Scope
 
@@ -558,9 +673,13 @@ Include trusted shell preparation and TodoRead/TodoWrite/TodoPause. Shell prepar
 
 ### Public contract
 
-workspaceCatalog(explicitWorkspaceInputs): ToolCatalog; immutable ToolDescriptor/ToolHandle; host executor lifecycle close remains separate. Prepared tokens bind final args plus file preconditions; resource-lock acquisition is abortable.
+workspaceCatalog(explicitWorkspaceInputs): ToolCatalog; immutable ToolDescriptor/ToolHandle with required policyIdentity populated from the trusted builtin registration name, not qualified ToolId parsing or model arguments; host executor lifecycle close remains separate. Prepared tokens bind final args plus file preconditions; resource-lock acquisition is abortable.
 
 ### Tests first
+
+Prepared-call tests through core match original builtin names even when catalog IDs differ, preserve literal stars and exact-or-prefix semantics, and reject forged nonempty server identity before execute. Fake descriptors and registration fixtures carry required policyIdentity; tool input cannot replace it.
+
+D18 facts retain exact raw final command, whole/segment redirection and policySplit output from the current policy shell helpers, separately from argv parse success/failure. Test quotes, whitespace, separators and redirects before and after edited approval; serialize args in core, not the adapter. No preparation result contains a policy decision or compiled regex.
 
 Run ToolCatalog conformance against read, write/edit, AST edit, shell, memory, web and image families. Preparation cannot modify files or spawn processes; edited args re-prepare. Symlink target/realpath changes invalidate approval. S16.4 stale preview never applies old edit. Shell abort waits for process settlement, output cap prevents retained-byte growth, exclusive resources serialize separate agents. Malformed input and revoked capability return typed errors. No ToolHandle can ask a human or bypass core policy.
 
@@ -604,9 +723,11 @@ Build MCP catalog/connection ownership separately from builtin tool preparation.
 
 ### Public contract
 
-mcpCatalog(explicitMcpInputs): ToolCatalog; composeToolCatalogs(catalogs); fetchMcpPrompt and fetchMcpResource returning UserInput/ContentPart values. Connections and authentication remain host-owned.
+mcpCatalog(explicitMcpInputs): ToolCatalog; composeToolCatalogs(catalogs); fetchMcpPrompt and fetchMcpResource returning UserInput/ContentPart values. Connections and authentication remain host-owned. Populate required ToolDescriptor.policyIdentity from the trusted connection server namespace and registered source-tool name (including the current server prefix), independently of qualified/versioned catalog IDs and untrusted MCP descriptions/annotations.
 
 ### Tests first
+
+Prepared-call/core tests cover original-name exact matches, literal stars, exact OR server-prefix matching and a mismatched nonempty server identity denied before execute. Rediscovery/edited arguments cannot substitute model-provided identity for the pinned descriptor.
 
 ToolCatalog conformance against a real local MCP fixture: duplicate server tool names cannot collide, descriptors are versioned and conservative despite malicious annotations, pin is stable during rediscovery, disconnect/trust withdrawal aborts sets and rejects pending decisions, running calls settle aborted/revoked. Large aggregate content respects acquisition limits, transport error stays typed, resources remain untrusted context. Reconnect appears only on next pin. Abort during connect or discovery cleans up unpublished sessions.
 
@@ -634,11 +755,13 @@ MCP has zero direct Config imports and no current widened baseline findings; do 
 
 One short-lived PR from current main. Write failing integration/conformance tests before production extraction; expand the referenced numbered pseudocode before implementation. Record retained behavior and observed red/green results. Use `Refs #3980`, `Fixes #<this-slice-issue>` and `Refs #4037` for baseline removals. No compatibility facade and no weakened check.
 
-## P14: Implement durable SessionStore over storage primitives
+## P14: Implement durable SessionStore and explicit offline conversation import
 
-**Plan:** PLAN-20261112-AGENT-API.P14. **Dependencies:** P13. **Magnitude:** 2,000-3,200 LoC added/changed, including tests. **Requirements:** REQ-PORTS, REQ-VERIFY; preserve REQ-CORE and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P14. **Dependencies:** P13. **Magnitude:** 3,600-5,800 LoC added/changed, including tests. **Requirements:** REQ-PORTS, REQ-VERIFY; preserve REQ-CORE and REQ-DELETE.
 
 ### Scope
+
+Implement approved Q2 Option A and `llxprt sessions import <old-file>` as specified in the decisions record. Keep it within P14 because conversion publishes through the same journal writer, validation and atomic index/receipt transaction. The CLI handler runs before agent/model/tool acquisition. No runtime fallback, permissive ReplayEngine reuse, dual-format writer or original-file mutation.
 
 Implement a versioned physical journal store and blob operations with durable append, explicit errors, bounded acquisition and exclusive writer ownership. Reuse storage path/media/lock mechanisms after extracting their owner-neutral inputs. Keep legacy logging distinct from the agent journal.
 
@@ -646,13 +769,29 @@ Store D14-D16 replay/accounting/recovery records losslessly. Expose task snapsho
 
 ### Packages and files
 
+**New:** packages/host-kit/src/store/import-conversation.ts, import-conversation.test.ts, historical-recording-schema.ts; packages/cli/src/commands/sessions.ts, sessions.test.ts. **Modify:** packages/cli/src/config/cliArgParser.ts for subcommand registration. **Read:** packages/core/src/recording/types.ts, ReplayEngine.ts, recording-pending-record.ts, refusalPayload.ts, refusalRewritePayload.ts and packages/core/src/services/history/IContent.ts. Extract needed pure format schemas without importing old session owners or retaining the runtime replay module. The audit blob is inert source evidence, not an executable replay envelope or restored grant store.
+
 **New:** packages/storage/src/journal/journal-file.ts, journal-file.test.ts; packages/host-kit/src/store/journal-store.ts, journal-store.test.ts. **Modify:** packages/storage/index.ts; reuse or relocate mechanisms from packages/core/src/recording/SessionLockManager.ts, packages/core/src/storage/SessionPersistenceService.ts and session-media-owner.ts. **Read:** packages/core/src/recording/SessionRecordingService.ts, ReplayEngine.ts, CheckpointService.ts; packages/storage/src/conversation/ConversationFileWriter.ts.
 
 ### Public contract
 
+Host-only `importConversation({ sourceFile, destinationStore, expectedProjectHash }, signal): Promise<ImportReport>` returns the new session ID, source digest and typed notices. ImportReport reports grants dropped, indeterminate calls, compression and replay exclusions, with refusal/rewrite audit references. Implement the exhaustive SessionEventType folding table from the decisions record, including validated refusal audit and refusal_rewrite history replacement. Validate envelopes/payloads in sequence, replace active pairing state with each validated snapshot, then check active pairs and subsequent content without confusing replayed IDs with duplicate active results. Reject malformed replacements before publication. ImportError distinguishes malformed/unsupported/active-source/changed-source/storage failures with source line or record ID. Only the importer accepts old bytes; SessionStore.load returns import-required for recognized old recordings.
+
 journalStore(explicitStoreInputs): SessionStore plus separate host-owned close/index/retention operations. Storage package deals in opaque versioned record bytes and media, not imported agent-core state or Config.
 
 ### Tests first
+
+Add these behavior fixtures before implementation, using physical source/destination stores and public CLI/host-kit entry points:
+
+1. Old session with completed tool calls: preserve paired IDs, arguments and terminal results, publish a usable new journal, perform zero tool/model/hook/network work and compare source bytes before/after.
+2. Interrupted call or isComplete false response: import an indeterminate terminal result and audit notice; resume and a later user turn never replay that operation automatically. No invented PreparedToken/tool-start proof.
+3. Session accompanied by old grants/recognized approval metadata: new journal and resumed agent have no imported grants; report the drop. The current recording schema has no grant event, so model this fixture using real saved-approval artifacts/metadata, not a fabricated accepted event type. Current external policies remain a separate startup source.
+4. Malformed file: invalid JSON including the tail, invalid sequence/version/payload, orphan/duplicate results and contradictory rewind data fail with provenance, leaving source unchanged and no published destination. A well-formed unmatched call follows case 2 instead.
+5. Compressed session: preserve the recorded summary and surviving tail, respect rewind/media purge and unavailable history, and attach no pre-compression replay to summary text. Do not assert original missing messages were recovered.
+6. Provider replay present or missing: preserve valid signed/encrypted/AFC content for audit; enable an envelope only with complete proven scope and target; missing principal/endpoint or expired connection means replay-excluded, not a guessed identity. Missing replay still imports ordinary content, and responsesStored never revives a parent chain.
+7. Refusal rewrite: begin with a completed tool call/result pair and refused text, record an audit-only refusal, then a valid refusal_rewrite whose resultingHistory repeats that pair and replaces the text, followed by later content. Assert the exact rewritten active transcript plus tail, no false duplicate-ID rejection, preserved original/new text and reviewer/prompt/operation metadata in audit only, zero reviewer/model/tool/hook/network execution and unchanged source bytes. Malformed payload/history, orphan or duplicate results within the replacement, and a duplicate result in the later active tail fail before publication; a later valid rewrite cannot hide earlier malformed records.
+
+Require exhaustive accepted/rejected payload coverage for every event type in the folding table, including multiple replacements and rewind/compression/media-purge interactions. Also test active-source lock refusal, source digest changes, collision/repeated import receipts, write/sync failure, abort before atomic publication, media integrity and discovery of no partial session. All hosts requesting the old ID receive import-required and never an empty successful session; the printed new ID resumes normally.
 
 SessionStore conformance: acknowledged append survives process termination/reopen; fail writes/sync and verify no acknowledgement; truncated final record vs interior corruption; concurrent append ordering and writer-lock conflict; aborted queued I/O settles; blob publication/refcounts survive cancellation. Drive S16.5 through a real store and real tool effect, kill between durable start and finish, resume indeterminate without repeating. Fork leaves source bytes unchanged and sequence advances on resume.
 
@@ -660,11 +799,13 @@ Run real provider converters through a physical-journal model/tool/model round t
 
 ### Exit criteria
 
-File and directory flush strategy documented for supported OSes; durable acknowledgement has explicit platform semantics. Corrupt/unknown versions fail with StoreError. Q2 disposition is recorded before host session resume is enabled. Old journal format is never silently treated as a new conversation.
+File and directory flush strategy documented for supported OSes; durable acknowledgement has explicit platform semantics. Corrupt/unknown versions fail with StoreError. The approved offline command passes all seven import fixtures before host session resume is enabled. Old format returns import-required; the imported ID loads the new journal without old-runtime dependencies.
 
 Physical durability covers replay and accounting as well as tool-started records. No recovery path reads a provider-local conversation cache or the source session live todo file when forking an older checkpoint.
 
 ### Deletions
+
+At P28 delete the old runtime reader/writer and all automatic legacy resume paths after the final host moves. Keep only the isolated offline data-format reader and the new-format writer; its import graph cannot reach old Agent, HistoryService or ReplayEngine.
 
 No immediate recorder deletion while old hosts use it. Remove duplicate storage ownership after host migration, retaining diagnostic logging if it has readers.
 
@@ -730,37 +871,41 @@ One short-lived PR from current main. Write failing integration/conformance test
 
 ## P16: Load host sources and build closed AgentDefinition values
 
-**Plan:** PLAN-20261112-AGENT-API.P16. **Dependencies:** P15; Q3 disposition required before shipping affected policies. **Magnitude:** 2,800-4,400 LoC added/changed, including tests. **Requirements:** REQ-PORTS, REQ-VERIFY; preserve REQ-CORE and REQ-DELETE.
+**Plan:** PLAN-20261112-AGENT-API.P16. **Dependencies:** P15, transitively P05b's recorded Q5 disposition; Q4 disposition before affected release flows switch. **Magnitude:** 4,000-6,400 LoC added/changed, including tests. **Requirements:** REQ-PORTS, REQ-VERIFY; preserve REQ-CORE and REQ-DELETE.
 
 ### Scope
 
 Move shared settings/profile/argv/environment/trust resolution into host-kit, preserving observed precedence and profile/auth semantics. Separate pure definition building from source I/O and adapter acquisition. Include narrow host profile/session/catalog/IDE utility APIs needed by all four hosts; no new service locator.
 
-Implement the full Policy source translation and rejection matrix, retaining provenance and all approval-mode presets. Translate getMaxSessionTurns into host-only HostAdmissionLimits, never maxStepsPerTurn; carry todo enablement into host continuation inputs.
+Implement every row of the Policy source translation matrix, retaining exact source-path transformations, provenance, priorities, authority-owned exceptions and all mode filters. No regex or exemption form is rejected merely because of its kind. Translate getMaxSessionTurns into host-only HostAdmissionLimits, never maxStepsPerTurn; carry todo enablement into host continuation inputs.
 
 ### Packages and files
 
 **New:** packages/host-kit/src/sources/load-host-sources.ts, build-definition.ts, profile-service.ts, source-precedence.test.ts, build-definition.test.ts. **Modify/extract:** packages/cli/src/config/configBuilder.ts, profileBootstrap.ts, settings.ts, cliArgParser.ts; packages/agents/src/api/profile-preflight.ts; packages/settings/src/settings/SettingsService.ts. **Read:** packages/core/src/config/configConstructor.ts, configTypes.ts, configBaseCore.ts and packages/zed-acp/src/zed-session-config.ts. CLI rendering/argv syntax stays at host entry; source resolution is shared.
 
-**New:** packages/host-kit/src/sources/policy-translation.ts, policy-translation.test.ts and host-admission-limits.ts. **Read/extract loader mechanics:** packages/policy/src/toml-loader.ts, types.ts, utils.ts and stable-stringify.ts, plus actual saved approval sources in packages/core/src/policy/policy-owner.ts. Do not import PolicyEngine into host-kit execution.
+**New:** packages/host-kit/src/sources/policy-translation.ts, policy-translation.test.ts and host-admission-limits.ts. **Read/extract loader mechanics:** packages/policy/src/toml-loader.ts, types.ts, utils.ts and stable-stringify.ts, plus actual saved approval sources in packages/core/src/policy/policy-owner.ts. Read packages/core/src/policy/config.ts for settings and persistence priority/regex differences. Extract source expansion into plain PolicyRegexInput values. Use P01a's pure normalizePolicyRegex helper to reproduce native-source normalization and exact validation stages, returning effective strings plus input evidence, never RegExp instances. Definition validation repeats those checks. Do not reuse buildArgsPatterns as a host compiler or copy the native-source transform into a second implementation. Do not import PolicyEngine into host-kit production; only the temporary parity test harness may import the old engine.
 
 ### Public contract
 
-HostSourceInput, HostSources, DefinitionSources, loadHostSources, buildDefinition; typed builders for approval preferences, trust authority, model selection and instructions. Profile save/delete/default/catalog operations stay on an explicit host profile service. A profile update creates a validated definition delta and sends permitted commands at their timing points.
+HostSourceInput, HostSources, DefinitionSources, loadHostSources, buildDefinition; typed builders for approval preferences, trust authority, model selection and instructions. Profile save/delete/default/catalog operations stay on an explicit host profile service. A profile update creates a validated definition delta and sends permitted commands at their timing points. Admin source refresh/removal sends one set-source-stacks command with validated paired copies for the entire admin priority domain; ordinary preference/mode and independent authority changes use their separate commands and cannot edit these copies.
 
-PolicySourceError carries source kind/file/rule/field and a migration explanation. HostSources includes HostAdmissionLimits.maxSessionSubmits and built-in continuation options outside DefinitionSources. Source policy provenance never becomes credentials or mutable Config.
+PolicySourceError carries source kind/file/rule/field and the invalid value explanation. Core definition validation resolves its opaque source ID through the host diagnostic map, without receiving a file-reading capability. HostSources includes HostAdmissionLimits.maxSessionSubmits and built-in continuation options outside DefinitionSources. Source policy provenance never becomes credentials or mutable Config.
 
 ### Tests first
 
 Source-builder conformance: system/user/project settings, profile and argv precedence match existing behavior; invalid profile/model/required limits fail before side effects; source cancellation releases acquisitions. No credentials, functions, environment objects or source paths in definition. Folder trust cannot be widened by YOLO or project settings. Same source fixture yields identical definition for CLI/ACP/a2a after explicit protocol differences. Profile change during active turn cannot rewrite request history. Skills/memory/IDE context respect trust and lifetime. Browser/profile management works before any agent exists.
 
-Load real temporary admin/user/default TOML and persisted approval fixtures, then assert the definition or specific pre-creation error: argsPattern, commandRegex, allowRedirection true/false, priority ties and tiers, active/inactive mode filters, unsupported authority-mode filters and overlapping restriction exceptions. Exercise a compiled definition through real core on compound/redirection/deny scenarios. Invalid inputs cannot partially load or quietly revert to ask/allow. Distinguish session-submit ceiling from per-turn steps in the built sources.
+Write a parity test that feeds the same real shipped and temporary admin/user/default policy files to the current loaders plus PolicyEngine and to the new translator plus agent-core evaluator. Use a fixed versioned corpus of tool identities and JSON calls with exact expected allow/ask/deny, including nested/escaped argsPattern, commandRegex anchors/alternation, both commandPrefix transforms, camel-case exemptions, actual shipped snake-case YOLO behavior, priority tiers/overlapping ties, admin allow/ask exceptions, inactive/active mode-restricted authority and mode switches. Exercise loadPoliciesFromToml and loadPolicyFromToml separately because their transforms differ. Compare the same settings, CLI allowlist, trusted/excluded MCP, dynamic confirmation and persisted-reload cases at their actual priorities; include base-before-overlay ordering.
+
+Run the corpus through real preparation/core for compound mixed matches, fallback/redirection, destructive deny under YOLO and mode changes while a decision is pending, admin exceptions moving from operation A to B under a pending independent ask, and source-rule/group removal. Observe complete policy revisions and decision settlement to prove no hybrid stack is visible. Each test asserts decisions/results and absence of denied effects, not just emitted definitions. Q5 cases assert the old result and its prerequisite selected new behavior in separate contract tests. Q4 retains the old-result/independent-authority conflict fixture without assuming its open release choice; add the chosen source-migration assertions before affected host switches. Neither conflict can be silently excluded or counted as a parity pass. Compare raw interactive decisions and then completed headless onAsk-deny decisions separately. P28 retains all corpus fixtures/results while deleting the old executable test oracle.
+
+Invalid syntax, flags, existing source-length violations, bad priorities and malformed files fail with file/rule/field provenance before agent creation, including inactive modes. Include ordinary 1,024/1,025 checks, the 1,024-unit commandRegex accepted by the directory path but rejected at the 1,035-unit single-file wrapper, and 513 slashes accepted by single-file argsPattern but rejected at the 1,026-unit directory native-source check. Cover prefix expansion/heuristic stage differences and input/effective-pattern mismatch too. No partial loading or fallback to ask/allow; valid regex/exemption/authority-mode forms compile. Verify definition-validation errors from P01a/P05a propagate without permissive recovery. Distinguish session-submit ceiling from per-turn steps in built sources.
 
 ### Exit criteria
 
 Every Config/preflight group in mapping has a concrete owner; no AgentProfilePreflight is used by new hosts. All host-only settings remain usable without exposing them to core. Both old/new composition use shared extracted resolution where practical; no duplicated precedence logic.
 
-Each matrix row is either exact under the approved authority ordering or rejected with provenance. Q3 disposition and default-policy migration are recorded before affected host switches. No implicit policy feature removal.
+Every matrix form has a tested exact translation and the fixed corpus matches old decisions under the existing regex/subject handling. Q5 chosen-contract assertions use the prerequisite recorded before P05b; Q4 changed-outcome contracts require recorded disposition before affected switches; do not report them as parity. No unsupported-form rejection list, silent source correction or second evaluator remains.
 
 ### Deletions
 
@@ -888,7 +1033,7 @@ One short-lived PR from current main. Write failing integration/conformance test
 
 ## P19: Prepare hidden host-entry selection and shared external behavior tests
 
-**Plan:** PLAN-20261112-AGENT-API.P19. **Dependencies:** P18. **Magnitude:** 600-1,000 LoC added/changed, including tests. **Requirements:** REQ-HOST, REQ-DELETE, REQ-VERIFY; preserve REQ-CORE and REQ-PORTS.
+**Plan:** PLAN-20261112-AGENT-API.P19. **Dependencies:** P18. **Magnitude:** 700-1,200 LoC added/changed, including tests. **Requirements:** REQ-HOST, REQ-DELETE, REQ-VERIFY; preserve REQ-CORE and REQ-PORTS.
 
 ### Scope
 
@@ -903,6 +1048,8 @@ Create the test infrastructure for each host cutover and enforce that only host 
 Test-only HostScenarioRunner accepts external input and returns wire output, exit/task state and observable effects. No production legacy-Agent compatibility type. The env flag accepts only absent/0 or 1 and is not exposed in help, settings or AgentDefinition.
 
 ### Tests first
+
+Shared host fixtures include import-required on old IDs versus explicit import then new-ID resume, plus the P16 fixed policy corpus and D19 atomic mode changes. Distinguish approved contract changes and Q4/Q5 conflict fixtures from equality assertions.
 
 Boundary fixtures reject hidden flag reads from core/host-kit/adapters/UI reducers, unknown flag values fail, and the selected new route never falls back on construction/runtime failure. One external test body runs against legacy and new entry factories; compare files, protocol outputs and lifecycle, not mock calls. Tests must still catch a missing output event or skipped cleanup in either factory.
 
@@ -932,7 +1079,7 @@ One short-lived PR from current main. Test both paths while both exist; final cu
 
 ## P20: Switch non-interactive CLI to agent-core and delete its old path
 
-**Plan:** PLAN-20261112-AGENT-API.P20. **Dependencies:** P19; Q1/Q2/Q3 release dispositions before affected flows switch. **Magnitude:** 1,400-2,300 LoC added/changed, including tests. **Requirements:** REQ-HOST, REQ-DELETE, REQ-VERIFY; preserve REQ-CORE and REQ-PORTS.
+**Plan:** PLAN-20261112-AGENT-API.P20. **Dependencies:** P19; Q1/Q4/Q5 release dispositions before affected flows switch; approved P14 import and P16 parity are prerequisites. **Magnitude:** 1,600-2,600 LoC added/changed, including tests. **Requirements:** REQ-HOST, REQ-DELETE, REQ-VERIFY; preserve REQ-CORE and REQ-PORTS.
 
 ### Scope
 
@@ -947,6 +1094,8 @@ Migrate the first host. Branch before old foreground preflight/Config/provider a
 headlessDecisions({onAsk: deny|fail|approve}): DecisionPort with presence none; host session runner returns exit/result output. Internal host-only functions do not become Agent methods.
 
 ### Tests first
+
+Requesting a pre-migration session must return a visible import-required failure with `llxprt sessions import <old-file>` guidance, without model/tool dispatch, a successful empty transcript or an automatic import. Import explicitly, then resume the printed new ID and retain its uncertainty/grant-drop/replay notices. Apply P16 parity policies through this host, including mode-filtered restrictions, priority exceptions, regex errors, compound checks and redirection exemptions. An approval-mode change sends one set-preferences command with independently editable layers plus approvalMode and re-evaluates pending decisions. Admin-source refresh/removal sends one set-source-stacks command; verify both source-owned copies change together without replacing independent trust restrictions. Q4/Q5 assertions follow the recorded choice, never a host-side evaluator.
 
 Shared old/new external suite: piped input plus prompt, empty input failure, slash commands and file/MCP resource expansion, JSON/stream JSON framing, quiet/reasoning/profile labels, cancellation and no duplicate committed retry text, auth error/unknown provider before model effect, cleanup aggregation and session resume. New contract cases S9.2/S9.3 plus DecisionPort conformance: immediate response, exact-scope auto-approval only, abort, no re-entry, no human interaction tools. CLI exit matches current documented mapping for setup errors and non-done turn outcomes.
 
@@ -980,7 +1129,7 @@ One short-lived PR from current main. Test both paths while both exist; final cu
 
 ## P21: Switch zed-acp to one core agent per session
 
-**Plan:** PLAN-20261112-AGENT-API.P21. **Dependencies:** P20. **Magnitude:** 1,800-3,000 LoC added/changed, including tests. **Requirements:** REQ-HOST, REQ-DELETE, REQ-VERIFY; preserve REQ-CORE and REQ-PORTS.
+**Plan:** PLAN-20261112-AGENT-API.P21. **Dependencies:** P20. **Magnitude:** 2,000-3,300 LoC added/changed, including tests. **Requirements:** REQ-HOST, REQ-DELETE, REQ-VERIFY; preserve REQ-CORE and REQ-PORTS.
 
 ### Scope
 
@@ -996,6 +1145,8 @@ ACP host session composition accepts explicit source/credential/workspace/connec
 
 ### Tests first
 
+Requesting a pre-migration session must return a visible import-required failure with `llxprt sessions import <old-file>` guidance, without model/tool dispatch, a successful empty transcript or an automatic import. Import explicitly, then resume the printed new ID and retain its uncertainty/grant-drop/replay notices. Apply P16 parity policies through this host, including mode-filtered restrictions, priority exceptions, regex errors, compound checks and redirection exemptions. An approval-mode change sends one set-preferences command with independently editable layers plus approvalMode and re-evaluates pending decisions. Admin-source refresh/removal sends one set-source-stacks command; verify both source-owned copies change together without replacing independent trust restrictions. Q4/Q5 assertions follow the recorded choice, never a host-side evaluator.
+
 Shared external ACP protocol suite: initialize/authenticate, new/load/resume/list/delete sessions, two cwd/profile-isolated sessions, tool update ordering, requestPermission approve/reject/edit, cancel pending permission, retry discard, reconnect/replay, and terminal/file operations. Failed startup closes unpublished session and terminals; connection shutdown joins accepted work. DecisionPort conformance handles disconnect/abort promptly. Resume cannot reuse event sequence or reissue stale permissions.
 
 Carry the P18 session-admission fixture through this host: two multi-step submits fit a ceiling of two, the third is stopped without a generation, reconnect retains the count and fresh resume starts a new live counter. Keep an independent per-turn max-step assertion. No submit-limit value is translated into maxStepsPerTurn.
@@ -1010,7 +1161,7 @@ Delete captureZedHostInputs/captureZedSessionParameters/captureZedAgentDeclarati
 
 ### Risks
 
-Current disposal starts terminal disposal before retiring agent; new contract requires settled agent work before shared ports close. Preserve remote process cancellation without retaining this ordering defect. Session file import depends on Q2.
+Current disposal starts terminal disposal before retiring agent; new contract requires settled agent work before shared ports close. Preserve remote process cancellation without retaining this ordering defect. Session file import uses the approved P14 command; ACP load never performs conversion implicitly.
 
 ### Verification and boundary retirement
 
@@ -1026,7 +1177,7 @@ One short-lived PR from current main. Test both paths while both exist; final cu
 
 ## P22: Switch a2a tasks to core agents and typed decisions
 
-**Plan:** PLAN-20261112-AGENT-API.P22. **Dependencies:** P21. **Magnitude:** 1,200-2,100 LoC added/changed, including tests. **Requirements:** REQ-HOST, REQ-DELETE, REQ-VERIFY; preserve REQ-CORE and REQ-PORTS.
+**Plan:** PLAN-20261112-AGENT-API.P22. **Dependencies:** P21. **Magnitude:** 1,400-2,400 LoC added/changed, including tests. **Requirements:** REQ-HOST, REQ-DELETE, REQ-VERIFY; preserve REQ-CORE and REQ-PORTS.
 
 ### Scope
 
@@ -1041,6 +1192,8 @@ Replace Task stream/confirmation callback injection with one core agent per task
 a2aDecisions(taskIdentity, clientChannel): DecisionPort; request-scoped pending decisions map to input-required, replies resolve by request identity. Core Agent remains private to the Task host composition, not a getter bag handed through protocol layers.
 
 ### Tests first
+
+Requesting a pre-migration session must return a visible import-required failure with `llxprt sessions import <old-file>` guidance, without model/tool dispatch, a successful empty transcript or an automatic import. Import explicitly, then resume the printed new ID and retain its uncertainty/grant-drop/replay notices. Apply P16 parity policies through this host, including mode-filtered restrictions, priority exceptions, regex errors, compound checks and redirection exemptions. An approval-mode change sends one set-preferences command with independently editable layers plus approvalMode and re-evaluates pending decisions. Admin-source refresh/removal sends one set-source-stacks command; verify both source-owned copies change together without replacing independent trust restrictions. Q4/Q5 assertions follow the recorded choice, never a host-side evaluator.
 
 Shared external task suite: task creation/output artifacts, input-required then approve/reject/edit, stale/duplicate client response, next-client-message resolution, cancellation/disconnect, busy input and steer, two-task credential/permission isolation, failed model/setup states, retry discard and close cleanup. DecisionPort conformance proves abort settlement and no re-entry. Final artifacts contain committed text only.
 
@@ -1164,7 +1317,7 @@ Move profile/auth/catalog/IDE/workspace/session-browser/terminal/background admi
 
 ### Packages and files
 
-**New:** packages/cli/src/session/host-operation-handlers.ts and host-operation-handlers.test.ts; add narrow modules under packages/host-kit/src only for operations not already present. **Modify:** packages/cli/src/session/interactiveUI.tsx, ui/AppContainerRuntime.tsx, affected ui/commands/*.ts and host-only contexts/hooks. **Read:** the 33-member mapping and P16 profile/session/catalog APIs.
+**New:** packages/cli/src/session/host-operation-handlers.ts and host-operation-handlers.test.ts; add narrow modules under packages/host-kit/src only for operations not already present. **Modify:** packages/cli/src/session/interactiveUI.tsx, ui/AppContainerRuntime.tsx, affected ui/commands/\*.ts and host-only contexts/hooks. **Read:** the 33-member mapping and P16 profile/session/catalog APIs.
 
 ### Public contract
 
@@ -1240,7 +1393,7 @@ One short-lived PR from current main. Write failing boundary/behavior tests befo
 
 ## P27: Switch the interactive Ink CLI to snapshot and event-driven presentation
 
-**Plan:** PLAN-20261112-AGENT-API.P27. **Dependencies:** P26; P23 view reducer, P24 DecisionPort and P25 host operations already green. **Magnitude:** 2,000-3,200 LoC added/changed, including tests. **Requirements:** REQ-HOST, REQ-DELETE, REQ-VERIFY; preserve REQ-CORE and REQ-PORTS.
+**Plan:** PLAN-20261112-AGENT-API.P27. **Dependencies:** P26; P23 view reducer, P24 DecisionPort and P25 host operations already green. **Magnitude:** 2,200-3,500 LoC added/changed, including tests. **Requirements:** REQ-HOST, REQ-DELETE, REQ-VERIFY; preserve REQ-CORE and REQ-PORTS.
 
 ### Scope
 
@@ -1255,6 +1408,8 @@ Migrate the final host by wiring the tested P23 view store, P24 DecisionPort and
 Host-only subscribeView(agent), inputPort(agent), inkDecisionQueue(): DecisionPort. UI receives view snapshots/events and narrow host command handlers, not Agent fields or Config. Slash model/compress/plan/approval commands use AgentCommand; auth/profile/catalog/IDE administration uses host-kit.
 
 ### Tests first
+
+Requesting a pre-migration session must return a visible import-required failure with `llxprt sessions import <old-file>` guidance, without model/tool dispatch, a successful empty transcript or an automatic import. Import explicitly, then resume the printed new ID and retain its uncertainty/grant-drop/replay notices. Apply P16 parity policies through this host, including mode-filtered restrictions, priority exceptions, regex errors, compound checks and redirection exemptions. An approval-mode change sends one set-preferences command with independently editable layers plus approvalMode and re-evaluates pending decisions. Admin-source refresh/removal sends one set-source-stacks command; verify both source-owned copies change together without replacing independent trust restrictions. Q4/Q5 assertions follow the recorded choice, never a host-side evaluator.
 
 Shared terminal/UI behavior suite: initial prompt, streamed committed/provisional output, discarded attempt removal, steer/cancel/queue, approval editing and stale preview, plan revise/approve/reject, model/profile switches, auth isolation, context/memory/skills refresh, sessions/rewind, shell/background tasks, tool progress/truncation, keyboard shutdown and failed startup cleanup. Snapshot-to-subscribe race and expired/lagging replay have visible recovery. DecisionPort conformance verifies queued dialogs, request identity, timeout/cancel and unavailable behavior. S9.1/S9.4/S9.5 run through the real view reducer.
 
@@ -1288,7 +1443,7 @@ One short-lived PR from current main. Test both paths while both exist; final cu
 
 ## P28: Delete the old Agent API, preflight and unread Config surface
 
-**Plan:** PLAN-20261112-AGENT-API.P28. **Dependencies:** P27. **Magnitude:** 900-1,500 LoC added/changed, including tests. **Requirements:** REQ-HOST, REQ-DELETE, REQ-VERIFY; preserve REQ-CORE and REQ-PORTS.
+**Plan:** PLAN-20261112-AGENT-API.P28. **Dependencies:** P27. **Magnitude:** 1,000-1,700 LoC added/changed, including tests. **Requirements:** REQ-HOST, REQ-DELETE, REQ-VERIFY; preserve REQ-CORE and REQ-PORTS.
 
 ### Scope
 
@@ -1312,6 +1467,8 @@ Zero old Agent API/preflight references in production, zero migration flag reads
 
 ### Deletions
 
+Delete PolicyEngine and automatic old recording replay/writers when their last production/test-oracle consumers move. Preserve the P16 fixed corpus and expected decisions against new core; remove the old executable parity oracle, not its behavioral assertions. The only pre-migration data reader that survives is P14's explicit offline importer. Assert its dependency closure cannot load old runtime code; no dual-format writer survives.
+
 Expected deletion magnitude is 12,000-25,000 LoC of legacy source/tests/assembly, an estimate to replace with actual diff counts. Do not delete behavioral tests: move their assertions to new public/integration suites; delete only obsolete implementation-specific scaffolding. Remove old RetryOrchestrator path if all generation consumers have migrated, preserving reusable error/auth utilities.
 
 ### Risks
@@ -1329,4 +1486,3 @@ Remove exact P28 entries in baseline ledger, never regenerate an arbitrary basel
 ### PR
 
 One short-lived PR from current main. Test both paths while both exist; final cutover commit removes that host flag and old route, then verifies the remaining new path. Use `Refs #3980`, `Fixes #<this-slice-issue>`, and `Refs #4037` for baseline changes. Only P28 may also use `Fixes #3980`, after every exit criterion passes. Never merge without Andrew's explicit instruction.
-
