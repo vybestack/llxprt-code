@@ -178,10 +178,10 @@ describe('BeforeModel source enforcement', () => {
 });
 
 describe('BeforeModel oversized row', () => {
-  it('accepts a valid row larger than 10 MiB with a genuine full-input model hook', async () => {
+  it('accepts a realistic 256-KiB mixed-text row with a genuine full-input model hook', async () => {
     const facts = await modelHookWorker(root(), 'large');
     expect(facts.error).toBeUndefined();
-    expect(facts.bodies[0].bytes).toBeGreaterThan(10 * 1024 * 1024);
+    expect(facts.bodies[0].bytes).toBeGreaterThan(256 * 1024);
     expect(facts.estimate).toStrictEqual(facts.oracle);
     expect(facts.firstLive).toBe(0);
     expect(facts.lastLive).toBe(0);

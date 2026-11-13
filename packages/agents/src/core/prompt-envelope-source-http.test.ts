@@ -27,21 +27,18 @@ const responseExitModes: ReadonlyArray<'return' | 'abort'> = [
   'abort',
 ];
 const instructions = 'Read rows.';
-const OVERSIZED_RUN_CHARS = 10 * 1024 * 1024;
-const OVERSIZED_RUN_SAMPLE_CHARS = 16 * 1024;
+const LARGE_RUN_CHARS = 128 * 1024;
+const LARGE_RUN_SAMPLE_CHARS = 16 * 1024;
 
 /**
- * Tokens of the oversized `z` run. The pinned whole-string encoder traps on a
- * single run this long (and the in-memory estimate then falls back to
- * length / 3), so the oracle measures a run it can encode and scales it.
+ * Count an independent 16 KiB sample and scale the repeated run separately
+ * from the message framing, without assuming a fixed bytes-per-token ratio.
  */
-function oversizedRunTokens(): number {
-  const sampleTokens = estimateTokens('z'.repeat(OVERSIZED_RUN_SAMPLE_CHARS));
+function largeRunTokens(): number {
+  const sampleTokens = estimateTokens('z'.repeat(LARGE_RUN_SAMPLE_CHARS));
   // length / 3 would mean the sample hit the fallback instead of the encoder.
-  expect(sampleTokens).toBeGreaterThan(
-    Math.ceil(OVERSIZED_RUN_SAMPLE_CHARS / 3),
-  );
-  return sampleTokens * (OVERSIZED_RUN_CHARS / OVERSIZED_RUN_SAMPLE_CHARS);
+  expect(sampleTokens).toBeGreaterThan(Math.ceil(LARGE_RUN_SAMPLE_CHARS / 3));
+  return sampleTokens * (LARGE_RUN_CHARS / LARGE_RUN_SAMPLE_CHARS);
 }
 
 function expectedDigest(
@@ -173,7 +170,7 @@ async function runOracle(large: boolean): Promise<number> {
   const http = endpoint(true);
   const setup = runtime(`http://127.0.0.1:${http.server.port}/v1`);
   const baseTokens = await independentEstimate(setup, 64, false);
-  const expectedTokens = large ? baseTokens + oversizedRunTokens() : baseTokens;
+  const expectedTokens = large ? baseTokens + largeRunTokens() : baseTokens;
   let enforcedTokens = -1;
   let stream: AsyncIterableIterator<IContent> | undefined;
   try {
@@ -236,7 +233,7 @@ describe('source-backed seam actual Responses local HTTP', () => {
     60000,
   );
   it.each([false, true])(
-    'preserves actual estimation and byte-identical retry for 64 disk rows, oversized=%s',
+    'preserves actual estimation and byte-identical retry for 64 disk rows, large=%s',
     async (large) => {
       expect(await runOracle(large)).toBeGreaterThan(0);
     },

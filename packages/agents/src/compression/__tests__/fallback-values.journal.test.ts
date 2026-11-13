@@ -88,11 +88,11 @@ describe('native persisted fallback value compensation', () => {
     }, 180_000);
   }
 
-  it('persists a complete candidate larger than nine MiB without a row-size fallback', async () => {
+  it('persists a complete candidate of 128 KiB without a row-size fallback', async () => {
     await withNativeValueFixture(async ({ history, durable, owners }) => {
       const rows = new DetachedHistoryJournal(historyScratchRoots, owners);
       try {
-        const candidate = suffixRow(0, 9 * 1024 * 1024 + 1);
+        const candidate = suffixRow(0, 128 * 1024 + 1);
         rows.append(candidate);
         await publishProviderFallbackCandidate(
           history,
@@ -104,7 +104,7 @@ describe('native persisted fallback value compensation', () => {
             yield candidate;
           })(),
         );
-        expect(expected.bytes).toBeGreaterThan(9 * 1024 * 1024);
+        expect(expected.bytes).toBeGreaterThan(128 * 1024);
         expect(await durable()).toStrictEqual(expected);
         expect(
           await compressionValueDigest(history.streamRawHistory()),

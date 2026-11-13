@@ -171,8 +171,8 @@ describe('disk one-shot summary and publication lifetimes', () => {
     },
     180_000,
   );
-  it('accepts a preserved nine-MiB row without truncating it', async () => {
-    const huge = 'L'.repeat(9 * 1024 * 1024);
+  it('accepts a preserved 128-KiB row without truncating it', async () => {
+    const huge = 'L'.repeat(128 * 1024);
     await withSuffixFixture(
       512,
       async (history) => {

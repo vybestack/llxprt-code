@@ -41,10 +41,10 @@ function registerRoute(size: number, set: boolean): void {
 }
 function registerLarge(): void {
   describe('registerLarge', () => {
-    it('keeps every byte of a valid nine MiB admitted row', async () => {
+    it('keeps every byte of a valid 128 KiB admitted row', async () => {
       await withDetachedFixture((fixture) =>
         withRetainedClient(fixture, async ({ client, store }) => {
-          const rows = clientArrayRows(1, 9 * 1024 * 1024);
+          const rows = clientArrayRows(1, 128 * 1024);
           const expected = await withClientOracle(store, rows, (admitted) =>
             detachedDigest(clientRows(admitted)),
           );
@@ -56,7 +56,7 @@ function registerLarge(): void {
           expect(await detachedDurableDigest(fixture.recorder)).toStrictEqual(
             expected,
           );
-          expect(expected.bytes).toBeGreaterThan(9 * 1024 * 1024);
+          expect(expected.bytes).toBeGreaterThan(128 * 1024);
         }),
       );
     }, 180_000);

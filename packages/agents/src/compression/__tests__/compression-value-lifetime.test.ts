@@ -220,7 +220,7 @@ describe('production compression value source and publication lifetime', () => {
     },
     180_000,
   );
-  it('keeps a valid complete nine-MiB row through acknowledged failure, rollback and real caller retry', async () => {
-    expect(await lifetime(16, 9 * 1024 * 1024)).toBeGreaterThan(0);
+  it('keeps a valid complete 128-KiB row through acknowledged failure, rollback and real caller retry', async () => {
+    expect(await lifetime(16, 128 * 1024)).toBeGreaterThan(0);
   }, 180_000);
 });

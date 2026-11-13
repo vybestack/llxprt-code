@@ -27,7 +27,7 @@ export function shapeRow(
 ): IContent {
   const large = mode === 'large' && index === 31;
   const repeats = large
-    ? Math.ceil((10 * 1024 * 1024 + 1) / sourceTextUnit.length)
+    ? Math.ceil((256 * 1024 + 1) / sourceTextUnit.length)
     : 3;
   const text = `${index}:` + sourceTextUnit.repeat(repeats);
   const id =

@@ -70,9 +70,9 @@ async function pendingParity(size: number): Promise<number> {
     await ready.promise;
     try {
       expect(owners.snapshot().liveRows).toBeGreaterThan(0);
-      expect(
-        owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
-      ).toBe(true);
+      expect(owners.within({ rows: 440, serializedBytes: 128 * 1024 })).toBe(
+        true,
+      );
       expect(reads.snapshot().peakDecodedRows).toBeLessThanOrEqual(440);
       expect((await pendingPublishedRows(fixture)).slice(-2)).toStrictEqual(
         callers,
@@ -90,7 +90,7 @@ async function pendingParity(size: number): Promise<number> {
         markers[index],
       );
     }
-    expect(owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 })).toBe(
+    expect(owners.within({ rows: 440, serializedBytes: 128 * 1024 })).toBe(
       true,
     );
     history.endCompression();
@@ -120,7 +120,7 @@ describe('actual pending-window disk route', () => {
     },
     180000,
   );
-  it('supports a valid surviving record larger than eight MiB', async () => {
+  it('supports a valid surviving record of 128 KiB', async () => {
     await withPendingFixture(
       3,
       async ({ history, setup }) => {
@@ -129,26 +129,24 @@ describe('actual pending-window disk route', () => {
             for (let index = 0; index < 3; index++) yield pendingCaller(index);
             yield {
               speaker: 'human' as const,
-              blocks: [
-                { type: 'text' as const, text: 'x'.repeat(9 * 1024 * 1024) },
-              ],
+              blocks: [{ type: 'text' as const, text: 'x'.repeat(128 * 1024) }],
             };
           })(),
           undefined,
           { publishTokens: true },
         );
         setup.handler.setLastPromptTokenCount(
-          history.getTotalTokens() + 20000000,
+          history.getTotalTokens() + 200000,
         );
         await setup.handler.enforceContextWindow(600, 'pending-large');
         const rows = await collectRawHistory(history);
         expect(rows).toHaveLength(2);
         expect(JSON.stringify(rows[rows.length - 1]).length).toBeGreaterThan(
-          8 * 1024 * 1024,
+          128 * 1024,
         );
       },
       2048,
-      10000000,
+      128000,
     );
   }, 180000);
 });

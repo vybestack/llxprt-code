@@ -146,11 +146,11 @@ describe('indexed native fallback value and summary contracts', () => {
     });
   });
 
-  it('preserves the complete surviving value larger than nine MiB and its durable mirror', async () => {
+  it('preserves the complete surviving value of 128 KiB and its durable mirror', async () => {
     await withNativeValueFixture(async ({ history, durable }) => {
       const text = 'abcdefghijk'
-        .repeat(Math.ceil((9 * 1024 * 1024 + 17) / 11))
-        .slice(0, 9 * 1024 * 1024 + 17);
+        .repeat(Math.ceil((128 * 1024 + 17) / 11))
+        .slice(0, 128 * 1024 + 17);
       const large: IContent = {
         ...fallbackRow(3),
         blocks: [{ type: 'text', text }],

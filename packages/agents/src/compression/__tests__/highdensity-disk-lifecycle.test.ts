@@ -70,8 +70,8 @@ describe('disk high-density atomicity and queued append', () => {
     },
     180_000,
   );
-  it('preserves a valid nine-MiB tail row without applying the owner budget as a row limit', async () => {
-    const huge = 'L'.repeat(9 * 1024 * 1024);
+  it('preserves a valid 128-KiB tail row without applying the owner budget as a row limit', async () => {
+    const huge = 'L'.repeat(128 * 1024);
     await withSuffixFixture(
       512,
       async (history) => {

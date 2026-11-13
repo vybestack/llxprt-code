@@ -97,6 +97,7 @@ export async function processorFixture(
   large: DiskTextTail = false,
   count = 64,
   telemetry: TelemetrySettings = { enabled: true, logPrompts: false },
+  historicalPaddingChars = 0,
 ) {
   const settings = new SettingsService();
   settings.setProviderSetting('openai-responses', 'model', 'gpt-5.6');
@@ -105,7 +106,7 @@ export async function processorFixture(
   settings.set('prompt-caching', 'off');
   settings.set('retries', 1);
   settings.set('retrywait', 0);
-  settings.set('context-limit', 4_000_000);
+  settings.set('context-limit', 1_000_000);
   const config = new Config({
     cwd: root,
     targetDir: root,
@@ -122,7 +123,22 @@ export async function processorFixture(
   const provider = new ObservedResponsesProvider('test-key', baseURL);
   const history = new ObservedHistory({ scratchRoots: historyScratchRoots });
   for (let index = 0; index < count; index++) {
-    const row = diskTextRow(index, large);
+    const original = diskTextRow(index, large);
+    const row: IContent =
+      index < 63 && historicalPaddingChars > 0
+        ? {
+            ...original,
+            blocks: [
+              ...original.blocks,
+              {
+                type: 'text',
+                text: 'Earlier history facts. '.repeat(
+                  Math.ceil(historicalPaddingChars / 23),
+                ),
+              },
+            ],
+          }
+        : original;
     history.inputReferences.push(new WeakRef(row));
     history.add(row);
   }
@@ -187,7 +203,7 @@ export function assembleProcessorFixture(
       baseUrl: baseURL,
     },
     history,
-    settings: { contextLimit: 4_000_000 },
+    settings: { contextLimit: 1_000_000 },
     providerRuntime,
     provider: {
       getActiveProvider: () => provider,

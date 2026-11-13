@@ -140,10 +140,10 @@ function registerFrozenAliases(): void {
 }
 function registerLargeRow(): void {
   describe('registerLargeRow', () => {
-    it('does not truncate a valid nine MiB original row', async () => {
+    it('does not truncate a valid 128 KiB original row', async () => {
       await withDetachedFixture((fixture) =>
         withArrayClient(fixture, async ({ client, store }) => {
-          const rows = clientArrayRows(1, 9 * 1024 * 1024);
+          const rows = clientArrayRows(1, 128 * 1024);
           forbidClientArrayRollback(fixture);
           const expected = await withClientOracle(store, rows, (admitted) =>
             detachedDigest(clientRows(admitted)),
@@ -155,7 +155,7 @@ function registerLargeRow(): void {
           expect(await detachedDurableDigest(fixture.recorder)).toStrictEqual(
             expected,
           );
-          expect(expected.bytes).toBeGreaterThan(9 * 1024 * 1024);
+          expect(expected.bytes).toBeGreaterThan(128 * 1024);
         }),
       );
     }, 180_000);

@@ -175,8 +175,8 @@ describe('CLI checkpoint publication faults', () => {
     });
   }, 180000);
 
-  it('accepts a nine MiB row with bounded encoding chunks and exact bytes', async () => {
-    const bytes = 9 * 1024 * 1024;
+  it('accepts a 128 KiB row with bounded encoding chunks and exact bytes', async () => {
+    const bytes = 128 * 1024;
     await withCheckpoint(
       1,
       false,
@@ -200,7 +200,7 @@ describe('CLI checkpoint publication faults', () => {
           ),
         );
         expect(fs.chunks().peakBytes).toBeLessThanOrEqual(64 * 1024);
-        expect(fs.chunks().count).toBeGreaterThan(140);
+        expect(fs.chunks().count).toBeGreaterThan(bytes / (64 * 1024));
         expect(fixture.reader.snapshot().peakRows).toBeLessThanOrEqual(1);
         expect(fixture.reader.snapshot().liveRows).toBe(0);
       },

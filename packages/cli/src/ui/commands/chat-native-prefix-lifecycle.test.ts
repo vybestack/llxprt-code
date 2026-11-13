@@ -139,12 +139,12 @@ describe('actual native CLI prefix rollback and readers', () => {
     });
   });
 
-  it('retains every byte of a surviving value greater than nine MiB without files', async () => {
+  it('retains every byte of a surviving value greater than 128 KiB without files', async () => {
     await withCLI(
       directory(),
       3,
       async ({ agent, client, context, recording }) => {
-        const text = 'x'.repeat(9 * 1024 * 1024 + 17);
+        const text = 'x'.repeat(128 * 1024 + 17);
         await agent.setHistory([
           { ...row(0), blocks: [{ type: 'text', text }] },
           row(1),

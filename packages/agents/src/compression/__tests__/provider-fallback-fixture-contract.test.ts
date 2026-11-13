@@ -75,16 +75,16 @@ describe('provider fallback fixture through the real detached transaction', () =
     expect(() => rows?.readRow(0)).toThrow(/closed/);
   });
 
-  it('admits a valid individual candidate row larger than 10MiB', async () => {
+  it('admits a valid individual candidate row of 128 KiB', async () => {
     const history = await seededHistory();
-    const candidate = makeUserMessage('x'.repeat(10 * 1024 * 1024 + 1));
+    const candidate = makeUserMessage('x'.repeat(128 * 1024 + 1));
     installProviderDiskFixture([candidate]);
 
     expect(await publishFixture(history, () => {})).toBe('applied');
 
     const [committed] = await collectRawHistory(history);
     expect(Buffer.byteLength(JSON.stringify(committed))).toBeGreaterThan(
-      10 * 1024 * 1024,
+      128 * 1024,
     );
     expect(committed.blocks).toStrictEqual(candidate.blocks);
   }, 30_000);

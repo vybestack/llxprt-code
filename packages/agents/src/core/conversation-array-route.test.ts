@@ -105,10 +105,10 @@ describe('ConversationManager restore value contract', () => {
     });
   });
 
-  it('accepts and restores a valid nine-MiB row without stamping its frozen input', async () => {
+  it('accepts and restores a valid 128-KiB row without stamping its frozen input', async () => {
     await withDetachedFixture(async ({ history, recorder }) => {
       const caller = {
-        ...detachedRow(0, 9 * 1024 * 1024),
+        ...detachedRow(0, 128 * 1024),
         metadata: Object.freeze(detachedRow(0).metadata),
       };
       const failure = new Error('large observer');
@@ -122,10 +122,10 @@ describe('ConversationManager restore value contract', () => {
       expect(history.getContextRange().totalEntries).toBe(0);
       await conversationFor(history).setHistory([caller]);
       expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
-        await detachedDigest(detachedRows(1, 9 * 1024 * 1024)),
+        await detachedDigest(detachedRows(1, 128 * 1024)),
       );
       expect((await detachedDurableDigest(recorder)).bytes).toBeGreaterThan(
-        9 * 1024 * 1024,
+        128 * 1024,
       );
     });
   }, 180_000);

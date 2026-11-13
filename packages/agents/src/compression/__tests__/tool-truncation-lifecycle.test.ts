@@ -165,7 +165,7 @@ describe('tool ranking abort and oversized rows', () => {
     120000,
   );
 
-  it('accepts and replaces a valid tool result larger than eight MiB', async () => {
+  it('accepts and replaces a complete 128-KiB tool result', async () => {
     await withSuffixFixture(
       1,
       async (history) => {
@@ -184,7 +184,7 @@ describe('tool ranking abort and oversized rows', () => {
           bytes += Buffer.byteLength(JSON.stringify(row));
         expect(bytes).toBeLessThan(2048);
       },
-      9 * 1024 * 1024,
+      128 * 1024,
       toolRankingRow,
       undefined,
       (options) => new HistoryService(options),

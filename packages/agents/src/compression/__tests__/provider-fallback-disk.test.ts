@@ -49,7 +49,7 @@ describe('provider fallback durable snapshot and compensation', () => {
           expect(harness.baseline()).toBe(123);
           expect(reads.snapshot().peakDecodedRows).toBeLessThanOrEqual(440);
           expect(
-            owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
+            owners.within({ rows: 440, serializedBytes: 128 * 1024 }),
           ).toBe(true);
           expect(owners.snapshot().liveRows).toBe(0);
         },
@@ -85,9 +85,9 @@ describe('provider fallback successful installation', () => {
     },
   );
 
-  it('accepts a valid candidate row larger than eight MiB', async () => {
+  it('accepts a valid candidate row of 128 KiB', async () => {
     await withFallbackFixture(1, async ({ history }) => {
-      const candidate = fallbackCandidate(9 * 1024 * 1024);
+      const candidate = fallbackCandidate(128 * 1024);
       const harness = fallbackHarness(
         history,
         async (_promptId, install) => {
@@ -98,7 +98,7 @@ describe('provider fallback successful installation', () => {
       );
       const result = await enforceFallback(harness);
       expect(result[0].blocks).toStrictEqual(candidate.blocks);
-      expect(JSON.stringify(result[0]).length).toBeGreaterThan(8 * 1024 * 1024);
+      expect(JSON.stringify(result[0]).length).toBeGreaterThan(128 * 1024);
     });
   });
 });

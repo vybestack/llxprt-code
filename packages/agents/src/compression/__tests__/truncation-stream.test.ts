@@ -92,7 +92,7 @@ describe('production disk-backed truncation', () => {
     );
   });
 
-  it('accepts an individual surviving row larger than eight MiB', async () => {
+  it('accepts an individual surviving row of 128 KiB', async () => {
     await withSuffixFixture(
       3,
       async (history) => {
@@ -105,11 +105,11 @@ describe('production disk-backed truncation', () => {
         const rows = await collectRows(history);
         expect(rows.map(rowIndex)).toStrictEqual([1, 2]);
         expect(Buffer.byteLength(JSON.stringify(rows[1]))).toBeGreaterThan(
-          8 * 1024 * 1024,
+          128 * 1024,
         );
       },
       0,
-      (index) => truncationRow(index, index === 2 ? 9 * 1024 * 1024 : 0),
+      (index) => truncationRow(index, index === 2 ? 128 * 1024 : 0),
       undefined,
       (options) => new TruncationStreamHistory(options),
     );

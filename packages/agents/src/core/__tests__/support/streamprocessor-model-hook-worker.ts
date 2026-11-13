@@ -74,7 +74,7 @@ function oracleTools(mode: ModelHookMode): typeof toolHookTools {
 function expectedRows(mode: ModelHookMode): IContent[] {
   const rows = [
     ...Array.from({ length: mode === 'large' ? 64 : 1 }, (_, index) =>
-      diskTextRow(index, mode === 'large'),
+      diskTextRow(index, mode === 'large' ? { mixedChunks: 4 } : false),
     ),
     sourcePending,
   ];
@@ -193,7 +193,7 @@ async function run(
   const setup = await processorFixture(
     root,
     `http://127.0.0.1:${http.server.port}/v1`,
-    mode === 'large',
+    mode === 'large' ? { mixedChunks: 4 } : false,
     mode === 'large' ? 64 : 1,
   );
   const logs: string[] = [];

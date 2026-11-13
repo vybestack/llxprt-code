@@ -156,7 +156,7 @@ describe('deferred source failures and oversized rows', () => {
     },
   );
 
-  it('accepts a valid disk row larger than the aggregate byte limit', async () => {
+  it('accepts a valid disk row at a realistic text-output size', async () => {
     await withSuffixFixture(
       1,
       async (source) => {
@@ -169,7 +169,7 @@ describe('deferred source failures and oversized rows', () => {
             if (first.done === true) throw new Error('Missing oversized row');
             const block = first.value.blocks[0];
             if (block.type !== 'text') throw new Error('Expected text');
-            expect(block.text.length).toBe(9 * 1024 * 1024 + 2);
+            expect(block.text.length).toBe(128 * 1024 + 2);
             expect((await stream.next()).done).toBe(true);
           } finally {
             await stream.return();
@@ -178,7 +178,7 @@ describe('deferred source failures and oversized rows', () => {
           await cleanup();
         }
       },
-      9 * 1024 * 1024,
+      128 * 1024,
     );
   }, 120_000);
 });

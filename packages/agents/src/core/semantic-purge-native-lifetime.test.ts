@@ -162,10 +162,10 @@ describe('native semantic purge output lifetimes', () => {
       });
     }
   }
-  it('preserves every byte of a greater-than-nine-MiB surviving value', async () => {
+  it('preserves every byte of a 128-KiB surviving value', async () => {
     const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.setTokenizerFactory(exactTokenizer());
-    const text = 'x'.repeat(9 * 1024 * 1024 + 17);
+    const text = 'x'.repeat(128 * 1024 + 17);
     try {
       await history.detachedValues.replace([row(0, text), row(1), row(2)]);
       const session = new SemanticMediaPurgeSession({

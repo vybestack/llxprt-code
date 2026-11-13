@@ -119,7 +119,7 @@ for (const size of [65]) {
 }
 
 describe('large Config replacement source', () => {
-  it('preserves a nine-MiB row through the actual rebuild and startup', async () => {
+  it('preserves a 128-KiB row through the actual rebuild and startup', async () => {
     await withReinitializeHistory(
       1,
       async (_old, _source, owners, _config, sessionClient) => {
@@ -130,11 +130,11 @@ describe('large Config replacement source', () => {
         await client.startChat([]);
         expect(await historyDigest(client.streamHistory())).toStrictEqual({
           count: 1,
-          digest: expectedHistoryDigest(1, 9 * 1024 * 1024),
+          digest: expectedHistoryDigest(1, 128 * 1024),
         });
         expect(owners.snapshot().liveRows).toBe(0);
       },
-      9 * 1024 * 1024,
+      128 * 1024,
     );
   }, 180000);
 });

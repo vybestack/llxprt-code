@@ -39,8 +39,8 @@ for (const { size, active, explicitFalse } of cases) {
 }
 
 describe('client default history ownership lifetime', () => {
-  it('accepts an untruncated nine MiB row', async () => {
-    const bytes = 9 * 1024 * 1024;
+  it('accepts an untruncated 128 KiB row', async () => {
+    const bytes = 128 * 1024;
     await withSuffixFixture(
       1,
       async (history, reader) => {

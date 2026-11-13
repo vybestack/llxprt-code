@@ -128,7 +128,7 @@ describe('actual provider hard-limit disk fallback', () => {
     },
     180000,
   );
-  it('preserves a valid surviving row over eight MiB on the actual route', async () => {
+  it('preserves a valid surviving row of 128 KiB on the actual route', async () => {
     const history = new HardlimitHistory({ scratchRoots: historyScratchRoots });
     try {
       const { handler } = setup(history);
@@ -140,7 +140,7 @@ describe('actual provider hard-limit disk fallback', () => {
               blocks: [
                 {
                   type: 'text' as const,
-                  text: `${index}:${'x'.repeat(index === 2 ? 9 * 1024 * 1024 : 64)}`,
+                  text: `${index}:${'x'.repeat(index === 2 ? 128 * 1024 : 64)}`,
                 },
               ],
             };
@@ -160,7 +160,7 @@ describe('actual provider hard-limit disk fallback', () => {
         undefined,
         async (rows) => (rows.length === 3 ? 1 : 200000),
       );
-      expect(JSON.stringify(result[1]).length).toBeGreaterThan(8 * 1024 * 1024);
+      expect(JSON.stringify(result[1]).length).toBeGreaterThan(128 * 1024);
       expect(await collectRows(history)).toHaveLength(2);
     } finally {
       await history.dispose();

@@ -132,9 +132,9 @@ describe('native session prefix publication lifecycle', () => {
     });
   }
 
-  it('retains every byte of a greater-than-nine-MiB prefix value without snapshot files', async () => {
+  it('retains every byte of a 128-KiB prefix value without snapshot files', async () => {
     await withSession(directory(), 3, async (agent) => {
-      const text = 'x'.repeat(9 * 1024 * 1024 + 17);
+      const text = 'x'.repeat(128 * 1024 + 17);
       await agent.setHistory([
         { ...row(0), blocks: [{ type: 'text', text }] },
         row(1),

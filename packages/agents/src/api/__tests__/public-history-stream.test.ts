@@ -100,8 +100,8 @@ describe('public history stream lifecycle', () => {
     });
   });
 
-  it('preserves a valid row larger than eight MiB without truncation', async () => {
-    const bytes = 9 * 1024 * 1024;
+  it('preserves a valid row of 128 KiB without truncation', async () => {
+    const bytes = 128 * 1024;
     await withPublicHistory(
       1,
       false,

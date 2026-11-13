@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { createHash } from 'node:crypto';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
@@ -57,13 +58,13 @@ class DigestTransport extends SummaryTransport {
 }
 
 const cases = ['middle-out', 'one-shot'].flatMap((strategy) =>
-  [512, 8192, 'large'].map((scale) => ({ strategy, scale })),
+  [512, 4096, 'large'].map((scale) => ({ strategy, scale })),
 );
 describe('native summary request byte digest and demand', () => {
   for (const { strategy, scale } of cases) {
     it(`${strategy} streams the original ${scale} request bytes after early consumer cancellation`, async () => {
       const size = typeof scale === 'number' ? scale : 512;
-      const payload = scale === 'large' ? 64 : 2048;
+      const payload = scale === 'large' ? 64 : 256;
       const makeRow = (index: number, bytes: number): IContent =>
         scale === 'large' && index === 200
           ? {
@@ -72,7 +73,7 @@ describe('native summary request byte digest and demand', () => {
               blocks: [
                 {
                   type: 'text',
-                  text: 'large-request:' + 'x'.repeat(9 * 1024 * 1024),
+                  text: 'large-request:' + 'x'.repeat(128 * 1024),
                 },
               ],
             }
@@ -83,6 +84,7 @@ describe('native summary request byte digest and demand', () => {
           const oracle =
             strategy === 'middle-out' ? middleoutOracle : oneshotOracle;
           const expected = await oracle(history, size, payload, makeRow);
+          expect(estimateTokens(expected.requests[0])).toBeLessThan(1_000_000);
           const transport = new DigestTransport();
           const setup =
             strategy === 'middle-out' ? middleoutSetup : oneshotSetup;
@@ -103,7 +105,10 @@ describe('native summary request byte digest and demand', () => {
           );
           expect(completed.bytes).toBe(Buffer.byteLength(expected.requests[0]));
           expect(completed.rows).toBeGreaterThan(size * 0.4);
-          expect(completed.bytes > 9 * 1024 * 1024).toBe(scale === 'large');
+          expect(completed.bytes).toBeGreaterThan(
+            scale === 'large' ? 128 * 1024 : 0,
+          );
+          expect(completed.bytes).toBeLessThan(4 * 1024 * 1024);
           expect(transport.requests).toHaveLength(0);
           expect(owners.snapshot().peakRows).toBeLessThanOrEqual(440);
           const bounded =

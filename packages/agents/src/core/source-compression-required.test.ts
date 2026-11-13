@@ -8,6 +8,7 @@ import {
   projectionInstructions,
 } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
+import type { DiskTextTail } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { ContextOverflowError } from '../compression/contextOverflowError.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
@@ -59,15 +60,15 @@ async function legacyFinalized(
 }
 
 /**
- * Holds the >10 MiB protected tail (about 3.06M tokens of mixed prose and code
- * since the fixture stopped using single-character runs) but not the earlier history.
+ * The catalogued 128,000-token window holds five mixed 64 KiB chunks,
+ * while accumulated earlier turns push the complete request over the window.
  */
-const FITS_TAIL_LIMIT = 3063000;
+const FITS_TAIL_LIMIT = 128_000;
 const SMALL_LIMIT = 4000;
 
 interface RequiredCase {
   readonly name: string;
-  readonly large: boolean;
+  readonly large: DiskTextTail;
   readonly limit: number;
   readonly outcome: 'sent' | 'overflow';
 }
@@ -81,12 +82,19 @@ async function requiredCompression(spec: RequiredCase): Promise<void> {
     root(),
     `http://127.0.0.1:${http.server.port}/v1`,
     large,
+    64,
+    undefined,
+    outcome === 'sent' && large !== false ? 4096 : 0,
   );
   setup.settings.set('compression.strategy', 'high-density');
   setup.settings.set('context-limit', limit);
   setup.settings.set('maxOutputTokens', 128);
   const before = await historyDigest(setup);
-  if (!large) await legacyFinalized(setup);
+  if (large === false) await legacyFinalized(setup);
+  if (typeof large === 'object' && outcome === 'sent')
+    expect(
+      (await legacyFinalized(setup)).estimatedPromptTokens,
+    ).toBeGreaterThan(computeMarginAdjustedLimit(limit) - 128);
   let failure: unknown;
   try {
     const stream = await setup.processor.makeApiCallAndProcessStream(
@@ -97,10 +105,10 @@ async function requiredCompression(spec: RequiredCase): Promise<void> {
       'source-pending-compression',
       pending,
     );
-    // The legacy collecting projection of a >10 MiB row does not finish in
-    // test time; it is an array-route cost that WP16 deletes, so the large
-    // rows are checked against the source estimate and the sent body instead.
-    const oracle = large ? undefined : await legacyFinalized(setup, false);
+    // Oversized refusal inputs need no collecting oracle; successful sends
+    // are checked against the finalized source estimate and complete body.
+    const oracle =
+      large !== false ? undefined : await legacyFinalized(setup, false);
     for await (const _chunk of stream) {
       /* Drain real HTTP and commit its lifecycle. */
     }
@@ -110,9 +118,9 @@ async function requiredCompression(spec: RequiredCase): Promise<void> {
     expect(estimate?.estimatedPromptTokens).toBeLessThanOrEqual(
       computeMarginAdjustedLimit(limit) - 128,
     );
-    if (large)
+    if (large !== false)
       expect(http.bodies[0]?.bytes).toBeGreaterThan(
-        largestSourceRowBytes(true),
+        largestSourceRowBytes(large),
       );
   } catch (error) {
     failure = error;
@@ -136,14 +144,14 @@ async function requiredCompression(spec: RequiredCase): Promise<void> {
 const cases: RequiredCase[] = [
   { name: 'ordinary rows', large: false, limit: SMALL_LIMIT, outcome: 'sent' },
   {
-    name: 'a valid row above 10MiB that the limit holds',
-    large: true,
+    name: 'a realistic protected tail within a 128,000-token window',
+    large: { mixedChunks: 5 },
     limit: FITS_TAIL_LIMIT,
     outcome: 'sent',
   },
   {
     name: 'a protected row above 10MiB that exceeds the limit',
-    large: true,
+    large: { mixedChunks: 161 },
     limit: SMALL_LIMIT,
     outcome: 'overflow',
   },

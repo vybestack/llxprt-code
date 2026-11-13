@@ -44,12 +44,12 @@ describe('pending-token native complete values and ties', () => {
       expect(input[0].blocks).toStrictEqual([first, last]);
     });
   });
-  it('keeps the entire nine-MiB human value while stubbing only the oversized response', async () => {
+  it('keeps the entire 128-KiB human value while stubbing only the oversized response', async () => {
     await withNativeValueFixture(async ({ history, durable }) => {
       lengthTokenizer(history);
       const text = 'large-preserved-value:'
-        .repeat(Math.ceil((9 * 1024 * 1024 + 17) / 22))
-        .slice(0, 9 * 1024 * 1024 + 17);
+        .repeat(Math.ceil((128 * 1024 + 17) / 22))
+        .slice(0, 128 * 1024 + 17);
       const human: IContent = {
         speaker: 'human',
         blocks: [{ type: 'text', text }],
@@ -69,7 +69,7 @@ describe('pending-token native complete values and ties', () => {
       }, true);
       const actual = await Array.fromAsync(history.streamRawHistory());
       expect(actual[0]).toStrictEqual(human);
-      expect(text).toHaveLength(9 * 1024 * 1024 + 17);
+      expect(text).toHaveLength(128 * 1024 + 17);
       expect(await durable()).toStrictEqual(
         await compressionValueDigest(actual),
       );

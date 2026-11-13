@@ -119,8 +119,8 @@ for (const size of [65]) {
 }
 
 describe('orchestrator valid large history row', () => {
-  it('preserves a nine-MiB row through the invoked read and send without truncation', async () => {
-    const bytes = 9 * 1024 * 1024;
+  it('preserves a 128-KiB row through the invoked read and send without truncation', async () => {
+    const bytes = 128 * 1024;
     await withOrchestratorHistory(
       1,
       async (client, history, reader) => {

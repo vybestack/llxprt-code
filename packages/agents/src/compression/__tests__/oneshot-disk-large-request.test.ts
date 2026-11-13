@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   oneshotRow,
@@ -17,7 +18,7 @@ function largeRow(index: number, bytes: number): IContent {
       ...oneshotRow(index, bytes),
       speaker: 'human',
       blocks: [
-        { type: 'text', text: 'large-request:' + 'x'.repeat(9 * 1024 * 1024) },
+        { type: 'text', text: 'large-request:' + 'x'.repeat(128 * 1024) },
       ],
     };
   return oneshotRow(index, bytes);
@@ -32,7 +33,8 @@ async function largeRequest(): Promise<number> {
         PerformCompressionResult.COMPRESSED,
       );
       expect(transport.requests).toStrictEqual(oracle.requests);
-      expect(transport.requests[0].length).toBeGreaterThan(9 * 1024 * 1024);
+      expect(estimateTokens(transport.requests[0])).toBeLessThan(1_000_000);
+      expect(transport.requests[0].length).toBeGreaterThan(128 * 1024);
       const rows = await collectRows(history);
       expect(
         rows.filter(
@@ -48,7 +50,7 @@ async function largeRequest(): Promise<number> {
   );
 }
 describe('one-shot large summary input', () => {
-  it('accepts a valid nine-MiB middle row and sends its complete legacy summary request', async () => {
+  it('accepts a valid 128-KiB middle row and sends its complete legacy summary request', async () => {
     expect(await largeRequest()).toBeGreaterThan(0);
   }, 180_000);
 });

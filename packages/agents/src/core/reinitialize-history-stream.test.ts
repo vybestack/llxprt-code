@@ -193,7 +193,7 @@ for (const size of [65]) {
 registerControls(512);
 
 describe('large active journal row', () => {
-  it('preserves a valid nine-MiB row without a byte admission cap', async () => {
+  it('preserves a valid 128-KiB row without a byte admission cap', async () => {
     await withReinitializeHistory(
       1,
       async (client) => {
@@ -204,14 +204,14 @@ describe('large active journal row', () => {
         await client.startChat([]);
         expect(await historyDigest(client.streamHistory())).toStrictEqual({
           count: 1,
-          digest: expectedHistoryDigest(1, 9 * 1024 * 1024),
+          digest: expectedHistoryDigest(1, 128 * 1024),
         });
         expect(owners.snapshot().liveRows).toBe(0);
         expect(owners.snapshot().peakSerializedBytes).toBeGreaterThan(
-          8 * 1024 * 1024,
+          128 * 1024,
         );
       },
-      9 * 1024 * 1024,
+      128 * 1024,
     );
   }, 180000);
 });

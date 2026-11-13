@@ -61,7 +61,8 @@ function blockText(block: IContent['blocks'][number]): string {
   return block.type === 'text' ? block.text : '';
 }
 function memoryRow(index: number, large: boolean): IContent {
-  const chars = large && index === 63 ? 10 * 1024 * 1024 + 17 : 160 * 1024;
+  const ordinaryChars = large ? 32 * 1024 : 4 * 1024;
+  const chars = large && index === 63 ? 256 * 1024 + 17 : ordinaryChars;
   return {
     speaker: index % 2 === 0 ? 'human' : 'ai',
     blocks: [
@@ -298,6 +299,7 @@ async function measure(
         countTokens,
       });
       expect(shape.historyTokens).toBeGreaterThan(0);
+      expect(shape.historyTokens).toBeLessThan(1_000_000);
       expect(shape.prefixFingerprintChanged).toBe(send === 0 ? null : false);
     }
     await trapReader(snapshot, facts);
@@ -347,7 +349,7 @@ describe('bounded disk shape release', () => {
         countTokens: estimate,
       });
       // The tiktoken wasm heap grows once to its high-water mark for the first
-      // >10 MiB string and never shrinks; warm it so the gate measures
+      // 256 KiB string and never shrinks; warm it so the gate measures
       // retention rather than that one-time allocation.
       if (large) estimate(memoryRow(63, true).blocks.map(blockText).join(''));
       expect((await measure(large, tokenizer, estimate)).measurementCount).toBe(
@@ -362,7 +364,7 @@ describe('bounded disk shape release traps', () => {
   it.each(['rows', 'serialized', 'reader'] as const)(
     'trap: deliberately retained %s fail the release gates',
     async (trap) => {
-      await expect(measure(false, 'fallback', estimate, trap)).rejects.toThrow(
+      await expect(measure(true, 'fallback', estimate, trap)).rejects.toThrow(
         'expect(received)',
       );
     },

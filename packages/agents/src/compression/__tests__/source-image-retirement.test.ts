@@ -28,7 +28,7 @@ describe('journal source image retirement', () => {
     await history.addBatch([
       {
         speaker: 'human',
-        blocks: [{ type: 'text', text: 'x'.repeat(10 * 1024 * 1024) }],
+        blocks: [{ type: 'text', text: 'x'.repeat(128 * 1024) }],
       },
       image('old'),
       image('pending'),

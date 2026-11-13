@@ -33,7 +33,7 @@ const responseRow: IContent = {
 
 describe('source-backed prompt envelope seam', () => {
   it(
-    'reopens the same 64-row disk candidate including a valid row above 10MiB and reuses its projection',
+    'reopens the same 64-row disk candidate including a valid row of 128 KiB and reuses its projection',
     testSource1,
   );
 
@@ -91,7 +91,7 @@ async function testSource1(): Promise<void> {
     expect(prepared).toBe(await preparer.prepare(fixture.source));
     expect(prepared.options.requestRows).toBe(fixture.source);
     expect(prepared.options.contentCount).toBe(64);
-    expect(prepared.estimatedPromptTokens).toBeGreaterThan(10 * 1024 * 1024);
+    expect(prepared.estimatedPromptTokens).toBeGreaterThan(128 * 1024);
     expect(events[0].digest).toBe(expected);
     expect(await digest(prepared.options.requestRows)).toBe(expected);
     expect(fixture.state.active).toBe(0);

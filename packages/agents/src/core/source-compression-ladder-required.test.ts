@@ -7,10 +7,10 @@ import { ladderAttempt } from './__tests__/support/source-compression-ladder-fix
 
 const root = sourceRootSetup();
 /**
- * A context limit that holds the >10 MiB protected tail (about 3.06M tokens)
- * but not the earlier history, so history must go through the ladder.
+ * A catalogued 128,000-token window holds the five-chunk protected tail,
+ * but accumulated earlier turns require compression before sending.
  */
-const FITS_TAIL_LIMIT = 3063000;
+const FITS_TAIL_LIMIT = 128_000;
 /** Two 64 KiB chunks: still over the 4000-token limit, small enough for the array route. */
 const OVER_LIMIT_SMALL_TAIL = 2;
 const SMALL_LIMIT = 4000;
@@ -58,11 +58,13 @@ describe('required real disk compression HTTP parity with the unchanged array ro
     expect(source.estimate).toStrictEqual(array.estimate);
   }, 600000);
 
-  it('sends a valid individual row above 10MiB when the limit holds it and only earlier history needs the ladder', async () => {
-    const source = await ladderAttempt(root(), true, true, FITS_TAIL_LIMIT);
+  it('sends a realistic protected tail after earlier history overflows the model window', async () => {
+    const tail = { mixedChunks: 5 };
+    const source = await ladderAttempt(root(), true, tail, FITS_TAIL_LIMIT);
+    expect(source.initialHistoryTokens).toBeGreaterThan(FITS_TAIL_LIMIT);
     assertSourceSuccess(source, FITS_TAIL_LIMIT);
     expect(source.bodies[0]?.bytes).toBeGreaterThan(
-      largestSourceRowBytes(true),
+      largestSourceRowBytes(tail),
     );
     expect(source.after).not.toBe(source.before);
   }, 600000);
@@ -88,7 +90,12 @@ describe('required real disk compression HTTP parity with the unchanged array ro
   }, 600000);
 
   it('returns the structured overflow when a valid row above 10MiB is the protected tail and exceeds the limit', async () => {
-    const source = await ladderAttempt(root(), true, true, SMALL_LIMIT);
+    const source = await ladderAttempt(
+      root(),
+      true,
+      { mixedChunks: 161 },
+      SMALL_LIMIT,
+    );
     expect(source.errorName).toBe('ContextOverflowError');
     assertStructuredOverflow(source);
   }, 600000);

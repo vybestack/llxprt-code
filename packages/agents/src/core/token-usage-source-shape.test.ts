@@ -51,6 +51,7 @@ async function parity(mode: ShapeCase, tokenizer: string) {
         ...shapeHead(mode, send),
         countTokens,
       });
+      expect(shape.historyTokens).toBeLessThan(1_000_000);
       observations.push({
         tokenizer,
         mode,

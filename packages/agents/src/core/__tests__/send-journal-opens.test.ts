@@ -10,7 +10,7 @@ import {
 import { sourceRootSetup } from './support/prompt-envelope-source-test-helpers.js';
 
 const root = sourceRootSetup();
-const UNDER_LIMIT = 4_000_000;
+const UNDER_LIMIT = 1_000_000;
 
 async function countSend(workload: Workload, turn: number): Promise<number> {
   const opens = spyOn(

@@ -40,7 +40,7 @@ for (const { size, explicitFalse } of cases) {
 }
 
 describe('chat default oversized row', () => {
-  it('streams a valid 9 MiB row without narrowing the row contract', async () => {
+  it('streams a valid 128 KiB row without narrowing the row contract', async () => {
     await withSuffixFixture(
       1,
       async (history, reader) => {
@@ -49,18 +49,13 @@ describe('chat default oversized row', () => {
         client.storeHistoryServiceForReuse(history);
         try {
           const chat = await client.startChat([]);
-          await assertDefaultHistory(
-            chat.getHistory(),
-            1,
-            reader,
-            9 * 1024 * 1024,
-          );
+          await assertDefaultHistory(chat.getHistory(), 1, reader, 128 * 1024);
           expect(reader.snapshot().liveRows).toBe(0);
         } finally {
           await cleanup();
         }
       },
-      9 * 1024 * 1024,
+      128 * 1024,
       accountingRow,
     );
   }, 180_000);

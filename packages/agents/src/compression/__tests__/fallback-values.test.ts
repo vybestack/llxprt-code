@@ -225,11 +225,11 @@ describe('fallback disk value callers', () => {
       }, 180_000);
     }
   }
-  it('preserves a complete valid candidate larger than nine MiB', async () => {
+  it('preserves a complete valid candidate of 128 KiB', async () => {
     await withValueTransformFixture(async ({ history, recorder }) => {
       const rows = new DetachedHistoryJournal(historyScratchRoots);
       try {
-        const bytes = 9 * 1024 * 1024 + 1;
+        const bytes = 128 * 1024 + 1;
         rows.append(suffixRow(0, bytes));
         await publishProviderFallbackCandidate(
           history,
@@ -237,7 +237,7 @@ describe('fallback disk value callers', () => {
           'test',
         );
         const expected = await detachedDigest(expectedRows(1, 0, bytes));
-        expect(expected.bytes).toBeGreaterThan(9 * 1024 * 1024);
+        expect(expected.bytes).toBeGreaterThan(128 * 1024);
         expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
         expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
           expected,

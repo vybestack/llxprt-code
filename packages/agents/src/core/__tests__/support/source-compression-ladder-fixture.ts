@@ -77,6 +77,9 @@ export async function ladderAttempt(
     root,
     `http://127.0.0.1:${http.server.port}/v1`,
     large,
+    64,
+    undefined,
+    typeof large === 'object' && contextLimit > 4000 ? 4096 : 0,
   );
   setup.settings.set('compression.strategy', 'high-density');
   setup.settings.set('context-limit', contextLimit);
@@ -86,6 +89,7 @@ export async function ladderAttempt(
   const stages: string[] = [];
   traceStages(setup.compression, stages);
   const before = await ladderHistoryDigest(setup);
+  const initialHistoryTokens = setup.history.getTotalTokens();
   const scratchRoots = setup.history.scratchRoots;
   const scratchBefore = readdirSync(scratchRoots.getRoot());
   let error: unknown;
@@ -107,6 +111,7 @@ export async function ladderAttempt(
     disk,
     large,
     before,
+    initialHistoryTokens,
     scratchRoots,
     scratchBefore,
     after: await ladderHistoryDigest(setup),

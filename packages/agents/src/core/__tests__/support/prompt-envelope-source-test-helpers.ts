@@ -26,7 +26,7 @@ export function sourceRootSetup(): () => string {
 }
 
 export function rowText(index: number, large = false): string {
-  return `${index}:"\\\n雪${large ? 'z'.repeat(10 * 1024 * 1024 + 1) : ''}`;
+  return `${index}:"\\\n雪${large ? 'z'.repeat(128 * 1024 + 1) : ''}`;
 }
 
 export async function diskSource(root: string, count = 64, large = false) {

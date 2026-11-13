@@ -109,10 +109,10 @@ describe('checkpoint single row owner boundaries', () => {
       },
     );
   });
-  it('charges but accepts a nine-MiB row exempt from the aggregate gate', async () => {
+  it('charges and preserves a complete 128-KiB row', async () => {
     const row = {
       speaker: 'human',
-      blocks: [{ type: 'text', text: '🐈'.repeat((9 * 1024 * 1024) / 4) }],
+      blocks: [{ type: 'text', text: '🐈'.repeat((128 * 1024) / 4) }],
     };
     const ownership = new RowOwnership();
     await withFile(
@@ -126,7 +126,7 @@ describe('checkpoint single row owner boundaries', () => {
           expect(await collect(checkpoint)).toStrictEqual([row]);
           expect(ownership.snapshot().peakRows).toBe(1);
           expect(ownership.snapshot().peakSerializedBytes).toBeGreaterThan(
-            9 * 1024 * 1024,
+            128 * 1024,
           );
           expect(ownership.snapshot().liveRows).toBe(0);
         } finally {

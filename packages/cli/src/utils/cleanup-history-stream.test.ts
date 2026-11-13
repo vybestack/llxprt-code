@@ -104,8 +104,8 @@ for (const size of [65]) {
 
 describe('CLI cleanup oversized valid rows', () => {
   for (const active of [false, true]) {
-    it(`accepts one valid nine-MiB row through ${active ? 'active' : 'inactive'} CLI cleanup`, async () => {
-      const bytes = 9 * 1024 * 1024;
+    it(`accepts one valid 128-KiB row through ${active ? 'active' : 'inactive'} CLI cleanup`, async () => {
+      const bytes = 128 * 1024;
       await withCleanupHistory(
         1,
         active,
@@ -117,7 +117,7 @@ describe('CLI cleanup oversized valid rows', () => {
             undefined,
             fixture.readActiveHistory,
           );
-          recordCleanupOwners(1, active, 'valid-nine-MiB', fixture);
+          recordCleanupOwners(1, active, 'valid-128-KiB', fixture);
           expect(result.failed).toBe(0);
           expect(fixture.history.digest).toBe(
             expectedCleanupDigest(1, bytes, fixture.reference),

@@ -61,12 +61,12 @@ async function oversized(): Promise<number> {
           const block = row.blocks[0];
           if (block.type !== 'text')
             throw new Error('Expected large text block');
-          expect(block.text.length).toBe(9 * 1024 * 1024 + 2);
+          expect(block.text.length).toBe(128 * 1024 + 2);
           count++;
         }
         expect(owners.snapshot().peakRows).toBeLessThanOrEqual(2);
         expect(owners.snapshot().peakSerializedBytes).toBeGreaterThan(
-          9 * 1024 * 1024,
+          128 * 1024,
         );
         expect(owners.snapshot().liveRows).toBe(0);
         expect(await readFile(saved.path, 'utf8')).toBe(saved.bytes);
@@ -75,7 +75,7 @@ async function oversized(): Promise<number> {
         vi.restoreAllMocks();
       }
     },
-    9 * 1024 * 1024,
+    128 * 1024,
   );
 }
 
@@ -154,7 +154,7 @@ async function compatibleRestore(active: boolean): Promise<string> {
 }
 
 describe('CLI checkpoint restoration compatibility contracts', () => {
-  it('restores a saved nine-MiB native row without a byte gate or uncharged ownership', async () => {
+  it('restores a saved 128-KiB native row without a byte gate or uncharged ownership', async () => {
     expect(await oversized()).toBe(1);
   }, 180000);
   it.each([false, true])(

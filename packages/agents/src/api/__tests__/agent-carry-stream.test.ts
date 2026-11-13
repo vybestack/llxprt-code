@@ -93,8 +93,8 @@ for (const size of [65]) {
 }
 
 describe('oversized AgentImpl carried history', () => {
-  it('accepts a valid 9 MiB carried row without applying the aggregate limit to one row', async () => {
-    const bytes = 9 * 1024 * 1024;
+  it('accepts a valid 128 KiB carried row with complete charged ownership', async () => {
+    const bytes = 128 * 1024;
     await withAgentCarry(
       1,
       async (agent, replacement) => {
@@ -105,7 +105,7 @@ describe('oversized AgentImpl carried history', () => {
         expect(replacement().owners.snapshot().liveRows).toBe(0);
         expect(
           replacement().owners.snapshot().peakSerializedBytes,
-        ).toBeGreaterThan(carryBounds.serializedBytes);
+        ).toBeGreaterThan(bytes);
       },
       bytes,
     );

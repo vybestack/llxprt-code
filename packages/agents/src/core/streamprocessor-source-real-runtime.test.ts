@@ -29,7 +29,7 @@ function realRuntimeFixture(root: string, baseURL: string, model: string) {
   settings.set('prompt-caching', 'off');
   settings.set('retries', 1);
   settings.set('retrywait', 0);
-  settings.set('context-limit', 4_000_000);
+  settings.set('context-limit', 1_000_000);
   const config = new Config({
     cwd: root,
     targetDir: root,
