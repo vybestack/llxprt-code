@@ -471,6 +471,7 @@ export class JournalStore {
     this.automaticCompaction.cancel();
     await this.tail;
     await this.writer.close();
+    this.restartOnNewFile(false);
     this.releaseNamedWriter?.();
   }
 
@@ -676,13 +677,13 @@ export class JournalStore {
   }
 
   /** Every offset a cache or a chain holds belongs to the old file. */
-  private restartOnNewFile(): void {
+  private restartOnNewFile(reopen = true): void {
     this.idCache = this.makeCache();
     this.metaCache = this.makeCache();
     this.stateCache = this.makeCache();
     this.spineEntry = undefined;
     this.chain = undefined;
-    this.install(this.writer.published?.trailer);
+    if (reopen) this.install(this.writer.published?.trailer);
     this.rearmAt = 0;
   }
 

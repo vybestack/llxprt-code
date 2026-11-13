@@ -357,15 +357,11 @@ export function decodeStoredRow(
     (header.flags & ROW_FLAG.invalidateResponses) !== 0
       ? invalidateResponsesStatefulChain([content])[0]
       : applyResumeBoundary(header.label, content, resumeBoundary);
-  return Object.assign(
-    Object.fromEntries(
-      (piece.contentKeys ?? Object.keys(decoded)).map((key) => [
-        key,
-        Reflect.get(decoded, key),
-      ]),
-    ),
-    decoded,
-  );
+  const entries: Array<[string, unknown]> = [];
+  for (const key of piece.contentKeys ?? Object.keys(decoded)) {
+    entries.push([key, Reflect.get(decoded, key)]);
+  }
+  return Object.assign(Object.fromEntries(entries), decoded);
 }
 
 /**

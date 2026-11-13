@@ -41,13 +41,14 @@ export function largeRowAccepted(result: LargeRoundTrip): boolean {
   );
 }
 
-async function warmLargeRow(bytes: number): Promise<void> {
+async function warmLargeRow(bytes: number, rowCount: number): Promise<void> {
   await roundTrip(
     await largeRig(),
     await medianSettledHeap('warm'),
     bytes,
     false,
     medianSettledHeap,
+    rowCount,
   );
 }
 
@@ -76,6 +77,7 @@ async function recordMeasurement(
 
 export function useLargeRowProof(
   size: number,
+  rowCount = 1,
 ): (trap?: boolean) => Promise<LargeRoundTrip> {
   afterRecordingTests(() => recordingScratchRoots.removeRoot());
 
@@ -84,11 +86,12 @@ export function useLargeRowProof(
     const forcedCodeAging =
       process.env['BUN_JSC_forceCodeBlockToJettisonDueToOldAge'] === '1';
     if (!forcedCodeAging) await ageOutIdleCode();
-    await warmLargeRow(size * MIB);
+    await warmLargeRow(size * MIB, rowCount);
+    await warmLargeRow(size * MIB, rowCount);
     const rig = await largeRig();
     prepared = { rig, baseline: Number.NaN };
     prepared = { rig, baseline: await medianSettledHeap('before admission') };
-  }, 60_000);
+  }, 120_000);
   afterAll(async () => {
     if (prepared !== undefined) await prepared.rig.close();
   });
@@ -102,6 +105,7 @@ export function useLargeRowProof(
       size * MIB,
       retaining,
       medianSettledHeap,
+      rowCount,
     );
     await recordMeasurement(result, retaining);
     return result;
@@ -114,25 +118,34 @@ async function roundTrip(
   bytes: number,
   trap: boolean,
   sample: Sample,
+  rowCount = 1,
 ): Promise<LargeRoundTrip> {
   const retained: IContent[] = [];
   try {
-    const written = await admitLargeRow(rig.history, rig.origin, bytes);
+    const expected: RowDigest[] = [];
+    for (let index = 0; index < rowCount; index++) {
+      const written = await admitLargeRow(rig.history, rig.origin, bytes);
+      expected.push({
+        ...written,
+        speaker: 'human',
+        metadata: LARGE_METADATA,
+        blocks: 1,
+      });
+    }
     await rig.integration.flushAtTurnBoundary();
     const admissionGrowth =
       (await sample('after admission and mirror flush')) - baseline;
-    const expected: RowDigest[] = [
-      { ...written, speaker: 'human', metadata: LARGE_METADATA, blocks: 1 },
-    ];
     expect(await publicDigest(rig.history, retained, trap)).toStrictEqual(
       expected,
     );
     const persisted = await diskDigest(rig.recording);
     expect(persisted.rows).toStrictEqual(expected);
-    expect(persisted.owners).toStrictEqual([
-      rig.history.originIds.get(rig.origin),
-    ]);
-    expect(persisted.offsets).toHaveLength(1);
+    expect(persisted.owners).toStrictEqual(
+      Array.from({ length: rowCount }, () =>
+        rig.history.originIds.get(rig.origin),
+      ),
+    );
+    expect(persisted.offsets).toHaveLength(rowCount);
     expect(persisted.offsets[0]).toBeGreaterThan(0);
     expect(persisted.bodyBytes[0]).toBeGreaterThan(bytes);
     expect(persisted.offsets[0] + persisted.bodyBytes[0]).toBeLessThan(
@@ -148,8 +161,8 @@ async function roundTrip(
       baseline,
     );
     return {
-      bytes,
-      hash: written.hash,
+      bytes: bytes * rowCount,
+      hash: expected[0].hash,
       admissionGrowth,
       growth: [afterRead, ...resumed],
       retained,
@@ -204,15 +217,18 @@ async function resumeAndContinue(
     await integration.flushAtTurnBoundary();
     const continued = await publicDigest(restored);
     const disk = await diskDigest(resumed.recording);
-    expect(continued).toHaveLength(2);
-    expect(continued[0]).toStrictEqual(expected[0]);
+    expect(continued).toHaveLength(expected.length + 1);
+    expect(continued.slice(0, expected.length)).toStrictEqual([...expected]);
     expect(disk.rows).toStrictEqual(continued);
-    expect(disk.owners).toStrictEqual([
-      rig.history.originIds.get(rig.origin),
-      rig.history.originIds.get(rig.origin),
-    ]);
-    expect(disk.offsets[0]).toBe(persisted.offsets[0]);
-    expect(disk.offsets[1]).toBe(persisted.durableEnd);
+    expect(disk.owners).toStrictEqual(
+      Array.from({ length: expected.length + 1 }, () =>
+        rig.history.originIds.get(rig.origin),
+      ),
+    );
+    expect(disk.offsets.slice(0, expected.length)).toStrictEqual(
+      persisted.offsets,
+    );
+    expect(disk.offsets[expected.length]).toBe(persisted.durableEnd);
     const afterContinue =
       (await sample('after continued durable write and reads')) - baseline;
     return [afterResume, afterContinue];
