@@ -290,6 +290,96 @@ describe('agent-core import boundary', () => {
     expect(scanAgentCoreBoundary(root)).toEqual([]);
   });
 
+  it('treats a for-of loop binding named document as a local binding', () => {
+    const root = fixture(
+      `export const titles = (documents: readonly string[]): string[] => {
+  const result: string[] = [];
+  for (const document of documents) result.push(document);
+  return result;
+};
+`,
+    );
+    expect(scanAgentCoreBoundary(root)).toEqual([]);
+  });
+
+  it('treats a for-in loop binding named process as a local binding', () => {
+    const root = fixture(
+      `export const keys = (values: Record<string, number>): string[] => {
+  const result: string[] = [];
+  for (const process in values) result.push(process);
+  return result;
+};
+`,
+    );
+    expect(scanAgentCoreBoundary(root)).toEqual([]);
+  });
+
+  it('treats a catch clause binding named console as a local binding', () => {
+    const root = fixture(
+      `export const message = (): string => {
+  try {
+    throw new Error('failed');
+  } catch (console) {
+    return String(console);
+  }
+};
+`,
+    );
+    expect(scanAgentCoreBoundary(root)).toEqual([]);
+  });
+
+  it('treats a destructured for-of binding named document as a local binding', () => {
+    const root = fixture(
+      `export const names = (people: ReadonlyArray<{ readonly document: string }>): string[] => {
+  const result: string[] = [];
+  for (const { document } of people) result.push(document);
+  return result;
+};
+`,
+    );
+    expect(scanAgentCoreBoundary(root)).toEqual([]);
+  });
+
+  it('treats destructured declarations and parameters as local bindings', () => {
+    const root = fixture(
+      `export const pick = ({ document }: { readonly document: string }): string => {
+  const { process } = { process: 1 };
+  return document + String(process);
+};
+`,
+    );
+    expect(scanAgentCoreBoundary(root)).toEqual([]);
+  });
+
+  it('rejects an undeclared loop target named document', () => {
+    const root = fixture(
+      `export const sweep = (documents: readonly string[]): void => {
+  for (document of documents) void document;
+};
+`,
+    );
+    expect(
+      scanAgentCoreBoundary(root).some((entry) => entry.kind === 'ambient-io'),
+    ).toBe(true);
+  });
+
+  it('rejects a catch binding named console used outside its catch clause', () => {
+    const root = fixture(
+      `export const log = (): void => {
+  try {
+    throw new Error('failed');
+  } catch (console) {
+    void console;
+  }
+  void console;
+};
+`,
+    );
+    expect(
+      scanAgentCoreBoundary(root).some((entry) => entry.kind === 'ambient-io'),
+    ).toBe(true);
+  });
+
   it('rejects helper barrels and unapproved external runtime exports', () => {
     const root = fixture("export * from '../../../helpers/bridge.js';", {
       'helpers/bridge.ts': "export * from 'node:fs';",

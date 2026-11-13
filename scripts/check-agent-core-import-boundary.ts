@@ -415,25 +415,54 @@ function isInertIdentifier(node: ts.Identifier): boolean {
   return isImportOrExportSpecifierName(parent, node);
 }
 
+function isNamedBinding(name: ts.BindingName, text: string): boolean {
+  return ts.isIdentifier(name) && name.text === text;
+}
+
+// Loop and catch bindings have no initializer but still create runtime locals;
+// `declare` forms never appear in these positions.
+function isLoopOrCatchBinding(declaration: ts.VariableDeclaration): boolean {
+  const parent = declaration.parent;
+  return (
+    ts.isCatchClause(parent) ||
+    (ts.isVariableDeclarationList(parent) &&
+      (ts.isForOfStatement(parent.parent) ||
+        ts.isForInStatement(parent.parent)))
+  );
+}
+
+function isRuntimeBindingOwner(owner: ts.Node): boolean {
+  if (ts.isVariableDeclaration(owner))
+    return owner.initializer !== undefined || isLoopOrCatchBinding(owner);
+  if (ts.isParameter(owner)) {
+    const fn = owner.parent;
+    return ts.isFunctionLike(fn) && fn.body !== undefined;
+  }
+  return false;
+}
+
+// Destructuring splits a declaration without changing whether its bindings are
+// local, so element bindings take the status of the declaration that owns them.
+function bindingDeclarationOwner(element: ts.BindingElement): ts.Node {
+  let pattern: ts.Node = element.parent;
+  while (ts.isBindingElement(pattern.parent)) pattern = pattern.parent.parent;
+  return pattern.parent;
+}
+
 function isRuntimeLocalDeclaration(
   declaration: ts.Node,
   name: string,
 ): boolean {
-  if (ts.isVariableDeclaration(declaration))
+  if (ts.isBindingElement(declaration))
     return (
-      ts.isIdentifier(declaration.name) &&
-      declaration.name.text === name &&
-      declaration.initializer !== undefined
+      isNamedBinding(declaration.name, name) &&
+      isRuntimeBindingOwner(bindingDeclarationOwner(declaration))
     );
-  if (ts.isParameter(declaration)) {
-    const owner = declaration.parent;
+  if (ts.isVariableDeclaration(declaration) || ts.isParameter(declaration))
     return (
-      ts.isIdentifier(declaration.name) &&
-      declaration.name.text === name &&
-      ts.isFunctionLike(owner) &&
-      owner.body !== undefined
+      isNamedBinding(declaration.name, name) &&
+      isRuntimeBindingOwner(declaration)
     );
-  }
   if (ts.isFunctionDeclaration(declaration))
     return declaration.name?.text === name && declaration.body !== undefined;
   if (ts.isClassDeclaration(declaration))
