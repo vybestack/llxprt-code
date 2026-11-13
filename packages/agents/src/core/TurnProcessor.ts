@@ -91,7 +91,7 @@ import {
   type PreparedUserTurn,
 } from './mediaAdmissionSeam.js';
 import {
-  failedTurnCleanup,
+  finishStreamTurn,
   throwAfterFailedTurnCleanup,
   wrapStreamGeneratorLifecycle,
 } from './turnMediaAdmissionLifecycle.js';
@@ -420,26 +420,13 @@ export class TurnProcessor {
       if (lastError != null) throw lastError;
     } catch (error: unknown) {
       primaryFailure = { error };
-    }
-    const cleanupFailures: unknown[] = prepared.isTransferredToHistory()
-      ? []
-      : [...(await failedTurnCleanup(prepared, semanticMediaPurge))];
-    try {
-      await sendState.discard();
-    } catch (error: unknown) {
-      cleanupFailures.push(error);
-    }
-    try {
-      onDone();
-    } catch (error: unknown) {
-      cleanupFailures.push(error);
-    }
-    if (cleanupFailures.length > 0) {
-      throw new AggregateError(
-        primaryFailure === undefined
-          ? cleanupFailures
-          : [primaryFailure.error, ...cleanupFailures],
-        'Stream turn media cleanup was incomplete',
+    } finally {
+      await finishStreamTurn(
+        prepared,
+        semanticMediaPurge,
+        () => sendState.discard(),
+        onDone,
+        primaryFailure,
       );
     }
     if (primaryFailure !== undefined) throw primaryFailure.error;

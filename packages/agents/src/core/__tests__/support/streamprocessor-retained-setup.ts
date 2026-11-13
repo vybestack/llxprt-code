@@ -109,6 +109,9 @@ export async function retainedSetup(
     large,
     count,
   );
+  // This census sends an 8 MiB mixed-text row without compression. Its native
+  // prompt exceeds the shared fixture's 1M-token compression-test capacity.
+  setup.settings.set('context-limit', 4_000_000);
   const restoreOwners = observeSourceOwners(census, (row) => {
     setup.history.references.push(new WeakRef(row));
     if (setup.history.retainRows) setup.history.retained.push(row);

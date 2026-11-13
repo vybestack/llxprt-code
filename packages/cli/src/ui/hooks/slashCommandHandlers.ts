@@ -159,23 +159,15 @@ async function executeParsedCommand(
 ): Promise<SlashCommandProcessorResult | false> {
   const { commandToExecute } = parsed;
   if (commandToExecute?.action) {
-    const outcome = await runCommandAction(
-      deps,
-      commandToExecute.action,
-      parsed,
-      (signal) =>
-        buildInvocationContext(
-          deps.commandContext,
-          parsed,
-          oneTimeShellAllowlist,
-          overwriteConfirmed,
-          signal,
-        ),
+    return runCommandAction(deps, commandToExecute.action, parsed, (signal) =>
+      buildInvocationContext(
+        deps.commandContext,
+        parsed,
+        oneTimeShellAllowlist,
+        overwriteConfirmed,
+        signal,
+      ),
     );
-    if (outcome.cancelled) return { type: 'handled' };
-    return outcome.result
-      ? handleActionResult(deps, outcome.context, outcome.result)
-      : { type: 'handled' };
   }
   if (commandToExecute?.subCommands) {
     await addSubcommandHelp(deps, commandToExecute);
@@ -187,16 +179,8 @@ async function executeParsedCommand(
 
 type CommandAction = NonNullable<SlashCommand['action']>;
 
-type CommandActionOutcome =
-  | { cancelled: true; context?: undefined; result?: undefined }
-  | {
-      cancelled: false;
-      context: CommandContext;
-      result: Awaited<ReturnType<CommandAction>>;
-    };
-
 /**
- * Awaits the action while it is registered as cancellable.
+ * Awaits the action and its result publication while registered as cancellable.
  *
  * Once the invocation is aborted its outcome is discarded either way. A
  * rejection is the expected shape of "the user pressed Esc" and must not also
@@ -213,22 +197,24 @@ async function runCommandAction(
   action: CommandAction,
   parsed: ParsedCommandState,
   buildContext: (signal: AbortSignal) => CommandContext,
-): Promise<CommandActionOutcome> {
+): Promise<SlashCommandProcessorResult | false> {
   const controller = deps.beginSlashCommandAction();
   try {
     const context = buildContext(controller.signal);
     const result = await action(context, parsed.args);
     if (controller.signal.aborted) {
       logDiscarded(deps, parsed, 'result', undefined);
-      return { cancelled: true };
+      return { type: 'handled' };
     }
-    return { cancelled: false, context, result };
+    return result
+      ? await handleActionResult(deps, context, result)
+      : { type: 'handled' };
   } catch (error) {
     if (!controller.signal.aborted) throw error;
     // The discard is intentional, but an unrelated failure can land in the same
     // window, so leave a trace rather than losing it entirely.
     logDiscarded(deps, parsed, 'error', error);
-    return { cancelled: true };
+    return { type: 'handled' };
   } finally {
     deps.endSlashCommandAction(controller);
   }
