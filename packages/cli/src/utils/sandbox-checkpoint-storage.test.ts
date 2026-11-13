@@ -22,7 +22,10 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { SandboxConfig } from '@vybestack/llxprt-code-core';
+import type {
+  ContainerSandboxConfig,
+  SandboxConfig,
+} from '@vybestack/llxprt-code-core';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import { useFakeEngine } from '../../test-utils/fake-dependency-engine-harness.js';
 import {
@@ -90,8 +93,8 @@ function flagValue(argv: readonly string[], flag: string): string | undefined {
 
 describe('persistent sandbox checkpoint storage (#3464)', () => {
   const harness = useFakeEngine('docker');
-  const config = harness.config as SandboxConfig;
-  const podmanConfig = harness.podmanConfig as SandboxConfig;
+  const config = harness.config as ContainerSandboxConfig;
+  const podmanConfig = harness.podmanConfig as ContainerSandboxConfig;
 
   /** The volume directory the fake engine backs a named volume with. */
   function fakeVolumeDir(name: string): string {

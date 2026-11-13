@@ -234,10 +234,39 @@ export const DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES = 15 * 1024 * 1024;
 import { AuthProviderType } from '@vybestack/llxprt-code-auth/mcp-auth-provider-type.js';
 export { AuthProviderType };
 
-export interface SandboxConfig {
-  command: 'docker' | 'podman' | 'sandbox-exec';
-  image: string;
+export interface SandboxMountConfig {
+  readonly from: string;
+  readonly to?: string;
+  readonly mode?: 'ro' | 'rw';
 }
+
+export interface SandboxProfileResourcesConfig {
+  readonly cpus?: number;
+  readonly memory?: string;
+  readonly pids?: number;
+}
+
+interface SandboxConfigBase {
+  readonly mounts?: readonly SandboxMountConfig[];
+  readonly env?: Readonly<Record<string, string>>;
+  readonly network?: 'on' | 'off' | 'proxied';
+  readonly sshAgent?: 'auto' | 'on' | 'off';
+  readonly resources?: SandboxProfileResourcesConfig;
+}
+
+export type SandboxConfig =
+  | (SandboxConfigBase & {
+      readonly command: 'docker' | 'podman' | 'sandbox-exec';
+      readonly image: string;
+    })
+  | (SandboxConfigBase & {
+      readonly command: 'bwrap';
+    });
+
+export type ContainerSandboxConfig = Extract<
+  SandboxConfig,
+  { readonly command: 'docker' | 'podman' | 'sandbox-exec' }
+>;
 
 export interface ActiveExtension {
   name: string;

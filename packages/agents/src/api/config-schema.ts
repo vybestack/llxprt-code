@@ -238,12 +238,31 @@ const AgentSkillDefinitionSchema = z
   })
   .strict();
 
-const AgentSandboxSchema = z
+const AgentSandboxMountSchema = z
   .object({
-    command: z.enum(['docker', 'podman', 'sandbox-exec']),
-    image: z.string(),
+    from: z.string(),
+    to: z.string().optional(),
+    mode: z.enum(['ro', 'rw']).optional(),
   })
   .strict();
+
+const AgentSandboxSchema = z.union([
+  z
+    .object({
+      command: z.enum(['docker', 'podman', 'sandbox-exec']),
+      image: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      command: z.literal('bwrap'),
+      mounts: z.array(AgentSandboxMountSchema).optional(),
+      env: z.record(z.string()).optional(),
+      network: z.enum(['on', 'off', 'proxied']).optional(),
+      sshAgent: z.enum(['auto', 'on', 'off']).optional(),
+    })
+    .strict(),
+]);
 
 const AgentExtensionSchema = z
   .object({

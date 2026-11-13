@@ -26,14 +26,19 @@ import { loadSandboxConfig } from './sandboxConfig.js';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
 
-const { commandSyncMock } = {
+const { commandSyncMock, bwrapProbeMock } = {
   commandSyncMock: vi.fn(),
+  bwrapProbeMock: vi.fn(),
 };
 
 void vi.mock('command-exists', () => ({
   default: {
     sync: commandSyncMock,
   },
+}));
+
+void vi.mock('../utils/sandbox-bwrap-capability.js', () => ({
+  probeBwrapCapability: bwrapProbeMock,
 }));
 
 const ORIGINAL_ENV = { ...process.env };
@@ -49,6 +54,7 @@ function makeSettings(sandbox?: boolean | string): Settings {
 function enginesAvailable(...available: readonly string[]): void {
   const set = new Set(available);
   commandSyncMock.mockImplementation((command: string) => set.has(command));
+  bwrapProbeMock.mockReset();
 }
 
 async function expectFatalSandbox(
@@ -66,6 +72,7 @@ async function expectFatalSandbox(
 
 describe('sandbox precedence (issue #3083)', () => {
   beforeEach(() => {
+    bwrapProbeMock.mockReset();
     process.env = { ...ORIGINAL_ENV };
     delete process.env.SANDBOX;
     delete process.env.LLXPRT_SANDBOX;
@@ -86,6 +93,65 @@ describe('sandbox precedence (issue #3083)', () => {
     });
     expect(config).toBeDefined();
     expect(config?.command).toBe('docker');
+  });
+
+  it('selects bwrap from the environment and settings without requiring an image', async () => {
+    if (process.platform !== 'linux') return;
+    enginesAvailable('bwrap');
+    process.env.LLXPRT_SANDBOX = 'bwrap';
+    const fromEnvironment = await loadSandboxConfig(
+      makeSettings(undefined),
+      {},
+    );
+    expect(fromEnvironment?.command).toBe('bwrap');
+    expect(fromEnvironment).not.toHaveProperty('image');
+
+    delete process.env.LLXPRT_SANDBOX;
+    const fromSettings = await loadSandboxConfig(makeSettings('bwrap'), {});
+    expect(fromSettings?.command).toBe('bwrap');
+    expect(fromSettings).not.toHaveProperty('image');
+  });
+
+  it('selects explicit bwrap without requiring a container image', async () => {
+    if (process.platform !== 'linux') {
+      await expectFatalSandbox(makeSettings(undefined), {
+        sandbox: true,
+        sandboxEngine: 'bwrap',
+      });
+      return;
+    }
+    enginesAvailable('bwrap');
+    const config = await loadSandboxConfig(makeSettings(undefined), {
+      sandbox: true,
+      sandboxEngine: 'bwrap',
+    });
+
+    expect(config).toBeDefined();
+    expect(config?.command).toBe('bwrap');
+    expect(config).not.toHaveProperty('image');
+  });
+
+  it('keeps Docker and Podman ahead of bwrap for automatic Linux selection', async () => {
+    if (process.platform !== 'linux') return;
+    bwrapProbeMock.mockImplementation(() => {
+      throw new Error('automatic bwrap candidate should not be probed');
+    });
+    enginesAvailable('docker', 'podman', 'bwrap');
+    const dockerConfig = await loadSandboxConfig(makeSettings(true), {});
+    expect(dockerConfig?.command).toBe('docker');
+
+    enginesAvailable('podman', 'bwrap');
+    const podmanConfig = await loadSandboxConfig(makeSettings(true), {});
+    expect(podmanConfig?.command).toBe('podman');
+  });
+
+  it('uses bwrap when it is the only available Linux sandbox engine', async () => {
+    if (process.platform !== 'linux') return;
+    enginesAvailable('bwrap');
+    const config = await loadSandboxConfig(makeSettings(true), {});
+
+    expect(config?.command).toBe('bwrap');
+    expect(config).not.toHaveProperty('image');
   });
 
   it('AC2: --sandbox false beats LLXPRT_SANDBOX=docker (returns undefined)', async () => {
