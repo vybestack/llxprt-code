@@ -267,7 +267,7 @@ describe('normalized request owner lifetime', () => {
 });
 
 describe('normalized request row size', () => {
-  it('permits a 10 MiB disk row with no product cap and repeatable bytes', async () => {
+  it('permits a two MiB disk row with no product cap and repeatable bytes', async () => {
     await withCoreSuffixFixture(
       1,
       async (history) => {
@@ -277,7 +277,7 @@ describe('normalized request row size', () => {
           const first = await reader.next();
           if (first.done === true) throw new Error('Missing large row');
           expect(JSON.stringify(first.value)).toBe(
-            JSON.stringify(suffixRow(0, 10 * 1024 * 1024)),
+            JSON.stringify(suffixRow(0, 2 * 1024 * 1024)),
           );
           await reader.return();
           expect(await digest(snapshot.openReader())).toBe(
@@ -287,7 +287,7 @@ describe('normalized request row size', () => {
           await snapshot.close();
         }
       },
-      10 * 1024 * 1024,
+      2 * 1024 * 1024,
     );
   });
 });

@@ -78,11 +78,11 @@ describe('detached journal checkpoints', () => {
     }, 180_000);
   }
 
-  it('restores every byte of a checkpoint row larger than nine MiB', async () => {
+  it('restores every byte of a checkpoint row of two MiB', async () => {
     await withValueTransformFixture(async ({ history, recorder }) => {
-      await history.detachedValues.replace(values(1, 9 * 1024 * 1024 + 1));
-      const expected = await detachedDigest(values(1, 9 * 1024 * 1024 + 1));
-      expect(expected.bytes).toBeGreaterThan(9 * 1024 * 1024);
+      await history.detachedValues.replace(values(1, 2 * 1024 * 1024 + 1));
+      const expected = await detachedDigest(values(1, 2 * 1024 * 1024 + 1));
+      expect(expected.bytes).toBeGreaterThan(2 * 1024 * 1024);
       await history.detachedValues.withCheckpoint(async (snapshot) => {
         await history.detachedValues.replace(values(2));
         await history.detachedValues.replace(checkpointRows(snapshot));

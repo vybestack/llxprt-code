@@ -131,7 +131,7 @@ describe('history JSON export lifecycle', () => {
     });
   });
 
-  it('exports empty history and a valid row larger than 8 MiB', async () => {
+  it('exports empty history and a valid row of two MiB', async () => {
     const empty = new HistoryService({ scratchRoots: historyScratchRoots });
     let output = '';
     try {
@@ -143,7 +143,7 @@ describe('history JSON export lifecycle', () => {
       await empty.dispose();
     }
     await withBatchFixture(async ({ history, owners }) => {
-      const row = exportSummaryRow(0, 9 * 1024 * 1024);
+      const row = exportSummaryRow(0, 2 * 1024 * 1024);
       await history.addBatch([row]);
       const hash = createHash('sha256');
       await history.writeJSON(async (chunk) => {

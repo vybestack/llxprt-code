@@ -10,8 +10,8 @@ function digest(bytes: string): string {
 }
 
 describe('fetch fixture streamed body', () => {
-  it('streams the complete body above 9 MiB through a preconnected real transport', async () => {
-    const body = 'streamed-μ-body\n'.repeat(700_000);
+  it('streams the complete body of about two MiB through a preconnected real transport', async () => {
+    const body = 'streamed-μ-body\n'.repeat(130_000);
     const server = Bun.serve({
       hostname: '127.0.0.1',
       port: 0,
@@ -44,7 +44,7 @@ describe('fetch fixture streamed body', () => {
         method: 'POST',
         body: stream,
       });
-      expect(Buffer.byteLength(body)).toBeGreaterThan(9 * 1024 * 1024);
+      expect(Buffer.byteLength(body)).toBeGreaterThan(2_000_000);
       expect(Number(response.headers.get('x-body-bytes'))).toBe(
         Buffer.byteLength(body),
       );

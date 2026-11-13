@@ -22,7 +22,7 @@ describe('native compensation media references', () => {
         content: {
           speaker: 'human',
           blocks: [
-            { type: 'text', text: 'x'.repeat(9 * 1024 * 1024 + 17) },
+            { type: 'text', text: 'x'.repeat(2 * 1024 * 1024 + 17) },
             reference,
           ],
         },

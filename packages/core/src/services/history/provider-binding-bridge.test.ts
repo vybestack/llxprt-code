@@ -114,11 +114,11 @@ describe('provider binding detached production bridge', () => {
 });
 
 describe('provider binding value edge cases', () => {
-  it('accepts and restores a nine-MiB source value without changing caller metadata', async () => {
+  it('accepts and restores a two-MiB source value without changing caller metadata', async () => {
     await withDetachedFixture(async ({ history, recorder, owners }) => {
-      const row = bindingBridgeRow(0, 9 * 1024 * 1024);
+      const row = bindingBridgeRow(0, 2 * 1024 * 1024);
       const expected = await detachedDigest(
-        bindingBridgeRows(1, 9 * 1024 * 1024),
+        bindingBridgeRows(1, 2 * 1024 * 1024),
       );
       Object.freeze(row.metadata?.chronology);
       Object.freeze(row.metadata);
@@ -139,7 +139,7 @@ describe('provider binding value edge cases', () => {
         expected,
       );
       expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
-      expect(row).toStrictEqual(bindingBridgeRow(0, 9 * 1024 * 1024));
+      expect(row).toStrictEqual(bindingBridgeRow(0, 2 * 1024 * 1024));
       expect(history.getTotalTokens()).toBe(4);
       expect(owners.snapshot().liveRows).toBe(0);
     });

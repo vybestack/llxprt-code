@@ -4,7 +4,7 @@ import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap
 import { ownedString } from './ownedString.js';
 
 const MIB = 1024 * 1024;
-const RETAINED_BOUND = 4 * MIB;
+const RETAINED_BOUND = MIB;
 
 /** Text of `bytes` characters built from distinct pieces so it is a real allocation. */
 function bigText(bytes: number): string {
@@ -30,7 +30,7 @@ describe('ownedString', () => {
     const baseline = await settledHeap();
     let held: string | undefined;
     const store = (): void => {
-      held = ownedString(bigText(40 * MIB).slice(0, 200));
+      held = ownedString(bigText(2 * MIB).slice(0, 200));
     };
     store();
     const afterStore = await settledHeap();
@@ -43,12 +43,12 @@ describe('ownedString', () => {
     const baseline = await settledHeap();
     let held: string | undefined;
     const store = (): void => {
-      held = bigText(40 * MIB).slice(0, 200);
+      held = bigText(2 * MIB).slice(0, 200);
     };
     store();
     const afterStore = await settledHeap();
 
     expect(held).toHaveLength(200);
-    expect(afterStore - baseline).toBeGreaterThan(20 * MIB);
+    expect(afterStore - baseline).toBeGreaterThan(MIB);
   });
 });

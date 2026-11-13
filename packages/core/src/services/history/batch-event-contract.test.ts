@@ -155,18 +155,18 @@ describe('journal contentBatchAdded scope', () => {
     });
   });
 
-  it('delivers the complete oversized row without a universal byte rejection', async () => {
+  it('delivers the complete large row without a universal byte rejection', async () => {
     await withValueTransformFixture(async ({ history }) => {
       let bytes: Promise<number[]> | undefined;
       history.once('contentBatchAdded', (value) => {
         bytes = readBatch(value, (row) => Buffer.byteLength(batchText(row)));
       });
       await history.detachedValues.replace(
-        eventRows(1, 9 * 1024 * 1024 + 37),
+        eventRows(1, 2 * 1024 * 1024 + 37),
         undefined,
         { publishBatch: true },
       );
-      expect(await bytes).toStrictEqual([9 * 1024 * 1024 + 39]);
+      expect(await bytes).toStrictEqual([2 * 1024 * 1024 + 39]);
     });
   });
 });

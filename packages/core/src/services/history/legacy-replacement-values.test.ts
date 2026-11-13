@@ -144,13 +144,13 @@ describe('replacement value admission', () => {
     });
   });
 
-  it('accepts a complete value larger than nine MiB through replaceAll without caller stamping', async () => {
+  it('accepts a complete value of two MiB through replaceAll without caller stamping', async () => {
     await withDetachedFixture(async ({ history, recorder }) => {
-      const row = detachedRow(0, 9 * 1024 * 1024 + 1);
+      const row = detachedRow(0, 2 * 1024 * 1024 + 1);
       await history.replaceAll([row]);
       expect((await rowsOf(history))[0]).toStrictEqual(row);
       expect((await detachedDurableDigest(recorder)).bytes).toBeGreaterThan(
-        9 * 1024 * 1024,
+        2 * 1024 * 1024,
       );
     });
   }, 180_000);

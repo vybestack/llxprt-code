@@ -57,7 +57,7 @@ describe('held production dump snapshots release caller identities', () => {
   for (const [count, bytes] of [
     [512, 1024],
     [8192, 1024],
-    [1, 9 * 1024 * 1024],
+    [1, 2 * 1024 * 1024],
   ]) {
     it(`keeps disk values after ${count} pending rows of ${bytes} bytes retire`, async () => {
       const fixture = capture(count, bytes);

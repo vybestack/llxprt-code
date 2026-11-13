@@ -74,8 +74,8 @@ describe('streamed session row persistence scale', () => {
 });
 
 describe('streamed persistence accepts large rows', () => {
-  it('persists a valid nine MiB row without a JSON snapshot', async () => {
-    const bytes = 9 * 1024 * 1024;
+  it('persists a valid two MiB row without a JSON snapshot', async () => {
+    const bytes = 2 * 1024 * 1024;
     await withCoreSuffixFixture(
       1,
       async (history) => {

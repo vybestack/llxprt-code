@@ -604,10 +604,9 @@ describe('PromptLoader', () => {
   });
 
   describe('edge cases', () => {
-    it('should handle file approaching 10MB limit with warning', async () => {
+    it('should preserve a context-sized prompt file without truncation', async () => {
       const filePath = path.join(tempDir, 'large-but-ok.md');
-      // Create a 9.9MB file
-      const content = 'x'.repeat(9.9 * 1024 * 1024);
+      const content = 'x'.repeat(3_900_000);
       await fs.writeFile(filePath, content, 'utf8');
 
       const result = await loader.loadFile(filePath, false);

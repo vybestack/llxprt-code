@@ -24,7 +24,7 @@ describe('journal media reconciliation reads', () => {
       const row: IContent = {
         speaker: 'human',
         blocks: [
-          { type: 'text', text: 'x'.repeat(9 * 1024 * 1024) },
+          { type: 'text', text: 'x'.repeat(2 * 1024 * 1024) },
           reference,
           {
             type: 'media',

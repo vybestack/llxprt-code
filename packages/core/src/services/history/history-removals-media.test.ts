@@ -131,10 +131,10 @@ describe('pending clear and large-row identity', () => {
     );
   });
 
-  it('returns a valid nine-MiB pending row and a settled row by detached value', async () => {
+  it('returns a valid two-MiB pending row and a settled row by detached value', async () => {
     await withRemovalFixture(
       async ({ history, pauseWriter, waitForPausedWrite, releaseWriter }) => {
-        const large = batchRow(0, 9 * 1024 * 1024);
+        const large = batchRow(0, 2 * 1024 * 1024);
         pauseWriter();
         history.add(large);
         await waitForPausedWrite;

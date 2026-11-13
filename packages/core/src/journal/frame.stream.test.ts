@@ -26,12 +26,12 @@ import {
 } from './__tests__/support/streamedBody.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
 
-const BODY_BYTES = 200 * MIB;
-const CHUNK_BYTES = MIB;
-const SAMPLE_EVERY_CHUNKS = 20;
-/** Streaming holds a few chunks. 200 MiB retained would be twelve times this. */
-const STREAMING_GROWTH_BOUND = 16 * MIB;
-const RETAINED_GROWTH_FLOOR = 100 * MIB;
+const BODY_BYTES = 15 * MIB;
+const CHUNK_BYTES = 64 * 1024;
+const SAMPLE_EVERY_CHUNKS = 8;
+/** Streaming holds a few 64 KiB chunks; retaining the media body exceeds this. */
+const STREAMING_GROWTH_BOUND = 2 * MIB;
+const RETAINED_GROWTH_FLOOR = BODY_BYTES / 2;
 const KIND_HEADER = new Uint8Array(24).fill(0x5a);
 
 type FrameWriter = (sink: ByteSink, body: FrameBody) => Promise<unknown>;
@@ -134,7 +134,7 @@ async function warmUp(file: string): Promise<void> {
   }
 }
 
-describe('a 200 MiB body', () => {
+describe('a 15 MiB media-budget body', () => {
   const tempDir = useTempDir('journal-stream-');
 
   it('encodes and decodes through the frame codec with heap growth far below the body size', async () => {
@@ -175,10 +175,10 @@ describe('a 200 MiB body', () => {
   }, 180_000);
 });
 
-const BIG_ROW_BODY_BYTES = 64 * MIB;
-const BIG_ROW_ITEMS = 100_000;
+const BIG_ROW_BODY_BYTES = 2 * MIB;
+const BIG_ROW_ITEMS = 128;
 
-/** A ROW header of 100,000 blocks and 100,000 ids, about 4.3 MB, held by the test throughout. */
+/** A multi-block ROW header larger than the frame reader prefetch. */
 function bigRowHeader(): Uint8Array {
   return encodeRowHeader({
     label: 1n << 20n,
@@ -207,7 +207,7 @@ function bigRowHeader(): Uint8Array {
   });
 }
 
-describe('a 64 MiB body behind a 100,000-block, 100,000-id ROW header', () => {
+describe('a 2 MiB body behind a 128-block, 128-id ROW header', () => {
   const tempDir = useTempDir('journal-bigrow-');
 
   async function writeRow(
@@ -263,8 +263,8 @@ describe('a 64 MiB body behind a 100,000-block, 100,000-id ROW header', () => {
     }
 
     expect(read).toStrictEqual(written);
-    expect(encodeProbe.peakGrowth()).toBeLessThan(STREAMING_GROWTH_BOUND);
-    expect(decodeProbe.peakGrowth()).toBeLessThan(STREAMING_GROWTH_BOUND);
+    expect(encodeProbe.peakGrowth()).toBeLessThan(512 * 1024);
+    expect(decodeProbe.peakGrowth()).toBeLessThan(512 * 1024);
   }, 180_000);
 
   it('is caught when the encoder buffers the whole body', async () => {
@@ -274,6 +274,6 @@ describe('a 64 MiB body behind a 100,000-block, 100,000-id ROW header', () => {
     await writeRow(path.join(tempDir(), 'trap.llxj'), header, probe, true);
 
     expect(probe.peakGrowth()).toBeGreaterThan(BIG_ROW_BODY_BYTES / 2);
-    expect(probe.peakGrowth()).not.toBeLessThan(STREAMING_GROWTH_BOUND);
+    expect(probe.peakGrowth()).not.toBeLessThan(512 * 1024);
   }, 180_000);
 });

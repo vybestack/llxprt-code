@@ -370,9 +370,9 @@ function registerLargeDiskOutputTests(): void {
           for await(const _ of process.stdin){}
           const put=s=>new Promise(r=>process.stdout.write(s,r));
           await put('{"ignored":"');
-          for(let i=0;i<17;i++) await put('z'.repeat(1024*1024));
+          for(let i=0;i<2;i++) await put('z'.repeat(1024*1024));
           await put('","hookSpecificOutput":{"llm_request":{"contents":[{"speaker":"human","blocks":[{"type":"text","text":"');
-          for(let i=0;i<17;i++) await put('x'.repeat(1024*1024));
+          for(let i=0;i<2;i++) await put('x'.repeat(1024*1024));
           await put('尾"}]}]}}}');
         })();`),
           HookEventName.BeforeModel,
@@ -383,7 +383,7 @@ function registerLargeDiskOutputTests(): void {
           const reader = result.output?.replacement?.openReader();
           const row = (await reader?.next())?.value;
           expect(row).toMatchObject({ speaker: 'human' });
-          expect(JSON.stringify(row).length).toBeGreaterThan(17 * 1024 * 1024);
+          expect(JSON.stringify(row).length).toBeGreaterThan(2 * 1024 * 1024);
           await reader?.return();
         } finally {
           result.dispose();

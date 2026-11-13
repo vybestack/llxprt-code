@@ -33,7 +33,7 @@ export const large: IContent = {
   blocks: [
     {
       type: 'text',
-      text: '\u{1f600}雪'.repeat(1024 * 1024) + 'x'.repeat(3 * 1024 * 1024),
+      text: '\u{1f600}雪'.repeat(128 * 1024) + 'x'.repeat(1024 * 1024),
     },
   ],
 };
@@ -391,7 +391,7 @@ export async function cancelsBlockedInput(
     [
       {
         speaker: 'human',
-        blocks: [{ type: 'text', text: 'x'.repeat(10 * 1024 * 1024) }],
+        blocks: [{ type: 'text', text: 'x'.repeat(2 * 1024 * 1024) }],
       },
       rich,
     ],

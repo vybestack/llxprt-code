@@ -147,18 +147,18 @@ describe('addBatch value ownership and real compensation', () => {
     });
   });
 
-  it('accepts a complete row larger than nine MiB without a blanket row-size ban', async () => {
+  it('accepts a complete row of two MiB without a blanket row-size ban', async () => {
     await withNativeDetachedFixture(async ({ history, primaryRows }) => {
       const marker = { seq: 1, userTurn: 1, step: 0, recordedAt: 0 };
       const caller = {
-        ...detachedRow(0, 9 * 1024 * 1024 + 1),
+        ...detachedRow(0, 2 * 1024 * 1024 + 1),
         metadata: { id: 'duplicate', chronology: marker },
       };
       await history.addBatch([caller]);
       expect(caller.metadata.chronology).toBe(marker);
       expect((await rowsOf(history))[0]).toStrictEqual(caller);
       expect((await detachedDigest(primaryRows())).bytes).toBeGreaterThan(
-        9 * 1024 * 1024,
+        2 * 1024 * 1024,
       );
     });
   }, 180_000);

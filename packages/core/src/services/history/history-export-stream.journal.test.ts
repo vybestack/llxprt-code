@@ -135,9 +135,9 @@ describe('streamed history JSON export on the journal store', () => {
     expect(await exported()).toBe(await oracle());
   });
 
-  it('exports an empty history and a valid row larger than 8 MiB', async () => {
+  it('exports an empty history and a valid row of two MiB', async () => {
     expect(await exported()).toBe('[]');
-    const row = exportSummaryRow(0, 9 * 1024 * 1024);
+    const row = exportSummaryRow(0, 2 * 1024 * 1024);
     await history.addBatch([row]);
     await history.waitForCommit();
     const hash = createHash('sha256');

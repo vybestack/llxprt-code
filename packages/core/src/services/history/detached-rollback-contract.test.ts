@@ -146,10 +146,10 @@ for (const stage of [
 
 describe('detached scalar and large-value recovery', () => {
   it.each([...backends])(
-    'restores chronology counters after rejection and accepts a nine-MiB value on %s',
+    'restores chronology counters after rejection and accepts a two-MiB value on %s',
     async () => {
       await withNativeDetachedFixture(async ({ history, durable }) => {
-        const caller = rollbackRow(0, 9 * 1024 * 1024);
+        const caller = rollbackRow(0, 2 * 1024 * 1024);
         const failure = new Error('large rejection');
         expect(
           await rejectedValue(
@@ -167,9 +167,9 @@ describe('detached scalar and large-value recovery', () => {
         const stored = await rowsOf(history);
         expect(stored[0].metadata?.chronology?.seq).toBe(1);
         expect(stored[0].blocks).toStrictEqual(
-          rollbackRow(0, 9 * 1024 * 1024).blocks,
+          rollbackRow(0, 2 * 1024 * 1024).blocks,
         );
-        expect((await durable()).bytes).toBeGreaterThan(9 * 1024 * 1024);
+        expect((await durable()).bytes).toBeGreaterThan(2 * 1024 * 1024);
       });
     },
     180_000,

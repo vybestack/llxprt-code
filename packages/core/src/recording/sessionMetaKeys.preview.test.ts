@@ -4,7 +4,7 @@ import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap
 import { MIB } from '../journal/__tests__/support/streamedBody.js';
 import { previewOfContent, SESSION_PREVIEW_LENGTH } from './sessionMetaKeys.js';
 
-const RETAINED_BOUND = 4 * MIB;
+const RETAINED_BOUND = MIB;
 const CONTROL_FLOOR_FRACTION = 0.5;
 
 function text(value: string): { type: string; text: string } {
@@ -53,7 +53,7 @@ describe('previewOfContent', () => {
     const cut = (): void => {
       held = previewOfContent({
         speaker: 'human',
-        blocks: [text(bigText(40 * MIB)), text(bigText(40 * MIB))],
+        blocks: [text(bigText(MIB)), text(bigText(MIB))],
       });
     };
     cut();
@@ -65,14 +65,14 @@ describe('previewOfContent', () => {
 
   it('control: holding the row itself shows in the same measurement', async () => {
     const baseline = await settledHeap();
-    const row = { speaker: 'human', blocks: [text(bigText(40 * MIB))] };
+    const row = { speaker: 'human', blocks: [text(bigText(2 * MIB))] };
     const preview = previewOfContent(row);
     const withRow = await settledHeap();
 
     expect(preview).toHaveLength(SESSION_PREVIEW_LENGTH);
     expect(row.blocks).toHaveLength(1);
     expect(withRow - baseline).toBeGreaterThan(
-      40 * MIB * CONTROL_FLOOR_FRACTION,
+      2 * MIB * CONTROL_FLOOR_FRACTION,
     );
   });
 });

@@ -58,7 +58,7 @@ describe('native borrowed row facts cancellation', () => {
 for (const [size, bytes] of [
   [512, 2048],
   [8192, 2048],
-  [1, 9 * 1024 * 1024],
+  [1, 2 * 1024 * 1024],
 ]) {
   describe(`native borrowed snapshot lifecycle ${size}/${bytes}`, () => {
     it('preserves every complete value and closes on a for-await callback exception', async () => {

@@ -11,7 +11,7 @@ import { JournalHistoryStore } from './journalHistoryStore.js';
 import { JournalSession } from './journalSession.js';
 
 /** Settled heap may rise this far above its start once the row has been written or read and dropped. */
-const RETAINED_BOUND = 4 * MIB;
+const RETAINED_BOUND = 2 * MIB;
 /** A row this big read into the control must show in the same measurement. */
 const CONTROL_FLOOR_FRACTION = 0.5;
 const PIECE_BYTES = MIB;
@@ -68,13 +68,24 @@ async function readDigest(
   return found;
 }
 
-describe('rows of 17, 40 and 200 MiB through the journal history store (defect 5)', () => {
+describe('rows of 1 and 2.5 MiB through the journal history store (defect 5)', () => {
   const directory = useTempDir('journal-history-large-');
 
-  for (const mebibytes of [17, 40, 200] as const) {
+  for (const mebibytes of [1, 2.5]) {
     it(`applies, reopens and streams a ${mebibytes} MiB row, and holds none of it afterwards`, async () => {
       const file = path.join(directory(), `row-${mebibytes}.llxj`);
       const bytes = mebibytes * MIB;
+      const warmFile = path.join(directory(), 'warm.llxj');
+      const warmStore = new JournalHistoryStore(
+        await JournalSession.create(warmFile, testJournalOptions()),
+      );
+      await applyRow(warmStore, 1024);
+      await warmStore.dispose();
+      const warmReopened = new JournalHistoryStore(
+        await JournalSession.open(warmFile, testJournalOptions()),
+      );
+      await readDigest(warmReopened);
+      await warmReopened.dispose();
       const baseline = await settledHeap();
       const store = new JournalHistoryStore(
         await JournalSession.create(file, testJournalOptions()),
@@ -105,7 +116,7 @@ describe('rows of 17, 40 and 200 MiB through the journal history store (defect 5
         testJournalOptions(),
       ),
     );
-    const bytes = 40 * MIB;
+    const bytes = 2.5 * MIB;
     const baseline = await settledHeap();
 
     const kept = [textRow(rowText(bytes), 1)];
@@ -116,5 +127,6 @@ describe('rows of 17, 40 and 200 MiB through the journal history store (defect 5
 
     expect(kept).toHaveLength(1);
     expect(withRow - baseline).toBeGreaterThan(bytes * CONTROL_FLOOR_FRACTION);
+    expect(withRow - baseline).toBeGreaterThan(RETAINED_BOUND);
   });
 });

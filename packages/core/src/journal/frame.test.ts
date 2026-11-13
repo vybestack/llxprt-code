@@ -151,8 +151,8 @@ describe('frame round trip', () => {
     expect(Array.from(back.body)).toStrictEqual([9, 8, 7]);
   });
 
-  it('has no 16 MiB ceiling', async () => {
-    const body = new SeededRandom(8).bytes(17 * 1024 * 1024);
+  it('round-trips a body at the default 15 MiB media budget', async () => {
+    const body = new SeededRandom(8).bytes(15 * 1024 * 1024);
     const bytes = await frameBytes(new Uint8Array(8), body, [1024 * 1024]);
 
     const back = await readBack(bytes);

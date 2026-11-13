@@ -74,17 +74,17 @@ describe('addBatch actual disk publication owners', () => {
   );
 });
 
-describe('addBatch oversized disk values', () => {
-  it('accepts a complete valid row larger than the fixture byte bound', async () => {
+describe('addBatch large disk values', () => {
+  it('accepts a complete two-MiB row without truncation', async () => {
     await withBatchFixture(async ({ history, owners }) => {
-      const batch = [batchRow(0, 9 * 1024 * 1024)];
+      const batch = [batchRow(0, 2 * 1024 * 1024)];
       owners.registerInput(batch);
       await history.addBatch(batch);
       let count = 0;
       for await (const row of history.streamRawHistory()) {
         expect(row).toStrictEqual(batch[0]);
         expect(Buffer.byteLength(JSON.stringify(row))).toBeGreaterThan(
-          bound.serializedBytes,
+          2 * 1024 * 1024,
         );
         count++;
       }

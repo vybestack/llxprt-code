@@ -6,11 +6,11 @@ import {
   useLargeRowProof,
 } from './__tests__/support/service-large-row-proof.js';
 
-describe('HistoryService real-recorder 17 MiB row (defect 5)', () => {
-  const measureLargeRow = useLargeRowProof(17);
+describe('HistoryService real-recorder 1 MiB row (defect 5)', () => {
+  const measureLargeRow = useLargeRowProof(1);
   it('persists and freshly resumes the complete row without retained context', async () => {
     const result = await measureLargeRow();
-    expect(result.bytes).toBe(17 * MIB);
+    expect(result.bytes).toBe(1 * MIB);
     expect(result.growth).toHaveLength(3);
     expect(Math.min(result.admissionGrowth, ...result.growth)).toBeGreaterThan(
       -256 * 1024,

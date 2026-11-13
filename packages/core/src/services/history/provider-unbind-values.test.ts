@@ -105,9 +105,9 @@ describe('provider unbind disk value transaction', () => {
       }, 120_000);
     }
   }
-  it('retains every byte of a valid row larger than nine MiB', async () => {
+  it('retains every byte of a valid row of two MiB', async () => {
     await withValueTransformFixture(async ({ history, recorder }) => {
-      const bytes = 9 * 1024 * 1024 + 1;
+      const bytes = 2 * 1024 * 1024 + 1;
       await history.detachedValues.replace(
         transformFixtureRows(1, true, bytes),
       );
@@ -118,7 +118,7 @@ describe('provider unbind disk value transaction', () => {
       const expected = await detachedDigest(
         transformFixtureRows(1, false, bytes),
       );
-      expect(expected.bytes).toBeGreaterThan(9 * 1024 * 1024);
+      expect(expected.bytes).toBeGreaterThan(2 * 1024 * 1024);
       expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
         expected,
       );

@@ -63,7 +63,7 @@ describe('independent journal provider cursor membership', () => {
     }
   });
 
-  it('permits a valid single row larger than 8 MiB without truncation', async () => {
+  it('permits a valid single row of two MiB without truncation', async () => {
     await withCoreSuffixFixture(
       1,
       async (history) => {
@@ -72,14 +72,14 @@ describe('independent journal provider cursor membership', () => {
           const row = await stream.next();
           if (row.done === true) throw new Error('Missing large row');
           expect(JSON.stringify(row.value)).toBe(
-            JSON.stringify(providerFixtureRow(0, 9 * 1024 * 1024)),
+            JSON.stringify(providerFixtureRow(0, 2 * 1024 * 1024)),
           );
           expect((await stream.next()).done).toBe(true);
         } finally {
           await stream.return();
         }
       },
-      9 * 1024 * 1024,
+      2 * 1024 * 1024,
       providerFixtureRow,
     );
   });

@@ -117,11 +117,11 @@ describe('native detached checkpoint public contracts', () => {
     180_000,
   );
 
-  it('restores every byte of a checkpoint row larger than nine MiB', async () => {
+  it('restores every byte of a checkpoint row of two MiB', async () => {
     await withNativeDetachedFixture(async ({ history, durable }) => {
-      const bytes = 9 * 1024 * 1024 + 1;
+      const bytes = 2 * 1024 * 1024 + 1;
       const expected = await detachedDigest(values(1, bytes));
-      expect(expected.bytes).toBeGreaterThan(9 * 1024 * 1024);
+      expect(expected.bytes).toBeGreaterThan(2 * 1024 * 1024);
       await history.detachedValues.replace(values(1, bytes));
       await history.detachedValues.withCheckpoint(async (checkpoint) => {
         await history.detachedValues.replace(values(2));

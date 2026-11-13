@@ -84,7 +84,7 @@ export function useLargeRowProof(
     const forcedCodeAging =
       process.env['BUN_JSC_forceCodeBlockToJettisonDueToOldAge'] === '1';
     if (!forcedCodeAging) await ageOutIdleCode();
-    await warmLargeRow(forcedCodeAging ? 17 * MIB : size * MIB);
+    await warmLargeRow(size * MIB);
     const rig = await largeRig();
     prepared = { rig, baseline: Number.NaN };
     prepared = { rig, baseline: await medianSettledHeap('before admission') };

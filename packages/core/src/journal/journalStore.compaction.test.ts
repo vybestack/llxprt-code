@@ -238,7 +238,7 @@ describe('compaction of a live store (design 4.11)', () => {
     await store.close();
   });
 
-  it('retains a popped 70 MiB transcript body without repeatedly compacting its live bytes', async () => {
+  it('retains a popped 64 MiB transcript across two-MiB rows without repeatedly compacting its live bytes', async () => {
     const target = file('real.llxj');
     const store = await JournalStore.create(
       target,
@@ -246,19 +246,24 @@ describe('compaction of a live store (design 4.11)', () => {
       testNamedWriters,
     );
     await store.commit([
-      { kind: 'append', rows: [draftRow({ text: 'x'.repeat(70 * MIB) })] },
+      {
+        kind: 'append',
+        rows: Array.from({ length: 32 }, () =>
+          draftRow({ text: 'x'.repeat(2 * MIB) }),
+        ),
+      },
     ]);
     const [label] = await labelsOf(store);
     expect((await fsp.stat(target)).size).toBeGreaterThan(64 * MIB);
     const originalFileId = await fileIdOf(target);
-    await store.commit([{ kind: 'pop', cutLabel: label, expectedRemoved: 1 }]);
+    await store.commit([{ kind: 'pop', cutLabel: label, expectedRemoved: 32 }]);
     await store.idle();
 
     expect(await fileIdOf(target)).toBe(originalFileId);
-    expect((await fsp.stat(target)).size).toBeGreaterThan(70 * MIB);
+    expect((await fsp.stat(target)).size).toBeGreaterThan(64 * MIB);
     expect(await labelsOf(store)).toStrictEqual([]);
     expect(await store.compact()).toBe('swapped');
-    expect((await fsp.stat(target)).size).toBeGreaterThan(70 * MIB);
+    expect((await fsp.stat(target)).size).toBeGreaterThan(64 * MIB);
     await store.close();
   });
 

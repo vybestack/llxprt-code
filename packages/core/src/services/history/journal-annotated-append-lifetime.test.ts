@@ -87,12 +87,12 @@ describe('annotated native append backpressure and complete large values', () =>
     180_000,
   );
 
-  it('preserves every character of a greater-than-nine-MiB annotated append and its pinned prefix', async () => {
+  it('preserves every character of a greater-than-two-MiB annotated append and its pinned prefix', async () => {
     const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.setTokenizerFactory(exactTokenizer());
     const text = 'abcdefghijk'
-      .repeat(Math.ceil((9 * 1024 * 1024 + 17) / 11))
-      .slice(0, 9 * 1024 * 1024 + 17);
+      .repeat(Math.ceil((2 * 1024 * 1024 + 17) / 11))
+      .slice(0, 2 * 1024 * 1024 + 17);
     try {
       await history.detachedValues.append([row(0)]);
       await history.detachedValues.withCheckpoint(async (checkpoint) => {

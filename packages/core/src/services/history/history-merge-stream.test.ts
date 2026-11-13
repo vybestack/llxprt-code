@@ -79,8 +79,8 @@ describe('history merge self append and large row', () => {
     );
   });
 
-  it('accepts a valid nine MiB row without applying the controlled-fixture byte limit as an input cap', async () => {
-    const bytes = 9 * 1024 * 1024;
+  it('accepts a valid two MiB row without applying the controlled-fixture byte limit as an input cap', async () => {
+    const bytes = 2 * 1024 * 1024;
     await withCoreSuffixFixture(
       1,
       async (source) => {

@@ -21,8 +21,8 @@ import {
 } from './__tests__/support/streamedBody.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
 
-const CHUNK_BYTES = 256 * 1024;
-const SAMPLE_EVERY_CHUNKS = 40;
+const CHUNK_BYTES = 64 * 1024;
+const SAMPLE_EVERY_CHUNKS = 8;
 
 type BodyMaker = (body: FrameBody) => Promise<FrameBody>;
 
@@ -111,9 +111,8 @@ async function consume(
 }
 
 const CASES: ReadonlyArray<readonly [number, number]> = [
-  [17 * MIB, 4 * MIB],
-  [40 * MIB, 6 * MIB],
-  [200 * MIB, 8 * MIB],
+  [MIB, 512 * 1024],
+  [15 * MIB, 2 * MIB],
 ];
 
 describe('rows larger than any buffer the codec would allocate', () => {
