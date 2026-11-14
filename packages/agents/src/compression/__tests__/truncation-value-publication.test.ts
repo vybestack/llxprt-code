@@ -157,15 +157,21 @@ async function summaryPublication(): Promise<IContent | undefined> {
           'test',
           1,
         );
-        expect(result?.metadata?.chronologyReplaced).toStrictEqual({
+        // The marked row was carried from history, so truncation reports no
+        // summary of its own (#4067); the published row keeps its annotations.
+        expect(result).toBeUndefined();
+        expect(history.getCacheAnchorSeq()).toBe(12);
+        const rows: IContent[] = [];
+        for await (const row of history.streamRawHistory()) rows.push(row);
+        const published = rows.find(
+          (row) => row.metadata?.reason === 'compression-state-snapshot',
+        );
+        expect(published?.metadata?.chronologyReplaced).toStrictEqual({
           fromSeq: 1,
           toSeq: 11,
           itemCount: 11,
         });
-        expect(result?.metadata?.chronology?.seq).toBe(13);
-        expect(history.getCacheAnchorSeq()).toBe(12);
-        const rows: IContent[] = [];
-        for await (const row of history.streamRawHistory()) rows.push(row);
+        expect(published?.metadata?.chronology?.seq).toBe(13);
         expect(
           rows
             .filter((row) => row.metadata?.cacheAnchor === true)
@@ -175,7 +181,7 @@ async function summaryPublication(): Promise<IContent | undefined> {
           contentIndex: 1,
           blockIndex: 0,
         });
-        return result;
+        return published;
       } finally {
         candidate.close();
         previous.close();
@@ -193,7 +199,7 @@ describe('truncation real publication failure and recording values', () => {
         expect(await rejectPublication(size, mode)).toBe(size);
       }, 120_000);
     }
-  it('returns the marked summary value and preserves cache/frontier/replaced chronology', async () => {
+  it('publishes a carried marked summary without reporting it and preserves cache/frontier/replaced chronology (#4067)', async () => {
     expect((await summaryPublication())?.metadata?.reason).toBe(
       'compression-state-snapshot',
     );
