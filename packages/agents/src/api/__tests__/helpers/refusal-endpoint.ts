@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ApprovalMode, createAgent } from '@vybestack/llxprt-code-agents';
 import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
-import { Storage } from '@vybestack/llxprt-code-settings';
+import { ProfileManager, Storage } from '@vybestack/llxprt-code-settings';
 import { startAnthropicEndpoint } from './anthropic-refusal-endpoint.js';
 
 const PROMPT_TOKENS = 120;
@@ -309,6 +309,7 @@ export interface ScriptedRun {
   readonly waits: readonly number[];
   readonly stats: ReturnType<Agent['getStats']>;
   readonly requests: readonly WireRequest[];
+  readonly compressionRequests: readonly WireRequest[];
   readonly historyBefore: Awaited<ReturnType<Agent['getHistory']>>;
   readonly historyAfter: Awaited<ReturnType<Agent['getHistory']>>;
   readonly tokenRecords: ReadonlyArray<Record<string, unknown>>;
@@ -355,6 +356,10 @@ export function isBackoffNotice(event: AgentEvent): boolean {
 }
 
 export interface ScriptedRunOptions {
+  /** Model name used by a dedicated compression profile endpoint. */
+  readonly compressionModel?: string;
+  /** Compresses the live session immediately before this zero-based prompt. */
+  readonly compressBeforePromptIndex?: number;
   /** Which wire protocol the local endpoint speaks. Default: openai. */
   readonly protocol?: 'openai' | 'anthropic';
   /**
@@ -384,6 +389,49 @@ export interface ScriptedRunOptions {
  * endpoint received, history before and after, the token-usage log and the
  * journal.
  */
+async function startCompressionProfile(
+  profileManager: ProfileManager,
+  sessionId: string,
+  model: string,
+): Promise<{ endpoint: ScriptedEndpoint; profileName: string }> {
+  const profileName = `refusal-audit-${sessionId}`;
+  const endpoint = await startScriptedEndpoint([
+    stopReply('compressed summary'),
+  ]);
+  await profileManager.saveProfile(profileName, {
+    version: 1,
+    provider: 'openai',
+    model,
+    modelParams: {},
+    ephemeralSettings: {
+      'base-url': endpoint.url,
+      'auth-key': 'local-test-key',
+    },
+  });
+  return { endpoint, profileName };
+}
+
+async function runPrompts(
+  agent: Agent,
+  prompts: readonly string[],
+  options: ScriptedRunOptions,
+): Promise<AgentEvent[]> {
+  const events: AgentEvent[] = [];
+  for (const [promptIndex, prompt] of prompts.entries()) {
+    if (promptIndex === options.compressBeforePromptIndex) {
+      await agent.compress({ promptId: `refusal-audit-${promptIndex}` });
+    }
+    for await (const event of agent.stream(
+      prompt,
+      options.signal === undefined ? undefined : { signal: options.signal },
+    )) {
+      events.push(event);
+      await options.onEvent?.(event, agent);
+    }
+  }
+  return events;
+}
+
 export async function runScriptedPrompt(
   replies: readonly EndpointReply[],
   prompts: readonly string[] = ['please summarise the work'],
@@ -393,10 +441,20 @@ export async function runScriptedPrompt(
     mkdtempSync(join(tmpdir(), 'llxprt-refusal-')),
   );
   const sessionId = `refusal-${randomUUID()}`;
+  const profileManager = new ProfileManager();
   const anthropic = options.protocol === 'anthropic';
   const endpoint = anthropic
     ? await startAnthropicEndpoint(replies)
     : await startScriptedEndpoint(replies);
+  const compressionProfile =
+    options.compressionModel === undefined
+      ? undefined
+      : await startCompressionProfile(
+          profileManager,
+          sessionId,
+          options.compressionModel,
+        );
+  const compressionEndpoint = compressionProfile?.endpoint;
   let agent: Agent | undefined;
   try {
     agent = await createAgent({
@@ -415,18 +473,15 @@ export async function runScriptedPrompt(
       agent.setEphemeralSetting(key, value);
     for (const [key, value] of Object.entries(options.modelParams ?? {}))
       agent.setModelParam(key, value);
+    if (compressionProfile !== undefined) {
+      agent.setEphemeralSetting(
+        'compression.profile',
+        compressionProfile.profileName,
+      );
+    }
     const historyBefore = await agent.getHistory();
     await agent.session.setRecording({ enabled: true });
-    const events: AgentEvent[] = [];
-    for (const prompt of prompts) {
-      for await (const event of agent.stream(
-        prompt,
-        options.signal === undefined ? undefined : { signal: options.signal },
-      )) {
-        events.push(event);
-        await options.onEvent?.(event, agent);
-      }
-    }
+    const events = await runPrompts(agent, prompts, options);
     await options.inspect?.(agent);
     const historyAfter = await agent.getHistory();
     const journalPath = agent.session.getRecording().path ?? '';
@@ -438,6 +493,7 @@ export async function runScriptedPrompt(
       waits: requestedWaits(journalRecords),
       stats: agent.getStats(),
       requests: [...endpoint.requests()],
+      compressionRequests: [...(compressionEndpoint?.requests() ?? [])],
       historyBefore,
       historyAfter,
       tokenRecords: readJsonl(
@@ -447,7 +503,11 @@ export async function runScriptedPrompt(
     };
   } finally {
     await agent?.dispose();
+    if (compressionProfile !== undefined) {
+      await profileManager.deleteProfile(compressionProfile.profileName);
+    }
     await endpoint.stop();
+    await compressionEndpoint?.stop();
     rmSync(workingDir, { recursive: true, force: true });
   }
 }

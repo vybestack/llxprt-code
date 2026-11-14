@@ -59,6 +59,19 @@ describe('RefusalContextTracker (REQ-4101-D2)', () => {
     expect(revised.digest).not.toBe(initial.digest);
   });
 
+  it('marks the baseline unavailable when the session tracker is reset', () => {
+    const tracker = new RefusalContextTracker();
+    tracker.commit([entry(1, 'previous session')], 'old-prompt', 2);
+
+    tracker.reset();
+    const afterReset = tracker.snapshot([entry(1, 'current session')], []);
+
+    expect(afterReset.baseline_available).toBe(false);
+    expect(afterReset.baseline_prompt_id).toBeNull();
+    expect(afterReset.baseline_attempt_index).toBeNull();
+    expect(afterReset.baseline_time).toBeNull();
+  });
+
   it('advances only on commit and bounds previews under one UTF-8 budget', () => {
     const tracker = new RefusalContextTracker();
     tracker.commit([entry(1, 'baseline')], 'p1', 0);

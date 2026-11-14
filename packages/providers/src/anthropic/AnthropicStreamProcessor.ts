@@ -5,11 +5,8 @@
  * @issue #1572 - Decomposing AnthropicProvider (Step 4 - Part B)
  */
 
-import {
-  mapStopReason,
-  parseAnthropicStopDetails,
-} from './finishReasonMapping.js';
-import { z } from 'zod';
+import { mapStopReason } from './finishReasonMapping.js';
+import { readAnthropicMessageDeltaStopDetails } from './anthropicStopDetails.js';
 import type Anthropic from '@anthropic-ai/sdk';
 import type {
   ToolUseBlock,
@@ -691,15 +688,7 @@ function* handleMessageDelta(
     | undefined;
 
   const stopReason = readMessageDeltaStopReason(chunk);
-  const parsedDelta = z
-    .object({
-      delta: z.object({ stop_details: z.unknown().optional() }).passthrough(),
-    })
-    .passthrough()
-    .safeParse(chunk);
-  const stopDetails = parsedDelta.success
-    ? parseAnthropicStopDetails(parsedDelta.data.delta.stop_details)
-    : undefined;
+  const stopDetails = readAnthropicMessageDeltaStopDetails(chunk);
   const { refusalAuditToolInputs, firstByteToRefusalMs } = refusalAuditFields(
     stopReason,
     state,

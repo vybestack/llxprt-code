@@ -91,6 +91,7 @@ interface RawPartialItem {
   readonly id?: string;
   readonly name?: string;
   readonly complete?: boolean;
+  readonly streamId?: string;
 }
 
 function utf8Length(value: string): number {
@@ -118,7 +119,11 @@ function rawItems(output: ModelOutput): RawPartialItem[] {
     if (block.type === 'text') {
       items.push({ type: 'text', text: block.text });
     } else if (block.type === 'thinking') {
-      items.push({ type: 'thinking', text: block.thought });
+      items.push({
+        type: 'thinking',
+        text: block.thought,
+        streamId: block.streamId,
+      });
     } else if (block.type === 'tool_call') {
       const raw = output.refusalAuditToolInputs?.find(
         (tool) => tool.id === block.id && tool.complete,
@@ -155,11 +160,27 @@ export function buildPartialOutputSnapshot(
   output: ModelOutput,
 ): PartialOutputSnapshot {
   const source = rawItems(output);
+  const thinkingPositions = new Map<string, number>();
+  const repeatedThinkingPositions = new Set<number>();
+  for (let index = 0; index < source.length; index++) {
+    const item = source[index];
+    if (item.type !== 'thinking' || item.streamId === undefined) continue;
+    const previous = thinkingPositions.get(item.streamId);
+    if (previous === undefined) {
+      thinkingPositions.set(item.streamId, index);
+    } else {
+      source[previous] = item;
+      repeatedThinkingPositions.add(index);
+    }
+  }
+  const coalesced = source.filter(
+    (_, index) => !repeatedThinkingPositions.has(index),
+  );
   let remaining = PARTIAL_OUTPUT_LIMIT_BYTES;
   let originalBytes = 0;
   let previewBytes = 0;
   let truncated = false;
-  const items = source.map((item): PartialOutputItem => {
+  const items = coalesced.map((item): PartialOutputItem => {
     const original = utf8Length(item.text);
     originalBytes += original;
     const preview = truncateUtf8(item.text, remaining);

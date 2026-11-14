@@ -19,7 +19,6 @@ import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.
 import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
 import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { CompressionAuditProvenance } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
@@ -40,7 +39,11 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import { fireBeforeModelHook } from './beforeModelHookFire.js';
 import type { ConversationManager } from './ConversationManager.js';
-import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
+import {
+  admitRefusalAuditChunk,
+  recordToolResponses,
+  releasePromptTurnIdentity,
+} from './streamRefusalAuditBoundary.js';
 import { processAfterModelHook } from './streamAfterModelHook.js';
 import { RefusalDumpPairing } from './refusalDumpPairing.js';
 import { prepareAtSendSeam } from './promptEnvelopeSendSeam.js';
@@ -75,16 +78,12 @@ import {
   StreamTimingTracker,
   type StreamFinishInfo,
 } from './streamTelemetryLogger.js';
-import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
+import { captureSendBoundaryAudit } from './sendBoundaryAudit.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
 import { logApiError, turnTelemetryPorts } from './turnLogging.js';
 
 import { assertAdmittedRoute } from './admittedRouteSecurity.js';
-import {
-  admitStreamChunkForHistory,
-  turnMediaAdmissionContext,
-  type PreparedUserTurn,
-} from './mediaAdmissionSeam.js';
+import type { PreparedUserTurn } from './mediaAdmissionSeam.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import { buildStreamChatOptions } from './streamChatOptions.js';
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
@@ -98,7 +97,7 @@ import {
 } from './runtimePorts.js';
 import { stampTurnIdentityOnInput } from './turnIdentity.js';
 import { throwIfRefused } from '../refusal/refusalDetection.js';
-import { RefusalContextTracker } from '../refusal/refusalContextTracker.js';
+import { RefusalStreamAudit } from '../refusal/refusalStreamAudit.js';
 import type { RefusalContextFingerprint } from '../refusal/refusalAudit.js';
 
 function isPreparedUserTurn(
@@ -114,21 +113,9 @@ export class StreamProcessor {
   }
   private eagerlyRecordedToolResponseCallIds = new Set<string>();
   private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
-  private readonly refusalContextTracker = new RefusalContextTracker();
-  private readonly compressionAuditListener = (
-    _summary: IContent,
-    _itemsCompressed: number,
-    _origin?: object,
-    provenance?: CompressionAuditProvenance,
-  ): void => {
-    if (provenance !== undefined) {
-      this.refusalContextTracker.recordCompression(provenance);
-    }
-  };
-  private readonly refusalFingerprintByStream = new WeakMap<
-    AsyncGenerator<ModelStreamChunk>,
-    RefusalContextFingerprint
-  >();
+  private readonly refusalStreamAudit: RefusalStreamAudit;
+  private readonly releaseCompressionAuditListener: () => void;
+  private currentContextFingerprint: RefusalContextFingerprint | undefined;
 
   /** Canonical turn identity retained across retries for each logical prompt. */
   private readonly turnIdByPromptId = new Map<string, string>();
@@ -158,12 +145,10 @@ export class StreamProcessor {
     ports: StreamProcessorRuntime,
     providerFileBindings: ProviderFileBindingStore,
   ): void {
-    this.historyService.off('compressionEnded', this.compressionAuditListener);
     this.ports = ports;
     this.historyService = ports.history;
     this.providerFileBindings = providerFileBindings;
-    this.refusalContextTracker.reset();
-    this.historyService.on('compressionEnded', this.compressionAuditListener);
+    this.refusalStreamAudit.rebind();
   }
 
   constructor(
@@ -185,24 +170,38 @@ export class StreamProcessor {
     private historyService: HistoryService,
     private readonly generationConfig: ChatSessionConfig,
   ) {
-    this.historyService.on('compressionEnded', this.compressionAuditListener);
+    this.refusalStreamAudit = new RefusalStreamAudit(
+      this.ports.state.sessionId,
+    );
+    this.releaseCompressionAuditListener =
+      this.compressionHandler.setCompressionAuditListener((provenance) =>
+        this.refusalStreamAudit.recordCompression(provenance),
+      );
   }
 
   /** Tracks tool responses already recorded during eager client streaming. */
+  private _finalizeStreamProcessing(
+    accumulated: ModelOutput,
+    options: Omit<Parameters<typeof finalizeStreamResponse>[0], 'accumulated'>,
+  ): Promise<void> {
+    return finalizeStreamResponse({ ...options, accumulated });
+  }
+
   markToolResponsesRecorded(callIds: readonly string[]): void {
-    for (const callId of callIds) {
-      if (typeof callId === 'string' && callId.length > 0) {
-        this.eagerlyRecordedToolResponseCallIds.add(callId);
-      }
-    }
+    recordToolResponses(this.eagerlyRecordedToolResponseCallIds, callIds);
   }
 
   releasePromptTurnIdentity(promptId: string): void {
-    this.turnIdByPromptId.delete(promptId);
+    releasePromptTurnIdentity(this.turnIdByPromptId, promptId);
   }
 
-  resetRefusalContext(): void {
-    this.refusalContextTracker.reset();
+  resetRefusalContextBaseline(): void {
+    this.refusalStreamAudit.resetBaseline();
+  }
+
+  dispose(): void {
+    this.releaseCompressionAuditListener();
+    this.refusalStreamAudit.dispose();
   }
 
   /** Resolves the provider, sends the request with retry, and returns a response stream. */
@@ -269,6 +268,7 @@ export class StreamProcessor {
       );
     }
 
+    this.currentContextFingerprint = undefined;
     const streamResponse = await this._executeStreamApiCall(
       params,
       promptId,
@@ -287,6 +287,7 @@ export class StreamProcessor {
       params.recordingExecution?.historyOrigin,
       promptId,
       this.currentAttemptIndex,
+      this.currentContextFingerprint,
     );
   }
 
@@ -299,6 +300,7 @@ export class StreamProcessor {
     origin: object | undefined,
     promptId: string,
     attemptIndex: number,
+    contextFingerprint: RefusalContextFingerprint | undefined,
   ): AsyncGenerator<ModelStreamChunk> {
     let processedStream: AsyncGenerator<ModelStreamChunk> | undefined;
     const ensureProcessedStream = (): AsyncGenerator<ModelStreamChunk> => {
@@ -309,7 +311,7 @@ export class StreamProcessor {
         turnId,
         prepared,
         origin,
-        this.refusalFingerprintByStream.get(streamResponse),
+        contextFingerprint,
         promptId,
         attemptIndex,
       );
@@ -639,21 +641,16 @@ export class StreamProcessor {
           this.ports.promptEstimator,
         ));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
-      recordSendSeamTelemetry({
-        usageLogger: this.compressionHandler.tokenUsageLogger,
+      this.currentContextFingerprint = captureSendBoundaryAudit(
+        this.refusalStreamAudit,
+        this.compressionHandler,
+        this.ports,
+        this.historyService,
+        prepared,
+        requestPayload,
+        generation,
         promptId,
-        estimate: prepared.estimate,
-        runtimeState: this.ports.state,
-        historyService: this.historyService,
-        requestContents: requestPayload.contents,
-        tools: requestPayload.tools,
-        systemInstruction: generation.systemInstruction,
-        turnId: this.turnIdByPromptId.get(promptId) ?? null,
-      });
-
-      const contextFingerprint = this.refusalContextTracker.snapshot(
-        this.historyService.getAll(),
-        prepared.options.contents,
+        this.turnIdByPromptId.get(promptId) ?? null,
       );
       assertAdmittedRoute(params.modelParameters?.route);
       const streamResponse = provider.generateChatCompletion({
@@ -677,7 +674,6 @@ export class StreamProcessor {
         dumpAttemptContext,
         this._convertIContentStream.bind(this),
       );
-      this.refusalFingerprintByStream.set(convertedStream, contextFingerprint);
       return convertedStream;
     } catch (error) {
       const durationMs = Date.now() - startTime;
@@ -868,52 +864,40 @@ export class StreamProcessor {
     let failureCleanupStarted = false;
     try {
       for await (const chunk of streamResponse) {
-        const allowedToolNames = chunk.hookRestrictions?.allowedToolNames;
-        const filteredContent: IContent = {
-          ...chunk.content,
-          blocks: filterHookRestrictedBlocks(
-            chunk.content.blocks,
-            allowedToolNames,
-          ),
-        };
-        const historyChunk = await admitStreamChunkForHistory(
+        const admitted = await admitRefusalAuditChunk(
           this.ports,
-          chunk,
-          stripProviderAttemptDiagnostics(filteredContent),
+          {
+            ...chunk,
+            content: stripProviderAttemptDiagnostics(chunk.content),
+          },
           turnId,
         );
-        admissions.push({
-          contents: [historyChunk.content],
-          context: turnMediaAdmissionContext(turnId, 'provider-stream-output'),
-          mode: 'content',
-        });
-        if (historyChunk.afcHistory !== undefined) {
-          admissions.push({
-            contents: historyChunk.afcHistory,
-            context: turnMediaAdmissionContext(
-              turnId,
-              'provider-stream-afc-history',
-            ),
-            mode: 'contents',
-          });
-        }
-        accumulator.add(historyChunk);
-        yield { ...chunk, content: filteredContent };
+        admissions.push(...admitted.admissions);
+        accumulator.add({ ...chunk, content: admitted.historyContent });
+        yield { ...chunk, content: admitted.filteredContent };
       }
       const accumulated = accumulator.materialize();
       // Classified before validation, history commit and success accounting:
       // a refused attempt's output never reaches any of them (issue #4036).
       throwIfRefused(accumulated, turnId, contextFingerprint);
-      await this._finalizeStreamProcessing(
-        accumulated,
+      await this._finalizeStreamProcessing(accumulated, {
+        origin,
+        logger: this.logger,
+        conversationManager: this.conversationManager,
+        historyService: this.historyService,
+        compressionHandler: this.compressionHandler,
+        mediaAdmission: mediaAdmissionPort(this.ports),
+        reasoningInclusion: reasoningInclusionPolicy(this.ports),
         userInput,
         includeThoughts,
         semanticMediaPurge,
+        retryHandoff: this.currentIsResend,
+        eagerlyRecordedToolResponseCallIds:
+          this.eagerlyRecordedToolResponseCallIds,
         preparedUserTurn,
-        admissions,
-        origin,
-      );
-      this.refusalContextTracker.commit(
+        mediaAdmissions: admissions,
+      });
+      this.refusalStreamAudit.commit(
         this.historyService.getAll(),
         promptId,
         attemptIndex,
@@ -931,34 +915,5 @@ export class StreamProcessor {
         await this.ports.mediaAdmission?.releaseAdmissions(admissions);
       }
     }
-  }
-
-  private _finalizeStreamProcessing(
-    acc: ModelOutput,
-    userInput: IContent | IContent[],
-    includeThoughts: boolean,
-    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
-    preparedUserTurn: PreparedUserTurn | undefined,
-    mediaAdmissions: readonly MediaAdmissionRelease[],
-    origin?: object,
-  ): Promise<void> {
-    return finalizeStreamResponse({
-      origin,
-      logger: this.logger,
-      conversationManager: this.conversationManager,
-      historyService: this.historyService,
-      compressionHandler: this.compressionHandler,
-      mediaAdmission: mediaAdmissionPort(this.ports),
-      reasoningInclusion: reasoningInclusionPolicy(this.ports),
-      accumulated: acc,
-      userInput,
-      includeThoughts,
-      semanticMediaPurge,
-      retryHandoff: this.currentIsResend,
-      eagerlyRecordedToolResponseCallIds:
-        this.eagerlyRecordedToolResponseCallIds,
-      preparedUserTurn,
-      mediaAdmissions,
-    });
   }
 }

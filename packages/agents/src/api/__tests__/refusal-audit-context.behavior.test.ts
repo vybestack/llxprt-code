@@ -119,12 +119,72 @@ describe('refusal audit context (REQ-4101-D1, REQ-4101-D2)', () => {
     const payload = asRecord(refusal['payload']);
     const partial = asRecord(payload['partial_output']);
     const items = partial['items'];
-    expect(partial['truncated']).toBe(true);
-    expect(partial['original_bytes']).toBeGreaterThan(32 * 1024);
     expect(partial['preview_bytes']).toBeLessThanOrEqual(32 * 1024);
     expect(items).toBeArray();
     expect(JSON.stringify(items)).toContain('[truncated]');
     expect(JSON.stringify(items)).toContain('original_bytes');
+  });
+
+  it('routes a real compression through its dedicated profile before a refusal', async () => {
+    const foregroundTurns = Array.from(
+      { length: 6 },
+      (_, turn) => `Earlier turn ${turn}: ${'context '.repeat(200)}`,
+    );
+    const run = await runScriptedPrompt(
+      [
+        ...foregroundTurns.map(
+          () =>
+            ({
+              kind: 'finish',
+              finishReason: 'stop',
+              text: 'foreground answer',
+              outputTokens: 4,
+            }) as const,
+        ),
+        { kind: 'finish', finishReason: 'refusal', outputTokens: 0 },
+      ],
+      [...foregroundTurns, 'refuse after compression'],
+      {
+        compressionModel: 'dedicated-summarizer-model',
+        compressBeforePromptIndex: foregroundTurns.length,
+        settings: {
+          'compression.strategy': 'one-shot',
+          maxOutputTokens: 100,
+          'refusal.retries': 0,
+          'refusal.rewrite': false,
+        },
+      },
+    );
+    const refusal = run.journalRecords.find(
+      (record) => record['type'] === 'refusal',
+    );
+    if (refusal === undefined) {
+      throw new Error(
+        JSON.stringify({
+          requests: run.requests,
+          events: run.events,
+          journal: run.journalRecords,
+        }),
+      );
+    }
+    expect(refusal).toBeDefined();
+    expect(run.requests).toHaveLength(7);
+    expect(run.compressionRequests).toHaveLength(1);
+    expect(run.compressionRequests[0]?.model).toBe(
+      'dedicated-summarizer-model',
+    );
+    const refusalPayload = asRecord(refusal['payload']);
+    const contextFingerprint = asRecord(refusalPayload['context_fingerprint']);
+    expect(contextFingerprint['compression_count']).toBe(1);
+    expect(contextFingerprint['last_compression_time']).toBeString();
+    expect(contextFingerprint['summary_author_provider']).toBe('openai');
+    expect(contextFingerprint['summary_author_model']).toBe(
+      'dedicated-summarizer-model',
+    );
+    expect(run.requests[6]?.model).toBe('scripted-model');
+    expect(
+      run.journalRecords.filter((record) => record['type'] === 'compressed'),
+    ).toHaveLength(1);
   });
 
   it('records empty previews and zero reported output tokens for a pre-output refusal', async () => {

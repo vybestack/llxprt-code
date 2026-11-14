@@ -14,7 +14,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
-import { RefusalContextTracker } from '../refusal/refusalContextTracker.js';
+import { RefusalStreamAudit } from '../refusal/refusalStreamAudit.js';
 import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -73,7 +73,7 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
         generateTurnKey: () => `turn-${crypto.randomUUID()}`,
         waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
       },
-      refusalContextTracker: new RefusalContextTracker(),
+      refusalStreamAudit: new RefusalStreamAudit(crypto.randomUUID()),
       refusalFingerprintByStream: new WeakMap(),
       logger: new DebugLogger('test'),
       eagerlyRecordedToolResponseCallIds: new Set<string>(),

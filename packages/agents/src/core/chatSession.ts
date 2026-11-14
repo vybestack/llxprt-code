@@ -780,7 +780,11 @@ export class ChatSession {
     }
     this.setHistoryAdmission = undefined;
     this.conversationManager.clearHistory();
-    this.streamProcessor.resetRefusalContext();
+    this.streamProcessor.resetRefusalContextBaseline();
+  }
+
+  dispose(): void {
+    this.streamProcessor.dispose();
   }
 
   addHistory(content: IContent): void {

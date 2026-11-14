@@ -151,10 +151,10 @@ export class RefusalContextTracker {
       added_entry_count: added.length,
       omitted_entry_count: previews.omitted,
       pending_entries: previews.previews.slice(added.length),
-      compression_count: Math.max(
-        compressions.length,
-        this.compressionEvents.length,
-      ),
+      compression_count:
+        this.compressionEvents.length > 0
+          ? this.compressionEvents.length
+          : compressions.length,
       last_compression_time: lastCompressionTime,
       summary_author_model:
         latestCompression?.provenance.summaryAuthorModel ?? null,
@@ -182,6 +182,13 @@ export class RefusalContextTracker {
     this.baselineAttemptIndex = attemptIndex;
     this.baselineTime = new Date().toISOString();
     this.compressionEvents.length = 0;
+  }
+
+  resetBaseline(): void {
+    this.baseline = undefined;
+    this.baselinePromptId = null;
+    this.baselineAttemptIndex = null;
+    this.baselineTime = null;
   }
 
   reset(): void {
