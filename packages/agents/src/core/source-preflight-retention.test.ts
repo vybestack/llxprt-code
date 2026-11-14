@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { gcAndSweep } from 'bun:jsc';
+import { MAX_SETTLE_ROUNDS } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   activeRequestBodyCount,
@@ -24,8 +26,48 @@ const root = sourceRootSetup();
 const retained: Array<
   () => { prepared: PreparedSourcePromptEnvelopeSend; row: IContent }
 > = [];
-const weakPrepared: Array<WeakRef<PreparedSourcePromptEnvelopeSend>> = [];
-const weakRows: Array<WeakRef<IContent>> = [];
+
+/**
+ * Counts collections through a FinalizationRegistry instead of WeakRef.deref.
+ * A deref puts the target back on the machine stack, and JSC scans the stack
+ * conservatively, so a deref census can keep its own target alive: a stale
+ * slot of the callback frame (prepared send plus its last row) survived the
+ * settling collections, and a per-round deref re-pinned it through every
+ * further round although no heap path to it existed.
+ */
+class ReleaseCensus {
+  private tracked = 0;
+  private released = 0;
+  track(target: object): void {
+    this.tracked++;
+    releases.register(target, this);
+  }
+  markReleased(): void {
+    this.released++;
+  }
+  get live(): number {
+    return this.tracked - this.released;
+  }
+}
+const releases = new FinalizationRegistry<ReleaseCensus>((census) => {
+  census.markReleased();
+});
+let preparedCensus = new ReleaseCensus();
+let rowCensus = new ReleaseCensus();
+function yieldToEventLoop(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+/** Collect from a fresh macrotask, then let finalizers report; a real holder never reports. */
+async function liveAfterSettling(census: ReleaseCensus): Promise<number> {
+  for (let round = 0; round < MAX_SETTLE_ROUNDS && census.live > 0; round++) {
+    await yieldToEventLoop();
+    gcAndSweep();
+    await yieldToEventLoop();
+  }
+  return census.live;
+}
 async function prepareCycle(
   large: boolean,
   trap: boolean,
@@ -66,9 +108,9 @@ async function prepareCycle(
       prepared: PreparedSourcePromptEnvelopeSend,
     ): Promise<void> {
       callbacks++;
-      weakPrepared.push(new WeakRef(prepared));
+      preparedCensus.track(prepared);
       for await (const row of prepared.source.openReader(controller.signal)) {
-        weakRows.push(new WeakRef(row));
+        rowCensus.track(row);
         if (trap) retained.push(() => ({ prepared, row }));
       }
       arrived.release();
@@ -104,16 +146,14 @@ async function prepareCycle(
 async function measureRetention(trap: boolean) {
   const census = new RequestBodyCensus();
   retained.length = 0;
-  weakPrepared.length = 0;
-  weakRows.length = 0;
   // The measured cycle runs the full-size path (chunked token estimation, lazy
   // encoder initialisation); warm that same path so the baseline excludes
   // one-time initialisation and only per-cycle growth is measured.
   await prepareCycle(true, false, census);
   await prepareCycle(true, false, census);
   await sourceHeap();
-  weakPrepared.length = 0;
-  weakRows.length = 0;
+  preparedCensus = new ReleaseCensus();
+  rowCensus = new ReleaseCensus();
   const baseline = await sourceHeap();
   await prepareCycle(true, trap, census);
   const settled = await sourceHeap();
@@ -121,9 +161,8 @@ async function measureRetention(trap: boolean) {
     baseline,
     settled,
     delta: settled - baseline,
-    livePrepared: weakPrepared.filter((ref) => ref.deref() !== undefined)
-      .length,
-    liveRows: weakRows.filter((ref) => ref.deref() !== undefined).length,
+    livePrepared: await liveAfterSettling(preparedCensus),
+    liveRows: await liveAfterSettling(rowCensus),
     retainedClosures: retained.length,
     activeBodies: activeRequestBodyCount(census),
   };
