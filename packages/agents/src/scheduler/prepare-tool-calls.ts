@@ -28,10 +28,10 @@ export interface PrepareToolCallsOptions {
 /**
  * Prepares the effective invocation of every validating call before policy
  * evaluation (issue #4084): BeforeTool runs once here, hook-modified input is
- * rebuilt and validated, and the call that policy evaluates carries exactly
- * the arguments that will execute. A failed preparation is a tool error, never
- * a fallback to the original invocation. Returns the calls to evaluate,
- * replacing each prepared call with its effective arguments and invocation.
+ * rebuilt and validated, and the invocation that policy evaluates uses exactly
+ * the arguments that will execute. The original request remains unchanged for
+ * telemetry and history. A failed preparation is a tool error, never a fallback
+ * to the original invocation. Returns calls with their prepared invocations.
  *
  * Without a hook owner preparation is synchronous, which keeps ALLOW calls
  * reaching 'scheduled' in the same microtask as schedule().
@@ -84,7 +84,6 @@ function applyPreparation(
   options.preparedExecutions.set(call.request.callId, execution);
   return {
     ...call,
-    request: { ...call.request, args: execution.effectiveArgs },
     invocation: execution.invocation,
   } as ToolCall;
 }

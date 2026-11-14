@@ -47,7 +47,7 @@ The named H1 configuration (parent with code mode on, told to use a script) is t
 
 ## Per-scenario notes
 
-Each directory holds the harness captures (`NNN-<label>-screen.txt`, `-scrollback.txt`; with the alternate buffer the scrollback capture equals the screen), `session.jsonl` (the session recording, encrypted reasoning removed), `token-usage-parent.jsonl` and any `token-usage-child-*.jsonl`, `metrics.json`, `final-answer.md`, `score-a.json` or `score-b.json`, the `/stats` capture (`*-stats-screen.txt`), `commit.txt` and the start/end epoch files. The raw terminal stream (`pane-output.log`) is left out.
+Each directory holds the harness captures (`NNN-<label>-screen.txt`, `-scrollback.txt`; with the alternate buffer the scrollback capture equals the screen), `session.jsonl` (the session recording, encrypted reasoning removed), `token-usage-parent.jsonl` and any `token-usage-child-*.jsonl`, `metrics.json`, `final-answer.md`, `score-a.json` or `score-b.json`, the `/stats` capture (`*-stats-screen.txt`), `commit.txt` and the start/end epoch files. The raw terminal stream (`pane-output.log`) is left out. The `d-read-off` and `d-read-on` `session.jsonl` recordings are also omitted because they contain verbatim source text stamped `Copyright 2025`, which fails the repository copyright-year guard.
 
 ### A, C and H1: `@plan` markers
 

@@ -138,6 +138,26 @@ describe('CoreToolScheduler effective-argument authorization', () => {
     expect(tool.executeFn).not.toHaveBeenCalled();
   });
 
+  it('preserves model-requested arguments while executing the BeforeTool rewrite', async () => {
+    const tool = hookedTool();
+    const target = fixture({
+      tool,
+      beforeToolOutput: {
+        hookSpecificOutput: { tool_input: { file_path: 'modified.txt' } },
+      },
+    });
+
+    await target.schedule({ file_path: 'original.txt' });
+    const [completed] = await target.completed;
+
+    expect(completed.status).toBe('success');
+    expect(completed.request.args).toStrictEqual({ file_path: 'original.txt' });
+    expect(tool.executeFn.mock.calls.map((call) => call[0])).toStrictEqual([
+      { file_path: 'modified.txt' },
+    ]);
+    expect(target.beforeToolRuns()).toBe(1);
+  });
+
   it('executes exactly the rewritten arguments policy allowed and runs BeforeTool once', async () => {
     const tool = hookedTool();
     const target = fixture({
@@ -163,7 +183,7 @@ describe('CoreToolScheduler effective-argument authorization', () => {
     expect(tool.executeFn.mock.calls.map((call) => call[0])).toStrictEqual([
       { rewritten: true },
     ]);
-    expect(completed.request.args).toStrictEqual({ rewritten: true });
+    expect(completed.request.args).toStrictEqual({ original: true });
     expect(target.beforeToolRuns()).toBe(1);
   });
 
@@ -193,7 +213,7 @@ describe('CoreToolScheduler effective-argument authorization', () => {
 
     await target.schedule({ command: 'npm run build' });
     const waiting = await awaitingApproval(target);
-    expect(waiting.request.args).toStrictEqual({ command: 'npm test' });
+    expect(waiting.request.args).toStrictEqual({ command: 'npm run build' });
     await respond(waiting, ToolConfirmationOutcome.ProceedOnce);
     const [completed] = await target.completed;
 
