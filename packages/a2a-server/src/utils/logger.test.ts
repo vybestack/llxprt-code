@@ -48,7 +48,7 @@ describe('a2a logger format', () => {
     });
 
     const lines = output();
-    expect(lines.filter((l) => l.startsWith('[ERROR]'))).toEqual([]);
+    expect(lines.filter((l) => l.startsWith('[ERROR]'))).toStrictEqual([]);
     expect(lines.filter((l) => l.startsWith('[INFO]'))).toHaveLength(1);
     expect(lines[0]).toContain('forged entry');
   });
@@ -63,7 +63,7 @@ describe('a2a logger format', () => {
       const code = char.charCodeAt(0);
       return code < 0x20 || code === 0x7f || code === 0x2028 || code === 0x2029;
     });
-    expect(forbidden).toEqual([]);
+    expect(forbidden).toStrictEqual([]);
     expect(joined).toContain('cleared');
     expect(joined).toContain('screen');
   });
