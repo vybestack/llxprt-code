@@ -16,6 +16,10 @@ import {
   getInstalledHash,
 } from './manifest-operations.js';
 
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
+}
+
 export type PromptConflictReason =
   | 'default-newer'
   | 'user-newer'
@@ -131,17 +135,23 @@ export async function createKeepDecision(
   const reviewRelativePath = generateReviewFilename(relativePath, timestamp);
   const reviewFullPath = path.join(expandedBaseDir, reviewRelativePath);
 
-  // Check if review file already exists
-  if (existsSync(reviewFullPath)) {
-    return { action: 'resolved' };
-  }
-
   if (createReviewCopy) {
     await fs.mkdir(path.dirname(reviewFullPath), {
       recursive: true,
       mode: 0o755,
     });
-    await fs.writeFile(reviewFullPath, content, { mode: 0o644 });
+    // Exclusive create doubles as the "review file already exists" check, so
+    // an existing file (or symlink) is never truncated or written through.
+    try {
+      await fs.writeFile(reviewFullPath, content, { mode: 0o644, flag: 'wx' });
+    } catch (error) {
+      if (isErrnoException(error) && error.code === 'EEXIST') {
+        return { action: 'resolved' };
+      }
+      throw error;
+    }
+  } else if (existsSync(reviewFullPath)) {
+    return { action: 'resolved' };
   }
 
   const conflict: PromptConflictSummary = {
