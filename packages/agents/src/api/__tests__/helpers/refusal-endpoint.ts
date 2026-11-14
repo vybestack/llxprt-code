@@ -18,7 +18,9 @@ import { startAnthropicEndpoint } from './anthropic-refusal-endpoint.js';
 const PROMPT_TOKENS = 120;
 
 /** What the local OpenAI-compatible endpoint answers to one request. */
-export type EndpointReply =
+export type EndpointReply = {
+  readonly requestId?: string | null;
+} & (
   | { readonly kind: 'http-error'; readonly status: number }
   | {
       readonly kind: 'finish';
@@ -31,7 +33,6 @@ export type EndpointReply =
         readonly explanation: string | null;
         readonly recommendedModel?: string;
       };
-      readonly requestId?: string | null;
       readonly includeUsage?: boolean;
     }
   | {
@@ -44,7 +45,8 @@ export type EndpointReply =
       readonly kind: 'tool-call';
       readonly name: string;
       readonly args: Readonly<Record<string, unknown>>;
-    };
+    }
+);
 
 /** The endpoint rejects the request with this HTTP status. */
 export function httpErrorReply(status: number): EndpointReply {

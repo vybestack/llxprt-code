@@ -27,6 +27,13 @@ const RETRY_NOTICE: AgentEvent = {
   message: 'Model m refused the request; retrying in 15 s (retry 1 of 2).',
 };
 
+const DIAGNOSTIC_NOTICE: AgentEvent = {
+  type: 'notice',
+  source: 'refusal-recovery',
+  message:
+    'Model m refused the request; retrying in 15 s (retry 1 of 2). Category: cyber. The requested operation crosses a safety boundary.',
+};
+
 async function* streamOf(
   events: readonly AgentEvent[],
 ): AsyncIterable<AgentEvent> {
@@ -92,6 +99,7 @@ describe('processAgentStream refusal-recovery notices (issue #4036)', () => {
     expect(stderr.join('')).toContain(
       'Model m refused the request; retrying in 15 s (retry 1 of 2).',
     );
+
     expect(stdout.join('')).toBe('the answer\n');
   });
 
@@ -102,6 +110,15 @@ describe('processAgentStream refusal-recovery notices (issue #4036)', () => {
 
     expect(stderr.join('')).toBe('');
     expect(stdout.join('')).toBe('the answer\n');
+  });
+
+  it('shows refusal category and explanation in the public text notice', async () => {
+    await run([DIAGNOSTIC_NOTICE]);
+
+    expect(stderr.join('')).toContain('Category: cyber.');
+    expect(stderr.join('')).toContain(
+      'The requested operation crosses a safety boundary.',
+    );
   });
 
   it('emits a warning event in stream-json', async () => {

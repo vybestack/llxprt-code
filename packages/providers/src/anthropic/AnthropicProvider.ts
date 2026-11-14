@@ -1004,7 +1004,8 @@ export class AnthropicProvider extends BaseProvider {
     rateLimitLogger: { debug: (fn: () => string) => void },
     requestId: string | null,
   ): AsyncGenerator<IContent> {
-    yield { speaker: 'ai', blocks: [], metadata: { requestId } };
+    if (requestId !== null)
+      yield { speaker: 'ai', blocks: [], metadata: { requestId } };
     if (requestContext.streamingEnabled) {
       if (!isAnthropicMessageStream(response)) {
         throw new Error('Anthropic streaming response was not an event stream');

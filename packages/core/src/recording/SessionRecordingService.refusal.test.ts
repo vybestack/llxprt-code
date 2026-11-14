@@ -31,6 +31,10 @@ const REFUSAL: RefusalPayload = {
   attemptIndex: 0,
   finishReason: 'refusal',
   rawStopReason: 'refusal',
+  refusal_category: 'cyber',
+  refusal_explanation: 'The response crossed a safety boundary.',
+  recommended_model: 'claude-sonnet-5-5',
+  request_id: 'anthropic-request-refused',
   usage: { promptTokens: 120, completionTokens: 0, totalTokens: 120 },
   action: 'stop',
 };
