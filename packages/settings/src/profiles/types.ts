@@ -179,6 +179,11 @@ export interface ProfileEphemeralSettings {
   'refusal.rewrite'?: boolean;
   'refusal.review-profile'?: string;
   'refusal.max-rewrites'?: number;
+  'code-mode'?: 'off' | 'on';
+  'code-mode-tool-surface'?: 'alongside' | 'compact';
+  'code-mode-max-calls'?: number;
+  'code-mode-wall-timeout-ms'?: number;
+  'code-mode-max-result-bytes'?: number;
   'compression.density.readWritePruning'?: boolean;
   'compression.density.fileDedupe'?: boolean;
   'compression.density.recencyPruning'?: boolean;

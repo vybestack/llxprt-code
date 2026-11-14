@@ -23,6 +23,7 @@ import { REGISTRY_ENTRIES_PART_1 } from './registry/registry-entries-1.js';
 import { REGISTRY_ENTRIES_PART_2 } from './registry/registry-entries-2.js';
 import { REGISTRY_ENTRIES_PART_3 } from './registry/registry-entries-3.js';
 import { REGISTRY_ENTRIES_PART_4 } from './registry/registry-entries-4.js';
+import { REGISTRY_ENTRIES_CODE_MODE } from './registry/registry-entries-code-mode.js';
 import { isStrictNumericString } from './numericString.js';
 import { legacySettingCanonicalKey } from './legacyKeyMigration.js';
 import { deepFreezeTable } from './immutableTable.js';
@@ -34,6 +35,7 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = deepFreezeTable<
   ...REGISTRY_ENTRIES_PART_2,
   ...REGISTRY_ENTRIES_PART_3,
   ...REGISTRY_ENTRIES_PART_4,
+  ...REGISTRY_ENTRIES_CODE_MODE,
 ]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
