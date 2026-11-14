@@ -145,7 +145,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
         {},
         [],
       );
-      const usageLogger = new TokenUsageLogger(true, undefined);
+      const usageLogger = new TokenUsageLogger('debug', undefined);
       chat.setTokenUsageLoggerForTesting(usageLogger);
       const recordActual = vi.spyOn(usageLogger, 'recordActual');
 

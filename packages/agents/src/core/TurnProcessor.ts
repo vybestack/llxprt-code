@@ -723,6 +723,8 @@ export class TurnProcessor {
           this.ports.promptEstimator,
         ));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
+      // This request's boundary for the live token-usage level (#4068).
+      this.compressionHandler.tokenUsageLogger?.beginRequest();
       recordSendSeamTelemetry({
         usageLogger: this.compressionHandler.tokenUsageLogger,
         promptId,

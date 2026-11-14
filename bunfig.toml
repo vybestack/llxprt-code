@@ -31,6 +31,7 @@ minimumReleaseAgeExcludes = [
   "@oven/bun-windows-x64-baseline",
   "@vybestack/llxprt-code",
   "@vybestack/llxprt-code-a2a-server",
+  "@vybestack/llxprt-code-agent-core",
   "@vybestack/llxprt-code-agents",
   "@vybestack/llxprt-code-auth",
   "@vybestack/llxprt-code-core",

@@ -49,7 +49,7 @@ describe('TokenUsageLogger refusal records (issue #4036)', () => {
       fs.mkdtempSync(path.join(os.tmpdir(), 'token-usage-refusal-')),
       'usage.jsonl',
     );
-    logger = new TokenUsageLogger(true, logFile);
+    logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-1', {
       provider: 'claudecode',
       model: 'claude-opus-5-5',

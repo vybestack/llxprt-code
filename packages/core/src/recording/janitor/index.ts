@@ -30,6 +30,7 @@ export {
 
 export {
   DEFAULT_MAX_TOTAL_SIZE_MB,
+  DEFAULT_TOKEN_USAGE_MAX_TOTAL_SIZE_MB,
   DEFAULT_MIN_RETENTION,
   parseRetentionPeriod,
   validateRetentionConfig,

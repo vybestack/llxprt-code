@@ -50,6 +50,13 @@ export {
   migrateLegacySettingKeys,
 } from './settings/legacyKeyMigration.js';
 export { isStrictNumericString } from './settings/numericString.js';
+export {
+  DEFAULT_TOKEN_USAGE_LOG_LEVEL,
+  TOKEN_USAGE_LOG_LEVELS,
+  normalizeTokenUsageLogLevel,
+  resolveTokenUsageLogLevel,
+  type TokenUsageLogLevel,
+} from './settings/tokenUsageLogLevel.js';
 export type {
   ValidationResult,
   SettingSpec,

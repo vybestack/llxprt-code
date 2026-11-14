@@ -164,7 +164,7 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
       {},
       [],
     );
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     chat.setTokenUsageLoggerForTesting(logger);
     return { chat, logger };
   }

@@ -258,10 +258,17 @@
           "default": 4096,
           "type": "number"
         },
+        "tokenUsageMaxTotalSizeMB": {
+          "title": "Token Usage Log Max Total Size (MiB)",
+          "description": "Machine-wide size limit for per-session token-usage logs (token-usage/*.jsonl), in MiB. The oldest inactive logs are deleted first when the total exceeds it.",
+          "markdownDescription": "Machine-wide size limit for per-session token-usage logs (token-usage/*.jsonl), in MiB. The oldest inactive logs are deleted first when the total exceeds it.\n\n- Category: `General`\n- Requires restart: `no`\n- Default: `1024`",
+          "default": 1024,
+          "type": "number"
+        },
         "maxAge": {
           "title": "Max Age",
-          "description": "Maximum age of sessions to keep (e.g. \"30d\", \"7d\", \"24h\"). No default age limit.",
-          "markdownDescription": "Maximum age of sessions to keep (e.g. \"30d\", \"7d\", \"24h\"). No default age limit.\n\n- Category: `General`\n- Requires restart: `no`",
+          "description": "Maximum age of sessions and token-usage logs to keep (e.g. \"30d\", \"7d\", \"24h\"). No default age limit.",
+          "markdownDescription": "Maximum age of sessions and token-usage logs to keep (e.g. \"30d\", \"7d\", \"24h\"). No default age limit.\n\n- Category: `General`\n- Requires restart: `no`",
           "type": "string"
         },
         "maxCount": {

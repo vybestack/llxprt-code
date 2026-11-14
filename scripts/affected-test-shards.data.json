@@ -13,6 +13,7 @@
     "settings": "rest",
     "telemetry": "rest",
     "ide-integration": "rest",
+    "agent-core": "rest",
     "policy": "rest",
     "mcp": "rest",
     "lsp": "rest",
@@ -45,6 +46,7 @@
       "tools"
     ],
     "auth": [],
+    "agent-core": [],
     "cli": [
       "agents",
       "auth",
@@ -94,6 +96,7 @@
     "a2a-server": [],
     "agents": ["test-utils"],
     "auth": ["test-utils"],
+    "agent-core": [],
     "cli": ["policy", "test-utils"],
     "core": ["agents", "providers", "test-utils"],
     "ide-integration": [],

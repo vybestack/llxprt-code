@@ -234,7 +234,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       [],
     );
 
-    const realLogger = new TokenUsageLogger(true, logFile);
+    const realLogger = new TokenUsageLogger('debug', logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
 
     const promptId = 'int-prompt-1';
@@ -328,7 +328,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       [],
     );
 
-    const realLogger = new TokenUsageLogger(true, logFile);
+    const realLogger = new TokenUsageLogger('debug', logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
 
     const promptId = 'int-prompt-2';
@@ -409,7 +409,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       [],
     );
 
-    const realLogger = new TokenUsageLogger(true, logFile);
+    const realLogger = new TokenUsageLogger('debug', logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
 
     const promptId = 'ac12-join-prompt';
@@ -523,7 +523,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       [],
     );
 
-    const realLogger = new TokenUsageLogger(true, logFile);
+    const realLogger = new TokenUsageLogger('debug', logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
 
     const promptId = 'ac12-cached-prompt';
@@ -622,7 +622,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       [],
     );
 
-    const realLogger = new TokenUsageLogger(true, logFile);
+    const realLogger = new TokenUsageLogger('debug', logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
 
     const promptId = 'timing-stream-prompt';
@@ -702,7 +702,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       [],
     );
 
-    const realLogger = new TokenUsageLogger(true, logFile);
+    const realLogger = new TokenUsageLogger('debug', logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
 
     const promptId = 'usage-only-prompt';
@@ -809,7 +809,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       [],
     );
 
-    const realLogger = new TokenUsageLogger(true, logFile);
+    const realLogger = new TokenUsageLogger('debug', logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
 
     const promptId = 'abandoned-timing-prompt';
@@ -909,7 +909,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       {},
       [],
     );
-    const realLogger = new TokenUsageLogger(true, logFile);
+    const realLogger = new TokenUsageLogger('debug', logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
     const promptId = 'empty-stream-prompt';
     realLogger.recordEstimate(promptId, {

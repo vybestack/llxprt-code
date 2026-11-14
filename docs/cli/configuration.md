@@ -238,8 +238,13 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `4096`
   - **Requires restart:** No
 
+- **`sessionRetention.tokenUsageMaxTotalSizeMB`** (number):
+  - **Description:** Machine-wide size limit for per-session token-usage logs (token-usage/\*.jsonl), in MiB. The oldest inactive logs are deleted first when the total exceeds it.
+  - **Default:** `1024`
+  - **Requires restart:** No
+
 - **`sessionRetention.maxAge`** (string):
-  - **Description:** Maximum age of sessions to keep (e.g. "30d", "7d", "24h"). No default age limit.
+  - **Description:** Maximum age of sessions and token-usage logs to keep (e.g. "30d", "7d", "24h"). No default age limit.
   - **Default:** `undefined`
   - **Requires restart:** No
 

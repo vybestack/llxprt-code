@@ -6,6 +6,12 @@
 
 import type { SettingSpec, ValidationResult } from './registry-types.js';
 import { deepFreezeTable } from '../immutableTable.js';
+import {
+  DEFAULT_TOKEN_USAGE_LOG_LEVEL,
+  TOKEN_USAGE_LOG_LEVELS,
+  invalidTokenUsageLogLevelMessage,
+  normalizeTokenUsageLogLevel,
+} from '../tokenUsageLogLevel.js';
 
 export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = deepFreezeTable<
   readonly SettingSpec[]
@@ -589,13 +595,36 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = deepFreezeTable<
     owner: 'application',
     propagation: 'next-turn',
     description:
-      'Log estimate-vs-actual token usage per turn to a per-session JSONL file (counts only, no prompt text)',
-    type: 'boolean',
-    default: true,
+      'Per-session token-usage JSONL detail: off, summary (one scalar record per request), or debug (adds tool attribution and request-shape detail). Counts only, no prompt text. Legacy true/false mean summary/off.',
+    type: 'enum',
+    enumValues: [...TOKEN_USAGE_LOG_LEVELS],
+    default: DEFAULT_TOKEN_USAGE_LOG_LEVEL,
     persistToProfile: true,
+    // `/set token-usage-log true` must keep working after the boolean became a
+    // level, so the legacy words are mapped at the CLI parse boundary too.
+    parse: (raw: string) => {
+      const lowered = raw.trim().toLowerCase();
+      if (lowered === 'true') return true;
+      if (lowered === 'false') return false;
+      return lowered;
+    },
+    normalize: (value: unknown) => normalizeTokenUsageLogLevel(value) ?? value,
+    validate: (value: unknown): ValidationResult => {
+      const level = normalizeTokenUsageLogLevel(value);
+      return level === undefined
+        ? { success: false, message: invalidTokenUsageLogLevelMessage(value) }
+        : { success: true, value: level };
+    },
     completionOptions: [
-      { value: 'true', description: 'Enable per-turn token usage logging' },
-      { value: 'false', description: 'Disable per-turn token usage logging' },
+      { value: 'off', description: 'Do not write token usage records' },
+      {
+        value: 'summary',
+        description: 'Write compact scalar request records (default)',
+      },
+      {
+        value: 'debug',
+        description: 'Include request-shape and tool attribution details',
+      },
     ],
   },
   {

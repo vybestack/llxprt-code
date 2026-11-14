@@ -40,7 +40,10 @@ import { selectCompressionSummary } from './utils.js';
 import { buildCompressionContext as buildContext } from './compressionContextBuilder.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { TokenUsageLogger } from '../core/TokenUsageLogger.js';
-import { recordCompressionTelemetry } from './compressionLifecycleTelemetry.js';
+import {
+  CompressionRunReport,
+  recordCompressionTelemetry,
+} from './compressionLifecycleTelemetry.js';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P05
  * @requirement:REQ-DEP-001
@@ -98,6 +101,8 @@ export class CompressionHandler {
   private lastCompressionFailureTime: number | null = null;
   private lastSuccessfulCompressionTime: number | null = null;
   private compressionSummary: IContent | undefined;
+  /** #4067: compression telemetry comes from the applied strategy result. */
+  private readonly runReport = new CompressionRunReport();
   densityDirty: boolean = true;
   private _suppressDensityDirty: boolean = false;
   private _suppressDensityDirtyDepth: number = 0;
@@ -636,6 +641,7 @@ export class CompressionHandler {
     // counter/timestamp changes entirely. (Issue #2602)
     let compressionOutcome: 'applied' | 'noop' | 'failed' = 'failed';
     this.compressionSummary = undefined;
+    this.runReport.begin();
     // @plan PLAN-20260211-HIGHDENSITY.P20
     // @requirement REQ-HD-002.6
     // Suppress densityDirty during compression rebuild (clear+add loop)
@@ -675,7 +681,7 @@ export class CompressionHandler {
         this.historyService,
         (profileName) => this.providerResolver(profileName),
         tokensBefore,
-        this.compressionSummary,
+        this.runReport.telemetry(),
       );
       return PerformCompressionResult.COMPRESSED;
     }
@@ -715,22 +721,6 @@ export class CompressionHandler {
       this.lastPromptTokenCount = null;
       this.compressionSummary = summary;
     };
-  }
-
-  /**
-   * Select the genuine compression snapshot entry from candidate history for
-   * recording. Prefers the entry explicitly marked with the
-   * 'compression-state-snapshot' reason; falls back to text-based detection
-   * of the canonical <state_snapshot> container for legacy/imported histories.
-   * Returns undefined when no summary entry is identifiable (e.g. truncation
-   * strategies that emit no synthetic snapshot).
-   *
-   * @plan PLAN-20260727-ISSUE2602
-   */
-  static selectCompressionSummary(
-    newHistory: readonly IContent[],
-  ): IContent | undefined {
-    return selectCompressionSummary(newHistory);
   }
 
   /**
@@ -800,6 +790,7 @@ export class CompressionHandler {
 
     const attemptPrimary = async (): Promise<StrategyCompressionResult> => {
       const strategy = this.strategy(configuredStrategyName);
+      this.runReport.countAttempt();
       return strategy.compress(context);
     };
 
@@ -898,6 +889,7 @@ export class CompressionHandler {
     context: CompressionContext,
   ): Promise<StrategyCompressionResult> {
     const oneShot = this.strategy('one-shot');
+    this.runReport.countAttempt();
     return oneShot.compress(context);
   }
 
@@ -923,15 +915,16 @@ export class CompressionHandler {
     // caller's rewrite runs with its own contract. The primary path applies the
     // cache anchor, while fallback paths atomically replace history and reset the
     // stale prompt-token baseline (#3070 fallback truncation propagation).
-    const summary = CompressionHandler.selectCompressionSummary(
-      result.newHistory,
-    );
+    // Only a summary this compression produced, never one carried in
+    // history (#4067).
+    const summary = selectCompressionSummary(result.newHistory);
     await applyResult(
       result.newHistory,
       summary,
       result.metadata.topPreserved ?? 0,
     );
     this.compressionSummary = summary;
+    this.runReport.recordApplied(result.metadata);
     this.compressionFailureCount = 0;
     this.lastCompressionFailureTime = null;
     this.lastSuccessfulCompressionTime = Date.now();
@@ -941,6 +934,7 @@ export class CompressionHandler {
     context: CompressionContext,
   ): Promise<StrategyCompressionResult> {
     const fallback = this.strategy('top-down-truncation');
+    this.runReport.countAttempt();
     return fallback.compress(context);
   }
 
