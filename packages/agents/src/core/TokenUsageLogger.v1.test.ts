@@ -57,7 +57,7 @@ describe('TokenUsageLogger — schema versioning (issue #3130 slice 1)', () => {
   });
 
   it('stamps every turn record with schema_version and record_type', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-sv', {
       provider: 'openai',
       model: 'gpt-4',
@@ -77,7 +77,7 @@ describe('TokenUsageLogger — schema versioning (issue #3130 slice 1)', () => {
   });
 
   it('pins the existing 17 estimator/calibration field names exactly', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-pin', {
       provider: 'openai',
       model: 'gpt-4',
@@ -131,7 +131,7 @@ describe('TokenUsageLogger — schema versioning (issue #3130 slice 1)', () => {
   });
 
   it('omits optional estimator fields when undefined', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-omit', {
       provider: 'openai',
       model: 'gpt-4',
@@ -166,7 +166,7 @@ describe('TokenUsageLogger — schema versioning (issue #3130 slice 1)', () => {
   const observeWritesOnlyFieldsTheDocumentedSchemaDeclares = async () => {
     // A key-allowlist rather than a denylist: a denylist passes whenever a
     // future field leaks content under a name nobody thought to forbid.
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.attachTurnContext('prompt-priv2', {
       sessionId: 'sess-1',
       runtimeId: 'rt-1',
@@ -244,7 +244,7 @@ describe('TokenUsageLogger — attachTurnContext', () => {
   });
 
   it('merges turn context into the written turn record', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-ctx', {
       provider: 'openai',
       model: 'gpt-4',
@@ -279,7 +279,7 @@ describe('TokenUsageLogger — attachTurnContext', () => {
   });
 
   it('retains context attached before the estimate arrives', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.attachTurnContext('prompt-early', {
       sessionId: 'sess-early',
       turnId: 'turn-early',
@@ -303,7 +303,7 @@ describe('TokenUsageLogger — attachTurnContext', () => {
   });
 
   it('serialises tool-call attribution with snake_case keys', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-tools', {
       provider: 'openai',
       model: 'gpt-4',
@@ -348,13 +348,13 @@ describe('TokenUsageLogger — attachTurnContext', () => {
   });
 
   it('is a no-op when disabled', () => {
-    const logger = new TokenUsageLogger(false, logFile);
+    const logger = new TokenUsageLogger('off', logFile);
     logger.attachTurnContext('prompt-disabled-ctx', { sessionId: 'sess-x' });
     expect(fs.existsSync(logFile)).toBe(false);
   });
 
   it('eviction bound still holds: attachTurnContext entries are capped at PENDING_CAP', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     for (let i = 0; i < PENDING_CAP; i++) {
       logger.attachTurnContext(`ctx-prompt-${i}`, {
         sessionId: `sess-${i}`,
@@ -416,7 +416,7 @@ describe('TokenUsageLogger — widened recordActual (cost + attempt fields)', ()
   });
 
   it('passes cost fields through to the JSONL record', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-cost', {
       provider: 'openai',
       model: 'gpt-4',
@@ -445,7 +445,7 @@ describe('TokenUsageLogger — widened recordActual (cost + attempt fields)', ()
   });
 
   it('passes attempt fields through to the JSONL record', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-attempt', {
       provider: 'openai',
       model: 'gpt-4',
@@ -472,7 +472,7 @@ describe('TokenUsageLogger — widened recordActual (cost + attempt fields)', ()
   });
 
   it('omits cost/attempt fields when not provided (no zero-fill)', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-no-cost', {
       provider: 'openai',
       model: 'gpt-4',
@@ -493,7 +493,7 @@ describe('TokenUsageLogger — widened recordActual (cost + attempt fields)', ()
   });
 
   it('keeps the legacy cached_tokens field alongside cache_read_tokens', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-cache', {
       provider: 'anthropic',
       model: 'claude-3',
@@ -530,7 +530,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
   });
 
   it('writes a compression record to the same JSONL file', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     await logger.recordLifecycleEvent({
       type: 'compression',
       sessionId: 'sess-1',
@@ -559,7 +559,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
   });
 
   it('writes a provider_switch record', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     await logger.recordLifecycleEvent({
       type: 'provider_switch',
       sessionId: 'sess-1',
@@ -577,7 +577,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
   });
 
   it('writes a model_switch record', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     await logger.recordLifecycleEvent({
       type: 'model_switch',
       sessionId: 'sess-1',
@@ -595,7 +595,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
   });
 
   it('writes a session_resume record', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     await logger.recordLifecycleEvent({
       type: 'session_resume',
       sessionId: 'sess-2',
@@ -612,7 +612,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
   });
 
   it('writes a context_truncation record', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     await logger.recordLifecycleEvent({
       type: 'context_truncation',
       sessionId: 'sess-1',
@@ -630,7 +630,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
   });
 
   it('writes lifecycle and turn records to the same file', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
 
     await logger.recordLifecycleEvent({
       type: 'compression',
@@ -660,7 +660,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
   });
 
   it('is a no-op when disabled', async () => {
-    const logger = new TokenUsageLogger(false, logFile);
+    const logger = new TokenUsageLogger('off', logFile);
     await logger.recordLifecycleEvent({
       type: 'model_switch',
       sessionId: 'sess-1',
@@ -672,7 +672,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
   });
 
   it('provides a default ts when the event omits it', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     await logger.recordLifecycleEvent({
       type: 'compression',
       sessionId: 'sess-1',
@@ -698,7 +698,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
 
   const observeRecordLifecycleEventRecordsRoundTripThroughParseTokenUsageLogRecord =
     async () => {
-      const logger = new TokenUsageLogger(true, logFile);
+      const logger = new TokenUsageLogger('debug', logFile);
       const event: TokenUsageLifecycleEvent = {
         type: 'provider_switch',
         sessionId: 'sess-1',
@@ -723,7 +723,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
 
   it('I/O errors on lifecycle records do not crash (fail-open)', async () => {
     const badPath = path.join(os.tmpdir(), 'invalid\0dir', 'usage.jsonl');
-    const logger = new TokenUsageLogger(true, badPath);
+    const logger = new TokenUsageLogger('debug', badPath);
     await expect(
       logger.recordLifecycleEvent({
         type: 'compression',

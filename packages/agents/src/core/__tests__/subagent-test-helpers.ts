@@ -395,8 +395,8 @@ function createRuntimeContext(
       policies.owner.readRuntimePolicy().promptCaching,
     showCitations: () =>
       policies.owner.readRuntimePolicy().showCitations === true,
-    tokenUsageLoggingEnabled:
-      policies.owner.readRuntimePolicy().tokenUsageLoggingEnabled !== false,
+    readTokenUsageLogLevel: () =>
+      policies.owner.readRuntimePolicy().tokenUsageLogLevel ?? 'summary',
     readToolExecutionPolicy: policies.readExecutionPolicy,
     readStreamTimeoutPolicy: () =>
       policies.owner.readRuntimePolicy().streamTimeoutPolicy,

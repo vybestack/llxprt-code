@@ -223,7 +223,7 @@ function registerBoundaryCases(fixture: UsageFixture): void {
 
     it('disabled logger writes nothing', async () => {
       const { logFile } = fixture();
-      const disabledLogger = new TokenUsageLogger(false, logFile);
+      const disabledLogger = new TokenUsageLogger('off', logFile);
 
       const state = createAgentRuntimeState({
         runtimeId: 'disabled-rt',
@@ -257,7 +257,7 @@ describe('Token usage subagent identity and boundary (issue #3130)', () => {
 
   beforeEach(() => {
     logFile = makeTempLogPath();
-    logger = new TokenUsageLogger(true, logFile);
+    logger = new TokenUsageLogger('debug', logFile);
   });
 
   afterEach(() => {

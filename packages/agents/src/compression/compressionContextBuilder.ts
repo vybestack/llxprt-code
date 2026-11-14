@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { CompressionRunReport } from './compressionLifecycleTelemetry.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -64,6 +65,8 @@ export async function buildCompressionMetadata(
     /** The owner whose journal receives the published summary rows. */
     historyOrigin?: object;
     onCommitted?: () => void;
+    /** Counts strategy invocations and keeps the applied result (#4067). */
+    runReport?: CompressionRunReport;
   },
 ): Promise<Omit<CompressionAttemptContext, 'history'>> {
   const modelParameters = runtimeContext.ephemerals.compressionProfile()

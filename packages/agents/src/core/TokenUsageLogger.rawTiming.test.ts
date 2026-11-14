@@ -398,7 +398,7 @@ describe('TokenUsageLogger raw token-delta timing (#3493): internal sink metadat
       [],
     );
 
-    const realLogger = new TokenUsageLogger(true, logFile);
+    const realLogger = new TokenUsageLogger('debug', logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
 
     const promptId = 'sink-channel-prompt';
@@ -448,7 +448,7 @@ async function runTurnReadRecords(
     [],
   );
 
-  const realLogger = new TokenUsageLogger(true, logFile);
+  const realLogger = new TokenUsageLogger('debug', logFile);
   chat.setTokenUsageLoggerForTesting(realLogger);
 
   realLogger.recordEstimate(promptId, {

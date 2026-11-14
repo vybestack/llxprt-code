@@ -52,10 +52,16 @@ const ToolCallEntrySchema = z.object({
 /**
  * Zod schema for the serialized turn record.
  *
- * The first 17 fields are the existing estimator/calibration columns (AC-11),
- * kept byte-identical.  The remaining optional fields are the join-key,
- * cost, attempt, tool-attribution, and request-shape additions from
- * AC-1/3/4/5/6 — all optional so this slice emits them only when populated.
+ * The first 17 fields are the existing estimator/calibration columns (AC-11).
+ * The remaining optional fields are the join-key, cost, attempt,
+ * tool-attribution, and request-shape additions from AC-1/3/4/5/6 — all
+ * optional so they are emitted only when populated.
+ *
+ * #4068: the `summary` level writes a scalar-only subset of these fields and
+ * the `debug` level writes all of them, so the estimator internals
+ * (`estimator`, `tiktoken_*`, `effective_actual_tokens`) are optional too.
+ * Fields are added or omitted per level, never renamed, and
+ * `schema_version` stays 1.
  */
 export const SerializedTokenUsageTurnRecordSchema = z.object({
   record_type: z.literal('turn'),
@@ -72,17 +78,17 @@ export const SerializedTokenUsageTurnRecordSchema = z.object({
   retained_context_tokens: z.number().optional(),
   effective_provider_context_tokens: z.number().optional(),
   stateful_parent_used: z.boolean().optional(),
-  estimator: TokenEstimatorSchema,
+  estimator: TokenEstimatorSchema.optional(),
   estimator_method: z.enum(['exact', 'calibrated']).optional(),
   estimator_family: z.string().optional(),
   estimator_version: z.string().optional(),
   asset_revision: z.string().optional(),
   projection_revision: z.number().optional(),
-  tiktoken_tokens: z.number().nullable(),
-  tiktoken_estimation_failed: z.boolean(),
+  tiktoken_tokens: z.number().nullable().optional(),
+  tiktoken_estimation_failed: z.boolean().optional(),
   actual_prompt_tokens: z.number(),
   cached_tokens: z.number(),
-  effective_actual_tokens: z.number(),
+  effective_actual_tokens: z.number().optional(),
   // --- AC-1 join keys ---
   session_id: z.string().optional(),
   turn_id: z.string().nullable().optional(),
@@ -109,8 +115,11 @@ export const SerializedTokenUsageTurnRecordSchema = z.object({
   raw_stop_reason: z.string().optional(),
   // --- AC-5 tool attribution ---
   tool_calls: z.array(ToolCallEntrySchema).optional(),
+  new_tool_result_count: z.number().optional(),
   new_tool_result_tokens: z.number().optional(),
   carried_tool_result_tokens: z.number().optional(),
+  fixed_tokens: z.number().optional(),
+  timing_source: z.enum(['raw', 'visible']).optional(),
   // --- AC-6 request-shape provenance ---
   instructions_tokens: z.number().optional(),
   tools_schema_tokens: z.number().optional(),
@@ -147,6 +156,9 @@ const SerializedCompressionRecordSchema = z.object({
   compression_provider: z.string().nullable(),
   compression_prompt_tokens: z.number().optional(),
   compression_output_tokens: z.number().optional(),
+  compression_strategy: z.string().optional(),
+  llm_call_made: z.boolean().optional(),
+  compression_attempts: z.number().optional(),
 });
 
 const SerializedProviderSwitchRecordSchema = z.object({
@@ -321,13 +333,16 @@ export interface TokenUsageTurnContext {
   runtimeId?: string;
   parentRuntimeId?: string | null;
   subagentName?: string | null;
-  // AC-5 tool attribution
+  // AC-5 tool attribution. `toolCalls` lists only the tool results that are
+  // new in this request (#4068); results carried from earlier requests are
+  // reported as `carriedToolResultTokens`. Attached at the debug level only.
   toolCalls?: ReadonlyArray<{
     callId: string;
     toolName: string;
     resultTokens: number;
     wasTruncated: boolean;
   }>;
+  newToolResultCount?: number;
   newToolResultTokens?: number;
   carriedToolResultTokens?: number;
   // AC-6 request-shape provenance
@@ -339,6 +354,9 @@ export interface TokenUsageTurnContext {
   promptCacheKey?: string;
   prefixFingerprint?: string;
   prefixFingerprintChanged?: boolean | null;
+  // #4068: 'raw' when raw provider chunks stamped the timing, 'visible' when
+  // it was measured from the visible (post-processing) stream.
+  timingSource?: 'raw' | 'visible';
   // #3257: per-attempt provider timing measured at the agents-layer stream
   // seam — request-relative ms from the start of the provider stream.
   ttftMs?: number | null;
@@ -386,8 +404,19 @@ export interface TokenUsageCompressionEvent {
   tokensAfter: number;
   compressionModel?: string | null;
   compressionProvider?: string | null;
+  /**
+   * #4067: usage of THIS compression's LLM call, taken from the strategy
+   * result. Absent when no LLM call was made or the provider reported none;
+   * never read back from a summary entry retained in history.
+   */
   compressionPromptTokens?: number;
   compressionOutputTokens?: number;
+  /** #4067: the strategy that produced the applied result. */
+  compressionStrategy?: string;
+  /** #4067: whether that strategy made an LLM call. */
+  llmCallMade?: boolean;
+  /** #4067: strategy invocations made during this compression, including retries and fallbacks. */
+  compressionAttempts?: number;
 }
 
 export interface TokenUsageProviderSwitchEvent {

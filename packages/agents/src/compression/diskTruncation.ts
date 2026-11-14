@@ -15,6 +15,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildCompressionMetadata } from './compressionContextBuilder.js';
 import { appendCandidateRow, curatedCandidate } from './curatedCandidate.js';
+import { CompressionSummarySelection } from './compressionSummary.js';
 import {
   TopDownTruncationStrategy,
   type DiskTruncationResult,
@@ -152,8 +153,7 @@ export async function publishCandidate(
     start,
     options.signal,
   );
-  let summary: IContent | undefined;
-  let marked = false;
+  const selection = new CompressionSummarySelection();
   await history.detachedValues.transform(
     async (_source, sink) => {
       for (let position = start; position < curated.length; position++) {
@@ -171,24 +171,7 @@ export async function publishCandidate(
           sanitizeProviderContentForSerialization(clean),
           await sourceOrdinalAt?.(position),
         );
-        if (
-          !marked &&
-          clean.metadata?.reason === 'compression-state-snapshot'
-        ) {
-          summary = clean;
-          marked = true;
-        } else if (
-          summary === undefined &&
-          (clean.metadata?.isSummary === true ||
-            (clean.metadata?.synthetic === true &&
-              clean.blocks.some(
-                (block) =>
-                  block.type === 'text' &&
-                  block.text.includes('<state_snapshot>'),
-              )))
-        ) {
-          summary = clean;
-        }
+        selection.observe(clean);
       }
     },
     model,
@@ -197,7 +180,7 @@ export async function publishCandidate(
   if (anchor === undefined) history.resetCacheAnchorSeq();
   else history.setCacheAnchorSeq(anchor);
   options.onCommitted?.();
-  return summary;
+  return selection.summary;
 }
 
 export async function runDiskTruncation(
@@ -209,15 +192,18 @@ export async function runDiskTruncation(
   const metadata = await buildCompressionMetadata(...args);
   const history = args[3];
   const origin = args[8]?.historyOrigin;
+  const runReport = args[8]?.runReport;
   const compress = (
     rows: CompressionIndexedRows,
   ): Promise<DiskTruncationResult> =>
     retryWithBackoff(
-      () =>
-        new TopDownTruncationStrategy().compressDisk({
+      () => {
+        runReport?.countAttempt();
+        return new TopDownTruncationStrategy().compressDisk({
           ...metadata,
           history: rows,
-        }),
+        });
+      },
       {
         maxAttempts: 3,
         initialDelayMs: 2000,
@@ -243,6 +229,7 @@ export async function runDiskTruncation(
         { origin, onCommitted: args[8]?.onCommitted },
         (position) => input.rows.sourceOrdinalAt(position),
       );
+      runReport?.recordApplied(result.metadata);
       return { outcome: 'applied', summary };
     }
     const curated = await curatedCandidate(
@@ -266,6 +253,7 @@ export async function runDiskTruncation(
         { origin, onCommitted: args[8]?.onCommitted },
         (position) => curated.sourceOrdinalAt(position),
       );
+      runReport?.recordApplied(result.metadata);
       return { outcome: 'applied', summary };
     } finally {
       curated.close();

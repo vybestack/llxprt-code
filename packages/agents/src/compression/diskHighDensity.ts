@@ -12,6 +12,7 @@ import { HighDensityStrategy } from './HighDensityStrategy.js';
 import { buildCompressionMetadata } from './compressionContextBuilder.js';
 import { applyCompressionValuesWithAnchor } from './cache-anchor-values.js';
 import { fallbackDisk } from './diskMiddleOut.js';
+import type { CompressionRunReport } from './compressionLifecycleTelemetry.js';
 
 type Outcome = {
   readonly outcome: 'applied' | 'noop' | 'failed';
@@ -24,6 +25,7 @@ async function compressPinned(
   previous: HistoryDumpSource,
   origin?: object,
   onCommitted?: () => void,
+  runReport?: CompressionRunReport,
 ): Promise<Outcome> {
   const strategy = new HighDensityStrategy();
   let output: HighDensityOutput | undefined;
@@ -33,6 +35,7 @@ async function compressPinned(
     try {
       prepared = await retryWithBackoff(
         async () => {
+          runReport?.countAttempt();
           output = await strategy.prepareDisk(context);
           return output;
         },
@@ -56,6 +59,7 @@ async function compressPinned(
         error,
         origin,
         onCommitted,
+        runReport,
       );
     }
     if (prepared.kind === 'noop') return { outcome: 'noop' };
@@ -68,6 +72,11 @@ async function compressPinned(
       0,
       { origin, onCommitted },
     );
+    runReport?.recordApplied({
+      strategyUsed: 'high-density',
+      llmCallMade: false,
+      usage: undefined,
+    });
     return { outcome: 'applied', summary };
   };
   try {
@@ -103,6 +112,7 @@ export async function runDiskHighDensity(
         input.previous,
         args[8]?.historyOrigin,
         args[8]?.onCommitted,
+        args[8]?.runReport,
       ),
     };
   } catch (error) {

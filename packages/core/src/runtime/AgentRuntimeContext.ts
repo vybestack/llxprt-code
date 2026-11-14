@@ -16,6 +16,7 @@ import type { LoopDetectionPolicy } from '../services/loopDetectionService.js';
 import type { PromptPolicy } from '../core/prompts.js';
 import type { RuntimeInvocationContext } from './RuntimeInvocationContext.js';
 import type { AdmittedModelParameters } from './admittedModelParameters.js';
+import type { TokenUsageLogLevel } from '@vybestack/llxprt-code-settings';
 
 /**
  * @plan PLAN-20251028-STATELESS6.P06
@@ -32,7 +33,7 @@ export interface ReadonlySettingsSnapshot {
   streamTimeoutPolicy?: StreamTimeoutPolicy;
   showCitations?: boolean;
   loopDetection?: LoopDetectionPolicy;
-  tokenUsageLoggingEnabled?: boolean;
+  tokenUsageLogLevel?: TokenUsageLogLevel;
   promptPolicy?: PromptPolicy;
   /** Compression threshold for history (0.0-1.0), default 0.8 */
   compressionThreshold?: number;
@@ -238,7 +239,8 @@ export interface AgentRuntimeContext {
   readonly readToolGovernance: () => ToolGovernance;
   readonly readStreamTimeoutPolicy: () => StreamTimeoutPolicy;
   readonly showCitations: () => boolean;
-  readonly tokenUsageLoggingEnabled: boolean;
+  /** Live `token-usage-log` level, read at each request boundary (#4068). */
+  readonly readTokenUsageLogLevel: () => TokenUsageLogLevel;
   readonly prepareProviderInvocation: PrepareProviderInvocation;
   /** Immutable runtime state (provider, model, auth, session) */
   readonly state: AgentRuntimeState;

@@ -32,6 +32,7 @@ const PROJECT_HASH = 'a'.repeat(64);
 const RETENTION = {
   enabled: true,
   maxTotalSizeBytes: 1024 * 1024,
+  tokenUsageMaxTotalSizeBytes: 1024 * 1024,
   maxAgeMs: null,
   maxCount: null,
   minRetentionMs: 0,

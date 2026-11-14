@@ -12,6 +12,10 @@ import { OneShotStrategy } from './OneShotStrategy.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
 import { buildCompressionMetadata } from './compressionContextBuilder.js';
 import { applyCompressionValuesWithAnchor } from './cache-anchor-values.js';
+import type {
+  AppliedStrategyReport,
+  CompressionRunReport,
+} from './compressionLifecycleTelemetry.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
 
@@ -24,11 +28,13 @@ export async function fallbackDisk(
   primaryError: unknown,
   origin?: object,
   onCommitted?: () => void,
+  runReport?: CompressionRunReport,
 ): Promise<{
   readonly outcome: 'applied' | 'noop' | 'failed';
   readonly summary?: IContent;
 }> {
   try {
+    runReport?.countAttempt();
     const fallback = await new TopDownTruncationStrategy().compressDisk(
       context,
     );
@@ -42,6 +48,7 @@ export async function fallbackDisk(
       0,
       { origin, onCommitted },
     );
+    runReport?.recordApplied(fallback.metadata);
     return { outcome: 'applied', summary };
   } catch (fallbackError) {
     context.logger.error('Fallback disk compression failed', {
@@ -102,6 +109,51 @@ export function runDiskOneShot(
   return runDiskSummary('one-shot', transport, ...args);
 }
 
+/** What a summarizing run reports: its LLM call and that call's usage. */
+function summaryReport(
+  strategyUsed: 'middle-out' | 'one-shot',
+  summary: IContent | undefined,
+): AppliedStrategyReport {
+  return { strategyUsed, llmCallMade: true, usage: summary?.metadata?.usage };
+}
+
+/**
+ * Prepare the summary with retries; a middle-out structural no-op is routed to
+ * one-shot over the same rows. Every strategy invocation is counted (#4067).
+ */
+async function prepareSummary(
+  name: 'middle-out' | 'one-shot',
+  transport: SummaryTransport,
+  context: Parameters<OneShotStrategy['prepareDisk']>[0],
+  runReport: CompressionRunReport | undefined,
+): Promise<{
+  readonly result: SummaryOutput;
+  readonly strategyUsed: 'middle-out' | 'one-shot';
+}> {
+  const oneShot = oneShotStrategy(transport);
+  const strategy =
+    name === 'middle-out' ? middleOutStrategy(transport) : oneShot;
+  const result = await retryWithBackoff(
+    () => {
+      runReport?.countAttempt();
+      return strategy.prepareDisk(context);
+    },
+    {
+      maxAttempts: 3,
+      initialDelayMs: 2000,
+      maxDelayMs: 10000,
+      shouldRetryOnError: shouldRetryCompressionError,
+    },
+  );
+  if (name !== 'middle-out' || result.kind !== 'noop')
+    return { result, strategyUsed: name };
+  runReport?.countAttempt();
+  return {
+    result: await oneShot.prepareDisk(context),
+    strategyUsed: 'one-shot',
+  };
+}
+
 async function runDiskSummary(
   name: 'middle-out' | 'one-shot',
   transport: SummaryTransport,
@@ -111,23 +163,20 @@ async function runDiskSummary(
   const history = args[3];
   const origin = args[8]?.historyOrigin;
   const onCommitted = args[8]?.onCommitted;
+  const runReport = args[8]?.runReport;
   const input = await history.openCompressionInput();
   const previous = input.previous;
   const attempt = async (): Promise<DiskSummaryOutcome> => {
     const context = { ...metadata, history: input.rows };
-    const oneShot = oneShotStrategy(transport);
-    const strategy =
-      name === 'middle-out' ? middleOutStrategy(transport) : oneShot;
     let result: SummaryOutput;
+    let strategyUsed: 'middle-out' | 'one-shot';
     try {
-      result = await retryWithBackoff(() => strategy.prepareDisk(context), {
-        maxAttempts: 3,
-        initialDelayMs: 2000,
-        maxDelayMs: 10000,
-        shouldRetryOnError: shouldRetryCompressionError,
-      });
-      if (name === 'middle-out' && result.kind === 'noop')
-        result = await oneShot.prepareDisk(context);
+      ({ result, strategyUsed } = await prepareSummary(
+        name,
+        transport,
+        context,
+        runReport,
+      ));
     } catch (primaryError) {
       if (!isFallbackEligibleCompressionError(primaryError)) throw primaryError;
       metadata.logger.warn(
@@ -141,6 +190,7 @@ async function runDiskSummary(
         primaryError,
         origin,
         onCommitted,
+        runReport,
       );
     }
     if (result.kind === 'noop') return { outcome: 'noop' };
@@ -153,6 +203,7 @@ async function runDiskSummary(
       result.top,
       { origin, onCommitted },
     );
+    runReport?.recordApplied(summaryReport(strategyUsed, summary));
     return { outcome: 'applied', summary };
   };
   let result:

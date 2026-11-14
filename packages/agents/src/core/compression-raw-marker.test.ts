@@ -72,7 +72,7 @@ for (const size of [65]) {
               tools: createToolRegistryViewFromRegistry(),
               providerRuntime: setup.runtime,
             });
-            const logger = new TokenUsageLogger(true, file);
+            const logger = new TokenUsageLogger('debug', file);
             try {
               await emitCompressionLifecycleEvent(
                 logger,
@@ -81,7 +81,12 @@ for (const size of [65]) {
                 () => ({ provider: setup.provider, runtime: setup.runtime }),
                 1000,
                 100,
-                undefined,
+                {
+                  strategy: 'top-down-truncation',
+                  llmCallMade: false,
+                  usage: undefined,
+                  attempts: 1,
+                },
               );
             } finally {
               await invocationOwner.dispose();

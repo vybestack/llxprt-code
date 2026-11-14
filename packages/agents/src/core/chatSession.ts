@@ -394,7 +394,7 @@ export class ChatSession {
 
   private createTokenUsageLogger(): TokenUsageLogger {
     return createTokenUsageLogger(
-      this.ports.runtime.tokenUsageLoggingEnabled,
+      () => this.ports.runtime.readTokenUsageLogLevel(),
       this.ports.runtime.state.sessionId,
       this.config,
     );

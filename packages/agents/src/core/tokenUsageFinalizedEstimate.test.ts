@@ -40,7 +40,7 @@ async function createLogger(): Promise<{
   const dir = await mkdtemp(path.join(tmpdir(), 'llxprt-token-usage-'));
   const logFilePath = path.join(dir, 'token-usage.jsonl');
   return {
-    logger: new TokenUsageLogger(true, logFilePath),
+    logger: new TokenUsageLogger('debug', logFilePath),
     readRecord: async () => {
       const lines = (await readFile(logFilePath, 'utf8'))
         .split('\n')

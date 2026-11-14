@@ -48,6 +48,7 @@ import { runReclamation } from './reclamationEngine.js';
 import { SessionLockManager } from '../SessionLockManager.js';
 import { debugLogger } from '../../utils/debugLogger.js';
 import { reclaimSessionMedia } from './mediaReclamation.js';
+import { cleanupTokenUsageFiles } from './tokenUsageRetention.js';
 
 /** Age threshold for recognizing stale temporary archive artifacts. */
 const STALE_TEMP_ARCHIVE_AGE_MS = 60 * 1000;
@@ -206,6 +207,19 @@ async function performSweep(
     debugLogger.error('[SessionJanitor] Media reclamation failed', error);
   }
   const cleanupErrors = await cleanupTempAndEmptyDirs(chatsDirs);
+  // #4068: token-usage logs follow the chat age policy under their own byte
+  // budget. Run after the stale-lock cleanup so the active-session check sees
+  // only live locks.
+  const tokenUsage = await cleanupTokenUsageFiles(
+    globalTempDir,
+    currentSessionId,
+    config,
+  );
+  if (params.quiet !== true && tokenUsage.deleted > 0) {
+    debugLogger.debug(
+      `Session janitor: removed ${tokenUsage.deleted} token-usage file(s), ${tokenUsage.bytesDeleted} bytes.`,
+    );
+  }
 
   return buildFinalResult(
     globalTempDir,
@@ -217,7 +231,11 @@ async function performSweep(
     metrics.archiveDeleted,
     staleLocksRemoved,
     metrics.skipped,
-    metrics.failed + mediaCleanupErrors + cleanupErrors + scanErrorCount,
+    metrics.failed +
+      mediaCleanupErrors +
+      cleanupErrors +
+      scanErrorCount +
+      tokenUsage.failed,
     metrics.ageCountShortfall,
     bytesBefore,
   );

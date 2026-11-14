@@ -5,7 +5,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { buildCompressionMetadata } from './compressionContextBuilder.js';
 import { curatedCandidate } from './curatedCandidate.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
-import { selectCompressionSummary } from './compressionSummary.js';
+import { CompressionSummarySelection } from './compressionSummary.js';
 import type { ProviderFallbackCandidate } from './providerFallbackCandidate.js';
 
 type FallbackOutcome = {
@@ -26,16 +26,10 @@ export async function runDiskProviderFallback(
       history: rows,
     });
     if (result.kind === 'noop') return { outcome: 'noop' };
-    let summary: IContent | undefined;
-    for (let position = result.start; position < rows.length; position++) {
-      const row = await rows.readRow(position);
-      const selected = selectCompressionSummary([row]);
-      if (row.metadata?.reason === 'compression-state-snapshot') {
-        summary = selected;
-        break;
-      }
-      summary ??= selected;
-    }
+    const selection = new CompressionSummarySelection();
+    for (let position = result.start; position < rows.length; position++)
+      selection.observe(await rows.readRow(position));
+    const summary = selection.summary;
     await applyResult({
       rows,
       start: result.start,

@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { createHash } from 'node:crypto';
+import { createHash, type Hash } from 'node:crypto';
 import {
   CallerRequestLineage,
   type CallerLineageState,
@@ -34,6 +34,12 @@ export interface RequestShapeInput {
   readonly previousFingerprint?: string;
   readonly callerOwned?: boolean;
   readonly previousCallerLineage?: CallerLineageState;
+  /**
+   * Whether to compute the prefix fingerprint (default true). The fingerprint
+   * is only written at the `debug` token-usage level (#4068), so the summary
+   * level skips the serialization and hashing it costs.
+   */
+  readonly includeFingerprint?: boolean;
 }
 
 export interface ToolCallAttribution {
@@ -49,10 +55,14 @@ export interface RequestShapeResult {
   readonly historyTokens: number;
   readonly mediaTokens: number;
   readonly injectedTokens: number;
+  /** Every tool result in the request, new and carried. */
   readonly toolCalls: readonly ToolCallAttribution[];
+  /** Only the tool results this session has not sent before (#4068). */
+  readonly newToolCalls: readonly ToolCallAttribution[];
   readonly newToolResultTokens: number;
   readonly carriedToolResultTokens: number;
-  readonly prefixFingerprint: string;
+  /** Undefined when the fingerprint was not requested. */
+  readonly prefixFingerprint: string | undefined;
   readonly prefixFingerprintChanged: boolean | null;
 }
 
@@ -101,15 +111,19 @@ class RequestShapeAccumulator {
   private mediaTokens = 0;
   private injectedTokens = 0;
   private readonly toolCalls: ToolCallAttribution[] = [];
+  private readonly newToolCalls: ToolCallAttribution[] = [];
   private newToolResultTokens = 0;
   private carriedToolResultTokens = 0;
   private fingerprintConsumed = 0;
 
+  /** Characters left for the prefix fingerprint; 0 when it was not requested. */
   get fingerprintBudget(): number {
-    return FINGERPRINT_PREFIX_CHAR_BUDGET - this.fingerprintConsumed;
+    return this.fingerprint === null
+      ? 0
+      : FINGERPRINT_PREFIX_CHAR_BUDGET - this.fingerprintConsumed;
   }
   sequence = 0n;
-  private readonly fingerprint = createHash('sha256');
+  private readonly fingerprint: Hash | null;
   private readonly toolsJson: string;
   readonly callerLineage: CallerRequestLineage | undefined;
 
@@ -123,15 +137,17 @@ class RequestShapeAccumulator {
         ? new CallerRequestLineage(input.previousCallerLineage)
         : undefined;
     this.toolsJson = stableStringify(input.tools);
-    this.fingerprint.update(`I:${input.instructionsText ?? ''}`);
-    this.fingerprint.update(`\u0000T:${this.toolsJson}`);
+    this.fingerprint =
+      input.includeFingerprint === false ? null : createHash('sha256');
+    this.fingerprint?.update(`I:${input.instructionsText ?? ''}`);
+    this.fingerprint?.update(`\u0000T:${this.toolsJson}`);
   }
 
   add(content: IContent, sequence: bigint): void {
     this.callerLineage?.observe(content);
     const measurement = measureRequestRow(content, this.input.countTokens);
     let part: FingerprintContribution | null = null;
-    if (this.fingerprintConsumed < FINGERPRINT_PREFIX_CHAR_BUDGET) {
+    if (this.fingerprintBudget > 0) {
       if (measurement.fingerprintKey !== null) {
         const text = `C#${measurement.fingerprintKey}`;
         part = { text, consumed: text.length };
@@ -167,7 +183,7 @@ class RequestShapeAccumulator {
       this.mediaTokens += measurement.tokens;
     else this.historyTokens += measurement.tokens;
     for (const result of measurement.toolResults) {
-      this.toolCalls.push({
+      const attribution: ToolCallAttribution = {
         callId: result.callId,
         toolName:
           nonempty(this.toolCallNames.get(result.callId)) ??
@@ -175,25 +191,33 @@ class RequestShapeAccumulator {
           UNRESOLVED_TOOL_NAME,
         resultTokens: result.resultTokens,
         wasTruncated: result.wasTruncated,
-      });
+      };
+      this.toolCalls.push(attribution);
       if (sequence <= this.input.lastSendSequence)
         this.carriedToolResultTokens += result.resultTokens;
-      else this.newToolResultTokens += result.resultTokens;
+      else {
+        this.newToolCalls.push(attribution);
+        this.newToolResultTokens += result.resultTokens;
+      }
     }
     if (sequence > this.sequence) this.sequence = sequence;
-    if (part !== null) {
+    if (part !== null && this.fingerprint !== null) {
       this.fingerprint.update(`\u0000${part.text}`);
       this.fingerprintConsumed += part.consumed;
     }
   }
 
   finish(): RequestShapeResult {
+    const newToolCalls =
+      this.callerLineage?.continuesPrevious() === false
+        ? this.toolCalls
+        : this.newToolCalls;
     if (this.callerLineage?.continuesPrevious() === false) {
       this.newToolResultTokens += this.carriedToolResultTokens;
       this.carriedToolResultTokens = 0;
     }
     const prefixFingerprint = this.fingerprint
-      .digest('hex')
+      ?.digest('hex')
       .slice(0, FINGERPRINT_HEX_LENGTH);
     return {
       instructionsTokens: this.input.instructionsText
@@ -215,10 +239,12 @@ class RequestShapeAccumulator {
       mediaTokens: this.mediaTokens,
       injectedTokens: this.injectedTokens,
       toolCalls: this.toolCalls,
+      newToolCalls,
       newToolResultTokens: this.newToolResultTokens,
       carriedToolResultTokens: this.carriedToolResultTokens,
       prefixFingerprint,
       prefixFingerprintChanged:
+        prefixFingerprint === undefined ||
         this.input.previousFingerprint === undefined
           ? null
           : this.input.previousFingerprint !== prefixFingerprint,
@@ -320,6 +346,7 @@ export class RequestShapeTracker {
   private lastSequence = 0n;
   private lastFp: string | undefined;
   private lastCallerLineage: CallerLineageState | undefined;
+  private missedRequest = false;
 
   constructor(private readonly staticCounts = new StaticTokenCountCache()) {}
 
@@ -330,12 +357,38 @@ export class RequestShapeTracker {
     return { sequence: this.lastSequence, fingerprint: this.lastFp };
   }
 
-  recordRequestShape(input: ShapeOptions): RequestShapeResult {
+  /**
+   * Record that the session sent a request this tracker did not see (the
+   * token-usage level was `off`, #4068). Rows first sent in that request are
+   * past the recorded send sequence, so the next recorded request cannot tell
+   * their tool results from new ones, and its prefix comparison would skip a
+   * request. That request reports both as unknown instead.
+   */
+  noteUnobservedRequest(): void {
+    this.missedRequest = true;
+  }
+
+  /**
+   * Whether the next recorded request can split new from carried tool
+   * results; consumes the missed-request mark. The request after an
+   * unobserved one still seeds the tracker, so the split is known again from
+   * the request after it.
+   */
+  private takeNewVsCarriedKnown(): boolean {
+    const known = !this.missedRequest;
+    this.missedRequest = false;
+    return known;
+  }
+
+  recordRequestShape(
+    input: ShapeOptions,
+  ): RequestShapeResult & { readonly newVsCarriedKnown: boolean } {
+    const newVsCarriedKnown = this.takeNewVsCarriedKnown();
     const result = arrayShape(
       {
         ...input,
         lastSendSequence: this.lastSequence,
-        previousFingerprint: this.lastFp,
+        previousFingerprint: newVsCarriedKnown ? this.lastFp : undefined,
         callerOwned: true,
         previousCallerLineage: this.lastCallerLineage,
       },
@@ -344,17 +397,18 @@ export class RequestShapeTracker {
     this.lastSequence = BigInt(input.requestContents.length);
     this.lastFp = result.shape.prefixFingerprint;
     this.lastCallerLineage = result.callerLineage;
-    return result.shape;
+    return { ...result.shape, newVsCarriedKnown };
   }
 
   async recordSourceRequestShape(
     input: SourceShapeOptions,
-  ): Promise<RequestShapeResult> {
+  ): Promise<RequestShapeResult & { readonly newVsCarriedKnown: boolean }> {
+    const newVsCarriedKnown = this.takeNewVsCarriedKnown();
     const result = await sourceShape(
       {
         ...input,
         lastSendSequence: this.lastSequence,
-        previousFingerprint: this.lastFp,
+        previousFingerprint: newVsCarriedKnown ? this.lastFp : undefined,
         callerOwned: input.requestRows.callerOwned === true,
         previousCallerLineage: this.lastCallerLineage,
       },
@@ -367,6 +421,6 @@ export class RequestShapeTracker {
       this.lastSequence = result.sequence;
     this.lastFp = result.shape.prefixFingerprint;
     this.lastCallerLineage = result.callerLineage;
-    return result.shape;
+    return { ...result.shape, newVsCarriedKnown };
   }
 }

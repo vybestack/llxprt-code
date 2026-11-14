@@ -19,7 +19,7 @@ for (const size of [65]) {
       const file = join(root, 'usage.jsonl');
       try {
         await withSuffixFixture(size, async (history, ownership, counters) => {
-          const logger = new TokenUsageLogger(true, file);
+          const logger = new TokenUsageLogger('debug', file);
           const runtime = createAgentRuntimeState({
             runtimeId: 'raw-runtime',
             sessionId: 'raw-session',

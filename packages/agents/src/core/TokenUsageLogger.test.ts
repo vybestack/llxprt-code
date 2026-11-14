@@ -44,7 +44,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('writes one JSONL record after recordEstimate + recordActual', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-1', {
       provider: 'openai',
       model: 'gpt-4',
@@ -62,7 +62,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('record contains all required fields with snake_case keys', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-2', {
       provider: 'anthropic',
       model: 'claude-3',
@@ -92,7 +92,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('computes effective_actual_tokens = actual - cached', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-3', {
       provider: 'openai',
       model: 'gpt-4',
@@ -110,7 +110,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('does not allow effective_actual_tokens to go negative', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-neg', {
       provider: 'openai',
       model: 'gpt-4',
@@ -128,7 +128,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('disabled logger writes nothing', async () => {
-    const logger = new TokenUsageLogger(false, logFile);
+    const logger = new TokenUsageLogger('off', logFile);
     logger.recordEstimate('prompt-4', {
       provider: 'openai',
       model: 'gpt-4',
@@ -145,7 +145,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('recordActual with no pending estimate writes nothing', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     await logger.recordActual('never-estimated', {
       actualPromptTokens: 120,
       cachedTokens: 0,
@@ -155,7 +155,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('does not persist any prompt text (privacy)', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-priv', {
       provider: 'openai',
       model: 'gpt-4',
@@ -177,6 +177,7 @@ describe('TokenUsageLogger', () => {
       'model',
       'estimator',
       'record_type',
+      'timing_source',
     ]);
     const forbiddenTextKeys = [
       'text',
@@ -197,7 +198,7 @@ describe('TokenUsageLogger', () => {
 
   it('file I/O errors do not crash (fail-open)', async () => {
     const badPath = path.join(os.tmpdir(), 'invalid\0dir', 'usage.jsonl');
-    const logger = new TokenUsageLogger(true, badPath);
+    const logger = new TokenUsageLogger('debug', badPath);
     logger.recordEstimate('prompt-fail', {
       provider: 'openai',
       model: 'gpt-4',
@@ -216,7 +217,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('preserves pending entry so multi-attempt recording works (issue #3130)', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-multi', {
       provider: 'openai',
       model: 'gpt-4',
@@ -249,7 +250,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('drops a repeat recordActual for an attempt already written (issue #3130)', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-dedupe', {
       provider: 'openai',
       model: 'gpt-4',
@@ -275,7 +276,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('treats an omitted attemptIndex as attempt 0 for duplicate protection', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-implicit', {
       provider: 'openai',
       model: 'gpt-4',
@@ -299,7 +300,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('preserves attempt dedupe memory across a retry re-estimate (issue #3130)', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     const estimate = {
       provider: 'openai',
       model: 'gpt-4',
@@ -332,7 +333,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('consumes the pending entry once the turn reaches a terminal outcome (issue #3130)', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-terminal', {
       provider: 'openai',
       model: 'gpt-4',
@@ -360,7 +361,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('evicts oldest pending entry when exceeding PENDING_CAP', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     for (let i = 0; i < PENDING_CAP; i++) {
       logger.recordEstimate(`prompt-${i}`, {
         provider: 'openai',
@@ -404,8 +405,8 @@ describe('TokenUsageLogger', () => {
   });
 
   it('isEnabled returns the enabled state', async () => {
-    const enabled = new TokenUsageLogger(true, logFile);
-    const disabled = new TokenUsageLogger(false, logFile);
+    const enabled = new TokenUsageLogger('debug', logFile);
+    const disabled = new TokenUsageLogger('off', logFile);
     expect(enabled.isEnabled()).toBe(true);
     expect(disabled.isEnabled()).toBe(false);
   });
@@ -417,7 +418,7 @@ describe('TokenUsageLogger', () => {
       'deep',
       'usage.jsonl',
     );
-    const logger = new TokenUsageLogger(true, nestedPath);
+    const logger = new TokenUsageLogger('debug', nestedPath);
     logger.recordEstimate('prompt-nested', {
       provider: 'openai',
       model: 'gpt-4',
@@ -434,7 +435,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('ts field is a valid ISO date string', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-ts', {
       provider: 'openai',
       model: 'gpt-4',
@@ -453,7 +454,7 @@ describe('TokenUsageLogger', () => {
     expect(new Date(ts).toString()).not.toBe('Invalid Date');
   });
   it('overwrites a pending estimate at capacity without evicting another prompt', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     for (let i = 0; i < PENDING_CAP - 1; i++) {
       logger.recordEstimate(`filler-${i}`, {
         provider: 'openai',
@@ -494,7 +495,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('enabled logger with undefined logFilePath writes nothing and does not crash', async () => {
-    const logger = new TokenUsageLogger(true, undefined);
+    const logger = new TokenUsageLogger('debug', undefined);
     logger.recordEstimate('prompt-no-path', {
       provider: 'openai',
       model: 'gpt-4',
@@ -529,7 +530,7 @@ describe('refineEstimate (finding #8)', () => {
   });
 
   it('updates the estimate for an existing record, preserving the tiktoken baseline', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-refine', {
       provider: 'openai',
       model: 'gpt-4',
@@ -555,7 +556,7 @@ describe('refineEstimate (finding #8)', () => {
   });
 
   it('records the estimate with a null tiktoken baseline when no earlier record exists', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
 
     // The finalized envelope is the authoritative estimate for the send, so it
     // is still recorded when no earlier tiktoken measurement was taken. The
@@ -580,7 +581,7 @@ describe('refineEstimate (finding #8)', () => {
   });
 
   it('is a no-op when disabled', async () => {
-    const logger = new TokenUsageLogger(false, logFile);
+    const logger = new TokenUsageLogger('off', logFile);
 
     logger.refineEstimate('prompt-disabled', {
       provider: 'openai',

@@ -557,7 +557,9 @@ async function testBody5(): Promise<void> {
   await suite0Handler.enforceContextWindow(0, 'pending-successful-commit');
 
   expect(suite0Handler['compressionFailureCount']).toBe(0);
-  expect(suite0Handler['compressionSummary']).toBe(snapshot);
+  // Truncation keeps the stored, chronology-stamped snapshot; it produced no
+  // summary of its own, so none is handed to recording (#4067).
+  expect(suite0Handler['compressionSummary']).toBeUndefined();
   expect(suite0Handler['lastSuccessfulCompressionTime']).not.toBeNull();
   expect(suite0Handler.isCompressionInCooldown()).toBe(false);
   expect(suite0Handler.wasRecentlyCompressed()).toBe(true);
@@ -595,7 +597,9 @@ async function testBody6(): Promise<void> {
   );
 
   expect(suite0Handler['compressionFailureCount']).toBe(0);
-  expect(suite0Handler['compressionSummary']).toBe(snapshot);
+  // Truncation keeps the stored, chronology-stamped snapshot; it produced no
+  // summary of its own, so none is handed to recording (#4067).
+  expect(suite0Handler['compressionSummary']).toBeUndefined();
   expect(suite0Handler['lastSuccessfulCompressionTime']).not.toBeNull();
   expect(suite0Handler.isCompressionInCooldown()).toBe(false);
   expect(suite0Handler.wasRecentlyCompressed()).toBe(true);

@@ -41,11 +41,23 @@ function records(path: string) {
     .split('\n')
     .map((line) => z.record(z.unknown()).parse(JSON.parse(line)));
 }
+/**
+ * The log fields a recorded shape becomes at the debug level (#4068):
+ * `tool_calls` lists only the new tool results, `new_tool_result_count`
+ * counts them, and the split is written only when it is known.
+ */
 function serializedShape(
   shape: Record<string, unknown>,
 ): Record<string, unknown> {
+  const { newToolCalls, newVsCarriedKnown, ...rest } = shape;
+  expect(newVsCarriedKnown).toBe(true);
+  const newCalls = z.array(z.unknown()).parse(newToolCalls);
   return Object.fromEntries(
-    Object.entries(shape).map(([name, value]) => [
+    Object.entries({
+      ...rest,
+      toolCalls: newCalls,
+      newToolResultCount: newCalls.length,
+    }).map(([name, value]) => [
       name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
       value,
     ]),
@@ -54,7 +66,7 @@ function serializedShape(
 async function contextualSends(providerChange: boolean) {
   const oracle = arrayShapeOracle('changed', 'tiktoken');
   const file = join(root(), 'usage.jsonl');
-  const logger = new TokenUsageLogger(true, file);
+  const logger = new TokenUsageLogger('debug', file);
   logger.getShapeMemory().recordRequestShape({
     requestContents: [seedTool()],
     tools: [],
@@ -133,7 +145,7 @@ describe('source shape context prerequisite', () => {
   );
   it('does not read a disabled source logger or attach partial context', async () => {
     const file = join(root(), 'disabled.jsonl');
-    const logger = new TokenUsageLogger(false, file);
+    const logger = new TokenUsageLogger('off', file);
     await recordSourceRequestShapeContext(
       logger,
       'disabled',

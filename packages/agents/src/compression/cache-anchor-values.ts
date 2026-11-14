@@ -16,6 +16,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { appendCandidateRow } from './curatedCandidate.js';
 import { replacedSpan } from './diskTruncation.js';
+import { CompressionSummarySelection } from './compressionSummary.js';
 
 type Span = Awaited<ReturnType<typeof replacedSpan>>;
 
@@ -90,23 +91,7 @@ export async function applyCompressionValuesWithAnchor(
     candidate,
     start,
   );
-  let summary: IContent | undefined;
-  let marked = false;
-  const selectSummary = (row: IContent): void => {
-    if (!marked && row.metadata?.reason === 'compression-state-snapshot') {
-      summary = row;
-      marked = true;
-    } else if (
-      summary === undefined &&
-      (row.metadata?.isSummary === true ||
-        (row.metadata?.synthetic === true &&
-          row.blocks.some(
-            (block) =>
-              block.type === 'text' && block.text.includes('<state_snapshot>'),
-          )))
-    )
-      summary = row;
-  };
+  const selection = new CompressionSummarySelection();
   await history.detachedValues.transform(
     (_source, sink) =>
       writeCompressionValues(
@@ -115,7 +100,7 @@ export async function applyCompressionValuesWithAnchor(
         start,
         top,
         annotation,
-        selectSummary,
+        (row) => selection.observe(row),
         options.signal,
       ),
     model,
@@ -124,5 +109,5 @@ export async function applyCompressionValuesWithAnchor(
   if (anchor === undefined) history.resetCacheAnchorSeq();
   else history.setCacheAnchorSeq(anchor);
   options.onCommitted?.();
-  return summary;
+  return selection.summary;
 }

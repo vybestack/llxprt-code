@@ -26,6 +26,7 @@ import {
 } from '../core/tokenLimits.js';
 /** @plan PLAN-20260211-COMPRESSION.P12 */
 import {
+  DEFAULT_TOKEN_USAGE_LOG_LEVEL,
   getSettingSpec,
   validateSetting,
 } from '@vybestack/llxprt-code-settings';
@@ -454,6 +455,10 @@ export function createAgentRuntimeContext(
   options: AgentRuntimeContextFactoryOptions,
 ): AgentRuntimeContext {
   validateRequiredOptions(options);
+  // Every policy below is read live, per request. Reading the live policy once
+  // here as well makes a malformed stored value fail at construction, before
+  // any request is built, instead of on the first send.
+  options.readRuntimeSettings?.();
 
   const history =
     options.history ??
@@ -507,10 +512,10 @@ export function createAgentRuntimeContext(
       options.readRuntimeSettings?.().showCitations ??
       options.settings.showCitations ??
       false,
-    tokenUsageLoggingEnabled:
-      options.readRuntimeSettings?.().tokenUsageLoggingEnabled ??
-      options.settings.tokenUsageLoggingEnabled ??
-      true,
+    readTokenUsageLogLevel: () =>
+      options.readRuntimeSettings?.().tokenUsageLogLevel ??
+      options.settings.tokenUsageLogLevel ??
+      DEFAULT_TOKEN_USAGE_LOG_LEVEL,
     prepareProviderInvocation: options.prepareProviderInvocation,
     state: options.state,
     history,

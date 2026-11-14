@@ -98,7 +98,7 @@ describe('indexed native fallback value and summary contracts', () => {
     });
   }
 
-  it('prefers the first surviving compression-state snapshot over earlier summary markers and excludes pending rows', async () => {
+  it('reports no summary when every surviving snapshot was carried from history, and excludes pending rows (#4067)', async () => {
     await withNativeValueFixture(async ({ history }) => {
       const input = [
         fallbackRow(0),
@@ -120,12 +120,14 @@ describe('indexed native fallback value and summary contracts', () => {
           'test-model',
         );
       });
-      expect(result.summary).toStrictEqual(input[2]);
+      // Truncation produces no summary; the surviving snapshots are stored
+      // rows from earlier compressions (#4067).
+      expect(result.summary).toBeUndefined();
       expect(await Array.fromAsync(history.streamRawHistory())).toHaveLength(4);
     });
   });
 
-  it('keeps the first legacy synthetic snapshot when no reason-marked summary survives', async () => {
+  it('reports no summary for a carried legacy synthetic snapshot (#4067)', async () => {
     await withNativeValueFixture(async ({ history }) => {
       const synthetic: IContent = {
         ...fallbackRow(1),
@@ -140,9 +142,7 @@ describe('indexed native fallback value and summary contracts', () => {
         snapshot(2),
         fallbackRow(3),
       ]);
-      expect((await nativeFallback(history, 3)).summary).toStrictEqual(
-        synthetic,
-      );
+      expect((await nativeFallback(history, 3)).summary).toBeUndefined();
     });
   });
 

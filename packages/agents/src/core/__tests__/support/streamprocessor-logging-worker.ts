@@ -225,7 +225,7 @@ async function assemble(root: string, mode: Mode, large: boolean) {
   const processor = loggingProcessor(setup, wrapper);
   if (mode === 'shape')
     setup.compression.tokenUsageLogger = new TokenUsageLogger(
-      true,
+      'debug',
       join(root, 'tokens.jsonl'),
     );
   let hooks: SessionHookOwner | undefined;

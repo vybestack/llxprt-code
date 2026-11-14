@@ -30,7 +30,6 @@ import { PendingContextWindowEnforcer } from './pendingContextWindowEnforcement.
 import { runDiskTruncation } from './diskTruncation.js';
 import { runDiskMiddleOut, runDiskOneShot } from './diskMiddleOut.js';
 import { runDiskHighDensity } from './diskHighDensity.js';
-import { selectCompressionSummary } from './compressionSummary.js';
 import type {
   CompressionAttemptContext,
   buildCompressionMetadata,
@@ -41,7 +40,10 @@ import {
 } from './compressionAttempt.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { TokenUsageLogger } from '../core/TokenUsageLogger.js';
-import { recordCompressionTelemetry } from './compressionLifecycleTelemetry.js';
+import {
+  CompressionRunReport,
+  recordCompressionTelemetry,
+} from './compressionLifecycleTelemetry.js';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P05
  * @requirement:REQ-DEP-001
@@ -132,6 +134,8 @@ export class CompressionHandler {
   private lastCompressionFailureTime: number | null = null;
   private lastSuccessfulCompressionTime: number | null = null;
   private compressionSummary: IContent | undefined;
+  /** #4067: compression telemetry comes from the applied strategy result. */
+  private readonly runReport = new CompressionRunReport();
   densityDirty: boolean = true;
   private _suppressDensityDirty: boolean = false;
   private _suppressDensityDirtyDepth: number = 0;
@@ -756,6 +760,7 @@ export class CompressionHandler {
     // counter/timestamp changes entirely. (Issue #2602)
     let compressionOutcome: 'applied' | 'noop' | 'failed' = 'failed';
     this.compressionSummary = undefined;
+    this.runReport.begin();
     // @plan PLAN-20260211-HIGHDENSITY.P20
     // @requirement REQ-HD-002.6
     // Suppress densityDirty during compression rebuild (clear+add loop)
@@ -797,7 +802,7 @@ export class CompressionHandler {
         this.historyService,
         (profileName) => this.providerResolver(profileName),
         tokensBefore,
-        this.compressionSummary,
+        this.runReport.telemetry(),
       );
       return PerformCompressionResult.COMPRESSED;
     }
@@ -807,22 +812,6 @@ export class CompressionHandler {
     );
 
     return PerformCompressionResult.FAILED;
-  }
-
-  /**
-   * Select the genuine compression snapshot entry from candidate history for
-   * recording. Prefers the entry explicitly marked with the
-   * 'compression-state-snapshot' reason; falls back to text-based detection
-   * of the canonical <state_snapshot> container for legacy/imported histories.
-   * Returns undefined when no summary entry is identifiable (e.g. truncation
-   * strategies that emit no synthetic snapshot).
-   *
-   * @plan PLAN-20260727-ISSUE2602
-   */
-  static selectCompressionSummary(
-    newHistory: readonly IContent[],
-  ): IContent | undefined {
-    return selectCompressionSummary(newHistory);
   }
 
   /**
@@ -881,6 +870,7 @@ export class CompressionHandler {
     const strategyName = parseCompressionStrategyName(
       this.ports.ephemerals.compressionStrategy(),
     );
+    const { runReport } = this;
     const args: Parameters<typeof buildCompressionMetadata> = [
       promptId,
       this.ports,
@@ -890,7 +880,7 @@ export class CompressionHandler {
       this.activeTodosProvider,
       transcriptPathProvider ?? this.transcriptPathProvider,
       this.logger,
-      { modelParameters, historyOrigin, onCommitted },
+      { modelParameters, historyOrigin, onCommitted, runReport },
     ];
     const transport = {
       mediaResolver: this.mediaResolver,

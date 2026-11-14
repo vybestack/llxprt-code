@@ -26,7 +26,8 @@ import {
 } from '../sessionFileExtension.js';
 import { readSessionHeaderInfo } from './sessionHeaderReader.js';
 
-const PROJECT_HASH_RE = /^[0-9a-f]{64}$/;
+/** Name grammar of the per-project directories under the global temp dir. */
+export const PROJECT_HASH_RE = /^[0-9a-f]{64}$/;
 export const ARCHIVE_DIR_NAME = 'archive';
 const SESSION_PREFIX = 'session-';
 

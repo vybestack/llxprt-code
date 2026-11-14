@@ -35,7 +35,7 @@ function retainedEntries(logger: TokenUsageLogger): number {
 
 describe('token usage session retention', () => {
   it('retains no additional per-row entries between 64 and 4096 turns', () => {
-    const logger = new TokenUsageLogger(true, undefined);
+    const logger = new TokenUsageLogger('debug', undefined);
     for (let turn = 0; turn < 64; turn++) send(logger, turn);
     const early = retainedEntries(logger);
     for (let turn = 64; turn < 4096; turn++) send(logger, turn);
@@ -75,7 +75,7 @@ describe('journal token usage session state', () => {
         return text.length;
       },
     });
-    const logger = new TokenUsageLogger(true, undefined);
+    const logger = new TokenUsageLogger('debug', undefined);
     try {
       await session.append([
         {
@@ -100,7 +100,7 @@ describe('journal token usage session state', () => {
       eagerTokenUsageFacts: true,
       tokenUsageCountTokens: (text) => text.length,
     });
-    const logger = new TokenUsageLogger(true, undefined);
+    const logger = new TokenUsageLogger('debug', undefined);
     const pending: IContent = {
       speaker: 'tool',
       blocks: [

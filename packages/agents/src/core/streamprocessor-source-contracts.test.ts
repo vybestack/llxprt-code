@@ -309,7 +309,7 @@ describe('actual source token-usage contract', () => {
       1,
     );
     setup.compression.tokenUsageLogger = new TokenUsageLogger(
-      true,
+      'debug',
       join(root(), 'token-usage.jsonl'),
     );
     try {

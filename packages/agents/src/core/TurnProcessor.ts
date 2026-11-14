@@ -739,6 +739,8 @@ export class TurnProcessor {
     systemInstruction: ChatSessionConfig['systemInstruction'],
   ): Promise<void> {
     this.currentPromptEnvelopeEstimate = prepared.estimate;
+    // This request's boundary for the live token-usage level (#4068).
+    this.compressionHandler.tokenUsageLogger?.beginRequest();
     await this.ports.telemetry.logApiRequest({
       model: this.ports.state.model,
       promptId,

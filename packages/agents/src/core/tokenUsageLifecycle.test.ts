@@ -104,7 +104,7 @@ async function buildCompressionHandler(
     await historyService.waitForTokenUpdates();
   }
   const { handler, transport } = middleoutSetup(historyService);
-  const logger = new TokenUsageLogger(true, logFile);
+  const logger = new TokenUsageLogger('debug', logFile);
   handler.tokenUsageLogger = logger;
   return { handler, transport, logger, historyService };
 }
@@ -290,7 +290,7 @@ describe('TokenUsageLogger — lifecycle event emission (issue #3130 slice 5)', 
     const { handler } = await buildCompressionHandler(logFile);
 
     // Replace logger with a disabled one
-    handler.tokenUsageLogger = new TokenUsageLogger(false, logFile);
+    handler.tokenUsageLogger = new TokenUsageLogger('off', logFile);
 
     expect(await handler.performCompression('test-prompt-disabled')).toBe(
       PerformCompressionResult.COMPRESSED,

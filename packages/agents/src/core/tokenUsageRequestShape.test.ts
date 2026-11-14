@@ -373,6 +373,30 @@ describe('tokenUsageRequestShape — prefix fingerprint (AC-6)', () => {
     expect(result.prefixFingerprint).toBeTruthy();
   });
 
+  it('is not computed when not requested, and the token split is unchanged (#4068 summary level)', () => {
+    const inputs = {
+      requestContents: [textContent('hello'), aiTextContent('world')],
+      tools: [{ name: 'tool_a' }],
+      instructionsText: 'system prompt',
+      countTokens: charCounter,
+    } as const;
+    const withFingerprint = new RequestShapeTracker().recordRequestShape(
+      inputs,
+    );
+    const memory = new RequestShapeTracker();
+    memory.recordRequestShape({ ...inputs, includeFingerprint: false });
+    const second = memory.recordRequestShape({
+      ...inputs,
+      includeFingerprint: false,
+    });
+
+    expect(second.prefixFingerprint).toBeUndefined();
+    expect(second.prefixFingerprintChanged).toBeNull();
+    expect(second.historyTokens).toBe(withFingerprint.historyTokens);
+    expect(second.instructionsTokens).toBe(withFingerprint.instructionsTokens);
+    expect(second.toolsSchemaTokens).toBe(withFingerprint.toolsSchemaTokens);
+  });
+
   it('is stable for an identical prefix', () => {
     const memory1 = new RequestShapeTracker();
     const memory2 = new RequestShapeTracker();
