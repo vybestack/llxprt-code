@@ -8,6 +8,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import type { SandboxMountConfig } from '@vybestack/llxprt-code-core';
+import {
+  buildBwrapDeviceArgs,
+  preflightSandboxDevices,
+  resolveSandboxDevices,
+  type ResolvedSandboxDevices,
+} from './sandbox-devices.js';
 
 export interface BwrapMountPolicyInput {
   readonly workspaceRoot: string;
@@ -18,6 +24,7 @@ export interface BwrapMountPolicyInput {
   readonly runtimeRoots?: readonly string[];
   readonly sshAgentSocket?: string;
   readonly maskedRoots?: readonly string[];
+  readonly devices?: readonly string[];
 }
 
 function canonicalDirectory(candidate: string, description: string): string {
@@ -129,6 +136,11 @@ function validatedProfileMounts(
       );
     }
     const destination = normalizeMountDestination(mount.to ?? mount.from);
+    if (isWithin('/dev', destination)) {
+      throw new FatalSandboxError(
+        `Sandbox mount destination '${destination}' is inside /dev; grant devices through the profile devices field.`,
+      );
+    }
     const overlapsProtectedPath = protectedDestinations.some(
       (protectedPath) => {
         const sourceOverlaps =
@@ -216,6 +228,23 @@ function buildBwrapBaseArgs(
   return args;
 }
 
+function resolveBwrapDeviceGrants(
+  devices: readonly string[] | undefined,
+  roots: readonly string[],
+): ResolvedSandboxDevices {
+  const resolved = resolveSandboxDevices(devices ?? []);
+  for (const root of roots) {
+    const covered = resolved.grants.find((grant) => isWithin(root, grant));
+    if (covered !== undefined) {
+      throw new FatalSandboxError(
+        `Workspace root '${root}' would cover the granted device '${covered}'.`,
+      );
+    }
+  }
+  preflightSandboxDevices(resolved);
+  return resolved;
+}
+
 export function buildBwrapMountArgs(
   input: BwrapMountPolicyInput,
 ): readonly string[] {
@@ -249,6 +278,7 @@ export function buildBwrapMountArgs(
   }
 
   const profileMounts = validatedProfileMounts(input.mounts ?? [], homeDir);
+  const deviceGrants = resolveBwrapDeviceGrants(input.devices, roots);
   const runtimeRoots = (input.runtimeRoots ?? []).map((root) =>
     canonicalDirectory(root, 'runtime root'),
   );
@@ -275,6 +305,7 @@ export function buildBwrapMountArgs(
     args.push('--dir', '/run/llxprt');
     args.push('--ro-bind', socketPath, '/run/llxprt/ssh-agent.sock');
   }
+  args.push(...buildBwrapDeviceArgs(deviceGrants));
 
   if (input.network === 'off') {
     args.push('--unshare-net');

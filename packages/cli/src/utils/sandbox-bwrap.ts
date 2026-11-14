@@ -387,6 +387,7 @@ function prepareBwrapLaunchPlan(
     workspaceRoot: workspacePlan.primaryRoot,
     includeRoots: workspacePlan.includeRoots,
     mounts: config.mounts,
+    devices: config.devices,
     network: config.network,
     homeDir,
     maskedRoots: [globalData, globalCache, globalLog].filter(
