@@ -27,7 +27,10 @@ import {
   CodeModeRunOwner,
   type ScriptRunDisplay,
 } from './code-mode-run-owner.js';
-import { scriptEnvelope, type ScriptEnvelope } from './script-result-envelope.js';
+import {
+  scriptEnvelope,
+  type ScriptEnvelope,
+} from './script-result-envelope.js';
 import {
   formatToolScriptCard,
   type ToolScriptRunView,

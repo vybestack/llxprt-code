@@ -70,7 +70,16 @@ function buildScenarioBRepo(): string {
   for (const args of [
     ['init', '-q'],
     ['add', '.'],
-    ['-c', 'user.name=Ada', '-c', 'user.email=ada@example.com', 'commit', '-q', '-m', 'sizes'],
+    [
+      '-c',
+      'user.name=Ada',
+      '-c',
+      'user.email=ada@example.com',
+      'commit',
+      '-q',
+      '-m',
+      'sizes',
+    ],
   ])
     execFileSync('git', ['-C', repo, ...args]);
   return repo;
@@ -105,7 +114,13 @@ describe('issue4084 evidence tools', () => {
         .join('\n'),
     );
 
-    const score = runTool('score-b.ts', [answer, '--repo', repo, '--ref', 'HEAD']) as {
+    const score = runTool('score-b.ts', [
+      answer,
+      '--repo',
+      repo,
+      '--ref',
+      'HEAD',
+    ]) as {
       excludingTests: {
         rowsFound: number;
         inTop10: number;

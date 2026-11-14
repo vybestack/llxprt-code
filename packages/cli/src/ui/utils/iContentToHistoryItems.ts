@@ -304,9 +304,7 @@ function scriptCardFor(
  * tool response (the turn ended without one) or a synthesized one, and must
  * not read as pending or as an ordinary failure.
  */
-function scriptRunStatus(
-  run: ToolScriptRunView,
-): ToolCallStatus | undefined {
+function scriptRunStatus(run: ToolScriptRunView): ToolCallStatus | undefined {
   const finished = run.finished;
   if (finished === undefined) return undefined;
   if (finished.ok) return ToolCallStatus.Success;
@@ -322,8 +320,7 @@ function toolCallDisplay(
 ): IndividualToolCallDisplay {
   const response = responseMap.get(tc.id);
   const run = tc.name === SCRIPT_TOOL ? scriptRuns.get(tc.id) : undefined;
-  const card =
-    run === undefined ? undefined : scriptCardFor(tc, response, run);
+  const card = run === undefined ? undefined : scriptCardFor(tc, response, run);
   const display =
     response !== undefined && card === undefined
       ? safeToolResultToDisplayText(response.result)

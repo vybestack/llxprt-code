@@ -39,11 +39,6 @@ type HookPhase = HookEventName.BeforeTool | HookEventName.AfterTool;
 
 const owned: ScriptAgent[] = [];
 
-afterEach(async () => {
-  for (const agent of owned.splice(0)) await agent.cleanup();
-  assertNoLiveWrappers();
-});
-
 function hookOn(phase: HookPhase, output: object) {
   const script = join(scratchDir('code-mode-stop-hook-'), 'hook.ts');
   writeFileSync(
@@ -109,6 +104,11 @@ async function runPastHook(
 }
 
 describe('code mode hook stop', () => {
+  afterEach(async () => {
+    for (const agent of owned.splice(0)) await agent.cleanup();
+    assertNoLiveWrappers();
+  });
+
   it('ends the run when a BeforeTool hook asks to stop, so a later call never runs', async () => {
     const { response, markerWritten } = await runPastHook(
       HookEventName.BeforeTool,

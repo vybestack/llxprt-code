@@ -34,6 +34,12 @@ import { mapToDisplay } from '../toolMapping.js';
 import { useToolSchedulerSetup } from './useAgentStreamLifecycle.js';
 
 const noop = (): void => {};
+
+function isToolGroup(
+  item: Omit<HistoryItem, 'id'>,
+): item is HistoryItemToolGroup {
+  return item.type === 'tool_group';
+}
 const owned: ScriptAgent[] = [];
 
 const ALLOW_SHELL = {
@@ -128,22 +134,16 @@ describe('code mode script cards for runs that do not succeed', () => {
     controller.abort();
     await turn;
 
-    await waitFor(
-      () =>
-        expect(
-          added.some(
-            (item) =>
-              item.type === 'tool_group' &&
-              item.tools.some((tool) => tool.callId === 'script-call-1'),
-          ),
-        ).toBe(true),
-      { timeout: 20_000 },
-    );
-    const groups = added.filter(
-      (item): item is HistoryItemToolGroup =>
-        item.type === 'tool_group' &&
-        item.tools.some((tool) => tool.callId === 'script-call-1'),
-    );
+    const scriptGroups = (): HistoryItemToolGroup[] =>
+      added
+        .filter(isToolGroup)
+        .filter((group) =>
+          group.tools.some((tool) => tool.callId === 'script-call-1'),
+        );
+    await waitFor(() => expect(scriptGroups()).not.toHaveLength(0), {
+      timeout: 20_000,
+    });
+    const groups = scriptGroups();
     expect(groups).toHaveLength(1);
     const [tool] = groups[0].tools;
     expect(tool.status).toBe(ToolCallStatus.Canceled);
