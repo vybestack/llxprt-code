@@ -47,9 +47,6 @@ export async function ensurePrivateDirectory(dir: string): Promise<void> {
   }
 }
 
-/** Tail of the pending replacement chain for each file being written. */
-const pendingReplacements = new Map<string, Promise<void>>();
-
 async function replaceFile(file: string, content: string): Promise<void> {
   try {
     await fs.unlink(file);
@@ -61,24 +58,37 @@ async function replaceFile(file: string, content: string): Promise<void> {
   await fs.writeFile(file, content, { mode: 0o600, flag: 'wx' });
 }
 
+export type PrivateFileWriter = (
+  file: string,
+  content: string,
+) => Promise<void>;
+
 /**
- * Writes `content` to a new file that is private from the moment it exists.
- * A previous file (or symlink) at the path is removed first and the write uses
- * exclusive creation, so it can never follow a link planted at the path.
- * Replacements of the same file run one at a time in request order: the
- * unlink and the exclusive create of overlapping updates would otherwise
- * interleave and make the later create fail with EEXIST. A failed replacement
- * rejects only its own caller.
+ * Creates a writer that puts `content` in a new file that is private from the
+ * moment it exists. A previous file (or symlink) at the path is removed first
+ * and the write uses exclusive creation, so it can never follow a link planted
+ * at the path. Replacements of the same file made through one writer run one
+ * at a time in request order: the unlink and the exclusive create of
+ * overlapping updates would otherwise interleave and make the later create
+ * fail with EEXIST. A failed replacement rejects only its own caller.
+ *
+ * The ordering state belongs to the returned writer, so the owner of the port
+ * file creates one writer and uses it for every update of that file.
  */
-export function writePrivateFile(file: string, content: string): Promise<void> {
-  const previous = pendingReplacements.get(file) ?? Promise.resolve();
-  const run = previous.then(() => replaceFile(file, content));
-  const tail = run.catch(() => undefined);
-  pendingReplacements.set(file, tail);
-  void tail.then(() => {
-    if (pendingReplacements.get(file) === tail) {
-      pendingReplacements.delete(file);
-    }
-  });
-  return run;
+export function createPrivateFileWriter(): PrivateFileWriter {
+  /** Tail of the pending replacement chain for each file being written. */
+  const pendingReplacements = new Map<string, Promise<void>>();
+
+  return (file, content) => {
+    const previous = pendingReplacements.get(file) ?? Promise.resolve();
+    const run = previous.then(() => replaceFile(file, content));
+    const tail = run.catch(() => undefined);
+    pendingReplacements.set(file, tail);
+    void tail.then(() => {
+      if (pendingReplacements.get(file) === tail) {
+        pendingReplacements.delete(file);
+      }
+    });
+    return run;
+  };
 }
