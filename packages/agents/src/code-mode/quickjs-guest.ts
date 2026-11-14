@@ -71,6 +71,8 @@ export class GuestRun {
   private readonly pending = new Map<number, QuickJSDeferredPromise>();
   private helpers: GuestHelpers | undefined;
   private guestPromise: QuickJSHandle | undefined;
+  /** Set once the guest returned; no call is admitted after that. */
+  private finalizing = false;
 
   private constructor(
     private readonly start: StartFrame,
@@ -224,6 +226,11 @@ export class GuestRun {
   private hostCall(nameHandle: QuickJSHandle, argsHandle: QuickJSHandle) {
     if (this.terminal !== undefined)
       this.terminate('SCRIPT_ERROR', 'The run has already ended.');
+    if (this.finalizing)
+      this.terminate(
+        'UNAWAITED_TOOL_CALLS',
+        'The script started a tool call while its return value was being serialized.',
+      );
     const tool = this.context.getString(nameHandle);
     if (this.callCount >= this.limits.maxCalls)
       this.terminate('CALL_LIMIT', `More than ${this.limits.maxCalls} calls.`);
@@ -326,7 +333,14 @@ export class GuestRun {
     return undefined;
   }
 
+  /**
+   * Serializing the return value runs guest getters and Proxy traps, so
+   * admission closes first: a call started there ends the run with
+   * UNAWAITED_TOOL_CALLS (recorded as terminal, so a getter that catches the
+   * refusal cannot turn it into a success).
+   */
   private complete(value: QuickJSHandle): GuestOutcome {
+    this.finalizing = true;
     if (this.pending.size > 0)
       return failure(
         'UNAWAITED_TOOL_CALLS',
@@ -346,6 +360,8 @@ export class GuestRun {
     }
     const text = this.context.getString(serialized.value);
     serialized.value.dispose();
+    const stopped = this.stoppedOutcome();
+    if (stopped !== undefined) return stopped;
     if (text.startsWith('E')) {
       const code =
         text.slice(1) === 'RESULT_TOO_LARGE'
