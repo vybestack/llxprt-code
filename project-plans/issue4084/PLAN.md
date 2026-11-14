@@ -544,3 +544,27 @@ Progress log (update after each finding; after context loss read this and `git s
 - Commits: 7c836a5628 (H1), 69a41c07f6 (H2), 55e8b0af93 (H3), 9b6e2abace (H4), 9dc21fe351 (M1), 3b51330620 (lint and format of this round's files), plus this record.
 - [x] Real-model E/F rerun after the card changes with `lunahigh` on `3b51330620`: E approval denial ended with the failed script card and `APPROVAL_DENIED` (`project-plans/issue4084/evidence/r1-e-approval-denial/`); F Escape left the cancelled script card visible and the in-session plus post-harness process checks found no `quickjs-wrapper` or `sleep 30` (`.../evidence/r1-f-cancellation/`). Runs were sequential; these artifacts are behavior evidence only, not performance measurements.
 - Open after this round: a cancelled direct (non-script) tool still disappears on Escape (Phase E open item 1, shared CLI cancel handling, unchanged); a parallel batch's divided output budget reaches the script through `modelOutputLimit`, but no test drives `execute_tool_script` inside a multi-call batch. These were outside the review findings and remain follow-ups.
+
+
+## H3 final delivery remediation (2026-11-14)
+
+The findings-only follow-up (`tmp/verify4084/review/review-2.md`) showed that the earlier H3 contract ended too early: a post-hook generic budget could replace both the outcome and completed-call accounting, and final provider serialization could do the same even with no hook. The contract is now enforced at the shared delivery boundary. In code mode, the bounded JSON envelope is authoritative. Before nested work is admitted, the script tool reserves the minimum failure-envelope and accounting allowance against the effective tool budget, including provider wrapper overhead; budgets below that minimum reject clearly before the nested broker can invoke a tool. Result measurement is conservative against the actual provider-visible representation. Hook text remains visible: it is represented in the bounded envelope when possible, and otherwise the result fails explicitly while preserving outcome/accounting. Hidden pre-hook payload is never emitted. Non-code-mode hook and tool formatting still follows ordinary limiter behavior. No budget or quality check was raised or bypassed.
+
+Permanent behavioral tests exercise the two follow-up probes through an actual provider-visible HTTP request: AfterTool hook decoration and no-hook low-budget result. They parse the emitted JSON and assert outcome plus completed calls, check that too-small budgets reject before nested invocation, and exercise `warn`, `truncate`, `sample`, and run accounting. The old hook regression that asserted generic replacement guidance is replaced. Red logs: `tmp/verify4084/h3-final/reviewer-red.log` and `permanent-red.log` (both expected failures before the fix). Green logs: `reviewer-green.log`, `permanent-green.log` and `hook-regression.log` (all pass after the fix).
+
+Test audit: `test-audit.log` scanned 3,947 files / 42,208 tests / 98,579 assertions, with zero scanner errors. None of the touched/new behavioral tests has a finding. The scanner's unrelated repository-wide findings include duplicate assertions and mock-only oracles; they do not identify these new provider-visible content tests. No false positive applies to the changed tests.
+
+Final verification results (all long commands were detached; logs and exit files are under `tmp/verify4084/h3-final/`):
+
+- `npm run test --workspace packages/cli`: exit 0, 1,006/1,006 test files passed; 10,573 passed, 0 failed, 16 skipped, 13 todo. Log: `cli.log`.
+- The earlier full `npm run test` log records: tools 142/143, storage 39/39, auth 43/43, settings 33/33, telemetry 49/49, IDE integration 10/10, agent-core 3/3, policy 12/12, MCP 57/57, core 528/528, LSP 15/15, providers 666/667, agents 862/862 plus 8/8 isolated tests, Zed ACP 49/49, CLI 1,002/1,002, A2A server 26/26, test-utils 17/17, and VS Code IDE companion 7/7. Tools and providers each had one failing test in that run. Workspace reruns passed: tools 144/144 (`tools-rerun.log`, exit 0) and providers 667/667 (`providers-rerun.log`, exit 0). The CLI rerun above passed all test files.
+- `npm run test:scripts`: exit 0, 369/369 isolated native Bun test files and 2/2 additional files passed. Log: `test-scripts-final.log`.
+- `npm run lint`: exit 0 after fixing the three reported violations. Log: `lint-rerun.log`.
+- `npm run typecheck`: exit 0. Log: `typecheck-final.log`.
+- `npm run format`: exit 0; the source diff was unchanged. Log: `format-final.log`; comparison result: `format-no-changes.exit` is 0.
+- `npm run build`: exit 0. Log: `build-final.log`.
+- Focused code-mode budget tests: exit 0, 8/8 passed. Log: `focused-final.log`.
+- Smoke off: exit 0; output was `Autumn leaves drift down / Soft rain taps the quiet roof / Dusk gathers the fields`. Log: `smoke-off.log`.
+- Smoke on: exit 0; `execute_tool_script` returned `41`, matching the direct `ls` count of 41 `.ts` files. Log: `smoke-code-mode.log`; count: `code-mode-ts-count.txt`.
+
+The initial lint run identified one assertion-style violation and two function-length violations. They were corrected without changing the behavioral contract; final lint, typecheck, focused tests, and build all passed.
