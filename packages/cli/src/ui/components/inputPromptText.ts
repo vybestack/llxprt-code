@@ -27,8 +27,7 @@ const formatLargePastePlaceholder = (
 ): string => {
   const idSuffix = ` #${id}`;
   if (lines > 1) {
-    const label = lines === 1 ? 'line' : 'lines';
-    return `[${lines} ${label} pasted${idSuffix}]`;
+    return `[${lines} lines pasted${idSuffix}]`;
   }
   const charLabel = chars === 1 ? 'character' : 'characters';
   return `[${chars} ${charLabel} pasted${idSuffix}]`;
