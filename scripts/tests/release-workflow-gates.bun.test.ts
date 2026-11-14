@@ -562,3 +562,36 @@ describe('issue #4033 release workflow gates', () => {
     ).toBe(true);
   });
 });
+
+describe('npm trusted publishing runtime', () => {
+  it('sets up the repository Node version and retains OIDC permission before npm publish', () => {
+    for (const [jobName, job] of Object.entries(jobs)) {
+      const steps = jobSteps(asRecord(job));
+      const publishIndex = steps.findIndex(
+        (step) =>
+          typeof step.run === 'string' && step.run.includes('npm publish'),
+      );
+      if (publishIndex < 0) continue;
+
+      const nodeSetupIndex = steps.findIndex((step) => {
+        if (typeof step.uses !== 'string') return false;
+        if (!step.uses.startsWith('actions/setup-node@')) return false;
+        return asString(asRecord(step.with)['node-version-file']) === '.nvmrc';
+      });
+      expect(
+        nodeSetupIndex,
+        `${jobName} must set up Node from .nvmrc before npm publish`,
+      ).toBeGreaterThanOrEqual(0);
+      expect(
+        nodeSetupIndex,
+        `${jobName} must set up Node before its first npm publish`,
+      ).toBeLessThan(publishIndex);
+
+      const permissions = asRecord(asRecord(job).permissions);
+      expect(
+        asString(permissions['id-token']),
+        `${jobName} must retain OIDC trusted-publishing permission`,
+      ).toBe('write');
+    }
+  });
+});
