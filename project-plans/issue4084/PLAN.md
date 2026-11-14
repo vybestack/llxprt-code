@@ -5,7 +5,8 @@
 - Phase A: done (runtime foundation and effective-argument authorization; see "Phase A record")
 - Phase B: done (run owner, nested execution seam, `execute_tool_script` behind a construction flag, bundle packaging; see "Phase B record")
 - Phase D: done (nested approvals in the CLI, fail-fast hosts, script card, `tool_script_event` recording and resume, script telemetry, default policy; see "Phase D record"). Done before Phase C on purpose: without it a nested approval in the CLI would wait forever once the setting exists.
-- Phases C and E: pending
+- Phase C: done (settings, live surface, `discover_tool_api`, declarations and API revision, subagents, hook restriction, scenario scripts and ground truth; see "Phase C record")
+- Phase E: pending
 
 ## Fixed decisions
 
@@ -47,11 +48,31 @@ Progress log (updated per milestone; read with `git status`/`git diff` after con
 
 See "Phase B record" below for what changed, decisions and follow-ups.
 
-### Phase C: discovery, declarations, settings and subagents (pending)
+### Phase C: discovery, declarations, settings and subagents (done)
 
 - Implement `discover_tool_api`, schema-derived declarations and API revision checks.
 - Add `code-mode` (`off|on`), tool-surface and bounded limit settings as application settings, not model parameters.
 - Derive subagent script capabilities from that subagent's own profile and admitted tool selection.
+
+Design (decided at the start of the phase):
+
+- One source of truth for enablement: the `code-mode` setting, read live. `AgentConfig.codeMode` is the host's default for an unset setting. Both code mode tools are always constructed in the session catalog; a surface view (`code-mode/code-mode-surface.ts`) hides them from every lookup, list and declaration while the setting is off, and with `compact` advertises only the code mode and direct control tools while lookups (authorization) stay unchanged. A change to `code-mode` or `code-mode-tool-surface` republishes the session's tool declarations, so the next model request sees it.
+- Subagents get a code-mode-neutral child selection from the parent catalog and apply the same surface view with the child's own settings (child profile). Child limits are the minimum of the child's and the caller's values.
+- `api_revision` stays optional; when present it must equal the revision of the caller's current script API (all admitted script-callable tools, their registered schemas, result adapters and the limits a script sees). `discover_tool_api` list and describe return that revision.
+- The client tool channel only runs client-initiated (slash command) calls, never model tools, so it gets no nested composition.
+
+Progress log (update per milestone; after context loss read this and `git status`/`git diff`):
+
+- [x] C1 settings: `settings/registry/registry-entries-code-mode.ts` (+ `settingsRegistry.ts`, `profiles/types.ts`), test `settings/src/__tests__/codeModeSettings.test.ts` (20); agents `code-mode/code-mode-settings.ts` (reader, lowering, deadline bound), `code-mode/code-mode-surface.ts`, `code-mode/code-mode-publication.ts`; catalog (`session-tool-catalog-owner.ts`: `admitted` vs surfaced `selection`, both tools always constructed), `session-client-owner.ts` (live reader, republication subscription), `scheduler/nested-execution.ts` (`readCodeModeLimits`, `readDeadline`, `NestedCodeModeInputs`), `session/assembleSchedulerOwner.ts` (`composeNestedExecution`), `session-execution-owner.ts`; tests `code-mode-registration.test.ts` (8), `code-mode-limits.test.ts` (2)
+- [x] C2 `code-mode/schema-to-typescript.ts`, `code-mode/tool-declarations.ts`, `code-mode/discover-tool-api.ts`, `script-tool-surface.ts` (`admittedScriptTools`), `execute-tool-script.ts` (limits per run, API_CHANGED); test `tool-declarations.test.ts` (6, compiles with repo tsc)
+- [x] C3 execute/discover descriptions (example script included); `core/src/prompt-config/defaults/tools/execute-tool-script.md`; `docs/reference/ephemerals.md` Code Mode section
+- [x] C4 compact surface tests in `code-mode-registration.test.ts`
+- [x] C5 subagents: `core/subagent-scheduler-owner.ts` (composition for both child paths), `core/subagent.ts` (`SubAgentRuntimeInput.codeMode`, deadline, compact declarations), `api/child-agent-assembly.ts` (child surface over the code-mode-neutral selection, `readCallerCodeModeLimits`, lowering), `session-client-owner.ts`, `core/__tests__/child-launch-fixture.ts`; test `code-mode-subagent.test.ts` (6, real `task` launch, both child paths)
+- [x] C6 `code-mode-hook-restriction.test.ts` (1). It found a real gap: the session loop never put a tool-selection hook's restriction on the tool call request, so scripts (and the scheduler's own check) did not see it. Fixed in `core/turn.ts` (`hookRestrictedAllowedTools` on the request).
+- [x] C7 14 scenario scripts plus the fixed nested-approval script, `scripts/issue4084-ground-truth.ts`, `scripts/issue4084-subagent-setup.ts`; tests `scripts/tests/issue-4084-ground-truth.bun.test.ts` (3), `scripts/tests/issue-4084-tmux-scripts.bun.test.ts` (35)
+- [x] C8 verification (see "Phase C record"), commits
+
+Files touched: see the C1-C7 entries above and the Phase C record. After the first full run, two follow-up fixes: `session-client-owner.ts` releases the republication subscription inside the collected cleanup (a synchronous release threw before the other owners were closed), and the catalog reads code mode settings from the settings store (as the task schema policy does) and captures them when a skill publication is accepted, so a publication racing teardown does not hit a closed settings owner.
 
 ### Phase D: UI, recording and telemetry (done)
 
@@ -90,9 +111,9 @@ Test file names below are planned owners; criteria move to done only when the na
 
 | Issue acceptance criterion | Phase | Behavioral test file |
 | --- | --- | --- |
-| Code mode off by default registers/advertises neither tool and leaves behavior unchanged | C (B covers the construction flag) | B: `execute-tool-script-history.test.ts`: "lists the tool only when the agent enables code mode", "cannot run a script when code mode is off"; C: `packages/agents/src/code-mode/code-mode-registration.test.ts` for the setting |
-| Code mode on exposes discover/execute; compact hides normal declarations without removing script authorization | C | `packages/agents/src/code-mode/code-mode-registration.test.ts` |
-| Settings validate at admission, invalid values get clear errors, settings do not reach providers | C | `packages/settings/src/code-mode-settings.test.ts` |
+| Code mode off by default registers/advertises neither tool and leaves behavior unchanged | C (done) | `code-mode-registration.test.ts`: "lists and advertises neither tool by default" (provider request read from a local endpoint); B: `execute-tool-script-history.test.ts` "cannot run a script when code mode is off" |
+| Code mode on exposes discover/execute; compact hides normal declarations without removing script authorization | C (done) | `code-mode-registration.test.ts`: "advertises both tools on the next request after /set code-mode on, and drops them after off", "advertises only the code mode and direct control tools with the compact surface, while scripts still call the hidden tools", "switches between compact and alongside on the next request", "turns code mode on when a profile that opts in is applied" |
+| Settings validate at admission, invalid values get clear errors, settings do not reach providers | C (done) | `packages/settings/src/__tests__/codeModeSettings.test.ts` (20: registration, defaults, separation from model params, `/set` and `--set` validation messages); `code-mode-registration.test.ts`: "keeps the settings out of the provider request and saves them into the profile", "fails a script with a clear message when a profile carries an invalid limit"; `code-mode-limits.test.ts` (limits reach the run, deadline bound) |
 | Guest cannot access environment, process, Bun, host globals, imports, fetch or filesystem; seeded credentials/socket stay hidden | A (done) | `quickjs-process-runtime.test.ts`: "gives the guest no host globals...", "fails a guest that touches host capabilities", "rejects dynamic module imports", "never exposes seeded credential values anywhere in the global object" |
 | Child process has only enumerated environment and omits credential/capability values | A (done) | `quickjs-process-runtime.test.ts`: "starts the wrapper with an empty environment, ignoring workspace .env and bunfig preloads" |
 | Infinite loop, deep recursion, memory blowup, microtask storm, unresolved promise, oversized/cyclic result and IPC flood terminate with named limits and no orphan | A (done) | `quickjs-process-runtime.limits.test.ts` (CPU_LIMIT, STACK_LIMIT, MEMORY_LIMIT, UNRESOLVED_PROMISE, RESULT_TOO_LARGE, RESULT_NOT_JSON, CALL_LIMIT, PENDING_LIMIT, ARGUMENTS_TOO_LARGE, INVALID_ARGUMENTS, INPUT_BYTES_LIMIT, CONSOLE_LIMIT, TIMEOUT, CANCELLED, SOURCE_TOO_LARGE); `quickjs-process-runtime.protocol.test.ts` (log-frame flood, oversized unterminated frame, malformed/duplicate/foreign frames). Every runtime test file asserts in `afterEach` that no wrapper process is still parented by the test process (`ps`), and one test proves that check detects a live wrapper |
@@ -115,10 +136,11 @@ Test file names below are planned owners; criteria move to done only when the na
 | One bounded parent card; nested live output forwarded | D (done) | `tool-script-card.test.ts` (64-call card has a fixed line count), `ToolGroupMessage.codeMode.test.tsx`: "keeps the card of a 64-call script to its listed calls"; `code-mode-approvals.test.ts`: "forwards nested live shell output to the child display" |
 | Nested `logToolCall` with parent links; script lifecycle metrics; `logPrompts` gate | D (done) | `tool-script-events.test.ts`: "logs the nested call with its parent links and the run lifecycle, keeping text out without logPrompts", "exports the purpose, source and nested arguments only when logPrompts is on" |
 | Default policy: script tool needs no confirmation; nested ASK still asks | D (done) | `code-mode-approvals.test.ts`: "runs a script of allowed reads in a headless session without any approval", "asks only for the nested shell command, never for the script tool itself" |
-| Generated declarations compile for all v1 schemas and cover enums/unions/optional/arrays/string-key names | C | `packages/agents/src/code-mode/tool-declarations.test.ts` |
-| API revision mismatch fails with `API_CHANGED` | C | `packages/agents/src/code-mode/tool-declarations.test.ts` |
-| Enabled subagent runs code mode within own whitelist and agent attribution | C | `packages/agents/src/code-mode/code-mode-subagent.test.ts` |
-| tmux scenarios with lunahigh, evidence and before/after table committed | E | `scripts/tmux-script.issue4084-*.llxprt.json` plus `project-plans/issue4084/evidence/README.md` |
+| Generated declarations compile for all v1 schemas and cover enums/unions/optional/arrays/string-key names | C (done) | `tool-declarations.test.ts`: "declares every script-callable tool from its registered schema, and the declarations compile" (repo `tsc --noEmit --strict`), "compiles enums, consts, unions, optional fields, arrays and recursive local references for dotted and dashed names", "rejects arguments the schema does not allow, so the types are not any" |
+| API revision mismatch fails with `API_CHANGED` | C (done) | `tool-declarations.test.ts`: "runs a script pinned to the current revision and refuses a stale one with API_CHANGED", "changes the revision when a schema, adapter or limit changes, and only then"; disabled tools: "lists the callable tools with the revision, leaving out a disabled tool and refusing to describe it" |
+| Enabled subagent runs code mode within own whitelist and agent attribution | C (done) | `code-mode-subagent.test.ts` (real `task` launch; both child paths): "runs a script within the child whitelist, attributed to the child agent, and refuses tools outside it", "leaves code mode off in a child whose profile does not enable it, even with the parent on", "keeps an explicit empty task whitelist empty", "cannot raise the caller limits", "cancels a running child script when the parent aborts the task" |
+| Tool-selection hook restriction applies inside scripts | C (done) | `code-mode-hook-restriction.test.ts`: "refuses a script tool the hook restricted, allows one it kept, and leaves it out of discovery" |
+| tmux scenarios with lunahigh, evidence and before/after table committed | E (scripts written and validated in C) | `scripts/tmux-script.issue4084-*.llxprt.json` (validated by `scripts/tests/issue-4084-tmux-scripts.bun.test.ts`), ground truth `scripts/issue4084-ground-truth.ts`, plus `project-plans/issue4084/evidence/README.md` in E |
 | Required test/lint/typecheck/format/build and off/on lunahigh smoke checks pass | E | Verification commands recorded in this plan and CI evidence |
 
 ## Phase A record
@@ -253,8 +275,8 @@ Registration: `AgentConfig.codeMode` (schema-validated boolean, default off) flo
 ### Known follow-ups
 
 - (Resolved in Phase D.) Nested confirmations go to the session approval handler (`onApproval`) and are published on the message bus, but they are not projected into the agent stream's `tool-confirmation` events or the CLI tool display, because the parent scheduler's call list does not contain them. A host without an approval handler (the CLI) would wait. Phase D must show nested calls through a scoped child display (as `ChildToolDisplay` does for subagents) before Phase C exposes the `code-mode` setting. Nested live output is not forwarded yet either.
-- Only the session loop's schedulers get the nested composition. Subagent schedulers, the client tool channel and `foreground-agent-assembly` do not, so the tool fails fast there; Phase C wires subagents.
-- Hook-restricted turns share the preflight check, but no behavioral test drives a real tool-selection hook restriction yet.
+- (Resolved in Phase C.) Only the session loop's schedulers get the nested composition. Subagent schedulers, the client tool channel and `foreground-agent-assembly` do not, so the tool fails fast there; Phase C wires subagents.
+- (Resolved in Phase C, which also fixed the missing restriction on session-loop requests.) Hook-restricted turns share the preflight check, but no behavioral test drives a real tool-selection hook restriction yet.
 - `CoreToolScheduler` never drains requests it queues while busy (only `cancelAll` empties the queue). Code mode does not depend on it; worth a separate issue.
 
 ### New tests
@@ -286,6 +308,82 @@ No existing test assertion changed.
 - `41a303f692` feat(tools): give scheduled executions a scope and programmatic results (#4084)
 - `ad37770a81` build(cli): ship the code mode wrapper and QuickJS wasm as bundle artifacts (#4084)
 - feat(agents): run code mode scripts through a nested scheduler owner (#4084) (the commit that adds this record)
+
+## Phase C record
+
+### What changed
+
+Settings (`packages/settings`):
+
+- `settings/registry/registry-entries-code-mode.ts`: `code-mode` (`off|on`, default `off`), `code-mode-tool-surface` (`alongside|compact`, default `alongside`), `code-mode-max-calls` (1 to 10000, default 64), `code-mode-wall-timeout-ms` (1 to 3600000, default 300000), `code-mode-max-result-bytes` (1 to 1048576, default 16384). All `cli-behavior` category, `agent-policy` owner, persisted to profiles, so `separateSettings` keeps them out of model parameters and `/set`, `--set` and profiles reach them. Validators give one message per key naming the allowed values or range. Typed in `profiles/types.ts`.
+
+Agents (`packages/agents/src/code-mode`):
+
+- `code-mode-settings.ts`: `readCodeModeSettings` (enablement and surface; `AgentConfig.codeMode` is the default for an unset `code-mode`), `readCodeModeLimits`, `lowerCodeModeLimits`, `boundWallTimeout`. Values are validated again at use with the registry validator and fail with `Invalid code mode setting: <message>. Fix it with /set <key> <value>.`
+- `code-mode-surface.ts`: `selectCodeModeSurface` (a view over a selection that hides both code mode tools while off and, with `compact`, advertises only the code mode tools and `COMPACT_DIRECT_TOOLS`; lookups are unchanged), `advertisedDeclarations`.
+- `code-mode-publication.ts`: republishes the session's tool declarations when `code-mode` or `code-mode-tool-surface` changes.
+- `schema-to-typescript.ts` (`SchemaProjection`), `tool-declarations.ts` (`readScriptApi`, `computeApiRevision`, `generateDeclarations`, the result prelude), `discover-tool-api.ts` (`DiscoverToolApiTool`: `list` with `offset`, `describe` with `tools`).
+- `execute-tool-script.ts`: per-run limits from the caller's composition (wall timeout bounded by the caller's deadline), optional `api_revision` checked before the run (`API_CHANGED`), new tool description with when-to-use guidance and an example. `script-tool-surface.ts`: `admittedScriptTools`.
+
+Composition:
+
+- `session-tool-catalog-owner.ts`: both code mode tools are always constructed; `admitted` holds every tool and `selection` is the surfaced view, read live. `acquireChildTools()` is built from `admitted`, so a subagent applies its own settings.
+- `session-client-owner.ts`: the catalog reads the session settings live; a settings subscription republishes declarations; subagent assembly gets the caller's limits.
+- `scheduler/nested-execution.ts`: the composition carries `readCodeModeLimits` and `readDeadline`; `NestedCodeModeInputs`. `session/assembleSchedulerOwner.ts`: `composeNestedExecution` shared by the session loop and subagents. `session-execution-owner.ts` passes the session limits.
+- Subagents: `core/subagent-scheduler-owner.ts` builds both child scheduler paths (interactive and non-interactive) with the child's composition; `core/subagent.ts` gets `SubAgentRuntimeInput.codeMode`, records its run deadline, and applies the compact surface to the child's declarations; `api/child-agent-assembly.ts` gives the child a surfaced view of the caller's child selection read from the child's own settings and lowers its limits to the caller's.
+- `core/turn.ts`: a tool-selection hook's restriction is now put on each tool call request (`hookRestrictedAllowedTools`). The session loop dropped restricted calls but never attached the restriction to the calls it kept, so neither the scheduler's own check nor a script started by the call saw it. Found by the new hook restriction test.
+
+Prompting: `core/src/prompt-config/defaults/tools/execute-tool-script.md` (+ `TOOL_DEFAULTS`), the per-tool prompt included only for enabled tools when tool prompts are on. `docs/reference/ephemerals.md` documents the settings.
+
+Phase E preparation: 14 scenario scripts `scripts/tmux-script.issue4084-{a-todos-off,a-todos-on,b-longest-off,b-longest-on,c-unprompted-on,d-read-off,d-read-on,e-approve-deny-on,f-escape-on,g-escape-attempts-on,h1-parent-on,h2-subagent-off,h3-subagent-on,i-large-output-on}.llxprt.json`; the nested-approval script was fixed (its `read_file` used a relative path, so the expected `2 (2 ok)` could not hold; it now uses `glob`) and given captures and `/stats`. `scripts/issue4084-ground-truth.ts` computes A and B from a commit; `scripts/issue4084-subagent-setup.ts` writes the H profiles (`issue4084-haiku-code-off|on`, copied from `haiku`) and subagents (`issue4084-gatherer-off|on`).
+
+### Decisions and reasons
+
+- Live `/set`: the setting is read on every lookup and a change republishes the declarations through the client's work queue, so the next model request sees the new tool list. No restart needed, so no fail-fast message was required. The publication is asynchronous; lookups (execution) follow the setting at once.
+- Both tools always constructed rather than registered on demand: registration happens once at catalog initialization, and a view is the only way to switch without reinitializing the registry. Off still means absent from every list, lookup and declaration.
+- Validation: `/set` and `--set` reject invalid values through the registry. Profile loading already reports registry violations as warnings (`profileValueWarnings`), and the reader fails at use: an invalid `code-mode` or surface fails the tool publication with the message, an invalid limit fails the script run with it. Limits are read per run, enablement per lookup, so a bad limit cannot break a session that does not use scripts.
+- Ranges: the issue gives only "positive integer"; upper bounds keep values sane (10000 calls, one hour, 1 MiB result since it enters history).
+- `api_revision` stays optional and is checked when present. It is a hash over every script-callable tool the caller admits (name, registered schema, result adapter) plus the limits a script runs under, so `list` and `describe` return the same revision and a script can be checked against it whatever subset it calls. Disabling or adding a callable tool changes it.
+- Declarations: properties a schema does not name are left out of the guidance unless `additionalProperties` gives their type; objects without properties get a `JsonValue` index signature. Tool names are string-literal keys; argument type names are made from the tool name with a numeric suffix on collision. Depth bound 24, 48 named types per tool, 48 KiB per describe (larger fails `DECLARATIONS_TOO_LARGE`).
+- Compact surface keeps: code mode tools, `todo_write`, `todo_read`, `todo_pause`, `task`, `list_subagents`, `check_async_tasks`, `activate_skill`, `write_file`, `replace`, `apply_patch`, `insert_at_line`, `delete_line_range`, `ast_edit`, `save_memory`. Scripts cannot write, and the loop needs todos, delegation and skills. Reads before an edit go through a script (bounded by the result limit) or a direct call, which stays authorized.
+- Subagents: a child's code mode comes from its own profile; it is not inherited from the session (`code-mode` is not session-scoped) and does not require the parent to have it on (scenario H3). The child's callable set is its own selection, governance and whitelist; a task whitelist that does not name `execute_tool_script` leaves the child without it, and an explicit empty whitelist stays empty. Limits are the minimum of the child's and the caller's. The run deadline is the child's own timeout. Nested approvals in a child go through the session child display (no approval handler), as the child's own calls do.
+- The client tool channel only runs client-initiated (slash command) calls, never model calls, so it gets no nested composition; `foreground-agent-assembly` goes through `SessionExecutionOwner`, which already has it.
+- Headless default policy: non-interactive sessions without `--yolo` allow only `READ_ONLY_TOOL_NAMES`, and the code mode tools were not in it, so `--set code-mode=on` had no effect there (the first smoke answered with a direct `glob`). Both tools were added to the list (`packages/cli/src/config/toolGovernance.ts`): they are hidden unless code mode is on, and a script can only call tools the same allowed list admits, so a read-only session stays read-only (no shell).
+- System prompt note: the per-tool prompt file is the existing mechanism for tool notes and appears only when the tool is enabled. The system prompt is built at chat start, so after a mid-session `/set` the note follows at the next prompt rebuild; the tool descriptions carry the same guidance immediately.
+
+### Verification (logs in `tmp/verify4084/`)
+
+- Code mode files one by one (`phaseC-codemode-perfile.log`): 17 files, 119 pass, 0 fail (new: registration 8, limits 2, declarations 6, subagent 6, hook restriction 1). Running the whole `src/code-mode/` directory in one Bun process fails 14 tests that pass alone (`phaseC-codemode-2.log`): the provider fixture (`LLXPRT_FAKE_RESPONSES`) and config-home environment leak between files in one process; the repository runner isolates files, which is how CI runs them.
+- `packages/settings` `codeModeSettings.test.ts`: 20 pass.
+- `npm run format` (`phaseC-format.log`, `phaseC-format-2.log`): exit 0, no file changed on the second run.
+- `npm run lint` (`phaseC-lint.log`, `phaseC-lint-2.log`): exit 0.
+- `npm run typecheck` (`phaseC-typecheck.log`, `phaseC-typecheck-2.log`): exit 0.
+- `npm run build` (`phaseC-build.log`): exit 0.
+- `npm run test` (`phaseC-test.log`): exit 1 on the first run with these failures: tools grep `grep-ripgrep-bounded-acquisition` and `grep-ripgrep-issue3203-remediation` (15 s timeouts under load average 18; both pass alone, `phaseC-grep-rerun.log`: 44 and 21 pass); core runner fixtures named `hangs`/`fails` (expected inner failures of the runner's own tests; core reported 528/528 files); agents 876/878 with two real regressions from this phase, both fixed: `activation-preflight-cleanup-failure` (the republication release ran synchronously before the collected cleanup) and `workspace-registrar-reload-owner` (a skill publication racing teardown read a closed settings owner). Agents rerun after the fixes (`phaseC-test-agents-rerun.log`): 878/878 files and 8/8 isolated files, exit 0. CLI rerun after the headless policy change (`phaseC-test-cli-rerun.log`): 1005/1005 files, 10569 test cases passed, 0 failed, exit 0.
+- `npm run test:scripts` (`phaseC-test-scripts.log`): 365/368 files; the new `issue-4084-ground-truth` (3) and `issue-4084-tmux-scripts` (35) pass. The three failures are load timeouts: `memory/sync-process.test.ts` (`spawnSync ETIMEDOUT`), `no-vitest-guard.test.ts` (60 s spawn timeout; the guard itself takes 0.9 s), `publish-integrity.test.ts` (60 s). Each passes alone (`phaseC-scripts-rerun.log` 6 pass, `phaseC-novitest-rerun.log` real-repo case 1 pass, `phaseC-publish-rerun.log` 19 pass).
+- Smoke, code mode off (`phaseC-smoke-off.log`): exit 0, haiku from `lunahigh:gpt-6-luna`.
+- Smoke, code mode on (`phaseC-smoke-on-haiku.log`): exit 0, haiku.
+- Smoke, `Use execute_tool_script to count the .ts files directly under packages/agents/src/code-mode and reply with only the number` with `--set code-mode=on` (`phaseC-smoke-on-count.log`, stream JSON in `phaseC-smoke-on-count-stream.jsonl`): exit 0, answer `37`; the model called `execute_tool_script` once with one nested `glob` (card: `Tool calls: 1 (1 ok)`). `ls packages/agents/src/code-mode/*.ts | wc -l` gives 37. The `--set` flag must follow the prompt (`--set` is an array option and takes the prompt as a value when placed before it). Before the headless policy fix the same prompt answered 37 through a direct `glob` (`execute_tool_script` was not admitted).
+
+### Ground truth at c764f439a4
+
+`bun scripts/issue4084-ground-truth.ts` (`tmp/verify4084/phaseC-ground-truth.json`): A covers 120 TypeScript files changed in `HEAD~10..HEAD` and finds no TODO or FIXME line (the repository has none in any `.ts`/`.tsx` file; `sonarjs/todo-tag` rejects them), so the correct answer is a total of 0. B, test files excluded: `chatSession.ts` constructor 99, `coreToolScheduler.ts` `attemptExecutionOfScheduledCalls` 99, `boundaryRecovery.ts` `recoverPendingBoundary` 97, `client.ts` `restoreHistory` 95, then 89, 89, 87, 86, 85, 85. Phase E recomputes both at the commit it runs on.
+
+### Commits
+
+- `5b7a418ccd` feat(settings): register the code mode application settings (#4084)
+- `e46cb59465` feat(agents): code mode setting, discover_tool_api and subagent scripts (#4084)
+- `07f7c3333c` fix(agents): carry a tool-selection hook restriction on each tool call (#4084)
+- `7685dd7b01` feat(cli): admit code mode in headless read-only sessions and add its tool note (#4084)
+- `4e10ef5780` test(scripts): add the code mode tmux scenarios and their ground truth (#4084)
+- this record: docs(plan)
+
+### Follow-ups and open items
+
+- Phase E: run the 15 tmux scripts with `lunahigh` (first `bun scripts/issue4084-subagent-setup.ts` for H2/H3), recompute the ground truth at that commit, and commit the evidence table. At c764f439a4 scenario A's correct answer is zero TODO/FIXME comments, which makes A a weak before/after comparison (the gathering work is the same, the answer trivial); Phase E may keep it as specified or pick a marker the repository has, and should record which.
+- The system prompt is built at chat start, so the per-tool code mode note appears after a mid-session `/set code-mode on` only when the system instruction is next rebuilt; the tool descriptions, which carry the same guidance, are updated for the next request.
+- A profile that holds an invalid `code-mode` or `code-mode-tool-surface` value (written by hand) makes tool publication fail with the validation message instead of starting without code mode; `/set` and `--set` cannot store such values.
+- `discover_tool_api` reports `TOOL_NOT_ADMITTED` for a callable tool the caller does not admit and `TOOL_NOT_SCRIPTABLE` for other names; MCP tools are outside the v1 set, so the MCP-name support is exercised with a fixture schema, not a live MCP server.
 
 ## Phase D record
 
@@ -359,10 +457,10 @@ Policy default (orchestrator decision): `execute_tool_script` is `Kind.Think` an
 
 ### Known follow-ups
 
-- Run the tmux script after Phase C adds the `code-mode` setting (Phase E evidence).
+- Run the tmux script after Phase C adds the `code-mode` setting (Phase E evidence). The setting now exists; the script was corrected in Phase C.
 - zed-acp and a2a cannot show nested approvals; they fail fast with `APPROVAL_REQUIRED`. Surfacing nested confirmations in those hosts (as separate permission requests labelled with the script) is a possible later improvement, not required by the issue.
 - The raw (non-agent) recording owner resume path does not redraw script cards; it shows the recorded JSON response as before.
-- Subagent schedulers still lack the nested composition (Phase C).
+- (Resolved in Phase C.) Subagent schedulers still lack the nested composition (Phase C).
 
 ### Commits
 
