@@ -40,6 +40,7 @@ export interface SandboxProfile {
   sshAgent?: SandboxProfileSshAgent;
   mounts?: SandboxProfileMount[];
   env?: Record<string, string>;
+  devices?: readonly string[];
 }
 
 export const SANDBOX_PROFILES_DIR_NAME = 'sandboxes';
