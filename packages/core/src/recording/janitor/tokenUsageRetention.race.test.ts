@@ -6,8 +6,9 @@
 /**
  * Issue #4068: token-usage retention must not delete a log whose session
  * becomes live, or whose file changes, after the scan selected it. The
- * scan-to-delete hook opens the window deterministically; everything else is
- * real: files in a temp tree, the real SessionLockManager, the real cleanup.
+ * injected beforeDelete hook opens the window deterministically; everything
+ * else is real: files in a temp tree, the real SessionLockManager, the real
+ * cleanup.
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -16,10 +17,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { SessionLockManager, type LockHandle } from '../SessionLockManager.js';
 import { resolveRetentionConfig } from './retentionPolicy.js';
-import {
-  cleanupTokenUsageFiles,
-  setTokenUsageScanToDeleteHookForTest,
-} from './tokenUsageRetention.js';
+import { cleanupTokenUsageFiles } from './tokenUsageRetention.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PROJECT = 'c'.repeat(64);
@@ -64,7 +62,6 @@ async function readIfPresent(file: string): Promise<string | null> {
 
 describe('token-usage retention races (#4068)', () => {
   afterEach(async () => {
-    setTokenUsageScanToDeleteHookForTest(null);
     for (const lock of locks.splice(0)) await lock.release();
     await Promise.all(
       roots
@@ -76,11 +73,13 @@ describe('token-usage retention races (#4068)', () => {
   it('keeps a root log when its session takes the lock after the scan', async () => {
     const tree = await newTree();
     const log = await writeAgedLog(tree, 'late-root.jsonl');
-    setTokenUsageScanToDeleteHookForTest(async () => {
+    const beforeDelete = async () => {
       locks.push(await SessionLockManager.acquire(tree.chats, 'late-root'));
-    });
+    };
 
-    const result = await cleanupTokenUsageFiles(tree.root, undefined, CONFIG);
+    const result = await cleanupTokenUsageFiles(tree.root, undefined, CONFIG, {
+      beforeDelete,
+    });
 
     expect(await readIfPresent(log)).toBe('{"record_type":"turn"}\n');
     expect(result).toStrictEqual({
@@ -99,11 +98,13 @@ describe('token-usage retention races (#4068)', () => {
       tree,
       'late-root::late-root#coder#11012e6c.jsonl',
     );
-    setTokenUsageScanToDeleteHookForTest(async () => {
+    const beforeDelete = async () => {
       locks.push(await SessionLockManager.acquire(tree.chats, 'late-root'));
-    });
+    };
 
-    const result = await cleanupTokenUsageFiles(tree.root, undefined, CONFIG);
+    const result = await cleanupTokenUsageFiles(tree.root, undefined, CONFIG, {
+      beforeDelete,
+    });
 
     expect(await readIfPresent(log)).toBe('{"record_type":"turn"}\n');
     expect(result.deleted).toBe(0);
@@ -113,11 +114,13 @@ describe('token-usage retention races (#4068)', () => {
   it('keeps a log that a session appended to after the scan', async () => {
     const tree = await newTree();
     const log = await writeAgedLog(tree, 'appending.jsonl');
-    setTokenUsageScanToDeleteHookForTest(async (filePath) => {
+    const beforeDelete = async (filePath: string) => {
       await fs.appendFile(filePath, '{"record_type":"turn","n":2}\n');
-    });
+    };
 
-    const result = await cleanupTokenUsageFiles(tree.root, undefined, CONFIG);
+    const result = await cleanupTokenUsageFiles(tree.root, undefined, CONFIG, {
+      beforeDelete,
+    });
 
     expect(await readIfPresent(log)).toBe(
       '{"record_type":"turn"}\n{"record_type":"turn","n":2}\n',
@@ -128,7 +131,7 @@ describe('token-usage retention races (#4068)', () => {
   it('keeps a log that was replaced after the scan, even with the same size and mtime', async () => {
     const tree = await newTree();
     const log = await writeAgedLog(tree, 'replaced.jsonl');
-    setTokenUsageScanToDeleteHookForTest(async (filePath) => {
+    const beforeDelete = async (filePath: string) => {
       // Created before the rename frees the old inode, so the replacement
       // cannot reuse it; same length and mtime leave the inode as the only
       // difference.
@@ -136,9 +139,11 @@ describe('token-usage retention races (#4068)', () => {
       await fs.writeFile(staged, '{"record_type":"TURN"}\n');
       await fs.utimes(staged, AGED, AGED);
       await fs.rename(staged, filePath);
-    });
+    };
 
-    const result = await cleanupTokenUsageFiles(tree.root, undefined, CONFIG);
+    const result = await cleanupTokenUsageFiles(tree.root, undefined, CONFIG, {
+      beforeDelete,
+    });
 
     expect(await readIfPresent(log)).toBe('{"record_type":"TURN"}\n');
     expect(result.deleted).toBe(0);
@@ -151,11 +156,13 @@ describe('token-usage retention races (#4068)', () => {
       'idle-root::idle-root#helper#ab12cd34.jsonl',
     );
     let hookRan = false;
-    setTokenUsageScanToDeleteHookForTest(async () => {
+    const beforeDelete = async () => {
       hookRan = true;
-    });
+    };
 
-    const result = await cleanupTokenUsageFiles(tree.root, undefined, CONFIG);
+    const result = await cleanupTokenUsageFiles(tree.root, undefined, CONFIG, {
+      beforeDelete,
+    });
 
     expect(hookRan).toBe(true);
     expect(await readIfPresent(log)).toBeNull();
