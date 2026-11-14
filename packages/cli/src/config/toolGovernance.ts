@@ -32,6 +32,11 @@ export const READ_ONLY_TOOL_NAMES = [
   'todo_pause',
   'task',
   'self_emitvalue',
+  // Code mode (issue #4084): hidden unless `code-mode` is on. A script can
+  // only call tools this same allowed list admits, so headless read-only
+  // sessions stay read-only.
+  'execute_tool_script',
+  'discover_tool_api',
 ] as const;
 
 export const EDIT_TOOL_NAME = 'replace';

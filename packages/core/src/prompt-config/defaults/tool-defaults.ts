@@ -325,4 +325,7 @@ export const TOOL_DEFAULTS: Record<string, string> = {
   'tools/list-subagents.md': loadMarkdownFile('tools/list-subagents.md'),
   'tools/task.md': loadMarkdownFile('tools/task.md'),
   'tools/apply-patch.md': loadMarkdownFile('tools/apply-patch.md'),
+  'tools/execute-tool-script.md': loadMarkdownFile(
+    'tools/execute-tool-script.md',
+  ),
 };
