@@ -724,10 +724,8 @@ describe('TaskTool', () => {
   // must resolve to the registry tool name. Unknown qualified names must
   // remain fail-closed. Qualified excluded tools must still be stripped.
   describe('Issue #2184: API-qualified tool name resolution', () => {
-    const executeIssue2184Invocation = qualifiedTaskInvocationFixture(
-      createConfig,
-      fixturePaths(),
-    );
+    const executeIssue2184Invocation =
+      qualifiedTaskInvocationFixture(createConfig);
 
     it("resolves functions.run_shell_command to 'run_shell_command' via the registry", async () => {
       const launchRequest = await executeIssue2184Invocation({

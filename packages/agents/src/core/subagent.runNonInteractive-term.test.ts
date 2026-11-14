@@ -591,6 +591,7 @@ describe('subagent.ts', () => {
     );
 
     const runtimeBundle = createStatelessRuntimeBundle({
+      settings,
       toolsView: {
         listToolNames: () => ['external_tool'],
         getToolMetadata: () => ({
@@ -602,8 +603,7 @@ describe('subagent.ts', () => {
     });
     const { overrides } = createRuntimeOverrides(
       mcpRuntime.workspaceFilesystem.paths,
-      { settings },
-      { runtimeBundle },
+      { settings, runtimeBundle },
     );
 
     const scope = await createSubagentScope(
@@ -677,11 +677,10 @@ describe('subagent.ts', () => {
       await acquireSubagentSettings(config, settings, retainCleanup);
       const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
 
-      const runtimeBundle = createStatelessRuntimeBundle();
+      const runtimeBundle = createStatelessRuntimeBundle({ settings });
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings },
-        { runtimeBundle },
+        { settings, runtimeBundle },
       );
 
       const scope = await createSubagentScope(
@@ -719,11 +718,10 @@ describe('subagent.ts', () => {
         'removeEventListener',
       );
 
-      const runtimeBundle = createStatelessRuntimeBundle();
+      const runtimeBundle = createStatelessRuntimeBundle({ settings });
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings },
-        { runtimeBundle },
+        { settings, runtimeBundle },
       );
 
       const scope = await createSubagentScope(
@@ -756,11 +754,10 @@ describe('subagent.ts', () => {
       await acquireSubagentSettings(config, settings, retainCleanup);
       const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
 
-      const runtimeBundle = createStatelessRuntimeBundle();
+      const runtimeBundle = createStatelessRuntimeBundle({ settings });
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings },
-        { runtimeBundle },
+        { settings, runtimeBundle },
       );
 
       const scope = await createSubagentScope(
@@ -789,11 +786,10 @@ describe('subagent.ts', () => {
       await acquireSubagentSettings(config, settings, retainCleanup);
       const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
 
-      const runtimeBundle = createStatelessRuntimeBundle();
+      const runtimeBundle = createStatelessRuntimeBundle({ settings });
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings },
-        { runtimeBundle },
+        { settings, runtimeBundle },
       );
 
       const scope = await createSubagentScope(
@@ -856,11 +852,10 @@ describe('subagent.ts', () => {
       let runPromise: Promise<void> | undefined;
       let runRejection: Promise<unknown> | undefined;
       try {
-        const runtimeBundle = createStatelessRuntimeBundle();
+        const runtimeBundle = createStatelessRuntimeBundle({ settings });
         const { overrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
-          { settings },
-          { runtimeBundle },
+          { settings, runtimeBundle },
         );
 
         scope = await createSubagentScope(
