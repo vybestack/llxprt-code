@@ -73,11 +73,19 @@ describe('native cache-anchor span publication', () => {
               'test',
               1,
             );
-            expect(selected?.metadata?.chronologyReplaced).toStrictEqual(
-              expected[1].metadata?.chronologyReplaced,
-            );
+            // The fixture summary already carries a chronology marker, so it
+            // counts as carried and is not reported as this compression's
+            // summary (#4067); the published row keeps its annotation.
+            expect(selected).toBeUndefined();
           }, true);
           expect(creates).toStrictEqual({ directories: [], files: [] });
+          let published: IContent | undefined;
+          for await (const row of history.streamRawHistory()) {
+            if (row.metadata?.isSummary === true) published = row;
+          }
+          expect(published?.metadata?.chronologyReplaced).toStrictEqual(
+            expected[1].metadata?.chronologyReplaced,
+          );
           expect(
             await compressionValueDigest(history.streamRawHistory()),
           ).toStrictEqual(digest);

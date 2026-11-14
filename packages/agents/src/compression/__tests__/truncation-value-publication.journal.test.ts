@@ -224,20 +224,25 @@ describe('native truncation publication and source enforcement', () => {
       await expect(sourceAdmission(size)).resolves.toBeUndefined();
     }, 120_000);
   }
-  it('returns the production truncation summary and preserves exact cache/frontier/replaced chronology', async () => {
+  it('publishes a carried truncation summary without reporting it and preserves exact cache/frontier/replaced chronology (#4067)', async () => {
     await withNativeFallbackFixture(async ({ history, durable }) => {
       await history.detachedValues.replace(summaryRows());
       const result = await executeTruncation(history, 32);
       expect(result.outcome).toBe('applied');
-      expect(result.summary?.metadata?.chronologyReplaced).toStrictEqual({
+      // The marked row was carried from history, so truncation reports no
+      // summary of its own (#4067); the published row keeps its annotations.
+      expect(result.summary).toBeUndefined();
+      let truncated: IContent | undefined;
+      for await (const row of history.streamRawHistory()) {
+        if (row.metadata?.reason === 'compression-state-snapshot')
+          truncated = row;
+      }
+      expect(truncated?.metadata?.chronologyReplaced).toStrictEqual({
         fromSeq: 1,
         toSeq: 11,
         itemCount: 11,
       });
-      expect(result.summary?.metadata?.chronology?.seq).toBe(13);
-      expect(result.summary?.metadata?.reason).toBe(
-        'compression-state-snapshot',
-      );
+      expect(truncated?.metadata?.chronology?.seq).toBe(13);
       await history.detachedValues.replace(summaryRows());
       await history.detachedValues.withCheckpoint(async (previous) => {
         const candidate = await curatedCandidate(
@@ -253,21 +258,25 @@ describe('native truncation publication and source enforcement', () => {
             'test',
             1,
           );
-          expect(summary?.metadata?.chronologyReplaced).toStrictEqual({
-            fromSeq: 1,
-            toSeq: 11,
-            itemCount: 11,
-          });
-          expect(summary?.metadata?.chronology?.seq).toBe(13);
+          expect(summary).toBeUndefined();
           expect(history.getCacheAnchorSeq()).toBe(12);
           const anchors: number[] = [];
           let count = 0;
           let first: IContent | undefined;
+          let published: IContent | undefined;
           for await (const row of history.streamRawHistory()) {
             if (row.metadata?.cacheAnchor === true)
               anchors.push(row.metadata.chronology?.seq ?? -1);
+            if (row.metadata?.reason === 'compression-state-snapshot')
+              published = row;
             if (count++ === 0) first = row;
           }
+          expect(published?.metadata?.chronologyReplaced).toStrictEqual({
+            fromSeq: 1,
+            toSeq: 11,
+            itemCount: 11,
+          });
+          expect(published?.metadata?.chronology?.seq).toBe(13);
           expect(first?.metadata?.semanticMediaPurgeFrontier).toStrictEqual({
             contentIndex: 1,
             blockIndex: 0,
