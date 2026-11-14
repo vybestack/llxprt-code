@@ -391,6 +391,8 @@ export class SessionSettingsOwner {
         'stream-first-response-timeout-ms': this.settings.get(
           'stream-first-response-timeout-ms',
         ),
+        'stream-timeout-retries': this.settings.get('stream-timeout-retries'),
+        'refusal.backoff-ms': this.settings.get('refusal.backoff-ms'),
       }),
       showCitations: this.settings.get('ui.showCitations') === true,
       loopDetection: this.readLoopDetectionPolicy(),

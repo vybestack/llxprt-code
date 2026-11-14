@@ -20,6 +20,10 @@ const PROMPT_TOKENS = 120;
 /** What the local OpenAI-compatible endpoint answers to one request. */
 export type EndpointReply =
   | { readonly kind: 'http-error'; readonly status: number }
+  /** Accepts the request and never answers, until the client hangs up. */
+  | { readonly kind: 'stall' }
+  /** Streams some text, then goes silent without ending the response. */
+  | { readonly kind: 'stall-after-text'; readonly text: string }
   | {
       readonly kind: 'finish';
       readonly finishReason: string;
@@ -41,6 +45,16 @@ export type EndpointReply =
 /** The endpoint rejects the request with this HTTP status. */
 export function httpErrorReply(status: number): EndpointReply {
   return { kind: 'http-error', status };
+}
+
+/** The endpoint takes the request and never sends a byte back. */
+export function stallReply(): EndpointReply {
+  return { kind: 'stall' };
+}
+
+/** The endpoint streams `text` and then never sends another byte. */
+export function stallAfterTextReply(text: string): EndpointReply {
+  return { kind: 'stall-after-text', text };
 }
 
 /** An answer that ends normally with the given text. */
@@ -134,7 +148,10 @@ function renderToolCall(
 }
 
 function renderReply(
-  reply: Exclude<EndpointReply, { kind: 'http-error' }>,
+  reply: Exclude<
+    EndpointReply,
+    { kind: 'http-error' } | { kind: 'stall' } | { kind: 'stall-after-text' }
+  >,
 ): string {
   if (reply.kind === 'tool-call') {
     return renderToolCall(reply.name, reply.args, 'tool_calls');
@@ -225,6 +242,12 @@ export async function startScriptedEndpoint(
       const reply =
         scripted ??
         stopReply('UNSCRIPTED REQUEST: the agent asked for more than expected');
+      if (reply.kind === 'stall') return;
+      if (reply.kind === 'stall-after-text') {
+        response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        response.write(chunk({ role: 'assistant', content: reply.text }, null));
+        return;
+      }
       if (reply.kind === 'http-error') {
         response.writeHead(reply.status, {
           'Content-Type': 'application/json',

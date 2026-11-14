@@ -10,6 +10,8 @@ import {
   type StreamTimeoutPolicy,
   nextStreamEventWithIdleTimeout,
   StreamIdleTimeoutError,
+  abortForStreamTimeout,
+  isStreamTimeoutAbort,
   resolveStreamIdleTimeoutMs,
   resolveStreamFirstResponseTimeoutMs,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
@@ -703,5 +705,29 @@ describe('resolveStreamFirstResponseTimeoutMs', () => {
     process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV] = '77000';
     expect(resolveStreamFirstResponseTimeoutMs()).toBe(-1);
     expect(resolveStreamIdleTimeoutMs()).toBe(77_000);
+  });
+});
+
+describe('abortForStreamTimeout (issue #4093)', () => {
+  it('marks the signal as aborted by a watchdog, as an ordinary AbortError', () => {
+    const controller = new AbortController();
+
+    abortForStreamTimeout(controller);
+
+    expect(isStreamTimeoutAbort(controller.signal)).toBe(true);
+    expect(controller.signal.reason).toBeInstanceOf(DOMException);
+    expect((controller.signal.reason as DOMException).name).toBe('AbortError');
+  });
+
+  it('does not mistake a user cancel, a custom abort or a live signal for a watchdog abort', () => {
+    const userCancel = new AbortController();
+    userCancel.abort();
+    const custom = new AbortController();
+    custom.abort(new Error('stop'));
+
+    expect(isStreamTimeoutAbort(userCancel.signal)).toBe(false);
+    expect(isStreamTimeoutAbort(custom.signal)).toBe(false);
+    expect(isStreamTimeoutAbort(new AbortController().signal)).toBe(false);
+    expect(isStreamTimeoutAbort(undefined)).toBe(false);
   });
 });

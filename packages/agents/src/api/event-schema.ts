@@ -129,7 +129,7 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('notice'),
     message: z.string(),
-    source: z.literal('refusal-recovery').optional(),
+    source: z.enum(['refusal-recovery', 'stream-timeout-retry']).optional(),
   }),
   z.object({
     type: z.literal('compression'),

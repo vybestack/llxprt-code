@@ -14,6 +14,31 @@ export class StreamIdleTimeoutError extends Error {
 }
 
 /**
+ * The abort reason of a stream watchdog abort (issue #4093). It is an
+ * `AbortError` like the default reason, so providers and transports treat it
+ * as any other abort, while code that only sees the signal can still tell it
+ * from a user cancel.
+ */
+export class StreamTimeoutAbortReason extends DOMException {
+  constructor() {
+    super('Stream watchdog timeout', 'AbortError');
+  }
+}
+
+/** Aborts `controller` because a stream watchdog fired. */
+export function abortForStreamTimeout(controller: AbortController): void {
+  controller.abort(new StreamTimeoutAbortReason());
+}
+
+/** Whether `signal` was aborted by {@link abortForStreamTimeout}. */
+export function isStreamTimeoutAbort(signal: AbortSignal | undefined): boolean {
+  return (
+    signal?.aborted === true &&
+    signal.reason instanceof StreamTimeoutAbortReason
+  );
+}
+
+/**
  * A provider-neutral transport/provider liveness signal (issue #2607).
  *
  * Emitted by a provider SSE parser when a raw lifecycle event (e.g. OpenAI
@@ -68,6 +93,10 @@ export const STREAM_IDLE_TIMEOUT_SETTING_KEY = 'stream-idle-timeout-ms';
 export interface StreamTimeoutPolicy {
   readonly 'stream-idle-timeout-ms'?: unknown;
   readonly 'stream-first-response-timeout-ms'?: unknown;
+  /** Resends after a watchdog timeout (issue #4093). */
+  readonly 'stream-timeout-retries'?: unknown;
+  /** Base wait of the backoff schedule shared with refusal recovery. */
+  readonly 'refusal.backoff-ms'?: unknown;
 }
 
 /**

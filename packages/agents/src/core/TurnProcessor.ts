@@ -79,7 +79,10 @@ import {
   type PreparedUserTurn,
 } from './mediaAdmissionSeam.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
-import { recordAbandonedStreamAttempt } from './tokenUsageActualLogger.js';
+import {
+  recordAbandonedStreamAttempt,
+  logAttemptEndedByStreamTimeout,
+} from './tokenUsageActualLogger.js';
 import { commitTurnHistory } from './turnHistoryCommit.js';
 import {
   failedTurnCleanup,
@@ -421,6 +424,15 @@ export class TurnProcessor {
 
     let hasYieldedChunk = false;
     let attemptUsage: UsageStats | undefined;
+    // A watchdog abort belongs to the turn, which resends the whole request
+    // itself (issue #4093); the attempt is only logged, at the moment it ends.
+    const stopWatching = logAttemptEndedByStreamTimeout(
+      params.config?.abortSignal,
+      this.compressionHandler.tokenUsageLogger,
+      prompt_id,
+      attempt.requestAttempt,
+      () => attemptUsage,
+    );
     try {
       const currentParams = applyRetryTemperature(
         params,
@@ -447,24 +459,13 @@ export class TurnProcessor {
       // classification: it never reaches the temperature-changing content
       // retry below (issue #4036).
       if (error instanceof ModelRefusalSignal) {
-        const route = params.modelParameters?.route;
-        const settlement = await settleRefusal(
-          {
-            recovery: this.refusalRecovery,
-            usageLogger: this.compressionHandler.tokenUsageLogger,
-            provider: () =>
-              route?.provider.name ?? this.providerResolver('stream').name,
-            model: () => route?.model ?? this.ports.state.model,
-            execution: params.recordingExecution,
-            pending: prepared,
-            modelParameters: params.modelParameters,
-            signal: params.config?.abortSignal,
-          },
+        return yield* this._settleRefusedAttempt(
           error,
+          params,
           prompt_id,
-          attempt.requestAttempt,
+          prepared,
+          attempt,
         );
-        return yield* announceRefusalSettlement(settlement);
       }
       // Hook execution control errors are yielded then stop the loop.
       if (yield* hookControlStreamEvents(error)) {
@@ -486,7 +487,37 @@ export class TurnProcessor {
         return { error, action: 'retry' };
       }
       return { error, action: 'stop' };
+    } finally {
+      stopWatching();
     }
+  }
+
+  /** Applies the refusal recovery policy to one refused attempt (#4036). */
+  private async *_settleRefusedAttempt(
+    refusal: ModelRefusalSignal,
+    params: SendMessageParams,
+    prompt_id: string,
+    prepared: PreparedUserTurn,
+    attempt: AttemptCounters,
+  ): AsyncGenerator<StreamEvent, StreamAttemptOutcome> {
+    const route = params.modelParameters?.route;
+    const settlement = await settleRefusal(
+      {
+        recovery: this.refusalRecovery,
+        usageLogger: this.compressionHandler.tokenUsageLogger,
+        provider: () =>
+          route?.provider.name ?? this.providerResolver('stream').name,
+        model: () => route?.model ?? this.ports.state.model,
+        execution: params.recordingExecution,
+        pending: prepared,
+        modelParameters: params.modelParameters,
+        signal: params.config?.abortSignal,
+      },
+      refusal,
+      prompt_id,
+      attempt.requestAttempt,
+    );
+    return yield* announceRefusalSettlement(settlement);
   }
 
   /**
