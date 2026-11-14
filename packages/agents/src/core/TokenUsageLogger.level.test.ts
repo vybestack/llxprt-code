@@ -33,6 +33,9 @@ import { recordActualTokenUsage } from './tokenUsageActualLogger.js';
 import {
   StreamTimingTracker,
   attachStreamTiming,
+  beginTokenUsageAttempt,
+  startAttemptTiming,
+  type StreamTimingMeasurement,
 } from './streamTelemetryLogger.js';
 
 const SUMMARY_KEYS = [
@@ -233,8 +236,13 @@ const REQUESTS: readonly RequestPlan[] = [
   },
 ];
 
+/**
+ * Drive the two-request session at `level`. Timing comes from a real tracker
+ * unless `measured` supplies a production-magnitude measurement.
+ */
 async function runToolSession(
   level: TokenUsageLogLevel,
+  measured?: StreamTimingMeasurement,
 ): Promise<{ logger: TokenUsageLogger; logPath: string }> {
   const logPath = await newLogPath();
   const logger = new TokenUsageLogger(level, logPath);
@@ -270,7 +278,7 @@ async function runToolSession(
     attachStreamTiming(
       logger,
       { promptId: request.promptId },
-      tracker.measure(),
+      measured ?? tracker.measure(),
     );
 
     await recordActualTokenUsage(logger, request.promptId, {
@@ -389,15 +397,30 @@ describe('token-usage-log levels (#4068)', () => {
   // runtime and prompt ids add about 300 more. The bound asserted here is the
   // one the implementation meets for production-length subagent ids (the
   // common case, about 86% of requests); the gap is reported on the issue.
-  it('keeps a summary record with production-length subagent ids under 1,200 bytes', async () => {
+  // Timing is a production-magnitude measurement (a minute-long request in
+  // fractional performance.now() milliseconds), written as whole
+  // milliseconds; the fractional digits alone would add about 40 bytes.
+  it('keeps a summary record with production-length subagent ids and timing under 1,150 bytes', async () => {
     const raw = await readFile(
-      (await runToolSession('summary')).logPath,
+      (
+        await runToolSession('summary', {
+          firstTokenMs: 2_345.678_901_2,
+          lastTokenMs: 61_234.567_890_1,
+          providerRequestMs: 61_300.123_456_7,
+          chunkCount: 412,
+          rawTimingStamped: true,
+        })
+      ).logPath,
       'utf8',
     );
     const lines = raw.trim().split('\n');
     expect(lines).toHaveLength(2);
     for (const line of lines) {
-      expect(Buffer.byteLength(line, 'utf8')).toBeLessThan(1_200);
+      const record = JSON.parse(line) as Record<string, unknown>;
+      expect(record.ttft_ms).toBe(2_346);
+      expect(record.generation_ms).toBe(58_889);
+      expect(record.provider_request_ms).toBe(61_300);
+      expect(Buffer.byteLength(line, 'utf8')).toBeLessThan(1_150);
     }
   });
 
@@ -431,5 +454,82 @@ describe('token-usage-log levels (#4068)', () => {
     });
     expect(logger.getShapeMemory().sentCallIdCount).toBe(0);
     expect(logger.getShapeMemory().measurementCount).toBe(0);
+  });
+
+  it('off returns from the send seam before reading the system instruction', async () => {
+    /** Instruction text reads per level, through a counting getter. */
+    async function instructionReads(level: TokenUsageLogLevel) {
+      let reads = 0;
+      const systemInstruction = {
+        role: 'system',
+        get parts() {
+          reads += 1;
+          return [{ text: 'You are a careful TypeScript engineer.' }];
+        },
+      };
+      const logger = new TokenUsageLogger(level, await newLogPath());
+      recordSendSeamTelemetry({
+        usageLogger: logger,
+        promptId: 'instruction-reads',
+        estimate: estimateFor(14_000),
+        runtimeState: createAgentRuntimeState({
+          runtimeId: 'instruction-reads',
+          provider: 'openai-responses',
+          model: 'gpt-6.1-sol',
+          sessionId: 'instruction-reads',
+        }),
+        historyService: new HistoryService(),
+        requestContents: turnOne,
+        tools: TOOLS,
+        systemInstruction,
+        turnId: null,
+      });
+      return reads;
+    }
+
+    // The control proves the getter observes the extraction.
+    expect(await instructionReads('summary')).toBeGreaterThan(0);
+    expect(await instructionReads('off')).toBe(0);
+  });
+
+  it('off installs no token-usage timing observers for the attempt', async () => {
+    const logPath = await newLogPath();
+    let level: TokenUsageLogLevel = 'off';
+    const logger = new TokenUsageLogger(level, logPath, () => level);
+
+    const offBridge = beginTokenUsageAttempt(logger);
+    expect(offBridge).toBeNull();
+    expect(startAttemptTiming(offBridge)).toBeNull();
+
+    level = 'summary';
+    const onBridge = beginTokenUsageAttempt(logger);
+    if (onBridge === null) throw new Error('summary attempt has no bridge');
+    const tracker = startAttemptTiming(onBridge);
+    if (tracker === null) throw new Error('summary attempt has no tracker');
+    // The bridge feeds the attempt's own tracker.
+    onBridge.notify();
+    expect(tracker.measure().rawTimingStamped).toBe(true);
+  });
+
+  it('writes timing in whole milliseconds at both levels, with ttft plus generation inside the request', async () => {
+    for (const level of ['summary', 'debug'] as const) {
+      const records = await readRecords((await runToolSession(level)).logPath);
+      for (const record of records) {
+        const { ttft_ms, generation_ms, provider_request_ms } = record;
+        if (
+          typeof ttft_ms !== 'number' ||
+          typeof generation_ms !== 'number' ||
+          typeof provider_request_ms !== 'number'
+        ) {
+          throw new Error(`${level} record lacks timing`);
+        }
+        expect(Number.isInteger(ttft_ms)).toBe(true);
+        expect(Number.isInteger(generation_ms)).toBe(true);
+        expect(Number.isInteger(provider_request_ms)).toBe(true);
+        expect(ttft_ms + generation_ms).toBeLessThanOrEqual(
+          provider_request_ms,
+        );
+      }
+    }
   });
 });

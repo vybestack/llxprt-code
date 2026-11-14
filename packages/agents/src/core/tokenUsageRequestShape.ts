@@ -625,6 +625,7 @@ function resolveToolName(
 export class RequestShapeSessionMemory implements ContentMeasurementCache {
   private readonly sentCallIds = new Set<string>();
   private lastFp: string | undefined;
+  private missedRequest = false;
   private readonly maxCallIds: number;
 
   /**
@@ -663,20 +664,37 @@ export class RequestShapeSessionMemory implements ContentMeasurementCache {
   }
 
   /**
+   * Record that the session sent a request this memory did not see (the
+   * token-usage level was `off`, #4068). Tool results first sent in that
+   * request are missing from the sent set, so the next recorded request
+   * cannot tell them from new ones, and its prefix comparison would skip a
+   * request. That request reports both as unknown instead.
+   */
+  noteUnobservedRequest(): void {
+    this.missedRequest = true;
+  }
+
+  /**
    * Compute the request shape using this memory's session snapshots, then
    * update the memory: mark every tool-result callId in this request as sent
    * and record the new fingerprint.
+   *
+   * `newVsCarriedKnown` is false for the first request after an unobserved
+   * one; that request still seeds the memory, so the split is known again
+   * from the request after it.
    */
   recordRequestShape(
     input: Omit<
       RequestShapeInput,
       'previouslySentCallIds' | 'previousFingerprint'
     >,
-  ): RequestShapeResult {
+  ): RequestShapeResult & { readonly newVsCarriedKnown: boolean } {
+    const newVsCarriedKnown = !this.missedRequest;
+    this.missedRequest = false;
     const result = computeRequestShape({
       ...input,
       previouslySentCallIds: this.sentCallIds,
-      previousFingerprint: this.lastFp,
+      previousFingerprint: newVsCarriedKnown ? this.lastFp : undefined,
       measurementCache: this,
     });
 
@@ -685,7 +703,7 @@ export class RequestShapeSessionMemory implements ContentMeasurementCache {
     }
     this.lastFp = result.prefixFingerprint;
 
-    return result;
+    return { ...result, newVsCarriedKnown };
   }
 
   /** Add a callId, evicting the oldest entry when at capacity (FIFO). */

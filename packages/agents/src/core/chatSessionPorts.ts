@@ -47,7 +47,7 @@ export interface ChatSessionRuntime {
   readonly readStreamTimeoutPolicy: () => StreamTimeoutPolicy;
   readonly readPromptCachingPolicy: () => unknown;
   readonly showCitations: () => boolean;
-  readonly tokenUsageLogLevel: 'off' | 'summary' | 'debug';
+  readonly readTokenUsageLogLevel: () => 'off' | 'summary' | 'debug';
 }
 
 /**
@@ -152,7 +152,7 @@ export function chatSessionPorts(
       readStreamTimeoutPolicy: context.readStreamTimeoutPolicy,
       readPromptCachingPolicy: context.readPromptCachingPolicy,
       showCitations: context.showCitations,
-      tokenUsageLogLevel: context.tokenUsageLogLevel,
+      readTokenUsageLogLevel: context.readTokenUsageLogLevel,
     },
     stream: {
       state: context.state,

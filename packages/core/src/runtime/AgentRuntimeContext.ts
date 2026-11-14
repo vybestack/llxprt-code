@@ -237,7 +237,8 @@ export interface AgentRuntimeContext {
   readonly readToolGovernance: () => ToolGovernance;
   readonly readStreamTimeoutPolicy: () => StreamTimeoutPolicy;
   readonly showCitations: () => boolean;
-  readonly tokenUsageLogLevel: TokenUsageLogLevel;
+  /** Live `token-usage-log` level, read at each request boundary (#4068). */
+  readonly readTokenUsageLogLevel: () => TokenUsageLogLevel;
   readonly prepareProviderInvocation: PrepareProviderInvocation;
   /** Immutable runtime state (provider, model, auth, session) */
   readonly state: AgentRuntimeState;

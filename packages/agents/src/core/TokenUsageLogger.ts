@@ -94,6 +94,12 @@ function _finiteMs(value: number | null | undefined): number | undefined {
     : undefined;
 }
 
+/** A finite timing value rounded to whole milliseconds (#4068 record size). */
+function _wholeMs(value: number | null | undefined): number | undefined {
+  const finite = _finiteMs(value);
+  return finite === undefined ? undefined : Math.round(finite);
+}
+
 /** True when a pending entry has all the estimate fields required to emit a turn record. */
 
 /**
@@ -179,15 +185,43 @@ export class TokenUsageLogger {
    * the logger is already per-session; bounded internally.
    */
   private readonly shapeMemory = new RequestShapeSessionMemory();
+  /** The level of the request in flight; see {@link beginRequest}. */
+  private level: TokenUsageLogLevel;
 
   /**
-   * @param level The resolved `token-usage-log` level (#4068). Legacy boolean
-   *   values are mapped by the settings accessor before they reach here.
+   * @param level The resolved `token-usage-log` level (#4068) in force until
+   *   the first {@link beginRequest}. Legacy boolean values are mapped by the
+   *   settings accessor before they reach here.
+   * @param readLevel Reads the live level at each request boundary, because
+   *   the setting applies from the next request (`/set` on an existing chat).
+   *   Defaults to the fixed `level`.
    */
   constructor(
-    private readonly level: TokenUsageLogLevel,
+    level: TokenUsageLogLevel,
     private readonly logFilePath: string | undefined,
-  ) {}
+    private readonly readLevel: () => TokenUsageLogLevel = () => level,
+  ) {
+    this.level = level;
+  }
+
+  /**
+   * Start a provider request: read the live level and apply it to this
+   * request and everything recorded until the next one. Called once per
+   * attempt, before any token-usage work for it.
+   *
+   * Requests of one session are sequential, and each attempt's actual usage
+   * is recorded before the next attempt begins, so an attempt is always
+   * written at the level it started with; a change made mid-attempt takes
+   * effect from the next request. Pending attempts and request-shape memory
+   * survive level changes. A request sent at `off` is not observed, so the
+   * shape memory is told it missed one (see
+   * {@link RequestShapeSessionMemory.noteUnobservedRequest}).
+   */
+  beginRequest(): TokenUsageLogLevel {
+    this.level = this.readLevel();
+    if (this.level === 'off') this.shapeMemory.noteUnobservedRequest();
+    return this.level;
+  }
 
   /**
    * Per-session request-shape memory (callId tracking + fingerprint history).
@@ -222,7 +256,7 @@ export class TokenUsageLogger {
     return { fromProvider: previous.provider, fromModel: previous.model };
   }
 
-  /** The configured detail level; `off` writes nothing. */
+  /** The level of the current request; `off` writes nothing. */
   getLevel(): TokenUsageLogLevel {
     return this.level;
   }
@@ -549,6 +583,10 @@ export class TokenUsageLogger {
    * lastToken-ttft window in ms, only when both endpoints are measured and
    * the window is strictly positive — never a total-duration fallback
    * (ProviderPerformanceTracker Finding #7).
+   *
+   * Timing is written in whole milliseconds (#4068). The endpoints are
+   * rounded before subtracting, so `ttft_ms + generation_ms` is the rounded
+   * last-token time and never exceeds the rounded `provider_request_ms`.
    */
   private _generationWindowMs(
     ctx: Partial<TokenUsageTurnContext>,
@@ -557,7 +595,9 @@ export class TokenUsageLogger {
     const lastTokenMs = _finiteMs(ctx.lastTokenMs);
     if (ttftMs === undefined || lastTokenMs === undefined) return undefined;
     const windowMs = lastTokenMs - ttftMs;
-    return windowMs > 0 ? windowMs : undefined;
+    return windowMs > 0
+      ? Math.round(lastTokenMs) - Math.round(ttftMs)
+      : undefined;
   }
 
   private _serializeContextFields(
@@ -565,8 +605,8 @@ export class TokenUsageLogger {
   ) {
     const c = ctx ?? {};
     const generationMs = this._generationWindowMs(c);
-    const ttftMs = _finiteMs(c.ttftMs);
-    const providerRequestMs = _finiteMs(c.providerRequestMs);
+    const ttftMs = _wholeMs(c.ttftMs);
+    const providerRequestMs = _wholeMs(c.providerRequestMs);
     const chunkCount = _finiteMs(c.chunkCount);
     return {
       ...(c.sessionId !== undefined && { session_id: c.sessionId }),
@@ -814,13 +854,19 @@ export class TokenUsageLogger {
   }
 }
 
+/**
+ * The session's logger. `readLevel` is the live `token-usage-log` level; the
+ * log path is resolved even when the level starts at `off`, so turning the
+ * level on later in the session writes to the session's file. Nothing is
+ * created on disk until a record is written.
+ */
 export function createTokenUsageLogger(
-  tokenUsageLevel: TokenUsageLogLevel,
+  readLevel: () => TokenUsageLogLevel,
   sessionId: string,
   config: Config | undefined,
 ): TokenUsageLogger {
   let logFilePath: string | undefined;
-  if (tokenUsageLevel !== 'off' && config) {
+  if (config) {
     try {
       const tempDir = config.getProjectTempDir();
       if (tempDir) {
@@ -830,8 +876,6 @@ export function createTokenUsageLogger(
       // Storage unavailable — logging disabled
     }
   }
-  return new TokenUsageLogger(
-    logFilePath === undefined ? 'off' : tokenUsageLevel,
-    logFilePath,
-  );
+  if (logFilePath === undefined) return new TokenUsageLogger('off', undefined);
+  return new TokenUsageLogger(readLevel(), logFilePath, readLevel);
 }

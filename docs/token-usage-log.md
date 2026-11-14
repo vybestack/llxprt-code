@@ -27,8 +27,9 @@ The `token-usage-log` setting chooses how much each record holds.
 | **Default**      | `summary`                      |
 | **Valid values** | `off`, `summary`, `debug`      |
 
-- `off` writes nothing. No file is created, and the request-shape and
-  fingerprint work done only for this log is skipped.
+- `off` writes nothing. No file is created, and the work done only for this
+  log is skipped: the request-shape split, the fingerprint, reading the system
+  instruction, and the stream timing tracker with its raw token-delta sink.
 - `summary` (the default) writes one line of scalar fields per model request:
   identity and lineage, provider and model, provider-reported usage, the
   estimate, timing, the fixed per-request overhead, and new versus carried
@@ -56,8 +57,20 @@ To turn logging off, add the following to your
 ```
 
 `/set token-usage-log debug` (or `off`) changes the level for the rest of the
-run. The level is read when a chat session starts, so it applies to sessions
-and subagents started after the change.
+run. The level is read again at the start of every model request, so an
+existing chat switches from its next request. A request already in flight
+finishes at the level it started with. Lifecycle records written between two
+requests follow the level of the last request.
+
+Switching to `off` and back loses nothing the log already holds, but the log
+does not see the requests sent while it was off. The first request after
+logging comes back on therefore cannot tell new tool results from carried ones
+and omits `new_tool_result_count`, `new_tool_result_tokens`,
+`carried_tool_result_tokens` and, at `debug`, `tool_calls`; its
+`prefix_fingerprint_changed` is `null`. Every later request has the split
+again. Switching between `summary` and `debug` keeps the split intact; the
+first `debug` request after `summary` has `prefix_fingerprint_changed: null`,
+because `summary` does not compute the fingerprint.
 
 ### Retention
 
@@ -76,7 +89,12 @@ files, at every level:
   `<root session>::<child runtime>.jsonl` and belongs to its root session. A
   file is kept when its root session is the running session, when that session
   holds a live lock in the project's `chats/` directory, or when the file was
-  written within `sessionRetention.minRetention` (default `1d`).
+  written within `sessionRetention.minRetention` (default `1d`). Each deletion
+  takes the root session's lock first, the same way chat recordings are
+  reclaimed, and skips the file when the lock is held. Under the lock the file
+  must still be the one that was scanned (same inode, size and modification
+  time), so a session that starts, appends or recreates its log after the scan
+  keeps it.
 - A `token-usage/` directory left empty is removed.
 - `sessionRetention.enabled: false` turns this cleanup off along with the rest
   of the janitor.
@@ -126,7 +144,8 @@ written as zero.
 | Tool results      | `new_tool_result_count`, `new_tool_result_tokens`, `carried_tool_result_tokens`                                                        |
 
 A summary record is about 1 KB for a subagent request, most of it the field
-names and the composite session, runtime and prompt identifiers.
+names and the composite session, runtime and prompt identifiers. Timing fields
+are written in whole milliseconds at both levels.
 
 ### Debug-only fields
 
@@ -153,9 +172,9 @@ A `debug` record holds every summary field and adds:
 
 | Field                   | Type   | Description                                                                                                                                                |
 | ----------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ttft_ms`               | number | Milliseconds from the start of the provider stream to the first token. Omitted when no token arrived.                                                      |
-| `provider_request_ms`   | number | Milliseconds the provider stream ran for this attempt.                                                                                                     |
-| `generation_ms`         | number | Milliseconds from the first token to the last. Omitted when not measured.                                                                                  |
+| `ttft_ms`               | number | Whole milliseconds from the start of the provider stream to the first token. Omitted when no token arrived.                                                |
+| `provider_request_ms`   | number | Whole milliseconds the provider stream ran for this attempt.                                                                                               |
+| `generation_ms`         | number | Whole milliseconds from the first token to the last; `ttft_ms + generation_ms` never exceeds `provider_request_ms`. Omitted when not measured.             |
 | `timing_source`         | string | `raw` when raw provider token deltas set the token window, `visible` when it was measured from visible output chunks. Omitted when no token window exists. |
 | `fixed_tokens`          | number | `instructions_tokens + tools_schema_tokens`: the overhead every request in the session pays before any conversation.                                       |
 | `new_tool_result_count` | number | How many tool results enter the prompt for the first time on this request.                                                                                 |

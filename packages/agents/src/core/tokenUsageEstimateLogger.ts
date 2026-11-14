@@ -9,6 +9,7 @@ import type {
   TokenUsageLogger,
   TokenEstimatorType,
 } from './TokenUsageLogger.js';
+import type { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
 import type { TokenUsageTurnContext } from './tokenUsageRecords.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -183,22 +184,45 @@ export function recordRequestShapeContext(
   });
 
   const context: TokenUsageTurnContext = {
-    newToolResultCount: result.newToolCalls.length,
-    newToolResultTokens: result.newToolResultTokens,
-    carriedToolResultTokens: result.carriedToolResultTokens,
+    ...newVsCarriedContext(result, debug),
     instructionsTokens: result.instructionsTokens,
     toolsSchemaTokens: result.toolsSchemaTokens,
     historyTokens: result.historyTokens,
     mediaTokens: result.mediaTokens,
     injectedTokens: result.injectedTokens,
     ...(debug && {
-      toolCalls: result.newToolCalls,
       prefixFingerprint: result.prefixFingerprint,
       prefixFingerprintChanged: result.prefixFingerprintChanged,
     }),
   };
 
   usageLogger.attachTurnContext(promptId, context);
+}
+
+/**
+ * The new-versus-carried tool-result split, or explicit absence when it is
+ * unknown because the previous request was sent while logging was off. The
+ * keys are present as undefined, not dropped, so a retry of the same prompt
+ * cannot inherit an earlier attempt's split through the context merge.
+ */
+function newVsCarriedContext(
+  result: ReturnType<RequestShapeSessionMemory['recordRequestShape']>,
+  debug: boolean,
+): Partial<TokenUsageTurnContext> {
+  if (!result.newVsCarriedKnown) {
+    return {
+      newToolResultCount: undefined,
+      newToolResultTokens: undefined,
+      carriedToolResultTokens: undefined,
+      toolCalls: undefined,
+    };
+  }
+  return {
+    newToolResultCount: result.newToolCalls.length,
+    newToolResultTokens: result.newToolResultTokens,
+    carriedToolResultTokens: result.carriedToolResultTokens,
+    ...(debug && { toolCalls: result.newToolCalls }),
+  };
 }
 
 /**
@@ -227,6 +251,10 @@ export interface SendSeamTelemetryInput {
 }
 
 export function recordSendSeamTelemetry(input: SendSeamTelemetryInput): void {
+  // #4068: at `off` nothing below may run, including the system-instruction
+  // extraction that only feeds the request-shape split. The level is the one
+  // the processor applied with `beginRequest` for this request.
+  if (input.usageLogger?.isEnabled() !== true) return;
   // Single fail-open boundary for the whole send-seam observation. This runs
   // on the request path, so a telemetry failure must never abort a real
   // conversation; equally, the functions below stay guard-free internally so a
