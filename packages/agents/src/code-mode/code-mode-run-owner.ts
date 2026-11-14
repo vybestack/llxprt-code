@@ -17,11 +17,29 @@
  * admission, cancels queued calls, cancels and joins in-flight executions,
  * and retires the approval subscription, so a late approval reply finds
  * nothing to resolve.
+ *
+ * Presentation (Phase D): the nested scheduler's call updates, live output
+ * and completions go to an execution opened on the session's child display,
+ * so a host that renders child calls (the CLI) shows a waiting nested call
+ * with the ordinary confirmation prompt. A nested call may wait for approval
+ * only when that display or the session's approval handler can answer it;
+ * otherwise an ASK ends the run with APPROVAL_REQUIRED at once. Each run
+ * also writes `tool_script_event` records and lifecycle telemetry through
+ * its {@link ScriptRunJournal}.
  */
 
 import { randomUUID } from 'node:crypto';
+import type {
+  ToolScriptApproval,
+  ToolScriptEventPayload,
+} from '@vybestack/llxprt-code-core';
 import type { ToolCallRequestInfo } from '@vybestack/llxprt-code-core/core/turn.js';
-import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import type {
+  CompletedToolCall,
+  ToolCall,
+} from '@vybestack/llxprt-code-core/scheduler/types.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { AgentDisplayCallbacks } from '../api/agent.js';
 import type {
   ToolExecutionScope,
   ToolResult,
@@ -44,6 +62,20 @@ import type {
   ScriptRunRequest,
   ScriptToolResult,
 } from './runtime-contract.js';
+import { ScriptRunJournal } from './script-run-journal.js';
+import type { ToolScriptRunView } from './tool-script-card.js';
+
+const logger = new DebugLogger('llxprt:agents:code-mode');
+
+/**
+ * Where a run shows its nested calls and publishes its records: the
+ * session's child display (`ChildToolDisplay` satisfies it).
+ */
+export interface ScriptRunDisplay {
+  open(): AgentDisplayCallbacks;
+  answersApprovals(): boolean;
+  publishToolScriptEvent(event: ToolScriptEventPayload): void;
+}
 
 export interface NestedCallRecord {
   readonly tool: string;
@@ -68,6 +100,22 @@ export interface CodeModeRunOptions {
   readonly request: ScriptRunRequest;
   readonly scope: ToolExecutionScope;
   readonly port: NestedExecutionPort;
+  /** Absent where no session display is bound (records are not kept). */
+  readonly display?: ScriptRunDisplay;
+  /** Receives the run's folded view after every record (the live card). */
+  readonly onProgress?: (view: ToolScriptRunView) => void;
+}
+
+function approvalOf(
+  done: CompletedToolCall,
+  status: NestedCallStatus,
+  awaited: boolean,
+): ToolScriptApproval {
+  if (status === 'approval_required') return 'unavailable';
+  if (!awaited) return 'not_required';
+  return done.status === 'success' || done.status === 'error'
+    ? 'approved'
+    : 'denied';
 }
 
 export class CodeModeRunOwner {
@@ -79,8 +127,10 @@ export class CodeModeRunOwner {
   >();
   private readonly delivered = new Map<string, ToolResult>();
   private readonly admitted = new Set<string>();
+  private readonly awaited = new Set<string>();
   private readonly records: NestedCallRecord[] = [];
   private readonly tools: TurnToolExecutionOwner;
+  private readonly journal: ScriptRunJournal;
   private lease: SchedulerLease | undefined;
   private releaseApprovals: (() => void) | undefined;
   private pumping = false;
@@ -90,26 +140,56 @@ export class CodeModeRunOwner {
 
   constructor(private readonly options: CodeModeRunOptions) {
     const { composition } = options.port;
+    const { display } = options;
+    const promptsAvailable =
+      composition.approval !== undefined ||
+      display?.answersApprovals() === true;
     this.tools = new TurnToolExecutionOwner(
       composition.messageBus,
       composition.approval,
       (callbacks) =>
-        composition.createScheduler({
-          ...callbacks,
-          onToolResult: (delivery) => this.onDelivered(delivery),
-        }),
+        composition.createScheduler(
+          {
+            ...callbacks,
+            onToolResult: (delivery) => this.onDelivered(delivery),
+          },
+          { promptsAvailable },
+        ),
+    );
+    this.journal = new ScriptRunJournal(
+      {
+        runId: this.runId,
+        parentCallId: options.scope.callId,
+        promptId: options.scope.promptId,
+        agentId: options.scope.agentId,
+        purpose: options.request.purpose,
+        tools: options.request.tools,
+      },
+      {
+        publish: (event) => display?.publishToolScriptEvent(event),
+        progress: (view) => options.onProgress?.(view),
+        logRun: (event) => composition.logScriptRun(event),
+      },
     );
   }
 
   async run(signal: AbortSignal): Promise<CodeModeRunReport> {
     if (this.started) throw new Error('A code mode run owner runs once');
     this.started = true;
+    this.journal.started();
     this.releaseApprovals = this.tools.begin();
+    const view = this.options.display?.open();
     this.lease = this.tools.acquire({
-      onAllToolCallsComplete: async (calls) => this.onCompleted(calls),
-      onToolCallsUpdate: (calls) => {
-        for (const call of calls) this.admitted.add(call.request.callId);
+      onAllToolCallsComplete: async (calls) => {
+        this.onCompleted(calls);
+        notifyCompletion(view, calls);
       },
+      onToolCallsUpdate: (calls) => {
+        this.observe(calls);
+        view?.onToolCallsUpdate?.(calls);
+      },
+      outputUpdateHandler: (callId, update) =>
+        view?.outputUpdateHandler?.(callId, update),
       getPreferredEditor: () => undefined,
       onEditorClose: () => undefined,
     });
@@ -122,6 +202,7 @@ export class CodeModeRunOwner {
         signal,
       );
       await this.close();
+      this.journal.finished(result, this.partial);
       return {
         result,
         completedCalls: [...this.records],
@@ -224,6 +305,19 @@ export class CodeModeRunOwner {
     if (aborted) await this.close();
     const outcome = classifyNestedCall(done, delivered, aborted);
     this.records.push({ tool: call.tool, status: outcome.status });
+    this.journal.call({
+      sequence: call.requestId,
+      callId: done.request.callId,
+      tool: call.tool,
+      args: call.args,
+      approval: approvalOf(
+        done,
+        outcome.status,
+        this.awaited.has(done.request.callId),
+      ),
+      status: outcome.status,
+      result: outcome.kind === 'result' ? outcome.result : undefined,
+    });
     if (outcome.kind === 'termination') throw outcome.termination;
     if (outcome.result.ok && outcome.result.completeness === 'partial')
       this.partial = true;
@@ -244,8 +338,20 @@ export class CodeModeRunOwner {
         : {
             hookRestrictedAllowedTools: [...scope.hookRestrictedAllowedTools],
           }),
-      script: { parentCallId: scope.callId, runId: this.runId },
+      script: {
+        parentCallId: scope.callId,
+        runId: this.runId,
+        purpose: this.options.request.purpose,
+      },
     };
+  }
+
+  private observe(calls: readonly ToolCall[]): void {
+    for (const call of calls) {
+      this.admitted.add(call.request.callId);
+      if (call.status === 'awaiting_approval')
+        this.awaited.add(call.request.callId);
+    }
   }
 
   private onDelivered(delivery: ToolResultDelivery): void {
@@ -265,4 +371,24 @@ export class CodeModeRunOwner {
       setImmediate(() => resolve(call));
     }
   }
+}
+
+/**
+ * The display's completion handler is not awaited: the nested scheduler
+ * accepts the run's next call only after its completion callback returns, so
+ * a slow renderer must not hold the broker. A failure is logged, the same way
+ * the agentic loop treats its display's completion callback.
+ */
+function notifyCompletion(
+  view: AgentDisplayCallbacks | undefined,
+  calls: CompletedToolCall[],
+): void {
+  const pending = view?.onAllToolCallsComplete?.(calls);
+  if (pending === undefined) return;
+  void Promise.resolve(pending).catch((error: unknown) => {
+    logger.debug(
+      () =>
+        `script display completion failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
 }

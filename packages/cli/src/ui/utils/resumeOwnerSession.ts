@@ -17,12 +17,15 @@ import { iContentToHistoryItems } from './iContentToHistoryItems.js';
  * Resume through the Agent session owner. Recordings discovery skipped as
  * unreadable come back as `warnings` (shown after the restore, like the raw
  * resume does), and a failed resume names the unreadable file it matched.
+ * Code mode runs come back as their script cards, rebuilt from the recorded
+ * script events; no script runs again.
  */
 export async function resumeOwnerSession(
   resume: Agent['session']['resume'],
   ref: string,
   emojiFilterMode: EmojiFilterMode,
   listBrowserTargetsDetailed: Agent['session']['listBrowserTargetsDetailed'],
+  readToolScriptRuns: Agent['session']['getToolScriptRuns'],
 ): Promise<{
   readonly history: readonly AgentHistoryItem[];
   readonly uiHistory: readonly HistoryItem[];
@@ -35,9 +38,15 @@ export async function resumeOwnerSession(
     throw await nameUnreadableRecording(listBrowserTargetsDetailed, ref, error);
   }
   const { unreadableRecordings } = await listBrowserTargetsDetailed();
+  // Code mode script cards are redrawn from their recorded events (#4084).
+  const toolScriptRuns = await readToolScriptRuns();
   return {
     history,
-    uiHistory: iContentToHistoryItems([...history], emojiFilterMode),
+    uiHistory: iContentToHistoryItems(
+      [...history],
+      emojiFilterMode,
+      toolScriptRuns,
+    ),
     warnings: unreadableRecordings.map(
       (recording) =>
         `Skipped unreadable session recording ${describeUnreadableRecording(recording)}`,

@@ -23,6 +23,7 @@ import type {
   ToolLookup,
   ToolResult,
 } from '@vybestack/llxprt-code-tools';
+import type { ToolScriptRunEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import type { ApprovalHandler } from '../core/agenticLoop/types.js';
 import type { SessionSchedulerOwner } from '../session/sessionSchedulerOwner.js';
 
@@ -37,6 +38,15 @@ export type ToolResultSink = (delivery: ToolResultDelivery) => void;
 
 export interface NestedSchedulerCallbacks extends SchedulerCallbacks {
   readonly onToolResult: ToolResultSink;
+}
+
+export interface NestedSchedulerOptions {
+  /**
+   * Whether anyone can answer this run's approval prompts. When false a
+   * nested call that needs approval fails at once with an approval-required
+   * error instead of waiting for an answer that cannot come.
+   */
+  readonly promptsAvailable: boolean;
 }
 
 /**
@@ -54,7 +64,10 @@ export interface NestedExecutionComposition {
   readonly readGovernance: () => ToolGovernance;
   readonly createScheduler: (
     callbacks: NestedSchedulerCallbacks,
+    options: NestedSchedulerOptions,
   ) => SessionSchedulerOwner;
+  /** Exports one script run's lifecycle metrics through session telemetry. */
+  readonly logScriptRun: (event: ToolScriptRunEvent) => void;
 }
 
 /**

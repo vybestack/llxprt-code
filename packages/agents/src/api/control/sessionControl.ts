@@ -28,11 +28,6 @@ import type { SessionNativeHistory } from './session-history-observation.js';
  *   restored IContent[] so callers (e.g. the Zed loadSession path) can replay it.
  */
 
-import type { LocalMediaStore } from '@vybestack/llxprt-code-core';
-import type {
-  RefusalPayload,
-  RefusalRewritePayload,
-} from '@vybestack/llxprt-code-core';
 import type { PreparedHistoryBatchEffect } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   CONTINUE_LATEST,
@@ -44,7 +39,11 @@ import {
   importSessionMediaPackage,
   resumeSession,
   type ContinueTarget,
+  type LocalMediaStore,
   type LockHandle,
+  type RefusalPayload,
+  type RefusalRewritePayload,
+  type ToolScriptEventPayload,
   type ReplayResult,
   type ResumeRequest,
   type SessionSummary,
@@ -95,6 +94,7 @@ import {
   rollbackPreparedSessionArtifacts,
 } from './sessionControlRollback.js';
 import { warnSkippedRecordings } from './skippedRecordings.js';
+import { SessionOpChain } from './sessionOpChain.js';
 
 const RECORDING_FORMAT = 'jsonl';
 
@@ -121,28 +121,21 @@ function logger(): DebugLogger {
 export class SessionControl implements AgentSessionControl {
   private readonly recordingLifetime: SessionRecordingLifetime;
   /**
-   * Promise-chain mutex (FINDING A1) serializing the state-mutating public
-   * operations (resume, setRecording enable/disable, dispose) so they never
-   * interleave their multi-await recording/integration/lock swaps. Without it a
-   * concurrent resume()/setRecording()/dispose() could adopt+dispose the same
-   * recording service or session lock across each other's await points
-   * (use-after-free / orphaned lock). runExclusive chains onto this so each op
-   * runs strictly after the prior one settles; it always settles (never
-   * rejects) so a failed op cannot poison the chain for the next caller.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
+   * Serializes the state-mutating public operations (FINDING A1). Without it
+   * a concurrent resume()/setRecording()/dispose() could adopt+dispose the
+   * same recording service or session lock across each other's await points
+   * (use-after-free / orphaned lock).
    */
-  private opChain: Promise<void> = Promise.resolve();
+  private readonly opChain = new SessionOpChain();
   private disposalPromise: Promise<void> | undefined;
   private admissionClosed = false;
   private checkpointService: CheckpointService | undefined;
   private adoptedPath: string | null = null;
 
-  private readonly mediaStore: LocalMediaStore;
   private readonly persistence: AgentSessionPersistence;
   constructor(
     private readonly paths: SessionRecordingPaths,
-    mediaStore: LocalMediaStore,
+    private readonly mediaStore: LocalMediaStore,
     private readonly readRecordingQueueLimit: () => number,
     private readonly directories: () => readonly string[],
     private readonly sessionIdentityOwnership: 'config' | 'facade',
@@ -161,7 +154,6 @@ export class SessionControl implements AgentSessionControl {
     private readonly adoptOwnedSessionId: (sessionId: string) => void,
     persistence?: AgentSessionPersistence,
   ) {
-    this.mediaStore = mediaStore;
     this.persistence =
       persistence ??
       createAgentSessionPersistence(
@@ -174,6 +166,7 @@ export class SessionControl implements AgentSessionControl {
       nativeHistory,
       sessionId(),
       this,
+      mediaStore,
     );
   }
 
@@ -194,16 +187,7 @@ export class SessionControl implements AgentSessionControl {
   private runExclusive<T>(fn: () => Promise<T>): Promise<T> {
     if (this.admissionClosed)
       return Promise.reject(new Error('Session disposed'));
-    const priorSettled = this.opChain;
-    const run = (async () => {
-      await priorSettled;
-      return fn();
-    })();
-    this.opChain = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
+    return this.opChain.run(fn);
   }
 
   /**
@@ -485,6 +469,15 @@ export class SessionControl implements AgentSessionControl {
   /** Internal refusal journaling (issue #4036); not on the public surface. */
   recordRefusal = (refusal: RefusalPayload): Promise<void> =>
     this.recordingLifetime.recordRefusal(refusal);
+
+  /** Display and audit record of a code mode script run (issue #4084). */
+  recordToolScriptEvent = (event: ToolScriptEventPayload): void =>
+    this.recordingLifetime.recordToolScriptEvent(event);
+
+  getToolScriptRuns = () =>
+    this.runExclusive(() =>
+      this.recordingLifetime.readToolScriptRuns(this.persistenceProjectHash()),
+    );
 
   prepareRefusalRewrite = (
     rewrite: RefusalRewritePayload,
@@ -1030,6 +1023,7 @@ export class SessionControl implements AgentSessionControl {
     // races a concurrent resume()/setRecording() adopting resources it is
     // releasing (double-dispose / released-then-adopted lock).
     return (this.disposalPromise ??= this.opChain
+      .settled()
       .then(() => this.recordingLifetime.teardownActiveSession())
       .finally(() => this.persistence.close()));
   }

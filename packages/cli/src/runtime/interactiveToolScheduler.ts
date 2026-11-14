@@ -181,22 +181,28 @@ export function useChildToolDisplay(
   useEffect(() => {
     const mounted = { current: true };
     const isMounted = (): boolean => mounted.current;
-    const detach = subscribeChildTools({
-      outputUpdateHandler: (id, callId, update) => {
-        if (!isMounted()) return;
-        refs.updateToolCallOutput(id, callId, update);
-        refs.setLastToolOutputTime(Date.now());
+    const detach = subscribeChildTools(
+      {
+        outputUpdateHandler: (id, callId, update) => {
+          if (!isMounted()) return;
+          refs.updateToolCallOutput(id, callId, update);
+          refs.setLastToolOutputTime(Date.now());
+        },
+        onToolCallsUpdate: (id, calls) => {
+          if (mounted.current) refs.replaceToolCallsForScheduler(id, calls);
+        },
+        onAllToolCallsComplete: async (id, calls) => {
+          if (!isMounted()) return;
+          if (calls.length > 0)
+            await refs.onCompleteRef.current(id, calls, { isPrimary: false });
+          if (mounted.current) refs.replaceToolCallsForScheduler(id, []);
+        },
+        // This display renders a waiting child call's confirmation and answers
+        // it through the call's own onConfirm, so code mode nested calls may
+        // wait for the user here (#4084).
       },
-      onToolCallsUpdate: (id, calls) => {
-        if (mounted.current) refs.replaceToolCallsForScheduler(id, calls);
-      },
-      onAllToolCallsComplete: async (id, calls) => {
-        if (!isMounted()) return;
-        if (calls.length > 0)
-          await refs.onCompleteRef.current(id, calls, { isPrimary: false });
-        if (mounted.current) refs.replaceToolCallsForScheduler(id, []);
-      },
-    });
+      { answersApprovals: true },
+    );
     setReady(true);
     return () => {
       mounted.current = false;

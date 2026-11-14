@@ -186,6 +186,12 @@ export class ConfirmationCoordinator {
     ) => Promise<unknown>,
     private readonly readApprovalMode: () => ApprovalMode = () =>
       ApprovalMode.DEFAULT,
+    /**
+     * False when nobody can answer a prompt from this scheduler (a code mode
+     * run whose host has no approval handler and no answering display, issue
+     * #4084), so a call that needs approval fails at once instead of waiting.
+     */
+    private readonly promptsAvailable: boolean = true,
   ) {}
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -365,6 +371,13 @@ export class ConfirmationCoordinator {
         `Tool execution for "${
           toolCall.tool.displayName || toolCall.tool.name
         }" requires user confirmation, which is not supported in non-interactive mode.`,
+      );
+    }
+    if (!this.promptsAvailable) {
+      throw new ConfirmationRequiredError(
+        `Tool execution for "${
+          toolCall.tool.displayName || toolCall.tool.name
+        }" requires user confirmation, and this host cannot show approvals for script tool calls.`,
       );
     }
 

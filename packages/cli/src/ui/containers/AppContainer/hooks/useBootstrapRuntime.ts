@@ -27,6 +27,7 @@ type BootstrapInputs = Pick<
   | 'readProviderMetrics'
   | 'readSessionTokenUsage'
   | 'resumedHistory'
+  | 'resumedToolScriptRuns'
   | 'version'
   | 'memoryController'
   | 'readIdeMode'

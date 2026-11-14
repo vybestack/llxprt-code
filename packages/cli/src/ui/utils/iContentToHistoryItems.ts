@@ -26,6 +26,10 @@ import {
   boundResultDisplayForRetention,
   stringifyForDisplayDetailed,
 } from './toolResultRetention.js';
+import {
+  formatToolScriptCard,
+  type ToolScriptRunView,
+} from '@vybestack/llxprt-code-agents';
 
 const NEWLINE = String.fromCharCode(10);
 
@@ -244,10 +248,65 @@ function combineMarkdownSegments(segments: MarkdownSegment[]): string {
   }, '');
 }
 
+const SCRIPT_TOOL = 'execute_tool_script';
+
+/**
+ * The value a recorded `execute_tool_script` response returned, as JSON text,
+ * when the script succeeded. Recorded responses are read back from disk, so
+ * one that is not the script summary simply has no result to show.
+ */
+function recordedResponseText(result: unknown): string | undefined {
+  if (typeof result === 'string') return result;
+  if (typeof result === 'object' && result !== null && 'output' in result)
+    return String((result as { output: unknown }).output);
+  return undefined;
+}
+
+function scriptResultText(result: unknown): string | undefined {
+  const text = recordedResponseText(result);
+  const start = text?.indexOf('{"ok"') ?? -1;
+  if (text === undefined || start < 0) return undefined;
+  const summary = parseRecordedJson(text.slice(start));
+  if (typeof summary !== 'object' || summary === null) return undefined;
+  if (!('ok' in summary) || summary.ok !== true) return undefined;
+  return 'value' in summary ? JSON.stringify(summary.value) : undefined;
+}
+
+function parseRecordedJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A resumed `execute_tool_script` call shows the script card rebuilt from
+ * its recorded `tool_script_event` records (#4084), the same card the live
+ * run ended with. The script is not run again.
+ */
+function scriptCardFor(
+  call: ToolCallBlock,
+  response: { result: unknown; error?: string } | undefined,
+  scriptRuns: ReadonlyMap<string, ToolScriptRunView>,
+): string | undefined {
+  if (call.name !== SCRIPT_TOOL) return undefined;
+  const run = scriptRuns.get(call.id);
+  if (run === undefined) return undefined;
+  const source = (call.parameters as { source?: unknown } | undefined)?.source;
+  const result =
+    response === undefined ? undefined : scriptResultText(response.result);
+  return formatToolScriptCard(run, {
+    ...(typeof source === 'string' ? { source } : {}),
+    ...(result === undefined ? {} : { result }),
+  });
+}
+
 function processAiContent(
   content: IContent,
   responseMap: Map<string, { result: unknown; error?: string }>,
   items: HistoryItemWithoutId[],
+  scriptRuns: ReadonlyMap<string, ToolScriptRunView>,
 ): void {
   const segments: MarkdownSegment[] = [];
   const thinkingBlocks: ThinkingBlock[] = [];
@@ -288,15 +347,16 @@ function processAiContent(
   if (toolCallBlocks.length > 0) {
     const tools: IndividualToolCallDisplay[] = toolCallBlocks.map((tc) => {
       const response = responseMap.get(tc.id);
+      const card = scriptCardFor(tc, response, scriptRuns);
       const display =
-        response !== undefined
+        response !== undefined && card === undefined
           ? safeToolResultToDisplayText(response.result)
           : undefined;
       return {
         callId: tc.id,
         name: tc.name,
         description: tc.description ?? tc.name,
-        resultDisplay: display?.text,
+        resultDisplay: card ?? display?.text,
         status: toToolCallStatus(response),
         confirmationDetails: undefined,
         retention: display?.retention,
@@ -322,15 +382,21 @@ function processAiContent(
  * @param emojiFilterModeOverride The resolved filter mode; defaults to
  *   'auto'. Pass `'allowed'` (or `resolveEmojiFilterMode`'s output) to
  *   honor the current setting.
+ * @param toolScriptRuns Recorded code mode runs (`session.getToolScriptRuns()`);
+ *   an `execute_tool_script` call with a recorded run shows its script card.
  */
 export function iContentToHistoryItems(
   contents: IContent[],
   emojiFilterModeOverride?: EmojiFilterMode,
+  toolScriptRuns: readonly ToolScriptRunView[] = [],
 ): HistoryItem[] {
   const filter = createEmojiFilter(emojiFilterModeOverride);
   const items: HistoryItemWithoutId[] = [];
 
   const responseMap = buildResponseMap(contents);
+  const scriptRuns = new Map(
+    toolScriptRuns.map((run) => [run.parentCallId, run]),
+  );
 
   for (const content of contents) {
     if (content.speaker === 'human') {
@@ -345,7 +411,7 @@ export function iContentToHistoryItems(
     }
 
     if (content.speaker === 'ai') {
-      processAiContent(content, responseMap, items);
+      processAiContent(content, responseMap, items, scriptRuns);
     }
   }
 

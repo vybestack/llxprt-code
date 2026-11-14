@@ -133,6 +133,7 @@ describe('registered command resume owner', () => {
               action.sessionRef,
               'allowed',
               owner.session.listBrowserTargetsDetailed.bind(owner.session),
+              owner.session.getToolScriptRuns.bind(owner.session),
             );
           },
           (history) => {

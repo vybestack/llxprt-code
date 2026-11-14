@@ -4,7 +4,8 @@
 
 - Phase A: done (runtime foundation and effective-argument authorization; see "Phase A record")
 - Phase B: done (run owner, nested execution seam, `execute_tool_script` behind a construction flag, bundle packaging; see "Phase B record")
-- Phases C-E: pending
+- Phase D: done (nested approvals in the CLI, fail-fast hosts, script card, `tool_script_event` recording and resume, script telemetry, default policy; see "Phase D record"). Done before Phase C on purpose: without it a nested approval in the CLI would wait forever once the setting exists.
+- Phases C and E: pending
 
 ## Fixed decisions
 
@@ -52,11 +53,30 @@ See "Phase B record" below for what changed, decisions and follow-ups.
 - Add `code-mode` (`off|on`), tool-surface and bounded limit settings as application settings, not model parameters.
 - Derive subagent script capabilities from that subagent's own profile and admitted tool selection.
 
-### Phase D: UI, recording and telemetry (pending)
+### Phase D: UI, recording and telemetry (done)
 
 - Add parent script card and nested execution presentation/approval details.
 - Record typed operational script events without injecting nested results into model history; restore display on resume without re-execution.
 - Add script lifecycle telemetry and apply existing prompt/data privacy controls.
+
+Design (decided at the start of the phase):
+
+- Approval reachability. A nested call may wait for a prompt only when someone can answer it: the session has an `onApproval` handler, or a child-tool display subscriber declared `answersApprovals` (the CLI's `useChildToolDisplay`). Otherwise the nested scheduler is built with prompts unavailable and an ASK ends the run with `APPROVAL_REQUIRED` at once. That covers non-interactive CLI, zed-acp and a2a (neither subscribes child tools nor passes `onApproval`) and programmatic hosts that only watch the stream.
+- CLI path. The run owner forwards its nested scheduler callbacks (tool-call updates, live output, completion) to an execution opened on the session `ChildToolDisplay`, the same path subagent tools use. The CLI renders a waiting nested call with the ordinary confirmation UI, whose `onConfirm` belongs to the nested scheduler, so keys and "always allow" behave as for direct calls. Nested requests carry serializable `script: { parentCallId, runId, purpose }`; the CLI labels nested rows from it.
+- Bounded display. Completed nested calls do not become separate history items; the parent `execute_tool_script` card (live output while running, `returnDisplay` when done) shows purpose, status, call counts, the last few calls, a bounded source preview and the result or error. One formatter (`formatToolScriptCard`) serves the live card, the final card and resume.
+- Recording. Typed `tool_script_event` records (`started`, `call`, `finished`) published through the `ChildToolDisplay` hub and recorded by the facade. Replay collects them outside history; `session.getToolScriptRuns()` folds them for resume display.
+- Telemetry. `ToolCallEvent` carries `parent_call_id`, `script_run_id`, `origin`; new `logToolScriptRun` event with lifecycle metrics, `purpose` only under `logPrompts`.
+- Policy default. `execute_tool_script` and `discover_tool_api` get an ALLOW rule in the default `read-only.toml` (as `task` has) and `Kind.Think`; every nested call is still authorized on its own.
+
+Progress log:
+
+- [x] D1 core: `ToolCallScriptOrigin` (`turn.ts`), `recording/toolScriptEventPayload.ts`, `tool_script_event` in `types.ts`/`ReplayEngine.ts` (`toolScriptEvents`)/`SessionRecordingService.ts`/`RecordingIntegration.ts`, `services/tool-dispatch-admission.ts` (`withScriptDisplay` stays admission-bound), telemetry `ToolCallEvent` script fields, `ToolScriptRunEvent`, `logToolScriptRun` (+ core re-exports)
+- [x] D2 agents: `session/childToolDisplay.ts` (subscription options, `answersApprovals`, `publishToolScriptEvent`), `scheduler/confirmation-coordinator.ts` + `core-tool-scheduler-options.ts` + `coreToolScheduler.ts` (`confirmationPromptsAvailable`), `scheduler/nested-execution.ts` + `session/assembleSchedulerOwner.ts` (per-run prompt availability, `logScriptRun`), `code-mode/script-run-journal.ts`, `code-mode/tool-script-card.ts`, run owner forwarding/journal, tool (`Kind.Think`, no own confirmation, live card, `withScriptDisplay`), `session/childToolAssembly.ts`, facade recorder subscription, `SessionControl.recordToolScriptEvent`/`getToolScriptRuns` (`api/control/sessionToolScriptRuns.ts`), API exports, `read-only.toml` (both copies)
+- [x] D3 agents tests: `code-mode-approvals.test.ts` (6), `tool-script-events.test.ts` (4), `tool-script-card.test.ts` (4); existing code-mode files 31/31 still pass
+- [x] D4 CLI: `runtime/interactiveToolScheduler.ts` (`answersApprovals: true`), `ui/types.ts` + `ui/hooks/toolMapping.ts` (`scriptOrigin`), `ToolGroupMessage.tsx` (script label row), `useAgentStreamLifecycle.ts` (nested completions stay in the card), `iContentToHistoryItems.ts` (resume card), `resumeOwnerSession.ts` and its callers, startup `--continue` path (`cli.tsx` -> `interactiveUI.tsx` -> `interactiveApplication*.ts` -> `AppContainerRuntime.tsx` -> `useAppBootstrap.ts`/`useBootstrapRuntime.ts`/`useSessionInitialization.ts`); tests `codeModeNestedApproval.test.tsx` (2), `ToolGroupMessage.codeMode.test.tsx` (2), `resumeOwnerSession.codeMode.test.ts` (1)
+- [x] Lint budget fixes without touching limits: `api/control/sessionOpChain.ts` (op-chain mutex extracted from `sessionControl.ts`), script-run reads moved to `SessionRecordingLifetime`, `SubscribeChildTools` type alias, replay handler `collectToolScriptEvent` in `toolScriptEventPayload.ts`, `RecordingIntegration` enqueues directly (no new `SessionRecordingService` method), `buildRenderElement` takes a `ResumedDisplay` pick
+- [x] `scripts/tmux-script.issue4084-nested-approval.llxprt.json`
+- [x] D5 full verification, PLAN record, commit
 
 ### Phase E: tmux scenarios and evidence (pending)
 
@@ -89,7 +109,12 @@ Test file names below are planned owners; criteria move to done only when the na
 | Twenty nested calls create exactly one provider-visible tool response | B (done) | `execute-tool-script-history.test.ts`: "records twenty nested calls as exactly one provider-visible tool response" |
 | Truncated producer output reaches guest as partial and final output preserves incompleteness | B (done) | `code-mode-run-owner.test.ts`: "marks a truncated read partial, and the run partial even if the script claims otherwise", "marks a search the tool cut at its match limit partial", "marks a multi-file read with a truncated file partial", "reports a window the script asked for as complete"; `packages/tools/src/tools/shell-structured-output.test.ts` (shell truncation) |
 | Oversized final value returns `RESULT_TOO_LARGE`, without truncated JSON | A, B (done for the default cap; the setting is wired in C) | `quickjs-process-runtime.limits.test.ts`; `code-mode-run-owner.test.ts`: "returns RESULT_TOO_LARGE for an oversized final value without clipping it" |
-| Resume restores card/events without executing script or unmatched model responses | D | `packages/agents/src/code-mode/script-event-resume.test.ts` |
+| Resume restores card/events without executing script or unmatched model responses | D (done) | `tool-script-events.test.ts`: "records the run next to model history, which keeps one call and one response", "redraws a resumed run from its records without running the script again"; CLI `resumeOwnerSession.codeMode.test.ts`: "shows the recorded script card and does not run the script again" |
+| Nested approvals reach the CLI confirmation flow, labelled with their script; approve/deny drive the run | D (done) | `code-mode-approvals.test.ts`: "shows the nested call as a waiting confirmation labelled with its script, and runs it once approved", "ends the run with APPROVAL_DENIED when the display refuses the nested call"; CLI `codeModeNestedApproval.test.tsx` (both cases, through `useToolSchedulerSetup` and the confirmation's own `onConfirm`); `ToolGroupMessage.codeMode.test.tsx`: "labels a waiting nested call with its script above the ordinary confirmation prompt" |
+| Hosts that cannot answer nested approvals fail fast (headless, zed-acp, a2a, stream-only API hosts) | D (done) | `code-mode-approvals.test.ts`: "fails an interactive session with no approval handler and no answering display at once"; headless: `code-mode-run-owner.lifecycle.test.ts` "fails a nested approval requirement fast in headless mode" |
+| One bounded parent card; nested live output forwarded | D (done) | `tool-script-card.test.ts` (64-call card has a fixed line count), `ToolGroupMessage.codeMode.test.tsx`: "keeps the card of a 64-call script to its listed calls"; `code-mode-approvals.test.ts`: "forwards nested live shell output to the child display" |
+| Nested `logToolCall` with parent links; script lifecycle metrics; `logPrompts` gate | D (done) | `tool-script-events.test.ts`: "logs the nested call with its parent links and the run lifecycle, keeping text out without logPrompts", "exports the purpose, source and nested arguments only when logPrompts is on" |
+| Default policy: script tool needs no confirmation; nested ASK still asks | D (done) | `code-mode-approvals.test.ts`: "runs a script of allowed reads in a headless session without any approval", "asks only for the nested shell command, never for the script tool itself" |
 | Generated declarations compile for all v1 schemas and cover enums/unions/optional/arrays/string-key names | C | `packages/agents/src/code-mode/tool-declarations.test.ts` |
 | API revision mismatch fails with `API_CHANGED` | C | `packages/agents/src/code-mode/tool-declarations.test.ts` |
 | Enabled subagent runs code mode within own whitelist and agent attribution | C | `packages/agents/src/code-mode/code-mode-subagent.test.ts` |
@@ -220,14 +245,14 @@ Registration: `AgentConfig.codeMode` (schema-validated boolean, default off) flo
 - Run-ending outcomes: policy DENY gives `POLICY_DENIED`; a headless approval requirement (`ToolApprovalRequiredError`, including the shell tool's non-interactive refusal) gives `APPROVAL_REQUIRED`; a refused prompt gives `APPROVAL_DENIED`; an abort gives the runtime's `CANCELLED`. The guest cannot catch them.
 - Completeness evidence: `read_file` is partial only when its own default line limit or line clipping cut the output; a window the caller asked for with `limit` is complete. `read_many_files` is partial when discovery, the file count, the byte budget or a per-file line limit cut it, otherwise `unknown` (skips such as ignored files make "complete" unprovable). `search_file_content` is partial when its `outputTruncation` metadata is set and complete otherwise; its single-file token-limited path now sets that metadata like the directory path. Shell is partial on acquisition truncation.
 - Shell structured value adds `streamsMerged`: a PTY merges the streams, so the combined text is reported as stdout with `streamsMerged: true` instead of an empty stderr. Output filters apply to each stream.
-- `execute_tool_script` is `Kind.Execute` and asks for confirmation ('info': purpose, tools, source preview) under the default policy. Approving it only starts the program; each nested call is still authorized. Headless use needs a policy allow for the script tool.
+- `execute_tool_script` is `Kind.Execute` and asks for confirmation ('info': purpose, tools, source preview) under the default policy. Approving it only starts the program; each nested call is still authorized. Headless use needs a policy allow for the script tool. (Superseded in Phase D: the script tool is `Kind.Think`, asks for no confirmation, and the default policy allows it.)
 - `api_revision` is accepted and unchecked until Phase C adds discovery.
 - Result JSON: `{ ok, value | error, callCount, partial, completedCalls, logs }`. `callCount` is the runtime's count of calls the guest made; `completedCalls` lists settled calls as `{ tool, status }` with status `ok | failed | denied | approval_required | cancelled`, bounded by the call limit; `logs` is bounded by the console limits.
 - Nested call IDs are `<parentCallId>#script-<run>-<n>`.
 
 ### Known follow-ups
 
-- Nested confirmations go to the session approval handler (`onApproval`) and are published on the message bus, but they are not projected into the agent stream's `tool-confirmation` events or the CLI tool display, because the parent scheduler's call list does not contain them. A host without an approval handler (the CLI) would wait. Phase D must show nested calls through a scoped child display (as `ChildToolDisplay` does for subagents) before Phase C exposes the `code-mode` setting. Nested live output is not forwarded yet either.
+- (Resolved in Phase D.) Nested confirmations go to the session approval handler (`onApproval`) and are published on the message bus, but they are not projected into the agent stream's `tool-confirmation` events or the CLI tool display, because the parent scheduler's call list does not contain them. A host without an approval handler (the CLI) would wait. Phase D must show nested calls through a scoped child display (as `ChildToolDisplay` does for subagents) before Phase C exposes the `code-mode` setting. Nested live output is not forwarded yet either.
 - Only the session loop's schedulers get the nested composition. Subagent schedulers, the client tool channel and `foreground-agent-assembly` do not, so the tool fails fast there; Phase C wires subagents.
 - Hook-restricted turns share the preflight check, but no behavioral test drives a real tool-selection hook restriction yet.
 - `CoreToolScheduler` never drains requests it queues while busy (only `cancelAll` empties the queue). Code mode does not depend on it; worth a separate issue.
@@ -261,3 +286,80 @@ No existing test assertion changed.
 - `41a303f692` feat(tools): give scheduled executions a scope and programmatic results (#4084)
 - `ad37770a81` build(cli): ship the code mode wrapper and QuickJS wasm as bundle artifacts (#4084)
 - feat(agents): run code mode scripts through a nested scheduler owner (#4084) (the commit that adds this record)
+
+## Phase D record
+
+### What changed
+
+Approvals (Phase B follow-up 1, the blocker):
+
+- `ChildToolDisplay` (`session/childToolDisplay.ts`) takes a subscription option `answersApprovals`. The interactive CLI's `useChildToolDisplay` subscribes with it, because it renders a waiting child call's confirmation and answers it through that call's own `onConfirm`. `ChildToolDisplay.answersApprovals()` reports whether any such subscriber exists. `Agent.tools.subscribeChildTools(callbacks, options?)` is typed by `SubscribeChildTools`.
+- `CodeModeRunOwner` opens an execution on the session's child display for each run and forwards its nested scheduler's call updates, live output and completions there, the same path subagent tool calls use. The CLI therefore shows a waiting nested call with the ordinary confirmation UI and keys; "allow always" goes through the same `onConfirm`/policy update path as a direct call. Nested requests carry the serializable `ToolCallScriptOrigin { parentCallId, runId, purpose }` (core `turn.ts`); the CLI maps it to `IndividualToolCallDisplay.scriptOrigin` and draws a "↳ from script: <purpose>" label above the row.
+- A nested call may wait for approval only when someone can answer: the session has an `onApproval` handler, or a child display subscriber answers approvals. Otherwise the run's scheduler is built with `confirmationPromptsAvailable: false` (`CoreToolSchedulerOptions` -> `ConfirmationCoordinator`), and an ASK raises `ConfirmationRequiredError`, which the run maps to `APPROVAL_REQUIRED` at once. Hosts checked: non-interactive CLI (already `isInteractive() === false`), zed-acp and a2a-server (neither passes `onApproval` nor subscribes child tools; verified by search), API hosts that only consume the stream. YOLO approval mode still approves before any prompt.
+- The display's completion callback is not awaited by the broker (the nested scheduler accepts the next call only after its completion callback returns); a failure there is logged, like the agentic loop's own display callback.
+
+Display:
+
+- `code-mode/tool-script-card.ts`: `ToolScriptRunView` (folded run state), `applyToolScriptEvent`, `foldToolScriptEvents`, `formatToolScriptCard`. One formatter for the live card (`execute_tool_script` streams it as `replace` live output), the final `returnDisplay`, and the resumed card. It shows purpose, status (running, completed with duration and partial flag, or failed with the named code), call count by status, the last 8 calls with bounded argument summaries, the first 8 source lines, and a bounded result excerpt. However many calls a run makes, the card is at most 23 lines.
+- Finished nested calls do not become separate CLI history items (`processSecondaryCompletion` skips calls with `request.script`); the parent card summarizes them.
+
+Recording and resume:
+
+- `tool_script_event` (`SessionEventType`), payload schema in `core/src/recording/toolScriptEventPayload.ts`: `started` (run ID, parent call ID, agent ID, purpose, tools), one `call` per nested call (sequence, call ID, tool, argument summary up to 240 chars, approval outcome `not_required | approved | denied | unavailable`, status, completeness, result bytes), `finished` (ok, error code and bounded message, call count, partial, input bytes, final bytes, duration). The source is not repeated; it is the recorded `execute_tool_script` argument.
+- `ScriptRunJournal` (`code-mode/script-run-journal.ts`) emits the records through `ChildToolDisplay.publishToolScriptEvent`; the facade subscribes the session recording (`SessionControl.recordToolScriptEvent` -> `RecordingIntegration.recordToolScriptEvent` -> enqueue). The records do not materialize the file and are written with the turn's flush.
+- Replay collects valid records in `ReplayResult.toolScriptEvents` (malformed ones count as malformed lines with a warning); history is untouched. `session.getToolScriptRuns()` folds the active session file's records. The CLI passes them to `iContentToHistoryItems`, which shows an `execute_tool_script` call with a recorded run as its script card. Covered paths: `/chat resume`/session browser (`resumeOwnerSession`) and startup `--continue` (`cli.tsx` -> `resumedToolScriptRuns`). The raw (non-agent) recording owner path is unchanged.
+
+Telemetry:
+
+- `ToolCallEvent` gains `origin: 'script'`, `parent_call_id` and `script_run_id` for nested calls (absent for direct calls); `agent_id` is the caller's, already carried by the nested request. Nested executions log through the existing `logToolCall` in their own scheduler.
+- `ToolScriptRunEvent` / `logToolScriptRun` (`llxprt_code.tool_script_run`): duration, nested call count, input bytes (results handed to the guest), final bytes, partial, success, termination reason (`completed` or the named code), parent and run IDs, agent ID. `purpose` is exported only with `logPrompts`; the source and nested arguments are `function_args`, which `logToolCall` already gates.
+
+Policy default (orchestrator decision): `execute_tool_script` is `Kind.Think` and no longer asks for its own confirmation, and both `execute_tool_script` and `discover_tool_api` have an ALLOW rule in the default `read-only.toml` (both copies, as `task` has). They perform no effect themselves and every nested call is authorized, and where policy asks, approved on its own. A policy rule can still deny them.
+
+### Decisions and reasons
+
+- Prompt availability is decided per run, from the composition's approval handler and the display's answering subscribers, rather than per host type. A host that adds an answering display later gets nested prompts without code-mode changes; one that does not can never hang.
+- Nested calls render as rows in the live tool group (with the script label) and the parent card stays the only history item after the run. A nested-children tree inside the parent card was not built: the existing tool group already renders confirmation details, and duplicating that renderer inside the card would split approval handling into two places.
+- Recording goes through the child display hub instead of passing the recording into the tool: the tool stays free of session plumbing, and the same records feed any other observer.
+- Records are enqueued without a per-event durable flush, like history content; a turn's flush writes them.
+- The approval outcome of a call that waited for a prompt is `approved` when it then ran (success or tool error) and `denied` otherwise.
+
+### Lint budget changes (no limit changed)
+
+- `api/control/sessionOpChain.ts`: the session op-chain mutex moved out of `sessionControl.ts`; `runExclusive` and `dispose` use it. Behavior is unchanged (same chain, same admission check).
+- Script-run reads live on `SessionRecordingLifetime`; `SessionControl` takes `mediaStore` as a parameter property and imports core types in one statement.
+- `SubscribeChildTools` type alias keeps `agent.ts` within its line limit; `collectToolScriptEvent` keeps `ReplayEngine.ts` within its limit; `RecordingIntegration` enqueues directly so `SessionRecordingService.ts` is untouched; `buildRenderElement` takes a `ResumedDisplay` pick.
+
+### Existing tests changed
+
+- Callers of `resumeOwnerSession` gained the new `readToolScriptRuns` argument (`resumeOwnerSession.test.ts`, `ownerSessionUi.test.ts`, `ownerSessionBrowser.test.ts`, `ownerSessionUnreadable.test.ts`, `command-resume-owner.behavior.test.ts`, `recording-transcript-owner.test.tsx`, `browser-resume-owner.behavior.test.tsx`, `history-operation-owner.behavior.test.ts`, `__tests__/command-history-result-fixture.ts`, `ui/__tests__/app-bootstrap-owner-props.ts`). No assertion changed.
+- `code-mode/__tests__/script-agent.ts` gained `defaultScriptPolicy` to build an agent without the explicit script allow rule.
+
+### New tests
+
+- `packages/agents/src/code-mode/code-mode-approvals.test.ts` (6), `tool-script-events.test.ts` (4), `tool-script-card.test.ts` (4).
+- `packages/cli/src/ui/hooks/agentStream/codeModeNestedApproval.test.tsx` (2), `packages/cli/src/ui/components/messages/ToolGroupMessage.codeMode.test.tsx` (2), `packages/cli/src/ui/utils/resumeOwnerSession.codeMode.test.ts` (1).
+- `scripts/tmux-script.issue4084-nested-approval.llxprt.json`: real-model (`lunahigh`) scenario that waits for the labelled nested prompt, approves once, and checks the completed card. It starts the CLI with `--set code-mode=on`, which only works once Phase C registers the setting; it was not run in this phase. The fake-provider path for the same UI flow is `codeModeNestedApproval.test.tsx` (the CLI's own scheduler hook over a real agent).
+
+### Root API surface
+
+`formatToolScriptCard` and `ToolScriptRunView` are new root exports of `@vybestack/llxprt-code-agents` (the CLI draws resumed cards with them), recorded in `api/__tests__/expected-root-surface.json`. No other export was added.
+
+### Verification (2026-11-14, logs in `tmp/verify4084/`)
+
+- `npm run test` (`phaseD-test.log`): tools 144/144, storage 39/39, auth 43/43, settings 33/33, telemetry 49/49, ide-integration 10/10, agent-core 3/3, policy 12/12, mcp 57/57, core 528/528, lsp 15/15, providers 667/667, zed-acp 49/49, cli 1005/1005, a2a-server 26/26, test-utils 17/17, vscode-ide-companion 7/7. Agents did not run: its `pretest` API-surface guard reported the new root exports (then five: two type re-exports of `ChildToolDisplay` types and `ToolScriptCardContent` were not needed and were removed; the two the CLI uses were added to the snapshot). Agents rerun (`phaseD-test-agents.log`): surface guard PASS, 873/873 plus 8/8, exit 0.
+- No wrapper process left after the runs (`phaseD-ps-after-tests.log` is empty).
+- `npm run test:scripts` (`phaseD-test-scripts.log`): 366/366 plus 2/2, exit 0.
+- `npm run lint` (`phaseD-lint.log`): exit 0 (the later `api/index.ts` export change was linted and format-checked on its own).
+- `npm run typecheck` (`phaseD-typecheck.log`): exit 0.
+- `npm run format` (`phaseD-format.log`): exit 0, no file changed (`phaseD-status-before-format.txt` equals `phaseD-status-after-format.txt`).
+- `npm run build` (`phaseD-build.log`): exit 0.
+- `bun scripts/start.ts --profile-load lunahigh "write me a haiku and nothing else"` (`phaseD-smoke-lunahigh.log`): exit 0, haiku printed by `lunahigh:gpt-6-luna`.
+- Targeted runs while iterating: `phaseD-approvals.log`, `phaseD-events.log`, `phaseD-agents-targeted.log` (115/115), `phaseD-core-targeted.log` (978/978), `phaseD-telemetry-targeted.log` (801/801), `phaseD-cli-targeted.log` (15 files, one process each, all pass).
+
+### Known follow-ups
+
+- Run the tmux script after Phase C adds the `code-mode` setting (Phase E evidence).
+- zed-acp and a2a cannot show nested approvals; they fail fast with `APPROVAL_REQUIRED`. Surfacing nested confirmations in those hosts (as separate permission requests labelled with the script) is a possible later improvement, not required by the issue.
+- The raw (non-agent) recording owner resume path does not redraw script cards; it shows the recorded JSON response as before.
+- Subagent schedulers still lack the nested composition (Phase C).

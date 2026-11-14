@@ -6,6 +6,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { IContent } from '@vybestack/llxprt-code-core';
+import type { ToolScriptRunView } from '@vybestack/llxprt-code-agents';
 import type { HistoryItem } from '../../../types.js';
 import { iContentToHistoryItems } from '../../../utils/iContentToHistoryItems.js';
 
@@ -44,6 +45,8 @@ export interface UseSessionInitializationParams {
   addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp: number) => number;
   loadHistory: (newHistory: HistoryItem[]) => void;
   resumedHistory?: IContent[];
+  /** Recorded code mode runs of the resumed session (#4084). */
+  resumedToolScriptRuns?: readonly ToolScriptRunView[];
 }
 
 export interface UseSessionInitializationResult {
@@ -98,6 +101,7 @@ export function useSessionInitialization({
   addItem,
   loadHistory,
   resumedHistory,
+  resumedToolScriptRuns,
 }: UseSessionInitializationParams): UseSessionInitializationResult {
   const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
   const [coreMemoryFileCount, setCoreMemoryFileCount] = useState<number>(0);
@@ -122,12 +126,13 @@ export function useSessionInitialization({
     const uiItems = iContentToHistoryItems(
       resumedHistory,
       readEmojiFilterMode(),
+      resumedToolScriptRuns,
     );
     if (uiItems.length > 0) {
       loadHistory(uiItems);
     }
     return undefined;
-  }, [loadHistory, resumedHistory, readEmojiFilterMode]);
+  }, [loadHistory, resumedHistory, resumedToolScriptRuns, readEmojiFilterMode]);
 
   // Effect: Trigger SessionStart hook on initialization
   useEffect(() => {

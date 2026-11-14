@@ -54,4 +54,10 @@ export interface CoreToolSchedulerOptions {
    * for schedulers that must not start nested runs (nested schedulers).
    */
   nestedExecution?: NestedExecutionComposition;
+  /**
+   * False when nobody can answer this scheduler's approval prompts, so a
+   * call that needs one fails with an approval-required error instead of
+   * waiting. Defaults to true; code mode sets it per run (#4084).
+   */
+  confirmationPromptsAvailable?: boolean;
 }

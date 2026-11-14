@@ -1,0 +1,84 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 40,
+    "historyLimit": 50000,
+    "scrollbackLines": 8000,
+    "initialWaitMs": 6000
+  },
+  "yolo": false,
+  "startCommand": [
+    "bun",
+    "scripts/start.ts",
+    "--profile-load",
+    "lunahigh",
+    "--set",
+    "code-mode=on",
+    "-i",
+    "Call execute_tool_script exactly once and no other tool. Use purpose \"issue4084 nested approval probe\", tools [\"read_file\", \"run_shell_command\"], and this exact source: const readme = await tools[\"read_file\"]({ absolute_path: \"README.md\" }); const shell = await tools[\"run_shell_command\"]({ command: \"echo issue4084-nested-approval-ok\" }); return { readOk: readme.ok, stdout: shell.ok ? shell.value.stdout.trim() : null };  After the tool returns, reply with the stdout value only."
+  ],
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "from script: issue4084 nested approval probe",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Allow once",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "echo issue4084-nested-approval-ok"
+    },
+    { "type": "capture", "label": "nested-approval-prompt", "scope": "screen" },
+    {
+      "type": "approveTool",
+      "confirmation": { "contains": "Allow once" },
+      "choice": "once",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "Allow once",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "Purpose: issue4084 nested approval probe",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "Status: completed",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "expect",
+      "scope": "scrollback",
+      "contains": "Tool calls: 2 (2 ok)"
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "issue4084-nested-approval-ok",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 120000
+    },
+    { "type": "capture", "label": "after-script", "scope": "screen" },
+    { "type": "line", "text": "/quit", "submitKeys": ["Escape", "Enter"] },
+    { "type": "waitForExit", "timeoutMs": 30000 }
+  ]
+}

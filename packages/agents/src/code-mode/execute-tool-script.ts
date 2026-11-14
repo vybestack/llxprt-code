@@ -17,7 +17,6 @@ import {
   Kind,
   type IToolMessageBus,
   type LiveOutputUpdate,
-  type ToolCallConfirmationDetails,
   type ToolExecutionScope,
   type ToolInvocation,
   type ToolResult,
@@ -27,7 +26,12 @@ import { NestedExecutionPort } from '../scheduler/nested-execution.js';
 import {
   CodeModeRunOwner,
   type CodeModeRunReport,
+  type ScriptRunDisplay,
 } from './code-mode-run-owner.js';
+import {
+  formatToolScriptCard,
+  type ToolScriptRunView,
+} from './tool-script-card.js';
 import { QuickJsProcessRuntime } from './quickjs-process-runtime.js';
 import type { CodeModeRuntime, JsonValue } from './runtime-contract.js';
 import {
@@ -46,8 +50,6 @@ export interface ExecuteToolScriptParams {
   readonly api_revision?: string;
   readonly purpose: string;
 }
-
-const MAX_SOURCE_PREVIEW = 2000;
 
 const schema = {
   type: 'object',
@@ -98,12 +100,17 @@ function summarize(report: CodeModeRunReport): ScriptSummary {
   };
 }
 
-function toToolResult(summary: ScriptSummary): ToolResult {
+function toToolResult(
+  summary: ScriptSummary,
+  card: string | undefined,
+): ToolResult {
   const llmContent = JSON.stringify(summary);
   const ok = summary['ok'] === true;
-  const display = ok
-    ? `Script finished after ${String(summary['callCount'])} tool call(s).`
-    : `Script failed: ${llmContent}`;
+  const display =
+    card ??
+    (ok
+      ? `Script finished after ${String(summary['callCount'])} tool call(s).`
+      : `Script failed: ${llmContent}`);
   return {
     llmContent,
     returnDisplay: display,
@@ -119,14 +126,36 @@ function toToolResult(summary: ScriptSummary): ToolResult {
 }
 
 function preflightFailure(code: string, message: string): ToolResult {
-  return toToolResult({
-    ok: false,
-    error: { code, message },
-    callCount: 0,
-    partial: false,
-    completedCalls: [],
-    logs: [],
-  });
+  return toToolResult(
+    {
+      ok: false,
+      error: { code, message },
+      callCount: 0,
+      partial: false,
+      completedCalls: [],
+      logs: [],
+    },
+    undefined,
+  );
+}
+
+/** One plain line of terminal output per card line, for live updates. */
+function toAnsiLines(text: string): LiveOutputUpdate {
+  return {
+    mode: 'replace',
+    data: text.split('\n').map((line) => [
+      {
+        text: line,
+        bold: false,
+        italic: false,
+        underline: false,
+        dim: false,
+        inverse: false,
+        fg: '',
+        bg: '',
+      },
+    ]),
+  };
 }
 
 class ExecuteToolScriptInvocation extends BaseToolInvocation<
@@ -137,6 +166,7 @@ class ExecuteToolScriptInvocation extends BaseToolInvocation<
     params: ExecuteToolScriptParams,
     messageBus: IToolMessageBus,
     private readonly createRuntime: CodeModeRuntimeFactory,
+    private readonly display: ScriptRunDisplay | undefined,
   ) {
     super(params, messageBus, EXECUTE_TOOL_SCRIPT, 'Execute tool script');
   }
@@ -145,22 +175,9 @@ class ExecuteToolScriptInvocation extends BaseToolInvocation<
     return `${this.params.purpose} [tools: ${this.params.tools.join(', ')}]`;
   }
 
-  override async shouldConfirmExecute(): Promise<ToolCallConfirmationDetails> {
-    const source =
-      this.params.source.length > MAX_SOURCE_PREVIEW
-        ? `${this.params.source.slice(0, MAX_SOURCE_PREVIEW)}\n…`
-        : this.params.source;
-    return {
-      type: 'info',
-      title: 'Run tool script',
-      prompt: `${this.params.purpose}\n\nTools: ${this.params.tools.join(', ')}\n\n${source}\n\nEach tool call the script makes is still checked and approved on its own.`,
-      onConfirm: async () => undefined,
-    };
-  }
-
   async execute(
     signal: AbortSignal,
-    _updateOutput?: (update: LiveOutputUpdate) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
     _terminalColumns?: number,
     _terminalRows?: number,
     _setPidCallback?: (pid: number) => void,
@@ -178,6 +195,7 @@ class ExecuteToolScriptInvocation extends BaseToolInvocation<
     );
     if (!preflight.ok)
       return preflightFailure(preflight.code, preflight.message);
+    let latest: ToolScriptRunView | undefined;
     const owner = new CodeModeRunOwner({
       runtime: this.createRuntime(),
       request: {
@@ -189,8 +207,28 @@ class ExecuteToolScriptInvocation extends BaseToolInvocation<
       },
       scope,
       port,
+      display: this.display,
+      onProgress: (view) => {
+        latest = view;
+        updateOutput?.(
+          toAnsiLines(
+            formatToolScriptCard(view, { source: this.params.source }),
+          ),
+        );
+      },
     });
-    return toToolResult(summarize(await owner.run(signal)));
+    const report = await owner.run(signal);
+    const summary = summarize(report);
+    const card =
+      latest === undefined
+        ? undefined
+        : formatToolScriptCard(latest, {
+            source: this.params.source,
+            ...(report.result.ok
+              ? { result: JSON.stringify(report.result.value) }
+              : {}),
+          });
+    return toToolResult(summary, card);
   }
 }
 
@@ -204,16 +242,35 @@ export class ExecuteToolScriptTool extends BaseDeclarativeTool<
     messageBus: IToolMessageBus,
     private readonly createRuntime: CodeModeRuntimeFactory = () =>
       new QuickJsProcessRuntime(),
+    private readonly display?: ScriptRunDisplay,
   ) {
+    // Kind.Think, like `task`: the script tool has no effect of its own, so
+    // it asks for no confirmation (the default policy also allows it). Every
+    // call the script makes is authorized and, where policy asks, approved
+    // on its own; a policy rule can still deny the script tool.
     super(
       EXECUTE_TOOL_SCRIPT,
       'Execute tool script',
       'Runs a short JavaScript program that calls read/search tools and foreground shell commands as async functions, loops over and filters their results in a sandbox, and returns one compact JSON value. Use it for mechanical gathering over many files or commands; read content directly when you need to see it yourself. Every tool call the script makes goes through the normal policy and approval checks.',
-      Kind.Execute,
+      Kind.Think,
       schema,
       false,
-      false,
+      true,
       messageBus,
+    );
+  }
+
+  /**
+   * The same tool bound to the session's child display, so its runs show
+   * nested calls and approvals there and publish their script records.
+   */
+  withScriptDisplay(display: ScriptRunDisplay): ExecuteToolScriptTool {
+    if (this.messageBus === undefined)
+      throw new Error(`${EXECUTE_TOOL_SCRIPT} requires a message bus.`);
+    return new ExecuteToolScriptTool(
+      this.messageBus,
+      this.createRuntime,
+      display,
     );
   }
 
@@ -227,6 +284,7 @@ export class ExecuteToolScriptTool extends BaseDeclarativeTool<
       params,
       messageBus,
       this.createRuntime,
+      this.display,
     );
   }
 }

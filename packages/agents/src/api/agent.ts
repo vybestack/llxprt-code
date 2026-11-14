@@ -35,7 +35,8 @@ import type {
 import type { AgentIdeControl } from './ide-control-contract.js';
 export type { AgentIdeControl } from './ide-control-contract.js';
 
-import type { ChildToolDisplayCallbacks } from '../session/childToolDisplay.js';
+import type { SubscribeChildTools } from '../session/childToolDisplay.js';
+import type { ToolScriptRunView } from '../code-mode/tool-script-card.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import type { AgentProfileApplication } from './profileApplicationAssembly.js';
 import type { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
@@ -570,7 +571,8 @@ export interface AgentDisplayCallbacks {
 }
 
 export interface AgentToolControl {
-  subscribeChildTools(callbacks: ChildToolDisplayCallbacks): Unsubscribe;
+  /** See {@link SubscribeChildTools}. */
+  subscribeChildTools: SubscribeChildTools;
   /**
    * Opens an Agent-owned client execution channel. Completion and history
    * recording remain fixed for its lifetime; rendering subscriptions are
@@ -809,6 +811,12 @@ export interface AgentSessionControl {
   getRecording(): SessionRecordingState;
   /** Flushes the active recording and its pending history persistence. */
   flushRecording(): Promise<void>;
+  /**
+   * Code mode script runs recorded in the active session (issue #4084),
+   * folded for display. Lets a resumed session redraw script cards without
+   * running any script; nothing here is part of model history.
+   */
+  getToolScriptRuns(): Promise<readonly ToolScriptRunView[]>;
   /** Records and durably flushes a provider, directory, or session event. */
   recordRecordingEvent(event: SessionRecordingEvent): Promise<void>;
   getRecordingTitle(): string | null | undefined;

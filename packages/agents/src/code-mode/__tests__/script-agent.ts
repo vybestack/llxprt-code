@@ -87,6 +87,11 @@ export interface AgentOptions {
   readonly workspace: string;
   readonly rules?: readonly PolicyRule[];
   readonly config?: Partial<AgentConfig>;
+  /**
+   * Leave out the explicit allow rule for the script tool, so the default
+   * policy alone decides whether it may run.
+   */
+  readonly defaultScriptPolicy?: boolean;
 }
 
 /** An agent whose provider makes the given direct (non-script) tool calls. */
@@ -106,7 +111,12 @@ async function buildFromTurns(
     codeMode: true,
     interactive: true,
     harness: { forceConfirmations: false, includeProcessCwd: false },
-    policy: { rules: [ALLOW_SCRIPT_TOOL, ...(options.rules ?? [])] },
+    policy: {
+      rules: [
+        ...(options.defaultScriptPolicy === true ? [] : [ALLOW_SCRIPT_TOOL]),
+        ...(options.rules ?? []),
+      ],
+    },
     ...options.config,
   });
   return {

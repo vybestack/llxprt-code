@@ -208,6 +208,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       editorCallbacks,
       (config, details, owner) => triggerToolNotificationHook(details, owner),
       options.readApprovalMode,
+      options.confirmationPromptsAvailable,
     );
     this.confirmationCoordinator.subscribe();
   }

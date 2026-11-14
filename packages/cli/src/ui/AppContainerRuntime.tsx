@@ -72,7 +72,7 @@ import type {
 import type { UiSubagentManager } from './cliUiRuntime.js';
 import type { EmojiFilterSettingsSource } from './utils/iContentToHistoryItems.js';
 import type { LayoutRuntime } from './layouts/DefaultAppLayoutHelpers.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { Agent, ToolScriptRunView } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import type { AppState, AppAction } from './reducers/appReducer.js';
 import type { OperationLifecycleRegistry } from './hooks/agentStream/operationLifecycle.js';
@@ -224,6 +224,7 @@ export interface AppContainerRuntimeProps
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];
+  resumedToolScriptRuns?: readonly ToolScriptRunView[];
   version: string;
   terminalBackgroundColor?: string;
   appState: AppState;
@@ -627,6 +628,7 @@ function useApplicationBootstrap(
       readSessionTokenUsage: props.readSessionTokenUsage,
       subscribeHistoryTokens: props.subscribeHistoryTokens,
       resumedHistory: props.resumedHistory,
+      resumedToolScriptRuns: props.resumedToolScriptRuns,
       version: props.version,
       memoryController: props.memoryController,
     },
@@ -646,7 +648,7 @@ function useApplicationBootstrap(
 
 function useInputBrowserCommands(
   session: Parameters<typeof useBrowserCatalogCommands>[0] &
-    Pick<Agent['session'], 'resume'>,
+    Pick<Agent['session'], 'resume' | 'getToolScriptRuns'>,
   config: Parameters<typeof bindRawBrowserSession>[0] &
     Parameters<typeof useBrowserCatalogCommands>[2] &
     Parameters<typeof resolveEmojiFilterMode>[0],
@@ -682,6 +684,7 @@ function useInputBrowserCommands(
               : target.checkpointId,
             resolveEmojiFilterMode(config),
             session.listBrowserTargetsDetailed.bind(session),
+            session.getToolScriptRuns.bind(session),
           ),
         turnStore.commands.loadHistory,
         turnStore.commands.addItem,

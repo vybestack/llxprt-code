@@ -18,6 +18,7 @@ import type {
 import { SessionSchedulerOwner } from './sessionSchedulerOwner.js';
 import type { ApprovalHandler } from '../core/agenticLoop/types.js';
 import type { NestedExecutionComposition } from '../scheduler/nested-execution.js';
+import { logToolScriptRun } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 
 export type SchedulerConstruction = (
   options: CoreToolSchedulerOptions,
@@ -80,12 +81,17 @@ export function bindSchedulerOwner(
           interactiveMode,
           selection: toolRegistry,
           readGovernance: getToolGovernance,
-          createScheduler: (callbacks) =>
+          createScheduler: (callbacks, { promptsAvailable }) =>
             assembleSchedulerOwner(
               `${label}#script`,
-              { ...base, ...callbacks },
+              {
+                ...base,
+                ...callbacks,
+                confirmationPromptsAvailable: promptsAvailable,
+              },
               construct,
             ),
+          logScriptRun: (event) => logToolScriptRun(config, event, telemetry),
         };
   return (callbacks) =>
     assembleSchedulerOwner(
@@ -181,6 +187,12 @@ function createDefaultToolSchedulerFactory(options: {
         : {}),
       ...(schedulerOptions.nestedExecution !== undefined
         ? { nestedExecution: schedulerOptions.nestedExecution }
+        : {}),
+      ...(schedulerOptions.confirmationPromptsAvailable !== undefined
+        ? {
+            confirmationPromptsAvailable:
+              schedulerOptions.confirmationPromptsAvailable,
+          }
         : {}),
     });
   };

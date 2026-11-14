@@ -41,6 +41,7 @@ describe('history operation ownership', () => {
       checkpoint.checkpointId,
       'allowed',
       owner.session.listBrowserTargetsDetailed.bind(owner.session),
+      owner.session.getToolScriptRuns.bind(owner.session),
     );
     expect(replay.uiHistory).toContainEqual(
       expect.objectContaining({
