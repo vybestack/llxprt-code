@@ -101,9 +101,12 @@ describe('compaction copy memory with growing checkpoint counts (design 13.6)', 
       inFlight.push(measurements.map((m) => m.settledGrowth));
     }
 
-    // Pair the counts within each run before taking medians: isolated JSC
-    // heap excursions survive settled readings, but persistent retention
-    // appears in every pair. Keep negative deltas and every sample.
+    // Retained growth is the application census (`finalGrowth`): the total
+    // heap moved by up to 600 KB between samples as the engine dropped and
+    // recompiled code, which the census leaves out. Pair the counts within
+    // each run before taking medians: isolated excursions survive settled
+    // readings, but persistent retention appears in every pair. Keep
+    // negative deltas and every sample.
     const retainedMedians = [0, 1, 2].map((index) =>
       median(retained.map((sample) => sample[index])),
     );

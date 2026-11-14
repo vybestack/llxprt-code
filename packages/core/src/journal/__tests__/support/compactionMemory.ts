@@ -171,6 +171,49 @@ export async function medianSettledHeap(label: string): Promise<number> {
   return median(readings);
 }
 
+/** Heap snapshot classes that hold compiled code and its engine metadata. */
+const ENGINE_CODE_CLASSES =
+  /CodeBlock|Executable|^Structure(?:RareData)?$|^JSSourceCode$|^SourceCode$|^SymbolTable$|^PropertyTable$/;
+
+/**
+ * The application-memory census of the allowance ledger: the bytes of every
+ * heap snapshot node except compiled code and its engine metadata.
+ * JavaScriptCore drops and recompiles code on its own schedule, which moves
+ * the total heap by hundreds of KiB between readings while the objects the
+ * application holds stay the same.
+ */
+export function applicationHeapBytes(): number {
+  const snapshot = Bun.generateHeapSnapshot();
+  if (snapshot.version !== 3 || snapshot.nodes.length % 4 !== 0)
+    throw new Error('Unsupported JSC heap snapshot layout');
+  let bytes = 0;
+  for (let at = 4; at < snapshot.nodes.length; at += 4) {
+    const name = snapshot.nodeClassNames[snapshot.nodes[at + 2]];
+    if (!ENGINE_CODE_CLASSES.test(name)) bytes += snapshot.nodes[at + 1];
+  }
+  return bytes;
+}
+
+export interface SettledReading {
+  /** Median of the settled total-heap readings, in bytes. */
+  readonly heap: number;
+  /** Median of the application censuses, one after each heap reading, in bytes. */
+  readonly application: number;
+}
+
+/** Settled total-heap readings and an application census after each, as medians of three. */
+export async function medianSettledReading(
+  label: string,
+): Promise<SettledReading> {
+  const heaps: number[] = [];
+  const applications: number[] = [];
+  for (let index = 0; index < MEDIAN_READINGS; index++) {
+    heaps.push(await strictSettledHeap(label));
+    applications.push(applicationHeapBytes());
+  }
+  return { heap: median(heaps), application: median(applications) };
+}
+
 /** A session with `checkpoints` checkpoints, each followed by `ROWS_PER_CHECKPOINT` small rows. */
 export async function sessionWithCheckpoints(
   file: string,
@@ -284,13 +327,18 @@ export interface CompactionMeasurement {
   /** Largest single settled reading above the settled heap before the copy, in bytes. */
   readonly peakGrowth: number;
   /**
-   * Median of the settled readings in the second half of the copy, with the
-   * reading after the last version, in bytes. A retention that grows with the
+   * Median of the settled total-heap readings in the second half of the copy,
+   * with the reading after the last version, in bytes. A retention that grows with the
    * versions is in every one of these readings; one reading of allocator
    * jitter is not.
    */
   readonly settledGrowth: number;
-  /** Check (i): median of three settled readings after the copy, above the baseline, in bytes. */
+  /**
+   * Check (i): the application census after the copy above the census
+   * before it, each the median of three (`medianSettledReading`), in bytes.
+   * Compiled code is outside the census, so the engine dropping or
+   * recompiling code during the copy does not show up as retention.
+   */
   readonly finalGrowth: number;
   readonly samples: number;
   readonly series: readonly number[];
@@ -313,7 +361,7 @@ export async function measureCompaction(
   if (current === undefined) throw new Error('nothing is published');
   const every = Math.max(1, Math.floor(current.rows / SAMPLES_PER_COPY));
   // The source is already built, so its fixture garbage is collected here.
-  const before = await medianSettledHeap('before the copy');
+  const before = await medianSettledReading('before the copy');
   let peak = 0;
   let samples = 0;
   const series: number[] = [];
@@ -322,7 +370,7 @@ export async function measureCompaction(
     if (trap !== undefined) await trap.collect(copied);
     written += 1;
     if (written % every === 0) {
-      const growth = (await settledHeap()) - before;
+      const growth = (await settledHeap()) - before.heap;
       series.push(growth);
       peak = Math.max(peak, growth);
       samples += 1;
@@ -337,14 +385,17 @@ export async function measureCompaction(
       observer,
     ),
   );
-  const finalGrowth = (await medianSettledHeap('after the copy')) - before;
-  const readings = [...series, finalGrowth];
+  const after = await medianSettledReading('after the copy');
+  const finalGrowth = after.application - before.application;
+  const finalHeapGrowth = after.heap - before.heap;
+  const readings = [...series, finalHeapGrowth];
   const settledGrowth = median(readings.slice(Math.floor(readings.length / 2)));
   process.stdout.write(`COMPACTION_MEMORY ${JSON.stringify({
     rows: current.rows,
     versions: result.versions.length,
     baseline: before,
     finalGrowth,
+    finalHeapGrowth,
     settledGrowth,
     peak,
     series,
@@ -355,7 +406,7 @@ export async function measureCompaction(
     checkpoints: result.versions.length - 1,
     versions: result.versions.length,
     rows: current.rows,
-    peakGrowth: Math.max(peak, finalGrowth),
+    peakGrowth: Math.max(peak, finalHeapGrowth),
     finalGrowth,
     settledGrowth,
     samples,

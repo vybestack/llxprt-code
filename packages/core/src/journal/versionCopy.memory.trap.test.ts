@@ -13,7 +13,13 @@ import {
 import type { JournalStore } from './journalStore.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
 
-const TRAPPED = 100;
+/**
+ * The largest count of the compaction test. Each held version keeps its
+ * state and the labels of all its rows, so the hold grows faster than the
+ * count: 100 versions measured 1.4 MB of application memory after the copy
+ * and 400 measured 20 MB, far past three times the retained bound.
+ */
+const TRAPPED = 400;
 
 describe('compaction copy memory trap (design 13.6)', () => {
   const directory = useTempDir('journal-compaction-trap-');
@@ -44,8 +50,11 @@ describe('compaction copy memory trap (design 13.6)', () => {
       trap,
     );
     expect(trapped.held).toBe(TRAPPED + 1);
-    // (i) retained: the trap is still held after the copy.
-    expect(trapped.finalGrowth).toBeGreaterThan(RETAINED_BOUND_BYTES);
+    // (i) retained: the trap is still held after the copy, by at least three
+    // times the bound, so the check fails it by a margin and not by jitter.
+    expect(trapped.finalGrowth).toBeGreaterThanOrEqual(
+      3 * RETAINED_BOUND_BYTES,
+    );
     // (ii) in flight: and it was held through the second half of the copy.
     expect(trapped.settledGrowth).toBeGreaterThan(IN_FLIGHT_BOUND_BYTES);
   }, 150_000);

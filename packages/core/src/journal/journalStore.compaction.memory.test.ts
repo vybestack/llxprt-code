@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { median } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import {
   ageOutIdleCode,
+  applicationHeapBytes,
   FLATNESS_BOUND_BYTES,
   medianSettledHeap,
   PerVersionBuilders,
@@ -48,26 +49,11 @@ describe('store compaction memory with growing checkpoint counts (design 13.6)',
     return store;
   }
 
-  /** Match the application-memory census used by the send allowance ledger. */
-  function applicationBytes(): number {
-    const snapshot = Bun.generateHeapSnapshot();
-    if (snapshot.version !== 3 || snapshot.nodes.length % 4 !== 0)
-      throw new Error('Unsupported JSC heap snapshot layout');
-    const engineCode =
-      /CodeBlock|Executable|^Structure(?:RareData)?$|^JSSourceCode$|^SourceCode$|^SymbolTable$|^PropertyTable$/;
-    let bytes = 0;
-    for (let at = 4; at < snapshot.nodes.length; at += 4) {
-      const name = snapshot.nodeClassNames[snapshot.nodes[at + 2]];
-      if (!engineCode.test(name)) bytes += snapshot.nodes[at + 1];
-    }
-    return bytes;
-  }
-
   async function settledApplicationBytes(label: string): Promise<number> {
     const readings: number[] = [];
     for (let reading = 0; reading < 3; reading++) {
       await medianSettledHeap(label);
-      readings.push(applicationBytes());
+      readings.push(applicationHeapBytes());
     }
     return median(readings);
   }
