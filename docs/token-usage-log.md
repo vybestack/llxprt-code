@@ -95,7 +95,9 @@ files, at every level:
   must still be the one that was scanned (same inode, size and modification
   time), so a session that starts, appends or recreates its log after the scan
   keeps it.
-- A `token-usage/` directory left empty is removed.
+- `token-usage/` directories are kept even when empty. A starting session
+  creates the directory and then appends to it without taking a lock, so
+  removing an empty directory could make that session's writes fail.
 - `sessionRetention.enabled: false` turns this cleanup off along with the rest
   of the janitor.
 

@@ -66,7 +66,7 @@ describe('token-usage retention (#4068)', () => {
     );
   });
 
-  it('deletes token-usage files past the chat age policy and removes the emptied directory', async () => {
+  it('deletes token-usage files past the chat age policy and keeps the emptied directory', async () => {
     const root = await tempRoot();
     const stale = await writeAged(
       root,
@@ -92,7 +92,11 @@ describe('token-usage retention (#4068)', () => {
     );
 
     expect(await exists(stale)).toBe(false);
-    expect(await exists(path.join(root, PROJECT, 'token-usage'))).toBe(false);
+    // A writer may have created the directory and not yet appended, so the
+    // emptied directory stays.
+    expect(
+      await fs.readdir(path.join(root, PROJECT, 'token-usage')),
+    ).toStrictEqual([]);
     expect(await exists(fresh)).toBe(true);
     expect(result).toStrictEqual({
       scanned: 2,
@@ -152,7 +156,7 @@ describe('token-usage retention (#4068)', () => {
     expect(await exists(recent)).toBe(true);
   });
 
-  it('never deletes files of an active session: the current session, a live-locked root session, or its subagents', async () => {
+  it('never deletes root-session files of an active session: the current session or a live-locked one', async () => {
     const root = await tempRoot();
     const chats = path.join(root, PROJECT, 'chats');
     await fs.mkdir(chats, { recursive: true });
@@ -166,27 +170,19 @@ describe('token-usage retention (#4068)', () => {
         10,
         30,
       );
-      const lockedChild = await writeAged(
-        root,
-        PROJECT,
-        'token-usage',
-        'locked-root::locked-root#coder#11012e6c.jsonl',
-        10,
-        30,
-      );
       const current = await writeAged(
         root,
         PROJECT,
         'token-usage',
-        'current-root::current-root#helper#ab12cd34.jsonl',
+        'current-root.jsonl',
         10,
         30,
       );
-      const idleChild = await writeAged(
+      const idleRoot = await writeAged(
         root,
         PROJECT,
         'token-usage',
-        'idle-root::idle-root#coder#99999999.jsonl',
+        'idle-root.jsonl',
         10,
         30,
       );
@@ -198,13 +194,61 @@ describe('token-usage retention (#4068)', () => {
       );
 
       expect(await exists(lockedRoot)).toBe(true);
-      expect(await exists(lockedChild)).toBe(true);
       expect(await exists(current)).toBe(true);
-      expect(await exists(idleChild)).toBe(false);
+      expect(await exists(idleRoot)).toBe(false);
     } finally {
       await lock.release();
     }
   });
+
+  // Windows cannot create '::' file names; see #4104
+  it.skipIf(process.platform === 'win32')(
+    'never deletes subagent files of an active session: children of the current session or a live-locked root session',
+    async () => {
+      const root = await tempRoot();
+      const chats = path.join(root, PROJECT, 'chats');
+      await fs.mkdir(chats, { recursive: true });
+      const lock = await SessionLockManager.acquire(chats, 'locked-root');
+      try {
+        const lockedChild = await writeAged(
+          root,
+          PROJECT,
+          'token-usage',
+          'locked-root::locked-root#coder#11012e6c.jsonl',
+          10,
+          30,
+        );
+        const current = await writeAged(
+          root,
+          PROJECT,
+          'token-usage',
+          'current-root::current-root#helper#ab12cd34.jsonl',
+          10,
+          30,
+        );
+        const idleChild = await writeAged(
+          root,
+          PROJECT,
+          'token-usage',
+          'idle-root::idle-root#coder#99999999.jsonl',
+          10,
+          30,
+        );
+
+        await cleanupTokenUsageFiles(
+          root,
+          'current-root',
+          resolveRetentionConfig({ maxAge: '7d', tokenUsageMaxTotalSizeMB: 1 }),
+        );
+
+        expect(await exists(lockedChild)).toBe(true);
+        expect(await exists(current)).toBe(true);
+        expect(await exists(idleChild)).toBe(false);
+      } finally {
+        await lock.release();
+      }
+    },
+  );
 
   it('runs inside the janitor sweep without touching chat recordings beyond the existing rules', async () => {
     const root = await tempRoot();

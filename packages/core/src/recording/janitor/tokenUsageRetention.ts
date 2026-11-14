@@ -24,6 +24,11 @@
  * the root session's lock itself (skipping the file when the lock is busy),
  * revalidates the file under it and unlinks before releasing, so a session
  * that starts between selection and deletion keeps its log.
+ *
+ * Token-usage directories are never removed, even when empty. A writer
+ * creates the directory once and then appends without holding any lock, so
+ * removing an empty directory could make every later write of a starting
+ * session fail.
  */
 
 import * as fs from 'node:fs/promises';
@@ -222,24 +227,6 @@ async function unlinkIfUnchanged(
   }
 }
 
-async function removeIfEmpty(
-  projectDir: string,
-  state: CleanupState,
-): Promise<void> {
-  const tokenDir = path.join(projectDir, TOKEN_USAGE_DIR_NAME);
-  try {
-    const dirStat = await fs.lstat(tokenDir);
-    if (!dirStat.isDirectory()) return;
-    if ((await fs.readdir(tokenDir)).length > 0) return;
-    await fs.rmdir(tokenDir);
-  } catch (error) {
-    // ENOTEMPTY: a session wrote its first record after the emptiness check.
-    if (!hasErrnoCode(error, 'ENOENT') && !hasErrnoCode(error, 'ENOTEMPTY')) {
-      state.failed += 1;
-    }
-  }
-}
-
 function oldestFirst(a: TokenUsageFile, b: TokenUsageFile): number {
   if (a.mtimeMs !== b.mtimeMs) return a.mtimeMs - b.mtimeMs;
   if (a.filePath === b.filePath) return 0;
@@ -248,9 +235,8 @@ function oldestFirst(a: TokenUsageFile, b: TokenUsageFile): number {
 
 /**
  * Apply the age policy, then the byte budget, to every token-usage file under
- * `globalTempDir`, and remove token-usage directories left empty. The budget
- * counts protected files too (it bounds what is on disk); only unprotected
- * files are ever evicted.
+ * `globalTempDir`. The budget counts protected files too (it bounds what is
+ * on disk); only unprotected files are ever evicted.
  */
 export async function cleanupTokenUsageFiles(
   globalTempDir: string,
@@ -284,10 +270,6 @@ export async function cleanupTokenUsageFiles(
     const before = state.deleted;
     await deleteScanned(file, state, options);
     if (state.deleted > before) totalBytes -= file.sizeBytes;
-  }
-
-  for (const projectDir of projectDirs) {
-    await removeIfEmpty(projectDir, state);
   }
   return {
     scanned: files.length,

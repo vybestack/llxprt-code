@@ -78,9 +78,9 @@ fixes").
   root session's lock, re-stats the file under it, skips it if its identity,
   size or mtime changed since the scan, unlinks and releases (see "Review
   fixes").
-- Empty `token-usage/` directories are removed (ENOTEMPTY from a concurrent
-  first write is not a failure). I/O failures are counted into the sweep's
-  `failed` total, like the other janitor phases.
+- `token-usage/` directories are never removed, even when empty (see "Review
+  fixes"). I/O failures are counted into the sweep's `failed` total, like the
+  other janitor phases.
 
 ## #4067: compression usage
 
@@ -234,6 +234,27 @@ asserts the rounded values and a 1,150-byte bound; the records measure 1,060
 and 1,136 bytes. Without rounding the fractional digits add about 27 bytes,
 over the bound. The main-session smoke-test summary record now measures 830
 bytes (866 before).
+
+### Empty-directory removal raced a starting writer (CodeRabbit)
+
+Retention used to remove a `token-usage/` directory it found empty, without a
+lock. `TokenUsageLogger._appendJsonl` runs `mkdir` once, marks the directory as
+ensured and then only appends. A session between those two steps lost the
+directory, and every later append failed with ENOENT. Retention no longer
+removes the directory: an empty directory costs nothing, and the writer needs
+no retry logic. The age-policy test now asserts that the emptied directory is
+kept.
+
+### `::` fixtures on Windows (CodeRabbit)
+
+Windows cannot create file names containing `::`, which subagent token-usage
+logs use (the production problem is #4104). Tests whose fixtures use `::`
+names are skipped on win32 with `it.skipIf(process.platform === 'win32')`:
+in `tokenUsageRetention.race.test.ts` the subagent late-lock test and the idle
+subagent deletion test; in `tokenUsageRetention.test.ts` the active-session
+test was split into a root-session test (current session, live-locked root,
+idle root deleted), which still runs on Windows, and a subagent test that is
+skipped there.
 
 ## Open questions
 
